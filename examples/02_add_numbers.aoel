@@ -1,0 +1,53 @@
+# AOEL Example 02: Add Two Numbers
+# 두 정수의 합 계산
+
+UNIT FUNCTION examples.add_numbers V1.0.0
+
+META
+  DOMAIN examples.math
+  DETERMINISM true
+  PURE true
+ENDMETA
+
+INPUT
+  a : INT32
+  b : INT32
+ENDINPUT
+
+OUTPUT
+  sum : INT32
+ENDOUTPUT
+
+INTENT
+  GOAL TRANSFORM: input.a, input.b -> output.sum
+  PRIORITY CORRECTNESS
+ENDINTENT
+
+CONSTRAINT
+  # 오버플로우 방지
+  REQUIRE input.a >= -1000000 AND input.a <= 1000000
+  REQUIRE input.b >= -1000000 AND input.b <= 1000000
+ENDCONSTRAINT
+
+FLOW
+  NODE add : TRANSFORM (op=ADD, left=input.a, right=input.b)
+
+  EDGE INPUT.a -> add
+  EDGE INPUT.b -> add
+  EDGE add     -> OUTPUT.sum
+ENDFLOW
+
+EXECUTION
+  PARALLEL false
+  TARGET ANY
+  MEMORY STACK_ONLY
+ENDEXECUTION
+
+VERIFY
+  ASSERT output.sum == input.a + input.b
+  TEST @tests.math.add_positive
+  TEST @tests.math.add_negative
+  TEST @tests.math.add_zero
+ENDVERIFY
+
+END

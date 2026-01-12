@@ -1,0 +1,13 @@
+[package]
+name = "aoel-lexer"
+version.workspace = true
+edition.workspace = true
+description = "AOEL Language Lexer"
+
+[dependencies]
+logos = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4"

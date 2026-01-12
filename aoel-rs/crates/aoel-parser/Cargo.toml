@@ -1,0 +1,14 @@
+[package]
+name = "aoel-parser"
+version.workspace = true
+edition.workspace = true
+description = "AOEL Language Parser"
+
+[dependencies]
+aoel-lexer = { workspace = true }
+aoel-ast = { workspace = true }
+thiserror = { workspace = true }
+ariadne = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4"

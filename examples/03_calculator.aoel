@@ -1,0 +1,82 @@
+# AOEL Example 03: Simple Calculator
+# 사칙연산 계산기 - BRANCH를 사용한 조건 분기
+
+UNIT FUNCTION examples.calculator V1.0.0
+
+META
+  DOMAIN examples.math
+  DETERMINISM true
+  PURE true
+ENDMETA
+
+INPUT
+  a        : FLOAT64
+  b        : FLOAT64
+  operator : STRING    [LEN >= 3, LEN <= 3]
+ENDINPUT
+
+OUTPUT
+  result : FLOAT64
+  error  : OPTIONAL<STRING>
+ENDOUTPUT
+
+INTENT
+  GOAL TRANSFORM: input.a, input.b, input.operator -> output.result
+  PRIORITY CORRECTNESS > LATENCY
+  ON_FAILURE DEFAULT 0.0
+ENDINTENT
+
+CONSTRAINT
+  REQUIRE LEN(input.operator) >= 3
+  FORBID input.operator == "div" AND input.b == 0.0
+  FORBID output.result != VOID AND output.error != VOID
+ENDCONSTRAINT
+
+FLOW
+  NODE route : BRANCH (key=input.operator)
+
+  NODE do_add : TRANSFORM (op=ADD, left=input.a, right=input.b)
+  NODE do_sub : TRANSFORM (op=SUB, left=input.a, right=input.b)
+  NODE do_mul : TRANSFORM (op=MUL, left=input.a, right=input.b)
+  NODE do_div : TRANSFORM (op=DIV, left=input.a, right=input.b)
+
+  NODE check_div_zero : BRANCH (condition=input.b == 0.0)
+  NODE div_error      : TRANSFORM (value="Division by zero")
+
+  NODE merge_result : MERGE
+
+  EDGE INPUT.operator -> route
+
+  EDGE route.add -> do_add
+  EDGE route.sub -> do_sub
+  EDGE route.mul -> do_mul
+  EDGE route.div -> check_div_zero
+
+  EDGE check_div_zero.yes -> div_error
+  EDGE check_div_zero.no  -> do_div
+
+  EDGE do_add    -> merge_result
+  EDGE do_sub    -> merge_result
+  EDGE do_mul    -> merge_result
+  EDGE do_div    -> merge_result
+
+  EDGE merge_result -> OUTPUT.result
+  EDGE div_error    -> OUTPUT.error
+ENDFLOW
+
+EXECUTION
+  PARALLEL false
+  TARGET ANY
+  MEMORY STACK_ONLY
+ENDEXECUTION
+
+VERIFY
+  ASSERT output.result != VOID OR output.error != VOID
+  PROPERTY input.operator == "add" IMPLIES output.result == input.a + input.b
+  PROPERTY input.operator == "sub" IMPLIES output.result == input.a - input.b
+  PROPERTY input.operator == "mul" IMPLIES output.result == input.a * input.b
+  PROPERTY input.operator == "div" AND input.b != 0 IMPLIES output.result == input.a / input.b
+  TEST @tests.calc.all_operations
+ENDVERIFY
+
+END

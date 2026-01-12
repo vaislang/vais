@@ -1,0 +1,12 @@
+[package]
+name = "aoel-ast"
+version.workspace = true
+edition.workspace = true
+description = "AOEL Abstract Syntax Tree"
+
+[dependencies]
+aoel-lexer = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4"

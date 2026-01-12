@@ -1,0 +1,64 @@
+# AOEL Example 07: Fetch API
+# 외부 API 호출 및 응답 처리
+
+UNIT FUNCTION examples.fetch_user V1.0.0
+
+META
+  DOMAIN examples.api
+  DETERMINISM false
+  PURE false
+  TIMEOUT 10s
+  RETRY 3
+ENDMETA
+
+INPUT
+  user_id : INT64
+ENDINPUT
+
+OUTPUT
+  user  : OPTIONAL<STRUCT {id: INT64, name: STRING, email: STRING}>
+  error : OPTIONAL<STRUCT {code: INT32, message: STRING}>
+ENDOUTPUT
+
+INTENT
+  GOAL FETCH: input.user_id -> output.user
+  PRIORITY CORRECTNESS > LATENCY
+  ON_FAILURE RETRY
+ENDINTENT
+
+CONSTRAINT
+  REQUIRE input.user_id > 0
+  FORBID output.user != VOID AND output.error != VOID
+  REQUIRE WITHIN 10s
+ENDCONSTRAINT
+
+FLOW
+  NODE build_url    : TRANSFORM (template="https://api.example.com/users/{id}", id=input.user_id)
+  NODE fetch_data   : FETCH (method=GET, url=build_url, timeout=5s)
+  NODE parse_json   : TRANSFORM (mapper=@mappers.json_to_user)
+  NODE handle_error : TRANSFORM (mapper=@mappers.api_error)
+
+  EDGE INPUT.user_id    -> build_url
+  EDGE build_url        -> fetch_data
+  EDGE fetch_data.ok    -> parse_json
+  EDGE fetch_data.err   -> handle_error
+  EDGE parse_json       -> OUTPUT.user
+  EDGE handle_error     -> OUTPUT.error
+ENDFLOW
+
+EXECUTION
+  PARALLEL false
+  TARGET ANY
+  MEMORY BOUNDED 1MB
+  ISOLATION THREAD
+ENDEXECUTION
+
+VERIFY
+  ASSERT output.user != VOID OR output.error != VOID
+  PROPERTY output.user != VOID IMPLIES output.user.id == input.user_id
+  TEST @tests.api.fetch_existing_user
+  TEST @tests.api.fetch_nonexistent_user
+  TEST @tests.api.fetch_timeout
+ENDVERIFY
+
+END

@@ -1,0 +1,99 @@
+# AOEL Example 09: CRUD User - Create
+# 사용자 생성 (Create 연산)
+
+UNIT FUNCTION examples.create_user V1.0.0
+
+META
+  DOMAIN examples.crud
+  DETERMINISM false
+  PURE false
+  IDEMPOTENT false
+  TIMEOUT 5s
+ENDMETA
+
+INPUT
+  name     : STRING    [LEN >= 2, LEN <= 100]
+  email    : STRING    [LEN >= 5]
+  password : STRING    [LEN >= 8]
+ENDINPUT
+
+OUTPUT
+  user    : OPTIONAL<STRUCT {id: INT64, name: STRING, email: STRING, created_at: INT64}>
+  error   : OPTIONAL<STRUCT {code: INT32, message: STRING}>
+ENDOUTPUT
+
+INTENT
+  GOAL COMPOSE: input.name, input.email, input.password -> output.user
+  PRIORITY CORRECTNESS > LATENCY
+  ON_FAILURE ABORT
+ENDINTENT
+
+CONSTRAINT
+  REQUIRE input.name != ""
+  REQUIRE input.email != ""
+  REQUIRE LEN(input.password) >= 8
+  FORBID output.user != VOID AND output.error != VOID
+  INVARIANT output.user != VOID OR output.error != VOID
+  REQUIRE WITHIN 5s
+ENDCONSTRAINT
+
+FLOW
+  # 입력 검증
+  NODE validate_input : VALIDATE (schema=@schemas.create_user_input)
+
+  # 이메일 중복 체크
+  NODE check_duplicate : FETCH (source=@db.users, query="email = ?")
+  NODE is_duplicate    : BRANCH (condition=check_duplicate.count > 0)
+
+  # 비밀번호 해싱
+  NODE hash_password : CALL (target=@crypto.hash_bcrypt, plain=input.password, rounds=12)
+
+  # 사용자 생성
+  NODE create_record : STORE (target=@db.users, mapper=@mappers.create_user_record)
+
+  # 응답 빌드
+  NODE build_response : TRANSFORM (mapper=@mappers.user_response)
+  NODE build_duplicate_error : TRANSFORM (code=409, message="Email already exists")
+  NODE build_error : TRANSFORM (mapper=@mappers.error_response)
+
+  # 엣지 연결
+  EDGE INPUT.name     -> validate_input
+  EDGE INPUT.email    -> validate_input
+  EDGE INPUT.password -> validate_input
+
+  EDGE validate_input.ok  -> check_duplicate
+  EDGE validate_input.err -> build_error
+
+  EDGE check_duplicate    -> is_duplicate
+
+  EDGE is_duplicate.yes -> build_duplicate_error
+  EDGE is_duplicate.no  -> hash_password
+
+  EDGE hash_password      -> create_record
+  EDGE create_record.ok   -> build_response
+  EDGE create_record.err  -> build_error
+
+  EDGE build_response         -> OUTPUT.user
+  EDGE build_duplicate_error  -> OUTPUT.error
+  EDGE build_error            -> OUTPUT.error
+ENDFLOW
+
+EXECUTION
+  PARALLEL false
+  TARGET ANY
+  MEMORY BOUNDED 64MB
+  ISOLATION THREAD
+ENDEXECUTION
+
+VERIFY
+  ASSERT output.user != VOID OR output.error != VOID
+  PROPERTY output.user != VOID IMPLIES output.user.email == input.email
+  PROPERTY output.user != VOID IMPLIES output.user.name == input.name
+  PROPERTY output.user != VOID IMPLIES output.user.id > 0
+  TEST @tests.crud.create_user_success
+  TEST @tests.crud.create_user_duplicate_email
+  TEST @tests.crud.create_user_invalid_email
+  TEST @tests.crud.create_user_short_password
+ENDVERIFY
+
+END

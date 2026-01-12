@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/aoel-lexer",
+    "crates/aoel-ast",
+    "crates/aoel-parser",
+    "crates/aoel-typeck",
+    "crates/aoel-ir",
+    "crates/aoel-vm",
+    "crates/aoel-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["AOEL Team"]
+license = "MIT"
+repository = "https://github.com/aoel-lang/aoel"
+description = "AI-Optimized Executable Language"
+
+[workspace.dependencies]
+# Internal crates
+aoel-lexer = { path = "crates/aoel-lexer" }
+aoel-ast = { path = "crates/aoel-ast" }
+aoel-parser = { path = "crates/aoel-parser" }
+aoel-typeck = { path = "crates/aoel-typeck" }
+aoel-ir = { path = "crates/aoel-ir" }
+aoel-vm = { path = "crates/aoel-vm" }
+
+# External dependencies
+thiserror = "1.0"
+logos = "0.14"           # Fast lexer generator
+ariadne = "0.4"          # Beautiful error reporting
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

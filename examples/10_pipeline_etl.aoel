@@ -1,0 +1,100 @@
+# AOEL Example 10: ETL Pipeline
+# 데이터 추출-변환-적재 파이프라인
+
+UNIT PIPELINE examples.etl_orders V1.0.0
+
+META
+  DOMAIN examples.etl
+  DETERMINISM false
+  IDEMPOTENT true
+  TIMEOUT 10m
+ENDMETA
+
+INPUT
+  source_table : STRING
+  target_table : STRING
+  batch_size   : INT32
+  date_from    : INT64
+  date_to      : INT64
+ENDINPUT
+
+OUTPUT
+  processed_count : INT64
+  error_count     : INT64
+  duration_ms     : INT64
+ENDOUTPUT
+
+INTENT
+  GOAL TRANSFORM: input.source_table -> input.target_table
+  PRIORITY CORRECTNESS > THROUGHPUT > MEMORY
+  ON_FAILURE RETRY
+ENDINTENT
+
+CONSTRAINT
+  REQUIRE input.date_to >= input.date_from
+  REQUIRE input.batch_size >= 100
+  INVARIANT output.processed_count >= 0
+  INVARIANT output.error_count >= 0
+ENDCONSTRAINT
+
+FLOW
+  # 추출 (Extract)
+  NODE extract_data : FETCH (source=@db.source, table=input.source_table, batch=input.batch_size)
+
+  # 변환 (Transform)
+  NODE validate_rows  : FILTER (condition=row.amount > 0 AND row.status != "cancelled")
+  NODE enrich_data    : MAP (fn=@transformers.enrich_order)
+  NODE calculate_tax  : MAP (fn=@transformers.calculate_tax)
+  NODE normalize      : MAP (fn=@transformers.normalize_schema)
+
+  # 적재 (Load)
+  NODE load_data : STORE (
+    target=@db.target,
+    table=input.target_table,
+    mode=UPSERT,
+    key="order_id"
+  )
+
+  # 집계
+  NODE count_success : REDUCE (fn=COUNT)
+  NODE count_errors  : REDUCE (fn=COUNT)
+  NODE measure_time  : TRANSFORM (fn=ELAPSED_MS)
+
+  # 엣지 - 메인 파이프라인
+  EDGE INPUT.source_table -> extract_data
+  EDGE INPUT.date_from    -> extract_data
+  EDGE INPUT.date_to      -> extract_data
+  EDGE INPUT.batch_size   -> extract_data
+
+  EDGE extract_data       -> validate_rows
+  EDGE validate_rows.pass -> enrich_data
+  EDGE validate_rows.fail -> count_errors
+  EDGE enrich_data        -> calculate_tax
+  EDGE calculate_tax      -> normalize
+  EDGE normalize          -> load_data
+
+  EDGE load_data.ok       -> count_success
+  EDGE load_data.err      -> count_errors
+
+  EDGE count_success      -> OUTPUT.processed_count
+  EDGE count_errors       -> OUTPUT.error_count
+  EDGE measure_time       -> OUTPUT.duration_ms
+ENDFLOW
+
+EXECUTION
+  PARALLEL true
+  TARGET CPU
+  MEMORY BOUNDED 2GB
+  ISOLATION PROCESS
+  CACHE LRU 1000
+ENDEXECUTION
+
+VERIFY
+  ASSERT output.processed_count + output.error_count >= 0
+  PROPERTY output.duration_ms > 0
+  TEST @tests.etl.process_small_batch
+  TEST @tests.etl.process_large_batch
+  TEST @tests.etl.handle_invalid_rows
+ENDVERIFY
+
+END

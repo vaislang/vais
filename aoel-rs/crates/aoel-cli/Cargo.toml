@@ -1,0 +1,17 @@
+[package]
+name = "aoel-cli"
+version.workspace = true
+edition.workspace = true
+description = "AOEL Command Line Interface"
+
+[[bin]]
+name = "aoel"
+path = "src/main.rs"
+
+[dependencies]
+aoel-lexer = { workspace = true }
+aoel-parser = { workspace = true }
+aoel-typeck = { workspace = true }
+aoel-ast = { workspace = true }
+clap = { version = "4.4", features = ["derive"] }
+ariadne = { workspace = true }

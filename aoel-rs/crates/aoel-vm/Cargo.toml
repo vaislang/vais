@@ -1,0 +1,9 @@
+[package]
+name = "aoel-vm"
+version.workspace = true
+edition.workspace = true
+description = "AOEL Virtual Machine"
+
+[dependencies]
+aoel-ir = { workspace = true }
+thiserror = { workspace = true }
