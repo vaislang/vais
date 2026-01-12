@@ -47,3 +47,28 @@ serde_json = "1.0"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+lto = true
+
+# Root package for integration tests and benchmarks
+[package]
+name = "aoel-workspace"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+aoel-lexer = { path = "crates/aoel-lexer" }
+aoel-parser = { path = "crates/aoel-parser" }
+aoel-lowering = { path = "crates/aoel-lowering" }
+aoel-ir = { path = "crates/aoel-ir" }
+aoel-vm = { path = "crates/aoel-vm" }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "benchmarks"
+harness = false
