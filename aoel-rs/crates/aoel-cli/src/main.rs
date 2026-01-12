@@ -94,9 +94,20 @@ enum Commands {
         #[arg(long)]
         no_typecheck: bool,
 
-        /// Target format (c, wasm)
+        /// Target format (c, wasm, llvm)
         #[arg(long, default_value = "c")]
         target: String,
+    },
+
+    /// JIT compile and execute using Cranelift (requires --features cranelift)
+    Jit {
+        /// The AOEL file to execute
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// Skip type checking
+        #[arg(long)]
+        no_typecheck: bool,
     },
 }
 
@@ -127,6 +138,9 @@ fn main() {
         }
         Commands::Build { file, output, keep_c, no_typecheck, target } => {
             build_file(&file, output.as_ref(), keep_c, no_typecheck, &target);
+        }
+        Commands::Jit { file, no_typecheck } => {
+            jit_run(&file, no_typecheck);
         }
     }
 }
@@ -618,8 +632,9 @@ fn build_file(path: &PathBuf, output: Option<&PathBuf>, keep_c: bool, no_typeche
     match target.to_lowercase().as_str() {
         "c" => build_c_target(path, output, keep_c, &functions),
         "wasm" | "wat" => build_wasm_target(path, output, &functions),
+        "llvm" | "ll" => build_llvm_target(path, output, &functions),
         _ => {
-            eprintln!("Unknown target: {}. Supported targets: c, wasm", target);
+            eprintln!("Unknown target: {}. Supported targets: c, wasm, llvm", target);
             std::process::exit(1);
         }
     }
@@ -745,6 +760,181 @@ fn build_wasm_target(
             println!("  2. Run: wat2wasm {} -o {}", wat_file.display(), wasm_file.display());
             println!("");
             println!("Or use the WAT file directly with a WASM runtime that supports text format.");
+        }
+    }
+}
+
+fn build_llvm_target(
+    path: &PathBuf,
+    output: Option<&PathBuf>,
+    functions: &[aoel_lowering::CompiledFunction],
+) {
+    use std::process::Command;
+
+    // Generate LLVM IR code
+    let llvm_ir = match aoel_codegen::generate_llvm_ir(functions) {
+        Ok(ir) => ir,
+        Err(e) => {
+            eprintln!("Code generation error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Determine output paths
+    let ll_file = path.with_extension("ll");
+    let exe_file = output.cloned().unwrap_or_else(|| {
+        if cfg!(windows) {
+            path.with_extension("exe")
+        } else {
+            path.with_extension("")
+        }
+    });
+
+    // Write LLVM IR file
+    if let Err(e) = fs::write(&ll_file, &llvm_ir) {
+        eprintln!("Failed to write LLVM IR file: {}", e);
+        std::process::exit(1);
+    }
+
+    println!("Generated LLVM IR: {}", ll_file.display());
+
+    // Try to compile using clang
+    let status = Command::new("clang")
+        .arg("-O2")
+        .arg("-o")
+        .arg(&exe_file)
+        .arg(&ll_file)
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("✓ Compiled {} to {}", path.display(), exe_file.display());
+            // Keep the .ll file for debugging
+            println!("  (LLVM IR file kept: {})", ll_file.display());
+        }
+        Ok(s) => {
+            eprintln!("clang failed with exit code: {:?}", s.code());
+            eprintln!("LLVM IR file generated: {}", ll_file.display());
+            eprintln!("You can compile it manually with: clang {} -o {}", ll_file.display(), exe_file.display());
+        }
+        Err(_) => {
+            // Try llc + cc as fallback
+            println!("clang not found, trying llc...");
+
+            let obj_file = path.with_extension("o");
+            let llc_status = Command::new("llc")
+                .arg("-filetype=obj")
+                .arg("-o")
+                .arg(&obj_file)
+                .arg(&ll_file)
+                .status();
+
+            match llc_status {
+                Ok(s) if s.success() => {
+                    // Link with system linker
+                    let compiler = std::env::var("CC").unwrap_or_else(|_| "cc".to_string());
+                    let link_status = Command::new(&compiler)
+                        .arg("-o")
+                        .arg(&exe_file)
+                        .arg(&obj_file)
+                        .status();
+
+                    match link_status {
+                        Ok(s) if s.success() => {
+                            println!("✓ Compiled {} to {}", path.display(), exe_file.display());
+                            let _ = fs::remove_file(&obj_file);
+                        }
+                        _ => {
+                            eprintln!("Linking failed. Object file: {}", obj_file.display());
+                        }
+                    }
+                }
+                _ => {
+                    println!("✓ Generated LLVM IR file: {}", ll_file.display());
+                    println!("");
+                    println!("Note: Neither clang nor llc found. To compile to native binary:");
+                    println!("  1. Install LLVM: https://llvm.org/");
+                    println!("  2. Run: clang {} -o {}", ll_file.display(), exe_file.display());
+                    println!("");
+                    println!("Or use llc to compile to object file:");
+                    println!("  llc -filetype=obj {} -o {}.o", ll_file.display(), path.display());
+                }
+            }
+        }
+    }
+}
+
+fn jit_run(path: &PathBuf, no_typecheck: bool) {
+    let source = match read_file(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Parse
+    let program = match aoel_parser::parse(&source) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Syntax error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Resolve modules
+    let base_dir = path.parent().unwrap_or(std::path::Path::new("."));
+    let program = match aoel_parser::resolve_modules(program, base_dir) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Module error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Type check (optional)
+    if !no_typecheck {
+        if let Err(e) = aoel_typeck::check(&program) {
+            eprintln!("Type error: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Lower to IR
+    let mut lowerer = aoel_lowering::Lowerer::new();
+    let functions = match lowerer.lower_program(&program) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Lowering error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // JIT compile and execute
+    match aoel_codegen::jit_execute(&functions) {
+        Ok(result) => {
+            // Decode and print result
+            let tag = (result & 0xFF) as u8;
+            let value = result >> 8;
+            match tag {
+                0 => println!("void"),
+                1 => println!("{}", if value != 0 { "true" } else { "false" }),
+                2 => println!("{}", value),
+                3 => {
+                    // Float - approximate decoding
+                    let bits = (result as u64) >> 8;
+                    let f = f64::from_bits(bits << 8);
+                    println!("{}", f);
+                }
+                _ => println!("{}", result),
+            }
+        }
+        Err(e) => {
+            eprintln!("JIT error: {}", e);
+            eprintln!("");
+            eprintln!("Note: Cranelift JIT requires the 'cranelift' feature.");
+            eprintln!("Build with: cargo build --release --features cranelift");
+            std::process::exit(1);
         }
     }
 }

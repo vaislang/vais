@@ -8,6 +8,10 @@ description = "AOEL Command Line Interface"
 name = "aoel"
 path = "src/main.rs"
 
+[features]
+default = []
+cranelift = ["aoel-codegen/cranelift"]
+
 [dependencies]
 aoel-lexer = { workspace = true }
 aoel-parser = { workspace = true }

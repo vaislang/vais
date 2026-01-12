@@ -12,6 +12,9 @@ pub enum CodegenError {
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 pub type CodegenResult<T> = Result<T, CodegenError>;

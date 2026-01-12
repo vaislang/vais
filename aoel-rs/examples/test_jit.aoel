@@ -1,0 +1,3 @@
+// Test JIT - factorial
+fact(n) = n < 2 ? 1 : n * $(n - 1)
+fact(10)
