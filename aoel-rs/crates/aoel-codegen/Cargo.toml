@@ -1,0 +1,12 @@
+[package]
+name = "aoel-codegen"
+version.workspace = true
+edition.workspace = true
+description = "AOEL Native Code Generator (C backend)"
+
+[dependencies]
+aoel-ast = { workspace = true }
+aoel-parser = { workspace = true }
+aoel-lowering = { workspace = true }
+aoel-ir = { workspace = true }
+thiserror = { workspace = true }

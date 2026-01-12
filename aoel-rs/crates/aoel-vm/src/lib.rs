@@ -1,21 +1,10 @@
-//! AOEL Virtual Machine
+//! AOEL v6b Virtual Machine
 //!
-//! Stack-based VM for executing AOEL IR.
+//! v6b 문법용 스택 기반 VM.
+//! 재귀 호출($), 컬렉션 연산(.@, .?, ./) 등을 지원.
 
-mod error;
-mod runtime;
 mod vm;
-mod builtins;
+mod error;
 
+pub use vm::{Vm, execute, execute_function};
 pub use error::{RuntimeError, RuntimeResult};
-pub use runtime::Runtime;
-pub use vm::Vm;
-
-/// Execute an IR module with the given inputs
-pub fn execute(
-    module: &aoel_ir::Module,
-    inputs: std::collections::HashMap<String, aoel_ir::Value>,
-) -> RuntimeResult<std::collections::HashMap<String, aoel_ir::Value>> {
-    let mut vm = Vm::new();
-    vm.execute(module, inputs)
-}

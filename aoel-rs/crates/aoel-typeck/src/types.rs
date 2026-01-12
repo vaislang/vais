@@ -1,168 +1,203 @@
-//! Type utilities for type checking
-//!
-//! Provides helpers for type comparison and formatting.
+//! v6b Type System
 
-use aoel_ast::{PrimitiveKind, PrimitiveType, Type};
-use aoel_lexer::Span;
+use std::collections::HashMap;
+use std::fmt;
 
-/// Check if a type is BOOL
-pub fn is_bool_type(ty: &Type) -> bool {
-    matches!(ty, Type::Primitive(p) if p.kind == PrimitiveKind::Bool)
+/// v6b 타입
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    /// 정수
+    Int,
+    /// 실수
+    Float,
+    /// 문자열
+    String,
+    /// 불리언
+    Bool,
+    /// Unit/Void
+    Unit,
+    /// 배열 타입
+    Array(Box<Type>),
+    /// 튜플 타입
+    Tuple(Vec<Type>),
+    /// 맵/딕셔너리 타입
+    Map(Box<Type>, Box<Type>),
+    /// 구조체 타입
+    Struct(HashMap<String, Type>),
+    /// 함수 타입
+    Function(Vec<Type>, Box<Type>),
+    /// Optional 타입
+    Optional(Box<Type>),
+    /// Result 타입
+    Result(Box<Type>),
+    /// 타입 변수 (추론용)
+    Var(usize),
+    /// Any 타입 (동적 타입)
+    Any,
+    /// Never 타입 (에러/발산)
+    Never,
 }
 
-/// Check if a type is numeric (any integer or float)
-pub fn is_numeric_type(ty: &Type) -> bool {
-    matches!(ty, Type::Primitive(p) if is_numeric_primitive(p.kind))
-}
-
-/// Check if a primitive kind is numeric
-pub fn is_numeric_primitive(kind: PrimitiveKind) -> bool {
-    matches!(
-        kind,
-        PrimitiveKind::Int
-            | PrimitiveKind::Int8
-            | PrimitiveKind::Int16
-            | PrimitiveKind::Int32
-            | PrimitiveKind::Int64
-            | PrimitiveKind::Uint
-            | PrimitiveKind::Uint8
-            | PrimitiveKind::Uint16
-            | PrimitiveKind::Uint32
-            | PrimitiveKind::Uint64
-            | PrimitiveKind::Float32
-            | PrimitiveKind::Float64
-    )
-}
-
-/// Check if a type is a string
-pub fn is_string_type(ty: &Type) -> bool {
-    matches!(ty, Type::Primitive(p) if p.kind == PrimitiveKind::String)
-}
-
-/// Check if a type is void
-pub fn is_void_type(ty: &Type) -> bool {
-    matches!(ty, Type::Primitive(p) if p.kind == PrimitiveKind::Void)
-}
-
-/// Check if a type is an array
-pub fn is_array_type(ty: &Type) -> bool {
-    matches!(ty, Type::Array(_))
-}
-
-/// Check if a type is a map
-pub fn is_map_type(ty: &Type) -> bool {
-    matches!(ty, Type::Map(_))
-}
-
-/// Check if a type is a struct
-pub fn is_struct_type(ty: &Type) -> bool {
-    matches!(ty, Type::Struct(_))
-}
-
-/// Get element type from array
-pub fn get_array_element_type(ty: &Type) -> Option<&Type> {
-    match ty {
-        Type::Array(arr) => Some(&arr.element_type),
-        _ => None,
+impl Type {
+    /// 정수 타입인지 확인
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, Type::Int | Type::Float)
     }
-}
 
-/// Get field type from struct by name
-pub fn get_struct_field_type<'a>(ty: &'a Type, field_name: &str) -> Option<&'a Type> {
-    match ty {
-        Type::Struct(s) => s.fields.iter().find(|f| f.name.name == field_name).map(|f| &f.ty),
-        _ => None,
+    /// 비교 가능한지 확인
+    pub fn is_comparable(&self) -> bool {
+        matches!(self, Type::Int | Type::Float | Type::String | Type::Bool)
     }
-}
 
-/// Get struct field names
-pub fn get_struct_field_names(ty: &Type) -> Vec<String> {
-    match ty {
-        Type::Struct(s) => s.fields.iter().map(|f| f.name.name.clone()).collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Convert type to string for error messages
-pub fn type_to_string(ty: &Type) -> String {
-    match ty {
-        Type::Primitive(p) => p.kind.as_str().to_string(),
-        Type::Array(arr) => format!("ARRAY<{}>", type_to_string(&arr.element_type)),
-        Type::Map(m) => format!(
-            "MAP<{}, {}>",
-            type_to_string(&m.key_type),
-            type_to_string(&m.value_type)
-        ),
-        Type::Struct(s) => {
-            let fields: Vec<String> = s
-                .fields
-                .iter()
-                .map(|f| format!("{}: {}", f.name.name, type_to_string(&f.ty)))
-                .collect();
-            format!("STRUCT {{ {} }}", fields.join(", "))
+    /// 배열 요소 타입 반환
+    pub fn element_type(&self) -> Option<&Type> {
+        match self {
+            Type::Array(t) => Some(t),
+            _ => None,
         }
-        Type::Optional(o) => format!("OPTIONAL<{}>", type_to_string(&o.inner_type)),
-        Type::Union(u) => {
-            let types: Vec<String> = u.types.iter().map(type_to_string).collect();
-            format!("UNION<{}>", types.join(" | "))
+    }
+
+    /// 함수 반환 타입
+    pub fn return_type(&self) -> Option<&Type> {
+        match self {
+            Type::Function(_, ret) => Some(ret),
+            _ => None,
         }
-        Type::Ref(r) => format!("@{}", r.path),
+    }
+
+    /// 타입 변수 치환
+    pub fn substitute(&self, var: usize, replacement: &Type) -> Type {
+        match self {
+            Type::Var(v) if *v == var => replacement.clone(),
+            Type::Array(t) => Type::Array(Box::new(t.substitute(var, replacement))),
+            Type::Tuple(ts) => Type::Tuple(
+                ts.iter()
+                    .map(|t| t.substitute(var, replacement))
+                    .collect(),
+            ),
+            Type::Map(k, v) => Type::Map(
+                Box::new(k.substitute(var, replacement)),
+                Box::new(v.substitute(var, replacement)),
+            ),
+            Type::Struct(fields) => Type::Struct(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.substitute(var, replacement)))
+                    .collect(),
+            ),
+            Type::Function(params, ret) => Type::Function(
+                params
+                    .iter()
+                    .map(|t| t.substitute(var, replacement))
+                    .collect(),
+                Box::new(ret.substitute(var, replacement)),
+            ),
+            Type::Optional(t) => Type::Optional(Box::new(t.substitute(var, replacement))),
+            Type::Result(t) => Type::Result(Box::new(t.substitute(var, replacement))),
+            _ => self.clone(),
+        }
+    }
+
+    /// 타입 변수 포함 여부
+    pub fn contains_var(&self, var: usize) -> bool {
+        match self {
+            Type::Var(v) => *v == var,
+            Type::Array(t) => t.contains_var(var),
+            Type::Tuple(ts) => ts.iter().any(|t| t.contains_var(var)),
+            Type::Map(k, v) => k.contains_var(var) || v.contains_var(var),
+            Type::Struct(fields) => fields.values().any(|t| t.contains_var(var)),
+            Type::Function(params, ret) => {
+                params.iter().any(|t| t.contains_var(var)) || ret.contains_var(var)
+            }
+            Type::Optional(t) | Type::Result(t) => t.contains_var(var),
+            _ => false,
+        }
+    }
+
+    /// 자유 타입 변수 수집
+    pub fn free_vars(&self) -> Vec<usize> {
+        let mut vars = Vec::new();
+        self.collect_vars(&mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
+    }
+
+    fn collect_vars(&self, vars: &mut Vec<usize>) {
+        match self {
+            Type::Var(v) => vars.push(*v),
+            Type::Array(t) => t.collect_vars(vars),
+            Type::Tuple(ts) => {
+                for t in ts {
+                    t.collect_vars(vars);
+                }
+            }
+            Type::Map(k, v) => {
+                k.collect_vars(vars);
+                v.collect_vars(vars);
+            }
+            Type::Struct(fields) => {
+                for t in fields.values() {
+                    t.collect_vars(vars);
+                }
+            }
+            Type::Function(params, ret) => {
+                for t in params {
+                    t.collect_vars(vars);
+                }
+                ret.collect_vars(vars);
+            }
+            Type::Optional(t) | Type::Result(t) => t.collect_vars(vars),
+            _ => {}
+        }
     }
 }
 
-/// Create a BOOL type
-pub fn bool_type(span: Span) -> Type {
-    Type::Primitive(PrimitiveType::new(PrimitiveKind::Bool, span))
-}
-
-/// Create an INT64 type
-pub fn int64_type(span: Span) -> Type {
-    Type::Primitive(PrimitiveType::new(PrimitiveKind::Int64, span))
-}
-
-/// Create a FLOAT64 type
-pub fn float64_type(span: Span) -> Type {
-    Type::Primitive(PrimitiveType::new(PrimitiveKind::Float64, span))
-}
-
-/// Create a STRING type
-pub fn string_type(span: Span) -> Type {
-    Type::Primitive(PrimitiveType::new(PrimitiveKind::String, span))
-}
-
-/// Create a VOID type
-pub fn void_type(span: Span) -> Type {
-    Type::Primitive(PrimitiveType::new(PrimitiveKind::Void, span))
-}
-
-/// Check if two types are compatible for comparison operations
-pub fn types_comparable(left: &Type, right: &Type) -> bool {
-    match (left, right) {
-        // Same primitive types are always comparable
-        (Type::Primitive(l), Type::Primitive(r)) => {
-            l.kind == r.kind || (is_numeric_primitive(l.kind) && is_numeric_primitive(r.kind))
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Int => write!(f, "Int"),
+            Type::Float => write!(f, "Float"),
+            Type::String => write!(f, "String"),
+            Type::Bool => write!(f, "Bool"),
+            Type::Unit => write!(f, "()"),
+            Type::Array(t) => write!(f, "[{}]", t),
+            Type::Tuple(ts) => {
+                write!(f, "(")?;
+                for (i, t) in ts.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", t)?;
+                }
+                write!(f, ")")
+            }
+            Type::Map(k, v) => write!(f, "{{{}: {}}}", k, v),
+            Type::Struct(fields) => {
+                write!(f, "{{ ")?;
+                for (i, (name, ty)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", name, ty)?;
+                }
+                write!(f, " }}")
+            }
+            Type::Function(params, ret) => {
+                write!(f, "(")?;
+                for (i, t) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", t)?;
+                }
+                write!(f, ") -> {}", ret)
+            }
+            Type::Optional(t) => write!(f, "?{}", t),
+            Type::Result(t) => write!(f, "!{}", t),
+            Type::Var(v) => write!(f, "T{}", v),
+            Type::Any => write!(f, "Any"),
+            Type::Never => write!(f, "Never"),
         }
-        // VOID can be compared with OPTIONAL
-        (Type::Primitive(p), Type::Optional(_)) | (Type::Optional(_), Type::Primitive(p))
-            if p.kind == PrimitiveKind::Void =>
-        {
-            true
-        }
-        // Same complex types
-        (Type::Array(_), Type::Array(_)) => true,
-        (Type::Optional(_), Type::Optional(_)) => true,
-        // References might be comparable
-        (Type::Ref(_), _) | (_, Type::Ref(_)) => true,
-        _ => false,
     }
-}
-
-/// Check if a type is valid for arithmetic operations
-pub fn valid_for_arithmetic(ty: &Type) -> bool {
-    is_numeric_type(ty)
-}
-
-/// Check if two types can be used in logical operations (must both be bool)
-pub fn valid_for_logical(left: &Type, right: &Type) -> bool {
-    is_bool_type(left) && is_bool_type(right)
 }

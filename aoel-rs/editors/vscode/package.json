@@ -1,0 +1,62 @@
+{
+  "name": "aoel-language",
+  "displayName": "AOEL Language",
+  "description": "Language support for AOEL (AI-Optimized Executable Language)",
+  "version": "0.1.0",
+  "publisher": "aoel-team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aoel-lang/aoel"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:aoel"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "aoel",
+        "aliases": ["AOEL", "aoel"],
+        "extensions": [".aoel", ".v6b"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "aoel",
+        "scopeName": "source.aoel",
+        "path": "./syntaxes/aoel.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "AOEL",
+      "properties": {
+        "aoel.server.path": {
+          "type": "string",
+          "default": "aoel-lsp",
+          "description": "Path to the AOEL language server executable"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

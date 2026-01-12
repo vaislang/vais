@@ -1,0 +1,4 @@
+// Collection operations example
+double_all(arr) = arr.@(_ * 2)
+filter_positive(arr) = arr.?(_ > 0)
+sum_all(arr) = arr./+

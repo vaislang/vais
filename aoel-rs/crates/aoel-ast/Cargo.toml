@@ -1,12 +1,9 @@
 [package]
 name = "aoel-ast"
-version.workspace = true
-edition.workspace = true
+version = "0.1.0"
+edition = "2021"
 description = "AOEL Abstract Syntax Tree"
 
 [dependencies]
-aoel-lexer = { workspace = true }
-serde = { workspace = true }
-
-[dev-dependencies]
-pretty_assertions = "1.4"
+serde = { version = "1.0", features = ["derive"] }
+aoel-lexer = { path = "../aoel-lexer" }

@@ -1,9 +1,0 @@
-[package]
-name = "aoel-v6b-ast"
-version = "0.1.0"
-edition = "2021"
-description = "AOEL v6b Abstract Syntax Tree"
-
-[dependencies]
-serde = { version = "1.0", features = ["derive"] }
-aoel-v6b-lexer = { path = "../aoel-v6b-lexer" }

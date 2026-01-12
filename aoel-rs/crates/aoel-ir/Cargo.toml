@@ -5,8 +5,4 @@ edition.workspace = true
 description = "AOEL Intermediate Representation"
 
 [dependencies]
-aoel-ast = { workspace = true }
 serde = { workspace = true }
-
-[dev-dependencies]
-aoel-lexer = { workspace = true }

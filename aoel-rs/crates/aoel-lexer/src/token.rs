@@ -1,11 +1,12 @@
-//! Token definitions for AOEL
+//! AOEL v6b Token Definitions
 //!
-//! Defines all token types and their representations.
+//! v6b 문법에 최적화된 토큰 정의.
+//! 목표: AI 토큰 효율성 44% 향상
 
 use logos::Logos;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-/// Span represents a range in the source code
+/// 소스 코드 내 위치
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Span {
     pub start: usize,
@@ -24,9 +25,22 @@ impl Span {
     pub fn is_empty(&self) -> bool {
         self.start == self.end
     }
+
+    pub fn merge(self, other: Span) -> Span {
+        Span {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
+    }
 }
 
-/// A token with its kind and location
+impl Default for Span {
+    fn default() -> Self {
+        Self { start: 0, end: 0 }
+    }
+}
+
+/// 토큰과 위치 정보
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
@@ -44,499 +58,336 @@ impl Token {
     }
 }
 
-/// All token types in AOEL
-#[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \t\r]+")]  // Skip whitespace (not newlines)
-#[logos(skip r"#[^\n]*")]   // Skip comments
+/// AOEL v6b 토큰 종류
+#[derive(Logos, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[logos(skip r"[ \t\r]+")]  // 공백 스킵 (줄바꿈 제외)
 pub enum TokenKind {
     // =========================================================================
-    // Block Keywords
+    // Keywords (최소한으로)
     // =========================================================================
-    #[token("UNIT")]
-    Unit,
-    #[token("META")]
-    Meta,
-    #[token("ENDMETA")]
-    EndMeta,
-    #[token("INPUT")]
-    Input,
-    #[token("ENDINPUT")]
-    EndInput,
-    #[token("OUTPUT")]
-    Output,
-    #[token("ENDOUTPUT")]
-    EndOutput,
-    #[token("INTENT")]
-    Intent,
-    #[token("ENDINTENT")]
-    EndIntent,
-    #[token("CONSTRAINT")]
-    Constraint,
-    #[token("ENDCONSTRAINT")]
-    EndConstraint,
-    #[token("FLOW")]
-    Flow,
-    #[token("ENDFLOW")]
-    EndFlow,
-    #[token("EXECUTION")]
-    Execution,
-    #[token("ENDEXECUTION")]
-    EndExecution,
-    #[token("VERIFY")]
-    Verify,
-    #[token("ENDVERIFY")]
-    EndVerify,
-    #[token("END")]
-    End,
+    #[token("let")]
+    Let,
 
-    // =========================================================================
-    // Unit Types
-    // =========================================================================
-    #[token("FUNCTION")]
-    Function,
-    #[token("SERVICE")]
-    Service,
-    #[token("PIPELINE")]
-    Pipeline,
-    #[token("MODULE")]
-    Module,
+    #[token("if")]
+    If,
 
-    // =========================================================================
-    // Meta Keywords
-    // =========================================================================
-    #[token("DOMAIN")]
-    Domain,
-    #[token("DETERMINISM")]
-    Determinism,
-    #[token("IDEMPOTENT")]
-    Idempotent,
-    #[token("PURE")]
-    Pure,
-    #[token("TIMEOUT")]
-    Timeout,
-    #[token("RETRY")]
-    Retry,
+    #[token("else")]
+    Else,
 
-    // =========================================================================
-    // Intent Keywords
-    // =========================================================================
-    #[token("GOAL")]
-    Goal,
-    #[token("PRIORITY")]
-    Priority,
-    #[token("ON_FAILURE")]
-    OnFailure,
-
-    // Goal Types
-    #[token("TRANSFORM")]
-    Transform,
-    #[token("VALIDATE")]
-    Validate,
-    #[token("AGGREGATE")]
-    Aggregate,
-    #[token("FILTER")]
-    Filter,
-    #[token("ROUTE")]
-    Route,
-    #[token("COMPOSE")]
-    Compose,
-    #[token("FETCH")]
-    Fetch,
-
-    // Priority Values
-    #[token("CORRECTNESS")]
-    Correctness,
-    #[token("PERFORMANCE")]
-    Performance,
-    #[token("LATENCY")]
-    Latency,
-    #[token("THROUGHPUT")]
-    Throughput,
-
-    // Failure Strategies
-    #[token("ABORT")]
-    Abort,
-    #[token("FALLBACK")]
-    Fallback,
-    #[token("DEFAULT")]
-    Default,
-
-    // =========================================================================
-    // Constraint Keywords
-    // =========================================================================
-    #[token("REQUIRE")]
-    Require,
-    #[token("FORBID")]
-    Forbid,
-    #[token("PREFER")]
-    Prefer,
-    #[token("INVARIANT")]
-    Invariant,
-    #[token("WITHIN")]
-    Within,
-
-    // =========================================================================
-    // Flow Keywords
-    // =========================================================================
-    #[token("NODE")]
-    Node,
-    #[token("EDGE")]
-    Edge,
-    #[token("WHEN")]
-    When,
-
-    // Operations
-    #[token("MAP")]
-    Map,
-    #[token("REDUCE")]
-    Reduce,
-    #[token("SPLIT")]
-    Split,
-    #[token("MERGE")]
-    Merge,
-    #[token("BRANCH")]
-    Branch,
-    #[token("JOIN")]
-    Join,
-    #[token("RACE")]
-    Race,
-    #[token("STORE")]
-    Store,
-    #[token("CALL")]
-    Call,
-    #[token("EMIT")]
-    Emit,
-    #[token("SUBSCRIBE")]
-    Subscribe,
-    #[token("SANITIZE")]
-    Sanitize,
-    #[token("AUTHORIZE")]
-    Authorize,
-
-    // =========================================================================
-    // Execution Keywords
-    // =========================================================================
-    #[token("PARALLEL")]
-    Parallel,
-    #[token("TARGET")]
-    Target,
-    #[token("ISOLATION")]
-    Isolation,
-    #[token("CACHE")]
-    Cache,
-
-    // Target Values
-    #[token("ANY")]
-    Any,
-    #[token("CPU")]
-    Cpu,
-    #[token("GPU")]
-    Gpu,
-    #[token("WASM")]
-    Wasm,
-    #[token("NATIVE")]
-    Native,
-
-    // Memory Values
-    #[token("MEMORY")]
-    Memory,
-    #[token("BOUNDED")]
-    Bounded,
-    #[token("UNBOUNDED")]
-    Unbounded,
-    #[token("STACK_ONLY")]
-    StackOnly,
-
-    // Isolation Values
-    #[token("NONE")]
-    None_,
-    #[token("THREAD")]
-    Thread,
-    #[token("PROCESS")]
-    Process,
-    #[token("CONTAINER")]
-    Container,
-
-    // Cache Values
-    #[token("LRU")]
-    Lru,
-    #[token("TTL")]
-    Ttl,
-
-    // =========================================================================
-    // Verify Keywords
-    // =========================================================================
-    #[token("ASSERT")]
-    Assert,
-    #[token("PROPERTY")]
-    Property,
-    #[token("POSTCONDITION")]
-    Postcondition,
-    #[token("TEST")]
-    Test,
-    #[token("FORALL")]
-    Forall,
-    #[token("EXISTS")]
-    Exists,
-    #[token("EVENTUALLY")]
-    Eventually,
-    #[token("ALWAYS")]
-    Always,
-
-    // =========================================================================
-    // Type Keywords
-    // =========================================================================
-    #[token("INT")]
-    Int,
-    #[token("INT8")]
-    Int8,
-    #[token("INT16")]
-    Int16,
-    #[token("INT32")]
-    Int32,
-    #[token("INT64")]
-    Int64,
-    #[token("UINT")]
-    Uint,
-    #[token("UINT8")]
-    Uint8,
-    #[token("UINT16")]
-    Uint16,
-    #[token("UINT32")]
-    Uint32,
-    #[token("UINT64")]
-    Uint64,
-    #[token("FLOAT32")]
-    Float32,
-    #[token("FLOAT64")]
-    Float64,
-    #[token("BOOL")]
-    Bool,
-    #[token("STRING")]
-    String_,
-    #[token("BYTES")]
-    Bytes,
-    #[token("VOID")]
-    Void,
-    #[token("ARRAY")]
-    Array,
-    #[token("STRUCT")]
-    Struct,
-    #[token("OPTIONAL")]
-    Optional,
-    #[token("UNION")]
-    Union,
-
-    // =========================================================================
-    // Logical Operators
-    // =========================================================================
-    #[token("AND")]
-    And,
-    #[token("OR")]
-    Or,
-    #[token("XOR")]
-    Xor,
-    #[token("NOT")]
-    Not,
-    #[token("IMPLIES")]
-    Implies,
-    #[token("IN")]
-    In,
-    #[token("MATCH")]
+    #[token("match")]
     Match,
 
-    // =========================================================================
-    // Built-in Functions
-    // =========================================================================
-    #[token("LEN")]
-    Len,
-    #[token("CONTAINS")]
-    Contains,
-    #[token("RANGE")]
-    Range,
-    #[token("NOW")]
-    Now,
-    #[token("SUM")]
-    Sum,
-    #[token("COUNT")]
-    Count,
+    #[token("for")]
+    For,
+
+    #[token("in")]
+    In,
+
+    #[token("fn")]
+    Fn,
+
+    #[token("pub")]
+    Pub,
+
+    #[token("mod")]
+    Mod,
+
+    #[token("use")]
+    Use,
+
+    #[token("type")]
+    Type,
+
+    #[token("trait")]
+    Trait,
+
+    #[token("impl")]
+    Impl,
+
+    #[token("async")]
+    Async,
+
+    #[token("await")]
+    Await,
+
+    #[token("mut")]
+    Mut,
+
+    #[token("ffi")]
+    Ffi,
 
     // =========================================================================
     // Literals
     // =========================================================================
     #[token("true")]
     True,
+
     #[token("false")]
     False,
 
-    #[regex(r"-?[0-9]+", priority = 2)]
+    #[token("nil")]
+    Nil,
+
+    #[token("some")]
+    Some,
+
+    #[token("ok")]
+    Ok,
+
+    #[token("err")]
+    Err,
+
+    /// 정수 리터럴 (음수 부호는 단항 연산자로 처리)
+    #[regex(r"[0-9]+", priority = 2)]
     Integer,
 
-    #[regex(r"-?[0-9]+\.[0-9]+")]
+    /// 실수 리터럴 (음수 부호는 단항 연산자로 처리)
+    #[regex(r"[0-9]+\.[0-9]+")]
     Float,
 
+    /// 문자열 리터럴
     #[regex(r#""([^"\\]|\\.)*""#)]
-    StringLiteral,
+    String,
 
-    // Regex literal /pattern/ - temporarily disabled due to conflict with Slash
-    // TODO: Re-enable with proper handling (maybe use callback or different syntax)
-    // #[regex(r"/([^/\\]|\\.)+/")]
-    Regex,
-
-    // Version (V1.0.0)
-    #[regex(r"V[0-9]+\.[0-9]+\.[0-9]+")]
-    Version,
-
-    // Duration (10s, 5m, 100ms)
-    #[regex(r"[0-9]+(ms|s|m|h)")]
-    Duration,
-
-    // Size (256MB, 1GB)
-    #[regex(r"[0-9]+(KB|MB|GB)")]
-    Size,
-
-    // =========================================================================
-    // Identifiers and References
-    // =========================================================================
+    /// 식별자
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
     Identifier,
 
-    #[regex(r"@[a-zA-Z_][a-zA-Z0-9_.]*")]
-    ExternalRef,
+    // =========================================================================
+    // Operators - Collection (v6b 핵심)
+    // =========================================================================
+    /// .@ - Map operator
+    #[token(".@")]
+    DotAt,
+
+    /// .? - Filter operator
+    #[token(".?")]
+    DotQuestion,
+
+    /// ./ - Reduce operator
+    #[token("./")]
+    DotSlash,
+
+    // =========================================================================
+    // Operators - Special (v6b)
+    // =========================================================================
+    /// $ - Self recursion
+    #[token("$")]
+    Dollar,
+
+    /// # - Length prefix
+    #[token("#")]
+    Hash,
+
+    /// _ - Lambda parameter / wildcard (높은 우선순위로 식별자보다 먼저 매칭)
+    #[token("_", priority = 10)]
+    Underscore,
+
+    /// @ - In operator (contains)
+    #[token("@")]
+    At,
+
+    /// .. - Range operator
+    #[token("..")]
+    DotDot,
+
+    // =========================================================================
+    // Operators - Arithmetic
+    // =========================================================================
+    #[token("+")]
+    Plus,
+
+    #[token("-")]
+    Minus,
+
+    #[token("*")]
+    Star,
+
+    #[token("/")]
+    Slash,
+
+    #[token("%")]
+    Percent,
+
+    // =========================================================================
+    // Operators - Comparison
+    // =========================================================================
+    #[token("==")]
+    EqEq,
+
+    #[token("!=")]
+    NotEq,
+
+    #[token("<")]
+    Lt,
+
+    #[token(">")]
+    Gt,
+
+    #[token("<=")]
+    LtEq,
+
+    #[token(">=")]
+    GtEq,
+
+    // =========================================================================
+    // Operators - Logical
+    // =========================================================================
+    #[token("&&")]
+    AndAnd,
+
+    #[token("||")]
+    OrOr,
+
+    #[token("!")]
+    Bang,
+
+    // =========================================================================
+    // Operators - Assignment & Arrow
+    // =========================================================================
+    #[token("=")]
+    Eq,
+
+    #[token("->")]
+    Arrow,
+
+    #[token("=>")]
+    FatArrow,
 
     // =========================================================================
     // Punctuation
     // =========================================================================
-    #[token(":")]
-    Colon,
-    #[token(",")]
-    Comma,
-    #[token(".")]
-    Dot,
-    #[token("->")]
-    Arrow,
     #[token("(")]
     LParen,
+
     #[token(")")]
     RParen,
+
     #[token("[")]
     LBracket,
+
     #[token("]")]
     RBracket,
+
     #[token("{")]
     LBrace,
+
     #[token("}")]
     RBrace,
-    #[token("<")]
-    Lt,
-    #[token(">")]
-    Gt,
-    #[token("<=")]
-    Lte,
-    #[token(">=")]
-    Gte,
-    #[token("==")]
-    Eq,
-    #[token("!=")]
-    Neq,
-    #[token("=")]
-    Assign,
+
+    #[token(",")]
+    Comma,
+
+    #[token(":")]
+    Colon,
+
+    #[token(";")]
+    Semi,
+
+    #[token(".")]
+    Dot,
+
+    #[token("?")]
+    Question,
+
     #[token("|")]
     Pipe,
-    #[token("+")]
-    Plus,
-    #[token("-")]
-    Minus,
-    #[token("*")]
-    Star,
-    #[token("/", priority = 3)]
-    Slash,
+
+    #[token("&")]
+    Ampersand,
 
     // =========================================================================
     // Special
     // =========================================================================
+    /// 줄바꿈
     #[token("\n")]
     Newline,
 
+    /// 주석
+    #[regex(r"//[^\n]*")]
+    Comment,
+
+    /// 파일 끝
     Eof,
 
+    /// 에러 토큰
     Error,
 }
 
 impl TokenKind {
-    /// Returns true if this token is a keyword
+    /// 키워드인지 확인
     pub fn is_keyword(&self) -> bool {
         matches!(
             self,
-            TokenKind::Unit
-                | TokenKind::Meta
-                | TokenKind::EndMeta
-                | TokenKind::Input
-                | TokenKind::EndInput
-                | TokenKind::Output
-                | TokenKind::EndOutput
-                | TokenKind::Intent
-                | TokenKind::EndIntent
-                | TokenKind::Constraint
-                | TokenKind::EndConstraint
-                | TokenKind::Flow
-                | TokenKind::EndFlow
-                | TokenKind::Execution
-                | TokenKind::EndExecution
-                | TokenKind::Verify
-                | TokenKind::EndVerify
-                | TokenKind::End
+            TokenKind::Let
+                | TokenKind::If
+                | TokenKind::Else
+                | TokenKind::Match
+                | TokenKind::For
+                | TokenKind::In
+                | TokenKind::Fn
+                | TokenKind::Pub
+                | TokenKind::Mod
+                | TokenKind::Use
+                | TokenKind::Type
+                | TokenKind::Trait
+                | TokenKind::Impl
+                | TokenKind::Async
+                | TokenKind::Await
+                | TokenKind::Mut
+                | TokenKind::Ffi
         )
     }
 
-    /// Returns true if this token is a type keyword
-    pub fn is_type(&self) -> bool {
+    /// 리터럴인지 확인
+    pub fn is_literal(&self) -> bool {
         matches!(
             self,
-            TokenKind::Int
-                | TokenKind::Int8
-                | TokenKind::Int16
-                | TokenKind::Int32
-                | TokenKind::Int64
-                | TokenKind::Uint
-                | TokenKind::Uint8
-                | TokenKind::Uint16
-                | TokenKind::Uint32
-                | TokenKind::Uint64
-                | TokenKind::Float32
-                | TokenKind::Float64
-                | TokenKind::Bool
-                | TokenKind::String_
-                | TokenKind::Bytes
-                | TokenKind::Void
-                | TokenKind::Array
-                | TokenKind::Struct
-                | TokenKind::Optional
-                | TokenKind::Union
+            TokenKind::True
+                | TokenKind::False
+                | TokenKind::Nil
+                | TokenKind::Some
+                | TokenKind::Ok
+                | TokenKind::Err
+                | TokenKind::Integer
+                | TokenKind::Float
+                | TokenKind::String
         )
     }
 
-    /// Returns true if this token is an operator
+    /// 연산자인지 확인
     pub fn is_operator(&self) -> bool {
         matches!(
             self,
-            TokenKind::And
-                | TokenKind::Or
-                | TokenKind::Xor
-                | TokenKind::Not
-                | TokenKind::Implies
-                | TokenKind::In
-                | TokenKind::Match
-                | TokenKind::Lt
-                | TokenKind::Gt
-                | TokenKind::Lte
-                | TokenKind::Gte
-                | TokenKind::Eq
-                | TokenKind::Neq
+            TokenKind::DotAt
+                | TokenKind::DotQuestion
+                | TokenKind::DotSlash
+                | TokenKind::Dollar
+                | TokenKind::Hash
+                | TokenKind::At
+                | TokenKind::DotDot
                 | TokenKind::Plus
                 | TokenKind::Minus
                 | TokenKind::Star
                 | TokenKind::Slash
+                | TokenKind::Percent
+                | TokenKind::EqEq
+                | TokenKind::NotEq
+                | TokenKind::Lt
+                | TokenKind::Gt
+                | TokenKind::LtEq
+                | TokenKind::GtEq
+                | TokenKind::AndAnd
+                | TokenKind::OrOr
+                | TokenKind::Bang
+        )
+    }
+
+    /// v6b 컬렉션 연산자인지 확인
+    pub fn is_collection_op(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::DotAt | TokenKind::DotQuestion | TokenKind::DotSlash
         )
     }
 }
@@ -544,20 +395,75 @@ impl TokenKind {
 impl std::fmt::Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenKind::Unit => write!(f, "UNIT"),
-            TokenKind::Meta => write!(f, "META"),
-            TokenKind::EndMeta => write!(f, "ENDMETA"),
-            TokenKind::Input => write!(f, "INPUT"),
-            TokenKind::EndInput => write!(f, "ENDINPUT"),
-            TokenKind::Output => write!(f, "OUTPUT"),
-            TokenKind::EndOutput => write!(f, "ENDOUTPUT"),
-            TokenKind::Identifier => write!(f, "identifier"),
+            TokenKind::Let => write!(f, "let"),
+            TokenKind::If => write!(f, "if"),
+            TokenKind::Else => write!(f, "else"),
+            TokenKind::Match => write!(f, "match"),
+            TokenKind::For => write!(f, "for"),
+            TokenKind::In => write!(f, "in"),
+            TokenKind::Fn => write!(f, "fn"),
+            TokenKind::Pub => write!(f, "pub"),
+            TokenKind::Mod => write!(f, "mod"),
+            TokenKind::Use => write!(f, "use"),
+            TokenKind::Type => write!(f, "type"),
+            TokenKind::Trait => write!(f, "trait"),
+            TokenKind::Impl => write!(f, "impl"),
+            TokenKind::Async => write!(f, "async"),
+            TokenKind::Await => write!(f, "await"),
+            TokenKind::Mut => write!(f, "mut"),
+            TokenKind::Ffi => write!(f, "ffi"),
+            TokenKind::True => write!(f, "true"),
+            TokenKind::False => write!(f, "false"),
+            TokenKind::Nil => write!(f, "nil"),
+            TokenKind::Some => write!(f, "some"),
+            TokenKind::Ok => write!(f, "ok"),
+            TokenKind::Err => write!(f, "err"),
             TokenKind::Integer => write!(f, "integer"),
             TokenKind::Float => write!(f, "float"),
-            TokenKind::StringLiteral => write!(f, "string"),
-            TokenKind::Eof => write!(f, "end of file"),
+            TokenKind::String => write!(f, "string"),
+            TokenKind::Identifier => write!(f, "identifier"),
+            TokenKind::DotAt => write!(f, ".@"),
+            TokenKind::DotQuestion => write!(f, ".?"),
+            TokenKind::DotSlash => write!(f, "./"),
+            TokenKind::Dollar => write!(f, "$"),
+            TokenKind::Hash => write!(f, "#"),
+            TokenKind::Underscore => write!(f, "_"),
+            TokenKind::At => write!(f, "@"),
+            TokenKind::DotDot => write!(f, ".."),
+            TokenKind::Plus => write!(f, "+"),
+            TokenKind::Minus => write!(f, "-"),
+            TokenKind::Star => write!(f, "*"),
+            TokenKind::Slash => write!(f, "/"),
+            TokenKind::Percent => write!(f, "%"),
+            TokenKind::EqEq => write!(f, "=="),
+            TokenKind::NotEq => write!(f, "!="),
+            TokenKind::Lt => write!(f, "<"),
+            TokenKind::Gt => write!(f, ">"),
+            TokenKind::LtEq => write!(f, "<="),
+            TokenKind::GtEq => write!(f, ">="),
+            TokenKind::AndAnd => write!(f, "&&"),
+            TokenKind::OrOr => write!(f, "||"),
+            TokenKind::Bang => write!(f, "!"),
+            TokenKind::Eq => write!(f, "="),
+            TokenKind::Arrow => write!(f, "->"),
+            TokenKind::FatArrow => write!(f, "=>"),
+            TokenKind::LParen => write!(f, "("),
+            TokenKind::RParen => write!(f, ")"),
+            TokenKind::LBracket => write!(f, "["),
+            TokenKind::RBracket => write!(f, "]"),
+            TokenKind::LBrace => write!(f, "{{"),
+            TokenKind::RBrace => write!(f, "}}"),
+            TokenKind::Comma => write!(f, ","),
+            TokenKind::Colon => write!(f, ":"),
+            TokenKind::Semi => write!(f, ";"),
+            TokenKind::Dot => write!(f, "."),
+            TokenKind::Question => write!(f, "?"),
+            TokenKind::Pipe => write!(f, "|"),
+            TokenKind::Ampersand => write!(f, "&"),
+            TokenKind::Newline => write!(f, "newline"),
+            TokenKind::Comment => write!(f, "comment"),
+            TokenKind::Eof => write!(f, "EOF"),
             TokenKind::Error => write!(f, "error"),
-            other => write!(f, "{:?}", other),
         }
     }
 }

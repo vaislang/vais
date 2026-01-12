@@ -1,47 +1,35 @@
-//! Runtime error types
+//! v6b VM Runtime Errors
 
 use thiserror::Error;
-use aoel_ir::ValueType;
 
-/// Runtime error type
 #[derive(Debug, Error)]
 pub enum RuntimeError {
     #[error("Stack underflow")]
     StackUnderflow,
 
-    #[error("Type error: expected {expected}, got {actual}")]
-    TypeError { expected: ValueType, actual: ValueType },
-
     #[error("Division by zero")]
     DivisionByZero,
+
+    #[error("Type error: {0}")]
+    TypeError(String),
 
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
 
-    #[error("Undefined input: {0}")]
-    UndefinedInput(String),
+    #[error("Undefined function: {0}")]
+    UndefinedFunction(String),
 
-    #[error("Undefined node: {0}")]
-    UndefinedNode(String),
-
-    #[error("Unknown builtin function: {0}")]
-    UnknownBuiltin(String),
-
-    #[error("Invalid argument count: expected {expected}, got {actual}")]
-    InvalidArgCount { expected: usize, actual: usize },
-
-    #[error("Index out of bounds: {index} for length {length}")]
+    #[error("Index out of bounds: {index} (length: {length})")]
     IndexOutOfBounds { index: i64, length: usize },
 
-    #[error("Invalid field access: {field} on type {value_type}")]
-    InvalidFieldAccess { field: String, value_type: ValueType },
+    #[error("Invalid field access: {field}")]
+    InvalidFieldAccess { field: String },
 
-    #[error("Halt: {0}")]
-    Halt(String),
+    #[error("Maximum recursion depth exceeded")]
+    MaxRecursionDepth,
 
     #[error("Internal error: {0}")]
     Internal(String),
 }
 
-/// Result type for runtime operations
 pub type RuntimeResult<T> = Result<T, RuntimeError>;

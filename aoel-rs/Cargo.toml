@@ -5,14 +5,12 @@ members = [
     "crates/aoel-ast",
     "crates/aoel-parser",
     "crates/aoel-typeck",
+    "crates/aoel-lowering",
     "crates/aoel-ir",
     "crates/aoel-vm",
+    "crates/aoel-codegen",
+    "crates/aoel-lsp",
     "crates/aoel-cli",
-    # v6b new implementation
-    "crates/aoel-v6b-lexer",
-    "crates/aoel-v6b-parser",
-    "crates/aoel-v6b-ast",
-    "crates/aoel-v6b-lowering",
 ]
 
 [workspace.package]
@@ -24,19 +22,15 @@ repository = "https://github.com/aoel-lang/aoel"
 description = "AI-Optimized Executable Language"
 
 [workspace.dependencies]
-# Internal crates (v1)
+# Internal crates
 aoel-lexer = { path = "crates/aoel-lexer" }
 aoel-ast = { path = "crates/aoel-ast" }
 aoel-parser = { path = "crates/aoel-parser" }
 aoel-typeck = { path = "crates/aoel-typeck" }
+aoel-lowering = { path = "crates/aoel-lowering" }
 aoel-ir = { path = "crates/aoel-ir" }
 aoel-vm = { path = "crates/aoel-vm" }
-
-# Internal crates (v6b)
-aoel-v6b-lexer = { path = "crates/aoel-v6b-lexer" }
-aoel-v6b-parser = { path = "crates/aoel-v6b-parser" }
-aoel-v6b-ast = { path = "crates/aoel-v6b-ast" }
-aoel-v6b-lowering = { path = "crates/aoel-v6b-lowering" }
+aoel-codegen = { path = "crates/aoel-codegen" }
 
 # External dependencies
 thiserror = "1.0"

@@ -1,0 +1,7 @@
+// Arithmetic test for native compilation
+double(x) = x * 2
+square(x) = x * x
+add_10(x) = x + 10
+
+// Compose operations
+add_10(square(double(5)))

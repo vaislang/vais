@@ -1,502 +1,936 @@
-//! Type checker implementation
-//!
-//! Main type checking logic for AOEL units.
+//! v6b Type Checker
 
-use aoel_ast::{Expr, Unit};
+use aoel_ast::*;
+use aoel_lexer::Span;
 
-use crate::error::{TypeCheckError, TypeCheckResult};
-use crate::infer::TypeInferrer;
-use crate::symbol::{find_similar_names, ScopeLevel, Symbol, SymbolKind, SymbolTable};
-use crate::types::{is_bool_type, type_to_string};
+use crate::error::{TypeError, TypeResult};
+use crate::infer::TypeEnv;
+use crate::types::Type;
 
-/// Type checker for AOEL units
-pub struct TypeChecker<'a> {
-    /// The unit being checked
-    unit: &'a Unit,
-    /// Symbol table
-    symbols: SymbolTable,
-    /// Collected errors
-    errors: Vec<TypeCheckError>,
+/// 프로그램 타입 체크
+pub fn check(program: &Program) -> TypeResult<()> {
+    let mut checker = TypeChecker::new();
+    checker.check_program(program)?;
+    Ok(())
 }
 
-impl<'a> TypeChecker<'a> {
-    pub fn new(unit: &'a Unit) -> Self {
+/// 타입 체커
+pub struct TypeChecker {
+    env: TypeEnv,
+}
+
+impl TypeChecker {
+    pub fn new() -> Self {
         Self {
-            unit,
-            symbols: SymbolTable::new(),
-            errors: Vec::new(),
+            env: TypeEnv::new(),
         }
     }
 
-    /// Run all type checking phases
-    pub fn check(mut self) -> TypeCheckResult<()> {
-        // Phase 1: Build symbol table and check for duplicates
-        self.build_symbol_table();
-
-        // Phase 1: Resolve references in expressions
-        self.check_references();
-
-        // Phase 1: Type check expressions
-        self.check_expression_types();
-
-        // Phase 2: Validate FLOW structure
-        self.check_flow();
-
-        // Phase 3: Check INTENT consistency
-        self.check_intent_consistency();
-
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(self.errors)
+    /// 프로그램 타입 체크
+    pub fn check_program(&mut self, program: &Program) -> TypeResult<()> {
+        // 1단계: 함수 시그니처 수집
+        for item in &program.items {
+            if let Item::Function(func) = item {
+                self.register_function(func)?;
+            }
         }
+
+        // 2단계: 함수 본문 체크
+        for item in &program.items {
+            match item {
+                Item::Function(func) => {
+                    self.check_function(func)?;
+                }
+                Item::Expr(expr) => {
+                    self.infer_expr(expr)?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
     }
 
-    // =========================================================================
-    // Phase 1: Symbol Table
-    // =========================================================================
+    /// 함수 시그니처 등록
+    fn register_function(&mut self, func: &FunctionDef) -> TypeResult<()> {
+        let param_types: Vec<Type> = func
+            .params
+            .iter()
+            .map(|p| {
+                p.ty.as_ref()
+                    .map(|t| self.convert_type_expr(t))
+                    .unwrap_or_else(|| self.env.fresh_var())
+            })
+            .collect();
 
-    fn build_symbol_table(&mut self) {
-        // Register INPUT fields
-        for field in &self.unit.input.fields {
-            let symbol = Symbol::input_field(
-                field.name.name.clone(),
-                field.ty.clone(),
-                field.span,
-            );
+        let return_type = func
+            .return_type
+            .as_ref()
+            .map(|t| self.convert_type_expr(t))
+            .unwrap_or_else(|| self.env.fresh_var());
 
-            if let Some(existing) = self.symbols.define(ScopeLevel::Input, symbol) {
-                self.errors.push(TypeCheckError::DuplicateField {
-                    name: field.name.name.clone(),
-                    first_span: existing.span,
-                    duplicate_span: field.span,
-                });
-            }
-        }
+        let func_type = Type::Function(param_types, Box::new(return_type));
+        self.env.register_function(func.name.clone(), func_type);
 
-        // Register OUTPUT fields
-        for field in &self.unit.output.fields {
-            let symbol = Symbol::output_field(
-                field.name.name.clone(),
-                field.ty.clone(),
-                field.span,
-            );
-
-            if let Some(existing) = self.symbols.define(ScopeLevel::Output, symbol) {
-                self.errors.push(TypeCheckError::DuplicateField {
-                    name: field.name.name.clone(),
-                    first_span: existing.span,
-                    duplicate_span: field.span,
-                });
-            }
-        }
-
-        // Register FLOW nodes
-        for node in &self.unit.flow.nodes {
-            let symbol = Symbol::flow_node(
-                node.id.name.clone(),
-                format!("{:?}", node.op_type),
-                node.span,
-            );
-
-            if let Some(existing) = self.symbols.define(ScopeLevel::Flow, symbol) {
-                self.errors.push(TypeCheckError::DuplicateNodeId {
-                    id: node.id.name.clone(),
-                    first_span: existing.span,
-                    duplicate_span: node.span,
-                });
-            }
-        }
+        Ok(())
     }
 
-    // =========================================================================
-    // Phase 1: Reference Checking
-    // =========================================================================
+    /// 함수 타입 체크
+    fn check_function(&mut self, func: &FunctionDef) -> TypeResult<()> {
+        // 현재 함수 설정 (재귀용)
+        if let Some(func_type) = self.env.lookup_function(&func.name).cloned() {
+            self.env.current_function = Some((func.name.clone(), func_type.clone()));
 
-    fn check_references(&mut self) {
-        // Check CONSTRAINT expressions
-        for constraint in &self.unit.constraint.constraints {
-            self.check_expr_references(&constraint.expr);
-        }
-
-        // Check VERIFY expressions
-        for entry in &self.unit.verify.entries {
-            if let Some(ref expr) = entry.expr {
-                self.check_expr_references(expr);
+            // 매개변수 바인딩
+            if let Type::Function(param_types, _) = &func_type {
+                for (param, ty) in func.params.iter().zip(param_types.iter()) {
+                    self.env.bind_var(param.name.clone(), ty.clone());
+                }
             }
         }
 
-        // Check INPUT field constraints
-        for field in &self.unit.input.fields {
-            for constraint in &field.constraints {
-                self.check_expr_references(&constraint.expr);
+        // 본문 타입 추론
+        let body_type = self.infer_expr(&func.body)?;
+
+        // 반환 타입과 통일
+        if let Some(func_type) = self.env.lookup_function(&func.name).cloned() {
+            if let Type::Function(_, ret) = func_type {
+                self.env.unify(&body_type, &ret, func.span)?;
             }
         }
 
-        // Check OUTPUT field constraints
-        for field in &self.unit.output.fields {
-            for constraint in &field.constraints {
-                self.check_expr_references(&constraint.expr);
-            }
-        }
-
-        // Check FLOW node parameters
-        for node in &self.unit.flow.nodes {
-            for param in &node.params {
-                self.check_expr_references(&param.value);
-            }
-        }
-
-        // Check FLOW edge conditions
-        for edge in &self.unit.flow.edges {
-            if let Some(ref cond) = edge.condition {
-                self.check_expr_references(cond);
-            }
-        }
+        self.env.current_function = None;
+        Ok(())
     }
 
-    fn check_expr_references(&mut self, expr: &Expr) {
+    /// 표현식 타입 추론
+    fn infer_expr(&mut self, expr: &Expr) -> TypeResult<Type> {
         match expr {
-            Expr::Ident(ident) => {
-                // Skip special keywords (reserved words and operators)
-                let special_keywords = [
-                    "input", "output", "INPUT", "OUTPUT",
-                    // Arithmetic operators for NODE parameters
-                    "ADD", "SUB", "MUL", "DIV", "MOD",
-                    // Comparison operators
-                    "EQ", "NEQ", "LT", "GT", "LTE", "GTE",
-                    // Logical operators
-                    "AND", "OR", "NOT", "XOR",
-                    // Other reserved names
-                    "VOID", "TRUE", "FALSE",
-                ];
-                if special_keywords.contains(&ident.name.as_str()) {
-                    return;
-                }
+            // 리터럴
+            Expr::Integer(_, _) => Ok(Type::Int),
+            Expr::Float(_, _) => Ok(Type::Float),
+            Expr::String(_, _) => Ok(Type::String),
+            Expr::Bool(_, _) => Ok(Type::Bool),
+            Expr::Nil(_) => Ok(Type::Unit),
 
-                // Check if it's a known symbol (built-in, input, output, or node)
-                if !self.symbols.exists(&ident.name) {
-                    let all_names = self.symbols.all_names();
-                    self.errors.push(TypeCheckError::UndefinedReference {
-                        name: ident.name.clone(),
-                        span: ident.span,
-                        suggestions: find_similar_names(&ident.name, &all_names, 2),
-                    });
-                }
-            }
-            Expr::FieldAccess(access) => {
-                self.check_field_access(access);
-            }
-            Expr::Binary(bin) => {
-                self.check_expr_references(&bin.left);
-                self.check_expr_references(&bin.right);
-            }
-            Expr::Unary(un) => {
-                self.check_expr_references(&un.operand);
-            }
-            Expr::Call(call) => {
-                // Check function name
-                if !self.symbols.is_builtin(&call.name.name) {
-                    let all_names = self.symbols.all_names();
-                    self.errors.push(TypeCheckError::UndefinedReference {
-                        name: call.name.name.clone(),
-                        span: call.name.span,
-                        suggestions: find_similar_names(&call.name.name, &all_names, 2),
-                    });
-                }
-                // Check arguments
-                for arg in &call.args {
-                    self.check_expr_references(arg);
-                }
-            }
-            Expr::Index(idx) => {
-                self.check_expr_references(&idx.base);
-                self.check_expr_references(&idx.index);
-            }
-            Expr::Grouped(grp) => {
-                self.check_expr_references(&grp.inner);
-            }
-            Expr::Literal(_) | Expr::ExternalRef(_) => {}
-        }
-    }
-
-    fn check_field_access(&mut self, access: &aoel_ast::FieldAccess) {
-        // Handle input.field and output.field patterns
-        if let Expr::Ident(base) = &access.base {
-            match base.name.as_str() {
-                "input" | "INPUT" => {
-                    if self
-                        .symbols
-                        .lookup_in_scope(ScopeLevel::Input, &access.field.name)
-                        .is_none()
-                    {
-                        let available = self.symbols.names_in_scope(ScopeLevel::Input);
-                        self.errors.push(TypeCheckError::InvalidFieldAccess {
-                            base: "input".to_string(),
-                            field: access.field.name.clone(),
-                            span: access.span,
-                            available_fields: available,
-                        });
-                    }
-                }
-                "output" | "OUTPUT" => {
-                    if self
-                        .symbols
-                        .lookup_in_scope(ScopeLevel::Output, &access.field.name)
-                        .is_none()
-                    {
-                        let available = self.symbols.names_in_scope(ScopeLevel::Output);
-                        self.errors.push(TypeCheckError::InvalidFieldAccess {
-                            base: "output".to_string(),
-                            field: access.field.name.clone(),
-                            span: access.span,
-                            available_fields: available,
-                        });
-                    }
-                }
-                _ => {
-                    // Check if it's a node reference (node.port)
-                    if self
-                        .symbols
-                        .lookup_in_scope(ScopeLevel::Flow, &base.name)
-                        .is_some()
-                    {
-                        // It's a node.port reference - allow any port name
-                        // (we could validate port names based on OpType in the future)
-                        return;
-                    }
-
-                    // Otherwise, recursively check the base
-                    self.check_expr_references(&access.base);
-                }
-            }
-        } else {
-            // Nested field access - check recursively
-            self.check_expr_references(&access.base);
-        }
-    }
-
-    // =========================================================================
-    // Phase 1: Expression Type Checking
-    // =========================================================================
-
-    fn check_expression_types(&mut self) {
-        let inferrer = TypeInferrer::new(&self.symbols);
-
-        // Check CONSTRAINT expressions are BOOL
-        for constraint in &self.unit.constraint.constraints {
-            match inferrer.infer(&constraint.expr) {
-                Ok(ty) => {
-                    if !is_bool_type(&ty) {
-                        self.errors.push(TypeCheckError::NonBoolConstraint {
-                            found: type_to_string(&ty),
-                            span: constraint.span,
-                        });
-                    }
-                }
-                Err(e) => self.errors.push(e),
-            }
-        }
-
-        // Check VERIFY expressions are BOOL
-        for entry in &self.unit.verify.entries {
-            if let Some(ref expr) = entry.expr {
-                match inferrer.infer(expr) {
-                    Ok(ty) => {
-                        if !is_bool_type(&ty) {
-                            self.errors.push(TypeCheckError::NonBoolVerify {
-                                found: type_to_string(&ty),
-                                span: entry.span,
-                            });
-                        }
-                    }
-                    Err(e) => self.errors.push(e),
-                }
-            }
-        }
-
-        // Check INPUT field constraints are BOOL
-        for field in &self.unit.input.fields {
-            for constraint in &field.constraints {
-                match inferrer.infer(&constraint.expr) {
-                    Ok(ty) => {
-                        if !is_bool_type(&ty) {
-                            self.errors.push(TypeCheckError::NonBoolConstraint {
-                                found: type_to_string(&ty),
-                                span: constraint.span,
-                            });
-                        }
-                    }
-                    Err(e) => self.errors.push(e),
-                }
-            }
-        }
-    }
-
-    // =========================================================================
-    // Phase 2: FLOW Validation
-    // =========================================================================
-
-    fn check_flow(&mut self) {
-        let inferrer = TypeInferrer::new(&self.symbols);
-
-        // Check edge sources and targets
-        for edge in &self.unit.flow.edges {
-            // Validate source
-            if !self.is_valid_edge_endpoint(&edge.source) {
-                if let Some(endpoint_name) = self.extract_endpoint_name(&edge.source) {
-                    self.errors.push(TypeCheckError::InvalidEdgeSource {
-                        name: endpoint_name,
-                        span: edge.span,
-                    });
-                }
-            }
-
-            // Validate target
-            if !self.is_valid_edge_endpoint(&edge.target) {
-                if let Some(endpoint_name) = self.extract_endpoint_name(&edge.target) {
-                    self.errors.push(TypeCheckError::InvalidEdgeTarget {
-                        name: endpoint_name,
-                        span: edge.span,
-                    });
-                }
-            }
-
-            // Check edge conditions are BOOL
-            if let Some(ref cond) = edge.condition {
-                match inferrer.infer(cond) {
-                    Ok(ty) => {
-                        if !is_bool_type(&ty) {
-                            self.errors.push(TypeCheckError::NonBoolEdgeCondition {
-                                found: type_to_string(&ty),
-                                span: cond.span(),
-                            });
-                        }
-                    }
-                    Err(e) => self.errors.push(e),
-                }
-            }
-        }
-    }
-
-    fn is_valid_edge_endpoint(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Ident(ident) => {
-                // Valid if it's a flow node
-                self.symbols
-                    .lookup_in_scope(ScopeLevel::Flow, &ident.name)
-                    .is_some()
-            }
-            Expr::FieldAccess(access) => {
-                if let Expr::Ident(base) = &access.base {
-                    match base.name.as_str() {
-                        // INPUT.field or OUTPUT.field
-                        "INPUT" | "input" => self
-                            .symbols
-                            .lookup_in_scope(ScopeLevel::Input, &access.field.name)
-                            .is_some(),
-                        "OUTPUT" | "output" => self
-                            .symbols
-                            .lookup_in_scope(ScopeLevel::Output, &access.field.name)
-                            .is_some(),
-                        // node.port
-                        _ => self
-                            .symbols
-                            .lookup_in_scope(ScopeLevel::Flow, &base.name)
-                            .is_some(),
-                    }
+            // 식별자
+            Expr::Ident(name, span) => {
+                if let Some(ty) = self.env.lookup_var(name) {
+                    Ok(ty.clone())
+                } else if let Some(ty) = self.env.lookup_function(name) {
+                    Ok(ty.clone())
                 } else {
-                    false
+                    Err(TypeError::UndefinedVariable {
+                        name: name.clone(),
+                        span: *span,
+                    })
                 }
             }
-            _ => false,
-        }
-    }
 
-    fn extract_endpoint_name(&self, expr: &Expr) -> Option<String> {
-        match expr {
-            Expr::Ident(ident) => Some(ident.name.clone()),
-            Expr::FieldAccess(access) => {
-                let base_name = self.extract_endpoint_name(&access.base)?;
-                Some(format!("{}.{}", base_name, access.field.name))
-            }
-            _ => None,
-        }
-    }
-
-    // =========================================================================
-    // Phase 3: INTENT Consistency
-    // =========================================================================
-
-    fn check_intent_consistency(&mut self) {
-        // Check GOAL inputs reference existing INPUT fields
-        for input_expr in &self.unit.intent.goal_spec.inputs {
-            self.check_goal_reference(input_expr, true);
-        }
-
-        // Check GOAL outputs reference existing OUTPUT fields
-        for output_expr in &self.unit.intent.goal_spec.outputs {
-            self.check_goal_reference(output_expr, false);
-        }
-    }
-
-    fn check_goal_reference(&mut self, expr: &Expr, is_input: bool) {
-        match expr {
-            Expr::Ident(ident) => {
-                let scope = if is_input {
-                    ScopeLevel::Input
+            // 람다 파라미터 (_)
+            Expr::LambdaParam(span) => {
+                if let Some(ty) = self.env.lookup_var("_") {
+                    Ok(ty.clone())
                 } else {
-                    ScopeLevel::Output
+                    // 람다 컨텍스트 외부에서 사용
+                    Err(TypeError::UndefinedVariable {
+                        name: "_".to_string(),
+                        span: *span,
+                    })
+                }
+            }
+
+            // 단항 연산자
+            Expr::Unary(op, operand, span) => {
+                let operand_type = self.infer_expr(operand)?;
+                self.check_unary_op(*op, &operand_type, *span)
+            }
+
+            // 이항 연산자
+            Expr::Binary(left, op, right, span) => {
+                let left_type = self.infer_expr(left)?;
+                let right_type = self.infer_expr(right)?;
+                self.check_binary_op(&left_type, *op, &right_type, *span)
+            }
+
+            // 삼항 연산자
+            Expr::Ternary(cond, then_expr, else_expr, span) => {
+                let cond_type = self.infer_expr(cond)?;
+                self.env.unify(&cond_type, &Type::Bool, *span)?;
+
+                let then_type = self.infer_expr(then_expr)?;
+                let else_type = self.infer_expr(else_expr)?;
+                self.env.unify(&then_type, &else_type, *span)?;
+
+                Ok(then_type)
+            }
+
+            // 함수 호출
+            Expr::Call(callee, args, span) => {
+                let callee_type = self.infer_expr(callee)?;
+                self.check_function_call(&callee_type, args, *span)
+            }
+
+            // 재귀 호출
+            Expr::SelfCall(args, span) => {
+                if let Some((_, func_type)) = &self.env.current_function.clone() {
+                    self.check_function_call(func_type, args, *span)
+                } else {
+                    Err(TypeError::RecursiveInference { span: *span })
+                }
+            }
+
+            // 배열
+            Expr::Array(elements, span) => {
+                if elements.is_empty() {
+                    let elem_type = self.env.fresh_var();
+                    Ok(Type::Array(Box::new(elem_type)))
+                } else {
+                    let first_type = self.infer_expr(&elements[0])?;
+                    for elem in elements.iter().skip(1) {
+                        let elem_type = self.infer_expr(elem)?;
+                        self.env.unify(&first_type, &elem_type, *span)?;
+                    }
+                    Ok(Type::Array(Box::new(first_type)))
+                }
+            }
+
+            // 튜플
+            Expr::Tuple(elements, _) => {
+                let types: Vec<Type> = elements
+                    .iter()
+                    .map(|e| self.infer_expr(e))
+                    .collect::<TypeResult<Vec<_>>>()?;
+                Ok(Type::Tuple(types))
+            }
+
+            // 맵
+            Expr::Map(entries, _) => {
+                if entries.is_empty() {
+                    let key_type = self.env.fresh_var();
+                    let val_type = self.env.fresh_var();
+                    Ok(Type::Map(Box::new(key_type), Box::new(val_type)))
+                } else {
+                    let val_types: Vec<Type> = entries
+                        .iter()
+                        .map(|(_, v)| self.infer_expr(v))
+                        .collect::<TypeResult<Vec<_>>>()?;
+
+                    // 모든 값 타입 통일
+                    let first_val = &val_types[0];
+                    for ty in val_types.iter().skip(1) {
+                        self.env.unify(first_val, ty, Span::default())?;
+                    }
+
+                    Ok(Type::Map(
+                        Box::new(Type::String),
+                        Box::new(first_val.clone()),
+                    ))
+                }
+            }
+
+            // 인덱스 접근
+            Expr::Index(base, index_kind, span) => {
+                let base_type = self.infer_expr(base)?;
+                self.check_index(&base_type, index_kind, *span)
+            }
+
+            // 필드 접근
+            Expr::Field(base, field, span) => {
+                let base_type = self.infer_expr(base)?;
+                self.check_field_access(&base_type, field, *span)
+            }
+
+            // 범위
+            Expr::Range(start, end, span) => {
+                let start_type = self.infer_expr(start)?;
+                let end_type = self.infer_expr(end)?;
+                self.env.unify(&start_type, &Type::Int, *span)?;
+                self.env.unify(&end_type, &Type::Int, *span)?;
+                Ok(Type::Array(Box::new(Type::Int)))
+            }
+
+            // Map 연산
+            Expr::MapOp(base, mapper, span) => {
+                let base_type = self.infer_expr(base)?;
+                let resolved = self.env.resolve(&base_type);
+
+                // 타입 변수면 배열로 통일
+                if let Type::Var(_) = resolved {
+                    let elem_type = self.env.fresh_var();
+                    self.env.unify(&base_type, &Type::Array(Box::new(elem_type.clone())), *span)?;
+                    self.env.bind_var("_".to_string(), elem_type);
+                    let result_type = self.infer_expr(mapper)?;
+                    Ok(Type::Array(Box::new(result_type)))
+                } else if let Type::Array(elem_type) = resolved {
+                    // _ 변수를 요소 타입으로 바인딩
+                    self.env.bind_var("_".to_string(), (*elem_type).clone());
+                    let result_type = self.infer_expr(mapper)?;
+                    Ok(Type::Array(Box::new(result_type)))
+                } else {
+                    Err(TypeError::InvalidOperator {
+                        op: "map (.@)".to_string(),
+                        ty: base_type.to_string(),
+                        span: *span,
+                    })
+                }
+            }
+
+            // Filter 연산
+            Expr::FilterOp(base, predicate, span) => {
+                let base_type = self.infer_expr(base)?;
+                let resolved = self.env.resolve(&base_type);
+
+                // 타입 변수면 배열로 통일
+                if let Type::Var(_) = resolved {
+                    let elem_type = self.env.fresh_var();
+                    self.env.unify(&base_type, &Type::Array(Box::new(elem_type.clone())), *span)?;
+                    self.env.bind_var("_".to_string(), elem_type.clone());
+                    let pred_type = self.infer_expr(predicate)?;
+                    self.env.unify(&pred_type, &Type::Bool, *span)?;
+                    Ok(Type::Array(Box::new(elem_type)))
+                } else if let Type::Array(elem_type) = resolved {
+                    self.env.bind_var("_".to_string(), (*elem_type).clone());
+                    let pred_type = self.infer_expr(predicate)?;
+                    self.env.unify(&pred_type, &Type::Bool, *span)?;
+                    Ok(Type::Array(elem_type))
+                } else {
+                    Err(TypeError::InvalidOperator {
+                        op: "filter (.?)".to_string(),
+                        ty: base_type.to_string(),
+                        span: *span,
+                    })
+                }
+            }
+
+            // Reduce 연산
+            Expr::ReduceOp(base, kind, span) => {
+                let base_type = self.infer_expr(base)?;
+                let resolved = self.env.resolve(&base_type);
+
+                // 타입 변수면 배열로 통일
+                let elem_type = if let Type::Var(_) = resolved {
+                    let elem = self.env.fresh_var();
+                    self.env.unify(&base_type, &Type::Array(Box::new(elem.clone())), *span)?;
+                    elem
+                } else if let Type::Array(elem) = resolved {
+                    (*elem).clone()
+                } else {
+                    return Err(TypeError::InvalidOperator {
+                        op: "reduce (./)".to_string(),
+                        ty: base_type.to_string(),
+                        span: *span,
+                    });
                 };
-                let kind = if is_input { "input" } else { "output" };
 
-                // Skip if it's just "input" or "output"
-                if ident.name == "input" || ident.name == "output" {
-                    return;
-                }
-
-                if self.symbols.lookup_in_scope(scope, &ident.name).is_none() {
-                    self.errors.push(TypeCheckError::UndefinedGoalField {
-                        field: ident.name.clone(),
-                        kind,
-                        span: ident.span,
-                    });
-                }
-            }
-            Expr::FieldAccess(access) => {
-                // Handle input.field or output.field in GOAL
-                if let Expr::Ident(base) = &access.base {
-                    if (base.name == "input" || base.name == "INPUT") && is_input {
-                        if self
-                            .symbols
-                            .lookup_in_scope(ScopeLevel::Input, &access.field.name)
-                            .is_none()
-                        {
-                            self.errors.push(TypeCheckError::UndefinedGoalField {
-                                field: access.field.name.clone(),
-                                kind: "input",
-                                span: access.span,
-                            });
+                match kind {
+                    ReduceKind::Sum | ReduceKind::Product => {
+                        if elem_type.is_numeric() {
+                            Ok(elem_type)
+                        } else {
+                            self.env.unify(&elem_type, &Type::Int, *span)?;
+                            Ok(Type::Int)
                         }
-                    } else if (base.name == "output" || base.name == "OUTPUT") && !is_input {
-                        if self
-                            .symbols
-                            .lookup_in_scope(ScopeLevel::Output, &access.field.name)
-                            .is_none()
-                        {
-                            self.errors.push(TypeCheckError::UndefinedGoalField {
-                                field: access.field.name.clone(),
-                                kind: "output",
-                                span: access.span,
-                            });
-                        }
+                    }
+                    ReduceKind::Min | ReduceKind::Max => Ok(elem_type),
+                    ReduceKind::And | ReduceKind::Or => Ok(Type::Bool),
+                    ReduceKind::Custom(_, _) => {
+                        // 커스텀 리듀스의 경우 Any 반환
+                        Ok(Type::Any)
                     }
                 }
             }
-            Expr::Grouped(grp) => {
-                self.check_goal_reference(&grp.inner, is_input);
+
+            // Let 바인딩
+            Expr::Let(bindings, body, _) => {
+                for (name, value) in bindings {
+                    let value_type = self.infer_expr(value)?;
+                    self.env.bind_var(name.clone(), value_type);
+                }
+                self.infer_expr(body)
             }
-            _ => {}
+
+            // If 표현식
+            Expr::If(cond, then_expr, else_expr, span) => {
+                let cond_type = self.infer_expr(cond)?;
+                self.env.unify(&cond_type, &Type::Bool, *span)?;
+
+                let then_type = self.infer_expr(then_expr)?;
+
+                if let Some(else_e) = else_expr {
+                    let else_type = self.infer_expr(else_e)?;
+                    self.env.unify(&then_type, &else_type, *span)?;
+                    Ok(then_type)
+                } else {
+                    // else 없으면 Optional
+                    Ok(Type::Optional(Box::new(then_type)))
+                }
+            }
+
+            // 블록
+            Expr::Block(exprs, _) => {
+                let mut last_type = Type::Unit;
+                for e in exprs {
+                    last_type = self.infer_expr(e)?;
+                }
+                Ok(last_type)
+            }
+
+            // Try
+            Expr::Try(inner, span) => {
+                let inner_type = self.infer_expr(inner)?;
+                match self.env.resolve(&inner_type) {
+                    Type::Optional(t) => Ok((*t).clone()),
+                    Type::Result(t) => Ok((*t).clone()),
+                    _ => Err(TypeError::InvalidOperator {
+                        op: "try (?)".to_string(),
+                        ty: inner_type.to_string(),
+                        span: *span,
+                    }),
+                }
+            }
+
+            // Contains
+            Expr::Contains(elem, container, span) => {
+                let elem_type = self.infer_expr(elem)?;
+                let container_type = self.infer_expr(container)?;
+
+                match self.env.resolve(&container_type) {
+                    Type::Array(inner) => {
+                        self.env.unify(&elem_type, &inner, *span)?;
+                        Ok(Type::Bool)
+                    }
+                    Type::String => {
+                        self.env.unify(&elem_type, &Type::String, *span)?;
+                        Ok(Type::Bool)
+                    }
+                    _ => Err(TypeError::InvalidOperator {
+                        op: "contains (@)".to_string(),
+                        ty: container_type.to_string(),
+                        span: *span,
+                    }),
+                }
+            }
+
+            // 메서드 호출
+            Expr::MethodCall(base, method, args, span) => {
+                let base_type = self.infer_expr(base)?;
+                self.check_method_call(&base_type, method, args, *span)
+            }
+
+            // Error
+            Expr::Error(_, _) => Ok(Type::Never),
+
+            // Match 표현식
+            Expr::Match(scrutinee, arms, span) => {
+                // TODO: 향후 패턴 타입 검증에 사용
+                let _scrutinee_type = self.infer_expr(scrutinee)?;
+                if arms.is_empty() {
+                    return Ok(Type::Never);
+                }
+
+                // 첫 번째 arm의 결과 타입
+                let first_result = self.infer_expr(&arms[0].body)?;
+
+                // 모든 arm의 결과 타입이 동일한지 확인
+                for arm in arms.iter().skip(1) {
+                    let result_type = self.infer_expr(&arm.body)?;
+                    self.env.unify(&first_result, &result_type, *span)?;
+                }
+
+                Ok(first_result)
+            }
+
+            // Lambda 표현식
+            Expr::Lambda(params, body, _) => {
+                // 파라미터 타입 생성
+                let param_types: Vec<Type> = params.iter().map(|_| self.env.fresh_var()).collect();
+
+                // 파라미터 바인딩
+                for (name, ty) in params.iter().zip(param_types.iter()) {
+                    self.env.bind_var(name.clone(), ty.clone());
+                }
+
+                // 본문 타입 추론
+                let return_type = self.infer_expr(body)?;
+
+                Ok(Type::Function(param_types, Box::new(return_type)))
+            }
+
+            // Coalesce 표현식 (a ?? b)
+            Expr::Coalesce(left, right, span) => {
+                let left_type = self.infer_expr(left)?;
+                let right_type = self.infer_expr(right)?;
+
+                // left가 Optional이면 inner와 right 통일
+                if let Type::Optional(inner) = self.env.resolve(&left_type) {
+                    self.env.unify(&inner, &right_type, *span)?;
+                    Ok((*inner).clone())
+                } else {
+                    Ok(left_type)
+                }
+            }
         }
+    }
+
+    /// 단항 연산자 타입 체크
+    fn check_unary_op(&mut self, op: UnaryOp, operand: &Type, span: Span) -> TypeResult<Type> {
+        let resolved = self.env.resolve(operand);
+        match op {
+            UnaryOp::Neg => {
+                if resolved.is_numeric() {
+                    Ok(resolved)
+                } else {
+                    Err(TypeError::InvalidOperator {
+                        op: "-".to_string(),
+                        ty: resolved.to_string(),
+                        span,
+                    })
+                }
+            }
+            UnaryOp::Not => {
+                self.env.unify(&resolved, &Type::Bool, span)?;
+                Ok(Type::Bool)
+            }
+            UnaryOp::Len => Ok(Type::Int),
+        }
+    }
+
+    /// 이항 연산자 타입 체크
+    fn check_binary_op(
+        &mut self,
+        left: &Type,
+        op: BinaryOp,
+        right: &Type,
+        span: Span,
+    ) -> TypeResult<Type> {
+        let left_resolved = self.env.resolve(left);
+        let right_resolved = self.env.resolve(right);
+
+        match op {
+            // 산술 연산자
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
+                // Add 연산은 배열/문자열 연결도 가능하므로 특별 처리
+                if op == BinaryOp::Add {
+                    // 한쪽이 배열이면 다른 쪽도 배열로 통일
+                    if matches!(left_resolved, Type::Array(_)) {
+                        self.env.unify(left, right, span)?;
+                        return Ok(self.env.resolve(left));
+                    }
+                    if matches!(right_resolved, Type::Array(_)) {
+                        self.env.unify(left, right, span)?;
+                        return Ok(self.env.resolve(right));
+                    }
+                    // 한쪽이 문자열이면 문자열 연결
+                    if matches!(left_resolved, Type::String) || matches!(right_resolved, Type::String) {
+                        self.env.unify(left, &Type::String, span)?;
+                        self.env.unify(right, &Type::String, span)?;
+                        return Ok(Type::String);
+                    }
+                }
+
+                // 타입 변수가 있으면 숫자 타입으로 통일 (배열/문자열이 아닌 경우)
+                if matches!(left_resolved, Type::Var(_)) {
+                    self.env.unify(left, &Type::Int, span)?;
+                }
+                if matches!(right_resolved, Type::Var(_)) {
+                    self.env.unify(right, &Type::Int, span)?;
+                }
+
+                // 다시 resolve해서 통일 결과 확인
+                let left_final = self.env.resolve(left);
+                let right_final = self.env.resolve(right);
+
+                self.env.unify(left, right, span)?;
+
+                if left_final.is_numeric() || right_final.is_numeric() {
+                    // Float가 있으면 Float, 아니면 Int
+                    if matches!(left_final, Type::Float) || matches!(right_final, Type::Float)
+                    {
+                        Ok(Type::Float)
+                    } else {
+                        Ok(Type::Int)
+                    }
+                } else if matches!(left_final, Type::String) {
+                    // 문자열 연결
+                    Ok(Type::String)
+                } else if matches!(left_final, Type::Array(_)) {
+                    // 배열 연결
+                    Ok(left_final)
+                } else {
+                    Err(TypeError::InvalidOperator {
+                        op: format!("{:?}", op),
+                        ty: left_final.to_string(),
+                        span,
+                    })
+                }
+            }
+
+            // 비교 연산자
+            BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq => {
+                // 타입 변수가 있으면 숫자 타입으로 통일
+                if matches!(left_resolved, Type::Var(_)) {
+                    self.env.unify(left, &Type::Int, span)?;
+                }
+                if matches!(right_resolved, Type::Var(_)) {
+                    self.env.unify(right, &Type::Int, span)?;
+                }
+                self.env.unify(left, right, span)?;
+                Ok(Type::Bool)
+            }
+
+            // 등호 연산자
+            BinaryOp::Eq | BinaryOp::NotEq => {
+                self.env.unify(left, right, span)?;
+                Ok(Type::Bool)
+            }
+
+            // 논리 연산자
+            BinaryOp::And | BinaryOp::Or => {
+                self.env.unify(left, &Type::Bool, span)?;
+                self.env.unify(right, &Type::Bool, span)?;
+                Ok(Type::Bool)
+            }
+
+            // Concat
+            BinaryOp::Concat => {
+                self.env.unify(left, right, span)?;
+                match &left_resolved {
+                    Type::String => Ok(Type::String),
+                    Type::Array(_) => Ok(left_resolved),
+                    _ => Err(TypeError::InvalidOperator {
+                        op: "++".to_string(),
+                        ty: left_resolved.to_string(),
+                        span,
+                    }),
+                }
+            }
+        }
+    }
+
+    /// 함수 호출 타입 체크
+    fn check_function_call(
+        &mut self,
+        func_type: &Type,
+        args: &[Expr],
+        span: Span,
+    ) -> TypeResult<Type> {
+        let resolved = self.env.resolve(func_type);
+
+        if let Type::Function(param_types, return_type) = resolved {
+            if args.len() != param_types.len() {
+                return Err(TypeError::ArgumentCount {
+                    expected: param_types.len(),
+                    found: args.len(),
+                    span,
+                });
+            }
+
+            for (arg, param_type) in args.iter().zip(param_types.iter()) {
+                let arg_type = self.infer_expr(arg)?;
+                self.env.unify(&arg_type, param_type, span)?;
+            }
+
+            Ok((*return_type).clone())
+        } else if let Type::Var(_) = resolved {
+            // 타입 변수인 경우: 함수 타입으로 통일 시도
+            // 파라미터 타입은 인자로부터 추론, 반환 타입은 새 변수
+            let param_types: Vec<Type> = args
+                .iter()
+                .map(|arg| self.infer_expr(arg))
+                .collect::<TypeResult<Vec<_>>>()?;
+            let return_type = self.env.fresh_var();
+            let inferred_func_type = Type::Function(param_types, Box::new(return_type.clone()));
+            self.env.unify(func_type, &inferred_func_type, span)?;
+            Ok(return_type)
+        } else {
+            Err(TypeError::NotAFunction {
+                ty: resolved.to_string(),
+                span,
+            })
+        }
+    }
+
+    /// 인덱스 접근 타입 체크
+    fn check_index(&mut self, base: &Type, index_kind: &IndexKind, span: Span) -> TypeResult<Type> {
+        let resolved = self.env.resolve(base);
+
+        match index_kind {
+            IndexKind::Single(index_expr) => {
+                let index_type = self.infer_expr(index_expr)?;
+
+                match &resolved {
+                    Type::Array(elem) => {
+                        self.env.unify(&index_type, &Type::Int, span)?;
+                        Ok((**elem).clone())
+                    }
+                    Type::String => {
+                        self.env.unify(&index_type, &Type::Int, span)?;
+                        Ok(Type::String)
+                    }
+                    Type::Map(_, v) => Ok((**v).clone()),
+                    Type::Tuple(_types) => {
+                        // 튜플 인덱싱은 상수 인덱스만 지원
+                        self.env.unify(&index_type, &Type::Int, span)?;
+                        // 반환 타입은 Any (정적으로 결정 불가)
+                        Ok(Type::Any)
+                    }
+                    // 타입 변수인 경우: 배열로 통일
+                    Type::Var(_) => {
+                        self.env.unify(&index_type, &Type::Int, span)?;
+                        let elem_type = self.env.fresh_var();
+                        self.env.unify(base, &Type::Array(Box::new(elem_type.clone())), span)?;
+                        Ok(elem_type)
+                    }
+                    _ => Err(TypeError::InvalidIndex {
+                        base: resolved.to_string(),
+                        index: index_type.to_string(),
+                        span,
+                    }),
+                }
+            }
+            IndexKind::Slice(start, end) => {
+                if let Some(s) = start {
+                    let s_type = self.infer_expr(s)?;
+                    self.env.unify(&s_type, &Type::Int, span)?;
+                }
+                if let Some(e) = end {
+                    let e_type = self.infer_expr(e)?;
+                    self.env.unify(&e_type, &Type::Int, span)?;
+                }
+
+                match &resolved {
+                    Type::Array(_) => Ok(resolved.clone()),
+                    Type::String => Ok(Type::String),
+                    // 타입 변수인 경우: 배열로 통일
+                    Type::Var(_) => {
+                        let elem_type = self.env.fresh_var();
+                        let arr_type = Type::Array(Box::new(elem_type));
+                        self.env.unify(base, &arr_type, span)?;
+                        Ok(arr_type)
+                    }
+                    _ => Err(TypeError::InvalidIndex {
+                        base: resolved.to_string(),
+                        index: "slice".to_string(),
+                        span,
+                    }),
+                }
+            }
+        }
+    }
+
+    /// 필드 접근 타입 체크
+    fn check_field_access(&mut self, base: &Type, field: &str, span: Span) -> TypeResult<Type> {
+        let resolved = self.env.resolve(base);
+
+        match &resolved {
+            Type::Struct(fields) => {
+                if let Some(ty) = fields.get(field) {
+                    Ok(ty.clone())
+                } else {
+                    Err(TypeError::InvalidField {
+                        field: field.to_string(),
+                        ty: resolved.to_string(),
+                        span,
+                    })
+                }
+            }
+            Type::Map(_, v) => Ok((**v).clone()),
+            _ => Err(TypeError::InvalidField {
+                field: field.to_string(),
+                ty: resolved.to_string(),
+                span,
+            }),
+        }
+    }
+
+    /// 메서드 호출 타입 체크
+    fn check_method_call(
+        &mut self,
+        base: &Type,
+        method: &str,
+        args: &[Expr],
+        span: Span,
+    ) -> TypeResult<Type> {
+        let resolved = self.env.resolve(base);
+
+        // 빌트인 메서드
+        match method {
+            "len" => {
+                match &resolved {
+                    Type::Array(_) | Type::String | Type::Map(_, _) => Ok(Type::Int),
+                    _ => Err(TypeError::InvalidField {
+                        field: method.to_string(),
+                        ty: resolved.to_string(),
+                        span,
+                    }),
+                }
+            }
+            "push" | "pop" | "first" | "last" => {
+                if let Type::Array(elem) = &resolved {
+                    match method {
+                        "push" => {
+                            if args.len() != 1 {
+                                return Err(TypeError::ArgumentCount {
+                                    expected: 1,
+                                    found: args.len(),
+                                    span,
+                                });
+                            }
+                            let arg_type = self.infer_expr(&args[0])?;
+                            self.env.unify(&arg_type, elem, span)?;
+                            Ok(Type::Unit)
+                        }
+                        "pop" | "first" | "last" => Ok(Type::Optional(elem.clone())),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    Err(TypeError::InvalidField {
+                        field: method.to_string(),
+                        ty: resolved.to_string(),
+                        span,
+                    })
+                }
+            }
+            _ => {
+                // 사용자 정의 메서드는 지원하지 않음
+                Err(TypeError::InvalidField {
+                    field: method.to_string(),
+                    ty: resolved.to_string(),
+                    span,
+                })
+            }
+        }
+    }
+
+    /// TypeExpr을 Type으로 변환
+    fn convert_type_expr(&self, type_expr: &TypeExpr) -> Type {
+        match type_expr {
+            TypeExpr::Simple(name) => match name.as_str() {
+                "Int" | "int" => Type::Int,
+                "Float" | "float" => Type::Float,
+                "String" | "string" | "str" => Type::String,
+                "Bool" | "bool" => Type::Bool,
+                "Unit" | "()" => Type::Unit,
+                "Any" | "any" => Type::Any,
+                _ => Type::Any, // 사용자 정의 타입은 Any로 처리
+            },
+            TypeExpr::Array(inner) => Type::Array(Box::new(self.convert_type_expr(inner))),
+            TypeExpr::Tuple(types) => {
+                Type::Tuple(types.iter().map(|t| self.convert_type_expr(t)).collect())
+            }
+            TypeExpr::Optional(inner) => Type::Optional(Box::new(self.convert_type_expr(inner))),
+            TypeExpr::Result(inner) => Type::Result(Box::new(self.convert_type_expr(inner))),
+            TypeExpr::Function(params, ret) => Type::Function(
+                params.iter().map(|t| self.convert_type_expr(t)).collect(),
+                Box::new(self.convert_type_expr(ret)),
+            ),
+            TypeExpr::Map(k, v) => Type::Map(
+                Box::new(self.convert_type_expr(k)),
+                Box::new(self.convert_type_expr(v)),
+            ),
+            TypeExpr::Struct(fields) => Type::Struct(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), self.convert_type_expr(v)))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check_source(source: &str) -> TypeResult<()> {
+        let program = aoel_parser::parse(source).unwrap();
+        check(&program)
+    }
+
+    #[test]
+    fn test_simple_function() {
+        let result = check_source("add(a: Int, b: Int) -> Int = a + b");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_inferred_types() {
+        let result = check_source("double(x) = x * 2");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_array_map() {
+        let result = check_source("double_all(arr: [Int]) = arr.@(_ * 2)");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_recursion() {
+        let result = check_source("fact(n: Int) -> Int = n < 2 ? 1 : n * $(n - 1)");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_fibonacci() {
+        // Tests multiple recursive calls with arithmetic
+        let result = check_source("fib(n) = n <= 1 ? n : fib(n - 1) + fib(n - 2)");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_nested_function_calls() {
+        // Tests deeply nested function calls
+        let result = check_source(
+            "double(x) = x * 2
+             triple(x) = x * 3
+             compose(x) = double(triple(x))"
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_mutual_recursion() {
+        // Tests mutual recursion between two functions
+        let result = check_source(
+            "is_even(n) = n == 0 ? true : is_odd(n - 1)
+             is_odd(n) = n == 0 ? false : is_even(n - 1)"
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_higher_order_function() {
+        // Tests passing function as parameter
+        let result = check_source("apply_twice(f, x) = f(f(x))");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_complex_arithmetic() {
+        // Tests multiple parameters with arithmetic
+        let result = check_source("quadratic(a, b, c, x) = a * x * x + b * x + c");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_conditional_type_inference() {
+        // Tests conditional expressions with negation
+        let result = check_source("abs(x) = x < 0 ? -x : x");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tree_recursion() {
+        // Tests tree-shaped recursive calls
+        let result = check_source("tree_sum(n) = n <= 0 ? 0 : n + tree_sum(n - 1) + tree_sum(n - 2)");
+        assert!(result.is_ok());
     }
 }

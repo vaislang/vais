@@ -101,6 +101,12 @@ pub enum OpCode {
     Call(String, usize),
     /// Self-recursive call ($)
     SelfCall(usize),
+    /// Tail-recursive self-call (optimized, no stack growth)
+    TailSelfCall(usize),
+    /// Create a closure (params, body instructions)
+    MakeClosure(Vec<String>, Box<Vec<Instruction>>),
+    /// Call a closure on stack with arg count
+    CallClosure(usize),
     /// Return from current function/node
     Return,
 

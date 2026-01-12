@@ -1,0 +1,2 @@
+// Factorial function using recursion
+fact(n) = n < 2 ? 1 : n * $(n - 1)

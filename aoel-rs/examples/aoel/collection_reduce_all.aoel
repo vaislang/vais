@@ -1,0 +1,7 @@
+// All reduce operations test
+product_test(arr) = arr./*
+min_test(arr) = arr./min
+max_test(arr) = arr./max
+
+// Test expressions
+product_test([1, 2, 3, 4, 5])

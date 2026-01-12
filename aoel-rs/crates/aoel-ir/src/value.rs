@@ -38,6 +38,14 @@ pub enum Value {
 
     /// Error value (for error propagation)
     Error(String),
+
+    /// Closure (params, captured environment, body instruction index)
+    /// The instructions are stored separately; this just tracks the closure metadata
+    Closure {
+        params: Vec<String>,
+        captured: HashMap<String, Value>,
+        body_id: usize,
+    },
 }
 
 impl Value {
@@ -55,6 +63,7 @@ impl Value {
             Value::Struct(s) => !s.is_empty(),
             Value::Optional(o) => o.is_some(),
             Value::Error(_) => false,
+            Value::Closure { .. } => true,
         }
     }
 
@@ -72,6 +81,7 @@ impl Value {
             Value::Struct(_) => ValueType::Struct,
             Value::Optional(_) => ValueType::Optional,
             Value::Error(_) => ValueType::Error,
+            Value::Closure { .. } => ValueType::Closure,
         }
     }
 
@@ -118,10 +128,10 @@ impl Value {
         }
     }
 
-    /// Get array length or string length
+    /// Get array length or string length (Unicode char count for strings)
     pub fn len(&self) -> Option<usize> {
         match self {
-            Value::String(s) => Some(s.len()),
+            Value::String(s) => Some(s.chars().count()), // Unicode char count
             Value::Bytes(b) => Some(b.len()),
             Value::Array(a) => Some(a.len()),
             Value::Map(m) => Some(m.len()),
@@ -178,6 +188,7 @@ impl std::fmt::Display for Value {
             Value::Optional(Some(v)) => write!(f, "Some({})", v),
             Value::Optional(None) => write!(f, "None"),
             Value::Error(e) => write!(f, "Error({})", e),
+            Value::Closure { params, .. } => write!(f, "<closure({})>", params.join(", ")),
         }
     }
 }
@@ -196,6 +207,7 @@ pub enum ValueType {
     Struct,
     Optional,
     Error,
+    Closure,
 }
 
 impl std::fmt::Display for ValueType {
@@ -212,6 +224,7 @@ impl std::fmt::Display for ValueType {
             ValueType::Struct => write!(f, "STRUCT"),
             ValueType::Optional => write!(f, "OPTIONAL"),
             ValueType::Error => write!(f, "ERROR"),
+            ValueType::Closure => write!(f, "CLOSURE"),
         }
     }
 }

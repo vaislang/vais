@@ -1,9 +1,11 @@
 [package]
 name = "aoel-vm"
-version.workspace = true
-edition.workspace = true
-description = "AOEL Virtual Machine"
+version = "0.1.0"
+edition = "2021"
+description = "AOEL Virtual Machine - Stack-based interpreter"
 
 [dependencies]
-aoel-ir = { workspace = true }
-thiserror = { workspace = true }
+aoel-ir = { path = "../aoel-ir" }
+aoel-ast = { path = "../aoel-ast" }
+aoel-lowering = { path = "../aoel-lowering" }
+thiserror = "1.0"

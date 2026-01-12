@@ -1,14 +1,10 @@
 [package]
 name = "aoel-parser"
-version.workspace = true
-edition.workspace = true
-description = "AOEL Language Parser"
+version = "0.1.0"
+edition = "2021"
+description = "AOEL Parser"
 
 [dependencies]
-aoel-lexer = { workspace = true }
-aoel-ast = { workspace = true }
-thiserror = { workspace = true }
-ariadne = { workspace = true }
-
-[dev-dependencies]
-pretty_assertions = "1.4"
+thiserror = "1.0"
+aoel-lexer = { path = "../aoel-lexer" }
+aoel-ast = { path = "../aoel-ast" }

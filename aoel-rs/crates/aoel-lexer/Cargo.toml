@@ -1,13 +1,13 @@
 [package]
 name = "aoel-lexer"
-version.workspace = true
-edition.workspace = true
-description = "AOEL Language Lexer"
+version = "0.1.0"
+edition = "2021"
+description = "AOEL Lexer - AI-optimized token efficiency"
 
 [dependencies]
-logos = { workspace = true }
-thiserror = { workspace = true }
-serde = { workspace = true }
+logos = "0.14"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

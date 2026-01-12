@@ -1,0 +1,5 @@
+// Module import test
+use lib.math
+
+// Use imported functions
+add(3, 4) + mul(2, 5)

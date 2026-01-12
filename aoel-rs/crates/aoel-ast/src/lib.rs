@@ -1,95 +1,24 @@
-//! AOEL Abstract Syntax Tree
+//! AOEL v6b Abstract Syntax Tree
 //!
-//! Defines all AST node types for the AOEL language.
+//! v6b 문법에 최적화된 AST 노드 정의.
+//!
+//! # 주요 노드
+//!
+//! - `Program` - 최상위 노드
+//! - `FunctionDef` - 함수 정의
+//! - `Expr` - 표현식 (모든 것이 표현식)
+//!
+//! # 예제
+//!
+//! ```ignore
+//! // add(a,b)=a+b 파싱 결과
+//! FunctionDef {
+//!     name: "add",
+//!     params: [Param { name: "a" }, Param { name: "b" }],
+//!     body: Binary(Ident("a"), Add, Ident("b")),
+//! }
+//! ```
 
-mod types;
-mod expr;
-mod stmt;
-mod unit;
-mod visitor;
+pub mod ast;
 
-pub use types::*;
-pub use expr::*;
-pub use stmt::*;
-pub use unit::*;
-pub use visitor::*;
-
-use aoel_lexer::Span;
-use serde::{Deserialize, Serialize};
-
-/// Common trait for all AST nodes
-pub trait AstNode {
-    /// Get the source span of this node
-    fn span(&self) -> Span;
-}
-
-/// Identifier with its source location
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Ident {
-    pub name: String,
-    pub span: Span,
-}
-
-impl Ident {
-    pub fn new(name: impl Into<String>, span: Span) -> Self {
-        Self {
-            name: name.into(),
-            span,
-        }
-    }
-}
-
-impl AstNode for Ident {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-/// Qualified name (e.g., `examples.hello_world`)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct QualifiedName {
-    pub parts: Vec<Ident>,
-    pub span: Span,
-}
-
-impl QualifiedName {
-    pub fn new(parts: Vec<Ident>, span: Span) -> Self {
-        Self { parts, span }
-    }
-
-    pub fn full_name(&self) -> String {
-        self.parts
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect::<Vec<_>>()
-            .join(".")
-    }
-}
-
-impl AstNode for QualifiedName {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-/// External reference (e.g., `@db.users`)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ExternalRef {
-    pub path: String,
-    pub span: Span,
-}
-
-impl ExternalRef {
-    pub fn new(path: impl Into<String>, span: Span) -> Self {
-        Self {
-            path: path.into(),
-            span,
-        }
-    }
-}
-
-impl AstNode for ExternalRef {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
+pub use ast::*;

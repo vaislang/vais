@@ -1,0 +1,12 @@
+// Math library functions
+
+pub add(a, b) = a + b
+pub sub(a, b) = a - b
+pub mul(a, b) = a * b
+pub div(a, b) = a / b
+
+// Factorial using recursion
+pub fact(n) = n < 2 ? 1 : n * $(n - 1)
+
+// Private helper (not exported)
+_helper(x) = x * x

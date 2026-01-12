@@ -1,42 +1,29 @@
-//! Lexer error types
+//! AOEL v6b Lexer Errors
 
 use thiserror::Error;
+
 use crate::token::Span;
 
-/// Errors that can occur during lexing
-#[derive(Error, Debug, Clone)]
-pub enum LexerError {
-    #[error("Invalid token at position {}: '{}'", .span.start, .text)]
-    InvalidToken {
-        span: Span,
-        text: String,
-    },
+/// 렉서 에러
+#[derive(Debug, Error)]
+pub enum LexError {
+    #[error("Unexpected character '{char}' at position {}", span.start)]
+    UnexpectedCharacter { char: char, span: Span },
 
-    #[error("Unterminated string literal starting at position {}", .span.start)]
-    UnterminatedString {
-        span: Span,
-    },
+    #[error("Unterminated string starting at position {}", span.start)]
+    UnterminatedString { span: Span },
 
-    #[error("Unterminated regex literal starting at position {}", .span.start)]
-    UnterminatedRegex {
-        span: Span,
-    },
-
-    #[error("Invalid escape sequence '\\{}' at position {}", .char, .offset)]
-    InvalidEscape {
-        char: char,
-        offset: usize,
-    },
+    #[error("Invalid number format at position {}", span.start)]
+    InvalidNumber { span: Span },
 }
 
-impl LexerError {
-    /// Get the span of the error, if available
-    pub fn span(&self) -> Option<Span> {
+impl LexError {
+    /// 에러 위치 반환
+    pub fn span(&self) -> Span {
         match self {
-            LexerError::InvalidToken { span, .. } => Some(*span),
-            LexerError::UnterminatedString { span } => Some(*span),
-            LexerError::UnterminatedRegex { span } => Some(*span),
-            LexerError::InvalidEscape { offset, .. } => Some(Span::new(*offset, *offset + 1)),
+            LexError::UnexpectedCharacter { span, .. } => *span,
+            LexError::UnterminatedString { span } => *span,
+            LexError::InvalidNumber { span } => *span,
         }
     }
 }

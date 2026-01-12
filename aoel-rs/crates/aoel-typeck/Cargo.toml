@@ -2,14 +2,12 @@
 name = "aoel-typeck"
 version.workspace = true
 edition.workspace = true
-description = "AOEL Type Checker and Semantic Analysis"
+description = "AOEL Type Checker"
 
 [dependencies]
-aoel-lexer = { workspace = true }
 aoel-ast = { workspace = true }
+aoel-lexer = { workspace = true }
 thiserror = { workspace = true }
-ariadne = { workspace = true }
 
 [dev-dependencies]
-pretty_assertions = "1.4"
 aoel-parser = { workspace = true }
