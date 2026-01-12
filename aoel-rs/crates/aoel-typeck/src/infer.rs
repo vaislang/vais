@@ -1,4 +1,4 @@
-//! v6b Type Inference
+//! AOEL Type Inference
 //!
 //! Hindley-Milner 스타일 타입 추론
 

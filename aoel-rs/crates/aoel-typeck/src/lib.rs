@@ -1,4 +1,4 @@
-//! AOEL v6b Type Checker
+//! AOEL AOEL Type Checker
 //!
 //! Hindley-Milner 기반 타입 추론 및 검사
 

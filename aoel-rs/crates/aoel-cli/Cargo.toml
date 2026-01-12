@@ -21,7 +21,11 @@ aoel-lowering = { workspace = true }
 aoel-vm = { workspace = true }
 aoel-ir = { workspace = true }
 aoel-codegen = { workspace = true }
+aoel-tools = { workspace = true }
 
 clap = { version = "4.4", features = ["derive"] }
 ariadne = { workspace = true }
 serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+dirs = "5.0"

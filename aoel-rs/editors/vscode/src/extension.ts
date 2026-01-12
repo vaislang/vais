@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'aoel' }
         ],
         synchronize: {
-            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{aoel,v6b}')
+            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.aoel')
         }
     };
 

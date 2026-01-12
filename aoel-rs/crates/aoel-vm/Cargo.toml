@@ -9,3 +9,6 @@ aoel-ir = { path = "../aoel-ir" }
 aoel-ast = { path = "../aoel-ast" }
 aoel-lowering = { path = "../aoel-lowering" }
 thiserror = "1.0"
+serde_json = "1.0"
+ureq = { version = "2.9", features = ["json"] }
+libloading = "0.8"

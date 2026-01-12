@@ -1,9 +1,9 @@
-//! v6b Type System
+//! AOEL Type System
 
 use std::collections::HashMap;
 use std::fmt;
 
-/// v6b 타입
+/// AOEL 타입
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     /// 정수

@@ -1,6 +1,6 @@
-//! AOEL v6b Token Definitions
+//! AOEL AOEL Token Definitions
 //!
-//! v6b 문법에 최적화된 토큰 정의.
+//! AOEL 문법에 최적화된 토큰 정의.
 //! 목표: AI 토큰 효율성 44% 향상
 
 use logos::Logos;
@@ -58,7 +58,7 @@ impl Token {
     }
 }
 
-/// AOEL v6b 토큰 종류
+/// AOEL AOEL 토큰 종류
 #[derive(Logos, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[logos(skip r"[ \t\r]+")]  // 공백 스킵 (줄바꿈 제외)
 pub enum TokenKind {
@@ -154,7 +154,7 @@ pub enum TokenKind {
     Identifier,
 
     // =========================================================================
-    // Operators - Collection (v6b 핵심)
+    // Operators - Collection (AOEL 핵심)
     // =========================================================================
     /// .@ - Map operator
     #[token(".@")]
@@ -169,7 +169,7 @@ pub enum TokenKind {
     DotSlash,
 
     // =========================================================================
-    // Operators - Special (v6b)
+    // Operators - Special (AOEL)
     // =========================================================================
     /// $ - Self recursion
     #[token("$")]
@@ -383,7 +383,7 @@ impl TokenKind {
         )
     }
 
-    /// v6b 컬렉션 연산자인지 확인
+    /// AOEL 컬렉션 연산자인지 확인
     pub fn is_collection_op(&self) -> bool {
         matches!(
             self,

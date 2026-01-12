@@ -509,10 +509,12 @@ impl LlvmCodeGenerator {
         } else {
             // Complex case: has jumps, need multiple blocks
             // Branch to actual first block if entry has instructions, otherwise jump to next block
-            let first_block = block_names.get(&0).unwrap();
+            let first_block = block_names.get(&0)
+                .ok_or_else(|| crate::error::CodegenError::Internal("Missing block 0 in block_names".to_string()))?;
             if first_block == "entry" {
                 // Generate entry block content
-                let end = *block_ends.get(&0).unwrap();
+                let end = *block_ends.get(&0)
+                    .ok_or_else(|| crate::error::CodegenError::Internal("Missing block 0 in block_ends".to_string()))?;
                 self.generate_block_instructions(
                     instructions,
                     0,
@@ -544,8 +546,10 @@ impl LlvmCodeGenerator {
                     continue; // Already handled entry
                 }
 
-                let block_name = block_names.get(&start).unwrap();
-                let end = *block_ends.get(&start).unwrap();
+                let block_name = block_names.get(&start)
+                    .ok_or_else(|| crate::error::CodegenError::Internal(format!("Missing block {} in block_names", start)))?;
+                let end = *block_ends.get(&start)
+                    .ok_or_else(|| crate::error::CodegenError::Internal(format!("Missing block {} in block_ends", start)))?;
 
                 self.writeln(&format!("{}:", block_name));
                 self.generate_block_instructions(

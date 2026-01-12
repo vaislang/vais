@@ -23,7 +23,7 @@
       {
         "id": "aoel",
         "aliases": ["AOEL", "aoel"],
-        "extensions": [".aoel", ".v6b"],
+        "extensions": [".aoel"],
         "configuration": "./language-configuration.json"
       }
     ],

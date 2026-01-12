@@ -1,4 +1,4 @@
-//! v6b Type Checker
+//! AOEL Type Checker
 
 use aoel_ast::*;
 use aoel_lexer::Span;

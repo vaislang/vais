@@ -1,4 +1,4 @@
-//! AOEL v6b Lexer Errors
+//! AOEL AOEL Lexer Errors
 
 use thiserror::Error;
 

@@ -1,4 +1,4 @@
-//! v6b Type Check Errors
+//! AOEL Type Check Errors
 
 use aoel_lexer::Span;
 use thiserror::Error;

@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AOEL Playground</title>
+    <style>
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #252526;
+            --bg-tertiary: #2d2d2d;
+            --text-primary: #d4d4d4;
+            --text-secondary: #808080;
+            --accent: #569cd6;
+            --accent-hover: #4fc1ff;
+            --success: #4ec9b0;
+            --error: #f14c4c;
+            --border: #3c3c3c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: var(--bg-secondary);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .logo span {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button:disabled {
+            background-color: var(--bg-tertiary);
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background-color: var(--bg-tertiary);
+        }
+
+        button.secondary:hover {
+            background-color: #404040;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .panel {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .panel-header {
+            background-color: var(--bg-secondary);
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .editor-container {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #editor {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            border: none;
+            padding: 16px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            tab-size: 4;
+        }
+
+        .divider {
+            width: 4px;
+            background-color: var(--border);
+            cursor: col-resize;
+        }
+
+        .divider:hover {
+            background-color: var(--accent);
+        }
+
+        #output {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            border: none;
+            padding: 16px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        .output-success {
+            color: var(--success);
+        }
+
+        .output-error {
+            color: var(--error);
+        }
+
+        .status-bar {
+            background-color: var(--bg-secondary);
+            padding: 4px 16px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--border);
+        }
+
+        .examples-dropdown {
+            position: relative;
+        }
+
+        .examples-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            min-width: 200px;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .examples-menu.show {
+            display: block;
+        }
+
+        .examples-menu button {
+            width: 100%;
+            background: none;
+            text-align: left;
+            padding: 10px 16px;
+            border-radius: 0;
+        }
+
+        .examples-menu button:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .kbd {
+            background-color: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            margin-left: 8px;
+        }
+
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column;
+            }
+            .divider {
+                width: 100%;
+                height: 4px;
+                cursor: row-resize;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <h1>AOEL</h1>
+            <span>AI-Optimized Executable Language</span>
+        </div>
+        <div class="toolbar">
+            <div class="examples-dropdown">
+                <button class="secondary" id="examplesBtn">
+                    Examples
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                        <path d="M2 4l4 4 4-4z"/>
+                    </svg>
+                </button>
+                <div class="examples-menu" id="examplesMenu">
+                    <button data-example="hello">Hello World</button>
+                    <button data-example="factorial">Factorial</button>
+                    <button data-example="fibonacci">Fibonacci</button>
+                    <button data-example="map">Map/Filter</button>
+                    <button data-example="reduce">Reduce</button>
+                </div>
+            </div>
+            <button id="formatBtn" class="secondary">
+                Format
+                <span class="kbd">Ctrl+Shift+F</span>
+            </button>
+            <button id="runBtn">
+                Run
+                <span class="kbd">Ctrl+Enter</span>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <div class="panel">
+            <div class="panel-header">
+                <span>Editor</span>
+                <span id="lineInfo">Ln 1, Col 1</span>
+            </div>
+            <div class="editor-container">
+                <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">// AOEL Playground
+// Try some examples from the dropdown menu!
+
+// Factorial function using self-recursion ($)
+factorial(n) = n < 2 ? 1 : n * $(n - 1)
+
+// Calculate factorial of 5
+print("Factorial of 5:", factorial(5))
+
+// Array operations
+numbers = [1, 2, 3, 4, 5]
+doubled = numbers.@(_ * 2)
+evens = numbers.?(_ % 2 == 0)
+
+print("Original:", numbers)
+print("Doubled:", doubled)
+print("Evens:", evens)
+</textarea>
+            </div>
+        </div>
+
+        <div class="divider" id="divider"></div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span>Output</span>
+                <span id="execTime"></span>
+            </div>
+            <div class="editor-container">
+                <div id="output">Click "Run" or press Ctrl+Enter to execute the code.</div>
+            </div>
+        </div>
+    </main>
+
+    <div class="status-bar">
+        <span>AOEL v0.1.0</span>
+        <span id="status">Ready</span>
+    </div>
+
+    <script type="module">
+        import init, { execute, check, format_code, get_ast, get_tokens } from './pkg/aoel_playground.js';
+
+        const examples = {
+            hello: `// Hello World in AOEL
+print("Hello, World!")
+
+// String concatenation
+name = "AOEL"
+print("Welcome to " ++ name ++ "!")`,
+
+            factorial: `// Factorial using self-recursion ($)
+factorial(n) = n < 2 ? 1 : n * $(n - 1)
+
+// Calculate factorials
+print("5! =", factorial(5))
+print("10! =", factorial(10))
+
+// Using reduce for factorial
+fact_reduce(n) = range(1, n + 1)./*(1, _ * _)
+print("5! (reduce) =", fact_reduce(5))`,
+
+            fibonacci: `// Fibonacci using self-recursion ($)
+fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)
+
+// First 10 Fibonacci numbers
+fibs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].@(fib(_))
+print("Fibonacci:", fibs)
+
+// Sum of first 10 Fibonacci numbers
+print("Sum:", fibs./+(0, _ + _))`,
+
+            map: `// Map and Filter operations
+numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// Map: double each number
+doubled = numbers.@(_ * 2)
+print("Doubled:", doubled)
+
+// Filter: keep only evens
+evens = numbers.?(_ % 2 == 0)
+print("Evens:", evens)
+
+// Chain operations: square the evens
+squared_evens = numbers.?(_ % 2 == 0).@(_ * _)
+print("Squared evens:", squared_evens)`,
+
+            reduce: `// Reduce operations
+numbers = [1, 2, 3, 4, 5]
+
+// Sum
+sum = numbers./+(0, _ + _)
+print("Sum:", sum)
+
+// Product
+product = numbers./*(1, _ * _)
+print("Product:", product)
+
+// Custom reduce: find max
+max_val = numbers./(numbers[0], _ > _ ? _1 : _2)
+print("Max:", max_val)`
+        };
+
+        let wasmReady = false;
+
+        async function main() {
+            try {
+                await init();
+                wasmReady = true;
+                document.getElementById('status').textContent = 'WASM loaded';
+                document.getElementById('runBtn').disabled = false;
+            } catch (e) {
+                document.getElementById('status').textContent = 'Failed to load WASM';
+                document.getElementById('output').innerHTML =
+                    '<span class="output-error">Failed to load WASM module. Make sure to build with wasm-pack first.</span>';
+                console.error('WASM init error:', e);
+            }
+        }
+
+        function runCode() {
+            if (!wasmReady) return;
+
+            const code = document.getElementById('editor').value;
+            const output = document.getElementById('output');
+            const execTime = document.getElementById('execTime');
+            const status = document.getElementById('status');
+
+            status.textContent = 'Running...';
+            output.innerHTML = '';
+
+            try {
+                const resultJson = execute(code);
+                const result = JSON.parse(resultJson);
+
+                if (result.success) {
+                    output.innerHTML = `<span class="output-success">${escapeHtml(result.output)}</span>`;
+                    execTime.textContent = `${result.execution_time_ms.toFixed(2)}ms`;
+                    status.textContent = 'Completed';
+                } else {
+                    output.innerHTML = `<span class="output-error">${escapeHtml(result.error)}</span>`;
+                    execTime.textContent = '';
+                    status.textContent = 'Error';
+                }
+            } catch (e) {
+                output.innerHTML = `<span class="output-error">Execution error: ${escapeHtml(e.message)}</span>`;
+                status.textContent = 'Error';
+            }
+        }
+
+        function formatCode() {
+            if (!wasmReady) return;
+
+            const editor = document.getElementById('editor');
+            const formatted = format_code(editor.value);
+            editor.value = formatted;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function updateLineInfo() {
+            const editor = document.getElementById('editor');
+            const pos = editor.selectionStart;
+            const lines = editor.value.substr(0, pos).split('\n');
+            const line = lines.length;
+            const col = lines[lines.length - 1].length + 1;
+            document.getElementById('lineInfo').textContent = `Ln ${line}, Col ${col}`;
+        }
+
+        // Event Listeners
+        document.getElementById('runBtn').addEventListener('click', runCode);
+        document.getElementById('formatBtn').addEventListener('click', formatCode);
+
+        document.getElementById('editor').addEventListener('keydown', (e) => {
+            // Ctrl+Enter to run
+            if (e.ctrlKey && e.key === 'Enter') {
+                e.preventDefault();
+                runCode();
+            }
+            // Ctrl+Shift+F to format
+            if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+                e.preventDefault();
+                formatCode();
+            }
+            // Tab handling
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = e.target.selectionStart;
+                const end = e.target.selectionEnd;
+                e.target.value = e.target.value.substring(0, start) + '    ' + e.target.value.substring(end);
+                e.target.selectionStart = e.target.selectionEnd = start + 4;
+            }
+        });
+
+        document.getElementById('editor').addEventListener('input', updateLineInfo);
+        document.getElementById('editor').addEventListener('click', updateLineInfo);
+        document.getElementById('editor').addEventListener('keyup', updateLineInfo);
+
+        // Examples dropdown
+        document.getElementById('examplesBtn').addEventListener('click', () => {
+            document.getElementById('examplesMenu').classList.toggle('show');
+        });
+
+        document.querySelectorAll('[data-example]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const example = examples[btn.dataset.example];
+                if (example) {
+                    document.getElementById('editor').value = example;
+                }
+                document.getElementById('examplesMenu').classList.remove('show');
+            });
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.examples-dropdown')) {
+                document.getElementById('examplesMenu').classList.remove('show');
+            }
+        });
+
+        // Resizable divider
+        const divider = document.getElementById('divider');
+        let isResizing = false;
+
+        divider.addEventListener('mousedown', () => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const container = document.querySelector('main');
+            const panels = container.querySelectorAll('.panel');
+            const containerRect = container.getBoundingClientRect();
+            const percentage = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+            panels[0].style.flex = `0 0 ${percentage}%`;
+            panels[1].style.flex = `0 0 ${100 - percentage - 0.5}%`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = '';
+        });
+
+        // Initialize
+        main();
+        updateLineInfo();
+    </script>
+</body>
+</html>

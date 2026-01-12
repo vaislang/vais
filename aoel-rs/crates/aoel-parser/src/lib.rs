@@ -1,6 +1,6 @@
-//! AOEL v6b Parser
+//! AOEL AOEL Parser
 //!
-//! v6b 문법 파서
+//! AOEL 문법 파서
 
 pub mod error;
 pub mod module;

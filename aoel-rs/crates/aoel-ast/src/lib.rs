@@ -1,6 +1,6 @@
-//! AOEL v6b Abstract Syntax Tree
+//! AOEL AOEL Abstract Syntax Tree
 //!
-//! v6b 문법에 최적화된 AST 노드 정의.
+//! AOEL 문법에 최적화된 AST 노드 정의.
 //!
 //! # 주요 노드
 //!

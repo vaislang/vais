@@ -1,0 +1,80 @@
+// AOEL JSON & HTTP API Example
+// Demonstrates JSON manipulation and HTTP client
+
+// === JSON Parsing ===
+
+json_str = '{"user": {"name": "Alice", "age": 30}, "items": [1, 2, 3]}'
+data = json_parse(json_str)
+
+print("Parsed JSON:")
+print(data)
+
+// Access nested values with path syntax
+user_name = json_get(data, "user.name")
+print("\nUser name:", user_name)
+
+// Access array elements
+items = json_get(data, "items")
+print("Items:", items)
+
+// === JSON Manipulation ===
+
+// Set nested values
+updated = json_set(data, "user.email", "alice@example.com")
+print("\nAfter adding email:")
+print(json_stringify_pretty(updated))
+
+// Get keys and values
+user = json_get(updated, "user")
+keys = json_keys(user)
+print("\nUser keys:", keys)
+
+// Check if key exists
+has_email = json_has(updated, "user.email")
+has_phone = json_has(updated, "user.phone")
+print("\nHas email:", has_email)
+print("Has phone:", has_phone)
+
+// Merge objects
+extra = json_parse('{"role": "admin", "active": true}')
+merged_user = json_merge(user, extra)
+print("\nMerged user:")
+print(json_stringify_pretty(merged_user))
+
+// Remove key
+without_age = json_remove(merged_user, "age")
+print("\nWithout age:")
+print(json_stringify(without_age))
+
+// === Type Checking ===
+
+print("\nType checks:")
+print("Type of items:", json_type(items))
+print("Is array:", json_is_array(items))
+print("Is object:", json_is_object(user))
+
+// === HTTP Client (commented out - requires network) ===
+
+// GET request
+// response = http_get("https://api.example.com/users")
+// if json_get(response, "ok") then
+//     body = json_get(response, "body")
+//     users = json_parse(body)
+//     print("Users:", users)
+// end
+
+// POST request with JSON body
+// new_user = {"name": "Bob", "email": "bob@example.com"}
+// response = http_post_json("https://api.example.com/users", new_user)
+// print("Created user:", response)
+
+// === URL Encoding ===
+
+query = "name=John Doe&city=New York"
+encoded = url_encode(query)
+print("\nURL encoded:", encoded)
+
+decoded = url_decode(encoded)
+print("URL decoded:", decoded)
+
+print("\n=== JSON & HTTP Demo Complete ===")

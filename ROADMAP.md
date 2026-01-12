@@ -16,9 +16,9 @@ AI가 가장 효율적으로 생성, 수정, 실행할 수 있는 프로그래�
 | Phase 2: Execution | **DONE** | 100% |
 | Phase 3: Optimization | **DONE** | 100% |
 | Phase 4: Native Compile | **DONE** | 100% |
-| Phase 5: Ecosystem | **IN PROGRESS** | 40% |
+| Phase 5: Ecosystem | **DONE** | 100% |
 
-**Last Updated:** 2026-01-12
+**Last Updated:** 2026-01-13
 
 ---
 
@@ -38,6 +38,15 @@ cargo build --release
 # JIT 실행 (Cranelift)
 cargo build --release --features cranelift
 ./target/release/aoel jit examples/simple.aoel
+
+# 패키지 매니저
+./target/release/aoel init my-project    # 새 프로젝트
+./target/release/aoel add utils          # 의존성 추가
+./target/release/aoel publish            # 레지스트리에 게시
+
+# 개발 도구
+./target/release/aoel format file.aoel   # 코드 포맷팅
+./target/release/aoel profile file.aoel  # 성능 프로파일링
 ```
 
 ---
@@ -86,20 +95,23 @@ use math.{sin, cos}
 
 ---
 
-## Phase 5: Ecosystem (진행 중)
+## Phase 5: Ecosystem (완료)
 
 ### 완료
 - [x] 50+ 빌트인 함수
 - [x] 모듈 시스템 (`use`, `pub`)
-- [x] LSP 기본 구현
 - [x] REPL
+- [x] **std.io** - 파일 I/O, 경로 처리, 디렉토리 연산
+- [x] **std.json** - JSON 파싱/생성/조작
+- [x] **std.net** - HTTP 클라이언트 (GET/POST/PUT/DELETE)
+- [x] **LSP 완전 구현** - 자동완성, Hover, Go to Definition, Find References, Rename, Signature Help
+- [x] **패키지 매니저 (APM)** - aoel.toml, init/add/remove/install/publish
+- [x] **FFI (C 바인딩)** - libc 함수 호출 (abs, sqrt, pow, sin, cos, etc.)
+- [x] **개발 도구 (aoel-tools)** - Formatter, Profiler, Debugger
 
-### TODO
-- [ ] I/O 함수 (파일, JSON, 네트워킹)
-- [ ] LSP 개선 (자동완성, Go to Definition)
-- [ ] 패키지 매니저
-- [ ] FFI (C, Rust, Python 바인딩)
-- [ ] 디버거, 프로파일러, Formatter
+### TODO (Future)
+- [x] FFI 동적 라이브러리 로딩 (libloading) - **완료**
+- [ ] Online REPL/Playground
 
 ---
 
@@ -115,6 +127,7 @@ aoel-rs/crates/
 ├── aoel-lowering/   # AST → IR
 ├── aoel-vm/         # 스택 VM
 ├── aoel-codegen/    # C/WASM/LLVM/Cranelift
+├── aoel-tools/      # Formatter, Profiler, Debugger
 ├── aoel-lsp/        # Language Server
 └── aoel-cli/        # CLI
 ```
@@ -130,13 +143,129 @@ aoel-rs/crates/
 | aoel-typeck | 11 |
 | aoel-ir | 20 |
 | aoel-lowering | 3 |
-| aoel-vm | 6 |
+| aoel-vm | 30 |
 | aoel-codegen | 14 |
-| **Total** | **76** |
+| aoel-tools | 7 |
+| aoel-cli | 3 |
+| **Total** | **113** |
 
 ---
 
 ## Change Log (Recent)
+
+### 2026-01-13 - FFI 동적 라이브러리 로딩 구현
+**libloading 기반 동적 FFI**
+- `FfiLoader` 클래스 추가 - 동적 라이브러리 로드/함수 호출
+- 플랫폼별 라이브러리 이름 자동 해석 (macOS: .dylib, Linux: .so, Windows: .dll)
+- 검색 경로 설정 가능 (`add_ffi_search_path`)
+- 함수 시그니처 등록 (`register_ffi_function`)
+
+**지원 함수 시그니처**
+- 인자 0-3개 함수 (i32, i64, f64, cstr)
+- 반환 타입: void, int, float, string
+
+**사용 예시**
+```rust
+let mut vm = Vm::new();
+// FFI 함수 등록
+vm.register_ffi_function("mylib", "compute",
+    vec![FfiType::F64, FfiType::F64],
+    FfiType::F64);
+// 라이브러리 검색 경로 추가
+vm.add_ffi_search_path("/opt/mylib");
+```
+
+**테스트**: 6개 신규 추가 (총 113개)
+
+### 2026-01-13 - 개발 도구 (aoel-tools) 구현
+**aoel-tools 크레이트 추가**
+- **Formatter** - AST 기반 코드 포맷터
+  - `aoel format <file>` - 코드 포맷 (stdout)
+  - `aoel format <file> --write` - 파일에 덮어쓰기
+  - `aoel format <file> --check` - 포맷 검사
+  - 설정: `--indent`, `--max-width`
+- **Profiler** - 함수별 실행 시간 측정
+  - `aoel profile <file>` - 텍스트 출력
+  - `aoel profile <file> --format json` - JSON 출력
+  - 호출 횟수, 평균/최소/최대 시간 측정
+- **Debugger** - 브레이크포인트, 스텝 실행
+  - 브레이크포인트 설정/해제/토글
+  - step, step_into, step_out, continue
+  - 변수 검사, 콜 스택 조회
+  - 감시 표현식 (watch)
+
+**테스트**: 7개 신규 추가 (총 103개)
+
+### 2026-01-13 - FFI (Foreign Function Interface) 구현
+**FFI 문법**
+```aoel
+ffi "c" {
+    fn abs(n: i32) -> i32
+    fn sqrt(x: f64) -> f64
+    fn pow(base: f64, exp: f64) -> f64
+    fn getenv(key: cstr) -> cstr
+}
+
+// 사용
+print(abs(-42))      // 42
+print(sqrt(16.0))    // 4.0
+```
+
+**지원 함수 (libc)**
+- 수학: abs, sqrt, pow, sin, cos, tan, log, exp, floor, ceil
+- 문자열: strlen, atoi, atof
+- 시스템: getenv, time, rand
+
+**FFI 타입**
+- 정수: i8, i16, i32, i64, u8, u16, u32, u64
+- 실수: f32, f64
+- 기타: bool, cstr, ptr, void
+
+### 2026-01-13 - 패키지 매니저 (APM) 구현
+**APM (AOEL Package Manager)**
+- `aoel init [path]` - 새 프로젝트 초기화
+- `aoel add <pkg>` - 의존성 추가
+- `aoel remove <pkg>` - 의존성 제거
+- `aoel install` - 의존성 설치
+- `aoel list` - 의존성 목록
+- `aoel publish` - 로컬 레지스트리에 게시
+
+**aoel.toml 지원**
+```toml
+[package]
+name = "my-app"
+version = "0.1.0"
+
+[dependencies]
+utils = "1.0.0"
+```
+
+**테스트**: 3개 신규 추가 (총 96개)
+
+### 2026-01-13 - std.io, std.json, std.net 및 LSP 개선
+**std.io (27개 함수)**
+- 파일 I/O: read_file, write_file, append_file, read_lines, read_file_bytes
+- 경로: path_join, path_exists, path_is_file, path_is_dir, path_parent, path_filename, path_extension, path_stem, path_absolute
+- 디렉토리: list_dir, create_dir, create_dir_all, remove_file, remove_dir, remove_dir_all, copy_file, rename
+- 환경: cwd, chdir, env_get, env_set, readline
+
+**std.json (14개 함수)**
+- 파싱/생성: json_parse, json_stringify, json_stringify_pretty
+- 접근/조작: json_get, json_set, json_keys, json_values, json_has, json_remove, json_merge
+- 타입 검사: json_type, json_is_null, json_is_object, json_is_array
+
+**std.net (10개 함수)**
+- HTTP: http_get, http_get_json, http_post, http_post_json, http_put, http_delete, http_head, http_request
+- URL: url_encode, url_decode
+
+**LSP v0.2.0 개선**
+- 자동완성: 90+ 빌트인 함수 (std.io, std.json, std.net 포함)
+- Signature Help: 함수 인자 도움말
+- Find References: 심볼 참조 찾기
+- Rename: 심볼 이름 변경
+- 문서화: 모든 빌트인 함수에 상세 설명 추가
+
+**테스트**: 17개 신규 추가 (총 93개)
 
 ### 2026-01-12 - Phase 4 완료
 - Cranelift JIT 백엔드 추가

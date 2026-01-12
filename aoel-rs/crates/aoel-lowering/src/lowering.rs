@@ -1,11 +1,12 @@
-//! v6b AST to IR Lowering
+//! AOEL AST to IR Lowering
 //!
-//! v6b AST를 IR 명령어로 변환
+//! AOEL AST를 IR 명령어로 변환
 
 use aoel_ir::{Instruction, OpCode, ReduceOp as IrReduceOp, Value};
 use aoel_ast::{
-    BinaryOp, Expr, FunctionDef, IndexKind, Item, Pattern, Program, ReduceKind, UnaryOp,
+    BinaryOp, Expr, FfiBlock, FunctionDef, IndexKind, Item, Pattern, Program, ReduceKind, UnaryOp,
 };
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Lowering 에러
@@ -31,12 +32,22 @@ pub struct CompiledFunction {
     pub instructions: Vec<Instruction>,
 }
 
-/// v6b Lowerer
+/// FFI 함수 정보
+#[derive(Debug, Clone)]
+pub struct FfiFnInfo {
+    pub lib_name: String,
+    pub extern_name: String,
+    pub param_count: usize,
+}
+
+/// AOEL Lowerer
 pub struct Lowerer {
     /// 현재 함수 이름 (재귀 호출용)
     current_function: Option<String>,
     /// 컴파일된 함수들
     functions: Vec<CompiledFunction>,
+    /// FFI 함수 레지스트리: aoel_name -> (lib_name, extern_name, param_count)
+    ffi_functions: HashMap<String, FfiFnInfo>,
 }
 
 impl Lowerer {
@@ -44,7 +55,13 @@ impl Lowerer {
         Self {
             current_function: None,
             functions: Vec::new(),
+            ffi_functions: HashMap::new(),
         }
+    }
+
+    /// FFI 함수 레지스트리 반환
+    pub fn ffi_functions(&self) -> &HashMap<String, FfiFnInfo> {
+        &self.ffi_functions
     }
 
     /// 프로그램을 컴파일
@@ -63,6 +80,10 @@ impl Lowerer {
                         params: Vec::new(),
                         instructions,
                     });
+                }
+                Item::Ffi(ffi_block) => {
+                    // FFI 블록 처리: 함수 레지스트리에 등록
+                    self.register_ffi_block(ffi_block);
                 }
                 _ => {
                     // TypeDef, Module, Use는 런타임에 직접 영향 없음
@@ -195,7 +216,7 @@ impl Lowerer {
                 instrs.push(Instruction::new(opcode));
             }
 
-            // === v6b Collection Operations ===
+            // === AOEL Collection Operations ===
             Expr::MapOp(arr, transform, _) => {
                 instrs.extend(self.lower_expr(arr)?);
                 let transform_instrs = self.lower_expr(transform)?;
@@ -379,8 +400,15 @@ impl Lowerer {
 
                 // 함수 호출
                 if let Expr::Ident(name, _) = func.as_ref() {
+                    // FFI 함수 체크
+                    if let Some(ffi_info) = self.is_ffi_function(name).cloned() {
+                        instrs.push(Instruction::new(OpCode::CallFfi(
+                            ffi_info.lib_name,
+                            ffi_info.extern_name,
+                            args.len(),
+                        )));
                     // 빌트인 함수 체크
-                    if Self::is_builtin(name) {
+                    } else if Self::is_builtin(name) {
                         instrs.push(Instruction::new(OpCode::CallBuiltin(name.clone(), args.len())));
                     } else {
                         instrs.push(Instruction::new(OpCode::Call(name.clone(), args.len())));
@@ -529,6 +557,25 @@ impl Lowerer {
         instrs.extend(else_instrs);
 
         Ok(instrs)
+    }
+
+    /// FFI 블록 등록
+    fn register_ffi_block(&mut self, ffi_block: &FfiBlock) {
+        for ffi_fn in &ffi_block.functions {
+            let extern_name = ffi_fn.extern_name.clone()
+                .unwrap_or_else(|| ffi_fn.name.clone());
+
+            self.ffi_functions.insert(ffi_fn.name.clone(), FfiFnInfo {
+                lib_name: ffi_block.lib_name.clone(),
+                extern_name,
+                param_count: ffi_fn.params.len(),
+            });
+        }
+    }
+
+    /// FFI 함수 여부 확인
+    fn is_ffi_function(&self, name: &str) -> Option<&FfiFnInfo> {
+        self.ffi_functions.get(name)
     }
 
     /// 빌트인 함수 여부 확인

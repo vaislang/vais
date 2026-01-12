@@ -1,6 +1,6 @@
-//! AOEL v6b Abstract Syntax Tree
+//! AOEL AOEL Abstract Syntax Tree
 //!
-//! v6b 문법에 최적화된 AST 노드 정의
+//! AOEL 문법에 최적화된 AST 노드 정의
 
 use aoel_lexer::Span;
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,8 @@ pub enum Item {
     Module(ModuleDef),
     /// import: use path
     Use(UseDef),
+    /// FFI 선언: ffi "lib" { ... }
+    Ffi(FfiBlock),
     /// 표현식 (REPL용)
     Expr(Expr),
 }
@@ -120,6 +122,87 @@ pub struct UseDef {
 }
 
 // =============================================================================
+// FFI (Foreign Function Interface)
+// =============================================================================
+
+/// FFI 블록: ffi "libname" { fn_decls... }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FfiBlock {
+    /// 라이브러리 이름 (예: "c", "math", "./mylib.so")
+    pub lib_name: String,
+    /// ABI (기본값: "C")
+    pub abi: String,
+    /// 함수 선언들
+    pub functions: Vec<FfiFn>,
+    pub span: Span,
+}
+
+/// FFI 함수 선언
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FfiFn {
+    /// AOEL에서 사용할 이름
+    pub name: String,
+    /// 외부 라이브러리에서의 원래 이름 (없으면 name 사용)
+    pub extern_name: Option<String>,
+    /// 매개변수 (이름, 타입)
+    pub params: Vec<(String, FfiType)>,
+    /// 반환 타입
+    pub return_type: FfiType,
+    pub span: Span,
+}
+
+/// FFI 타입 (C 호환)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum FfiType {
+    /// void
+    Void,
+    /// i8, i16, i32, i64
+    Int(u8),
+    /// u8, u16, u32, u64
+    Uint(u8),
+    /// f32
+    F32,
+    /// f64
+    F64,
+    /// bool
+    Bool,
+    /// *const T (읽기 전용 포인터)
+    Ptr(Box<FfiType>),
+    /// *mut T (쓰기 가능 포인터)
+    MutPtr(Box<FfiType>),
+    /// C 문자열 (*const c_char)
+    CStr,
+    /// 불투명 포인터 (void*)
+    Opaque,
+}
+
+impl FfiType {
+    /// C 타입 문자열 반환
+    pub fn to_c_type(&self) -> &'static str {
+        match self {
+            FfiType::Void => "void",
+            FfiType::Int(8) => "int8_t",
+            FfiType::Int(16) => "int16_t",
+            FfiType::Int(32) => "int32_t",
+            FfiType::Int(64) => "int64_t",
+            FfiType::Int(_) => "int64_t",
+            FfiType::Uint(8) => "uint8_t",
+            FfiType::Uint(16) => "uint16_t",
+            FfiType::Uint(32) => "uint32_t",
+            FfiType::Uint(64) => "uint64_t",
+            FfiType::Uint(_) => "uint64_t",
+            FfiType::F32 => "float",
+            FfiType::F64 => "double",
+            FfiType::Bool => "bool",
+            FfiType::Ptr(_) => "const void*",
+            FfiType::MutPtr(_) => "void*",
+            FfiType::CStr => "const char*",
+            FfiType::Opaque => "void*",
+        }
+    }
+}
+
+// =============================================================================
 // Expressions
 // =============================================================================
 
@@ -158,7 +241,7 @@ pub enum Expr {
     /// 단항 연산: -a, !a, #a
     Unary(UnaryOp, Box<Expr>, Span),
 
-    // === v6b Collection Operations ===
+    // === AOEL Collection Operations ===
     /// Map: arr.@(expr)
     MapOp(Box<Expr>, Box<Expr>, Span),
     /// Filter: arr.?(expr)

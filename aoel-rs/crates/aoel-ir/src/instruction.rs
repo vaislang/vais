@@ -120,6 +120,10 @@ pub enum OpCode {
     /// Call built-in function by name
     CallBuiltin(String, usize), // (name, arg_count)
 
+    // === FFI (Foreign Function Interface) ===
+    /// Call FFI function: (lib_name, fn_name, arg_count)
+    CallFfi(String, String, usize),
+
     // === Special ===
     /// No operation
     Nop,

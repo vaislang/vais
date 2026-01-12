@@ -9,8 +9,10 @@ members = [
     "crates/aoel-ir",
     "crates/aoel-vm",
     "crates/aoel-codegen",
+    "crates/aoel-tools",
     "crates/aoel-lsp",
     "crates/aoel-cli",
+    "crates/aoel-playground",
 ]
 
 [workspace.package]
@@ -31,6 +33,7 @@ aoel-lowering = { path = "crates/aoel-lowering" }
 aoel-ir = { path = "crates/aoel-ir" }
 aoel-vm = { path = "crates/aoel-vm" }
 aoel-codegen = { path = "crates/aoel-codegen" }
+aoel-tools = { path = "crates/aoel-tools" }
 
 # External dependencies
 thiserror = "1.0"

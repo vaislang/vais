@@ -1,4 +1,4 @@
-//! v6b VM Runtime Errors
+//! AOEL VM Runtime Errors
 
 use thiserror::Error;
 
@@ -28,8 +28,20 @@ pub enum RuntimeError {
     #[error("Maximum recursion depth exceeded")]
     MaxRecursionDepth,
 
+    #[error("I/O error: {0}")]
+    IoError(String),
+
+    #[error("File not found: {0}")]
+    FileNotFound(String),
+
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("FFI error: {0}")]
+    FfiError(String),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;

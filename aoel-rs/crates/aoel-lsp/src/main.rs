@@ -1,8 +1,9 @@
 //! AOEL Language Server
 //!
-//! LSP implementation for AOEL v6b syntax
+//! LSP implementation for AOEL AOEL syntax
 
 mod backend;
+mod builtins;
 mod diagnostics;
 mod document;
 

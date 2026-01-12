@@ -1,11 +1,12 @@
-//! v6b VM Implementation
+//! AOEL VM Implementation
 //!
-//! 스택 기반 VM으로 v6b IR을 실행
+//! 스택 기반 VM으로 AOEL IR을 실행
 
 use std::collections::HashMap;
 use aoel_ir::{Instruction, OpCode, ReduceOp, Value};
 use aoel_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
+use crate::ffi::FfiLoader;
 
 const MAX_RECURSION_DEPTH: usize = 1000;
 
@@ -17,7 +18,7 @@ enum TcoResult {
     TailCall(Vec<Value>),
 }
 
-/// v6b Virtual Machine
+/// AOEL Virtual Machine
 pub struct Vm {
     /// 스택
     stack: Vec<Value>,
@@ -33,6 +34,8 @@ pub struct Vm {
     closures: HashMap<usize, Vec<Instruction>>,
     /// 다음 클로저 ID
     next_closure_id: usize,
+    /// FFI 동적 라이브러리 로더
+    ffi_loader: FfiLoader,
 }
 
 impl Vm {
@@ -45,7 +48,34 @@ impl Vm {
             recursion_depth: 0,
             closures: HashMap::new(),
             next_closure_id: 0,
+            ffi_loader: FfiLoader::new(),
         }
+    }
+
+    /// FFI 함수 등록 (동적 라이브러리용)
+    pub fn register_ffi_function(
+        &mut self,
+        lib_name: &str,
+        fn_name: &str,
+        params: Vec<crate::ffi::FfiType>,
+        return_type: crate::ffi::FfiType,
+    ) {
+        self.ffi_loader.register_function(lib_name, fn_name, params, return_type);
+    }
+
+    /// FFI 라이브러리 검색 경로 추가
+    pub fn add_ffi_search_path(&mut self, path: &str) {
+        self.ffi_loader.add_search_path(path);
+    }
+
+    /// FFI 로더에 대한 참조 반환
+    pub fn ffi_loader(&self) -> &FfiLoader {
+        &self.ffi_loader
+    }
+
+    /// FFI 로더에 대한 가변 참조 반환
+    pub fn ffi_loader_mut(&mut self) -> &mut FfiLoader {
+        &mut self.ffi_loader
     }
 
     /// 함수들을 로드
@@ -686,6 +716,18 @@ impl Vm {
                     // builtin이 None을 반환하면 Void 푸시
                     self.stack.push(Value::Void);
                 }
+            }
+
+            // === FFI Function Call ===
+            OpCode::CallFfi(lib_name, fn_name, arg_count) => {
+                let mut args = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count {
+                    args.push(self.pop()?);
+                }
+                args.reverse();
+
+                let result = self.call_ffi(lib_name, fn_name, &args)?;
+                self.stack.push(result);
             }
 
             // === Special ===
@@ -1576,9 +1618,1092 @@ impl Vm {
                 args.first().map(|v| Value::Bool(matches!(v, Value::Map(_))))
             }
 
+            // === File I/O functions (std.io) ===
+            "READ_FILE" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::read_to_string(path) {
+                        Ok(content) => Some(Value::String(content)),
+                        Err(e) => Some(Value::Error(format!("read_file: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("read_file: expected string path".to_string()))
+                }
+            }
+            "READ_FILE_BYTES" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::read(path) {
+                        Ok(bytes) => Some(Value::Bytes(bytes)),
+                        Err(e) => Some(Value::Error(format!("read_file_bytes: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("read_file_bytes: expected string path".to_string()))
+                }
+            }
+            "WRITE_FILE" => {
+                if args.len() >= 2 {
+                    if let (Value::String(path), Value::String(content)) = (&args[0], &args[1]) {
+                        match std::fs::write(path, content) {
+                            Ok(_) => Some(Value::Bool(true)),
+                            Err(e) => Some(Value::Error(format!("write_file: {}", e))),
+                        }
+                    } else if let (Value::String(path), Value::Bytes(bytes)) = (&args[0], &args[1]) {
+                        match std::fs::write(path, bytes) {
+                            Ok(_) => Some(Value::Bool(true)),
+                            Err(e) => Some(Value::Error(format!("write_file: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("write_file: expected (path, content)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("write_file: expected 2 arguments".to_string()))
+                }
+            }
+            "APPEND_FILE" => {
+                if args.len() >= 2 {
+                    if let (Value::String(path), Value::String(content)) = (&args[0], &args[1]) {
+                        use std::io::Write;
+                        match std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                            Ok(mut file) => {
+                                match file.write_all(content.as_bytes()) {
+                                    Ok(_) => Some(Value::Bool(true)),
+                                    Err(e) => Some(Value::Error(format!("append_file: {}", e))),
+                                }
+                            }
+                            Err(e) => Some(Value::Error(format!("append_file: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("append_file: expected (path, content)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("append_file: expected 2 arguments".to_string()))
+                }
+            }
+            "READ_LINES" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::read_to_string(path) {
+                        Ok(content) => {
+                            let lines: Vec<Value> = content
+                                .lines()
+                                .map(|s| Value::String(s.to_string()))
+                                .collect();
+                            Some(Value::Array(lines))
+                        }
+                        Err(e) => Some(Value::Error(format!("read_lines: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("read_lines: expected string path".to_string()))
+                }
+            }
+
+            // === Path functions ===
+            "PATH_EXISTS" => {
+                if let Some(Value::String(path)) = args.first() {
+                    Some(Value::Bool(std::path::Path::new(path).exists()))
+                } else {
+                    Some(Value::Bool(false))
+                }
+            }
+            "PATH_IS_FILE" => {
+                if let Some(Value::String(path)) = args.first() {
+                    Some(Value::Bool(std::path::Path::new(path).is_file()))
+                } else {
+                    Some(Value::Bool(false))
+                }
+            }
+            "PATH_IS_DIR" => {
+                if let Some(Value::String(path)) = args.first() {
+                    Some(Value::Bool(std::path::Path::new(path).is_dir()))
+                } else {
+                    Some(Value::Bool(false))
+                }
+            }
+            "PATH_JOIN" => {
+                if args.len() >= 2 {
+                    let mut path = std::path::PathBuf::new();
+                    for arg in args {
+                        if let Value::String(s) = arg {
+                            path.push(s);
+                        }
+                    }
+                    Some(Value::String(path.to_string_lossy().to_string()))
+                } else if let Some(Value::String(s)) = args.first() {
+                    Some(Value::String(s.clone()))
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+            "PATH_PARENT" => {
+                if let Some(Value::String(path)) = args.first() {
+                    let p = std::path::Path::new(path);
+                    match p.parent() {
+                        Some(parent) => Some(Value::String(parent.to_string_lossy().to_string())),
+                        None => Some(Value::String(String::new())),
+                    }
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+            "PATH_FILENAME" => {
+                if let Some(Value::String(path)) = args.first() {
+                    let p = std::path::Path::new(path);
+                    match p.file_name() {
+                        Some(name) => Some(Value::String(name.to_string_lossy().to_string())),
+                        None => Some(Value::String(String::new())),
+                    }
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+            "PATH_EXTENSION" => {
+                if let Some(Value::String(path)) = args.first() {
+                    let p = std::path::Path::new(path);
+                    match p.extension() {
+                        Some(ext) => Some(Value::String(ext.to_string_lossy().to_string())),
+                        None => Some(Value::String(String::new())),
+                    }
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+            "PATH_STEM" => {
+                if let Some(Value::String(path)) = args.first() {
+                    let p = std::path::Path::new(path);
+                    match p.file_stem() {
+                        Some(stem) => Some(Value::String(stem.to_string_lossy().to_string())),
+                        None => Some(Value::String(String::new())),
+                    }
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+            "PATH_ABSOLUTE" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::canonicalize(path) {
+                        Ok(abs) => Some(Value::String(abs.to_string_lossy().to_string())),
+                        Err(e) => Some(Value::Error(format!("path_absolute: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("path_absolute: expected string path".to_string()))
+                }
+            }
+
+            // === Directory functions ===
+            "LIST_DIR" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::read_dir(path) {
+                        Ok(entries) => {
+                            let mut items = Vec::new();
+                            for entry in entries.flatten() {
+                                items.push(Value::String(
+                                    entry.file_name().to_string_lossy().to_string()
+                                ));
+                            }
+                            Some(Value::Array(items))
+                        }
+                        Err(e) => Some(Value::Error(format!("list_dir: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("list_dir: expected string path".to_string()))
+                }
+            }
+            "CREATE_DIR" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::create_dir(path) {
+                        Ok(_) => Some(Value::Bool(true)),
+                        Err(e) => Some(Value::Error(format!("create_dir: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("create_dir: expected string path".to_string()))
+                }
+            }
+            "CREATE_DIR_ALL" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::create_dir_all(path) {
+                        Ok(_) => Some(Value::Bool(true)),
+                        Err(e) => Some(Value::Error(format!("create_dir_all: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("create_dir_all: expected string path".to_string()))
+                }
+            }
+            "REMOVE_FILE" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::remove_file(path) {
+                        Ok(_) => Some(Value::Bool(true)),
+                        Err(e) => Some(Value::Error(format!("remove_file: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("remove_file: expected string path".to_string()))
+                }
+            }
+            "REMOVE_DIR" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::remove_dir(path) {
+                        Ok(_) => Some(Value::Bool(true)),
+                        Err(e) => Some(Value::Error(format!("remove_dir: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("remove_dir: expected string path".to_string()))
+                }
+            }
+            "REMOVE_DIR_ALL" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::remove_dir_all(path) {
+                        Ok(_) => Some(Value::Bool(true)),
+                        Err(e) => Some(Value::Error(format!("remove_dir_all: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("remove_dir_all: expected string path".to_string()))
+                }
+            }
+            "COPY_FILE" => {
+                if args.len() >= 2 {
+                    if let (Value::String(src), Value::String(dst)) = (&args[0], &args[1]) {
+                        match std::fs::copy(src, dst) {
+                            Ok(bytes) => Some(Value::Int(bytes as i64)),
+                            Err(e) => Some(Value::Error(format!("copy_file: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("copy_file: expected (src, dst)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("copy_file: expected 2 arguments".to_string()))
+                }
+            }
+            "RENAME" => {
+                if args.len() >= 2 {
+                    if let (Value::String(src), Value::String(dst)) = (&args[0], &args[1]) {
+                        match std::fs::rename(src, dst) {
+                            Ok(_) => Some(Value::Bool(true)),
+                            Err(e) => Some(Value::Error(format!("rename: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("rename: expected (src, dst)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("rename: expected 2 arguments".to_string()))
+                }
+            }
+
+            // === File metadata ===
+            "FILE_SIZE" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::fs::metadata(path) {
+                        Ok(meta) => Some(Value::Int(meta.len() as i64)),
+                        Err(e) => Some(Value::Error(format!("file_size: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("file_size: expected string path".to_string()))
+                }
+            }
+
+            // === Standard input ===
+            "READLINE" => {
+                use std::io::BufRead;
+                let stdin = std::io::stdin();
+                let mut line = String::new();
+                match stdin.lock().read_line(&mut line) {
+                    Ok(_) => {
+                        // Remove trailing newline
+                        if line.ends_with('\n') {
+                            line.pop();
+                            if line.ends_with('\r') {
+                                line.pop();
+                            }
+                        }
+                        Some(Value::String(line))
+                    }
+                    Err(e) => Some(Value::Error(format!("readline: {}", e))),
+                }
+            }
+
+            // === Environment ===
+            "ENV_GET" => {
+                if let Some(Value::String(key)) = args.first() {
+                    match std::env::var(key) {
+                        Ok(val) => Some(Value::String(val)),
+                        Err(_) => Some(Value::Optional(None)),
+                    }
+                } else {
+                    Some(Value::Error("env_get: expected string key".to_string()))
+                }
+            }
+            "ENV_SET" => {
+                if args.len() >= 2 {
+                    if let (Value::String(key), Value::String(val)) = (&args[0], &args[1]) {
+                        std::env::set_var(key, val);
+                        Some(Value::Bool(true))
+                    } else {
+                        Some(Value::Error("env_set: expected (key, value)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("env_set: expected 2 arguments".to_string()))
+                }
+            }
+            "CWD" => {
+                match std::env::current_dir() {
+                    Ok(path) => Some(Value::String(path.to_string_lossy().to_string())),
+                    Err(e) => Some(Value::Error(format!("cwd: {}", e))),
+                }
+            }
+            "CHDIR" => {
+                if let Some(Value::String(path)) = args.first() {
+                    match std::env::set_current_dir(path) {
+                        Ok(_) => Some(Value::Bool(true)),
+                        Err(e) => Some(Value::Error(format!("chdir: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("chdir: expected string path".to_string()))
+                }
+            }
+
+            // === JSON functions (std.json) ===
+            "JSON_PARSE" => {
+                if let Some(Value::String(s)) = args.first() {
+                    match serde_json::from_str::<serde_json::Value>(s) {
+                        Ok(json) => Some(Self::json_to_value(&json)),
+                        Err(e) => Some(Value::Error(format!("json_parse: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("json_parse: expected string".to_string()))
+                }
+            }
+            "JSON_STRINGIFY" => {
+                if let Some(val) = args.first() {
+                    let json = Self::value_to_json(val);
+                    match serde_json::to_string(&json) {
+                        Ok(s) => Some(Value::String(s)),
+                        Err(e) => Some(Value::Error(format!("json_stringify: {}", e))),
+                    }
+                } else {
+                    Some(Value::String("null".to_string()))
+                }
+            }
+            "JSON_STRINGIFY_PRETTY" => {
+                if let Some(val) = args.first() {
+                    let json = Self::value_to_json(val);
+                    match serde_json::to_string_pretty(&json) {
+                        Ok(s) => Some(Value::String(s)),
+                        Err(e) => Some(Value::Error(format!("json_stringify_pretty: {}", e))),
+                    }
+                } else {
+                    Some(Value::String("null".to_string()))
+                }
+            }
+            "JSON_GET" => {
+                // json_get(obj, key) or json_get(obj, "path.to.key")
+                if args.len() >= 2 {
+                    if let (val, Value::String(key)) = (&args[0], &args[1]) {
+                        Some(Self::json_path_get(val, key))
+                    } else if let (val, Value::Int(idx)) = (&args[0], &args[1]) {
+                        // Array index access
+                        if let Value::Array(arr) = val {
+                            let i = if *idx < 0 { arr.len() as i64 + *idx } else { *idx };
+                            if i >= 0 && (i as usize) < arr.len() {
+                                Some(arr[i as usize].clone())
+                            } else {
+                                Some(Value::Void)
+                            }
+                        } else {
+                            Some(Value::Void)
+                        }
+                    } else {
+                        Some(Value::Error("json_get: expected (value, key)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("json_get: expected 2 arguments".to_string()))
+                }
+            }
+            "JSON_SET" => {
+                // json_set(obj, key, value)
+                if args.len() >= 3 {
+                    if let Value::String(key) = &args[1] {
+                        Some(Self::json_path_set(&args[0], key, &args[2]))
+                    } else {
+                        Some(Value::Error("json_set: key must be string".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("json_set: expected 3 arguments".to_string()))
+                }
+            }
+            "JSON_KEYS" => {
+                if let Some(Value::Map(m)) = args.first() {
+                    let keys: Vec<Value> = m.keys()
+                        .map(|k| Value::String(k.clone()))
+                        .collect();
+                    Some(Value::Array(keys))
+                } else if let Some(Value::Struct(s)) = args.first() {
+                    let keys: Vec<Value> = s.keys()
+                        .map(|k| Value::String(k.clone()))
+                        .collect();
+                    Some(Value::Array(keys))
+                } else {
+                    Some(Value::Array(vec![]))
+                }
+            }
+            "JSON_VALUES" => {
+                if let Some(Value::Map(m)) = args.first() {
+                    let values: Vec<Value> = m.values().cloned().collect();
+                    Some(Value::Array(values))
+                } else if let Some(Value::Struct(s)) = args.first() {
+                    let values: Vec<Value> = s.values().cloned().collect();
+                    Some(Value::Array(values))
+                } else {
+                    Some(Value::Array(vec![]))
+                }
+            }
+            "JSON_HAS" => {
+                // Check if key exists
+                if args.len() >= 2 {
+                    if let (val, Value::String(key)) = (&args[0], &args[1]) {
+                        let result = Self::json_path_get(val, key);
+                        Some(Value::Bool(!matches!(result, Value::Void)))
+                    } else {
+                        Some(Value::Bool(false))
+                    }
+                } else {
+                    Some(Value::Bool(false))
+                }
+            }
+            "JSON_REMOVE" => {
+                // Remove a key from object
+                if args.len() >= 2 {
+                    if let (Value::Map(m), Value::String(key)) = (&args[0], &args[1]) {
+                        let mut new_map = m.clone();
+                        new_map.remove(key);
+                        Some(Value::Map(new_map))
+                    } else if let (Value::Struct(s), Value::String(key)) = (&args[0], &args[1]) {
+                        let mut new_struct = s.clone();
+                        new_struct.remove(key);
+                        Some(Value::Struct(new_struct))
+                    } else {
+                        Some(args[0].clone())
+                    }
+                } else {
+                    Some(Value::Error("json_remove: expected 2 arguments".to_string()))
+                }
+            }
+            "JSON_MERGE" => {
+                // Merge two objects
+                if args.len() >= 2 {
+                    match (&args[0], &args[1]) {
+                        (Value::Map(a), Value::Map(b)) => {
+                            let mut merged = a.clone();
+                            merged.extend(b.clone());
+                            Some(Value::Map(merged))
+                        }
+                        (Value::Struct(a), Value::Struct(b)) => {
+                            let mut merged = a.clone();
+                            merged.extend(b.clone());
+                            Some(Value::Struct(merged))
+                        }
+                        _ => Some(Value::Error("json_merge: expected two objects".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("json_merge: expected 2 arguments".to_string()))
+                }
+            }
+            "JSON_TYPE" => {
+                // Get JSON type as string
+                args.first().map(|v| Value::String(match v {
+                    Value::Void => "null",
+                    Value::Bool(_) => "boolean",
+                    Value::Int(_) | Value::Float(_) => "number",
+                    Value::String(_) => "string",
+                    Value::Array(_) => "array",
+                    Value::Map(_) | Value::Struct(_) => "object",
+                    _ => "unknown",
+                }.to_string()))
+            }
+            "JSON_IS_NULL" => {
+                args.first().map(|v| Value::Bool(matches!(v, Value::Void)))
+            }
+            "JSON_IS_OBJECT" => {
+                args.first().map(|v| Value::Bool(matches!(v, Value::Map(_) | Value::Struct(_))))
+            }
+            "JSON_IS_ARRAY" => {
+                args.first().map(|v| Value::Bool(matches!(v, Value::Array(_))))
+            }
+
+            // === HTTP functions (std.net) ===
+            "HTTP_GET" => {
+                if let Some(Value::String(url)) = args.first() {
+                    match ureq::get(url).call() {
+                        Ok(response) => {
+                            let status = response.status();
+                            let body = response.into_string().unwrap_or_default();
+                            let mut result = HashMap::new();
+                            result.insert("status".to_string(), Value::Int(status as i64));
+                            result.insert("body".to_string(), Value::String(body));
+                            result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
+                            Some(Value::Map(result))
+                        }
+                        Err(e) => Some(Value::Error(format!("http_get: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("http_get: expected url string".to_string()))
+                }
+            }
+            "HTTP_GET_JSON" => {
+                if let Some(Value::String(url)) = args.first() {
+                    match ureq::get(url).call() {
+                        Ok(response) => {
+                            let body = response.into_string().unwrap_or_default();
+                            match serde_json::from_str::<serde_json::Value>(&body) {
+                                Ok(json) => Some(Self::json_to_value(&json)),
+                                Err(e) => Some(Value::Error(format!("http_get_json: parse error: {}", e))),
+                            }
+                        }
+                        Err(e) => Some(Value::Error(format!("http_get_json: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("http_get_json: expected url string".to_string()))
+                }
+            }
+            "HTTP_POST" => {
+                if args.len() >= 2 {
+                    if let (Value::String(url), body) = (&args[0], &args[1]) {
+                        let body_str = match body {
+                            Value::String(s) => s.clone(),
+                            _ => {
+                                let json = Self::value_to_json(body);
+                                serde_json::to_string(&json).unwrap_or_default()
+                            }
+                        };
+
+                        match ureq::post(url)
+                            .set("Content-Type", "application/json")
+                            .send_string(&body_str)
+                        {
+                            Ok(response) => {
+                                let status = response.status();
+                                let resp_body = response.into_string().unwrap_or_default();
+                                let mut result = HashMap::new();
+                                result.insert("status".to_string(), Value::Int(status as i64));
+                                result.insert("body".to_string(), Value::String(resp_body));
+                                result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
+                                Some(Value::Map(result))
+                            }
+                            Err(e) => Some(Value::Error(format!("http_post: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("http_post: expected (url, body)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("http_post: expected 2 arguments".to_string()))
+                }
+            }
+            "HTTP_POST_JSON" => {
+                if args.len() >= 2 {
+                    if let (Value::String(url), body) = (&args[0], &args[1]) {
+                        let json_body = Self::value_to_json(body);
+
+                        match ureq::post(url)
+                            .set("Content-Type", "application/json")
+                            .send_json(&json_body)
+                        {
+                            Ok(response) => {
+                                let body = response.into_string().unwrap_or_default();
+                                match serde_json::from_str::<serde_json::Value>(&body) {
+                                    Ok(json) => Some(Self::json_to_value(&json)),
+                                    Err(_) => Some(Value::String(body)),
+                                }
+                            }
+                            Err(e) => Some(Value::Error(format!("http_post_json: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("http_post_json: expected (url, body)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("http_post_json: expected 2 arguments".to_string()))
+                }
+            }
+            "HTTP_PUT" => {
+                if args.len() >= 2 {
+                    if let (Value::String(url), body) = (&args[0], &args[1]) {
+                        let body_str = match body {
+                            Value::String(s) => s.clone(),
+                            _ => {
+                                let json = Self::value_to_json(body);
+                                serde_json::to_string(&json).unwrap_or_default()
+                            }
+                        };
+
+                        match ureq::put(url)
+                            .set("Content-Type", "application/json")
+                            .send_string(&body_str)
+                        {
+                            Ok(response) => {
+                                let status = response.status();
+                                let resp_body = response.into_string().unwrap_or_default();
+                                let mut result = HashMap::new();
+                                result.insert("status".to_string(), Value::Int(status as i64));
+                                result.insert("body".to_string(), Value::String(resp_body));
+                                result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
+                                Some(Value::Map(result))
+                            }
+                            Err(e) => Some(Value::Error(format!("http_put: {}", e))),
+                        }
+                    } else {
+                        Some(Value::Error("http_put: expected (url, body)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("http_put: expected 2 arguments".to_string()))
+                }
+            }
+            "HTTP_DELETE" => {
+                if let Some(Value::String(url)) = args.first() {
+                    match ureq::delete(url).call() {
+                        Ok(response) => {
+                            let status = response.status();
+                            let body = response.into_string().unwrap_or_default();
+                            let mut result = HashMap::new();
+                            result.insert("status".to_string(), Value::Int(status as i64));
+                            result.insert("body".to_string(), Value::String(body));
+                            result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
+                            Some(Value::Map(result))
+                        }
+                        Err(e) => Some(Value::Error(format!("http_delete: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("http_delete: expected url string".to_string()))
+                }
+            }
+            "HTTP_HEAD" => {
+                if let Some(Value::String(url)) = args.first() {
+                    match ureq::head(url).call() {
+                        Ok(response) => {
+                            let status = response.status();
+                            let mut headers = HashMap::new();
+                            for name in response.headers_names() {
+                                if let Some(value) = response.header(&name) {
+                                    headers.insert(name, Value::String(value.to_string()));
+                                }
+                            }
+                            let mut result = HashMap::new();
+                            result.insert("status".to_string(), Value::Int(status as i64));
+                            result.insert("headers".to_string(), Value::Map(headers));
+                            result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
+                            Some(Value::Map(result))
+                        }
+                        Err(e) => Some(Value::Error(format!("http_head: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("http_head: expected url string".to_string()))
+                }
+            }
+            "HTTP_REQUEST" => {
+                // Generic HTTP request: http_request(method, url, headers, body)
+                if args.len() >= 2 {
+                    let method = match &args[0] {
+                        Value::String(s) => s.to_uppercase(),
+                        _ => return Ok(Some(Value::Error("http_request: method must be string".to_string()))),
+                    };
+                    let url = match &args[1] {
+                        Value::String(s) => s.clone(),
+                        _ => return Ok(Some(Value::Error("http_request: url must be string".to_string()))),
+                    };
+
+                    let mut request = match method.as_str() {
+                        "GET" => ureq::get(&url),
+                        "POST" => ureq::post(&url),
+                        "PUT" => ureq::put(&url),
+                        "DELETE" => ureq::delete(&url),
+                        "HEAD" => ureq::head(&url),
+                        "PATCH" => ureq::patch(&url),
+                        _ => return Ok(Some(Value::Error(format!("http_request: unsupported method: {}", method)))),
+                    };
+
+                    // Add headers if provided
+                    if args.len() >= 3 {
+                        if let Value::Map(headers) = &args[2] {
+                            for (key, value) in headers {
+                                if let Value::String(v) = value {
+                                    request = request.set(key, v);
+                                }
+                            }
+                        }
+                    }
+
+                    // Send with body if provided
+                    let response_result = if args.len() >= 4 {
+                        let body_str = match &args[3] {
+                            Value::String(s) => s.clone(),
+                            Value::Void => String::new(),
+                            other => {
+                                let json = Self::value_to_json(other);
+                                serde_json::to_string(&json).unwrap_or_default()
+                            }
+                        };
+                        if body_str.is_empty() {
+                            request.call()
+                        } else {
+                            request.send_string(&body_str)
+                        }
+                    } else {
+                        request.call()
+                    };
+
+                    match response_result {
+                        Ok(response) => {
+                            let status = response.status();
+                            let mut headers = HashMap::new();
+                            for name in response.headers_names() {
+                                if let Some(value) = response.header(&name) {
+                                    headers.insert(name, Value::String(value.to_string()));
+                                }
+                            }
+                            let body = response.into_string().unwrap_or_default();
+
+                            let mut result = HashMap::new();
+                            result.insert("status".to_string(), Value::Int(status as i64));
+                            result.insert("headers".to_string(), Value::Map(headers));
+                            result.insert("body".to_string(), Value::String(body));
+                            result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
+                            Some(Value::Map(result))
+                        }
+                        Err(e) => Some(Value::Error(format!("http_request: {}", e))),
+                    }
+                } else {
+                    Some(Value::Error("http_request: expected at least (method, url)".to_string()))
+                }
+            }
+            "URL_ENCODE" => {
+                if let Some(Value::String(s)) = args.first() {
+                    // Simple percent encoding for URL parameters
+                    let encoded: String = s.chars().map(|c| {
+                        match c {
+                            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+                            ' ' => "+".to_string(),
+                            _ => format!("%{:02X}", c as u8),
+                        }
+                    }).collect();
+                    Some(Value::String(encoded))
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+            "URL_DECODE" => {
+                if let Some(Value::String(s)) = args.first() {
+                    let mut result = String::new();
+                    let mut chars = s.chars().peekable();
+                    while let Some(c) = chars.next() {
+                        match c {
+                            '+' => result.push(' '),
+                            '%' => {
+                                let hex: String = chars.by_ref().take(2).collect();
+                                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                                    result.push(byte as char);
+                                } else {
+                                    result.push('%');
+                                    result.push_str(&hex);
+                                }
+                            }
+                            _ => result.push(c),
+                        }
+                    }
+                    Some(Value::String(result))
+                } else {
+                    Some(Value::String(String::new()))
+                }
+            }
+
             _ => None,
         };
         Ok(result)
+    }
+
+    /// Convert serde_json::Value to AOEL Value
+    fn json_to_value(json: &serde_json::Value) -> Value {
+        match json {
+            serde_json::Value::Null => Value::Void,
+            serde_json::Value::Bool(b) => Value::Bool(*b),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Value::Int(i)
+                } else if let Some(f) = n.as_f64() {
+                    Value::Float(f)
+                } else {
+                    Value::Void
+                }
+            }
+            serde_json::Value::String(s) => Value::String(s.clone()),
+            serde_json::Value::Array(arr) => {
+                Value::Array(arr.iter().map(Self::json_to_value).collect())
+            }
+            serde_json::Value::Object(obj) => {
+                let map: HashMap<String, Value> = obj.iter()
+                    .map(|(k, v)| (k.clone(), Self::json_to_value(v)))
+                    .collect();
+                Value::Map(map)
+            }
+        }
+    }
+
+    /// Convert AOEL Value to serde_json::Value
+    fn value_to_json(val: &Value) -> serde_json::Value {
+        match val {
+            Value::Void => serde_json::Value::Null,
+            Value::Bool(b) => serde_json::Value::Bool(*b),
+            Value::Int(n) => serde_json::Value::Number((*n).into()),
+            Value::Float(f) => {
+                serde_json::Number::from_f64(*f)
+                    .map(serde_json::Value::Number)
+                    .unwrap_or(serde_json::Value::Null)
+            }
+            Value::String(s) => serde_json::Value::String(s.clone()),
+            Value::Array(arr) => {
+                serde_json::Value::Array(arr.iter().map(Self::value_to_json).collect())
+            }
+            Value::Map(m) => {
+                let obj: serde_json::Map<String, serde_json::Value> = m.iter()
+                    .map(|(k, v)| (k.clone(), Self::value_to_json(v)))
+                    .collect();
+                serde_json::Value::Object(obj)
+            }
+            Value::Struct(s) => {
+                let obj: serde_json::Map<String, serde_json::Value> = s.iter()
+                    .map(|(k, v)| (k.clone(), Self::value_to_json(v)))
+                    .collect();
+                serde_json::Value::Object(obj)
+            }
+            _ => serde_json::Value::Null,
+        }
+    }
+
+    /// Get value at JSON path (e.g., "user.name" or "items.0.id")
+    fn json_path_get(val: &Value, path: &str) -> Value {
+        let parts: Vec<&str> = path.split('.').collect();
+        let mut current = val.clone();
+
+        for part in parts {
+            current = match &current {
+                Value::Map(m) => m.get(part).cloned().unwrap_or(Value::Void),
+                Value::Struct(s) => s.get(part).cloned().unwrap_or(Value::Void),
+                Value::Array(arr) => {
+                    if let Ok(idx) = part.parse::<usize>() {
+                        arr.get(idx).cloned().unwrap_or(Value::Void)
+                    } else {
+                        Value::Void
+                    }
+                }
+                _ => Value::Void,
+            };
+
+            if matches!(current, Value::Void) {
+                break;
+            }
+        }
+
+        current
+    }
+
+    /// Set value at JSON path
+    fn json_path_set(val: &Value, path: &str, new_val: &Value) -> Value {
+        let parts: Vec<&str> = path.split('.').collect();
+
+        if parts.is_empty() {
+            return val.clone();
+        }
+
+        if parts.len() == 1 {
+            // Direct set
+            match val {
+                Value::Map(m) => {
+                    let mut new_map = m.clone();
+                    new_map.insert(parts[0].to_string(), new_val.clone());
+                    Value::Map(new_map)
+                }
+                Value::Struct(s) => {
+                    let mut new_struct = s.clone();
+                    new_struct.insert(parts[0].to_string(), new_val.clone());
+                    Value::Struct(new_struct)
+                }
+                _ => val.clone()
+            }
+        } else {
+            // Nested set
+            let key = parts[0];
+            let rest = parts[1..].join(".");
+
+            match val {
+                Value::Map(m) => {
+                    let mut new_map = m.clone();
+                    let nested = m.get(key).cloned().unwrap_or(Value::Map(HashMap::new()));
+                    new_map.insert(key.to_string(), Self::json_path_set(&nested, &rest, new_val));
+                    Value::Map(new_map)
+                }
+                Value::Struct(s) => {
+                    let mut new_struct = s.clone();
+                    let nested = s.get(key).cloned().unwrap_or(Value::Map(HashMap::new()));
+                    new_struct.insert(key.to_string(), Self::json_path_set(&nested, &rest, new_val));
+                    Value::Struct(new_struct)
+                }
+                _ => val.clone()
+            }
+        }
+    }
+
+    /// FFI 함수 호출
+    fn call_ffi(&mut self, lib_name: &str, fn_name: &str, args: &[Value]) -> RuntimeResult<Value> {
+        // 1. 먼저 내장된 FFI 함수 체크 (빠른 경로)
+        if let Some(result) = self.call_builtin_ffi(lib_name, fn_name, args) {
+            return result;
+        }
+
+        // 2. 동적 라이브러리에서 함수 호출 시도
+        self.ffi_loader.call_function(lib_name, fn_name, args)
+    }
+
+    /// 내장 FFI 함수 호출 (Rust 네이티브 구현)
+    fn call_builtin_ffi(&self, lib_name: &str, fn_name: &str, args: &[Value]) -> Option<RuntimeResult<Value>> {
+        // 내장 FFI 함수들 - 동적 로딩 없이 빠르게 실행
+        let result = match (lib_name, fn_name) {
+            // C stdlib 함수들
+            ("c", "abs") | ("libc", "abs") => {
+                if let Some(Value::Int(n)) = args.first() {
+                    Ok(Value::Int(n.abs()))
+                } else {
+                    Err(RuntimeError::TypeError("abs: expected int".to_string()))
+                }
+            }
+            ("c", "floor") | ("libc", "floor") | ("libm", "floor") => {
+                if let Some(Value::Float(f)) = args.first() {
+                    Ok(Value::Float(f.floor()))
+                } else if let Some(Value::Int(n)) = args.first() {
+                    Ok(Value::Int(*n))
+                } else {
+                    Err(RuntimeError::TypeError("floor: expected number".to_string()))
+                }
+            }
+            ("c", "ceil") | ("libc", "ceil") | ("libm", "ceil") => {
+                if let Some(Value::Float(f)) = args.first() {
+                    Ok(Value::Float(f.ceil()))
+                } else if let Some(Value::Int(n)) = args.first() {
+                    Ok(Value::Int(*n))
+                } else {
+                    Err(RuntimeError::TypeError("ceil: expected number".to_string()))
+                }
+            }
+            ("c", "sqrt") | ("libm", "sqrt") => {
+                match args.first() {
+                    Some(Value::Float(f)) => Ok(Value::Float(f.sqrt())),
+                    Some(Value::Int(n)) => Ok(Value::Float((*n as f64).sqrt())),
+                    _ => Err(RuntimeError::TypeError("sqrt: expected number".to_string())),
+                }
+            }
+            ("c", "pow") | ("libm", "pow") => {
+                if args.len() >= 2 {
+                    let base = match &args[0] {
+                        Value::Float(f) => *f,
+                        Value::Int(n) => *n as f64,
+                        _ => return Some(Err(RuntimeError::TypeError("pow: expected numbers".to_string()))),
+                    };
+                    let exp = match &args[1] {
+                        Value::Float(f) => *f,
+                        Value::Int(n) => *n as f64,
+                        _ => return Some(Err(RuntimeError::TypeError("pow: expected numbers".to_string()))),
+                    };
+                    Ok(Value::Float(base.powf(exp)))
+                } else {
+                    Err(RuntimeError::TypeError("pow: expected 2 arguments".to_string()))
+                }
+            }
+            ("c", "sin") | ("libm", "sin") => {
+                match args.first() {
+                    Some(Value::Float(f)) => Ok(Value::Float(f.sin())),
+                    Some(Value::Int(n)) => Ok(Value::Float((*n as f64).sin())),
+                    _ => Err(RuntimeError::TypeError("sin: expected number".to_string())),
+                }
+            }
+            ("c", "cos") | ("libm", "cos") => {
+                match args.first() {
+                    Some(Value::Float(f)) => Ok(Value::Float(f.cos())),
+                    Some(Value::Int(n)) => Ok(Value::Float((*n as f64).cos())),
+                    _ => Err(RuntimeError::TypeError("cos: expected number".to_string())),
+                }
+            }
+            ("c", "tan") | ("libm", "tan") => {
+                match args.first() {
+                    Some(Value::Float(f)) => Ok(Value::Float(f.tan())),
+                    Some(Value::Int(n)) => Ok(Value::Float((*n as f64).tan())),
+                    _ => Err(RuntimeError::TypeError("tan: expected number".to_string())),
+                }
+            }
+            ("c", "log") | ("libm", "log") => {
+                match args.first() {
+                    Some(Value::Float(f)) => Ok(Value::Float(f.ln())),
+                    Some(Value::Int(n)) => Ok(Value::Float((*n as f64).ln())),
+                    _ => Err(RuntimeError::TypeError("log: expected number".to_string())),
+                }
+            }
+            ("c", "exp") | ("libm", "exp") => {
+                match args.first() {
+                    Some(Value::Float(f)) => Ok(Value::Float(f.exp())),
+                    Some(Value::Int(n)) => Ok(Value::Float((*n as f64).exp())),
+                    _ => Err(RuntimeError::TypeError("exp: expected number".to_string())),
+                }
+            }
+            ("c", "strlen") | ("libc", "strlen") => {
+                if let Some(Value::String(s)) = args.first() {
+                    Ok(Value::Int(s.len() as i64))
+                } else {
+                    Err(RuntimeError::TypeError("strlen: expected string".to_string()))
+                }
+            }
+            ("c", "atoi") | ("libc", "atoi") => {
+                if let Some(Value::String(s)) = args.first() {
+                    match s.trim().parse::<i64>() {
+                        Ok(n) => Ok(Value::Int(n)),
+                        Err(_) => Ok(Value::Int(0)),
+                    }
+                } else {
+                    Err(RuntimeError::TypeError("atoi: expected string".to_string()))
+                }
+            }
+            ("c", "atof") | ("libc", "atof") => {
+                if let Some(Value::String(s)) = args.first() {
+                    match s.trim().parse::<f64>() {
+                        Ok(f) => Ok(Value::Float(f)),
+                        Err(_) => Ok(Value::Float(0.0)),
+                    }
+                } else {
+                    Err(RuntimeError::TypeError("atof: expected string".to_string()))
+                }
+            }
+            ("c", "getenv") | ("libc", "getenv") => {
+                if let Some(Value::String(key)) = args.first() {
+                    match std::env::var(key) {
+                        Ok(val) => Ok(Value::String(val)),
+                        Err(_) => Ok(Value::Void),
+                    }
+                } else {
+                    Err(RuntimeError::TypeError("getenv: expected string".to_string()))
+                }
+            }
+            ("c", "time") | ("libc", "time") => {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                Ok(Value::Int(now))
+            }
+            ("c", "rand") | ("libc", "rand") => {
+                // 간단한 난수 생성 (실제로는 rand 크레이트 사용 권장)
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let seed = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0) as i64;
+                Ok(Value::Int((seed % 32767).abs()))
+            }
+            _ => {
+                // 내장 FFI 함수에 없음 - None 반환하여 동적 로딩 시도
+                return None;
+            }
+        };
+        Some(result)
     }
 }
 
@@ -1776,5 +2901,594 @@ mod tests {
 
         let result = execute(vec![main]).unwrap();
         assert_eq!(result, Value::Int(15));
+    }
+
+    // === std.io tests ===
+
+    #[test]
+    fn test_file_io_write_read() {
+        use std::fs;
+        let test_path = "/tmp/aoel_test_io.txt";
+        let test_content = "Hello, AOEL!";
+
+        // Clean up if exists
+        let _ = fs::remove_file(test_path);
+
+        let vm = Vm::new();
+
+        // Test write_file
+        let result = vm.call_builtin("WRITE_FILE", &[
+            Value::String(test_path.to_string()),
+            Value::String(test_content.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Test read_file
+        let result = vm.call_builtin("READ_FILE", &[
+            Value::String(test_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String(test_content.to_string())));
+
+        // Test path_exists
+        let result = vm.call_builtin("PATH_EXISTS", &[
+            Value::String(test_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Test path_is_file
+        let result = vm.call_builtin("PATH_IS_FILE", &[
+            Value::String(test_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Test file_size
+        let result = vm.call_builtin("FILE_SIZE", &[
+            Value::String(test_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Int(test_content.len() as i64)));
+
+        // Cleanup
+        fs::remove_file(test_path).unwrap();
+    }
+
+    #[test]
+    fn test_file_io_append() {
+        use std::fs;
+        let test_path = "/tmp/aoel_test_append.txt";
+
+        // Clean up if exists
+        let _ = fs::remove_file(test_path);
+
+        let vm = Vm::new();
+
+        // Write initial content
+        vm.call_builtin("WRITE_FILE", &[
+            Value::String(test_path.to_string()),
+            Value::String("Line1\n".to_string()),
+        ]).unwrap();
+
+        // Append more content
+        vm.call_builtin("APPEND_FILE", &[
+            Value::String(test_path.to_string()),
+            Value::String("Line2\n".to_string()),
+        ]).unwrap();
+
+        // Read and verify
+        let result = vm.call_builtin("READ_FILE", &[
+            Value::String(test_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("Line1\nLine2\n".to_string())));
+
+        // Test read_lines
+        let result = vm.call_builtin("READ_LINES", &[
+            Value::String(test_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Array(vec![
+            Value::String("Line1".to_string()),
+            Value::String("Line2".to_string()),
+        ])));
+
+        // Cleanup
+        fs::remove_file(test_path).unwrap();
+    }
+
+    #[test]
+    fn test_path_functions() {
+        let vm = Vm::new();
+
+        // Test path_join
+        let result = vm.call_builtin("PATH_JOIN", &[
+            Value::String("/home".to_string()),
+            Value::String("user".to_string()),
+            Value::String("docs".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("/home/user/docs".to_string())));
+
+        // Test path_parent
+        let result = vm.call_builtin("PATH_PARENT", &[
+            Value::String("/home/user/file.txt".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("/home/user".to_string())));
+
+        // Test path_filename
+        let result = vm.call_builtin("PATH_FILENAME", &[
+            Value::String("/home/user/file.txt".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("file.txt".to_string())));
+
+        // Test path_extension
+        let result = vm.call_builtin("PATH_EXTENSION", &[
+            Value::String("/home/user/file.txt".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("txt".to_string())));
+
+        // Test path_stem
+        let result = vm.call_builtin("PATH_STEM", &[
+            Value::String("/home/user/file.txt".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("file".to_string())));
+    }
+
+    #[test]
+    fn test_directory_operations() {
+        use std::fs;
+        let test_dir = "/tmp/aoel_test_dir";
+        let test_subdir = "/tmp/aoel_test_dir/subdir";
+
+        // Clean up if exists
+        let _ = fs::remove_dir_all(test_dir);
+
+        let vm = Vm::new();
+
+        // Test create_dir_all
+        let result = vm.call_builtin("CREATE_DIR_ALL", &[
+            Value::String(test_subdir.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Test path_is_dir
+        let result = vm.call_builtin("PATH_IS_DIR", &[
+            Value::String(test_dir.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Create a file in the directory
+        vm.call_builtin("WRITE_FILE", &[
+            Value::String(format!("{}/test.txt", test_dir)),
+            Value::String("test".to_string()),
+        ]).unwrap();
+
+        // Test list_dir
+        let result = vm.call_builtin("LIST_DIR", &[
+            Value::String(test_dir.to_string()),
+        ]).unwrap();
+        if let Some(Value::Array(items)) = result {
+            assert!(items.contains(&Value::String("subdir".to_string())));
+            assert!(items.contains(&Value::String("test.txt".to_string())));
+        } else {
+            panic!("Expected array from list_dir");
+        }
+
+        // Cleanup
+        fs::remove_dir_all(test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_copy_and_rename() {
+        use std::fs;
+        let src_path = "/tmp/aoel_test_src.txt";
+        let dst_path = "/tmp/aoel_test_dst.txt";
+        let renamed_path = "/tmp/aoel_test_renamed.txt";
+
+        // Clean up
+        let _ = fs::remove_file(src_path);
+        let _ = fs::remove_file(dst_path);
+        let _ = fs::remove_file(renamed_path);
+
+        let vm = Vm::new();
+
+        // Create source file
+        vm.call_builtin("WRITE_FILE", &[
+            Value::String(src_path.to_string()),
+            Value::String("source content".to_string()),
+        ]).unwrap();
+
+        // Test copy_file
+        let result = vm.call_builtin("COPY_FILE", &[
+            Value::String(src_path.to_string()),
+            Value::String(dst_path.to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Some(Value::Int(_))));
+
+        // Verify copy
+        let result = vm.call_builtin("READ_FILE", &[
+            Value::String(dst_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("source content".to_string())));
+
+        // Test rename
+        let result = vm.call_builtin("RENAME", &[
+            Value::String(dst_path.to_string()),
+            Value::String(renamed_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Verify rename
+        let result = vm.call_builtin("PATH_EXISTS", &[
+            Value::String(dst_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(false)));
+
+        let result = vm.call_builtin("PATH_EXISTS", &[
+            Value::String(renamed_path.to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Cleanup
+        fs::remove_file(src_path).unwrap();
+        fs::remove_file(renamed_path).unwrap();
+    }
+
+    #[test]
+    fn test_environment_functions() {
+        let vm = Vm::new();
+
+        // Test env_set and env_get
+        vm.call_builtin("ENV_SET", &[
+            Value::String("AOEL_TEST_VAR".to_string()),
+            Value::String("test_value".to_string()),
+        ]).unwrap();
+
+        let result = vm.call_builtin("ENV_GET", &[
+            Value::String("AOEL_TEST_VAR".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("test_value".to_string())));
+
+        // Test cwd
+        let result = vm.call_builtin("CWD", &[]).unwrap();
+        assert!(matches!(result, Some(Value::String(_))));
+    }
+
+    #[test]
+    fn test_error_handling() {
+        let vm = Vm::new();
+
+        // Test read_file on non-existent file
+        let result = vm.call_builtin("READ_FILE", &[
+            Value::String("/nonexistent/path/file.txt".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Some(Value::Error(_))));
+
+        // Test path_absolute on non-existent path
+        let result = vm.call_builtin("PATH_ABSOLUTE", &[
+            Value::String("/nonexistent/path".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Some(Value::Error(_))));
+    }
+
+    // === std.json tests ===
+
+    #[test]
+    fn test_json_parse_and_stringify() {
+        let vm = Vm::new();
+
+        // Test json_parse with object
+        let json_str = r#"{"name": "Alice", "age": 30, "active": true}"#;
+        let result = vm.call_builtin("JSON_PARSE", &[
+            Value::String(json_str.to_string()),
+        ]).unwrap();
+
+        if let Some(Value::Map(m)) = result {
+            assert_eq!(m.get("name"), Some(&Value::String("Alice".to_string())));
+            assert_eq!(m.get("age"), Some(&Value::Int(30)));
+            assert_eq!(m.get("active"), Some(&Value::Bool(true)));
+        } else {
+            panic!("Expected Map from json_parse");
+        }
+
+        // Test json_stringify
+        let mut map = HashMap::new();
+        map.insert("x".to_string(), Value::Int(10));
+        map.insert("y".to_string(), Value::Int(20));
+        let result = vm.call_builtin("JSON_STRINGIFY", &[
+            Value::Map(map),
+        ]).unwrap();
+
+        if let Some(Value::String(s)) = result {
+            assert!(s.contains("\"x\":10") || s.contains("\"x\": 10"));
+            assert!(s.contains("\"y\":20") || s.contains("\"y\": 20"));
+        } else {
+            panic!("Expected String from json_stringify");
+        }
+    }
+
+    #[test]
+    fn test_json_parse_array() {
+        let vm = Vm::new();
+
+        let json_str = r#"[1, 2, 3, "hello", null]"#;
+        let result = vm.call_builtin("JSON_PARSE", &[
+            Value::String(json_str.to_string()),
+        ]).unwrap();
+
+        if let Some(Value::Array(arr)) = result {
+            assert_eq!(arr.len(), 5);
+            assert_eq!(arr[0], Value::Int(1));
+            assert_eq!(arr[1], Value::Int(2));
+            assert_eq!(arr[2], Value::Int(3));
+            assert_eq!(arr[3], Value::String("hello".to_string()));
+            assert_eq!(arr[4], Value::Void);
+        } else {
+            panic!("Expected Array from json_parse");
+        }
+    }
+
+    #[test]
+    fn test_json_get_nested() {
+        let vm = Vm::new();
+
+        let json_str = r#"{"user": {"name": "Bob", "address": {"city": "Seoul"}}}"#;
+        let parsed = vm.call_builtin("JSON_PARSE", &[
+            Value::String(json_str.to_string()),
+        ]).unwrap().unwrap();
+
+        // Test nested path access
+        let result = vm.call_builtin("JSON_GET", &[
+            parsed.clone(),
+            Value::String("user.name".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("Bob".to_string())));
+
+        let result = vm.call_builtin("JSON_GET", &[
+            parsed.clone(),
+            Value::String("user.address.city".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("Seoul".to_string())));
+
+        // Test non-existent path
+        let result = vm.call_builtin("JSON_GET", &[
+            parsed,
+            Value::String("user.email".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Void));
+    }
+
+    #[test]
+    fn test_json_set() {
+        let vm = Vm::new();
+
+        let mut map = HashMap::new();
+        map.insert("name".to_string(), Value::String("Alice".to_string()));
+        let obj = Value::Map(map);
+
+        // Set a new field
+        let result = vm.call_builtin("JSON_SET", &[
+            obj.clone(),
+            Value::String("age".to_string()),
+            Value::Int(25),
+        ]).unwrap();
+
+        if let Some(Value::Map(m)) = result {
+            assert_eq!(m.get("name"), Some(&Value::String("Alice".to_string())));
+            assert_eq!(m.get("age"), Some(&Value::Int(25)));
+        } else {
+            panic!("Expected Map from json_set");
+        }
+
+        // Test nested set
+        let result = vm.call_builtin("JSON_SET", &[
+            obj,
+            Value::String("address.city".to_string()),
+            Value::String("Seoul".to_string()),
+        ]).unwrap();
+
+        if let Some(Value::Map(m)) = &result {
+            if let Some(Value::Map(addr)) = m.get("address") {
+                assert_eq!(addr.get("city"), Some(&Value::String("Seoul".to_string())));
+            } else {
+                panic!("Expected nested address object");
+            }
+        } else {
+            panic!("Expected Map from json_set");
+        }
+    }
+
+    #[test]
+    fn test_json_keys_values() {
+        let vm = Vm::new();
+
+        let mut map = HashMap::new();
+        map.insert("a".to_string(), Value::Int(1));
+        map.insert("b".to_string(), Value::Int(2));
+        let obj = Value::Map(map);
+
+        // Test json_keys
+        let result = vm.call_builtin("JSON_KEYS", &[obj.clone()]).unwrap();
+        if let Some(Value::Array(keys)) = result {
+            assert_eq!(keys.len(), 2);
+            assert!(keys.contains(&Value::String("a".to_string())));
+            assert!(keys.contains(&Value::String("b".to_string())));
+        } else {
+            panic!("Expected Array from json_keys");
+        }
+
+        // Test json_values
+        let result = vm.call_builtin("JSON_VALUES", &[obj]).unwrap();
+        if let Some(Value::Array(values)) = result {
+            assert_eq!(values.len(), 2);
+            assert!(values.contains(&Value::Int(1)));
+            assert!(values.contains(&Value::Int(2)));
+        } else {
+            panic!("Expected Array from json_values");
+        }
+    }
+
+    #[test]
+    fn test_json_has_and_remove() {
+        let vm = Vm::new();
+
+        let mut map = HashMap::new();
+        map.insert("name".to_string(), Value::String("Test".to_string()));
+        map.insert("value".to_string(), Value::Int(42));
+        let obj = Value::Map(map);
+
+        // Test json_has
+        let result = vm.call_builtin("JSON_HAS", &[
+            obj.clone(),
+            Value::String("name".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        let result = vm.call_builtin("JSON_HAS", &[
+            obj.clone(),
+            Value::String("missing".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Bool(false)));
+
+        // Test json_remove
+        let result = vm.call_builtin("JSON_REMOVE", &[
+            obj,
+            Value::String("name".to_string()),
+        ]).unwrap();
+
+        if let Some(Value::Map(m)) = result {
+            assert!(!m.contains_key("name"));
+            assert!(m.contains_key("value"));
+        } else {
+            panic!("Expected Map from json_remove");
+        }
+    }
+
+    #[test]
+    fn test_json_merge() {
+        let vm = Vm::new();
+
+        let mut map1 = HashMap::new();
+        map1.insert("a".to_string(), Value::Int(1));
+        map1.insert("b".to_string(), Value::Int(2));
+
+        let mut map2 = HashMap::new();
+        map2.insert("b".to_string(), Value::Int(3)); // Override b
+        map2.insert("c".to_string(), Value::Int(4));
+
+        let result = vm.call_builtin("JSON_MERGE", &[
+            Value::Map(map1),
+            Value::Map(map2),
+        ]).unwrap();
+
+        if let Some(Value::Map(m)) = result {
+            assert_eq!(m.get("a"), Some(&Value::Int(1)));
+            assert_eq!(m.get("b"), Some(&Value::Int(3))); // Overwritten
+            assert_eq!(m.get("c"), Some(&Value::Int(4)));
+        } else {
+            panic!("Expected Map from json_merge");
+        }
+    }
+
+    #[test]
+    fn test_json_type_checks() {
+        let vm = Vm::new();
+
+        // Test json_type
+        let result = vm.call_builtin("JSON_TYPE", &[Value::Int(42)]).unwrap();
+        assert_eq!(result, Some(Value::String("number".to_string())));
+
+        let result = vm.call_builtin("JSON_TYPE", &[Value::String("hello".to_string())]).unwrap();
+        assert_eq!(result, Some(Value::String("string".to_string())));
+
+        let result = vm.call_builtin("JSON_TYPE", &[Value::Array(vec![])]).unwrap();
+        assert_eq!(result, Some(Value::String("array".to_string())));
+
+        let result = vm.call_builtin("JSON_TYPE", &[Value::Map(HashMap::new())]).unwrap();
+        assert_eq!(result, Some(Value::String("object".to_string())));
+
+        let result = vm.call_builtin("JSON_TYPE", &[Value::Void]).unwrap();
+        assert_eq!(result, Some(Value::String("null".to_string())));
+
+        // Test json_is_* functions
+        let result = vm.call_builtin("JSON_IS_NULL", &[Value::Void]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        let result = vm.call_builtin("JSON_IS_OBJECT", &[Value::Map(HashMap::new())]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        let result = vm.call_builtin("JSON_IS_ARRAY", &[Value::Array(vec![])]).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_json_parse_error() {
+        let vm = Vm::new();
+
+        // Test invalid JSON
+        let result = vm.call_builtin("JSON_PARSE", &[
+            Value::String("{ invalid json }".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Some(Value::Error(_))));
+    }
+
+    // === std.net tests ===
+
+    #[test]
+    fn test_url_encode_decode() {
+        let vm = Vm::new();
+
+        // Test url_encode
+        let result = vm.call_builtin("URL_ENCODE", &[
+            Value::String("hello world".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("hello+world".to_string())));
+
+        let result = vm.call_builtin("URL_ENCODE", &[
+            Value::String("a=1&b=2".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("a%3D1%26b%3D2".to_string())));
+
+        // Test url_decode
+        let result = vm.call_builtin("URL_DECODE", &[
+            Value::String("hello+world".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("hello world".to_string())));
+
+        let result = vm.call_builtin("URL_DECODE", &[
+            Value::String("a%3D1%26b%3D2".to_string()),
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("a=1&b=2".to_string())));
+    }
+
+    #[test]
+    fn test_http_error_handling() {
+        let vm = Vm::new();
+
+        // Test with invalid URL (should return error)
+        let result = vm.call_builtin("HTTP_GET", &[
+            Value::String("http://localhost:99999/nonexistent".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Some(Value::Error(_))));
+
+        // Test with missing arguments
+        let result = vm.call_builtin("HTTP_POST", &[
+            Value::String("http://example.com".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Some(Value::Error(_))));
+    }
+
+    // Note: Real HTTP tests would require a test server or mock
+    // The following test is marked as ignored for CI but can be run manually
+    #[test]
+    #[ignore]
+    fn test_http_get_real() {
+        let vm = Vm::new();
+
+        // Test against a real public API
+        let result = vm.call_builtin("HTTP_GET_JSON", &[
+            Value::String("https://httpbin.org/get".to_string()),
+        ]).unwrap();
+
+        if let Some(Value::Map(m)) = result {
+            assert!(m.contains_key("url"));
+        } else {
+            panic!("Expected Map from http_get_json");
+        }
     }
 }

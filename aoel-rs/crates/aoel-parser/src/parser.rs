@@ -1,4 +1,4 @@
-//! AOEL v6b Parser Implementation
+//! AOEL AOEL Parser Implementation
 //!
 //! Pratt parser를 사용한 표현식 파싱
 
@@ -7,7 +7,7 @@ use aoel_lexer::{Lexer, Span, Token, TokenKind};
 
 use crate::error::{ParseError, ParseResult};
 
-/// AOEL v6b Parser
+/// AOEL AOEL Parser
 pub struct Parser<'src> {
     lexer: Lexer<'src>,
     current: Token,
@@ -133,6 +133,17 @@ impl<'src> Parser<'src> {
                 self.advance();
                 let type_def = self.parse_type_def(is_pub)?;
                 Ok(Item::TypeDef(type_def))
+            }
+            TokenKind::Ffi => {
+                if is_pub {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "ffi blocks cannot be pub".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                self.advance();
+                let ffi_block = self.parse_ffi_block()?;
+                Ok(Item::Ffi(ffi_block))
             }
             TokenKind::Identifier => {
                 // 함수 정의: name(params) = body
@@ -423,6 +434,155 @@ impl<'src> Parser<'src> {
             is_pub,
             span: start.merge(self.previous.span),
         })
+    }
+
+    // =========================================================================
+    // FFI 파싱
+    // =========================================================================
+
+    /// FFI 블록 파싱: ffi "libname" { fn declarations }
+    fn parse_ffi_block(&mut self) -> ParseResult<FfiBlock> {
+        let start = self.previous.span;
+
+        // 라이브러리 이름 (문자열)
+        let lib_name = if self.current.kind == TokenKind::String {
+            let text = &self.current.text;
+            let name = text[1..text.len() - 1].to_string();
+            self.advance();
+            name
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                expected: "library name string".to_string(),
+                found: self.current.kind.clone(),
+                span: self.current.span,
+            });
+        };
+
+        // { 시작
+        self.expect(TokenKind::LBrace)?;
+
+        // 함수 선언들
+        let mut functions = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+            let ffi_fn = self.parse_ffi_fn()?;
+            functions.push(ffi_fn);
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(FfiBlock {
+            lib_name,
+            abi: "C".to_string(),
+            functions,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// FFI 함수 선언 파싱: fn name(param: type, ...) -> return_type
+    fn parse_ffi_fn(&mut self) -> ParseResult<FfiFn> {
+        let start = self.current.span;
+
+        // fn 키워드
+        self.expect(TokenKind::Fn)?;
+
+        // 함수 이름
+        let name = self.expect_identifier()?;
+
+        // 외부 이름 (옵션): fn aoel_name = "external_name"
+        let extern_name = if self.match_token(TokenKind::Eq) {
+            if self.current.kind == TokenKind::String {
+                let text = &self.current.text;
+                let ext_name = text[1..text.len() - 1].to_string();
+                self.advance();
+                Some(ext_name)
+            } else {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "external function name string".to_string(),
+                    found: self.current.kind.clone(),
+                    span: self.current.span,
+                });
+            }
+        } else {
+            None
+        };
+
+        // 파라미터
+        self.expect(TokenKind::LParen)?;
+        let mut params = Vec::new();
+        if !self.check(TokenKind::RParen) {
+            loop {
+                let param_name = self.expect_identifier()?;
+                self.expect(TokenKind::Colon)?;
+                let param_type = self.parse_ffi_type()?;
+                params.push((param_name, param_type));
+                if !self.match_token(TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+        self.expect(TokenKind::RParen)?;
+
+        // 반환 타입 (옵션, 기본값: void)
+        let return_type = if self.match_token(TokenKind::Arrow) {
+            self.parse_ffi_type()?
+        } else {
+            FfiType::Void
+        };
+
+        Ok(FfiFn {
+            name,
+            extern_name,
+            params,
+            return_type,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// FFI 타입 파싱
+    fn parse_ffi_type(&mut self) -> ParseResult<FfiType> {
+        match &self.current.kind {
+            TokenKind::Identifier => {
+                let type_name = self.current.text.clone();
+                self.advance();
+
+                match type_name.as_str() {
+                    "void" => Ok(FfiType::Void),
+                    "i8" => Ok(FfiType::Int(8)),
+                    "i16" => Ok(FfiType::Int(16)),
+                    "i32" | "int" => Ok(FfiType::Int(32)),
+                    "i64" | "long" => Ok(FfiType::Int(64)),
+                    "u8" => Ok(FfiType::Uint(8)),
+                    "u16" => Ok(FfiType::Uint(16)),
+                    "u32" | "uint" => Ok(FfiType::Uint(32)),
+                    "u64" | "ulong" => Ok(FfiType::Uint(64)),
+                    "f32" | "float" => Ok(FfiType::F32),
+                    "f64" | "double" => Ok(FfiType::F64),
+                    "bool" => Ok(FfiType::Bool),
+                    "cstr" | "string" => Ok(FfiType::CStr),
+                    "ptr" | "opaque" => Ok(FfiType::Opaque),
+                    _ => Err(ParseError::InvalidSyntax {
+                        message: format!("Unknown FFI type: {}", type_name),
+                        span: self.previous.span,
+                    }),
+                }
+            }
+            TokenKind::Star => {
+                // *T 또는 *mut T
+                self.advance();
+                if self.match_token(TokenKind::Mut) {
+                    let inner = self.parse_ffi_type()?;
+                    Ok(FfiType::MutPtr(Box::new(inner)))
+                } else {
+                    let inner = self.parse_ffi_type()?;
+                    Ok(FfiType::Ptr(Box::new(inner)))
+                }
+            }
+            _ => Err(ParseError::UnexpectedToken {
+                expected: "FFI type".to_string(),
+                found: self.current.kind.clone(),
+                span: self.current.span,
+            }),
+        }
     }
 
     // =========================================================================

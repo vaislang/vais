@@ -1,4 +1,4 @@
-//! AOEL v6b Lexer Implementation
+//! AOEL AOEL Lexer Implementation
 //!
 //! logos 기반의 빠른 렉서 구현
 
@@ -7,7 +7,7 @@ use logos::Logos;
 use crate::error::LexError;
 use crate::token::{Span, Token, TokenKind};
 
-/// AOEL v6b Lexer
+/// AOEL AOEL Lexer
 #[derive(Clone)]
 pub struct Lexer<'src> {
     source: &'src str,
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn test_complex_example() {
-        // 실제 v6b 예제
+        // 실제 AOEL 예제
         let source = "qs(a)=#a<2?a:let p=a[0],r=a[1:]:$(r.?(_<p))+[p]+$(r.?(_>=p))";
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize_no_newlines().unwrap();

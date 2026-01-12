@@ -1,0 +1,10 @@
+// Simple FFI test
+ffi "c" {
+    fn abs(n: i32) -> i32
+    fn sqrt(x: f64) -> f64
+}
+
+print("Testing FFI abs:")
+print(abs(-42))
+print("Testing FFI sqrt:")
+print(sqrt(16.0))
