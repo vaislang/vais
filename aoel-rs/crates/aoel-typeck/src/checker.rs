@@ -158,8 +158,19 @@ impl<'a> TypeChecker<'a> {
     fn check_expr_references(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(ident) => {
-                // Skip special keywords
-                if matches!(ident.name.as_str(), "input" | "output" | "INPUT" | "OUTPUT") {
+                // Skip special keywords (reserved words and operators)
+                let special_keywords = [
+                    "input", "output", "INPUT", "OUTPUT",
+                    // Arithmetic operators for NODE parameters
+                    "ADD", "SUB", "MUL", "DIV", "MOD",
+                    // Comparison operators
+                    "EQ", "NEQ", "LT", "GT", "LTE", "GTE",
+                    // Logical operators
+                    "AND", "OR", "NOT", "XOR",
+                    // Other reserved names
+                    "VOID", "TRUE", "FALSE",
+                ];
+                if special_keywords.contains(&ident.name.as_str()) {
                     return;
                 }
 

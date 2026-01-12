@@ -378,7 +378,9 @@ pub enum TokenKind {
     #[regex(r#""([^"\\]|\\.)*""#)]
     StringLiteral,
 
-    #[regex(r"/([^/\\]|\\.)+/")]
+    // Regex literal /pattern/ - temporarily disabled due to conflict with Slash
+    // TODO: Re-enable with proper handling (maybe use callback or different syntax)
+    // #[regex(r"/([^/\\]|\\.)+/")]
     Regex,
 
     // Version (V1.0.0)
@@ -447,7 +449,7 @@ pub enum TokenKind {
     Minus,
     #[token("*")]
     Star,
-    #[token("/")]
+    #[token("/", priority = 3)]
     Slash,
 
     // =========================================================================

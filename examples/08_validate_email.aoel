@@ -31,7 +31,7 @@ ENDCONSTRAINT
 FLOW
   NODE check_length : VALIDATE (condition=LEN(input.email) >= 5 AND LEN(input.email) <= 254)
   NODE check_at     : VALIDATE (condition=CONTAINS(input.email, "@"))
-  NODE check_format : VALIDATE (pattern=/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)
+  NODE check_format : VALIDATE (pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
   NODE build_ok     : TRANSFORM (valid=true, reason=VOID)
   NODE build_err    : TRANSFORM (valid=false)
 

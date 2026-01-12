@@ -1,8 +1,21 @@
 //! AOEL Virtual Machine
 //!
-//! This crate will contain the VM for executing AOEL IR.
-//! Currently a placeholder for Phase 2.
+//! Stack-based VM for executing AOEL IR.
 
-pub struct Vm {
-    // TODO: Implement VM
+mod error;
+mod runtime;
+mod vm;
+mod builtins;
+
+pub use error::{RuntimeError, RuntimeResult};
+pub use runtime::Runtime;
+pub use vm::Vm;
+
+/// Execute an IR module with the given inputs
+pub fn execute(
+    module: &aoel_ir::Module,
+    inputs: std::collections::HashMap<String, aoel_ir::Value>,
+) -> RuntimeResult<std::collections::HashMap<String, aoel_ir::Value>> {
+    let mut vm = Vm::new();
+    vm.execute(module, inputs)
 }

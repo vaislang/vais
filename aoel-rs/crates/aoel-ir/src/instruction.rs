@@ -1,0 +1,252 @@
+//! IR instructions and opcodes
+
+use serde::{Deserialize, Serialize};
+use crate::value::Value;
+
+/// IR opcode for VM execution
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum OpCode {
+    // === Stack Operations ===
+    /// Push a constant value onto the stack
+    Const(Value),
+    /// Pop the top value from the stack
+    Pop,
+    /// Duplicate the top value
+    Dup,
+
+    // === Variable Operations ===
+    /// Load a variable by name
+    Load(String),
+    /// Store top of stack to variable
+    Store(String),
+    /// Load input field
+    LoadInput(String),
+    /// Store to output field
+    StoreOutput(String),
+
+    // === Arithmetic Operations ===
+    /// Add top two values
+    Add,
+    /// Subtract top two values
+    Sub,
+    /// Multiply top two values
+    Mul,
+    /// Divide top two values
+    Div,
+    /// Negate top value
+    Neg,
+
+    // === Comparison Operations ===
+    /// Equal comparison
+    Eq,
+    /// Not equal comparison
+    Neq,
+    /// Less than
+    Lt,
+    /// Greater than
+    Gt,
+    /// Less than or equal
+    Lte,
+    /// Greater than or equal
+    Gte,
+
+    // === Logical Operations ===
+    /// Logical AND
+    And,
+    /// Logical OR
+    Or,
+    /// Logical NOT
+    Not,
+
+    // === Collection Operations ===
+    /// Get array/map length
+    Len,
+    /// Get element at index
+    Index,
+    /// Get field from struct
+    GetField(String),
+    /// Create array from top N elements
+    MakeArray(usize),
+    /// Create struct from field names
+    MakeStruct(Vec<String>),
+
+    // === Array Operations (for FLOW) ===
+    /// Map operation: apply function to each element
+    Map(Box<Vec<Instruction>>),
+    /// Filter operation: keep elements matching predicate
+    Filter(Box<Vec<Instruction>>),
+    /// Reduce operation with initial value
+    Reduce(ReduceOp, Value),
+
+    // === Control Flow ===
+    /// Jump to instruction offset
+    Jump(i32),
+    /// Jump if top of stack is truthy
+    JumpIf(i32),
+    /// Jump if top of stack is falsy
+    JumpIfNot(i32),
+    /// Call a node by ID
+    CallNode(String),
+    /// Return from current function/node
+    Return,
+
+    // === Built-in Functions ===
+    /// Call built-in function by name
+    CallBuiltin(String, usize), // (name, arg_count)
+
+    // === Special ===
+    /// No operation
+    Nop,
+    /// Halt execution
+    Halt,
+    /// Raise an error
+    Error(String),
+}
+
+/// Reduce operation types
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ReduceOp {
+    Sum,
+    Count,
+    Min,
+    Max,
+    Avg,
+    First,
+    Last,
+    Custom(Box<Vec<Instruction>>),
+}
+
+/// A single instruction with metadata
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Instruction {
+    pub opcode: OpCode,
+    pub comment: Option<String>,
+}
+
+impl Instruction {
+    pub fn new(opcode: OpCode) -> Self {
+        Self {
+            opcode,
+            comment: None,
+        }
+    }
+
+    pub fn with_comment(opcode: OpCode, comment: impl Into<String>) -> Self {
+        Self {
+            opcode,
+            comment: Some(comment.into()),
+        }
+    }
+}
+
+impl From<OpCode> for Instruction {
+    fn from(opcode: OpCode) -> Self {
+        Instruction::new(opcode)
+    }
+}
+
+/// IR representation of a FLOW node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeIR {
+    /// Node identifier
+    pub id: String,
+    /// Node operation type
+    pub op_type: NodeOpType,
+    /// Instructions to execute
+    pub instructions: Vec<Instruction>,
+    /// Input port names
+    pub inputs: Vec<String>,
+    /// Output port names
+    pub outputs: Vec<String>,
+}
+
+/// Node operation type in IR
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum NodeOpType {
+    /// Simple transform (execute instructions)
+    Transform,
+    /// Map over array
+    Map,
+    /// Filter array
+    Filter,
+    /// Reduce array
+    Reduce(ReduceOp),
+    /// Branch based on condition
+    Branch,
+    /// Merge multiple inputs
+    Merge,
+    /// External fetch (placeholder)
+    Fetch,
+    /// External store (placeholder)
+    Store,
+    /// Validate data
+    Validate,
+}
+
+/// IR representation of a FLOW edge
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgeIR {
+    /// Source node ID
+    pub source_node: String,
+    /// Source port (empty for default)
+    pub source_port: String,
+    /// Target node ID
+    pub target_node: String,
+    /// Target port (empty for default)
+    pub target_port: String,
+    /// Optional condition instructions
+    pub condition: Option<Vec<Instruction>>,
+}
+
+impl NodeIR {
+    pub fn new(id: impl Into<String>, op_type: NodeOpType) -> Self {
+        Self {
+            id: id.into(),
+            op_type,
+            instructions: Vec::new(),
+            inputs: vec!["default".to_string()],
+            outputs: vec!["default".to_string()],
+        }
+    }
+
+    pub fn with_instructions(mut self, instructions: Vec<Instruction>) -> Self {
+        self.instructions = instructions;
+        self
+    }
+
+    pub fn with_inputs(mut self, inputs: Vec<String>) -> Self {
+        self.inputs = inputs;
+        self
+    }
+
+    pub fn with_outputs(mut self, outputs: Vec<String>) -> Self {
+        self.outputs = outputs;
+        self
+    }
+}
+
+impl EdgeIR {
+    pub fn new(
+        source_node: impl Into<String>,
+        source_port: impl Into<String>,
+        target_node: impl Into<String>,
+        target_port: impl Into<String>,
+    ) -> Self {
+        Self {
+            source_node: source_node.into(),
+            source_port: source_port.into(),
+            target_node: target_node.into(),
+            target_port: target_port.into(),
+            condition: None,
+        }
+    }
+
+    pub fn simple(source: impl Into<String>, target: impl Into<String>) -> Self {
+        Self::new(source, "default", target, "default")
+    }
+
+    pub fn with_condition(mut self, condition: Vec<Instruction>) -> Self {
+        self.condition = Some(condition);
+        self
+    }
+}

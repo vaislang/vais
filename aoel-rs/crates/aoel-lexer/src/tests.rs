@@ -156,3 +156,14 @@ fn test_tokenize_helper() {
     // Should include EOF
     assert_eq!(tokens.last().unwrap().kind, TokenKind::Eof);
 }
+
+#[test]
+fn test_slash_operator() {
+    let source = "a / b";
+    let tokens: Vec<_> = Lexer::new(source).collect();
+
+    assert_eq!(tokens.len(), 3);
+    assert_eq!(tokens[0].kind, TokenKind::Identifier);
+    assert_eq!(tokens[1].kind, TokenKind::Slash);
+    assert_eq!(tokens[2].kind, TokenKind::Identifier);
+}

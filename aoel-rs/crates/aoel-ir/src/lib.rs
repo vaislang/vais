@@ -1,8 +1,16 @@
 //! AOEL Intermediate Representation
 //!
-//! This crate will contain the IR for AOEL compilation.
-//! Currently a placeholder for Phase 2.
+//! This crate defines the IR for AOEL execution.
+//! The IR is a graph-based representation optimized for execution.
 
-pub struct IrModule {
-    // TODO: Implement IR
-}
+mod value;
+mod instruction;
+mod module;
+mod lowering;
+mod optimize;
+
+pub use value::{Value, ValueType};
+pub use instruction::{Instruction, OpCode, NodeIR, EdgeIR, NodeOpType, ReduceOp};
+pub use module::{Module, Function, FieldDef, ModuleMetadata};
+pub use lowering::lower;
+pub use optimize::{optimize, constant_folding, dead_code_elimination, OptLevel};

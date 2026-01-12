@@ -536,7 +536,7 @@ impl Parser {
         let start = self.peek().span;
         let mut inputs = Vec::new();
 
-        // Parse input list: (a, b, c) or just a single expression
+        // Parse input list: (a, b, c) or a, b, c or just a single expression
         if self.check(&TokenKind::LParen) {
             self.advance();
             while !self.check(&TokenKind::RParen) && !self.is_at_end() {
@@ -547,14 +547,24 @@ impl Parser {
             }
             self.consume(TokenKind::RParen, ")")?;
         } else {
-            // Single expression without parentheses
+            // Single expression or comma-separated list without parentheses
             inputs.push(self.parse_expression()?);
+            // Continue parsing if there are more comma-separated inputs
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                // Check if next token might start an output (after ->)
+                // We need to peek ahead to see if this is still an input
+                if self.check(&TokenKind::Arrow) {
+                    break;
+                }
+                inputs.push(self.parse_expression()?);
+            }
         }
 
         // Parse arrow
         self.consume(TokenKind::Arrow, "->")?;
 
-        // Parse output list: (x, y) or just a single expression
+        // Parse output list: (x, y) or x, y or just a single expression
         let mut outputs = Vec::new();
         if self.check(&TokenKind::LParen) {
             self.advance();
@@ -566,8 +576,13 @@ impl Parser {
             }
             self.consume(TokenKind::RParen, ")")?;
         } else {
-            // Single expression without parentheses
+            // Single expression or comma-separated list without parentheses
             outputs.push(self.parse_expression()?);
+            // Continue parsing if there are more comma-separated outputs
+            while self.check(&TokenKind::Comma) {
+                self.advance();
+                outputs.push(self.parse_expression()?);
+            }
         }
 
         Ok(GoalSpec {
@@ -591,7 +606,8 @@ impl Parser {
             };
             priorities.push(priority);
 
-            if self.check(&TokenKind::Comma) {
+            // Accept comma, '>' or ',' as separator (CORRECTNESS > LATENCY or CORRECTNESS, LATENCY)
+            if self.check(&TokenKind::Comma) || self.check(&TokenKind::Gt) {
                 self.advance();
             } else {
                 break;
@@ -676,7 +692,24 @@ impl Parser {
             }
         };
 
-        let expr = self.parse_expression()?;
+        // Special handling for WITHIN constraint: REQUIRE WITHIN 10s
+        let expr = if self.check(&TokenKind::Within) {
+            let within_token = self.advance();
+            // Parse the duration value
+            let duration_token = self.consume(TokenKind::Duration, "duration (e.g., 10s, 5m)")?;
+            let duration_literal = Literal::new(
+                LiteralKind::Duration(duration_token.text.clone()),
+                duration_token.span,
+            );
+            // Create a WITHIN(duration) call expression
+            Expr::Call(Box::new(CallExpr::new(
+                Ident { name: "WITHIN".to_string(), span: within_token.span },
+                vec![Expr::Literal(duration_literal)],
+                Span::new(within_token.span.start, duration_token.span.end),
+            )))
+        } else {
+            self.parse_expression()?
+        };
 
         Ok(Constraint {
             kind,
@@ -833,11 +866,27 @@ impl Parser {
 
         self.consume(TokenKind::Edge, "EDGE")?;
 
-        let source = self.parse_expression()?;
+        let source = self.parse_edge_target_expr()?;
 
         self.consume(TokenKind::Arrow, "->")?;
 
-        let target = self.parse_expression()?;
+        let target = self.parse_edge_target_expr()?;
+
+        // Parse optional edge params: (key=value, ...)
+        let params = if self.check(&TokenKind::LParen) {
+            self.advance();
+            let mut params = Vec::new();
+            while !self.check(&TokenKind::RParen) && !self.is_at_end() {
+                params.push(self.parse_node_param()?);
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            }
+            self.consume(TokenKind::RParen, ")")?;
+            params
+        } else {
+            Vec::new()
+        };
 
         // Parse optional condition
         let condition = if self.check(&TokenKind::When) {
@@ -850,9 +899,33 @@ impl Parser {
         Ok(FlowEdge {
             source,
             target,
+            params,
             condition,
             span: Span::new(start.start, self.previous().span.end),
         })
+    }
+
+    // Parse edge target expression without function call parsing
+    // This avoids confusion between edge params (key=value) and function call syntax
+    fn parse_edge_target_expr(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_primary_expr()?;
+
+        loop {
+            if self.check(&TokenKind::Dot) {
+                self.advance();
+                let field_token = self.consume(TokenKind::Identifier, "field name")?;
+                let span = Span::new(expr.span().start, field_token.span.end);
+                let field = Ident {
+                    name: field_token.text.clone(),
+                    span: field_token.span,
+                };
+                expr = Expr::FieldAccess(Box::new(FieldAccess { base: expr, field, span }));
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
     }
 
     // =========================================================================
@@ -1189,17 +1262,37 @@ impl Parser {
     // =========================================================================
 
     fn parse_expression(&mut self) -> ParseResult<Expr> {
-        self.parse_or_expr()
+        self.parse_implies_expr()
+    }
+
+    fn parse_implies_expr(&mut self) -> ParseResult<Expr> {
+        let mut left = self.parse_or_expr()?;
+
+        // IMPLIES is right-associative with lowest precedence
+        while self.check(&TokenKind::Implies) {
+            self.advance();
+            let right = self.parse_implies_expr()?;
+            let span = Span::new(left.span().start, right.span().end);
+            left = Expr::Binary(Box::new(BinaryExpr::new(left, BinaryOp::Implies, right, span)));
+        }
+
+        Ok(left)
     }
 
     fn parse_or_expr(&mut self) -> ParseResult<Expr> {
         let mut left = self.parse_and_expr()?;
 
-        while self.check(&TokenKind::Or) {
-            self.advance();
+        while self.check(&TokenKind::Or) || self.check(&TokenKind::Xor) {
+            let op = if self.check(&TokenKind::Xor) {
+                self.advance();
+                BinaryOp::Xor
+            } else {
+                self.advance();
+                BinaryOp::Or
+            };
             let right = self.parse_and_expr()?;
             let span = Span::new(left.span().start, right.span().end);
-            left = Expr::Binary(Box::new(BinaryExpr::new(left, BinaryOp::Or, right, span)));
+            left = Expr::Binary(Box::new(BinaryExpr::new(left, op, right, span)));
         }
 
         Ok(left)
@@ -1388,13 +1481,25 @@ impl Parser {
                 Ok(Expr::Literal(Literal::new(LiteralKind::Regex(pattern), token.span)))
             }
 
+            // Duration literal (e.g., 10s, 5m, 100ms)
+            TokenKind::Duration => {
+                let token = self.advance();
+                Ok(Expr::Literal(Literal::new(LiteralKind::Duration(token.text.clone()), token.span)))
+            }
+
+            // Size literal (e.g., 256MB, 1GB)
+            TokenKind::Size => {
+                let token = self.advance();
+                Ok(Expr::Literal(Literal::new(LiteralKind::Size(token.text.clone()), token.span)))
+            }
+
             // External reference
             TokenKind::ExternalRef => {
                 let ext_ref = self.parse_external_ref()?;
                 Ok(Expr::ExternalRef(ext_ref))
             }
 
-            // Built-in functions
+            // Built-in functions or special identifiers
             TokenKind::Len | TokenKind::Contains | TokenKind::Range |
             TokenKind::Now | TokenKind::Sum | TokenKind::Count |
             TokenKind::Forall | TokenKind::Exists => {
@@ -1404,21 +1509,28 @@ impl Parser {
                     span: token.span,
                 };
 
-                self.consume(TokenKind::LParen, "(")?;
-                let mut args = Vec::new();
-                while !self.check(&TokenKind::RParen) && !self.is_at_end() {
-                    args.push(self.parse_expression()?);
-                    if self.check(&TokenKind::Comma) {
-                        self.advance();
+                // If followed by '(', parse as function call
+                // Otherwise treat as identifier (e.g., LEN in field constraints)
+                if self.check(&TokenKind::LParen) {
+                    self.advance(); // consume '('
+                    let mut args = Vec::new();
+                    while !self.check(&TokenKind::RParen) && !self.is_at_end() {
+                        args.push(self.parse_expression()?);
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        }
                     }
-                }
-                self.consume(TokenKind::RParen, ")")?;
+                    self.consume(TokenKind::RParen, ")")?;
 
-                Ok(Expr::Call(Box::new(CallExpr::new(
-                    name,
-                    args,
-                    Span::new(token.span.start, self.previous().span.end),
-                ))))
+                    Ok(Expr::Call(Box::new(CallExpr::new(
+                        name,
+                        args,
+                        Span::new(token.span.start, self.previous().span.end),
+                    ))))
+                } else {
+                    // Treat as identifier (special field reference like LEN in constraints)
+                    Ok(Expr::Ident(name))
+                }
             }
 
             // Parenthesized expression

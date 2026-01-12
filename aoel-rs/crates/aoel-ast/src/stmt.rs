@@ -227,6 +227,7 @@ pub struct FlowNode {
 pub struct FlowEdge {
     pub source: Expr,
     pub target: Expr,
+    pub params: Vec<NodeParam>,
     pub condition: Option<Expr>,
     pub span: Span,
 }
