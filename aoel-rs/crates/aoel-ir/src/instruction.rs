@@ -33,6 +33,8 @@ pub enum OpCode {
     Mul,
     /// Divide top two values
     Div,
+    /// Modulo (remainder)
+    Mod,
     /// Negate top value
     Neg,
 
@@ -69,6 +71,14 @@ pub enum OpCode {
     MakeArray(usize),
     /// Create struct from field names
     MakeStruct(Vec<String>),
+    /// Slice array: arr[start:end]
+    Slice,
+    /// Create range: start..end
+    Range,
+    /// Check containment: x @ arr
+    Contains,
+    /// Concatenate arrays or strings
+    Concat,
 
     // === Array Operations (for FLOW) ===
     /// Map operation: apply function to each element
@@ -87,8 +97,18 @@ pub enum OpCode {
     JumpIfNot(i32),
     /// Call a node by ID
     CallNode(String),
+    /// Call a function by name with arg count
+    Call(String, usize),
+    /// Self-recursive call ($)
+    SelfCall(usize),
     /// Return from current function/node
     Return,
+
+    // === Optional/Error Handling ===
+    /// Optional unwrap (?)
+    Try,
+    /// Coalesce: value ?? default
+    Coalesce,
 
     // === Built-in Functions ===
     /// Call built-in function by name
@@ -106,13 +126,27 @@ pub enum OpCode {
 /// Reduce operation types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ReduceOp {
+    /// ./+ Sum
     Sum,
+    /// Count elements
     Count,
+    /// ./min Minimum
     Min,
+    /// ./max Maximum
     Max,
+    /// ./* Product
+    Product,
+    /// Average
     Avg,
+    /// First element
     First,
+    /// Last element
     Last,
+    /// ./and Logical AND of all elements
+    All,
+    /// ./or Logical OR of all elements
+    Any,
+    /// Custom reducer with initial value and function
     Custom(Box<Vec<Instruction>>),
 }
 

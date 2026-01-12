@@ -153,6 +153,12 @@ impl Vm {
                 let result = self.binary_div(a, b)?;
                 self.runtime.push(result);
             }
+            OpCode::Mod => {
+                let b = self.runtime.pop()?;
+                let a = self.runtime.pop()?;
+                let result = self.binary_mod(a, b)?;
+                self.runtime.push(result);
+            }
             OpCode::Neg => {
                 let a = self.runtime.pop()?;
                 let result = self.unary_neg(a)?;
@@ -244,6 +250,31 @@ impl Vm {
                 }
                 self.runtime.push(Value::Struct(struct_val));
             }
+            OpCode::Slice => {
+                let end = self.runtime.pop()?;
+                let start = self.runtime.pop()?;
+                let base = self.runtime.pop()?;
+                let result = self.slice_access(base, start, end)?;
+                self.runtime.push(result);
+            }
+            OpCode::Range => {
+                let end = self.runtime.pop()?;
+                let start = self.runtime.pop()?;
+                let result = self.create_range(start, end)?;
+                self.runtime.push(result);
+            }
+            OpCode::Contains => {
+                let arr = self.runtime.pop()?;
+                let elem = self.runtime.pop()?;
+                let result = self.contains_check(elem, arr)?;
+                self.runtime.push(Value::Bool(result));
+            }
+            OpCode::Concat => {
+                let b = self.runtime.pop()?;
+                let a = self.runtime.pop()?;
+                let result = self.concat_values(a, b)?;
+                self.runtime.push(result);
+            }
 
             // Array operations (handled in node execution)
             OpCode::Map(_) | OpCode::Filter(_) | OpCode::Reduce(_, _) => {
@@ -259,8 +290,52 @@ impl Vm {
                 // For now, just store the node_id reference
                 self.runtime.push(Value::String(node_id.clone()));
             }
+            OpCode::Call(name, arg_count) => {
+                // Function call (delegate to builtin for now)
+                let mut args = Vec::new();
+                for _ in 0..*arg_count {
+                    args.push(self.runtime.pop()?);
+                }
+                args.reverse();
+                // Try as builtin first, otherwise error
+                let result = call_builtin(name, args)
+                    .unwrap_or_else(|_| Value::Error(format!("Unknown function: {}", name)));
+                self.runtime.push(result);
+            }
+            OpCode::SelfCall(arg_count) => {
+                // Self-recursive call - handled by call stack
+                let mut args = Vec::new();
+                for _ in 0..*arg_count {
+                    args.push(self.runtime.pop()?);
+                }
+                args.reverse();
+                // TODO: Implement actual recursion with call stack
+                // For now, push placeholder
+                self.runtime.push(Value::Error("SelfCall not implemented in simple VM".to_string()));
+            }
             OpCode::Return => {
                 // Return is a no-op in this simple VM
+            }
+
+            // Optional/Error Handling
+            OpCode::Try => {
+                let value = self.runtime.pop()?;
+                match value {
+                    Value::Optional(Some(v)) => self.runtime.push(*v),
+                    Value::Optional(None) => {
+                        return Err(RuntimeError::Internal("Unwrap on None".to_string()));
+                    }
+                    other => self.runtime.push(other), // Pass through non-optional
+                }
+            }
+            OpCode::Coalesce => {
+                let default = self.runtime.pop()?;
+                let value = self.runtime.pop()?;
+                match value {
+                    Value::Optional(Some(v)) => self.runtime.push(*v),
+                    Value::Optional(None) | Value::Void => self.runtime.push(default),
+                    other => self.runtime.push(other),
+                }
             }
 
             // Built-in functions
@@ -351,6 +426,15 @@ impl Vm {
                     Value::Int(sum)
                 }
                 ReduceOp::Count => Value::Int(items.len() as i64),
+                ReduceOp::Product => {
+                    let mut product = 1i64;
+                    for item in items {
+                        if let Some(n) = item.as_int() {
+                            product *= n;
+                        }
+                    }
+                    Value::Int(product)
+                }
                 ReduceOp::Min => {
                     call_builtin("MIN", vec![Value::Array(items)])?
                 }
@@ -359,6 +443,14 @@ impl Vm {
                 }
                 ReduceOp::Avg => {
                     call_builtin("AVG", vec![Value::Array(items)])?
+                }
+                ReduceOp::All => {
+                    let all = items.iter().all(|item| item.is_truthy());
+                    Value::Bool(all)
+                }
+                ReduceOp::Any => {
+                    let any = items.iter().any(|item| item.is_truthy());
+                    Value::Bool(any)
                 }
                 ReduceOp::First => items.first().cloned().unwrap_or(Value::Void),
                 ReduceOp::Last => items.last().cloned().unwrap_or(Value::Void),
@@ -459,6 +551,24 @@ impl Vm {
         }
     }
 
+    fn binary_mod(&self, a: Value, b: Value) -> RuntimeResult<Value> {
+        match (a, b) {
+            (Value::Int(x), Value::Int(y)) => {
+                if y == 0 {
+                    return Err(RuntimeError::DivisionByZero);
+                }
+                Ok(Value::Int(x % y))
+            }
+            (Value::Float(x), Value::Float(y)) => {
+                if y == 0.0 {
+                    return Err(RuntimeError::DivisionByZero);
+                }
+                Ok(Value::Float(x % y))
+            }
+            _ => Ok(Value::Void),
+        }
+    }
+
     // ==================== Collection Access ====================
 
     fn index_access(&self, base: Value, index: Value) -> RuntimeResult<Value> {
@@ -495,6 +605,71 @@ impl Vm {
                 Ok(Value::String(
                     s.chars().nth(idx as usize).unwrap().to_string(),
                 ))
+            }
+            _ => Ok(Value::Void),
+        }
+    }
+
+    fn slice_access(&self, base: Value, start: Value, end: Value) -> RuntimeResult<Value> {
+        let start_idx = start.as_int().unwrap_or(0) as usize;
+        let end_idx = end.as_int().unwrap_or(-1);
+
+        match base {
+            Value::Array(arr) => {
+                let len = arr.len();
+                let actual_end = if end_idx < 0 { len } else { (end_idx as usize).min(len) };
+                let actual_start = start_idx.min(len);
+                Ok(Value::Array(arr[actual_start..actual_end].to_vec()))
+            }
+            Value::String(s) => {
+                let len = s.len();
+                let actual_end = if end_idx < 0 { len } else { (end_idx as usize).min(len) };
+                let actual_start = start_idx.min(len);
+                Ok(Value::String(s.chars().skip(actual_start).take(actual_end - actual_start).collect()))
+            }
+            _ => Ok(Value::Void),
+        }
+    }
+
+    fn create_range(&self, start: Value, end: Value) -> RuntimeResult<Value> {
+        match (start, end) {
+            (Value::Int(s), Value::Int(e)) => {
+                let range: Vec<Value> = (s..e).map(Value::Int).collect();
+                Ok(Value::Array(range))
+            }
+            _ => Ok(Value::Array(vec![])),
+        }
+    }
+
+    fn contains_check(&self, elem: Value, container: Value) -> RuntimeResult<bool> {
+        match container {
+            Value::Array(arr) => Ok(arr.contains(&elem)),
+            Value::String(s) => {
+                if let Value::String(e) = elem {
+                    Ok(s.contains(&e))
+                } else {
+                    Ok(false)
+                }
+            }
+            Value::Map(m) => {
+                if let Value::String(key) = elem {
+                    Ok(m.contains_key(&key))
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn concat_values(&self, a: Value, b: Value) -> RuntimeResult<Value> {
+        match (a, b) {
+            (Value::Array(mut x), Value::Array(y)) => {
+                x.extend(y);
+                Ok(Value::Array(x))
+            }
+            (Value::String(x), Value::String(y)) => {
+                Ok(Value::String(format!("{}{}", x, y)))
             }
             _ => Ok(Value::Void),
         }

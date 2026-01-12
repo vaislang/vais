@@ -1,6 +1,7 @@
 //! AOEL CLI
 //!
 //! Command-line interface for the AOEL language.
+//! Supports both v1 (FLOW-based) and v6b (expression-based) syntax.
 
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
@@ -65,6 +66,46 @@ enum Commands {
         #[arg(short, long, default_value = "{}")]
         input: String,
     },
+
+    // =========== v6b Commands ===========
+    /// [v6b] Parse a v6b file and check syntax
+    V6bCheck {
+        /// The v6b file to check
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+
+    /// [v6b] Parse a v6b file and print AST
+    V6bAst {
+        /// The v6b file to parse
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+
+    /// [v6b] Tokenize a v6b file
+    V6bTokens {
+        /// The v6b file to tokenize
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
+
+    /// [v6b] Compile and execute a v6b expression
+    V6bEval {
+        /// The v6b expression to evaluate
+        #[arg(value_name = "EXPR")]
+        expr: String,
+    },
+
+    /// [v6b] Compile a v6b file to IR
+    V6bCompile {
+        /// The v6b file to compile
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// Output file (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -85,6 +126,22 @@ fn main() {
         }
         Commands::Run { file, input } => {
             run_file(&file, &input);
+        }
+        // v6b commands
+        Commands::V6bCheck { file } => {
+            v6b_check_file(&file);
+        }
+        Commands::V6bAst { file } => {
+            v6b_print_ast(&file);
+        }
+        Commands::V6bTokens { file } => {
+            v6b_print_tokens(&file);
+        }
+        Commands::V6bEval { expr } => {
+            v6b_eval(&expr);
+        }
+        Commands::V6bCompile { file, output } => {
+            v6b_compile_file(&file, output.as_ref());
         }
     }
 }
@@ -336,6 +393,168 @@ fn json_to_value(json: serde_json::Value) -> aoel_ir::Value {
                 map.insert(k, json_to_value(v));
             }
             aoel_ir::Value::Map(map)
+        }
+    }
+}
+
+// =============================================================================
+// v6b Functions
+// =============================================================================
+
+fn v6b_check_file(path: &PathBuf) {
+    let source = match read_file(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match aoel_v6b_parser::parse(&source) {
+        Ok(program) => {
+            println!("✓ {} passed syntax check", path.display());
+            println!("  Functions: {}", program.items.iter().filter(|i| matches!(i, aoel_v6b_ast::Item::Function(_))).count());
+            println!("  Expressions: {}", program.items.iter().filter(|i| matches!(i, aoel_v6b_ast::Item::Expr(_))).count());
+        }
+        Err(e) => {
+            eprintln!("Syntax error: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn v6b_print_ast(path: &PathBuf) {
+    let source = match read_file(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match aoel_v6b_parser::parse(&source) {
+        Ok(program) => {
+            println!("{:#?}", program);
+        }
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn v6b_print_tokens(path: &PathBuf) {
+    let source = match read_file(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let tokens = match aoel_v6b_lexer::tokenize(&source) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Lex error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    for token in tokens {
+        println!(
+            "{:4}..{:4}  {:20} {:?}",
+            token.span.start,
+            token.span.end,
+            format!("{:?}", token.kind),
+            token.text
+        );
+    }
+}
+
+fn v6b_eval(expr: &str) {
+    // Parse expression
+    let parsed = match aoel_v6b_parser::parse_expr(expr) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Create a program with just this expression
+    let program = aoel_v6b_ast::Program {
+        items: vec![aoel_v6b_ast::Item::Expr(parsed)],
+        span: aoel_v6b_lexer::Span::new(0, expr.len()),
+    };
+
+    // Lower to IR
+    let mut lowerer = aoel_v6b_lowering::Lowerer::new();
+    let functions = match lowerer.lower_program(&program) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Lowering error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Print IR for debugging
+    println!("Expression: {}", expr);
+    println!("\nIR:");
+    for func in &functions {
+        println!("  Function: {}", func.name);
+        for (i, instr) in func.instructions.iter().enumerate() {
+            println!("    {:3}: {:?}", i, instr.opcode);
+        }
+    }
+}
+
+fn v6b_compile_file(path: &PathBuf, output: Option<&PathBuf>) {
+    let source = match read_file(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Parse
+    let program = match aoel_v6b_parser::parse(&source) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Lower to IR
+    let mut lowerer = aoel_v6b_lowering::Lowerer::new();
+    let functions = match lowerer.lower_program(&program) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Lowering error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Serialize IR
+    let json = serde_json::to_string_pretty(&functions.iter().map(|f| {
+        serde_json::json!({
+            "name": f.name,
+            "params": f.params,
+            "instructions": f.instructions.iter().map(|i| format!("{:?}", i.opcode)).collect::<Vec<_>>()
+        })
+    }).collect::<Vec<_>>()).unwrap();
+
+    match output {
+        Some(out_path) => {
+            fs::write(out_path, &json).unwrap_or_else(|e| {
+                eprintln!("Failed to write output file: {}", e);
+                std::process::exit(1);
+            });
+            println!("✓ Compiled {} to {}", path.display(), out_path.display());
+        }
+        None => {
+            println!("{}", json);
         }
     }
 }

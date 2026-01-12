@@ -1,0 +1,23 @@
+// AOEL v6b 테스트 파일
+// 44% 토큰 효율성 달성을 위한 문법
+
+// 기본 함수
+add(a,b)=a+b
+sub(a,b)=a-b
+mul(a,b)=a*b
+
+// 삼항 연산자
+max(a,b)=a>b?a:b
+abs(n)=n<0?-n:n
+
+// 재귀 ($ 사용)
+fib(n)=n<2?n:$(n-1)+$(n-2)
+fact(n)=n<2?1:n*$(n-1)
+
+// 컬렉션 연산
+double(arr)=arr.@(_*2)
+evens(arr)=arr.?(_>0)
+sum(arr)=arr./+
+
+// Quicksort (v6b 문법의 강력함을 보여주는 예제)
+qs(a)=#a<2?a:let p=a[0],r=a[1:]:$(r.?(_<p))+[p]+$(r.?(_>=p))

@@ -70,6 +70,10 @@ dependencies = [
  "aoel-lexer",
  "aoel-parser",
  "aoel-typeck",
+ "aoel-v6b-ast",
+ "aoel-v6b-lexer",
+ "aoel-v6b-lowering",
+ "aoel-v6b-parser",
  "aoel-vm",
  "ariadne",
  "clap",
@@ -115,6 +119,43 @@ dependencies = [
  "aoel-parser",
  "ariadne",
  "pretty_assertions",
+ "thiserror",
+]
+
+[[package]]
+name = "aoel-v6b-ast"
+version = "0.1.0"
+dependencies = [
+ "aoel-v6b-lexer",
+ "serde",
+]
+
+[[package]]
+name = "aoel-v6b-lexer"
+version = "0.1.0"
+dependencies = [
+ "logos",
+ "pretty_assertions",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "aoel-v6b-lowering"
+version = "0.1.0"
+dependencies = [
+ "aoel-ir",
+ "aoel-v6b-ast",
+ "aoel-v6b-lexer",
+ "thiserror",
+]
+
+[[package]]
+name = "aoel-v6b-parser"
+version = "0.1.0"
+dependencies = [
+ "aoel-v6b-ast",
+ "aoel-v6b-lexer",
  "thiserror",
 ]
 

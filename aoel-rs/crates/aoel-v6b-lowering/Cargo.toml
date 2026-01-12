@@ -1,0 +1,11 @@
+[package]
+name = "aoel-v6b-lowering"
+version = "0.1.0"
+edition = "2021"
+description = "AOEL v6b AST to IR lowering"
+
+[dependencies]
+aoel-v6b-ast = { path = "../aoel-v6b-ast" }
+aoel-v6b-lexer = { path = "../aoel-v6b-lexer" }
+aoel-ir = { path = "../aoel-ir" }
+thiserror = "1.0"
