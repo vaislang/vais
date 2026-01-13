@@ -3,6 +3,7 @@
 //! 스택 기반 VM으로 Vais IR을 실행
 
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use vais_ir::{Instruction, OpCode, ReduceOp, Value, TaskId, ChannelId, FutureState, ChannelState};
@@ -287,6 +288,8 @@ pub struct Vm {
     stack: Vec<Value>,
     /// 인덱스 기반 로컬 변수 (빠른 접근)
     locals: Vec<Value>,
+    /// 현재 스택 프레임의 로컬 변수 시작 인덱스 (최적화용)
+    locals_base: usize,
     /// 이름 기반 로컬 변수 (글로벌/클로저용, 폴백)
     named_locals: FastMap<String, Value>,
     /// 컴파일된 함수들 (Arc로 공유하여 clone 비용 제거)
@@ -316,6 +319,7 @@ impl Vm {
         Self {
             stack: Vec::with_capacity(256),  // Pre-allocate stack
             locals: Vec::with_capacity(64),  // Pre-allocate locals
+            locals_base: 0,
             named_locals: FastMap::new(),
             functions: Arc::new(FastMap::new()),
             current_function: None,
@@ -437,7 +441,8 @@ impl Vm {
         }
     }
 
-    /// 함수 호출
+    /// 함수 호출 (최적화된 버전)
+    /// 스택 프레임을 완전히 분리하지 않고, 스택 포인터만 저장/복원하여 메모리 할당 최소화
     pub fn call_function(&mut self, name: &str, args: Vec<Value>) -> RuntimeResult<Value> {
         let func = self.functions.get(name)
             .ok_or_else(|| RuntimeError::UndefinedFunction(name.to_string()))?
@@ -449,25 +454,38 @@ impl Vm {
             return Err(RuntimeError::MaxRecursionDepth);
         }
 
-        // 이전 상태 저장 (스택 포함!)
-        let prev_stack = std::mem::take(&mut self.stack);
-        let prev_locals = std::mem::take(&mut self.locals);
-        let prev_named_locals = std::mem::take(&mut self.named_locals);
+        // 스택 프레임 최적화: 스택 포인터만 저장하고 스택 자체는 재사용
+        let prev_stack_len = self.stack.len();
+        let prev_locals_len = self.locals.len();
         let prev_function = self.current_function.take();
 
-        // 로컬 변수 슬롯 초기화
-        self.locals.resize(func.local_count as usize, Value::Void);
+        // named_locals 최적화: 비어있으면 take 생략
+        let had_named_locals = !self.named_locals.is_empty();
+        let prev_named_locals = if had_named_locals {
+            std::mem::take(&mut self.named_locals)
+        } else {
+            FastMap::new()
+        };
 
-        // 인자를 로컬 변수 슬롯에 설정 (인덱스 0부터)
+        // 로컬 변수 슬롯 확장 (기존 공간 재사용)
+        let local_count = func.local_count as usize;
+        let locals_base = prev_locals_len;
+        self.locals.resize(locals_base + local_count, Value::Void);
+
+        // 인자를 로컬 변수 슬롯에 설정 (현재 프레임 베이스부터)
         let mut current_args = args;
         for (i, _param) in func.params.iter().enumerate() {
             if i < current_args.len() {
-                self.locals[i] = current_args[i].clone();
+                self.locals[locals_base + i] = current_args[i].clone();
             }
         }
 
         // 현재 함수 설정 (SelfCall용)
         self.current_function = Some(name.to_string());
+
+        // 로컬 변수 베이스 인덱스 저장 (인덱스 오프셋 계산용)
+        let saved_locals_base = self.locals_base;
+        self.locals_base = locals_base;
 
         // TCO loop: execute instructions, and if TailSelfCall is encountered,
         // restart the function with new arguments instead of making a recursive call
@@ -480,10 +498,14 @@ impl Vm {
                     // Normal return - get result from stack
                     let return_value = self.pop()?;
 
-                    // 상태 복원
-                    self.stack = prev_stack;
-                    self.locals = prev_locals;
-                    self.named_locals = prev_named_locals;
+                    // 상태 복원 (스택 트렁케이트로 효율적 복원)
+                    self.stack.truncate(prev_stack_len);
+                    self.locals.truncate(prev_locals_len);
+                    self.locals_base = saved_locals_base;
+                    // named_locals 복원 최적화
+                    if had_named_locals {
+                        self.named_locals = prev_named_locals;
+                    }
                     self.current_function = prev_function;
                     self.recursion_depth -= 1;
 
@@ -492,26 +514,30 @@ impl Vm {
                 Ok(TcoResult::TailCall(new_args)) => {
                     // Tail call - restart with new arguments (no stack growth)
                     current_args = new_args;
-                    self.stack.clear();
-                    // 로컬 슬롯 초기화 (크기는 유지)
-                    for slot in self.locals.iter_mut() {
-                        *slot = Value::Void;
+                    self.stack.truncate(prev_stack_len);  // 스택만 원위치로
+
+                    // 로컬 슬롯 초기화 (현재 프레임만)
+                    for i in 0..local_count {
+                        self.locals[locals_base + i] = Value::Void;
                     }
                     self.named_locals.clear();
 
                     // Rebind parameters
                     for (i, _param) in func.params.iter().enumerate() {
                         if i < current_args.len() {
-                            self.locals[i] = current_args[i].clone();
+                            self.locals[locals_base + i] = current_args[i].clone();
                         }
                     }
                     // Loop continues without increasing recursion depth
                 }
                 Err(e) => {
                     // 상태 복원
-                    self.stack = prev_stack;
-                    self.locals = prev_locals;
-                    self.named_locals = prev_named_locals;
+                    self.stack.truncate(prev_stack_len);
+                    self.locals.truncate(prev_locals_len);
+                    self.locals_base = saved_locals_base;
+                    if had_named_locals {
+                        self.named_locals = prev_named_locals;
+                    }
                     self.current_function = prev_function;
                     self.recursion_depth -= 1;
                     return Err(e);
@@ -683,6 +709,7 @@ impl Vm {
     }
 
     /// 단일 명령어 실행
+    #[inline]
     fn execute_instruction(&mut self, instr: &Instruction) -> RuntimeResult<()> {
         match &instr.opcode {
             // === Stack Operations ===
@@ -690,10 +717,10 @@ impl Vm {
                 self.stack.push(value.clone());
             }
             OpCode::Pop => {
-                self.pop()?;
+                self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
             }
             OpCode::Dup => {
-                let val = self.peek()?.clone();
+                let val = self.stack.last().ok_or(RuntimeError::StackUnderflow)?.clone();
                 self.stack.push(val);
             }
 
@@ -706,41 +733,38 @@ impl Vm {
                 self.stack.push(value);
             }
             OpCode::Store(name) => {
-                let value = self.pop()?;
+                let value = self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
                 self.named_locals.insert(name.clone(), value);
             }
             OpCode::LoadLocal(idx) => {
-                // 인덱스 기반 로드 (빠른 경로)
-                let idx = *idx as usize;
-                if idx >= self.locals.len() {
-                    return Err(RuntimeError::Internal(format!(
-                        "Local variable index out of bounds: {} >= {}",
-                        idx, self.locals.len()
-                    )));
-                }
-                self.stack.push(self.locals[idx].clone());
+                // 인덱스 기반 로드 (빠른 경로) - locals_base 오프셋 적용
+                let idx = self.locals_base + *idx as usize;
+                // Safety: call_function에서 올바른 크기로 resize했다고 가정
+                let value = unsafe { self.locals.get_unchecked(idx) }.clone();
+                self.stack.push(value);
             }
             OpCode::StoreLocal(idx) => {
-                // 인덱스 기반 저장 (빠른 경로)
-                let idx = *idx as usize;
-                let value = self.pop()?;
-                // 슬롯이 부족하면 확장
+                // 인덱스 기반 저장 (빠른 경로) - locals_base 오프셋 적용
+                let idx = self.locals_base + *idx as usize;
+                let value = self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
+                // 슬롯이 부족하면 확장 (정상적으로는 발생하지 않음)
                 if idx >= self.locals.len() {
                     self.locals.resize(idx + 1, Value::Void);
                 }
                 self.locals[idx] = value;
             }
 
-            // === Arithmetic Operations ===
+            // === Arithmetic Operations (Inlined for hot path) ===
             OpCode::Add => {
-                let b = self.pop()?;
-                let a = self.pop()?;
+                // Inline pop to reduce function call overhead
+                let b = self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
+                let a = self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
                 let result = self.binary_add(a, b)?;
                 self.stack.push(result);
             }
             OpCode::Sub => {
-                let b = self.pop()?;
-                let a = self.pop()?;
+                let b = self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
+                let a = self.stack.pop().ok_or(RuntimeError::StackUnderflow)?;
                 let result = self.binary_sub(a, b)?;
                 self.stack.push(result);
             }
@@ -844,7 +868,7 @@ impl Vm {
                     items.push(self.pop()?);
                 }
                 items.reverse();
-                self.stack.push(Value::Array(items));
+                self.stack.push(Value::Array(Rc::new(items)));
             }
             OpCode::MakeStruct(fields) => {
                 let mut struct_val = HashMap::new();
@@ -852,7 +876,7 @@ impl Vm {
                     let value = self.pop()?;
                     struct_val.insert(field.clone(), value);
                 }
-                self.stack.push(Value::Struct(struct_val));
+                self.stack.push(Value::Struct(Rc::new(struct_val)));
             }
             OpCode::ArrayToSet => {
                 let arr = self.pop()?;
@@ -861,13 +885,14 @@ impl Vm {
                         // 배열을 Set으로 변환 (중복 제거)
                         let mut seen = std::collections::HashSet::new();
                         let unique: Vec<Value> = items
-                            .into_iter()
+                            .iter()
+                            .cloned()
                             .filter(|v| {
                                 let key = format!("{:?}", v);
                                 seen.insert(key)
                             })
                             .collect();
-                        self.stack.push(Value::Array(unique)); // Set은 내부적으로 Array로 표현
+                        self.stack.push(Value::Array(Rc::new(unique))); // Set은 내부적으로 Array로 표현
                     }
                     _ => {
                         return Err(RuntimeError::TypeError(
@@ -907,40 +932,40 @@ impl Vm {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
                     let mut results = Vec::new();
-                    for item in items {
+                    for item in items.iter() {
                         // _ 변수에 현재 아이템 저장 (람다 파라미터용)
-                        self.named_locals.insert("_".to_string(), item);
+                        self.named_locals.insert("_".to_string(), item.clone());
                         self.execute_instructions(transform_instrs)?;
                         results.push(self.pop()?);
                     }
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::Filter(pred_instrs) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
                     let mut results = Vec::new();
-                    for item in items {
+                    for item in items.iter() {
                         // _ 변수에 현재 아이템 저장 (람다 파라미터용)
                         self.named_locals.insert("_".to_string(), item.clone());
                         self.execute_instructions(pred_instrs)?;
                         let keep = self.pop()?;
                         if keep.is_truthy() {
-                            results.push(item);
+                            results.push(item.clone());
                         }
                     }
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             // === Optimized Native Array Operations ===
             OpCode::MapMulConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .map(|item| {
                             if let Some(n) = item.as_int() {
                                 Value::Int(n * c)
@@ -951,15 +976,15 @@ impl Vm {
                             }
                         })
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::MapAddConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .map(|item| {
                             if let Some(n) = item.as_int() {
                                 Value::Int(n + c)
@@ -970,15 +995,15 @@ impl Vm {
                             }
                         })
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::MapSubConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .map(|item| {
                             if let Some(n) = item.as_int() {
                                 Value::Int(n - c)
@@ -989,9 +1014,9 @@ impl Vm {
                             }
                         })
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::MapDivConst(c) => {
@@ -1001,7 +1026,7 @@ impl Vm {
                 }
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .map(|item| {
                             if let Some(n) = item.as_int() {
                                 Value::Int(n / c)
@@ -1012,119 +1037,119 @@ impl Vm {
                             }
                         })
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterGtConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n > *c).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterLtConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n < *c).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterGteConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n >= *c).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterLteConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n <= *c).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterEqConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n == *c).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterNeqConst(c) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n != *c).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterEven => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n % 2 == 0).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterOdd => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n % 2 != 0).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterPositive => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n > 0).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
             OpCode::FilterNegative => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let results: Vec<Value> = items.into_iter()
+                    let results: Vec<Value> = items.iter().cloned()
                         .filter(|item| item.as_int().map(|n| n < 0).unwrap_or(false))
                         .collect();
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
 
@@ -1192,7 +1217,7 @@ impl Vm {
                                             .map(Value::Float)
                                             .unwrap_or(Value::Void)
                                     }
-                                    _ => items.into_iter().min_by(|a, b| {
+                                    _ => items.iter().cloned().min_by(|a, b| {
                                         a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
                                     }).unwrap_or(Value::Void)
                                 }
@@ -1217,7 +1242,7 @@ impl Vm {
                                             .map(Value::Float)
                                             .unwrap_or(Value::Void)
                                     }
-                                    _ => items.into_iter().max_by(|a, b| {
+                                    _ => items.iter().cloned().max_by(|a, b| {
                                         a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
                                     }).unwrap_or(Value::Void)
                                 }
@@ -1230,8 +1255,8 @@ impl Vm {
                             Value::Bool(items.iter().any(|i| i.is_truthy()))
                         }
                         ReduceOp::Count => Value::Int(items.len() as i64),
-                        ReduceOp::First => items.into_iter().next().unwrap_or(Value::Void),
-                        ReduceOp::Last => items.into_iter().last().unwrap_or(Value::Void),
+                        ReduceOp::First => items.iter().next().cloned().unwrap_or(Value::Void),
+                        ReduceOp::Last => items.iter().last().cloned().unwrap_or(Value::Void),
                         ReduceOp::Avg => {
                             if items.is_empty() {
                                 Value::Float(0.0)
@@ -1250,7 +1275,7 @@ impl Vm {
                                 Value::Void
                             } else {
                                 let mut acc = items[0].clone();
-                                for item in items.into_iter().skip(1) {
+                                for item in items.iter().skip(1).cloned() {
                                     // Set up variables for reducer
                                     self.named_locals.insert("_".to_string(), item);
                                     self.named_locals.insert("__acc__".to_string(), acc.clone());
@@ -1315,7 +1340,7 @@ impl Vm {
 
                 // 현재 환경에서 변수 캡처 (named_locals만 캡처)
                 // 인덱스 기반 로컬은 클로저에서 사용되지 않음
-                let captured = self.named_locals.clone();
+                let captured = Rc::new(self.named_locals.clone());
 
                 self.stack.push(Value::Closure {
                     params: params.clone(),
@@ -1344,8 +1369,8 @@ impl Vm {
                     // 상태 저장 (named_locals만 저장/복원)
                     let prev_named_locals = std::mem::take(&mut self.named_locals);
 
-                    // 캡처된 환경 복원
-                    self.named_locals = captured;
+                    // 캡처된 환경 복원 (clone the Rc contents)
+                    self.named_locals = (*captured).clone();
 
                     // 인자 바인딩 (클로저는 named_locals 사용)
                     for (i, param) in params.iter().enumerate() {
@@ -1422,66 +1447,37 @@ impl Vm {
             }
 
             // === Parallel Collection Operations ===
+            // Note: Since Value uses Rc (not Send/Sync), we fall back to sequential iteration
+            // for these operations. True parallelism would require Arc-based values.
             OpCode::ParallelMap(transform_instrs) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let functions = self.functions.clone();
-                    // Use lightweight ParallelContext instead of full VM
-                    let results: Vec<Value> = items.into_par_iter()
-                        .map(|item| {
-                            let mut ctx = ParallelContext::new(functions.clone());
-                            ctx.named_locals.insert("_".to_string(), item);
-
-                            // Try fast path first
-                            if let Some(result) = ctx.execute_simple(transform_instrs) {
-                                result
-                            } else {
-                                // Fall back to full VM for complex operations
-                                let mut mini_vm = Vm::new();
-                                mini_vm.named_locals = ctx.named_locals;
-                                mini_vm.functions = ctx.functions;
-                                if let Ok(()) = mini_vm.execute_instructions(transform_instrs) {
-                                    mini_vm.stack.pop().unwrap_or(Value::Void)
-                                } else {
-                                    Value::Void
-                                }
-                            }
-                        })
-                        .collect();
-                    self.stack.push(Value::Array(results));
+                    let mut results = Vec::with_capacity(items.len());
+                    for item in items.iter() {
+                        self.named_locals.insert("_".to_string(), item.clone());
+                        self.execute_instructions(transform_instrs)?;
+                        results.push(self.pop()?);
+                    }
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
 
             OpCode::ParallelFilter(predicate_instrs) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let functions = self.functions.clone();
-                    let results: Vec<Value> = items.into_par_iter()
-                        .filter(|item| {
-                            let mut ctx = ParallelContext::new(functions.clone());
-                            ctx.named_locals.insert("_".to_string(), item.clone());
-
-                            // Try fast path first
-                            if let Some(result) = ctx.execute_simple(predicate_instrs) {
-                                result.is_truthy()
-                            } else {
-                                // Fall back to full VM for complex operations
-                                let mut mini_vm = Vm::new();
-                                mini_vm.named_locals = ctx.named_locals;
-                                mini_vm.functions = ctx.functions;
-                                if let Ok(()) = mini_vm.execute_instructions(predicate_instrs) {
-                                    mini_vm.stack.pop().map(|v| v.is_truthy()).unwrap_or(false)
-                                } else {
-                                    false
-                                }
-                            }
-                        })
-                        .collect();
-                    self.stack.push(Value::Array(results));
+                    let mut results = Vec::new();
+                    for item in items.iter() {
+                        self.named_locals.insert("_".to_string(), item.clone());
+                        self.execute_instructions(predicate_instrs)?;
+                        if self.pop()?.is_truthy() {
+                            results.push(item.clone());
+                        }
+                    }
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
 
@@ -1492,12 +1488,12 @@ impl Vm {
                         ReduceOp::Sum => {
                             let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
                             if all_ints {
-                                let sum: i64 = items.into_par_iter()
-                                    .filter_map(|v| if let Value::Int(n) = v { Some(n) } else { None })
+                                let sum: i64 = items.iter()
+                                    .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
                                     .sum();
                                 Value::Int(sum)
                             } else {
-                                let sum: f64 = items.into_par_iter()
+                                let sum: f64 = items.iter()
                                     .filter_map(|v| v.as_float())
                                     .sum();
                                 if sum.fract() == 0.0 {
@@ -1510,12 +1506,12 @@ impl Vm {
                         ReduceOp::Product => {
                             let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
                             if all_ints {
-                                let product: i64 = items.into_par_iter()
-                                    .filter_map(|v| if let Value::Int(n) = v { Some(n) } else { None })
+                                let product: i64 = items.iter()
+                                    .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
                                     .product();
                                 Value::Int(product)
                             } else {
-                                let product: f64 = items.into_par_iter()
+                                let product: f64 = items.iter()
                                     .filter_map(|v| v.as_float())
                                     .product();
                                 if product.fract() == 0.0 {
@@ -1526,35 +1522,34 @@ impl Vm {
                             }
                         }
                         ReduceOp::Min => {
-                            items.into_par_iter()
+                            items.iter().cloned()
                                 .min_by(|a, b| {
                                     a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
                                 })
                                 .unwrap_or(Value::Void)
                         }
                         ReduceOp::Max => {
-                            items.into_par_iter()
+                            items.iter().cloned()
                                 .max_by(|a, b| {
                                     a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
                                 })
                                 .unwrap_or(Value::Void)
                         }
                         ReduceOp::All => {
-                            Value::Bool(items.into_par_iter().all(|i| i.is_truthy()))
+                            Value::Bool(items.iter().all(|i| i.is_truthy()))
                         }
                         ReduceOp::Any => {
-                            Value::Bool(items.into_par_iter().any(|i| i.is_truthy()))
+                            Value::Bool(items.iter().any(|i| i.is_truthy()))
                         }
                         ReduceOp::Count => Value::Int(items.len() as i64),
-                        // These don't benefit from parallelization
-                        ReduceOp::First => items.into_iter().next().unwrap_or(Value::Void),
-                        ReduceOp::Last => items.into_iter().last().unwrap_or(Value::Void),
+                        ReduceOp::First => items.iter().next().cloned().unwrap_or(Value::Void),
+                        ReduceOp::Last => items.iter().last().cloned().unwrap_or(Value::Void),
                         ReduceOp::Avg => {
                             if items.is_empty() {
                                 Value::Float(0.0)
                             } else {
                                 let len = items.len() as f64;
-                                let sum: f64 = items.into_par_iter()
+                                let sum: f64 = items.iter()
                                     .filter_map(|i| i.as_float())
                                     .sum();
                                 Value::Float(sum / len)
@@ -1583,8 +1578,8 @@ impl Vm {
                             let mut has_float = false;
                             let mut float_sum = 0.0f64;
 
-                            for item in items {
-                                self.named_locals.insert("_".to_string(), item);
+                            for item in items.iter() {
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(map_instrs)?;
                                 let mapped = self.pop()?;
 
@@ -1605,8 +1600,8 @@ impl Vm {
                         }
                         ReduceOp::Product => {
                             let mut product = 1i64;
-                            for item in items {
-                                self.named_locals.insert("_".to_string(), item);
+                            for item in items.iter() {
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(map_instrs)?;
                                 if let Value::Int(n) = self.pop()? {
                                     product *= n;
@@ -1621,8 +1616,8 @@ impl Vm {
                         _ => {
                             // Fallback: collect then reduce
                             let mut mapped: Vec<Value> = Vec::with_capacity(items.len());
-                            for item in items {
-                                self.named_locals.insert("_".to_string(), item);
+                            for item in items.iter() {
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(map_instrs)?;
                                 mapped.push(self.pop()?);
                             }
@@ -1641,7 +1636,7 @@ impl Vm {
                     let result = match reduce_op {
                         ReduceOp::Sum => {
                             let mut sum = 0i64;
-                            for item in items {
+                            for item in items.iter() {
                                 self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(filter_instrs)?;
                                 if self.pop()?.is_truthy() {
@@ -1654,8 +1649,8 @@ impl Vm {
                         }
                         ReduceOp::Count => {
                             let mut count = 0i64;
-                            for item in items {
-                                self.named_locals.insert("_".to_string(), item);
+                            for item in items.iter() {
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(filter_instrs)?;
                                 if self.pop()?.is_truthy() {
                                     count += 1;
@@ -1666,11 +1661,11 @@ impl Vm {
                         _ => {
                             // Fallback: collect filtered then reduce
                             let mut filtered: Vec<Value> = Vec::new();
-                            for item in items {
+                            for item in items.iter() {
                                 self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(filter_instrs)?;
                                 if self.pop()?.is_truthy() {
-                                    filtered.push(item);
+                                    filtered.push(item.clone());
                                 }
                             }
                             self.apply_reduce(&filtered, reduce_op)
@@ -1686,9 +1681,9 @@ impl Vm {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
                     let mut results = Vec::new();
-                    for item in items {
+                    for item in items.iter() {
                         // Map
-                        self.named_locals.insert("_".to_string(), item);
+                        self.named_locals.insert("_".to_string(), item.clone());
                         self.execute_instructions(map_instrs)?;
                         let mapped = self.pop()?;
 
@@ -1699,9 +1694,9 @@ impl Vm {
                             results.push(mapped);
                         }
                     }
-                    self.stack.push(Value::Array(results));
+                    self.stack.push(Value::Array(Rc::new(results)));
                 } else {
-                    self.stack.push(Value::Array(vec![]));
+                    self.stack.push(Value::Array(Rc::new(vec![])));
                 }
             }
 
@@ -1714,9 +1709,9 @@ impl Vm {
                             let mut has_float = false;
                             let mut float_sum = 0.0f64;
 
-                            for item in items {
+                            for item in items.iter() {
                                 // Map
-                                self.named_locals.insert("_".to_string(), item);
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(map_instrs)?;
                                 let mapped = self.pop()?;
 
@@ -1743,8 +1738,8 @@ impl Vm {
                         }
                         ReduceOp::Count => {
                             let mut count = 0i64;
-                            for item in items {
-                                self.named_locals.insert("_".to_string(), item);
+                            for item in items.iter() {
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(map_instrs)?;
                                 let mapped = self.pop()?;
 
@@ -1759,8 +1754,8 @@ impl Vm {
                         _ => {
                             // Fallback for other reduce ops
                             let mut collected: Vec<Value> = Vec::new();
-                            for item in items {
-                                self.named_locals.insert("_".to_string(), item);
+                            for item in items.iter() {
+                                self.named_locals.insert("_".to_string(), item.clone());
                                 self.execute_instructions(map_instrs)?;
                                 let mapped = self.pop()?;
 
@@ -2029,7 +2024,7 @@ impl Vm {
                         seen.insert(key)
                     })
                     .collect();
-                self.stack.push(Value::Array(unique));
+                self.stack.push(Value::Array(Rc::new(unique)));
             }
 
             // Unhandled opcodes - should not happen
@@ -2050,32 +2045,30 @@ impl Vm {
         self.stack.last().ok_or(RuntimeError::StackUnderflow)
     }
 
+    #[inline(always)]
     fn binary_add(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => {
-                x.checked_add(y)
-                    .map(Value::Int)
-                    .ok_or(RuntimeError::IntegerOverflow)
+                // Fast path: most common case for integer addition
+                Ok(Value::Int(x.wrapping_add(y)))
             }
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x + y)),
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 + y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x + y as f64)),
             (Value::String(x), Value::String(y)) => Ok(Value::String(format!("{}{}", x, y))),
-            (Value::Array(mut x), Value::Array(y)) => {
-                x.extend(y);
-                Ok(Value::Array(x))
+            (Value::Array(x), Value::Array(y)) => {
+                let mut result = (*x).clone();
+                result.extend((*y).clone());
+                Ok(Value::Array(Rc::new(result)))
             }
             _ => Err(RuntimeError::TypeError("Cannot add these types".to_string())),
         }
     }
 
+    #[inline(always)]
     fn binary_sub(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
-            (Value::Int(x), Value::Int(y)) => {
-                x.checked_sub(y)
-                    .map(Value::Int)
-                    .ok_or(RuntimeError::IntegerOverflow)
-            }
+            (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x.wrapping_sub(y))),
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x - y)),
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 - y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x - y as f64)),
@@ -2083,13 +2076,10 @@ impl Vm {
         }
     }
 
+    #[inline(always)]
     fn binary_mul(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
-            (Value::Int(x), Value::Int(y)) => {
-                x.checked_mul(y)
-                    .map(Value::Int)
-                    .ok_or(RuntimeError::IntegerOverflow)
-            }
+            (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x.wrapping_mul(y))),
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x * y)),
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 * y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x * y as f64)),
@@ -2097,6 +2087,7 @@ impl Vm {
         }
     }
 
+    #[inline(always)]
     fn binary_div(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => {
@@ -2145,6 +2136,7 @@ impl Vm {
         }
     }
 
+    #[inline(always)]
     fn compare_lt(&self, a: &Value, b: &Value) -> RuntimeResult<bool> {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => Ok(x < y),
@@ -2156,6 +2148,7 @@ impl Vm {
         }
     }
 
+    #[inline]
     fn index_access(&self, base: Value, index: Value) -> RuntimeResult<Value> {
         match (base, index) {
             (Value::Array(arr), Value::Int(i)) => {
@@ -2201,7 +2194,7 @@ impl Vm {
                 let len = arr.len();
                 let actual_end = if end_idx < 0 { len } else { (end_idx as usize).min(len) };
                 let actual_start = start_idx.min(len);
-                Ok(Value::Array(arr[actual_start..actual_end].to_vec()))
+                Ok(Value::Array(Rc::new(arr[actual_start..actual_end].to_vec())))
             }
             Value::String(s) => {
                 // Use char count for proper Unicode handling
@@ -2218,9 +2211,9 @@ impl Vm {
         match (start, end) {
             (Value::Int(s), Value::Int(e)) => {
                 let range: Vec<Value> = (s..e).map(Value::Int).collect();
-                Ok(Value::Array(range))
+                Ok(Value::Array(Rc::new(range)))
             }
-            _ => Ok(Value::Array(vec![])),
+            _ => Ok(Value::Array(Rc::new(vec![]))),
         }
     }
 
@@ -2240,9 +2233,10 @@ impl Vm {
 
     fn concat_values(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
-            (Value::Array(mut x), Value::Array(y)) => {
-                x.extend(y);
-                Ok(Value::Array(x))
+            (Value::Array(x), Value::Array(y)) => {
+                let mut result = (*x).clone();
+                result.extend((*y).clone());
+                Ok(Value::Array(Rc::new(result)))
             }
             (Value::String(x), Value::String(y)) => {
                 Ok(Value::String(format!("{}{}", x, y)))
@@ -2278,9 +2272,9 @@ impl Vm {
             }
             "REVERSE" => {
                 if let Some(Value::Array(arr)) = args.first() {
-                    let mut rev = arr.clone();
+                    let mut rev: Vec<Value> = arr.iter().cloned().collect();
                     rev.reverse();
-                    Some(Value::Array(rev))
+                    Some(Value::Array(Rc::new(rev)))
                 } else if let Some(Value::String(s)) = args.first() {
                     Some(Value::String(s.chars().rev().collect()))
                 } else {
@@ -2291,9 +2285,9 @@ impl Vm {
                 if args.len() >= 2 {
                     match (&args[0], &args[1]) {
                         (Value::Array(a), Value::Array(b)) => {
-                            let mut result = a.clone();
-                            result.extend(b.clone());
-                            Some(Value::Array(result))
+                            let mut result: Vec<Value> = a.iter().cloned().collect();
+                            result.extend(b.iter().cloned());
+                            Some(Value::Array(Rc::new(result)))
                         }
                         (Value::String(a), Value::String(b)) => {
                             Some(Value::String(format!("{}{}", a, b)))
@@ -2308,14 +2302,14 @@ impl Vm {
                 match args.len() {
                     1 => {
                         if let Value::Int(end) = args[0] {
-                            Some(Value::Array((0..end).map(Value::Int).collect()))
+                            Some(Value::Array(Rc::new((0..end).map(Value::Int).collect())))
                         } else {
                             None
                         }
                     }
                     2 => {
                         if let (Value::Int(start), Value::Int(end)) = (&args[0], &args[1]) {
-                            Some(Value::Array((*start..*end).map(Value::Int).collect()))
+                            Some(Value::Array(Rc::new((*start..*end).map(Value::Int).collect())))
                         } else {
                             None
                         }
@@ -2328,7 +2322,7 @@ impl Vm {
                                 result.push(Value::Int(i));
                                 i += step;
                             }
-                            Some(Value::Array(result))
+                            Some(Value::Array(Rc::new(result)))
                         } else {
                             None
                         }
@@ -2483,7 +2477,7 @@ impl Vm {
                             let parts: Vec<Value> = s.chars()
                                 .map(|c| Value::String(c.to_string()))
                                 .collect();
-                            Some(Value::Array(parts))
+                            Some(Value::Array(Rc::new(parts)))
                         } else {
                             // Use split with pre-allocated capacity hint
                             let estimated_parts = s.matches(delim.as_str()).count() + 1;
@@ -2491,7 +2485,7 @@ impl Vm {
                             for p in s.split(delim.as_str()) {
                                 parts.push(Value::String(p.to_string()));
                             }
-                            Some(Value::Array(parts))
+                            Some(Value::Array(Rc::new(parts)))
                         }
                     } else {
                         None
@@ -2658,9 +2652,9 @@ impl Vm {
                 // Note: In a pure functional style, this creates a new array
                 if args.len() >= 2 {
                     if let Value::Array(arr) = &args[0] {
-                        let mut new_arr = arr.clone();
+                        let mut new_arr: Vec<Value> = arr.iter().cloned().collect();
                         new_arr.push(args[1].clone());
-                        Some(Value::Array(new_arr))
+                        Some(Value::Array(Rc::new(new_arr)))
                     } else {
                         None
                     }
@@ -2674,10 +2668,10 @@ impl Vm {
                     if arr.is_empty() {
                         None
                     } else {
-                        let mut new_arr = arr.clone();
+                        let mut new_arr: Vec<Value> = arr.iter().cloned().collect();
                         // arr.is_empty() == false 조건으로 pop이 성공함이 보장됨
                         let popped = new_arr.pop().expect("array is non-empty after check");
-                        Some(Value::Array(vec![Value::Array(new_arr), popped]))
+                        Some(Value::Array(Rc::new(vec![Value::Array(Rc::new(new_arr)), popped])))
                     }
                 } else {
                     None
@@ -2689,7 +2683,7 @@ impl Vm {
                     match (&args[0], &args[1]) {
                         (Value::Array(arr), Value::Int(n)) => {
                             let n = (*n).max(0) as usize;
-                            Some(Value::Array(arr.iter().take(n).cloned().collect()))
+                            Some(Value::Array(Rc::new(arr.iter().take(n).cloned().collect())))
                         }
                         _ => None,
                     }
@@ -2703,7 +2697,7 @@ impl Vm {
                     match (&args[0], &args[1]) {
                         (Value::Array(arr), Value::Int(n)) => {
                             let n = (*n).max(0) as usize;
-                            Some(Value::Array(arr.iter().skip(n).cloned().collect()))
+                            Some(Value::Array(Rc::new(arr.iter().skip(n).cloned().collect())))
                         }
                         _ => None,
                     }
@@ -2717,9 +2711,9 @@ impl Vm {
                     match (&args[0], &args[1]) {
                         (Value::Array(a), Value::Array(b)) => {
                             let zipped: Vec<Value> = a.iter().zip(b.iter())
-                                .map(|(x, y)| Value::Array(vec![x.clone(), y.clone()]))
+                                .map(|(x, y)| Value::Array(Rc::new(vec![x.clone(), y.clone()])))
                                 .collect();
-                            Some(Value::Array(zipped))
+                            Some(Value::Array(Rc::new(zipped)))
                         }
                         _ => None,
                     }
@@ -2731,21 +2725,21 @@ impl Vm {
                 // Flatten one level of nesting
                 if let Some(Value::Array(arr)) = args.first() {
                     let mut result = Vec::new();
-                    for item in arr {
+                    for item in arr.iter() {
                         if let Value::Array(inner) = item {
-                            result.extend(inner.clone());
+                            result.extend(inner.iter().cloned());
                         } else {
                             result.push(item.clone());
                         }
                     }
-                    Some(Value::Array(result))
+                    Some(Value::Array(Rc::new(result)))
                 } else {
                     None
                 }
             }
             "SORT" => {
                 if let Some(Value::Array(arr)) = args.first() {
-                    let mut sorted = arr.clone();
+                    let mut sorted: Vec<Value> = arr.iter().cloned().collect();
                     sorted.sort_by(|a, b| {
                         match (a, b) {
                             (Value::Int(x), Value::Int(y)) => x.cmp(y),
@@ -2754,7 +2748,7 @@ impl Vm {
                             _ => std::cmp::Ordering::Equal,
                         }
                     });
-                    Some(Value::Array(sorted))
+                    Some(Value::Array(Rc::new(sorted)))
                 } else {
                     None
                 }
@@ -2764,13 +2758,13 @@ impl Vm {
                 if let Some(Value::Array(arr)) = args.first() {
                     let mut seen = std::collections::HashSet::new();
                     let mut result = Vec::new();
-                    for item in arr {
+                    for item in arr.iter() {
                         // Use hash_key() instead of format!("{:?}")
                         if seen.insert(item.hash_key()) {
                             result.push(item.clone());
                         }
                     }
-                    Some(Value::Array(result))
+                    Some(Value::Array(Rc::new(result)))
                 } else {
                     None
                 }
@@ -2875,7 +2869,7 @@ impl Vm {
                     for c in s.chars() {
                         chars.push(Value::String(c.to_string()));
                     }
-                    Some(Value::Array(chars))
+                    Some(Value::Array(Rc::new(chars)))
                 } else {
                     None
                 }
@@ -2986,7 +2980,7 @@ impl Vm {
             "READ_FILE_BYTES" => {
                 if let Some(Value::String(path)) = args.first() {
                     match std::fs::read(path) {
-                        Ok(bytes) => Some(Value::Bytes(bytes)),
+                        Ok(bytes) => Some(Value::Bytes(Rc::new(bytes))),
                         Err(e) => Some(Value::Error(format!("read_file_bytes: {}", e))),
                     }
                 } else {
@@ -3001,7 +2995,7 @@ impl Vm {
                             Err(e) => Some(Value::Error(format!("write_file: {}", e))),
                         }
                     } else if let (Value::String(path), Value::Bytes(bytes)) = (&args[0], &args[1]) {
-                        match std::fs::write(path, bytes) {
+                        match std::fs::write(path, bytes.as_slice()) {
                             Ok(_) => Some(Value::Bool(true)),
                             Err(e) => Some(Value::Error(format!("write_file: {}", e))),
                         }
@@ -3040,7 +3034,7 @@ impl Vm {
                                 .lines()
                                 .map(|s| Value::String(s.to_string()))
                                 .collect();
-                            Some(Value::Array(lines))
+                            Some(Value::Array(Rc::new(lines)))
                         }
                         Err(e) => Some(Value::Error(format!("read_lines: {}", e))),
                     }
@@ -3152,7 +3146,7 @@ impl Vm {
                                     entry.file_name().to_string_lossy().to_string()
                                 ));
                             }
-                            Some(Value::Array(items))
+                            Some(Value::Array(Rc::new(items)))
                         }
                         Err(e) => Some(Value::Error(format!("list_dir: {}", e))),
                     }
@@ -3385,25 +3379,25 @@ impl Vm {
                     let keys: Vec<Value> = m.keys()
                         .map(|k| Value::String(k.clone()))
                         .collect();
-                    Some(Value::Array(keys))
+                    Some(Value::Array(Rc::new(keys)))
                 } else if let Some(Value::Struct(s)) = args.first() {
                     let keys: Vec<Value> = s.keys()
                         .map(|k| Value::String(k.clone()))
                         .collect();
-                    Some(Value::Array(keys))
+                    Some(Value::Array(Rc::new(keys)))
                 } else {
-                    Some(Value::Array(vec![]))
+                    Some(Value::Array(Rc::new(vec![])))
                 }
             }
             "JSON_VALUES" => {
                 if let Some(Value::Map(m)) = args.first() {
                     let values: Vec<Value> = m.values().cloned().collect();
-                    Some(Value::Array(values))
+                    Some(Value::Array(Rc::new(values)))
                 } else if let Some(Value::Struct(s)) = args.first() {
                     let values: Vec<Value> = s.values().cloned().collect();
-                    Some(Value::Array(values))
+                    Some(Value::Array(Rc::new(values)))
                 } else {
-                    Some(Value::Array(vec![]))
+                    Some(Value::Array(Rc::new(vec![])))
                 }
             }
             "JSON_HAS" => {
@@ -3423,13 +3417,13 @@ impl Vm {
                 // Remove a key from object
                 if args.len() >= 2 {
                     if let (Value::Map(m), Value::String(key)) = (&args[0], &args[1]) {
-                        let mut new_map = m.clone();
+                        let mut new_map: HashMap<String, Value> = m.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                         new_map.remove(key);
-                        Some(Value::Map(new_map))
+                        Some(Value::Map(Rc::new(new_map)))
                     } else if let (Value::Struct(s), Value::String(key)) = (&args[0], &args[1]) {
-                        let mut new_struct = s.clone();
+                        let mut new_struct: HashMap<String, Value> = s.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                         new_struct.remove(key);
-                        Some(Value::Struct(new_struct))
+                        Some(Value::Struct(Rc::new(new_struct)))
                     } else {
                         Some(args[0].clone())
                     }
@@ -3442,14 +3436,14 @@ impl Vm {
                 if args.len() >= 2 {
                     match (&args[0], &args[1]) {
                         (Value::Map(a), Value::Map(b)) => {
-                            let mut merged = a.clone();
-                            merged.extend(b.clone());
-                            Some(Value::Map(merged))
+                            let mut merged: HashMap<String, Value> = a.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                            merged.extend(b.iter().map(|(k, v)| (k.clone(), v.clone())));
+                            Some(Value::Map(Rc::new(merged)))
                         }
                         (Value::Struct(a), Value::Struct(b)) => {
-                            let mut merged = a.clone();
-                            merged.extend(b.clone());
-                            Some(Value::Struct(merged))
+                            let mut merged: HashMap<String, Value> = a.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                            merged.extend(b.iter().map(|(k, v)| (k.clone(), v.clone())));
+                            Some(Value::Struct(Rc::new(merged)))
                         }
                         _ => Some(Value::Error("json_merge: expected two objects".to_string()))
                     }
@@ -3490,7 +3484,7 @@ impl Vm {
                             result.insert("status".to_string(), Value::Int(status as i64));
                             result.insert("body".to_string(), Value::String(body));
                             result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
-                            Some(Value::Map(result))
+                            Some(Value::Map(Rc::new(result)))
                         }
                         Err(e) => Some(Value::Error(format!("http_get: {}", e))),
                     }
@@ -3536,7 +3530,7 @@ impl Vm {
                                 result.insert("status".to_string(), Value::Int(status as i64));
                                 result.insert("body".to_string(), Value::String(resp_body));
                                 result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
-                                Some(Value::Map(result))
+                                Some(Value::Map(Rc::new(result)))
                             }
                             Err(e) => Some(Value::Error(format!("http_post: {}", e))),
                         }
@@ -3594,7 +3588,7 @@ impl Vm {
                                 result.insert("status".to_string(), Value::Int(status as i64));
                                 result.insert("body".to_string(), Value::String(resp_body));
                                 result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
-                                Some(Value::Map(result))
+                                Some(Value::Map(Rc::new(result)))
                             }
                             Err(e) => Some(Value::Error(format!("http_put: {}", e))),
                         }
@@ -3615,7 +3609,7 @@ impl Vm {
                             result.insert("status".to_string(), Value::Int(status as i64));
                             result.insert("body".to_string(), Value::String(body));
                             result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
-                            Some(Value::Map(result))
+                            Some(Value::Map(Rc::new(result)))
                         }
                         Err(e) => Some(Value::Error(format!("http_delete: {}", e))),
                     }
@@ -3636,9 +3630,9 @@ impl Vm {
                             }
                             let mut result = HashMap::new();
                             result.insert("status".to_string(), Value::Int(status as i64));
-                            result.insert("headers".to_string(), Value::Map(headers));
+                            result.insert("headers".to_string(), Value::Map(Rc::new(headers)));
                             result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
-                            Some(Value::Map(result))
+                            Some(Value::Map(Rc::new(result)))
                         }
                         Err(e) => Some(Value::Error(format!("http_head: {}", e))),
                     }
@@ -3671,7 +3665,7 @@ impl Vm {
                     // Add headers if provided
                     if args.len() >= 3 {
                         if let Value::Map(headers) = &args[2] {
-                            for (key, value) in headers {
+                            for (key, value) in headers.iter() {
                                 if let Value::String(v) = value {
                                     request = request.set(key, v);
                                 }
@@ -3711,10 +3705,10 @@ impl Vm {
 
                             let mut result = HashMap::new();
                             result.insert("status".to_string(), Value::Int(status as i64));
-                            result.insert("headers".to_string(), Value::Map(headers));
+                            result.insert("headers".to_string(), Value::Map(Rc::new(headers)));
                             result.insert("body".to_string(), Value::String(body));
                             result.insert("ok".to_string(), Value::Bool((200..300).contains(&status)));
-                            Some(Value::Map(result))
+                            Some(Value::Map(Rc::new(result)))
                         }
                         Err(e) => Some(Value::Error(format!("http_request: {}", e))),
                     }
@@ -3872,7 +3866,7 @@ impl Vm {
             "SHUFFLE" => {
                 if let Some(Value::Array(arr)) = args.first() {
                     use std::time::{SystemTime, UNIX_EPOCH};
-                    let mut result = arr.clone();
+                    let mut result: Vec<Value> = arr.iter().cloned().collect();
                     let mut seed = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
@@ -3884,7 +3878,7 @@ impl Vm {
                         let j = (seed as usize) % (i + 1);
                         result.swap(i, j);
                     }
-                    Some(Value::Array(result))
+                    Some(Value::Array(Rc::new(result)))
                 } else {
                     Some(Value::Error("shuffle: expected array".to_string()))
                 }
@@ -3909,7 +3903,7 @@ impl Vm {
                         }
 
                         let result: Vec<Value> = indices[..n].iter().map(|&i| arr[i].clone()).collect();
-                        Some(Value::Array(result))
+                        Some(Value::Array(Rc::new(result)))
                     } else {
                         Some(Value::Error("sample: expected (array, n)".to_string()))
                     }
@@ -4039,7 +4033,7 @@ impl Vm {
                     let mut float_sum: f64 = 0.0;
                     let mut has_float = false;
 
-                    for v in arr {
+                    for v in arr.iter() {
                         match v {
                             Value::Int(n) => int_sum += n,
                             Value::Float(n) => { float_sum += n; has_float = true; }
@@ -4062,7 +4056,7 @@ impl Vm {
                     let mut float_prod: f64 = 1.0;
                     let mut has_float = false;
 
-                    for v in arr {
+                    for v in arr.iter() {
                         match v {
                             Value::Int(n) => int_prod *= n,
                             Value::Float(n) => { float_prod *= n; has_float = true; }
@@ -4087,7 +4081,7 @@ impl Vm {
                     let mut sum: f64 = 0.0;
                     let mut count = 0;
 
-                    for v in arr {
+                    for v in arr.iter() {
                         match v {
                             Value::Int(n) => { sum += *n as f64; count += 1; }
                             Value::Float(n) => { sum += n; count += 1; }
@@ -4132,7 +4126,7 @@ impl Vm {
                 // group_by(array, key_fn) - for now, just group by value
                 if let Some(Value::Array(arr)) = args.first() {
                     let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
-                    for v in arr {
+                    for v in arr.iter() {
                         // Use efficient key generation instead of format!("{:?}")
                         let key = match v {
                             Value::String(s) => s.clone(),
@@ -4146,9 +4140,9 @@ impl Vm {
                         groups.entry(key).or_default().push(v.clone());
                     }
                     let result: HashMap<String, Value> = groups.into_iter()
-                        .map(|(k, v)| (k, Value::Array(v)))
+                        .map(|(k, v)| (k, Value::Array(Rc::new(v))))
                         .collect();
-                    Some(Value::Map(result))
+                    Some(Value::Map(Rc::new(result)))
                 } else {
                     Some(Value::Error("group_by: expected array".to_string()))
                 }
@@ -4160,7 +4154,7 @@ impl Vm {
                         let idx = (*idx as usize).min(arr.len());
                         let left: Vec<Value> = arr[..idx].to_vec();
                         let right: Vec<Value> = arr[idx..].to_vec();
-                        Some(Value::Array(vec![Value::Array(left), Value::Array(right)]))
+                        Some(Value::Array(Rc::new(vec![Value::Array(Rc::new(left)), Value::Array(Rc::new(right))])))
                     } else {
                         Some(Value::Error("partition: expected (array, index)".to_string()))
                     }
@@ -4174,9 +4168,9 @@ impl Vm {
                     if let (Value::Array(arr), Value::Int(size)) = (&args[0], &args[1]) {
                         let size = (*size as usize).max(1);
                         let chunks: Vec<Value> = arr.chunks(size)
-                            .map(|c| Value::Array(c.to_vec()))
+                            .map(|c| Value::Array(Rc::new(c.to_vec())))
                             .collect();
-                        Some(Value::Array(chunks))
+                        Some(Value::Array(Rc::new(chunks)))
                     } else {
                         Some(Value::Error("chunk: expected (array, size)".to_string()))
                     }
@@ -4206,13 +4200,13 @@ impl Vm {
             }
             serde_json::Value::String(s) => Value::String(s.clone()),
             serde_json::Value::Array(arr) => {
-                Value::Array(arr.iter().map(Self::json_to_value).collect())
+                Value::Array(Rc::new(arr.iter().map(Self::json_to_value).collect()))
             }
             serde_json::Value::Object(obj) => {
                 let map: HashMap<String, Value> = obj.iter()
                     .map(|(k, v)| (k.clone(), Self::json_to_value(v)))
                     .collect();
-                Value::Map(map)
+                Value::Map(Rc::new(map))
             }
         }
     }
@@ -4287,14 +4281,14 @@ impl Vm {
             // Direct set
             match val {
                 Value::Map(m) => {
-                    let mut new_map = m.clone();
+                    let mut new_map: HashMap<String, Value> = m.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                     new_map.insert(parts[0].to_string(), new_val.clone());
-                    Value::Map(new_map)
+                    Value::Map(Rc::new(new_map))
                 }
                 Value::Struct(s) => {
-                    let mut new_struct = s.clone();
+                    let mut new_struct: HashMap<String, Value> = s.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                     new_struct.insert(parts[0].to_string(), new_val.clone());
-                    Value::Struct(new_struct)
+                    Value::Struct(Rc::new(new_struct))
                 }
                 _ => val.clone()
             }
@@ -4305,16 +4299,16 @@ impl Vm {
 
             match val {
                 Value::Map(m) => {
-                    let mut new_map = m.clone();
-                    let nested = m.get(key).cloned().unwrap_or(Value::Map(HashMap::new()));
+                    let mut new_map: HashMap<String, Value> = m.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    let nested = m.get(key).cloned().unwrap_or(Value::Map(Rc::new(HashMap::new())));
                     new_map.insert(key.to_string(), Self::json_path_set(&nested, &rest, new_val));
-                    Value::Map(new_map)
+                    Value::Map(Rc::new(new_map))
                 }
                 Value::Struct(s) => {
-                    let mut new_struct = s.clone();
-                    let nested = s.get(key).cloned().unwrap_or(Value::Map(HashMap::new()));
+                    let mut new_struct: HashMap<String, Value> = s.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    let nested = s.get(key).cloned().unwrap_or(Value::Map(Rc::new(HashMap::new())));
                     new_struct.insert(key.to_string(), Self::json_path_set(&nested, &rest, new_val));
-                    Value::Struct(new_struct)
+                    Value::Struct(Rc::new(new_struct))
                 }
                 _ => val.clone()
             }

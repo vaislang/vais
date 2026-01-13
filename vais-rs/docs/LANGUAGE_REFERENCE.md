@@ -120,10 +120,11 @@ multiply(x: Int, y: Int) -> Int = x * y
 ### Block Body
 
 ```vais
+// Statements separated by semicolons
 calculate(x, y) = {
-    sum = x + y
-    product = x * y
-    sum + product
+    sum = x + y;
+    product = x * y;
+    sum + product   // Last expression is the return value
 }
 ```
 
@@ -144,10 +145,12 @@ sum_to(n, acc) = n == 0 ? acc : $(n - 1, acc + n)
 // Full syntax
 double = (x) => x * 2
 
-// Shorthand with _
+// Pipe lambda syntax
+add = |x, y| x + y
+
+// Shorthand with _ (placeholder)
 numbers.@(_ * 2)      // Same as: numbers.@(x => x * 2)
 numbers.?(_ > 0)      // Same as: numbers.?(x => x > 0)
-numbers./(_ + _)      // _1, _2 for multiple args
 ```
 
 ### Async Functions
@@ -199,9 +202,13 @@ async fetch_data(url) = {
 |----------|-------------|---------|
 | `.@(f)` | Map | `[1,2,3].@(_ * 2)` |
 | `.?(p)` | Filter | `[1,2,3].?(_ > 1)` |
-| `./(init, f)` | Reduce | `[1,2,3]./(0, _ + _)` |
-| `./+(init, f)` | Sum reduce | `[1,2,3]./+(0, _ + _)` |
-| `./*(init, f)` | Product reduce | `[1,2,3]./*( 1, _ * _)` |
+| `./+` | Sum reduce | `[1,2,3]./+` → 6 |
+| `./*` | Product reduce | `[1,2,3]./*` → 6 |
+| `./min` | Min reduce | `[1,2,3]./min` → 1 |
+| `./max` | Max reduce | `[1,2,3]./max` → 3 |
+| `./and` | Logical AND reduce | `[true,true]./and` |
+| `./or` | Logical OR reduce | `[false,true]./or` |
+| `elem @ arr` | Contains | `2 @ [1,2,3]` → true |
 
 ### Pipeline
 

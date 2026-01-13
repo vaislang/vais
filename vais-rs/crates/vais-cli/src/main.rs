@@ -556,7 +556,8 @@ fn compile_file(path: &PathBuf, output: Option<&PathBuf>) {
     }
 }
 
-fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str, use_jit: bool, _show_stats: bool) {
+#[allow(unused_variables)]
+fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str, use_jit: bool, show_stats: bool) {
     let source = match read_file(path) {
         Ok(s) => s,
         Err(e) => {

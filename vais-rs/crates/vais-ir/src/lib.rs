@@ -7,8 +7,10 @@ mod value;
 mod instruction;
 mod module;
 mod optimize;
+mod nanbox;
 
-pub use value::{Value, ValueType, TaskId, ChannelId, FutureState, ChannelState};
+pub use value::{Value, ValueType, TaskId, ChannelId, FutureState, ChannelState, RcArray, RcMap, RcBytes};
+pub use nanbox::{NanBoxedValue, ClosureData};
 pub use instruction::{Instruction, OpCode, NodeIR, EdgeIR, NodeOpType, ReduceOp};
 pub use module::{Module, Function, FieldDef, ModuleMetadata};
 pub use optimize::{

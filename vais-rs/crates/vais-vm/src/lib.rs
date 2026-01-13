@@ -10,10 +10,21 @@
 //! ```toml
 //! vais-vm = { path = "...", features = ["jit"] }
 //! ```
+//!
+//! ## FastVM (NaN-boxing)
+//!
+//! NaN-boxing을 사용한 고성능 VM:
+//!
+//! ```rust,ignore
+//! use vais_vm::{FastVm, execute_fast};
+//! ```
 
 mod vm;
 mod error;
+mod async_runtime;
+mod parallel;
 pub mod ffi;
+mod fast_vm;
 
 #[cfg(feature = "jit")]
 mod jit_vm;
@@ -21,6 +32,7 @@ mod jit_vm;
 pub use vm::{Vm, execute, execute_function};
 pub use error::{RuntimeError, RuntimeResult};
 pub use ffi::{FfiLoader, FfiType, FfiFunctionInfo};
+pub use fast_vm::{FastVm, execute_fast};
 
 #[cfg(feature = "jit")]
 pub use jit_vm::{JitVm, JitConfig, execute_with_jit, execute_function_with_jit};

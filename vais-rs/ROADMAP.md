@@ -4,7 +4,7 @@
 
 ---
 
-## 🎯 Current Version: v0.0.5
+## 🎯 Current Version: v0.0.6
 
 ### 완료된 기능
 
@@ -17,10 +17,11 @@
 
 #### JIT Compiler (Cranelift)
 - ✅ Integer/Float 연산 JIT 컴파일
-- ✅ 재귀 함수 (TCO)
+- ✅ 재귀 함수 (TCO - Tail Call Optimization)
 - ✅ 조건문/비교 연산
 - ✅ Hot path 자동 JIT (프로파일러 기반)
-- ✅ **15-75x Python 대비 성능 향상**
+- ✅ SelfCall 최적화 (재귀 함수 전용 빠른 경로)
+- ✅ **16x+ Python 대비 성능 향상** (fibonacci(30) 기준)
 
 #### Language Features
 - ✅ **Pattern Matching** - match 표현식, destructuring
@@ -45,6 +46,9 @@
 - ✅ Native loop optimizations
 - ✅ Checked arithmetic (integer overflow 보호)
 - ✅ Arc-based function sharing
+- ✅ **NaN-boxing** - 모든 값을 64비트로 인코딩 (O(1) copy)
+- ✅ **FastVM** - 타입 특화 연산 (정수 fast-path)
+- ✅ **Trampoline Execution** - Rust 재귀 없이 수동 호출 스택
 
 #### Tools
 - ✅ **CLI** - run, build, check, format, repl, debug, profile, doc, test
@@ -76,6 +80,18 @@
 
 ## 📊 Performance
 
+### fibonacci(30) Benchmark
+
+| VM Type | Time (ms) | vs Python | vs Std VM |
+|---------|-----------|-----------|-----------|
+| Python (CPython 3.x) | ~110 | baseline | - |
+| Standard VM | ~497 | 4.5x slower | baseline |
+| FastVM (NaN-boxing) | ~196 | 1.8x slower | 2.5x faster |
+| FastVM + SelfCall | ~87 | **1.3x faster** | 5.7x faster |
+| **JIT VM + SelfCall** | **~7** | **16x faster** | **71x faster** |
+
+### Other Benchmarks
+
 | Operation | Python | Vais VM | Vais JIT |
 |-----------|--------|---------|----------|
 | Map (1000 elements) | 27.4µs | 24.7µs | - |
@@ -93,7 +109,58 @@
 | Macro System | 컴파일 타임 코드 생성 | 낮음 |
 | ~~Async/Await~~ | ~~비동기 프로그래밍~~ | ✅ 완료 |
 | ~~Traits/Interfaces~~ | ~~타입 추상화~~ | ✅ 완료 |
-| Algebraic Effects | 부작용 관리 | 낮음 |
+| Algebraic Effects | 부작용 관리 | 중간 |
+
+### Algebraic Effects 로드맵 (계획)
+
+Effect System은 부작용을 선언적으로 관리하는 기능입니다.
+
+#### Phase 1: 기본 Effect 문법 (v1.1)
+```vais
+// Effect 정의
+effect Logger {
+    log(msg: String) -> Void
+}
+
+// Effect 핸들러
+with_logging(computation) =
+    handle computation {
+        Logger.log(msg) => { print(msg); resume() }
+    }
+```
+
+#### Phase 2: Resume 지원 (v1.2)
+```vais
+// 재개 가능한 effect
+effect Error {
+    raise(e: String) -> T
+}
+
+safe_operation() =
+    handle risky_computation() {
+        Error.raise(e) with resume => resume(default_value)
+    }
+```
+
+#### Phase 3: 채널 통합 (v1.3)
+```vais
+// 채널 기반 동시성
+producer(ch) = ch <- 42
+consumer(ch) = <-ch
+
+// Select 표현식
+race_operations(op1, op2) = select {
+    spawn(op1) => "op1 completed",
+    spawn(op2) => "op2 completed"
+}
+```
+
+#### 구현 작업
+- [ ] Lexer: `effect`, `handle`, `resume` 키워드 추가
+- [ ] Parser: Effect 정의 및 핸들러 문법
+- [ ] Type Checker: Effect 타입 추론
+- [ ] IR: Effect 관련 OpCode 추가
+- [ ] VM: Effect 핸들러 런타임 구현
 
 ### 도구 개선
 | 기능 | 설명 | 우선순위 |
@@ -117,7 +184,8 @@
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| **v0.0.5** | 2026-01-13 | Async/Await, Test Runner, DAP Server, Generic types, Trait/Impl, Mutation |
+| **v0.0.6** | 2026-01-14 | JIT 버그 수정, NaN-boxing FastVM, SelfCall 최적화, **16x Python 성능** |
+| v0.0.5 | 2026-01-13 | Async/Await, Test Runner, DAP Server, Generic types, Trait/Impl, Mutation |
 | v0.0.4 | 2026-01-13 | Checked arithmetic, error handling 개선 |
 | v0.0.3 | 2026-01-13 | 프로젝트명 AOEL → Vais 변경, 문서 구조화 (en/ko) |
 | v0.0.2 | 2026-01-12 | Package registry, VS Code extension, Playground |

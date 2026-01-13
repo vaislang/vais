@@ -5,6 +5,8 @@
 //! - 컬러 출력 지원
 //! - 에러 유형별 제안사항
 
+#![allow(dead_code)]
+
 use std::fmt::Write;
 use vais_lexer::Span;
 use vais_parser::ParseError;

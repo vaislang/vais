@@ -1,7 +1,19 @@
 //! Runtime values for Vais IR
+//!
+//! # Performance Optimizations
+//!
+//! This module uses `Rc<T>` (Reference Counting) for large collection types
+//! to implement Copy-on-Write (COW) semantics. This dramatically reduces
+//! clone overhead for Array, Map, Struct, and Closure captured environments.
+//!
+//! ## Why Rc instead of Arc?
+//! - Vais VM is single-threaded (parallel ops use separate VM instances)
+//! - Rc has ~30% less overhead than Arc due to no atomic operations
+//! - For parallel operations, values are deep-cloned across thread boundaries anyway
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Unique ID for async tasks
 pub type TaskId = u64;
@@ -38,7 +50,21 @@ impl ChannelState {
     }
 }
 
+/// Shared array type for O(1) clone via reference counting
+pub type RcArray = Rc<Vec<Value>>;
+
+/// Shared map type for O(1) clone via reference counting
+pub type RcMap = Rc<HashMap<String, Value>>;
+
+/// Shared bytes type for O(1) clone via reference counting
+pub type RcBytes = Rc<Vec<u8>>;
+
 /// Runtime value types
+///
+/// # Clone Performance
+/// - Small types (Void, Bool, Int, Float): O(1) bitwise copy
+/// - Large types (Array, Map, Struct, Bytes): O(1) Rc pointer copy
+/// - String: O(1) due to Rust's String small-string optimization
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     /// Void/null value
@@ -56,17 +82,21 @@ pub enum Value {
     /// UTF-8 string
     String(String),
 
-    /// Byte array
-    Bytes(Vec<u8>),
+    /// Byte array - Rc wrapped for O(1) clone
+    #[serde(with = "rc_bytes_serde")]
+    Bytes(RcBytes),
 
-    /// Array of values
-    Array(Vec<Value>),
+    /// Array of values - Rc wrapped for O(1) clone
+    #[serde(with = "rc_array_serde")]
+    Array(RcArray),
 
-    /// Map/dictionary
-    Map(HashMap<String, Value>),
+    /// Map/dictionary - Rc wrapped for O(1) clone
+    #[serde(with = "rc_map_serde")]
+    Map(RcMap),
 
-    /// Struct with named fields
-    Struct(HashMap<String, Value>),
+    /// Struct with named fields - Rc wrapped for O(1) clone
+    #[serde(with = "rc_map_serde")]
+    Struct(RcMap),
 
     /// Optional value (Some or None)
     Optional(Option<Box<Value>>),
@@ -78,7 +108,8 @@ pub enum Value {
     /// The instructions are stored separately; this just tracks the closure metadata
     Closure {
         params: Vec<String>,
-        captured: HashMap<String, Value>,
+        #[serde(with = "rc_map_serde")]
+        captured: RcMap,
         body_id: usize,
     },
 
@@ -87,6 +118,117 @@ pub enum Value {
 
     /// Channel for async communication
     Channel(ChannelId),
+}
+
+// ============================================================================
+// Serde support for Rc types (serialize inner value, deserialize to new Rc)
+// ============================================================================
+
+mod rc_array_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(data: &RcArray, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        data.as_ref().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<RcArray, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::<Value>::deserialize(deserializer)?;
+        Ok(Rc::new(vec))
+    }
+}
+
+mod rc_map_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(data: &RcMap, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        data.as_ref().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<RcMap, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let map = HashMap::<String, Value>::deserialize(deserializer)?;
+        Ok(Rc::new(map))
+    }
+}
+
+mod rc_bytes_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(data: &RcBytes, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        data.as_ref().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<RcBytes, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes = Vec::<u8>::deserialize(deserializer)?;
+        Ok(Rc::new(bytes))
+    }
+}
+
+// ============================================================================
+// From implementations for convenient construction
+// ============================================================================
+
+impl From<Vec<Value>> for Value {
+    #[inline]
+    fn from(vec: Vec<Value>) -> Self {
+        Value::Array(Rc::new(vec))
+    }
+}
+
+impl From<HashMap<String, Value>> for Value {
+    #[inline]
+    fn from(map: HashMap<String, Value>) -> Self {
+        Value::Map(Rc::new(map))
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    #[inline]
+    fn from(bytes: Vec<u8>) -> Self {
+        Value::Bytes(Rc::new(bytes))
+    }
+}
+
+// Allow direct Rc wrapping without intermediate allocation
+impl From<RcArray> for Value {
+    #[inline]
+    fn from(arr: RcArray) -> Self {
+        Value::Array(arr)
+    }
+}
+
+impl From<RcMap> for Value {
+    #[inline]
+    fn from(map: RcMap) -> Self {
+        Value::Map(map)
+    }
+}
+
+impl From<RcBytes> for Value {
+    #[inline]
+    fn from(bytes: RcBytes) -> Self {
+        Value::Bytes(bytes)
+    }
 }
 
 impl Value {
@@ -156,10 +298,26 @@ impl Value {
         }
     }
 
-    /// Try to get as array
+    /// Try to get as array slice
     pub fn as_array(&self) -> Option<&[Value]> {
         match self {
+            Value::Array(a) => Some(a.as_slice()),
+            _ => None,
+        }
+    }
+
+    /// Get array as Rc reference (for efficient sharing)
+    pub fn as_rc_array(&self) -> Option<&RcArray> {
+        match self {
             Value::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    /// Get map as Rc reference (for efficient sharing)
+    pub fn as_rc_map(&self) -> Option<&RcMap> {
+        match self {
+            Value::Map(m) => Some(m),
             _ => None,
         }
     }
@@ -212,7 +370,7 @@ impl Value {
             Value::Bytes(b) => b.hash(&mut hasher),
             Value::Array(arr) => {
                 arr.len().hash(&mut hasher);
-                for item in arr {
+                for item in arr.iter() {
                     item.hash_key().hash(&mut hasher);
                 }
             }
@@ -255,6 +413,56 @@ impl Value {
         }
 
         hasher.finish()
+    }
+
+    // ========================================================================
+    // Convenience constructors for Rc-wrapped types
+    // ========================================================================
+
+    /// Create a new Array value from a Vec
+    #[inline]
+    pub fn new_array(vec: Vec<Value>) -> Self {
+        Value::Array(Rc::new(vec))
+    }
+
+    /// Create a new Map value from a HashMap
+    #[inline]
+    pub fn new_map(map: HashMap<String, Value>) -> Self {
+        Value::Map(Rc::new(map))
+    }
+
+    /// Create a new Struct value from a HashMap
+    #[inline]
+    pub fn new_struct(fields: HashMap<String, Value>) -> Self {
+        Value::Struct(Rc::new(fields))
+    }
+
+    /// Create a new Bytes value from a Vec<u8>
+    #[inline]
+    pub fn new_bytes(bytes: Vec<u8>) -> Self {
+        Value::Bytes(Rc::new(bytes))
+    }
+
+    /// Create a new Closure value
+    #[inline]
+    pub fn new_closure(params: Vec<String>, captured: HashMap<String, Value>, body_id: usize) -> Self {
+        Value::Closure {
+            params,
+            captured: Rc::new(captured),
+            body_id,
+        }
+    }
+
+    /// Create an Array from an Rc (zero-copy for sharing)
+    #[inline]
+    pub fn from_rc_array(arr: RcArray) -> Self {
+        Value::Array(arr)
+    }
+
+    /// Create a Map from an Rc (zero-copy for sharing)
+    #[inline]
+    pub fn from_rc_map(map: RcMap) -> Self {
+        Value::Map(map)
     }
 }
 

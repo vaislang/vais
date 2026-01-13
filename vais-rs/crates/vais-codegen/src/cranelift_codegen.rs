@@ -16,7 +16,6 @@ mod implementation {
     use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
     use cranelift_jit::{JITBuilder, JITModule};
     use cranelift_module::{DataDescription, FuncId, Linkage, Module};
-    use cranelift_native;
 
     use vais_ir::{OpCode, Value as VaisValue};
     use vais_lowering::CompiledFunction;
@@ -27,6 +26,7 @@ mod implementation {
     pub struct CraneliftCodeGenerator {
         module: JITModule,
         ctx: Context,
+        #[allow(dead_code)] // Reserved for future data section support
         data_description: DataDescription,
         function_ids: HashMap<String, FuncId>,
     }
@@ -137,7 +137,7 @@ mod implementation {
             // This works for simple expressions without complex control flow
 
             // Generate code for each instruction
-            for (i, instr) in func.instructions.iter().enumerate() {
+            for (_i, instr) in func.instructions.iter().enumerate() {
                 match &instr.opcode {
                     OpCode::Const(value) => {
                         let val = match value {
@@ -426,8 +426,13 @@ mod implementation {
         }
 
         /// Execute the compiled __main__ function and return the result
-        pub fn execute(&self, code_ptr: *const u8) -> i64 {
-            let func: fn() -> i64 = unsafe { std::mem::transmute(code_ptr) };
+        ///
+        /// # Safety
+        ///
+        /// - `code_ptr` must be a valid function pointer obtained from JIT compilation
+        /// - The compiled function must have the signature `fn() -> i64`
+        pub unsafe fn execute(&self, code_ptr: *const u8) -> i64 {
+            let func: fn() -> i64 = std::mem::transmute(code_ptr);
             func()
         }
 
@@ -463,10 +468,16 @@ mod implementation {
     }
 
     /// JIT compile and execute Vais functions
+    ///
+    /// # Safety
+    ///
+    /// This function compiles and executes machine code. The caller must ensure
+    /// that the input functions are valid and do not cause undefined behavior.
     pub fn jit_execute(functions: &[CompiledFunction]) -> CodegenResult<i64> {
         let mut gen = CraneliftCodeGenerator::new()?;
         let code_ptr = gen.compile(functions)?;
-        Ok(gen.execute(code_ptr))
+        // SAFETY: code_ptr was just obtained from compile() and is valid
+        Ok(unsafe { gen.execute(code_ptr) })
     }
 
     #[cfg(test)]

@@ -1,0 +1,22 @@
+// Basic Effect System Example
+// ============================
+// This demonstrates the algebraic effect system
+
+// Define a Console effect
+effect Console {
+    print(msg: String) -> Void
+}
+
+// Simple computation using effect
+compute(x) = {
+    perform Console.print("Starting computation");
+    result = x * 2;
+    perform Console.print("Computation done");
+    result
+}
+
+// Handle the effect and run computation
+// Expected output: 42
+handle compute(21) {
+    Console.print(msg) => msg
+}

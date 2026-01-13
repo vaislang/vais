@@ -3,5 +3,7 @@ double(x) = x * 2
 square(x) = x * x
 add_10(x) = x + 10
 
-// Compose operations
+// Compose operations: add_10(square(double(5)))
+// double(5) = 10, square(10) = 100, add_10(100) = 110
+// Expected output: 110
 add_10(square(double(5)))

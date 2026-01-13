@@ -239,7 +239,7 @@ impl TieredManager {
 
                 // 우선순위 계산 (호출 횟수 + 시간 가중치)
                 let time_weight = total_time.as_micros() as u64;
-                let priority = ((call_count + time_weight / 1000) as u32).min(u32::MAX);
+                let priority = (call_count + time_weight / 1000) as u32;
 
                 let request = CompileRequest {
                     func_name: name.to_string(),
@@ -263,7 +263,7 @@ impl TieredManager {
         let time_weight = info.total_time.as_micros() as u64;
 
         // 호출 횟수 + 총 실행 시간 기반 우선순위
-        ((call_count + time_weight / 1000) as u32).min(u32::MAX)
+        (call_count + time_weight / 1000) as u32
     }
 
     /// 다음 컴파일 요청 가져오기 (우선순위 기반)

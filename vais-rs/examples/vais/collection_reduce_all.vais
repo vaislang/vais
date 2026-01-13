@@ -4,4 +4,6 @@ min_test(arr) = arr./min
 max_test(arr) = arr./max
 
 // Test expressions
+// Product: 1 * 2 * 3 * 4 * 5 = 120
+// Expected output: 120
 product_test([1, 2, 3, 4, 5])

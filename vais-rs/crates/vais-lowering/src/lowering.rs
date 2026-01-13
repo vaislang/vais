@@ -888,14 +888,18 @@ impl Lowerer {
             // Effect 핸들링
             Expr::Handle { body, handlers, span: _ } => {
                 // handle expr { handlers } -> 핸들러를 등록하고 body 실행
-                // 핸들러 정보를 IR로 변환
+                // 핸들러들을 컴파일하고 점프 테이블 생성
+
+                // 1. body 명령어 먼저 컴파일
                 let body_instrs = self.lower_expr(body)?;
 
-                // 핸들러들을 컴파일
-                let mut handler_data = Vec::new();
+                // 2. 각 핸들러 바디 컴파일
+                // Type: (effect_name, op_name, params, resume_name, body_instructions)
+                #[allow(clippy::type_complexity)]
+                let mut handler_bodies: Vec<(String, String, Vec<String>, Option<String>, Vec<Instruction>)> = Vec::new();
                 for handler in handlers {
                     let handler_body = self.lower_expr(&handler.body)?;
-                    handler_data.push((
+                    handler_bodies.push((
                         handler.effect.clone(),
                         handler.operation.clone(),
                         handler.params.clone(),
@@ -904,22 +908,30 @@ impl Lowerer {
                     ));
                 }
 
-                instrs.push(Instruction::new(OpCode::InstallHandlers(handler_data.len())));
+                // 3. 핸들러 정의 (effect_name, op_name, param_count, body_offset)
+                //    InstallHandlers: 핸들러 수, 그 다음에 핸들러 정의들
+                let handler_count = handler_bodies.len();
 
-                // 핸들러 바디들을 저장
-                for (effect, op, params, resume, body_instrs) in handler_data {
+                // InstallHandlers 전에 핸들러 정보 푸시 (역순으로)
+                for (effect, op, params, resume, _) in handler_bodies.iter().rev() {
                     instrs.push(Instruction::new(OpCode::DefineHandler(
-                        effect,
-                        op,
+                        effect.clone(),
+                        op.clone(),
                         params.len(),
                         resume.is_some(),
                     )));
-                    instrs.extend(body_instrs);
-                    instrs.push(Instruction::new(OpCode::EndHandler));
                 }
 
+                instrs.push(Instruction::new(OpCode::InstallHandlers(handler_count)));
+
+                // 4. body 실행
                 instrs.extend(body_instrs);
+
+                // 5. 핸들러 제거
                 instrs.push(Instruction::new(OpCode::UninstallHandlers));
+
+                // Note: 실제 핸들러 body는 Perform에서 inline으로 처리하거나
+                // 핸들러를 클로저로 저장하여 호출하는 방식으로 확장 가능
             }
         }
 

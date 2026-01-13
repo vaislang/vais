@@ -1,0 +1,55 @@
+# Build output
+/target/
+
+# Cargo lock for libraries (keep for binaries)
+# Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated files
+*.ll
+*.bc
+*.s
+*.o
+*.a
+*.so
+*.dylib
+*.wasm
+*.wat
+
+# Compiled examples (native binaries)
+examples/vais/factorial
+examples/vais/fib
+examples/vais/fib35
+examples/vais/collection_simple
+examples/vais/collection_filter
+examples/vais/collection_reduce
+examples/vais/collection_reduce_all
+examples/vais/collection_chain
+examples/vais/stdlib_test
+examples/vais/stdlib_test2
+
+# Generated C code
+examples/**/*.c
+
+# Coverage
+*.profraw
+*.profdata
+/coverage/
+
+# Benchmark results
+/bench_results/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

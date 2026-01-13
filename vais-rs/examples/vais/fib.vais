@@ -2,4 +2,5 @@
 fib(n) = n <= 1 ? n : fib(n - 1) + fib(n - 2)
 
 // Calculate fib(20)
+// Expected output: 6765
 fib(20)

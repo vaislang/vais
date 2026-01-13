@@ -30,11 +30,13 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// 줄바꿈 제외한 다음 토큰
+    /// 줄바꿈, 주석 제외한 다음 토큰
     fn next_significant_token(lexer: &mut Lexer<'src>) -> Token {
         loop {
             match lexer.next_token() {
                 Some(token) if token.kind == TokenKind::Newline => continue,
+                Some(token) if token.kind == TokenKind::Comment => continue,
+                Some(token) if token.kind == TokenKind::MultiLineComment => continue,
                 Some(token) => return token,
                 None => {
                     return Token::new(TokenKind::Eof, Span::default(), "");

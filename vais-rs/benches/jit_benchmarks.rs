@@ -23,6 +23,7 @@ fn make_add_function() -> CompiledFunction {
             Instruction::new(OpCode::Add),
             Instruction::new(OpCode::Return),
         ],
+        local_count: 2,
     }
 }
 
@@ -44,6 +45,7 @@ fn make_calc_function() -> CompiledFunction {
             Instruction::new(OpCode::Mul),
             Instruction::new(OpCode::Return),
         ],
+        local_count: 2,
     }
 }
 
@@ -71,6 +73,7 @@ fn make_math_function() -> CompiledFunction {
             Instruction::new(OpCode::Div),
             Instruction::new(OpCode::Return),
         ],
+        local_count: 1,
     }
 }
 
@@ -236,6 +239,7 @@ fn make_factorial_function() -> CompiledFunction {
             Instruction::new(OpCode::Mul),                       // 11
             Instruction::new(OpCode::Return),                    // 12
         ],
+        local_count: 1,
     }
 }
 
@@ -260,6 +264,7 @@ fn make_sum_tail_function() -> CompiledFunction {
             Instruction::new(OpCode::Add),                       // 11
             Instruction::new(OpCode::TailSelfCall(2)),           // 12
         ],
+        local_count: 2,
     }
 }
 
@@ -373,6 +378,7 @@ fn make_double_function() -> CompiledFunction {
             Instruction::new(OpCode::Mul),
             Instruction::new(OpCode::Return),
         ],
+        local_count: 1,
     }
 }
 
@@ -387,6 +393,7 @@ fn make_quadruple_function() -> CompiledFunction {
             Instruction::new(OpCode::Call("double".to_string(), 1)),
             Instruction::new(OpCode::Return),
         ],
+        local_count: 1,
     }
 }
 
@@ -401,6 +408,7 @@ fn make_add_helper_function() -> CompiledFunction {
             Instruction::new(OpCode::Add),
             Instruction::new(OpCode::Return),
         ],
+        local_count: 2,
     }
 }
 
@@ -424,6 +432,7 @@ fn make_sum_with_helper_function() -> CompiledFunction {
             Instruction::new(OpCode::Call("add_helper".to_string(), 2)), // 11
             Instruction::new(OpCode::TailSelfCall(2)),            // 12
         ],
+        local_count: 2,
     }
 }
 

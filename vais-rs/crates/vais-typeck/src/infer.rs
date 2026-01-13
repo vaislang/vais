@@ -517,12 +517,12 @@ impl TypeEnv {
 
         // 2. trait impl에서 찾기
         for impl_info in &self.impls {
-            if impl_info.trait_name.is_some() {
-                if self.types_match(&impl_info.target_type, &resolved) {
-                    if let Some(scheme) = impl_info.methods.get(method_name) {
-                        found_scheme = Some(scheme.clone());
-                        break;
-                    }
+            if impl_info.trait_name.is_some()
+                && self.types_match(&impl_info.target_type, &resolved)
+            {
+                if let Some(scheme) = impl_info.methods.get(method_name) {
+                    found_scheme = Some(scheme.clone());
+                    break;
                 }
             }
         }
@@ -540,10 +540,10 @@ impl TypeEnv {
         let resolved = self.resolve(target_type);
 
         for impl_info in &self.impls {
-            if impl_info.trait_name.as_deref() == Some(trait_name) {
-                if self.types_match(&impl_info.target_type, &resolved) {
-                    return true;
-                }
+            if impl_info.trait_name.as_deref() == Some(trait_name)
+                && self.types_match(&impl_info.target_type, &resolved)
+            {
+                return true;
             }
         }
         false
@@ -579,12 +579,10 @@ impl TypeEnv {
                 f1.len() == f2.len()
                     && f1.iter().all(|(name, ty1)| {
                         f2.iter()
-                            .find(|(n, _)| n == name)
+                            .find(|(n, _)| *n == name)
                             .is_some_and(|(_, ty2)| self.types_match(ty1, ty2))
                     })
             }
-            (Type::Named(n1), Type::Named(n2)) => n1 == n2,
-            (Type::Generic(g1), Type::Generic(g2)) => g1 == g2,
             _ => false,
         }
     }

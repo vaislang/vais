@@ -2,4 +2,6 @@
 use lib.math
 
 // Use imported functions
+// add(3, 4) = 7, mul(2, 5) = 10
+// Expected output: 17
 add(3, 4) + mul(2, 5)

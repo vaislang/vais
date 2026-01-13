@@ -19,4 +19,8 @@ abs(x) = x < 0 ? -x : x
 tree_sum(n) = n <= 0 ? 0 : n + tree_sum(n - 1) + tree_sum(n - 2)
 
 // Test expression
+// compose(5) = 30, quadratic(1, 2, 3, 4) = 27, abs(-10) = 10
+// tree_sum(5) = 5 + tree_sum(4) + tree_sum(3) = 5 + 15 + 6 = 26
+// Total: 30 + 27 + 10 + 26 = 93
+// Expected output: 93
 compose(5) + quadratic(1, 2, 3, 4) + abs(-10) + tree_sum(5)

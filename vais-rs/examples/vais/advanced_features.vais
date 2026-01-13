@@ -1,0 +1,71 @@
+// ============================================================================
+// Advanced Vais Language Features
+// ============================================================================
+
+// --- Multi-line Comments ---
+/* This is a multi-line comment
+   that spans multiple lines.
+   Useful for longer explanations. */
+
+// --- Scientific Notation ---
+large_number() = 1e6          // 1000000.0
+small_number() = 2.5e-3       // 0.0025
+precise_pi() = 3.14159e0      // 3.14159
+
+// --- Set Literals and Operations ---
+unique_set() = #{1, 2, 3, 2, 1}  // Set: deduplicated {1, 2, 3}
+
+// --- Pattern Matching ---
+describe(n) = match n {
+    0 => "zero",
+    1 => "one",
+    _ => "many"
+}
+
+// --- Struct Creation and Access ---
+make_point(x, y) = { x: x, y: y }
+get_x(point) = point.x
+
+// --- Try-Catch for Error Handling ---
+safe_divide(a, b) = try { a / b } catch e { 0 }
+
+// --- Coalesce Operator ---
+default_value(x) = x ?? 0
+
+// --- Range Operations ---
+numbers_1_to_10() = 1..10
+range_sum(n) = (1..n)./+
+
+// --- Contains Check ---
+has_element(arr, elem) = elem @ arr
+
+// --- Lambda/Closure Syntax ---
+square(x) = |y| y * y     // Returns a closure
+apply_twice(f, x) = f(f(x))
+
+// --- Collection Operations with Placeholders ---
+double_all(arr) = arr.@(_ * 2)
+filter_positive(arr) = arr.?(_ > 0)
+sum_all(arr) = arr./+
+
+// --- Parallel Operations ---
+parallel_map(arr) = arr.||@(_ * 2)
+parallel_filter(arr) = arr.||?(_ % 2 == 0)
+parallel_reduce(arr) = arr.||/+
+
+// --- Chained Operations ---
+process(arr) = arr
+    .?(_ > 0)           // filter positive
+    .@(_ * 2)           // double
+    ./+                 // sum
+
+// --- Entry Point ---
+main() = {
+    result = process([1, -2, 3, -4, 5]);
+    result
+}
+
+// Run main
+// process([1, -2, 3, -4, 5]) = [1, 3, 5].@(_ * 2)./+ = [2, 6, 10]./+ = 18
+// Expected output: 18
+main()

@@ -97,131 +97,6 @@ impl JitCompiler {
         })
     }
 
-    /// 함수를 JIT 컴파일 (Float 전용 최적화)
-    pub fn compile_function_float(&mut self, func: &CompiledFunction) -> JitResult<*const u8> {
-        let name = format!("{}_float", func.name);
-
-        // 이미 컴파일된 경우 캐시에서 반환
-        if let Some(compiled) = self.compiled_functions.get(&name) {
-            return Ok(compiled.ptr);
-        }
-
-        // Float 전용 시그니처: (f64*, usize) -> f64
-        let ptr_type = self.module.target_config().pointer_type();
-        let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(ptr_type)); // args pointer
-        sig.params.push(AbiParam::new(types::I64)); // arg count
-        sig.returns.push(AbiParam::new(types::F64)); // return value
-
-        // 함수 선언
-        let func_id = self.module
-            .declare_function(&name, Linkage::Local, &sig)?;
-
-        // 컨텍스트 생성
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = sig;
-        ctx.func.name = cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32());
-
-        // 함수 빌더 컨텍스트
-        let mut func_ctx = FunctionBuilderContext::new();
-
-        {
-            let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
-
-            let entry_block = builder.create_block();
-            builder.append_block_params_for_function_params(entry_block);
-            builder.switch_to_block(entry_block);
-            builder.seal_block(entry_block);
-
-            let args_ptr = builder.block_params(entry_block)[0];
-
-            // 파라미터 로드 (f64)
-            let mut stack: Vec<cranelift::prelude::Value> = Vec::new();
-            let param_count = func.params.len();
-
-            for i in 0..param_count {
-                let offset = (i * 8) as i32;
-                let val = builder.ins().load(types::F64, MemFlags::trusted(), args_ptr, offset);
-                stack.push(val);
-            }
-
-            // 명령어 실행 (Float 연산만)
-            for instr in &func.instructions {
-                match &instr.opcode {
-                    OpCode::Const(Value::Float(f)) => {
-                        let val = builder.ins().f64const(*f);
-                        stack.push(val);
-                    }
-                    OpCode::Const(Value::Int(n)) => {
-                        // Int를 Float으로 변환
-                        let int_val = builder.ins().iconst(types::I64, *n);
-                        let val = builder.ins().fcvt_from_sint(types::F64, int_val);
-                        stack.push(val);
-                    }
-                    OpCode::LoadLocal(idx) => {
-                        if *idx < stack.len() {
-                            stack.push(stack[*idx]);
-                        }
-                    }
-                    OpCode::Add => {
-                        if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
-                            let result = builder.ins().fadd(a, b);
-                            stack.push(result);
-                        }
-                    }
-                    OpCode::Sub => {
-                        if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
-                            let result = builder.ins().fsub(a, b);
-                            stack.push(result);
-                        }
-                    }
-                    OpCode::Mul => {
-                        if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
-                            let result = builder.ins().fmul(a, b);
-                            stack.push(result);
-                        }
-                    }
-                    OpCode::Div => {
-                        if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
-                            let result = builder.ins().fdiv(a, b);
-                            stack.push(result);
-                        }
-                    }
-                    OpCode::Neg => {
-                        if let Some(a) = stack.pop() {
-                            let result = builder.ins().fneg(a);
-                            stack.push(result);
-                        }
-                    }
-                    OpCode::Return => break,
-                    _ => {
-                        // 지원하지 않는 연산은 스킵
-                    }
-                }
-            }
-
-            // 결과 반환
-            let result = stack.pop().unwrap_or_else(|| builder.ins().f64const(0.0));
-            builder.ins().return_(&[result]);
-        }
-
-        // 함수 정의
-        self.module.define_function(func_id, &mut ctx)?;
-        self.module.clear_context(&mut ctx);
-        self.module.finalize_definitions()?;
-
-        let code_ptr = self.module.get_finalized_function(func_id);
-
-        // 캐시에 저장
-        self.compiled_functions.insert(name.clone(), CompiledFn {
-            name,
-            ptr: code_ptr,
-            signature: FnSignature::FloatOnly { param_count: func.params.len() },
-        });
-
-        Ok(code_ptr)
-    }
-
     /// 함수를 JIT 컴파일 (Int 전용 최적화)
     pub fn compile_function_int(&mut self, func: &CompiledFunction) -> JitResult<*const u8> {
         let name = &func.name;
@@ -287,6 +162,8 @@ impl JitCompiler {
                 let offset = (i * 8) as i32;
                 let val = builder.ins().load(types::I64, MemFlags::trusted(), args_ptr, offset);
                 locals.insert(param.clone(), val);
+                // LoadLocal(idx) 지원을 위해 __param_N 형식으로도 저장
+                locals.insert(format!("__param_{}", i), val);
             }
 
             // 스택 시뮬레이션 (Cranelift SSA values)
@@ -433,6 +310,8 @@ impl JitCompiler {
             // 파라미터를 로컬에 등록
             for (i, param_name) in func.params.iter().enumerate() {
                 locals.insert(param_name.clone(), loop_params[i]);
+                // LoadLocal(idx) 지원을 위해 __param_N 형식으로도 저장
+                locals.insert(format!("__param_{}", i), loop_params[i]);
             }
 
             // 제어 흐름 분석
@@ -575,7 +454,7 @@ impl JitCompiler {
         for (ip, instr) in instructions.iter().enumerate() {
             match &instr.opcode {
                 OpCode::Jump(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -584,7 +463,7 @@ impl JitCompiler {
                     }
                 }
                 OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -643,7 +522,7 @@ impl JitCompiler {
                         if let Some(val) = stack.last() {
                             builder.def_var(result_var, *val);
                         }
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -657,7 +536,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::NotEqual, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -676,7 +555,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::Equal, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -811,7 +690,7 @@ impl JitCompiler {
         for (ip, instr) in instructions.iter().enumerate() {
             match &instr.opcode {
                 OpCode::Jump(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -820,7 +699,7 @@ impl JitCompiler {
                     }
                 }
                 OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -890,7 +769,7 @@ impl JitCompiler {
                         if let Some(val) = stack.last() {
                             builder.def_var(result_var, *val);
                         }
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {} (from ip {})", target_ip, ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -904,7 +783,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::NotEqual, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -923,7 +802,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::Equal, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -1394,6 +1273,8 @@ impl JitCompiler {
             let offset = (i * 8) as i32;
             let val = builder.ins().load(types::I64, MemFlags::trusted(), args_ptr, offset);
             locals.insert(param.clone(), val);
+            // LoadLocal(idx) 지원을 위해 __param_N 형식으로도 저장
+            locals.insert(format!("__param_{}", i), val);
         }
 
         let mut stack: Vec<cranelift::prelude::Value> = Vec::new();
@@ -1436,6 +1317,8 @@ impl JitCompiler {
             let offset = (i * 8) as i32;
             let val = builder.ins().load(types::I64, MemFlags::trusted(), args_ptr, offset);
             locals.insert(param.clone(), val);
+            // LoadLocal(idx) 지원을 위해 __param_N 형식으로도 저장
+            locals.insert(format!("__param_{}", i), val);
         }
 
         let mut stack: Vec<cranelift::prelude::Value> = Vec::new();
@@ -1536,6 +1419,8 @@ impl JitCompiler {
 
         for (i, param_name) in func.params.iter().enumerate() {
             locals.insert(param_name.clone(), loop_params[i]);
+            // LoadLocal(idx) 지원을 위해 __param_N 형식으로도 저장
+            locals.insert(format!("__param_{}", i), loop_params[i]);
         }
 
         // 제어 흐름 분석
@@ -1669,7 +1554,7 @@ impl JitCompiler {
         for (ip, instr) in instructions.iter().enumerate() {
             match &instr.opcode {
                 OpCode::Jump(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -1678,7 +1563,7 @@ impl JitCompiler {
                     }
                 }
                 OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -1741,7 +1626,7 @@ impl JitCompiler {
                         if let Some(val) = stack.last() {
                             builder.def_var(result_var, *val);
                         }
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -1755,7 +1640,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::NotEqual, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -1774,7 +1659,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::Equal, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -1851,7 +1736,7 @@ impl JitCompiler {
         for (ip, instr) in instructions.iter().enumerate() {
             match &instr.opcode {
                 OpCode::Jump(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -1860,7 +1745,7 @@ impl JitCompiler {
                     }
                 }
                 OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if target < instructions.len() {
                         block_starts.insert(target);
                     }
@@ -1916,7 +1801,7 @@ impl JitCompiler {
                         if let Some(val) = stack.last() {
                             builder.def_var(result_var, *val);
                         }
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -1930,7 +1815,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::NotEqual, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -1949,7 +1834,7 @@ impl JitCompiler {
                         let zero = builder.ins().iconst(types::I64, 0);
                         let cmp = builder.ins().icmp(IntCC::Equal, cond, zero);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -2492,7 +2377,7 @@ impl JitCompiler {
         for (ip, instr) in instructions.iter().enumerate() {
             match &instr.opcode {
                 OpCode::Jump(offset) | OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if !block_starts.contains(&target) {
                         block_starts.push(target);
                     }
@@ -2545,7 +2430,7 @@ impl JitCompiler {
 
                 match &instr.opcode {
                     OpCode::Jump(offset) => {
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -2559,7 +2444,7 @@ impl JitCompiler {
                         let zero_f = builder.ins().f64const(0.0);
                         let cmp = builder.ins().fcmp(FloatCC::NotEqual, cond, zero_f);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -2578,7 +2463,7 @@ impl JitCompiler {
                         let zero_f = builder.ins().f64const(0.0);
                         let cmp = builder.ins().fcmp(FloatCC::Equal, cond, zero_f);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -2688,7 +2573,7 @@ impl JitCompiler {
         for (ip, instr) in instructions.iter().enumerate() {
             match &instr.opcode {
                 OpCode::Jump(offset) | OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
-                    let target = ((ip as i32) + *offset) as usize;
+                    let target = ((ip as i32) + *offset + 1) as usize;
                     if !block_starts.contains(&target) {
                         block_starts.push(target);
                     }
@@ -2735,7 +2620,7 @@ impl JitCompiler {
 
                 match &instr.opcode {
                     OpCode::Jump(offset) => {
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -2749,7 +2634,7 @@ impl JitCompiler {
                         let zero_f = builder.ins().f64const(0.0);
                         let cmp = builder.ins().fcmp(FloatCC::NotEqual, cond, zero_f);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
@@ -2768,7 +2653,7 @@ impl JitCompiler {
                         let zero_f = builder.ins().f64const(0.0);
                         let cmp = builder.ins().fcmp(FloatCC::Equal, cond, zero_f);
 
-                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_ip = ((ip as i32) + *offset + 1) as usize;
                         let target_block_idx = ip_to_block.get(&target_ip)
                             .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
                         let target_block = blocks[*target_block_idx];
