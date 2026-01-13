@@ -211,6 +211,36 @@ enum Commands {
         #[arg(long, default_value = "text")]
         format: String,
     },
+
+    /// Debug AOEL program with interactive debugger
+    Debug {
+        /// The AOEL file to debug
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// Function to debug (default: __main__)
+        #[arg(short, long)]
+        func: Option<String>,
+
+        /// Set breakpoint at instruction (function:instruction)
+        #[arg(short, long)]
+        breakpoint: Vec<String>,
+    },
+
+    /// Generate documentation for AOEL files
+    Doc {
+        /// The AOEL file or directory to document
+        #[arg(value_name = "PATH")]
+        path: PathBuf,
+
+        /// Output directory (default: ./docs)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format (markdown, html, json)
+        #[arg(long, default_value = "markdown")]
+        format: String,
+    },
 }
 
 fn main() {
@@ -267,6 +297,12 @@ fn main() {
         }
         Commands::Profile { file, format } => {
             cmd_profile(&file, &format);
+        }
+        Commands::Debug { file, func, breakpoint } => {
+            cmd_debug(&file, func.as_deref(), &breakpoint);
+        }
+        Commands::Doc { path, output, format } => {
+            cmd_doc(&path, output.as_ref(), &format);
         }
     }
 }
@@ -1750,6 +1786,450 @@ fn cmd_format(path: &PathBuf, write: bool, check: bool, indent: usize, max_width
         // Print mode: print to stdout
         print!("{}", formatted);
     }
+}
+
+fn cmd_debug(path: &PathBuf, func_name: Option<&str>, breakpoints: &[String]) {
+    use rustyline::error::ReadlineError;
+    use rustyline::DefaultEditor;
+    use aoel_tools::debugger::{Debugger, DebugEvent, DebugState};
+
+    let source = match read_file(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Parse
+    let program = match aoel_parser::parse(&source) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Resolve modules
+    let base_dir = path.parent().unwrap_or(std::path::Path::new("."));
+    let program = match aoel_parser::resolve_modules(program, base_dir) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Module error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Type check
+    if let Err(e) = aoel_typeck::check(&program) {
+        eprintln!("Type error: {}", e);
+        std::process::exit(1);
+    }
+
+    // Lower to IR
+    let mut lowerer = aoel_lowering::Lowerer::new();
+    let functions = match lowerer.lower_program(&program) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Lowering error: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if functions.is_empty() {
+        eprintln!("No functions to debug");
+        std::process::exit(1);
+    }
+
+    // Initialize debugger
+    let mut debugger = Debugger::new();
+    debugger.load_functions(functions.clone());
+
+    // Set breakpoints from command line
+    for bp_str in breakpoints {
+        let parts: Vec<&str> = bp_str.split(':').collect();
+        if parts.len() == 2 {
+            if let Ok(instr) = parts[1].parse::<usize>() {
+                let id = debugger.set_breakpoint(parts[0], instr);
+                println!("Breakpoint #{} set at {}:{}", id, parts[0], instr);
+            }
+        } else {
+            eprintln!("Invalid breakpoint format: {} (use function:instruction)", bp_str);
+        }
+    }
+
+    // Determine entry function
+    let entry = func_name
+        .map(|s| s.to_string())
+        .or_else(|| functions.iter().find(|f| f.name == "__main__").map(|f| f.name.clone()))
+        .unwrap_or_else(|| functions[0].name.clone());
+
+    println!("AOEL Debugger");
+    println!("Debugging: {} -> {}", path.display(), entry);
+    println!("Type 'help' for commands\n");
+
+    // Start debug session
+    if let Err(e) = debugger.start(&entry, vec![]) {
+        eprintln!("Failed to start debugger: {}", e);
+        std::process::exit(1);
+    }
+
+    // Interactive debug loop
+    let mut rl = match DefaultEditor::new() {
+        Ok(editor) => editor,
+        Err(e) => {
+            eprintln!("Failed to initialize readline: {}", e);
+            return;
+        }
+    };
+
+    loop {
+        let state = debugger.state();
+        let prompt = match state {
+            DebugState::NotStarted => "(not started) dbg> ",
+            DebugState::Running => "(running) dbg> ",
+            DebugState::Paused => "(paused) dbg> ",
+            DebugState::Stepping => "(stepping) dbg> ",
+            DebugState::Finished => "(finished) dbg> ",
+        };
+
+        match rl.readline(prompt) {
+            Ok(line) => {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+
+                let _ = rl.add_history_entry(line);
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                let cmd = parts[0];
+
+                match cmd {
+                    "help" | "h" => {
+                        println!("Commands:");
+                        println!("  step, s           Step to next instruction");
+                        println!("  continue, c       Continue to next breakpoint");
+                        println!("  into, i           Step into function");
+                        println!("  out, o            Step out of function");
+                        println!("  break, b <f:n>    Set breakpoint at function:instruction");
+                        println!("  delete, d <id>    Delete breakpoint");
+                        println!("  list, l           List breakpoints");
+                        println!("  locals            Show local variables");
+                        println!("  stack             Show call stack");
+                        println!("  instr             Show current instruction");
+                        println!("  info              Show debug summary");
+                        println!("  reset             Reset debugger");
+                        println!("  quit, q           Exit debugger");
+                    }
+                    "step" | "s" => {
+                        if let Some(event) = debugger.step() {
+                            print_debug_event(&event);
+                        }
+                    }
+                    "continue" | "c" => {
+                        if let Some(event) = debugger.continue_execution() {
+                            print_debug_event(&event);
+                        }
+                    }
+                    "into" | "i" => {
+                        if let Some(event) = debugger.step_into() {
+                            print_debug_event(&event);
+                        }
+                    }
+                    "out" | "o" => {
+                        if let Some(event) = debugger.step_out() {
+                            print_debug_event(&event);
+                        }
+                    }
+                    "break" | "b" => {
+                        if parts.len() >= 2 {
+                            let bp_parts: Vec<&str> = parts[1].split(':').collect();
+                            if bp_parts.len() == 2 {
+                                if let Ok(instr) = bp_parts[1].parse::<usize>() {
+                                    let id = debugger.set_breakpoint(bp_parts[0], instr);
+                                    println!("Breakpoint #{} set at {}:{}", id, bp_parts[0], instr);
+                                }
+                            } else {
+                                println!("Usage: break function:instruction");
+                            }
+                        } else {
+                            println!("Usage: break function:instruction");
+                        }
+                    }
+                    "delete" | "d" => {
+                        if parts.len() >= 2 {
+                            if let Ok(id) = parts[1].parse::<usize>() {
+                                if debugger.remove_breakpoint(id) {
+                                    println!("Deleted breakpoint #{}", id);
+                                } else {
+                                    println!("Breakpoint #{} not found", id);
+                                }
+                            }
+                        } else {
+                            println!("Usage: delete <breakpoint-id>");
+                        }
+                    }
+                    "list" | "l" => {
+                        let bps = debugger.list_breakpoints();
+                        if bps.is_empty() {
+                            println!("No breakpoints set");
+                        } else {
+                            println!("Breakpoints:");
+                            for bp in bps {
+                                let status = if bp.enabled { "enabled" } else { "disabled" };
+                                println!(
+                                    "  #{}: {}:{} [{}] hits={}",
+                                    bp.id, bp.function, bp.instruction, status, bp.hit_count
+                                );
+                            }
+                        }
+                    }
+                    "locals" => {
+                        if let Some(locals) = debugger.locals() {
+                            if locals.is_empty() {
+                                println!("No local variables");
+                            } else {
+                                println!("Local variables:");
+                                for (name, value) in locals {
+                                    println!("  {} = {}", name, value);
+                                }
+                            }
+                        } else {
+                            println!("No active frame");
+                        }
+                    }
+                    "stack" => {
+                        let stack = debugger.call_stack();
+                        if stack.is_empty() {
+                            println!("Call stack empty");
+                        } else {
+                            println!("Call stack:");
+                            for (i, frame) in stack.iter().rev().enumerate() {
+                                println!(
+                                    "  #{}: {} (ip: {})",
+                                    i, frame.function, frame.instruction_pointer
+                                );
+                            }
+                        }
+                    }
+                    "instr" => {
+                        if let Some(instr) = debugger.current_instruction() {
+                            println!("Current instruction: {:?}", instr);
+                        } else {
+                            println!("No current instruction");
+                        }
+                    }
+                    "info" => {
+                        println!("{}", debugger.summary());
+                    }
+                    "reset" => {
+                        debugger.reset();
+                        if let Err(e) = debugger.start(&entry, vec![]) {
+                            eprintln!("Failed to restart: {}", e);
+                        } else {
+                            println!("Debugger reset, ready to run");
+                        }
+                    }
+                    "quit" | "q" => {
+                        println!("Goodbye!");
+                        break;
+                    }
+                    _ => {
+                        println!("Unknown command: {}. Type 'help' for commands.", cmd);
+                    }
+                }
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("^C");
+            }
+            Err(ReadlineError::Eof) => {
+                println!("\nGoodbye!");
+                break;
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                break;
+            }
+        }
+    }
+}
+
+fn print_debug_event(event: &aoel_tools::debugger::DebugEvent) {
+    match event {
+        aoel_tools::debugger::DebugEvent::BreakpointHit { breakpoint_id, function } => {
+            println!("Breakpoint #{} hit at {}", breakpoint_id, function);
+        }
+        aoel_tools::debugger::DebugEvent::StepComplete { function, instruction } => {
+            println!("Step complete: {}:{}", function, instruction);
+        }
+        aoel_tools::debugger::DebugEvent::FunctionEnter { name } => {
+            println!("Entering function: {}", name);
+        }
+        aoel_tools::debugger::DebugEvent::FunctionExit { name, result } => {
+            println!("Exiting function: {} => {}", name, result);
+        }
+        aoel_tools::debugger::DebugEvent::Error { message } => {
+            eprintln!("Error: {}", message);
+        }
+        aoel_tools::debugger::DebugEvent::Finished { result } => {
+            println!("Execution finished: {}", result);
+        }
+    }
+}
+
+fn cmd_doc(path: &PathBuf, output: Option<&PathBuf>, format: &str) {
+    use aoel_tools::docgen::{DocGenerator, DocFormat};
+
+    // Determine output format
+    let doc_format = DocFormat::from_str(format).unwrap_or_else(|| {
+        eprintln!("Unknown format: {}. Using markdown.", format);
+        DocFormat::Markdown
+    });
+
+    // Check if path is a file or directory
+    if path.is_dir() {
+        // Process all .aoel files in directory
+        let output_dir = output.cloned().unwrap_or_else(|| path.join("docs"));
+
+        if let Err(e) = fs::create_dir_all(&output_dir) {
+            eprintln!("Failed to create output directory: {}", e);
+            std::process::exit(1);
+        }
+
+        let mut count = 0;
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let file_path = entry.path();
+                if file_path.extension().map(|e| e == "aoel").unwrap_or(false) {
+                    if generate_doc_for_file(&file_path, &output_dir, doc_format) {
+                        count += 1;
+                    }
+                }
+            }
+        }
+
+        if count == 0 {
+            println!("No .aoel files found in {}", path.display());
+        } else {
+            println!("Generated documentation for {} file(s) in {}", count, output_dir.display());
+
+            // Generate index file
+            generate_index(&output_dir, doc_format);
+        }
+    } else {
+        // Process single file
+        let output_dir = output.cloned().unwrap_or_else(|| {
+            path.parent()
+                .map(|p| p.join("docs"))
+                .unwrap_or_else(|| PathBuf::from("docs"))
+        });
+
+        if let Err(e) = fs::create_dir_all(&output_dir) {
+            eprintln!("Failed to create output directory: {}", e);
+            std::process::exit(1);
+        }
+
+        if generate_doc_for_file(path, &output_dir, doc_format) {
+            println!("Generated documentation in {}", output_dir.display());
+        }
+    }
+}
+
+fn generate_doc_for_file(
+    path: &Path,
+    output_dir: &Path,
+    format: aoel_tools::docgen::DocFormat,
+) -> bool {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to read {}: {}", path.display(), e);
+            return false;
+        }
+    };
+
+    // Parse
+    let program = match aoel_parser::parse(&source) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Parse error in {}: {:?}", path.display(), e);
+            return false;
+        }
+    };
+
+    // Generate documentation
+    let module_name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("module");
+
+    let generator = aoel_tools::DocGenerator::new(format);
+    let doc_content = generator.generate(&program, module_name);
+
+    // Write output file
+    let output_file = output_dir.join(format!("{}.{}", module_name, format.extension()));
+
+    if let Err(e) = fs::write(&output_file, &doc_content) {
+        eprintln!("Failed to write {}: {}", output_file.display(), e);
+        return false;
+    }
+
+    println!("  {} -> {}", path.display(), output_file.display());
+    true
+}
+
+fn generate_index(output_dir: &Path, format: aoel_tools::docgen::DocFormat) {
+    use aoel_tools::docgen::DocFormat;
+
+    let ext = format.extension();
+    let mut files = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(output_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.extension().map(|e| e == ext).unwrap_or(false) {
+                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                    if name != "index" {
+                        files.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    files.sort();
+
+    let index_content = match format {
+        DocFormat::Markdown => {
+            let mut content = String::from("# AOEL Documentation Index\n\n");
+            content.push_str("## Modules\n\n");
+            for name in &files {
+                content.push_str(&format!("- [{}](./{}.{})\n", name, name, ext));
+            }
+            content
+        }
+        DocFormat::Html => {
+            let mut content = String::from("<!DOCTYPE html>\n<html><head><title>AOEL Documentation</title>");
+            content.push_str("<style>body{font-family:sans-serif;max-width:900px;margin:0 auto;padding:2rem;}</style>");
+            content.push_str("</head><body>\n<h1>AOEL Documentation Index</h1>\n<h2>Modules</h2>\n<ul>\n");
+            for name in &files {
+                content.push_str(&format!("<li><a href=\"{}.{}\">{}</a></li>\n", name, ext, name));
+            }
+            content.push_str("</ul>\n</body></html>");
+            content
+        }
+        DocFormat::Json => {
+            let modules_json: Vec<String> = files
+                .iter()
+                .map(|n| format!("\"{}\"", n))
+                .collect();
+            format!("{{\"modules\": [{}]}}", modules_json.join(", "))
+        }
+    };
+
+    let index_file = output_dir.join(format!("index.{}", ext));
+    let _ = fs::write(&index_file, &index_content);
+    println!("  Generated index: {}", index_file.display());
 }
 
 fn cmd_profile(path: &PathBuf, output_format: &str) {
