@@ -268,7 +268,7 @@ impl Debugger {
         }
 
         // 다음 명령어 실행
-        let instr = &func.instructions[frame.instruction_pointer];
+        let _instr = &func.instructions[frame.instruction_pointer];
         frame.instruction_pointer += 1;
 
         // 브레이크포인트 체크

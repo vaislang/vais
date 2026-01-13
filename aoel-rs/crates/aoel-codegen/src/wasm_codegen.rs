@@ -14,6 +14,7 @@ use crate::error::CodegenResult;
 pub struct WasmCodeGenerator {
     output: String,
     indent: usize,
+    #[allow(dead_code)]
     label_counter: usize,
 }
 
@@ -34,6 +35,7 @@ impl WasmCodeGenerator {
         let _ = writeln!(self.output, "{}{}", self.indent_str(), s);
     }
 
+    #[allow(dead_code)]
     fn next_label(&mut self) -> String {
         let label = format!("$L{}", self.label_counter);
         self.label_counter += 1;
@@ -429,7 +431,7 @@ impl WasmCodeGenerator {
     }
 
     fn sanitize_name(&self, name: &str) -> String {
-        name.replace('-', "_").replace('.', "_")
+        name.replace(['-', '.'], "_")
     }
 }
 

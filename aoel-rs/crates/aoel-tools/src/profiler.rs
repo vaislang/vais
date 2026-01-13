@@ -41,10 +41,10 @@ impl FunctionProfile {
         self.call_count += 1;
         self.total_time += duration;
 
-        if self.min_time.map_or(true, |min| duration < min) {
+        if self.min_time.is_none_or(|min| duration < min) {
             self.min_time = Some(duration);
         }
-        if self.max_time.map_or(true, |max| duration > max) {
+        if self.max_time.is_none_or(|max| duration > max) {
             self.max_time = Some(duration);
         }
     }
@@ -159,7 +159,7 @@ impl Profiler {
             let duration = start.elapsed();
             self.profiles
                 .entry(name)
-                .or_insert_with(FunctionProfile::new)
+                .or_default()
                 .record(duration);
         }
     }
@@ -195,7 +195,7 @@ impl Profiler {
         for func in &functions {
             self.profiles
                 .entry(func.name.clone())
-                .or_insert_with(FunctionProfile::new);
+                .or_default();
         }
 
         ProfileResult {

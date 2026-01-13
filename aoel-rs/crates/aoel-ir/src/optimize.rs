@@ -215,33 +215,30 @@ fn eliminate_dead_code(node: &mut NodeIR) {
         }
 
         // Remove Const followed by Pop (useless push-pop)
-        if i + 1 < instructions.len() {
-            if matches!(instructions[i].opcode, OpCode::Const(_))
-                && matches!(instructions[i + 1].opcode, OpCode::Pop)
-            {
-                i += 2;
-                continue;
-            }
+        if i + 1 < instructions.len()
+            && matches!(instructions[i].opcode, OpCode::Const(_))
+            && matches!(instructions[i + 1].opcode, OpCode::Pop)
+        {
+            i += 2;
+            continue;
         }
 
         // Remove duplicate Dup followed by Pop
-        if i + 1 < instructions.len() {
-            if matches!(instructions[i].opcode, OpCode::Dup)
-                && matches!(instructions[i + 1].opcode, OpCode::Pop)
-            {
-                i += 2;
-                continue;
-            }
+        if i + 1 < instructions.len()
+            && matches!(instructions[i].opcode, OpCode::Dup)
+            && matches!(instructions[i + 1].opcode, OpCode::Pop)
+        {
+            i += 2;
+            continue;
         }
 
         // Remove Load followed by Pop (useless load-pop)
-        if i + 1 < instructions.len() {
-            if matches!(instructions[i].opcode, OpCode::Load(_))
-                && matches!(instructions[i + 1].opcode, OpCode::Pop)
-            {
-                i += 2;
-                continue;
-            }
+        if i + 1 < instructions.len()
+            && matches!(instructions[i].opcode, OpCode::Load(_))
+            && matches!(instructions[i + 1].opcode, OpCode::Pop)
+        {
+            i += 2;
+            continue;
         }
 
         new_instructions.push(instructions[i].clone());

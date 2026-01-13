@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_double, c_int, c_long};
+use std::os::raw::{c_char, c_double, c_int};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ pub enum FfiType {
 
 impl FfiType {
     /// 문자열에서 FfiType 파싱
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "void" => Some(FfiType::Void),
             "bool" => Some(FfiType::Bool),
@@ -264,9 +264,9 @@ impl FfiLoader {
                     Ok(Value::Void)
                 }
                 FfiType::I32 | FfiType::I64 => {
-                    let func: Symbol<unsafe extern "C" fn() -> c_long> = library.get(fn_name.as_bytes())
+                    let func: Symbol<unsafe extern "C" fn() -> i64> = library.get(fn_name.as_bytes())
                         .map_err(|e| RuntimeError::FfiError(format!("Function '{}' not found: {}", fn_name, e)))?;
-                    Ok(Value::Int(func() as i64))
+                    Ok(Value::Int(func()))
                 }
                 FfiType::F64 => {
                     let func: Symbol<unsafe extern "C" fn() -> c_double> = library.get(fn_name.as_bytes())
@@ -310,10 +310,10 @@ impl FfiLoader {
                 }
                 // cstr -> int (strlen 등)
                 (FfiType::CStr, FfiType::I32 | FfiType::I64 | FfiType::U64) => {
-                    let func: Symbol<unsafe extern "C" fn(*const c_char) -> c_long> = library.get(fn_name.as_bytes())
+                    let func: Symbol<unsafe extern "C" fn(*const c_char) -> i64> = library.get(fn_name.as_bytes())
                         .map_err(|e| RuntimeError::FfiError(format!("Function '{}' not found: {}", fn_name, e)))?;
                     let s = self.value_to_cstring(arg)?;
-                    Ok(Value::Int(func(s.as_ptr()) as i64))
+                    Ok(Value::Int(func(s.as_ptr())))
                 }
                 // cstr -> cstr (getenv 등)
                 (FfiType::CStr, FfiType::CStr | FfiType::Ptr) => {
@@ -355,7 +355,7 @@ impl FfiLoader {
         let (arg1, arg2) = (&args[0], &args[1]);
 
         let param_types = func_info
-            .map(|f| (f.params.get(0).cloned(), f.params.get(1).cloned()))
+            .map(|f| (f.params.first().cloned(), f.params.get(1).cloned()))
             .unwrap_or_else(|| (Some(self.infer_type(arg1)), Some(self.infer_type(arg2))));
 
         unsafe {
@@ -489,10 +489,10 @@ mod tests {
 
     #[test]
     fn test_ffi_type_from_str() {
-        assert_eq!(FfiType::from_str("i32"), Some(FfiType::I32));
-        assert_eq!(FfiType::from_str("f64"), Some(FfiType::F64));
-        assert_eq!(FfiType::from_str("cstr"), Some(FfiType::CStr));
-        assert_eq!(FfiType::from_str("void"), Some(FfiType::Void));
+        assert_eq!(FfiType::parse("i32"), Some(FfiType::I32));
+        assert_eq!(FfiType::parse("f64"), Some(FfiType::F64));
+        assert_eq!(FfiType::parse("cstr"), Some(FfiType::CStr));
+        assert_eq!(FfiType::parse("void"), Some(FfiType::Void));
     }
 
     #[test]

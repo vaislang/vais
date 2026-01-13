@@ -607,42 +607,772 @@ impl Default for Lowerer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aoel_ast::{FunctionDef, Param, Program};
+    use aoel_ast::{FunctionDef, MatchArm, Param, Program};
     use aoel_lexer::Span;
 
     fn dummy_span() -> Span {
         Span::new(0, 0)
     }
 
+    fn make_func(name: &str, params: Vec<&str>, body: Expr) -> FunctionDef {
+        FunctionDef {
+            name: name.to_string(),
+            params: params.into_iter().map(|p| Param {
+                name: p.to_string(),
+                ty: None,
+                default: None,
+                span: dummy_span(),
+            }).collect(),
+            return_type: None,
+            body,
+            is_pub: false,
+            span: dummy_span(),
+        }
+    }
+
+    fn int(n: i64) -> Expr {
+        Expr::Integer(n, dummy_span())
+    }
+
+    fn float(f: f64) -> Expr {
+        Expr::Float(f, dummy_span())
+    }
+
+    fn string(s: &str) -> Expr {
+        Expr::String(s.to_string(), dummy_span())
+    }
+
+    fn bool_expr(b: bool) -> Expr {
+        Expr::Bool(b, dummy_span())
+    }
+
+    fn ident(name: &str) -> Expr {
+        Expr::Ident(name.to_string(), dummy_span())
+    }
+
+    fn binary(left: Expr, op: BinaryOp, right: Expr) -> Expr {
+        Expr::Binary(Box::new(left), op, Box::new(right), dummy_span())
+    }
+
+    fn unary(op: UnaryOp, expr: Expr) -> Expr {
+        Expr::Unary(op, Box::new(expr), dummy_span())
+    }
+
+    // === Literal Tests ===
+
     #[test]
-    fn test_simple_function() {
-        // add(a,b) = a + b
-        let func = FunctionDef {
-            name: "add".to_string(),
-            params: vec![
-                Param {
-                    name: "a".to_string(),
-                    ty: None,
-                    default: None,
+    fn test_literal_integer() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&int(42)).unwrap();
+        assert_eq!(instrs.len(), 1);
+        assert!(matches!(instrs[0].opcode, OpCode::Const(Value::Int(42))));
+    }
+
+    #[test]
+    fn test_literal_float() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&float(3.14)).unwrap();
+        assert_eq!(instrs.len(), 1);
+        if let OpCode::Const(Value::Float(f)) = &instrs[0].opcode {
+            assert!((*f - 3.14).abs() < f64::EPSILON);
+        } else {
+            panic!("Expected float constant");
+        }
+    }
+
+    #[test]
+    fn test_literal_string() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&string("hello")).unwrap();
+        assert_eq!(instrs.len(), 1);
+        assert!(matches!(instrs[0].opcode, OpCode::Const(Value::String(ref s)) if s == "hello"));
+    }
+
+    #[test]
+    fn test_literal_bool() {
+        let mut lowerer = Lowerer::new();
+
+        let instrs = lowerer.lower_expr(&bool_expr(true)).unwrap();
+        assert!(matches!(instrs[0].opcode, OpCode::Const(Value::Bool(true))));
+
+        let instrs = lowerer.lower_expr(&bool_expr(false)).unwrap();
+        assert!(matches!(instrs[0].opcode, OpCode::Const(Value::Bool(false))));
+    }
+
+    #[test]
+    fn test_literal_nil() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&Expr::Nil(dummy_span())).unwrap();
+        assert_eq!(instrs.len(), 1);
+        assert!(matches!(instrs[0].opcode, OpCode::Const(Value::Void)));
+    }
+
+    // === Identifier Tests ===
+
+    #[test]
+    fn test_identifier() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&ident("x")).unwrap();
+        assert_eq!(instrs.len(), 1);
+        assert!(matches!(&instrs[0].opcode, OpCode::Load(name) if name == "x"));
+    }
+
+    #[test]
+    fn test_lambda_param() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&Expr::LambdaParam(dummy_span())).unwrap();
+        assert_eq!(instrs.len(), 1);
+        assert!(matches!(&instrs[0].opcode, OpCode::Load(name) if name == "_"));
+    }
+
+    // === Binary Operation Tests ===
+
+    #[test]
+    fn test_binary_arithmetic() {
+        let mut lowerer = Lowerer::new();
+
+        // Addition
+        let instrs = lowerer.lower_expr(&binary(int(1), BinaryOp::Add, int(2))).unwrap();
+        assert_eq!(instrs.len(), 3);
+        assert!(matches!(instrs[2].opcode, OpCode::Add));
+
+        // Subtraction
+        let instrs = lowerer.lower_expr(&binary(int(5), BinaryOp::Sub, int(3))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Sub));
+
+        // Multiplication
+        let instrs = lowerer.lower_expr(&binary(int(4), BinaryOp::Mul, int(2))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Mul));
+
+        // Division
+        let instrs = lowerer.lower_expr(&binary(int(10), BinaryOp::Div, int(2))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Div));
+
+        // Modulo
+        let instrs = lowerer.lower_expr(&binary(int(10), BinaryOp::Mod, int(3))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Mod));
+    }
+
+    #[test]
+    fn test_binary_comparison() {
+        let mut lowerer = Lowerer::new();
+
+        let instrs = lowerer.lower_expr(&binary(int(1), BinaryOp::Eq, int(1))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Eq));
+
+        let instrs = lowerer.lower_expr(&binary(int(1), BinaryOp::NotEq, int(2))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Neq));
+
+        let instrs = lowerer.lower_expr(&binary(int(1), BinaryOp::Lt, int(2))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Lt));
+
+        let instrs = lowerer.lower_expr(&binary(int(2), BinaryOp::Gt, int(1))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Gt));
+
+        let instrs = lowerer.lower_expr(&binary(int(1), BinaryOp::LtEq, int(1))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Lte));
+
+        let instrs = lowerer.lower_expr(&binary(int(2), BinaryOp::GtEq, int(2))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Gte));
+    }
+
+    #[test]
+    fn test_binary_logical() {
+        let mut lowerer = Lowerer::new();
+
+        let instrs = lowerer.lower_expr(&binary(bool_expr(true), BinaryOp::And, bool_expr(false))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::And));
+
+        let instrs = lowerer.lower_expr(&binary(bool_expr(true), BinaryOp::Or, bool_expr(false))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Or));
+    }
+
+    #[test]
+    fn test_binary_concat() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&binary(string("a"), BinaryOp::Concat, string("b"))).unwrap();
+        assert!(matches!(instrs[2].opcode, OpCode::Concat));
+    }
+
+    // === Unary Operation Tests ===
+
+    #[test]
+    fn test_unary_neg() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&unary(UnaryOp::Neg, int(5))).unwrap();
+        assert_eq!(instrs.len(), 2);
+        assert!(matches!(instrs[1].opcode, OpCode::Neg));
+    }
+
+    #[test]
+    fn test_unary_not() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&unary(UnaryOp::Not, bool_expr(true))).unwrap();
+        assert!(matches!(instrs[1].opcode, OpCode::Not));
+    }
+
+    #[test]
+    fn test_unary_len() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_expr(&unary(UnaryOp::Len, ident("arr"))).unwrap();
+        assert!(matches!(instrs[1].opcode, OpCode::Len));
+    }
+
+    // === Collection Tests ===
+
+    #[test]
+    fn test_array_literal() {
+        let mut lowerer = Lowerer::new();
+        let arr = Expr::Array(vec![int(1), int(2), int(3)], dummy_span());
+        let instrs = lowerer.lower_expr(&arr).unwrap();
+
+        // 3 consts + 1 MakeArray
+        assert_eq!(instrs.len(), 4);
+        assert!(matches!(instrs[3].opcode, OpCode::MakeArray(3)));
+    }
+
+    #[test]
+    fn test_empty_array() {
+        let mut lowerer = Lowerer::new();
+        let arr = Expr::Array(vec![], dummy_span());
+        let instrs = lowerer.lower_expr(&arr).unwrap();
+
+        assert_eq!(instrs.len(), 1);
+        assert!(matches!(instrs[0].opcode, OpCode::MakeArray(0)));
+    }
+
+    #[test]
+    fn test_map_literal() {
+        let mut lowerer = Lowerer::new();
+        let map = Expr::Map(
+            vec![
+                ("x".to_string(), int(1)),
+                ("y".to_string(), int(2)),
+            ],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&map).unwrap();
+
+        // 2 consts + 1 MakeStruct
+        assert_eq!(instrs.len(), 3);
+        if let OpCode::MakeStruct(fields) = &instrs[2].opcode {
+            assert_eq!(fields, &vec!["x".to_string(), "y".to_string()]);
+        } else {
+            panic!("Expected MakeStruct");
+        }
+    }
+
+    #[test]
+    fn test_tuple_literal() {
+        let mut lowerer = Lowerer::new();
+        let tuple = Expr::Tuple(vec![int(1), string("a")], dummy_span());
+        let instrs = lowerer.lower_expr(&tuple).unwrap();
+
+        assert_eq!(instrs.len(), 3);
+        assert!(matches!(instrs[2].opcode, OpCode::MakeArray(2)));
+    }
+
+    // === Collection Operation Tests ===
+
+    #[test]
+    fn test_map_op() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::MapOp(
+            Box::new(ident("arr")),
+            Box::new(binary(Expr::LambdaParam(dummy_span()), BinaryOp::Mul, int(2))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Load arr + Map
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Map(_))));
+    }
+
+    #[test]
+    fn test_filter_op() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::FilterOp(
+            Box::new(ident("arr")),
+            Box::new(binary(Expr::LambdaParam(dummy_span()), BinaryOp::Gt, int(0))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Filter(_))));
+    }
+
+    #[test]
+    fn test_reduce_op_sum() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::ReduceOp(
+            Box::new(ident("arr")),
+            ReduceKind::Sum,
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Reduce(IrReduceOp::Sum, _))));
+    }
+
+    #[test]
+    fn test_reduce_op_product() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::ReduceOp(
+            Box::new(ident("arr")),
+            ReduceKind::Product,
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Reduce(IrReduceOp::Product, _))));
+    }
+
+    #[test]
+    fn test_reduce_op_min_max() {
+        let mut lowerer = Lowerer::new();
+
+        let expr = Expr::ReduceOp(Box::new(ident("arr")), ReduceKind::Min, dummy_span());
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Reduce(IrReduceOp::Min, _))));
+
+        let expr = Expr::ReduceOp(Box::new(ident("arr")), ReduceKind::Max, dummy_span());
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Reduce(IrReduceOp::Max, _))));
+    }
+
+    #[test]
+    fn test_reduce_op_all_any() {
+        let mut lowerer = Lowerer::new();
+
+        let expr = Expr::ReduceOp(Box::new(ident("arr")), ReduceKind::And, dummy_span());
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Reduce(IrReduceOp::All, _))));
+
+        let expr = Expr::ReduceOp(Box::new(ident("arr")), ReduceKind::Or, dummy_span());
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Reduce(IrReduceOp::Any, _))));
+    }
+
+    // === Access Tests ===
+
+    #[test]
+    fn test_field_access() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Field(
+            Box::new(ident("obj")),
+            "name".to_string(),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert_eq!(instrs.len(), 2);
+        assert!(matches!(&instrs[1].opcode, OpCode::GetField(f) if f == "name"));
+    }
+
+    #[test]
+    fn test_index_single() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Index(
+            Box::new(ident("arr")),
+            Box::new(IndexKind::Single(int(0))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Index)));
+    }
+
+    #[test]
+    fn test_index_slice() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Index(
+            Box::new(ident("arr")),
+            Box::new(IndexKind::Slice(Some(int(1)), Some(int(3)))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Slice)));
+    }
+
+    #[test]
+    fn test_index_slice_defaults() {
+        let mut lowerer = Lowerer::new();
+
+        // [..3] - start defaults to 0
+        let expr = Expr::Index(
+            Box::new(ident("arr")),
+            Box::new(IndexKind::Slice(None, Some(int(3)))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Const(Value::Int(0)))));
+
+        // [1..] - end defaults to -1
+        let expr = Expr::Index(
+            Box::new(ident("arr")),
+            Box::new(IndexKind::Slice(Some(int(1)), None)),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Const(Value::Int(-1)))));
+    }
+
+    #[test]
+    fn test_method_call() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::MethodCall(
+            Box::new(string("hello")),
+            "upper".to_string(),
+            vec![],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::CallBuiltin(name, 1) if name == "upper")));
+    }
+
+    // === Control Flow Tests ===
+
+    #[test]
+    fn test_ternary() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Ternary(
+            Box::new(bool_expr(true)),
+            Box::new(int(1)),
+            Box::new(int(0)),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Should have JumpIfNot and Jump
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::JumpIfNot(_))));
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Jump(_))));
+    }
+
+    #[test]
+    fn test_if_then_else() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::If(
+            Box::new(bool_expr(true)),
+            Box::new(int(1)),
+            Some(Box::new(int(0))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::JumpIfNot(_))));
+    }
+
+    #[test]
+    fn test_if_without_else() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::If(
+            Box::new(bool_expr(true)),
+            Box::new(int(1)),
+            None,  // no else
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Should produce Void for else branch
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Const(Value::Void))));
+    }
+
+    #[test]
+    fn test_match_single_arm() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Match(
+            Box::new(int(1)),
+            vec![MatchArm {
+                pattern: Pattern::Wildcard(dummy_span()),
+                guard: None,
+                body: int(42),
+                span: dummy_span(),
+            }],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Should store match value
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "__match_val__")));
+    }
+
+    #[test]
+    fn test_match_multiple_arms() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Match(
+            Box::new(ident("x")),
+            vec![
+                MatchArm {
+                    pattern: Pattern::Literal(int(1)),
+                    guard: None,
+                    body: string("one"),
                     span: dummy_span(),
                 },
-                Param {
-                    name: "b".to_string(),
-                    ty: None,
-                    default: None,
+                MatchArm {
+                    pattern: Pattern::Literal(int(2)),
+                    guard: None,
+                    body: string("two"),
+                    span: dummy_span(),
+                },
+                MatchArm {
+                    pattern: Pattern::Wildcard(dummy_span()),
+                    guard: None,
+                    body: string("other"),
                     span: dummy_span(),
                 },
             ],
-            return_type: None,
-            body: Expr::Binary(
-                Box::new(Expr::Ident("a".to_string(), dummy_span())),
-                BinaryOp::Add,
-                Box::new(Expr::Ident("b".to_string(), dummy_span())),
-                dummy_span(),
-            ),
-            is_pub: false,
-            span: dummy_span(),
-        };
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Multiple JumpIfNot for each arm
+        let jump_count = instrs.iter().filter(|i| matches!(i.opcode, OpCode::JumpIfNot(_))).count();
+        assert!(jump_count >= 2);
+    }
+
+    #[test]
+    fn test_match_with_guard() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Match(
+            Box::new(ident("x")),
+            vec![MatchArm {
+                pattern: Pattern::Binding("n".to_string(), dummy_span()),
+                guard: Some(binary(ident("n"), BinaryOp::Gt, int(0))),
+                body: string("positive"),
+                span: dummy_span(),
+            }],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Should have And for pattern + guard
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::And)));
+    }
+
+    #[test]
+    fn test_match_empty() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Match(
+            Box::new(int(1)),
+            vec![],  // empty arms
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Should return Void
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Const(Value::Void))));
+    }
+
+    #[test]
+    fn test_block() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Block(
+            vec![int(1), int(2), int(3)],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        // Should have Pop between expressions
+        let pop_count = instrs.iter().filter(|i| matches!(i.opcode, OpCode::Pop)).count();
+        assert_eq!(pop_count, 2);  // 2 pops for 3 expressions
+    }
+
+    // === Binding Tests ===
+
+    #[test]
+    fn test_let_binding() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Let(
+            vec![("x".to_string(), int(42))],
+            Box::new(ident("x")),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "x")));
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Load(n) if n == "x")));
+    }
+
+    #[test]
+    fn test_let_multiple_bindings() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Let(
+            vec![
+                ("x".to_string(), int(1)),
+                ("y".to_string(), int(2)),
+            ],
+            Box::new(binary(ident("x"), BinaryOp::Add, ident("y"))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "x")));
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "y")));
+    }
+
+    // === Function Call Tests ===
+
+    #[test]
+    fn test_call_user_function() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Call(
+            Box::new(ident("my_func")),
+            vec![int(1), int(2)],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Call(name, 2) if name == "my_func")));
+    }
+
+    #[test]
+    fn test_call_builtin_function() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Call(
+            Box::new(ident("sqrt")),
+            vec![int(4)],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::CallBuiltin(name, 1) if name == "sqrt")));
+    }
+
+    #[test]
+    fn test_self_call() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::SelfCall(
+            vec![int(1), int(2)],
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::SelfCall(2))));
+    }
+
+    #[test]
+    fn test_lambda() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Lambda(
+            vec!["x".to_string()],
+            Box::new(binary(ident("x"), BinaryOp::Mul, int(2))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::MakeClosure(params, _) if params == &vec!["x".to_string()])));
+    }
+
+    // === Special Expression Tests ===
+
+    #[test]
+    fn test_range() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Range(
+            Box::new(int(1)),
+            Box::new(int(10)),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Range)));
+    }
+
+    #[test]
+    fn test_contains() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Contains(
+            Box::new(int(5)),
+            Box::new(ident("arr")),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Contains)));
+    }
+
+    #[test]
+    fn test_error_with_message() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Error(
+            Some(Box::new(string("oops"))),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Error(_))));
+    }
+
+    #[test]
+    fn test_error_without_message() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Error(None, dummy_span());
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Error(msg) if msg == "error")));
+    }
+
+    #[test]
+    fn test_try() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Try(
+            Box::new(ident("maybe_error")),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Try)));
+    }
+
+    #[test]
+    fn test_coalesce() {
+        let mut lowerer = Lowerer::new();
+        let expr = Expr::Coalesce(
+            Box::new(ident("maybe_nil")),
+            Box::new(int(0)),
+            dummy_span(),
+        );
+        let instrs = lowerer.lower_expr(&expr).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Coalesce)));
+    }
+
+    // === Pattern Tests ===
+
+    #[test]
+    fn test_pattern_wildcard() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_pattern(&Pattern::Wildcard(dummy_span())).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Pop)));
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Const(Value::Bool(true)))));
+    }
+
+    #[test]
+    fn test_pattern_literal() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_pattern(&Pattern::Literal(int(42))).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Eq)));
+    }
+
+    #[test]
+    fn test_pattern_binding() {
+        let mut lowerer = Lowerer::new();
+        let instrs = lowerer.lower_pattern(&Pattern::Binding("x".to_string(), dummy_span())).unwrap();
+
+        assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Dup)));
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "x")));
+    }
+
+    // === Function Definition Tests ===
+
+    #[test]
+    fn test_simple_function() {
+        let func = make_func("add", vec!["a", "b"],
+            binary(ident("a"), BinaryOp::Add, ident("b")));
 
         let program = Program {
             items: vec![Item::Function(func)],
@@ -656,55 +1386,24 @@ mod tests {
         let functions = result.unwrap();
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].name, "add");
+        assert!(functions[0].instructions.iter().any(|i| matches!(i.opcode, OpCode::Return)));
     }
 
     #[test]
     fn test_self_recursion() {
         // fib(n) = n < 2 ? n : $(n-1) + $(n-2)
-        let func = FunctionDef {
-            name: "fib".to_string(),
-            params: vec![Param {
-                name: "n".to_string(),
-                ty: None,
-                default: None,
-                span: dummy_span(),
-            }],
-            return_type: None,
-            body: Expr::Ternary(
-                Box::new(Expr::Binary(
-                    Box::new(Expr::Ident("n".to_string(), dummy_span())),
-                    BinaryOp::Lt,
-                    Box::new(Expr::Integer(2, dummy_span())),
-                    dummy_span(),
-                )),
-                Box::new(Expr::Ident("n".to_string(), dummy_span())),
-                Box::new(Expr::Binary(
-                    Box::new(Expr::SelfCall(
-                        vec![Expr::Binary(
-                            Box::new(Expr::Ident("n".to_string(), dummy_span())),
-                            BinaryOp::Sub,
-                            Box::new(Expr::Integer(1, dummy_span())),
-                            dummy_span(),
-                        )],
-                        dummy_span(),
-                    )),
+        let func = make_func("fib", vec!["n"],
+            Expr::Ternary(
+                Box::new(binary(ident("n"), BinaryOp::Lt, int(2))),
+                Box::new(ident("n")),
+                Box::new(binary(
+                    Expr::SelfCall(vec![binary(ident("n"), BinaryOp::Sub, int(1))], dummy_span()),
                     BinaryOp::Add,
-                    Box::new(Expr::SelfCall(
-                        vec![Expr::Binary(
-                            Box::new(Expr::Ident("n".to_string(), dummy_span())),
-                            BinaryOp::Sub,
-                            Box::new(Expr::Integer(2, dummy_span())),
-                            dummy_span(),
-                        )],
-                        dummy_span(),
-                    )),
-                    dummy_span(),
+                    Expr::SelfCall(vec![binary(ident("n"), BinaryOp::Sub, int(2))], dummy_span()),
                 )),
                 dummy_span(),
-            ),
-            is_pub: false,
-            span: dummy_span(),
-        };
+            )
+        );
 
         let program = Program {
             items: vec![Item::Function(func)],
@@ -718,7 +1417,6 @@ mod tests {
         let functions = result.unwrap();
         assert_eq!(functions[0].name, "fib");
 
-        // SelfCall이 IR에 있는지 확인
         let has_self_call = functions[0]
             .instructions
             .iter()
@@ -730,13 +1428,8 @@ mod tests {
     fn test_collection_ops() {
         // arr.@(_*2)
         let expr = Expr::MapOp(
-            Box::new(Expr::Ident("arr".to_string(), dummy_span())),
-            Box::new(Expr::Binary(
-                Box::new(Expr::LambdaParam(dummy_span())),
-                BinaryOp::Mul,
-                Box::new(Expr::Integer(2, dummy_span())),
-                dummy_span(),
-            )),
+            Box::new(ident("arr")),
+            Box::new(binary(Expr::LambdaParam(dummy_span()), BinaryOp::Mul, int(2))),
             dummy_span(),
         );
 
@@ -748,5 +1441,122 @@ mod tests {
         let mut lowerer = Lowerer::new();
         let result = lowerer.lower_program(&program);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_expression_as_main() {
+        // 표현식만 있는 프로그램 -> __main__ 함수로 래핑
+        let program = Program {
+            items: vec![Item::Expr(binary(int(1), BinaryOp::Add, int(2)))],
+            span: dummy_span(),
+        };
+
+        let mut lowerer = Lowerer::new();
+        let result = lowerer.lower_program(&program).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "__main__");
+    }
+
+    // === FFI Tests ===
+
+    #[test]
+    fn test_ffi_registration() {
+        use aoel_ast::{FfiBlock, FfiFn, FfiType};
+
+        let ffi_block = FfiBlock {
+            lib_name: "libc".to_string(),
+            abi: "C".to_string(),
+            functions: vec![
+                FfiFn {
+                    name: "my_abs".to_string(),
+                    extern_name: Some("abs".to_string()),
+                    params: vec![("x".to_string(), FfiType::Int(32))],
+                    return_type: FfiType::Int(32),
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        let program = Program {
+            items: vec![Item::Ffi(ffi_block)],
+            span: dummy_span(),
+        };
+
+        let mut lowerer = Lowerer::new();
+        lowerer.lower_program(&program).unwrap();
+
+        let ffi_funcs = lowerer.ffi_functions();
+        assert!(ffi_funcs.contains_key("my_abs"));
+
+        let info = ffi_funcs.get("my_abs").unwrap();
+        assert_eq!(info.lib_name, "libc");
+        assert_eq!(info.extern_name, "abs");
+        assert_eq!(info.param_count, 1);
+    }
+
+    #[test]
+    fn test_ffi_call() {
+        use aoel_ast::{FfiBlock, FfiFn, FfiType};
+
+        let ffi_block = FfiBlock {
+            lib_name: "libc".to_string(),
+            abi: "C".to_string(),
+            functions: vec![
+                FfiFn {
+                    name: "my_abs".to_string(),
+                    extern_name: Some("abs".to_string()),
+                    params: vec![("x".to_string(), FfiType::Int(32))],
+                    return_type: FfiType::Int(32),
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        // FFI 호출 표현식
+        let call_expr = Expr::Call(
+            Box::new(ident("my_abs")),
+            vec![int(-5)],
+            dummy_span(),
+        );
+
+        let program = Program {
+            items: vec![
+                Item::Ffi(ffi_block),
+                Item::Expr(call_expr),
+            ],
+            span: dummy_span(),
+        };
+
+        let mut lowerer = Lowerer::new();
+        let funcs = lowerer.lower_program(&program).unwrap();
+
+        // __main__ 함수에서 CallFfi가 사용되어야 함
+        let main_func = &funcs[0];
+        assert!(main_func.instructions.iter().any(|i| matches!(&i.opcode, OpCode::CallFfi(lib, name, 1) if lib == "libc" && name == "abs")));
+    }
+
+    // === Builtin Detection Tests ===
+
+    #[test]
+    fn test_is_builtin() {
+        assert!(Lowerer::is_builtin("sqrt"));
+        assert!(Lowerer::is_builtin("SQRT"));  // case insensitive
+        assert!(Lowerer::is_builtin("print"));
+        assert!(Lowerer::is_builtin("len"));
+        assert!(!Lowerer::is_builtin("my_custom_func"));
+    }
+
+    // === Default Implementation ===
+
+    #[test]
+    fn test_lowerer_default() {
+        let lowerer1 = Lowerer::new();
+        let lowerer2 = Lowerer::default();
+
+        assert!(lowerer1.ffi_functions().is_empty());
+        assert!(lowerer2.ffi_functions().is_empty());
     }
 }

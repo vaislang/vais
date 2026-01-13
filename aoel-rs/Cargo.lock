@@ -103,6 +103,7 @@ version = "0.1.0"
 dependencies = [
  "aoel-lexer",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

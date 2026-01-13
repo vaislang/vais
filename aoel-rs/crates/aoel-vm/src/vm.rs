@@ -861,7 +861,7 @@ impl Vm {
                 }
                 // Safe: we've validated the index is in bounds
                 let ch = s.chars().nth(idx as usize)
-                    .ok_or_else(|| RuntimeError::IndexOutOfBounds { index: i, length: char_count })?;
+                    .ok_or(RuntimeError::IndexOutOfBounds { index: i, length: char_count })?;
                 Ok(Value::String(ch.to_string()))
             }
             (Value::Map(m), Value::String(key)) => {
@@ -1535,8 +1535,7 @@ impl Vm {
                         if s.len() >= target_len {
                             Some(Value::String(s.clone()))
                         } else {
-                            let padding: String = std::iter::repeat(pad_char)
-                                .take(target_len - s.len())
+                            let padding: String = std::iter::repeat_n(pad_char, target_len - s.len())
                                 .collect();
                             Some(Value::String(format!("{}{}", padding, s)))
                         }
@@ -1556,8 +1555,7 @@ impl Vm {
                         if s.len() >= target_len {
                             Some(Value::String(s.clone()))
                         } else {
-                            let padding: String = std::iter::repeat(pad_char)
-                                .take(target_len - s.len())
+                            let padding: String = std::iter::repeat_n(pad_char, target_len - s.len())
                                 .collect();
                             Some(Value::String(format!("{}{}", s, padding)))
                         }

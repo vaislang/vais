@@ -7,7 +7,7 @@ use logos::Logos;
 use serde::{Deserialize, Serialize};
 
 /// 소스 코드 내 위치
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -31,12 +31,6 @@ impl Span {
             start: self.start.min(other.start),
             end: self.end.max(other.end),
         }
-    }
-}
-
-impl Default for Span {
-    fn default() -> Self {
-        Self { start: 0, end: 0 }
     }
 }
 

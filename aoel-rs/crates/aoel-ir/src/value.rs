@@ -138,11 +138,10 @@ impl Value {
             _ => None,
         }
     }
-}
 
-impl Default for Value {
-    fn default() -> Self {
-        Value::Void
+    /// Check if the value is empty (for collection types)
+    pub fn is_empty(&self) -> Option<bool> {
+        self.len().map(|l| l == 0)
     }
 }
 

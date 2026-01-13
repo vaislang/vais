@@ -734,7 +734,7 @@ impl CCodeGenerator {
 
     fn sanitize_name(&self, name: &str) -> String {
         // C 키워드 충돌 방지 및 특수문자 처리
-        let sanitized = name.replace('-', "_").replace('.', "_");
+        let sanitized = name.replace(['-', '.'], "_");
         format!("aoel_{}", sanitized)
     }
 

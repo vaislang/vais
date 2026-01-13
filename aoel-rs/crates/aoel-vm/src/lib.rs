@@ -23,4 +23,4 @@ pub use error::{RuntimeError, RuntimeResult};
 pub use ffi::{FfiLoader, FfiType, FfiFunctionInfo};
 
 #[cfg(feature = "jit")]
-pub use jit_vm::{JitVm, JitConfig};
+pub use jit_vm::{JitVm, JitConfig, execute_with_jit, execute_function_with_jit};

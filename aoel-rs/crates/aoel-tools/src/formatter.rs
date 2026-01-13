@@ -160,7 +160,7 @@ impl Formatter {
         if self.config.space_around_operators {
             self.output.push_str(" = ");
         } else {
-            self.output.push_str("=");
+            self.output.push('=');
         }
 
         self.format_expr(&func.body);
@@ -176,7 +176,7 @@ impl Formatter {
         if self.config.space_around_operators {
             self.output.push_str(" = ");
         } else {
-            self.output.push_str("=");
+            self.output.push('=');
         }
         self.format_type(&typedef.ty);
     }
@@ -272,7 +272,7 @@ impl Formatter {
             FfiType::Int(32) => self.output.push_str("i32"),
             FfiType::Int(64) => self.output.push_str("i64"),
             FfiType::Int(n) => {
-                self.output.push_str("i");
+                self.output.push('i');
                 self.output.push_str(&n.to_string());
             }
             FfiType::Uint(8) => self.output.push_str("u8"),
@@ -280,7 +280,7 @@ impl Formatter {
             FfiType::Uint(32) => self.output.push_str("u32"),
             FfiType::Uint(64) => self.output.push_str("u64"),
             FfiType::Uint(n) => {
-                self.output.push_str("u");
+                self.output.push('u');
                 self.output.push_str(&n.to_string());
             }
             FfiType::F32 => self.output.push_str("f32"),

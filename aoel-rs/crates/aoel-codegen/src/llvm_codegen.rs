@@ -996,7 +996,7 @@ impl LlvmCodeGenerator {
     }
 
     fn sanitize_name(&self, name: &str) -> String {
-        name.replace('-', "_").replace('.', "_")
+        name.replace(['-', '.'], "_")
     }
 }
 
