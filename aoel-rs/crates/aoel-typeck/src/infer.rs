@@ -22,6 +22,8 @@ pub struct TypeEnv {
     next_var: usize,
     /// 타입 변수 치환 (Union-Find)
     substitution: HashMap<usize, Type>,
+    /// 타입 파라미터 -> 타입 변수 매핑 (제네릭용)
+    type_params: HashMap<String, Type>,
 }
 
 impl TypeEnv {
@@ -32,9 +34,27 @@ impl TypeEnv {
             current_function: None,
             next_var: 0,
             substitution: HashMap::new(),
+            type_params: HashMap::new(),
         };
         env.register_builtins();
         env
+    }
+
+    /// 타입 파라미터 바인딩 (제네릭 함수용)
+    pub fn bind_type_param(&mut self, name: String) -> Type {
+        let var = self.fresh_var();
+        self.type_params.insert(name, var.clone());
+        var
+    }
+
+    /// 타입 파라미터 조회
+    pub fn lookup_type_param(&self, name: &str) -> Option<Type> {
+        self.type_params.get(name).cloned()
+    }
+
+    /// 타입 파라미터 스코프 클리어
+    pub fn clear_type_params(&mut self) {
+        self.type_params.clear();
     }
 
     /// 빌트인 함수 등록

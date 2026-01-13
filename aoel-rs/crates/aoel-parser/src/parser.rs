@@ -181,13 +181,29 @@ impl<'src> Parser<'src> {
 
     /// 함수 정의인지 확인 (lookahead)
     fn is_function_def(&self) -> bool {
-        // 함수 정의: name(params) = body 또는 name() = body
-        // 함수 호출: name(args) 또는 name()
+        // 함수 정의: name(params) = body 또는 name<T>(params) = body
+        // 함수 호출: name(args) 또는 name<T>(args)
         // 구분: ) 다음에 = 또는 -> 가 있으면 함수 정의
         let mut lexer_clone = self.lexer.clone();
 
         // 현재 토큰은 Identifier, 다음 토큰을 확인
-        let next = Self::next_significant_token(&mut lexer_clone);
+        let mut next = Self::next_significant_token(&mut lexer_clone);
+
+        // 제네릭 타입 파라미터 <T, U, ...> 건너뛰기
+        if next.kind == TokenKind::Lt {
+            let mut depth = 1;
+            while depth > 0 {
+                next = Self::next_significant_token(&mut lexer_clone);
+                match next.kind {
+                    TokenKind::Lt => depth += 1,
+                    TokenKind::Gt => depth -= 1,
+                    TokenKind::Eof => return false,
+                    _ => {}
+                }
+            }
+            next = Self::next_significant_token(&mut lexer_clone);
+        }
+
         if next.kind != TokenKind::LParen {
             return false; // identifier 다음에 ( 가 없으면 표현식
         }
@@ -229,6 +245,13 @@ impl<'src> Parser<'src> {
         let start = self.current.span;
         let name = self.expect_identifier()?;
 
+        // 타입 파라미터 (옵션): <T, U>
+        let type_params = if self.match_token(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+
         // (params)
         self.expect(TokenKind::LParen)?;
         let params = self.parse_params()?;
@@ -247,12 +270,31 @@ impl<'src> Parser<'src> {
 
         Ok(FunctionDef {
             name,
+            type_params,
             params,
             return_type,
             body,
             is_pub,
             span: start.merge(self.previous.span),
         })
+    }
+
+    /// 타입 파라미터 목록 파싱: <T, U, V>
+    fn parse_type_params(&mut self) -> ParseResult<Vec<TypeParam>> {
+        let mut type_params = Vec::new();
+
+        loop {
+            let span = self.current.span;
+            let name = self.expect_identifier()?;
+            type_params.push(TypeParam { name, span });
+
+            if !self.match_token(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::Gt)?;
+        Ok(type_params)
     }
 
     /// 매개변수 목록 파싱
@@ -452,11 +494,20 @@ impl<'src> Parser<'src> {
     fn parse_type_def(&mut self, is_pub: bool) -> ParseResult<TypeDef> {
         let start = self.previous.span;
         let name = self.expect_identifier()?;
+
+        // 타입 파라미터 (옵션): <T, U>
+        let type_params = if self.match_token(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+
         self.expect(TokenKind::Eq)?;
         let ty = self.parse_type()?;
 
         Ok(TypeDef {
             name,
+            type_params,
             ty,
             is_pub,
             span: start.merge(self.previous.span),
@@ -2341,6 +2392,44 @@ mod tests {
             assert!(matches!(*handler, Expr::Integer(0, _)));
         } else {
             panic!("Expected try-catch expression");
+        }
+    }
+
+    // === Generic Type Tests ===
+
+    #[test]
+    fn test_generic_function() {
+        let result = parse("identity<T>(x) = x").unwrap();
+        if let Item::Function(func) = &result.items[0] {
+            assert_eq!(func.name, "identity");
+            assert_eq!(func.type_params.len(), 1);
+            assert_eq!(func.type_params[0].name, "T");
+        } else {
+            panic!("Expected function");
+        }
+    }
+
+    #[test]
+    fn test_generic_function_multiple_params() {
+        let result = parse("swap<T, U>(a, b) = (b, a)").unwrap();
+        if let Item::Function(func) = &result.items[0] {
+            assert_eq!(func.name, "swap");
+            assert_eq!(func.type_params.len(), 2);
+            assert_eq!(func.type_params[0].name, "T");
+            assert_eq!(func.type_params[1].name, "U");
+        } else {
+            panic!("Expected function");
+        }
+    }
+
+    #[test]
+    fn test_non_generic_function() {
+        let result = parse("add(a, b) = a + b").unwrap();
+        if let Item::Function(func) = &result.items[0] {
+            assert_eq!(func.name, "add");
+            assert!(func.type_params.is_empty());
+        } else {
+            panic!("Expected function");
         }
     }
 }

@@ -53,6 +53,11 @@ impl TypeChecker {
 
     /// 함수 시그니처 등록
     fn register_function(&mut self, func: &FunctionDef) -> TypeResult<()> {
+        // 제네릭 타입 파라미터 바인딩
+        for type_param in &func.type_params {
+            self.env.bind_type_param(type_param.name.clone());
+        }
+
         let param_types: Vec<Type> = func
             .params
             .iter()
@@ -72,11 +77,19 @@ impl TypeChecker {
         let func_type = Type::Function(param_types, Box::new(return_type));
         self.env.register_function(func.name.clone(), func_type);
 
+        // 타입 파라미터 스코프 클리어
+        self.env.clear_type_params();
+
         Ok(())
     }
 
     /// 함수 타입 체크
     fn check_function(&mut self, func: &FunctionDef) -> TypeResult<()> {
+        // 제네릭 타입 파라미터 바인딩
+        for type_param in &func.type_params {
+            self.env.bind_type_param(type_param.name.clone());
+        }
+
         // 현재 함수 설정 (재귀용)
         if let Some(func_type) = self.env.lookup_function(&func.name).cloned() {
             self.env.current_function = Some((func.name.clone(), func_type.clone()));
@@ -98,6 +111,8 @@ impl TypeChecker {
         }
 
         self.env.current_function = None;
+        // 타입 파라미터 스코프 클리어
+        self.env.clear_type_params();
         Ok(())
     }
 
@@ -832,7 +847,7 @@ impl TypeChecker {
     }
 
     /// TypeExpr을 Type으로 변환
-    fn convert_type_expr(&self, type_expr: &TypeExpr) -> Type {
+    fn convert_type_expr(&mut self, type_expr: &TypeExpr) -> Type {
         match type_expr {
             TypeExpr::Simple(name) => match name.as_str() {
                 "Int" | "int" => Type::Int,
@@ -863,6 +878,37 @@ impl TypeChecker {
                     .map(|(k, v)| (k.clone(), self.convert_type_expr(v)))
                     .collect(),
             ),
+            TypeExpr::TypeVar(name) => {
+                // 타입 파라미터 스코프에서 조회
+                if let Some(ty) = self.env.lookup_type_param(name) {
+                    ty
+                } else {
+                    // 스코프에 없으면 새로운 타입 변수 생성
+                    self.env.fresh_var()
+                }
+            }
+            TypeExpr::Generic(name, args) => {
+                // 제네릭 타입 인스턴스화
+                // 현재는 기본적인 처리만 - 실제 제네릭 확장은 Phase 2에서
+                match name.as_str() {
+                    "Array" if args.len() == 1 => {
+                        Type::Array(Box::new(self.convert_type_expr(&args[0])))
+                    }
+                    "Optional" if args.len() == 1 => {
+                        Type::Optional(Box::new(self.convert_type_expr(&args[0])))
+                    }
+                    "Result" if args.len() == 1 => {
+                        Type::Result(Box::new(self.convert_type_expr(&args[0])))
+                    }
+                    "Map" if args.len() == 2 => {
+                        Type::Map(
+                            Box::new(self.convert_type_expr(&args[0])),
+                            Box::new(self.convert_type_expr(&args[1])),
+                        )
+                    }
+                    _ => Type::Any, // 사용자 정의 제네릭은 Any로 처리
+                }
+            }
         }
     }
 
@@ -1097,6 +1143,27 @@ mod tests {
     fn test_tree_recursion() {
         // Tests tree-shaped recursive calls
         let result = check_source("tree_sum(n) = n <= 0 ? 0 : n + tree_sum(n - 1) + tree_sum(n - 2)");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generic_function() {
+        // Tests simple generic function (identity)
+        let result = check_source("identity<T>(x: T) -> T = x");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generic_function_multiple_params() {
+        // Tests generic function with multiple type parameters
+        let result = check_source("pair<A, B>(a: A, b: B) = (a, b)");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generic_function_inferred() {
+        // Tests generic function with inferred types
+        let result = check_source("identity<T>(x) = x");
         assert!(result.is_ok());
     }
 }

@@ -802,6 +802,7 @@ mod tests {
     fn make_func(name: &str, params: Vec<&str>, body: Expr) -> FunctionDef {
         FunctionDef {
             name: name.to_string(),
+            type_params: vec![],
             params: params.into_iter().map(|p| Param {
                 name: p.to_string(),
                 ty: None,

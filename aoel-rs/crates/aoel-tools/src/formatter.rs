@@ -796,6 +796,23 @@ impl Formatter {
                 }
                 self.output.push('}');
             }
+            TypeExpr::TypeVar(name) => {
+                self.output.push_str(name);
+            }
+            TypeExpr::Generic(name, args) => {
+                self.output.push_str(name);
+                self.output.push('<');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push(',');
+                        if self.config.space_after_comma {
+                            self.output.push(' ');
+                        }
+                    }
+                    self.format_type(arg);
+                }
+                self.output.push('>');
+            }
         }
     }
 

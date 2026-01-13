@@ -37,11 +37,20 @@ pub enum Item {
 // Function Definition
 // =============================================================================
 
+/// 타입 파라미터 (제네릭용)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeParam {
+    pub name: String,
+    pub span: Span,
+}
+
 /// 함수 정의
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionDef {
     /// 함수 이름
     pub name: String,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
     /// 매개변수
     pub params: Vec<Param>,
     /// 반환 타입 (옵션)
@@ -73,6 +82,8 @@ pub struct Param {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeDef {
     pub name: String,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
     pub ty: TypeExpr,
     pub is_pub: bool,
     pub span: Span,
@@ -83,6 +94,10 @@ pub struct TypeDef {
 pub enum TypeExpr {
     /// 기본 타입: i, f, s, b
     Simple(String),
+    /// 타입 파라미터 참조 (제네릭): T, U
+    TypeVar(String),
+    /// 제네릭 타입: Box<T>, Result<T, E>
+    Generic(String, Vec<TypeExpr>),
     /// 배열: [T]
     Array(Box<TypeExpr>),
     /// 맵: {K: V}
@@ -489,6 +504,7 @@ mod tests {
     fn test_program_with_function() {
         let func = FunctionDef {
             name: "test".to_string(),
+            type_params: vec![],
             params: vec![],
             return_type: None,
             body: Expr::Integer(42, dummy_span()),
@@ -508,6 +524,7 @@ mod tests {
     fn test_item_variants() {
         let func = FunctionDef {
             name: "f".to_string(),
+            type_params: vec![],
             params: vec![],
             return_type: None,
             body: Expr::Nil(dummy_span()),
@@ -518,6 +535,7 @@ mod tests {
 
         let typedef = TypeDef {
             name: "MyType".to_string(),
+            type_params: vec![],
             ty: TypeExpr::Simple("Int".to_string()),
             is_pub: false,
             span: dummy_span(),
@@ -548,6 +566,7 @@ mod tests {
     fn test_function_def_with_params() {
         let func = FunctionDef {
             name: "add".to_string(),
+            type_params: vec![],
             params: vec![
                 Param {
                     name: "a".to_string(),
@@ -944,6 +963,7 @@ mod tests {
         // fib(n: Int): Int = n < 2 ? n : $(n-1) + $(n-2)
         let func = FunctionDef {
             name: "fib".to_string(),
+            type_params: vec![],
             params: vec![Param {
                 name: "n".to_string(),
                 ty: Some(TypeExpr::Simple("Int".to_string())),
