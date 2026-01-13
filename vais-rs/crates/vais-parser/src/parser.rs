@@ -789,7 +789,7 @@ impl<'src> Parser<'src> {
     /// 삼항 연산자: cond ? then : else
     fn parse_ternary(&mut self) -> ParseResult<Expr> {
         let start = self.current.span;
-        let mut expr = self.parse_or()?;
+        let mut expr = self.parse_coalesce()?;
 
         while self.match_token(TokenKind::Question) {
             let then_expr = self.parse_expr()?;
@@ -803,6 +803,20 @@ impl<'src> Parser<'src> {
                 Box::new(else_expr),
                 span,
             );
+        }
+
+        Ok(expr)
+    }
+
+    /// Coalesce: a ?? b (null 병합 연산자)
+    fn parse_coalesce(&mut self) -> ParseResult<Expr> {
+        let start = self.current.span;
+        let mut expr = self.parse_or()?;
+
+        while self.match_token(TokenKind::QuestionQuestion) {
+            let right = self.parse_or()?;
+            let span = start.merge(self.previous.span);
+            expr = Expr::Coalesce(Box::new(expr), Box::new(right), span);
         }
 
         Ok(expr)
@@ -2232,11 +2246,19 @@ mod tests {
 
     #[test]
     fn test_coalesce_expression() {
-        // ?? might not be implemented yet
-        // Testing that we get a parse result (either success or error)
-        let result = parse_expr("x ?? 0");
-        // This is a "nice to have" feature
-        let _ = result;
+        let result = parse_expr("x ?? 0").unwrap();
+        assert!(matches!(result, Expr::Coalesce(_, _, _)));
+    }
+
+    #[test]
+    fn test_coalesce_chained() {
+        let result = parse_expr("a ?? b ?? c").unwrap();
+        // Should be left-associative: (a ?? b) ?? c
+        if let Expr::Coalesce(left, _, _) = result {
+            assert!(matches!(*left, Expr::Coalesce(_, _, _)));
+        } else {
+            panic!("Expected Coalesce");
+        }
     }
 
     // =========================================================================

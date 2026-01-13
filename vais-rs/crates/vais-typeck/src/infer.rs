@@ -57,6 +57,16 @@ impl TypeEnv {
         self.type_params.clear();
     }
 
+    /// 현재 변수 스코프 저장 (Lambda 등 새 스코프 진입 시)
+    pub fn save_var_scope(&self) -> HashMap<String, Type> {
+        self.vars.clone()
+    }
+
+    /// 변수 스코프 복원 (스코프 종료 시)
+    pub fn restore_var_scope(&mut self, saved: HashMap<String, Type>) {
+        self.vars = saved;
+    }
+
     /// 빌트인 함수 등록
     fn register_builtins(&mut self) {
         // Math functions (Float -> Float) - 숫자 타입은 자동 변환됨

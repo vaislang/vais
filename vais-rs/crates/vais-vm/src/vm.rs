@@ -30,6 +30,133 @@ struct CatchHandler {
     stack_depth: usize,
 }
 
+/// Lightweight execution context for parallel operations
+/// Avoids full VM initialization overhead
+struct ParallelContext {
+    stack: Vec<Value>,
+    named_locals: FastMap<String, Value>,
+    functions: Arc<FastMap<String, Arc<CompiledFunction>>>,
+}
+
+impl ParallelContext {
+    fn new(functions: Arc<FastMap<String, Arc<CompiledFunction>>>) -> Self {
+        Self {
+            stack: Vec::with_capacity(16),
+            named_locals: FastMap::new(),
+            functions,
+        }
+    }
+
+    fn execute_simple(&mut self, instructions: &[Instruction]) -> Option<Value> {
+        for instr in instructions {
+            match &instr.opcode {
+                OpCode::Const(v) => self.stack.push(v.clone()),
+                OpCode::Load(name) => {
+                    if let Some(v) = self.named_locals.get(name) {
+                        self.stack.push(v.clone());
+                    } else {
+                        self.stack.push(Value::Void);
+                    }
+                }
+                OpCode::Store(name) => {
+                    if let Some(v) = self.stack.pop() {
+                        self.named_locals.insert(name.clone(), v);
+                    }
+                }
+                OpCode::Add => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) => Value::Int(x.wrapping_add(y)),
+                            (Value::Float(x), Value::Float(y)) => Value::Float(x + y),
+                            (Value::Int(x), Value::Float(y)) => Value::Float(x as f64 + y),
+                            (Value::Float(x), Value::Int(y)) => Value::Float(x + y as f64),
+                            _ => Value::Void,
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Sub => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) => Value::Int(x.wrapping_sub(y)),
+                            (Value::Float(x), Value::Float(y)) => Value::Float(x - y),
+                            _ => Value::Void,
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Mul => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) => Value::Int(x.wrapping_mul(y)),
+                            (Value::Float(x), Value::Float(y)) => Value::Float(x * y),
+                            (Value::Int(x), Value::Float(y)) => Value::Float(x as f64 * y),
+                            (Value::Float(x), Value::Int(y)) => Value::Float(x * y as f64),
+                            _ => Value::Void,
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Div => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) if y != 0 => Value::Int(x / y),
+                            (Value::Float(x), Value::Float(y)) if y != 0.0 => Value::Float(x / y),
+                            _ => Value::Void,
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Mod => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) if y != 0 => Value::Int(x % y),
+                            _ => Value::Void,
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Lt => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) => Value::Bool(x < y),
+                            (Value::Float(x), Value::Float(y)) => Value::Bool(x < y),
+                            _ => Value::Bool(false),
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Gt => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        let result = match (a, b) {
+                            (Value::Int(x), Value::Int(y)) => Value::Bool(x > y),
+                            (Value::Float(x), Value::Float(y)) => Value::Bool(x > y),
+                            _ => Value::Bool(false),
+                        };
+                        self.stack.push(result);
+                    }
+                }
+                OpCode::Eq => {
+                    if let (Some(b), Some(a)) = (self.stack.pop(), self.stack.pop()) {
+                        self.stack.push(Value::Bool(a == b));
+                    }
+                }
+                OpCode::Not => {
+                    if let Some(v) = self.stack.pop() {
+                        self.stack.push(Value::Bool(!v.is_truthy()));
+                    }
+                }
+                OpCode::Return => break,
+                _ => {
+                    // For complex operations, return None to fall back to full VM
+                    return None;
+                }
+            }
+        }
+        self.stack.pop()
+    }
+}
+
 /// Vais Virtual Machine
 pub struct Vm {
     /// 스택
@@ -1141,18 +1268,26 @@ impl Vm {
             OpCode::ParallelMap(transform_instrs) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    // Use rayon for parallel execution
+                    let functions = self.functions.clone();
+                    // Use lightweight ParallelContext instead of full VM
                     let results: Vec<Value> = items.into_par_iter()
                         .map(|item| {
-                            // Create a mini-VM for each thread
-                            let mut mini_vm = Vm::new();
-                            mini_vm.named_locals.insert("_".to_string(), item);
-                            mini_vm.functions = self.functions.clone();
+                            let mut ctx = ParallelContext::new(functions.clone());
+                            ctx.named_locals.insert("_".to_string(), item);
 
-                            if let Ok(()) = mini_vm.execute_instructions(transform_instrs) {
-                                mini_vm.stack.pop().unwrap_or(Value::Void)
+                            // Try fast path first
+                            if let Some(result) = ctx.execute_simple(transform_instrs) {
+                                result
                             } else {
-                                Value::Void
+                                // Fall back to full VM for complex operations
+                                let mut mini_vm = Vm::new();
+                                mini_vm.named_locals = ctx.named_locals;
+                                mini_vm.functions = ctx.functions;
+                                if let Ok(()) = mini_vm.execute_instructions(transform_instrs) {
+                                    mini_vm.stack.pop().unwrap_or(Value::Void)
+                                } else {
+                                    Value::Void
+                                }
                             }
                         })
                         .collect();
@@ -1165,16 +1300,25 @@ impl Vm {
             OpCode::ParallelFilter(predicate_instrs) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
+                    let functions = self.functions.clone();
                     let results: Vec<Value> = items.into_par_iter()
                         .filter(|item| {
-                            let mut mini_vm = Vm::new();
-                            mini_vm.named_locals.insert("_".to_string(), item.clone());
-                            mini_vm.functions = self.functions.clone();
+                            let mut ctx = ParallelContext::new(functions.clone());
+                            ctx.named_locals.insert("_".to_string(), item.clone());
 
-                            if let Ok(()) = mini_vm.execute_instructions(predicate_instrs) {
-                                mini_vm.stack.pop().map(|v| v.is_truthy()).unwrap_or(false)
+                            // Try fast path first
+                            if let Some(result) = ctx.execute_simple(predicate_instrs) {
+                                result.is_truthy()
                             } else {
-                                false
+                                // Fall back to full VM for complex operations
+                                let mut mini_vm = Vm::new();
+                                mini_vm.named_locals = ctx.named_locals;
+                                mini_vm.functions = ctx.functions;
+                                if let Ok(()) = mini_vm.execute_instructions(predicate_instrs) {
+                                    mini_vm.stack.pop().map(|v| v.is_truthy()).unwrap_or(false)
+                                } else {
+                                    false
+                                }
                             }
                         })
                         .collect();

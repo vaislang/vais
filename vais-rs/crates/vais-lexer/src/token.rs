@@ -263,6 +263,10 @@ pub enum TokenKind {
     #[token("!")]
     Bang,
 
+    /// Coalesce 연산자 (null 병합)
+    #[token("??")]
+    QuestionQuestion,
+
     // =========================================================================
     // Operators - Assignment & Arrow
     // =========================================================================
@@ -416,6 +420,7 @@ impl TokenKind {
                 | TokenKind::AndAnd
                 | TokenKind::OrOr
                 | TokenKind::Bang
+                | TokenKind::QuestionQuestion
         )
     }
 
@@ -509,6 +514,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Dot => write!(f, "."),
             TokenKind::Question => write!(f, "?"),
+            TokenKind::QuestionQuestion => write!(f, "??"),
             TokenKind::Pipe => write!(f, "|"),
             TokenKind::Ampersand => write!(f, "&"),
             TokenKind::Newline => write!(f, "newline"),

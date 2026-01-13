@@ -505,6 +505,9 @@ impl TypeChecker {
 
             // Lambda 표현식
             Expr::Lambda(params, body, _) => {
+                // 현재 변수 스코프 저장
+                let saved_scope = self.env.save_var_scope();
+
                 // 파라미터 타입 생성
                 let param_types: Vec<Type> = params.iter().map(|_| self.env.fresh_var()).collect();
 
@@ -515,6 +518,9 @@ impl TypeChecker {
 
                 // 본문 타입 추론
                 let return_type = self.infer_expr(body)?;
+
+                // 스코프 복원 (Lambda 파라미터가 외부로 누출되지 않음)
+                self.env.restore_var_scope(saved_scope);
 
                 Ok(Type::Function(param_types, Box::new(return_type)))
             }
