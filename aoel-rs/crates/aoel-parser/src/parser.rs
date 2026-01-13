@@ -114,9 +114,17 @@ impl<'src> Parser<'src> {
     fn parse_item(&mut self) -> ParseResult<Item> {
         // pub 키워드 확인
         let is_pub = self.match_token(TokenKind::Pub);
+        // async 키워드 확인
+        let is_async = self.match_token(TokenKind::Async);
 
         match self.current.kind {
             TokenKind::Mod => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "modules cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
                 self.advance();
                 let name = self.expect_identifier()?;
                 Ok(Item::Module(ModuleDef {
@@ -125,16 +133,34 @@ impl<'src> Parser<'src> {
                 }))
             }
             TokenKind::Use => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "use statements cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
                 self.advance();
                 let use_def = self.parse_use()?;
                 Ok(Item::Use(use_def))
             }
             TokenKind::Type => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "type definitions cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
                 self.advance();
                 let type_def = self.parse_type_def(is_pub)?;
                 Ok(Item::TypeDef(type_def))
             }
             TokenKind::Enum => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "enum definitions cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
                 self.advance();
                 let enum_def = self.parse_enum_def(is_pub)?;
                 Ok(Item::Enum(enum_def))
@@ -143,6 +169,12 @@ impl<'src> Parser<'src> {
                 if is_pub {
                     return Err(ParseError::InvalidSyntax {
                         message: "ffi blocks cannot be pub".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "ffi blocks cannot be async".to_string(),
                         span: self.current.span,
                     });
                 }
@@ -155,12 +187,19 @@ impl<'src> Parser<'src> {
                 // 또는 함수 호출/표현식
                 // Lookahead: identifier( 다음이 identifier 또는 ) 이면 함수 정의
                 if self.is_function_def() {
-                    let func = self.parse_function_def(is_pub)?;
+                    let func = self.parse_function_def(is_pub, is_async)?;
                     Ok(Item::Function(func))
                 } else {
                     if is_pub {
                         return Err(ParseError::InvalidSyntax {
                             message: "pub can only be used with functions, types, or modules"
+                                .to_string(),
+                            span: self.current.span,
+                        });
+                    }
+                    if is_async {
+                        return Err(ParseError::InvalidSyntax {
+                            message: "async can only be used with functions"
                                 .to_string(),
                             span: self.current.span,
                         });
@@ -174,6 +213,13 @@ impl<'src> Parser<'src> {
                 if is_pub {
                     return Err(ParseError::InvalidSyntax {
                         message: "pub can only be used with functions, types, or modules"
+                            .to_string(),
+                        span: self.current.span,
+                    });
+                }
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "async can only be used with functions"
                             .to_string(),
                         span: self.current.span,
                     });
@@ -245,8 +291,8 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// 함수 정의 파싱: name(params) = body
-    fn parse_function_def(&mut self, is_pub: bool) -> ParseResult<FunctionDef> {
+    /// 함수 정의 파싱: name(params) = body 또는 async name(params) = body
+    fn parse_function_def(&mut self, is_pub: bool, is_async: bool) -> ParseResult<FunctionDef> {
         let start = self.current.span;
         let name = self.expect_identifier()?;
 
@@ -280,6 +326,7 @@ impl<'src> Parser<'src> {
             return_type,
             body,
             is_pub,
+            is_async,
             span: start.merge(self.previous.span),
         })
     }
@@ -809,12 +856,21 @@ impl<'src> Parser<'src> {
         Ok(expr)
     }
 
-    /// 비교: a < b, a >= b
+    /// 비교: a < b, a >= b, chan <- value
     fn parse_comparison(&mut self) -> ParseResult<Expr> {
         let start = self.current.span;
         let mut expr = self.parse_range()?;
 
         loop {
+            // Channel send: chan <- value
+            if self.current.kind == TokenKind::LeftArrow {
+                self.advance();
+                let value = self.parse_range()?;
+                let span = start.merge(self.previous.span);
+                expr = Expr::Send(Box::new(expr), Box::new(value), span);
+                continue;
+            }
+
             let op = match self.current.kind {
                 TokenKind::Lt => BinaryOp::Lt,
                 TokenKind::Gt => BinaryOp::Gt,
@@ -900,9 +956,17 @@ impl<'src> Parser<'src> {
         Ok(expr)
     }
 
-    /// 단항: -a, !a, #a
+    /// 단항: -a, !a, #a, <-chan
     fn parse_unary(&mut self) -> ParseResult<Expr> {
         let start = self.current.span;
+
+        // Channel receive: <- chan
+        if self.current.kind == TokenKind::LeftArrow {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let span = start.merge(self.previous.span);
+            return Ok(Expr::Recv(Box::new(expr), span));
+        }
 
         let op = match self.current.kind {
             TokenKind::Minus => Some(UnaryOp::Neg),
@@ -983,6 +1047,34 @@ impl<'src> Parser<'src> {
                     let kind = self.parse_reduce_kind()?;
                     let span = start.merge(self.previous.span);
                     expr = Expr::ReduceOp(Box::new(expr), kind, span);
+                }
+
+                // 병렬 Map: arr.||@(f)
+                TokenKind::DotParMap => {
+                    self.advance();
+                    self.expect(TokenKind::LParen)?;
+                    let mapper = self.parse_expr()?;
+                    self.expect(TokenKind::RParen)?;
+                    let span = start.merge(self.previous.span);
+                    expr = Expr::ParallelMap(Box::new(expr), Box::new(mapper), span);
+                }
+
+                // 병렬 Filter: arr.||?(p)
+                TokenKind::DotParFilter => {
+                    self.advance();
+                    self.expect(TokenKind::LParen)?;
+                    let predicate = self.parse_expr()?;
+                    self.expect(TokenKind::RParen)?;
+                    let span = start.merge(self.previous.span);
+                    expr = Expr::ParallelFilter(Box::new(expr), Box::new(predicate), span);
+                }
+
+                // 병렬 Reduce: arr.||/+
+                TokenKind::DotParReduce => {
+                    self.advance();
+                    let kind = self.parse_reduce_kind()?;
+                    let span = start.merge(self.previous.span);
+                    expr = Expr::ParallelReduce(Box::new(expr), kind, span);
                 }
 
                 // 인덱스: a[i] 또는 a[start:end]
@@ -1377,6 +1469,22 @@ impl<'src> Parser<'src> {
                 } else {
                     Ok(Expr::Error(None, span))
                 }
+            }
+
+            // await 표현식
+            TokenKind::Await => {
+                self.advance();
+                let expr = self.parse_unary()?;
+                let end_span = expr.span();
+                Ok(Expr::Await(Box::new(expr), span.merge(end_span)))
+            }
+
+            // spawn 표현식 (태스크 생성)
+            TokenKind::Spawn => {
+                self.advance();
+                let expr = self.parse_unary()?;
+                let end_span = expr.span();
+                Ok(Expr::Spawn(Box::new(expr), span.merge(end_span)))
             }
 
             _ => Err(ParseError::UnexpectedToken {

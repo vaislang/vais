@@ -130,6 +130,28 @@ pub enum OpCode {
     /// Call FFI function: (lib_name, fn_name, arg_count)
     CallFfi(String, String, usize),
 
+    // === Async Operations ===
+    /// Await a future/task
+    Await,
+    /// Spawn a new task
+    Spawn,
+
+    // === Channel Operations ===
+    /// Create a new channel with optional capacity
+    MakeChannel(usize),
+    /// Send value to channel
+    Send,
+    /// Receive value from channel
+    Recv,
+
+    // === Parallel Collection Operations ===
+    /// Parallel map
+    ParallelMap(Box<Vec<Instruction>>),
+    /// Parallel filter
+    ParallelFilter(Box<Vec<Instruction>>),
+    /// Parallel reduce
+    ParallelReduce(ReduceOp, Value),
+
     // === Special ===
     /// No operation
     Nop,

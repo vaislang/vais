@@ -107,6 +107,9 @@ pub enum TokenKind {
     #[token("await")]
     Await,
 
+    #[token("spawn")]
+    Spawn,
+
     #[token("mut")]
     Mut,
 
@@ -173,6 +176,18 @@ pub enum TokenKind {
     /// ./ - Reduce operator
     #[token("./")]
     DotSlash,
+
+    /// .||@ - Parallel map operator
+    #[token(".||@")]
+    DotParMap,
+
+    /// .||? - Parallel filter operator
+    #[token(".||?")]
+    DotParFilter,
+
+    /// .||/ - Parallel reduce operator
+    #[token(".||/")]
+    DotParReduce,
 
     // =========================================================================
     // Operators - Special (AOEL)
@@ -256,6 +271,9 @@ pub enum TokenKind {
 
     #[token("->")]
     Arrow,
+
+    #[token("<-")]
+    LeftArrow,
 
     #[token("=>")]
     FatArrow,
@@ -343,6 +361,7 @@ impl TokenKind {
                 | TokenKind::Impl
                 | TokenKind::Async
                 | TokenKind::Await
+                | TokenKind::Spawn
                 | TokenKind::Mut
                 | TokenKind::As
                 | TokenKind::Try
@@ -399,7 +418,12 @@ impl TokenKind {
     pub fn is_collection_op(&self) -> bool {
         matches!(
             self,
-            TokenKind::DotAt | TokenKind::DotQuestion | TokenKind::DotSlash
+            TokenKind::DotAt
+                | TokenKind::DotQuestion
+                | TokenKind::DotSlash
+                | TokenKind::DotParMap
+                | TokenKind::DotParFilter
+                | TokenKind::DotParReduce
         )
     }
 }
@@ -423,6 +447,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Impl => write!(f, "impl"),
             TokenKind::Async => write!(f, "async"),
             TokenKind::Await => write!(f, "await"),
+            TokenKind::Spawn => write!(f, "spawn"),
             TokenKind::Mut => write!(f, "mut"),
             TokenKind::As => write!(f, "as"),
             TokenKind::Try => write!(f, "try"),
@@ -441,6 +466,9 @@ impl std::fmt::Display for TokenKind {
             TokenKind::DotAt => write!(f, ".@"),
             TokenKind::DotQuestion => write!(f, ".?"),
             TokenKind::DotSlash => write!(f, "./"),
+            TokenKind::DotParMap => write!(f, ".||@"),
+            TokenKind::DotParFilter => write!(f, ".||?"),
+            TokenKind::DotParReduce => write!(f, ".||/"),
             TokenKind::Dollar => write!(f, "$"),
             TokenKind::Hash => write!(f, "#"),
             TokenKind::Underscore => write!(f, "_"),
@@ -462,6 +490,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Bang => write!(f, "!"),
             TokenKind::Eq => write!(f, "="),
             TokenKind::Arrow => write!(f, "->"),
+            TokenKind::LeftArrow => write!(f, "<-"),
             TokenKind::FatArrow => write!(f, "=>"),
             TokenKind::LParen => write!(f, "("),
             TokenKind::RParen => write!(f, ")"),

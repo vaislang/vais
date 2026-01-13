@@ -116,6 +116,11 @@ impl Formatter {
             self.output.push_str("pub ");
         }
 
+        // async prefix
+        if func.is_async {
+            self.output.push_str("async ");
+        }
+
         // name(params)
         self.output.push_str(&func.name);
         self.output.push('(');
@@ -737,6 +742,40 @@ impl Formatter {
                     self.format_expr(condition);
                 }
                 self.output.push('}');
+            }
+            Expr::Await(inner, _) => {
+                self.output.push_str("await ");
+                self.format_expr(inner);
+            }
+            Expr::Spawn(inner, _) => {
+                self.output.push_str("spawn ");
+                self.format_expr(inner);
+            }
+            Expr::Send(chan, value, _) => {
+                self.format_expr(chan);
+                self.output.push_str(" <- ");
+                self.format_expr(value);
+            }
+            Expr::Recv(chan, _) => {
+                self.output.push_str("<- ");
+                self.format_expr(chan);
+            }
+            Expr::ParallelMap(arr, transform, _) => {
+                self.format_expr(arr);
+                self.output.push_str(".||@(");
+                self.format_expr(transform);
+                self.output.push(')');
+            }
+            Expr::ParallelFilter(arr, predicate, _) => {
+                self.format_expr(arr);
+                self.output.push_str(".||?(");
+                self.format_expr(predicate);
+                self.output.push(')');
+            }
+            Expr::ParallelReduce(arr, kind, _) => {
+                self.format_expr(arr);
+                self.output.push_str(".||/");
+                self.format_reduce_kind(kind);
             }
         }
     }

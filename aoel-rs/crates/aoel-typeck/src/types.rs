@@ -32,6 +32,10 @@ pub enum Type {
     Optional(Box<Type>),
     /// Result 타입
     Result(Box<Type>),
+    /// Future/Async 타입
+    Future(Box<Type>),
+    /// Channel 타입
+    Channel(Box<Type>),
     /// 타입 변수 (추론용)
     Var(usize),
     /// Any 타입 (동적 타입)
@@ -96,6 +100,8 @@ impl Type {
             ),
             Type::Optional(t) => Type::Optional(Box::new(t.substitute(var, replacement))),
             Type::Result(t) => Type::Result(Box::new(t.substitute(var, replacement))),
+            Type::Future(t) => Type::Future(Box::new(t.substitute(var, replacement))),
+            Type::Channel(t) => Type::Channel(Box::new(t.substitute(var, replacement))),
             _ => self.clone(),
         }
     }
@@ -111,7 +117,7 @@ impl Type {
             Type::Function(params, ret) => {
                 params.iter().any(|t| t.contains_var(var)) || ret.contains_var(var)
             }
-            Type::Optional(t) | Type::Result(t) => t.contains_var(var),
+            Type::Optional(t) | Type::Result(t) | Type::Future(t) | Type::Channel(t) => t.contains_var(var),
             _ => false,
         }
     }
@@ -149,7 +155,7 @@ impl Type {
                 }
                 ret.collect_vars(vars);
             }
-            Type::Optional(t) | Type::Result(t) => t.collect_vars(vars),
+            Type::Optional(t) | Type::Result(t) | Type::Future(t) | Type::Channel(t) => t.collect_vars(vars),
             _ => {}
         }
     }
@@ -198,6 +204,8 @@ impl fmt::Display for Type {
             }
             Type::Optional(t) => write!(f, "?{}", t),
             Type::Result(t) => write!(f, "!{}", t),
+            Type::Future(t) => write!(f, "Future<{}>", t),
+            Type::Channel(t) => write!(f, "Chan<{}>", t),
             Type::Var(v) => write!(f, "T{}", v),
             Type::Any => write!(f, "Any"),
             Type::Never => write!(f, "Never"),

@@ -594,6 +594,67 @@ impl Lowerer {
                 // 여기서는 결과를 배열로 남기고 런타임에서 세트로 변환하도록 함
                 // TODO: ArrayToSet opcode 추가 필요
             }
+
+            // Await 표현식
+            Expr::Await(inner, _) => {
+                instrs.extend(self.lower_expr(inner)?);
+                instrs.push(Instruction::new(OpCode::Await));
+            }
+
+            // Spawn 표현식 (태스크 생성)
+            Expr::Spawn(inner, _) => {
+                instrs.extend(self.lower_expr(inner)?);
+                instrs.push(Instruction::new(OpCode::Spawn));
+            }
+
+            // Channel send: chan <- value
+            Expr::Send(chan, value, _) => {
+                instrs.extend(self.lower_expr(chan)?);
+                instrs.extend(self.lower_expr(value)?);
+                instrs.push(Instruction::new(OpCode::Send));
+            }
+
+            // Channel receive: <- chan
+            Expr::Recv(chan, _) => {
+                instrs.extend(self.lower_expr(chan)?);
+                instrs.push(Instruction::new(OpCode::Recv));
+            }
+
+            // Parallel Map: arr.||@(f)
+            Expr::ParallelMap(arr, transform, _) => {
+                instrs.extend(self.lower_expr(arr)?);
+                let transform_instrs = self.lower_expr(transform)?;
+                instrs.push(Instruction::new(OpCode::ParallelMap(Box::new(transform_instrs))));
+            }
+
+            // Parallel Filter: arr.||?(p)
+            Expr::ParallelFilter(arr, predicate, _) => {
+                instrs.extend(self.lower_expr(arr)?);
+                let pred_instrs = self.lower_expr(predicate)?;
+                instrs.push(Instruction::new(OpCode::ParallelFilter(Box::new(pred_instrs))));
+            }
+
+            // Parallel Reduce: arr.||/+
+            Expr::ParallelReduce(arr, kind, _) => {
+                instrs.extend(self.lower_expr(arr)?);
+
+                let (reduce_op, init_value) = match kind {
+                    ReduceKind::Sum => (IrReduceOp::Sum, Value::Int(0)),
+                    ReduceKind::Product => (IrReduceOp::Product, Value::Int(1)),
+                    ReduceKind::Min => (IrReduceOp::Min, Value::Void),
+                    ReduceKind::Max => (IrReduceOp::Max, Value::Void),
+                    ReduceKind::And => (IrReduceOp::All, Value::Bool(true)),
+                    ReduceKind::Or => (IrReduceOp::Any, Value::Bool(false)),
+                    ReduceKind::Custom(init, func) => {
+                        let init_instrs = self.lower_expr(init)?;
+                        let func_instrs = self.lower_expr(func)?;
+                        instrs.extend(init_instrs);
+                        (IrReduceOp::Custom(Box::new(func_instrs)), Value::Void)
+                    }
+                };
+
+                instrs.push(Instruction::new(OpCode::ParallelReduce(reduce_op, init_value)));
+            }
         }
 
         Ok(instrs)
@@ -898,6 +959,7 @@ mod tests {
             return_type: None,
             body,
             is_pub: false,
+            is_async: false,
             span: dummy_span(),
         }
     }

@@ -61,6 +61,8 @@ pub struct FunctionDef {
     pub body: Expr,
     /// public 여부
     pub is_pub: bool,
+    /// async 함수 여부
+    pub is_async: bool,
     pub span: Span,
 }
 
@@ -137,6 +139,10 @@ pub enum TypeExpr {
     Function(Vec<TypeExpr>, Box<TypeExpr>),
     /// 구조체 타입: { field: Type, ... }
     Struct(Vec<(String, TypeExpr)>),
+    /// Future/Async 타입: Future<T>
+    Future(Box<TypeExpr>),
+    /// Channel 타입: Chan<T>
+    Channel(Box<TypeExpr>),
 }
 
 // =============================================================================
@@ -359,6 +365,20 @@ pub enum Expr {
         cond: Option<Box<Expr>>,
         span: Span,
     },
+    /// Await 표현식: await expr
+    Await(Box<Expr>, Span),
+    /// Spawn 표현식: spawn expr (태스크 생성)
+    Spawn(Box<Expr>, Span),
+    /// Channel 송신: chan <- value
+    Send(Box<Expr>, Box<Expr>, Span),
+    /// Channel 수신: <- chan
+    Recv(Box<Expr>, Span),
+    /// Parallel map: arr.||@(f)
+    ParallelMap(Box<Expr>, Box<Expr>, Span),
+    /// Parallel filter: arr.||?(p)
+    ParallelFilter(Box<Expr>, Box<Expr>, Span),
+    /// Parallel reduce: arr.||/+
+    ParallelReduce(Box<Expr>, ReduceKind, Span),
 }
 
 impl Expr {
@@ -401,6 +421,13 @@ impl Expr {
             Expr::Struct(_, _, s) => *s,
             Expr::ListComprehension { span, .. } => *span,
             Expr::SetComprehension { span, .. } => *span,
+            Expr::Await(_, s) => *s,
+            Expr::Spawn(_, s) => *s,
+            Expr::Send(_, _, s) => *s,
+            Expr::Recv(_, s) => *s,
+            Expr::ParallelMap(_, _, s) => *s,
+            Expr::ParallelFilter(_, _, s) => *s,
+            Expr::ParallelReduce(_, _, s) => *s,
         }
     }
 }
@@ -558,6 +585,7 @@ mod tests {
             return_type: None,
             body: Expr::Integer(42, dummy_span()),
             is_pub: false,
+            is_async: false,
             span: dummy_span(),
         };
         let program = Program {
@@ -578,6 +606,7 @@ mod tests {
             return_type: None,
             body: Expr::Nil(dummy_span()),
             is_pub: false,
+            is_async: false,
             span: dummy_span(),
         };
         assert!(matches!(Item::Function(func), Item::Function(_)));
@@ -638,6 +667,7 @@ mod tests {
                 dummy_span(),
             ),
             is_pub: true,
+            is_async: false,
             span: dummy_span(),
         };
         assert_eq!(func.name, "add");
@@ -1053,6 +1083,7 @@ mod tests {
                 dummy_span(),
             ),
             is_pub: false,
+            is_async: false,
             span: dummy_span(),
         };
 

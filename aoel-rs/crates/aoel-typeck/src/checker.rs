@@ -585,6 +585,158 @@ impl TypeChecker {
                 let result_type = self.infer_expr(expr)?;
                 Ok(Type::Set(Box::new(result_type)))
             }
+
+            // Await 표현식: await expr
+            Expr::Await(inner, span) => {
+                let inner_type = self.infer_expr(inner)?;
+                match self.env.resolve(&inner_type) {
+                    Type::Future(t) => Ok((*t).clone()),
+                    Type::Var(_) => {
+                        // 타입 변수인 경우 Future<T>로 통일
+                        let result_type = self.env.fresh_var();
+                        self.env.unify(&inner_type, &Type::Future(Box::new(result_type.clone())), *span)?;
+                        Ok(result_type)
+                    }
+                    _ => Err(TypeError::InvalidOperator {
+                        op: "await".to_string(),
+                        ty: inner_type.to_string(),
+                        span: *span,
+                    }),
+                }
+            }
+
+            // Spawn 표현식: spawn expr (태스크 생성)
+            Expr::Spawn(inner, _span) => {
+                let inner_type = self.infer_expr(inner)?;
+                // spawn은 Future<T>를 반환
+                Ok(Type::Future(Box::new(inner_type)))
+            }
+
+            // Channel send: chan <- value
+            Expr::Send(chan, value, span) => {
+                let chan_type = self.infer_expr(chan)?;
+                let value_type = self.infer_expr(value)?;
+
+                match self.env.resolve(&chan_type) {
+                    Type::Channel(t) => {
+                        self.env.unify(&t, &value_type, *span)?;
+                        Ok(Type::Unit)
+                    }
+                    Type::Var(_) => {
+                        // 타입 변수인 경우 Chan<T>로 통일
+                        self.env.unify(&chan_type, &Type::Channel(Box::new(value_type)), *span)?;
+                        Ok(Type::Unit)
+                    }
+                    _ => Err(TypeError::InvalidOperator {
+                        op: "send (<-)".to_string(),
+                        ty: chan_type.to_string(),
+                        span: *span,
+                    }),
+                }
+            }
+
+            // Channel receive: <- chan
+            Expr::Recv(chan, span) => {
+                let chan_type = self.infer_expr(chan)?;
+                match self.env.resolve(&chan_type) {
+                    Type::Channel(t) => Ok((*t).clone()),
+                    Type::Var(_) => {
+                        // 타입 변수인 경우 Chan<T>로 통일
+                        let result_type = self.env.fresh_var();
+                        self.env.unify(&chan_type, &Type::Channel(Box::new(result_type.clone())), *span)?;
+                        Ok(result_type)
+                    }
+                    _ => Err(TypeError::InvalidOperator {
+                        op: "recv (<-)".to_string(),
+                        ty: chan_type.to_string(),
+                        span: *span,
+                    }),
+                }
+            }
+
+            // Parallel Map: arr.||@(f)
+            Expr::ParallelMap(base, mapper, span) => {
+                let base_type = self.infer_expr(base)?;
+                let resolved = self.env.resolve(&base_type);
+
+                if let Type::Var(_) = resolved {
+                    let elem_type = self.env.fresh_var();
+                    self.env.unify(&base_type, &Type::Array(Box::new(elem_type.clone())), *span)?;
+                    self.env.bind_var("_".to_string(), elem_type);
+                    let result_type = self.infer_expr(mapper)?;
+                    Ok(Type::Array(Box::new(result_type)))
+                } else if let Type::Array(elem_type) = resolved {
+                    self.env.bind_var("_".to_string(), (*elem_type).clone());
+                    let result_type = self.infer_expr(mapper)?;
+                    Ok(Type::Array(Box::new(result_type)))
+                } else {
+                    Err(TypeError::InvalidOperator {
+                        op: "parallel map (.||@)".to_string(),
+                        ty: base_type.to_string(),
+                        span: *span,
+                    })
+                }
+            }
+
+            // Parallel Filter: arr.||?(p)
+            Expr::ParallelFilter(base, predicate, span) => {
+                let base_type = self.infer_expr(base)?;
+                let resolved = self.env.resolve(&base_type);
+
+                if let Type::Var(_) = resolved {
+                    let elem_type = self.env.fresh_var();
+                    self.env.unify(&base_type, &Type::Array(Box::new(elem_type.clone())), *span)?;
+                    self.env.bind_var("_".to_string(), elem_type.clone());
+                    let pred_type = self.infer_expr(predicate)?;
+                    self.env.unify(&pred_type, &Type::Bool, *span)?;
+                    Ok(Type::Array(Box::new(elem_type)))
+                } else if let Type::Array(elem_type) = resolved {
+                    self.env.bind_var("_".to_string(), (*elem_type).clone());
+                    let pred_type = self.infer_expr(predicate)?;
+                    self.env.unify(&pred_type, &Type::Bool, *span)?;
+                    Ok(Type::Array(elem_type))
+                } else {
+                    Err(TypeError::InvalidOperator {
+                        op: "parallel filter (.||?)".to_string(),
+                        ty: base_type.to_string(),
+                        span: *span,
+                    })
+                }
+            }
+
+            // Parallel Reduce: arr.||/+
+            Expr::ParallelReduce(base, kind, span) => {
+                let base_type = self.infer_expr(base)?;
+                let resolved = self.env.resolve(&base_type);
+
+                let elem_type = if let Type::Var(_) = resolved {
+                    let elem = self.env.fresh_var();
+                    self.env.unify(&base_type, &Type::Array(Box::new(elem.clone())), *span)?;
+                    elem
+                } else if let Type::Array(elem) = resolved {
+                    (*elem).clone()
+                } else {
+                    return Err(TypeError::InvalidOperator {
+                        op: "parallel reduce (.||/)".to_string(),
+                        ty: base_type.to_string(),
+                        span: *span,
+                    });
+                };
+
+                match kind {
+                    ReduceKind::Sum | ReduceKind::Product => {
+                        if elem_type.is_numeric() {
+                            Ok(elem_type)
+                        } else {
+                            self.env.unify(&elem_type, &Type::Int, *span)?;
+                            Ok(Type::Int)
+                        }
+                    }
+                    ReduceKind::Min | ReduceKind::Max => Ok(elem_type),
+                    ReduceKind::And | ReduceKind::Or => Ok(Type::Bool),
+                    ReduceKind::Custom(_, _) => Ok(Type::Any),
+                }
+            }
         }
     }
 
@@ -962,7 +1114,6 @@ impl TypeChecker {
             }
             TypeExpr::Generic(name, args) => {
                 // 제네릭 타입 인스턴스화
-                // 현재는 기본적인 처리만 - 실제 제네릭 확장은 Phase 2에서
                 match name.as_str() {
                     "Array" if args.len() == 1 => {
                         Type::Array(Box::new(self.convert_type_expr(&args[0])))
@@ -979,9 +1130,17 @@ impl TypeChecker {
                             Box::new(self.convert_type_expr(&args[1])),
                         )
                     }
+                    "Future" if args.len() == 1 => {
+                        Type::Future(Box::new(self.convert_type_expr(&args[0])))
+                    }
+                    "Chan" | "Channel" if args.len() == 1 => {
+                        Type::Channel(Box::new(self.convert_type_expr(&args[0])))
+                    }
                     _ => Type::Any, // 사용자 정의 제네릭은 Any로 처리
                 }
             }
+            TypeExpr::Future(inner) => Type::Future(Box::new(self.convert_type_expr(inner))),
+            TypeExpr::Channel(inner) => Type::Channel(Box::new(self.convert_type_expr(inner))),
         }
     }
 
