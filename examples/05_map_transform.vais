@@ -1,4 +1,4 @@
-# AOEL Example 05: Map Transform
+# Vais Example 05: Map Transform
 # 리스트의 각 요소를 변환 (제곱 계산)
 
 UNIT FUNCTION examples.square_list V1.0.0

@@ -1,4 +1,4 @@
-# AOEL v6b Language Specification
+# Vais v6b Language Specification
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-AOEL v6b는 AI가 효율적으로 생성하고 직접 실행할 수 있는 프로그래밍 언어입니다.
+Vais v6b는 AI가 효율적으로 생성하고 직접 실행할 수 있는 프로그래밍 언어입니다.
 
 ### 설계 원칙
 
@@ -615,7 +615,7 @@ cat(age)=age<0?err:age>=18?"adult":age>=13?"teen":"child"
 
 ## 10. Comparison with Python
 
-| 기능 | Python | AOEL v6b | 토큰 절감 |
+| 기능 | Python | Vais v6b | 토큰 절감 |
 |------|--------|----------|----------|
 | 합계 | `sum(nums)` | `ns./+` | 50%+ |
 | 필터+맵 | `[u.email for u in users if u.active]` | `us.?active.@email` | 50%+ |
@@ -643,13 +643,13 @@ cat(age)=age<0?err:age>=18?"adult":age>=13?"teen":"child"
 
 ### 11.3 IR
 
-기존 AOEL IR 재사용 가능:
+기존 Vais IR 재사용 가능:
 - Value, OpCode, Module, Function
 - 체이닝 연산 → 일련의 IR 명령으로 변환
 
 ### 11.4 VM
 
-기존 AOEL VM 재사용 가능:
+기존 Vais VM 재사용 가능:
 - 스택 기반 실행
 - 빌트인 함수 추가 필요
 

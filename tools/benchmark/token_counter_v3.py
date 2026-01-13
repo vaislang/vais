@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL v3 Token Benchmark - Extreme Compression Experiment
+Vais v3 Token Benchmark - Extreme Compression Experiment
 
 Testing multiple compression strategies:
 - v3a: Symbol-heavy (minimal keywords)
@@ -223,7 +223,7 @@ EXAMPLES = {
 
 def run_benchmark():
     print("=" * 80)
-    print("AOEL v3 Extreme Compression Benchmark")
+    print("Vais v3 Extreme Compression Benchmark")
     print("=" * 80)
     print()
 

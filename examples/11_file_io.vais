@@ -1,22 +1,22 @@
-// AOEL File I/O Example (std.io)
+// Vais File I/O Example (std.io)
 // Demonstrates file operations, path handling, and directory operations
 
 // === File Operations ===
 
 // Write content to a file
-write_result = write_file("/tmp/aoel_demo.txt", "Hello from AOEL!\nLine 2\nLine 3")
+write_result = write_file("/tmp/vais_demo.txt", "Hello from Vais!\nLine 2\nLine 3")
 
 // Read the file content
-content = read_file("/tmp/aoel_demo.txt")
+content = read_file("/tmp/vais_demo.txt")
 print("File content:")
 print(content)
 
 // Read file as lines
-lines = read_lines("/tmp/aoel_demo.txt")
+lines = read_lines("/tmp/vais_demo.txt")
 print("\nLines count:", len(lines))
 
 // Append to file
-append_file("/tmp/aoel_demo.txt", "\nAppended line")
+append_file("/tmp/vais_demo.txt", "\nAppended line")
 
 // === Path Functions ===
 
@@ -37,10 +37,10 @@ stem = path_stem(full_path)
 print("Stem:", stem)
 
 // Check if paths exist
-exists = path_exists("/tmp/aoel_demo.txt")
+exists = path_exists("/tmp/vais_demo.txt")
 print("\nFile exists:", exists)
 
-is_file = path_is_file("/tmp/aoel_demo.txt")
+is_file = path_is_file("/tmp/vais_demo.txt")
 print("Is file:", is_file)
 
 is_dir = path_is_dir("/tmp")
@@ -49,7 +49,7 @@ print("/tmp is directory:", is_dir)
 // === Directory Operations ===
 
 // Create directory
-create_dir_all("/tmp/aoel_test_dir/subdir")
+create_dir_all("/tmp/vais_test_dir/subdir")
 print("\nCreated directory structure")
 
 // List directory contents
@@ -57,7 +57,7 @@ items = list_dir("/tmp")
 print("Items in /tmp (first 5):", take(items, 5))
 
 // Get file size
-size = file_size("/tmp/aoel_demo.txt")
+size = file_size("/tmp/vais_demo.txt")
 print("\nFile size:", size, "bytes")
 
 // === Environment ===
@@ -67,25 +67,25 @@ cwd_path = cwd()
 print("\nCurrent directory:", cwd_path)
 
 // Environment variables
-env_set("AOEL_TEST", "hello_aoel")
-test_val = env_get("AOEL_TEST")
+env_set("VAIS_TEST", "hello_vais")
+test_val = env_get("VAIS_TEST")
 print("Environment variable:", test_val)
 
 // === Copy and Rename ===
 
 // Copy file
-copy_file("/tmp/aoel_demo.txt", "/tmp/aoel_demo_copy.txt")
+copy_file("/tmp/vais_demo.txt", "/tmp/vais_demo_copy.txt")
 print("\nFile copied")
 
 // Rename file
-rename("/tmp/aoel_demo_copy.txt", "/tmp/aoel_demo_renamed.txt")
+rename("/tmp/vais_demo_copy.txt", "/tmp/vais_demo_renamed.txt")
 print("File renamed")
 
 // === Cleanup ===
 
-remove_file("/tmp/aoel_demo.txt")
-remove_file("/tmp/aoel_demo_renamed.txt")
-remove_dir_all("/tmp/aoel_test_dir")
+remove_file("/tmp/vais_demo.txt")
+remove_file("/tmp/vais_demo_renamed.txt")
+remove_dir_all("/tmp/vais_test_dir")
 print("\nCleanup completed")
 
 print("\n=== std.io Demo Complete ===")

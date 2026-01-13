@@ -17,16 +17,16 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            name: aoel-linux-x86_64
+            name: vais-linux-x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: aoel-macos-x86_64
+            name: vais-macos-x86_64
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: aoel-macos-aarch64
+            name: vais-macos-aarch64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            name: aoel-windows-x86_64.exe
+            name: vais-windows-x86_64.exe
 
     steps:
       - name: Checkout repository
@@ -38,19 +38,19 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        working-directory: aoel-rs
-        run: cargo build --release --target ${{ matrix.target }} -p aoel-cli
+        working-directory: vais-rs
+        run: cargo build --release --target ${{ matrix.target }} -p vais-cli
 
       - name: Prepare artifact (Unix)
         if: runner.os != 'Windows'
         run: |
-          cp aoel-rs/target/${{ matrix.target }}/release/aoel ${{ matrix.name }}
+          cp vais-rs/target/${{ matrix.target }}/release/vais ${{ matrix.name }}
           chmod +x ${{ matrix.name }}
 
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
         run: |
-          cp aoel-rs/target/${{ matrix.target }}/release/aoel.exe ${{ matrix.name }}
+          cp vais-rs/target/${{ matrix.target }}/release/vais.exe ${{ matrix.name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

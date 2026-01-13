@@ -1,10 +1,10 @@
-# AOEL v2: AI-Optimized Executable Language
+# Vais v2: AI-Optimized Executable Language
 
 ## Project Vision
 
 **"AI가 효율적으로 생성하고, 직접 실행되는 언어"**
 
-Python이 인간을 위해 설계되었다면, AOEL v2는 AI를 위해 설계된다.
+Python이 인간을 위해 설계되었다면, Vais v2는 AI를 위해 설계된다.
 
 ---
 
@@ -52,9 +52,9 @@ Python이 인간을 위해 설계되었다면, AOEL v2는 AI를 위해 설계된
 
 | # | 태스크 | 상태 | 산출물 |
 |---|--------|------|--------|
-| 1.0 | v6b 문법 명세 작성 | ✅ 완료 | AOEL_V6B_SPEC.md |
-| 1.1 | 빌트인 목록 확정 | ✅ 완료 | AOEL_V6B_BUILTINS.md |
-| 1.2 | 기존 코드 재사용 분석 | ✅ 완료 | AOEL_V6B_REUSE_ANALYSIS.md |
+| 1.0 | v6b 문법 명세 작성 | ✅ 완료 | VAIS_V6B_SPEC.md |
+| 1.1 | 빌트인 목록 확정 | ✅ 완료 | VAIS_V6B_BUILTINS.md |
+| 1.2 | 기존 코드 재사용 분석 | ✅ 완료 | VAIS_V6B_REUSE_ANALYSIS.md |
 
 ### 다음 단계: 구현
 
@@ -173,7 +173,7 @@ b   = bool
 
 ---
 
-## 기존 AOEL v1과 비교
+## 기존 Vais v1과 비교
 
 | 측면 | v1 | v2 |
 |------|----|----|
@@ -195,8 +195,8 @@ def hello():
     return "Hello, World!"
 ```
 
-**AOEL v1 (150+ tokens)**
-```aoel
+**Vais v1 (150+ tokens)**
+```vais
 UNIT FUNCTION examples.hello V1.0.0
 META
   DOMAIN examples
@@ -210,7 +210,7 @@ ENDOUTPUT
 END
 ```
 
-**AOEL v2 (10 tokens)**
+**Vais v2 (10 tokens)**
 ```lisp
 (fn hello [] :s "Hello, World!")
 ```
@@ -223,7 +223,7 @@ def get_emails(users):
     return [u.email.upper() for u in users if u.active]
 ```
 
-**AOEL v2 (20 tokens)**
+**Vais v2 (20 tokens)**
 ```lisp
 (fn get_emails [users:[User]] :[s]
   (-> users (filter .active) (map .email) (map upper)))
@@ -247,25 +247,25 @@ def get_emails(users):
 ## 진행 로그
 
 ### 2026-01-12 (저녁) - 확장성 설계 완료
-- 전체 아키텍처 설계 (AOEL_ARCHITECTURE.md)
-- 코어 언어 설계 원칙 (AOEL_CORE_DESIGN.md)
-- FFI 시스템 설계 (AOEL_FFI_DESIGN.md)
-- 패키지 시스템 설계 (AOEL_PACKAGE_SYSTEM.md)
-- 표준 라이브러리 구조 (AOEL_STDLIB.md)
-- 확장 가이드라인 (AOEL_EXTENSION_GUIDE.md)
+- 전체 아키텍처 설계 (VAIS_ARCHITECTURE.md)
+- 코어 언어 설계 원칙 (VAIS_CORE_DESIGN.md)
+- FFI 시스템 설계 (VAIS_FFI_DESIGN.md)
+- 패키지 시스템 설계 (VAIS_PACKAGE_SYSTEM.md)
+- 표준 라이브러리 구조 (VAIS_STDLIB.md)
+- 확장 가이드라인 (VAIS_EXTENSION_GUIDE.md)
 - **목표: Python처럼 커뮤니티가 확장할 수 있는 생태계**
 
 ### 2026-01-12 (오후) - Phase 1 우선 작업 완료
-- v6b 문법 명세 문서 작성 (AOEL_V6B_SPEC.md)
-- 빌트인 함수 목록 확정 (AOEL_V6B_BUILTINS.md, ~60개)
-- 기존 코드 재사용 분석 완료 (AOEL_V6B_REUSE_ANALYSIS.md)
+- v6b 문법 명세 문서 작성 (VAIS_V6B_SPEC.md)
+- 빌트인 함수 목록 확정 (VAIS_V6B_BUILTINS.md, ~60개)
+- 기존 코드 재사용 분석 완료 (VAIS_V6B_REUSE_ANALYSIS.md)
   - IR/VM: 60-90% 재사용 가능
   - Lexer/Parser: 전면 재작성 필요
 - 다음 단계: 구현 (Lexer, Parser, AST)
 
 ### 2026-01-12 (오전) - Phase 0 완료 및 Go 결정
-- AOEL v2 프로젝트 시작
-- 기존 AOEL v1 토큰 효율성 분석: Python 대비 6배 비효율 확인
+- Vais v2 프로젝트 시작
+- 기존 Vais v1 토큰 효율성 분석: Python 대비 6배 비효율 확인
 - 7가지 문법 버전 실험 (v2~v6b)
 - **v6b 최종 선택**: 43.9% 토큰 절감, 93% 생성 정확도
 - **Go 결정**: Phase 1 진행

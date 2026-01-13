@@ -1,4 +1,4 @@
-# AOEL Example 10: ETL Pipeline
+# Vais Example 10: ETL Pipeline
 # 데이터 추출-변환-적재 파이프라인
 
 UNIT PIPELINE examples.etl_orders V1.0.0

@@ -1,6 +1,6 @@
 """
-AOEL Validator - 의미 검증기
-AI-Optimized Executable Language Parser v0.2
+Vais Validator - 의미 검증기
+Vibe AI SSW Language Parser v0.2
 """
 
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from typing import List, Dict, Set, Optional, Any
 from enum import Enum, auto
 
 from ast_nodes import (
-    AOELUnit, ASTNode, ASTVisitor,
+    VaisUnit, ASTNode, ASTVisitor,
     UnitBlock, MetaBlock, InputBlock, OutputBlock,
     IntentBlock, ConstraintBlock, FlowBlock, ExecutionBlock, VerifyBlock,
     FlowNode, FlowEdge, InputEntry, OutputEntry,
@@ -39,7 +39,7 @@ class ValidationError:
 
 
 class Validator(ASTVisitor):
-    """AOEL 의미 검증기"""
+    """Vais 의미 검증기"""
 
     def __init__(self):
         self.errors: List[ValidationError] = []
@@ -61,7 +61,7 @@ class Validator(ASTVisitor):
             node=node
         ))
 
-    def validate(self, unit: AOELUnit) -> List[ValidationError]:
+    def validate(self, unit: VaisUnit) -> List[ValidationError]:
         """전체 유닛 검증"""
         self.errors = []
 
@@ -86,7 +86,7 @@ class Validator(ASTVisitor):
 
         return self.errors
 
-    def _validate_blocks_exist(self, unit: AOELUnit):
+    def _validate_blocks_exist(self, unit: VaisUnit):
         """모든 필수 블록 존재 확인"""
         if not unit.unit:
             self.add_error("E1001", "Missing UNIT block", unit)
@@ -107,7 +107,7 @@ class Validator(ASTVisitor):
         if not unit.verify:
             self.add_error("E1009", "Missing VERIFY block", unit)
 
-    def _collect_fields(self, unit: AOELUnit):
+    def _collect_fields(self, unit: VaisUnit):
         """입력/출력 필드 수집"""
         if unit.input:
             for entry in unit.input.entries:
@@ -343,7 +343,7 @@ class Validator(ASTVisitor):
             self._validate_expression_refs(expr.left, parent)
             self._validate_expression_refs(expr.right, parent)
 
-    def _validate_cross_references(self, unit: AOELUnit):
+    def _validate_cross_references(self, unit: VaisUnit):
         """교차 블록 참조 검증"""
         # INTENT의 입출력 참조가 실제 필드와 일치하는지
         if unit.intent and unit.intent.goal_spec:
@@ -353,7 +353,7 @@ class Validator(ASTVisitor):
                 self._validate_expression_refs(output_ref, unit.intent)
 
 
-def validate(unit: AOELUnit) -> List[ValidationError]:
+def validate(unit: VaisUnit) -> List[ValidationError]:
     """유닛 검증 헬퍼 함수"""
     validator = Validator()
     return validator.validate(unit)

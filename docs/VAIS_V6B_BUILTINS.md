@@ -1,4 +1,4 @@
-# AOEL v6b Built-in Functions
+# Vais v6b Built-in Functions
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -7,7 +7,7 @@
 
 ## Overview
 
-AOEL v6b 빌트인 함수는 최소한으로 유지하면서 필수 기능을 제공합니다.
+Vais v6b 빌트인 함수는 최소한으로 유지하면서 필수 기능을 제공합니다.
 
 ### 설계 원칙
 

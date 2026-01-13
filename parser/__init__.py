@@ -1,11 +1,11 @@
 """
-AOEL Parser Package
-AI-Optimized Executable Language Parser v0.2
+Vais Parser Package
+Vibe AI SSW Language Parser v0.2
 """
 
 from .lexer import Lexer, Token, TokenType, tokenize
 from .ast_nodes import (
-    AOELUnit, ASTNode, ASTVisitor, ASTPrinter,
+    VaisUnit, ASTNode, ASTVisitor, ASTPrinter,
     UnitBlock, MetaBlock, InputBlock, OutputBlock,
     IntentBlock, ConstraintBlock, FlowBlock, ExecutionBlock, VerifyBlock,
     FlowNode, FlowEdge, NodeParam,
@@ -22,7 +22,7 @@ __all__ = [
     # Lexer
     "Lexer", "Token", "TokenType", "tokenize",
     # AST
-    "AOELUnit", "ASTNode", "ASTVisitor", "ASTPrinter",
+    "VaisUnit", "ASTNode", "ASTVisitor", "ASTPrinter",
     "UnitBlock", "MetaBlock", "InputBlock", "OutputBlock",
     "IntentBlock", "ConstraintBlock", "FlowBlock", "ExecutionBlock", "VerifyBlock",
     "FlowNode", "FlowEdge", "NodeParam",

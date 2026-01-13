@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL Parser 테스트 스크립트
+Vais Parser 테스트 스크립트
 예제 파일들을 파싱하고 검증 결과를 출력
 """
 
@@ -130,7 +130,7 @@ def test_file(filepath: str):
 def main():
     """메인 테스트 실행"""
     print("="*70)
-    print("🚀 AOEL Parser Prototype Test Suite")
+    print("🚀 Vais Parser Prototype Test Suite")
     print("="*70)
 
     # 예제 디렉토리 찾기
@@ -141,20 +141,20 @@ def main():
         print(f"❌ 예제 디렉토리 없음: {examples_dir}")
         return
 
-    # 모든 .aoel 파일 테스트
-    aoel_files = sorted(examples_dir.glob("*.aoel"))
+    # 모든 .vais 파일 테스트
+    vais_files = sorted(examples_dir.glob("*.vais"))
 
-    if not aoel_files:
-        print(f"❌ .aoel 파일 없음: {examples_dir}")
+    if not vais_files:
+        print(f"❌ .vais 파일 없음: {examples_dir}")
         return
 
-    print(f"\n📁 발견된 예제 파일: {len(aoel_files)}개")
-    for f in aoel_files:
+    print(f"\n📁 발견된 예제 파일: {len(vais_files)}개")
+    for f in vais_files:
         print(f"  - {f.name}")
 
     # 테스트 실행
     results = {}
-    for filepath in aoel_files:
+    for filepath in vais_files:
         success = test_file(str(filepath))
         results[filepath.name] = success
 

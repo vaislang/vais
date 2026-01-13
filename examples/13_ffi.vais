@@ -1,4 +1,4 @@
-// AOEL FFI Example
+// Vais FFI Example
 // Demonstrates calling C library functions
 
 // FFI block: declare external C functions

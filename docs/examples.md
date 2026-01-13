@@ -1,6 +1,6 @@
-# AOEL Examples
+# Vais Examples
 
-A collection of practical examples demonstrating AOEL's features.
+A collection of practical examples demonstrating Vais's features.
 
 ## Table of Contents
 
@@ -17,15 +17,15 @@ A collection of practical examples demonstrating AOEL's features.
 
 ### Hello World
 
-```aoel
+```vais
 print("Hello, World!")
 ```
 
 ### Variables and Expressions
 
-```aoel
+```vais
 // Variables
-name = "AOEL"
+name = "Vais"
 version = 1.0
 is_ready = true
 
@@ -40,12 +40,12 @@ print("Mod:", x % y)      // 1
 
 // String concatenation
 greeting = "Hello, " ++ name ++ "!"
-print(greeting)           // "Hello, AOEL!"
+print(greeting)           // "Hello, Vais!"
 ```
 
 ### Functions
 
-```aoel
+```vais
 // Simple function
 add(a, b) = a + b
 
@@ -65,7 +65,7 @@ print(apply_twice(double, 5))   // 20
 
 ### Factorial
 
-```aoel
+```vais
 // Using self-recursion ($)
 factorial(n) = n < 2 ? 1 : n * $(n - 1)
 
@@ -79,7 +79,7 @@ print(factorial(10))  // 3628800
 
 ### Fibonacci
 
-```aoel
+```vais
 // Recursive Fibonacci
 fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)
 
@@ -93,7 +93,7 @@ fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)
 
 ### GCD (Greatest Common Divisor)
 
-```aoel
+```vais
 gcd(a, b) = b == 0 ? a : $(b, a % b)
 
 print(gcd(48, 18))    // 6
@@ -102,7 +102,7 @@ print(gcd(100, 35))   // 5
 
 ### Power Function
 
-```aoel
+```vais
 // Recursive power
 power(base, exp) = exp == 0 ? 1 : base * $(base, exp - 1)
 
@@ -116,7 +116,7 @@ print(power(3, 4))    // 81
 
 ### Map Examples
 
-```aoel
+```vais
 numbers = [1, 2, 3, 4, 5]
 
 // Double each element
@@ -139,7 +139,7 @@ print(names)     // ["Alice", "Bob"]
 
 ### Filter Examples
 
-```aoel
+```vais
 numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 // Keep evens
@@ -162,7 +162,7 @@ print(adults)    // [{name: "Alice", age: 30}]
 
 ### Reduce Examples
 
-```aoel
+```vais
 numbers = [1, 2, 3, 4, 5]
 
 // Sum
@@ -186,14 +186,14 @@ count = numbers./(0, _1 + 1)
 print(count)     // 5
 
 // Join strings
-words = ["Hello", "World", "AOEL"]
+words = ["Hello", "World", "Vais"]
 joined = words./("", _1 ++ " " ++ _2)
-print(trim(joined))   // "Hello World AOEL"
+print(trim(joined))   // "Hello World Vais"
 ```
 
 ### Chaining Operations
 
-```aoel
+```vais
 // Pipeline: filter evens, square them, sum
 result = [1..11]
     .?(_ % 2 == 0)      // [2, 4, 6, 8, 10]
@@ -223,7 +223,7 @@ print(adult_names)   // ["ALICE", "CHARLIE"]
 
 ### Statistics
 
-```aoel
+```vais
 data = [23, 45, 67, 12, 89, 34, 56, 78, 90, 11]
 
 // Sum
@@ -247,8 +247,8 @@ print("Above average:", len(above_avg))   // 5
 
 ### String Processing
 
-```aoel
-text = "  Hello, World! Welcome to AOEL.  "
+```vais
+text = "  Hello, World! Welcome to Vais.  "
 
 // Trim whitespace
 trimmed = trim(text)
@@ -267,13 +267,13 @@ upper_text = upper(text)
 print(upper_text)
 
 // Replace
-replaced = replace(text, "AOEL", "Rust")
+replaced = replace(text, "Vais", "Rust")
 print(replaced)
 ```
 
 ### JSON Processing
 
-```aoel
+```vais
 // Parse JSON
 json_str = '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}'
 data = json_parse(json_str)
@@ -300,7 +300,7 @@ print(json_stringify_pretty(adults))
 
 ### Prime Numbers
 
-```aoel
+```vais
 // Check if number is prime
 is_prime(n) = n < 2 ? false :
     n == 2 ? true :
@@ -321,7 +321,7 @@ print(primes_up_to(50))
 
 ### Quicksort
 
-```aoel
+```vais
 quicksort(arr) =
     len(arr) <= 1 ? arr :
     let pivot = arr[0] in
@@ -336,7 +336,7 @@ print(sorted)   // [11, 12, 22, 25, 34, 64, 90]
 
 ### Binary Search
 
-```aoel
+```vais
 binary_search(arr, target) = search(arr, target, 0, len(arr) - 1)
 
 search(arr, target, low, high) =
@@ -353,7 +353,7 @@ print(binary_search(sorted, 6))    // -1
 
 ### Merge Sort
 
-```aoel
+```vais
 merge_sort(arr) =
     len(arr) <= 1 ? arr :
     let mid = len(arr) / 2 in
@@ -378,7 +378,7 @@ print(merge_sort(arr))   // [3, 9, 10, 27, 38, 43, 82]
 
 ### Temperature Converter
 
-```aoel
+```vais
 celsius_to_fahrenheit(c) = c * 9 / 5 + 32
 fahrenheit_to_celsius(f) = (f - 32) * 5 / 9
 
@@ -391,7 +391,7 @@ print("Fahrenheit:", temps_f)
 
 ### Grade Calculator
 
-```aoel
+```vais
 grade(score) =
     score >= 90 ? "A" :
     score >= 80 ? "B" :
@@ -411,7 +411,7 @@ print("C:", count_grade(grades, "C"))
 
 ### Shopping Cart
 
-```aoel
+```vais
 cart = [
     {name: "Apple", price: 1.50, qty: 4},
     {name: "Bread", price: 2.50, qty: 2},
@@ -435,7 +435,7 @@ print("Final:", final)
 
 ### Word Frequency Counter
 
-```aoel
+```vais
 text = "the quick brown fox jumps over the lazy dog the fox"
 
 // Split into words
@@ -457,7 +457,7 @@ print(reverse(sorted_freq))
 
 ### FizzBuzz
 
-```aoel
+```vais
 fizzbuzz(n) =
     n % 15 == 0 ? "FizzBuzz" :
     n % 3 == 0 ? "Fizz" :
@@ -471,7 +471,7 @@ print(result)
 
 ### Palindrome Checker
 
-```aoel
+```vais
 is_palindrome(s) =
     let cleaned = lower(replace(s, " ", "")) in
     cleaned == reverse(cleaned)
@@ -485,15 +485,15 @@ print(is_palindrome("hello"))          // false
 
 ## Running Examples
 
-Save any example to a `.aoel` file and run:
+Save any example to a `.vais` file and run:
 
 ```bash
 # Run with interpreter
-aoel run example.aoel
+vais run example.vais
 
 # Run with JIT (faster)
-aoel run example.aoel --jit
+vais run example.vais --jit
 
 # Interactive REPL
-aoel repl
+vais repl
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL v6 Token Benchmark - Clear + Efficient
+Vais v6 Token Benchmark - Clear + Efficient
 
 설계 원칙:
 1. 명확성 유지 (각 기호는 하나의 의미)
@@ -317,7 +317,7 @@ EXAMPLES = {
 
 def run_benchmark():
     print("=" * 80)
-    print("AOEL v6 Token Benchmark - Clear + Efficient")
+    print("Vais v6 Token Benchmark - Clear + Efficient")
     print("=" * 80)
     print()
     print("핵심 문법:")

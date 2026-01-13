@@ -1,6 +1,6 @@
 """
-AOEL Parser - 구문 분석기
-AI-Optimized Executable Language Parser v0.2
+Vais Parser - 구문 분석기
+Vibe AI SSW Language Parser v0.2
 """
 
 from typing import List, Optional, Any, Set
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from lexer import Token, TokenType, Lexer, tokenize
 from ast_nodes import (
-    ASTNode, AOELUnit, UnitBlock, MetaBlock, MetaEntry,
+    ASTNode, VaisUnit, UnitBlock, MetaBlock, MetaEntry,
     InputBlock, InputEntry, OutputBlock, OutputEntry,
     IntentBlock, GoalSpec, ConstraintBlock, Constraint,
     FlowBlock, FlowNode, FlowEdge, NodeParam,
@@ -34,7 +34,7 @@ class ParseError(Exception):
 
 
 class Parser:
-    """AOEL 파서"""
+    """Vais 파서"""
 
     def __init__(self, tokens: List[Token]):
         # 줄바꿈 토큰 제거
@@ -797,8 +797,8 @@ class Parser:
     # 메인 파싱
     # =========================================================================
 
-    def parse(self) -> AOELUnit:
-        """전체 AOEL 유닛 파싱"""
+    def parse(self) -> VaisUnit:
+        """전체 Vais 유닛 파싱"""
         unit = self.parse_unit_block()
         meta = self.parse_meta_block()
         input_block = self.parse_input_block()
@@ -810,7 +810,7 @@ class Parser:
         verify = self.parse_verify_block()
         self.expect(TokenType.END)
 
-        return AOELUnit(
+        return VaisUnit(
             unit=unit, meta=meta, input=input_block, output=output_block,
             intent=intent, constraint=constraint, flow=flow,
             execution=execution, verify=verify,
@@ -818,7 +818,7 @@ class Parser:
         )
 
 
-def parse(source: str) -> AOELUnit:
+def parse(source: str) -> VaisUnit:
     """소스 코드 파싱 헬퍼 함수"""
     tokens = tokenize(source)
     parser = Parser(tokens)

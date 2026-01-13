@@ -1,6 +1,6 @@
 """
-AOEL AST Nodes - 추상 구문 트리 노드 정의
-AI-Optimized Executable Language Parser v0.2
+Vais AST Nodes - 추상 구문 트리 노드 정의
+Vibe AI SSW Language Parser v0.2
 """
 
 from dataclasses import dataclass, field
@@ -421,8 +421,8 @@ class VerifyBlock(ASTNode):
 # =============================================================================
 
 @dataclass
-class AOELUnit(ASTNode):
-    """AOEL 유닛 (최상위 노드)"""
+class VaisUnit(ASTNode):
+    """Vais 유닛 (최상위 노드)"""
     unit: Optional[UnitBlock] = None
     meta: Optional[MetaBlock] = None
     input: Optional[InputBlock] = None
@@ -435,8 +435,8 @@ class AOELUnit(ASTNode):
 
     def __repr__(self):
         if self.unit and self.unit.unit_id:
-            return f"AOELUnit({self.unit.unit_type.value if self.unit.unit_type else 'UNKNOWN'} {self.unit.unit_id.full_name})"
-        return "AOELUnit(UNKNOWN)"
+            return f"VaisUnit({self.unit.unit_type.value if self.unit.unit_type else 'UNKNOWN'} {self.unit.unit_id.full_name})"
+        return "VaisUnit(UNKNOWN)"
 
 
 # =============================================================================
@@ -465,8 +465,8 @@ class ASTPrinter(ASTVisitor):
     def _print(self, text: str):
         print("  " * self.indent + text)
 
-    def visit_AOELUnit(self, node: AOELUnit):
-        self._print(f"AOELUnit:")
+    def visit_VaisUnit(self, node: VaisUnit):
+        self._print(f"VaisUnit:")
         self.indent += 1
         if node.unit:
             self.visit(node.unit)

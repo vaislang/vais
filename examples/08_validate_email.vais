@@ -1,4 +1,4 @@
-# AOEL Example 08: Validate Email
+# Vais Example 08: Validate Email
 # 이메일 형식 검증
 
 UNIT FUNCTION examples.validate_email V1.0.0

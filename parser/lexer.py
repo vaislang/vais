@@ -1,6 +1,6 @@
 """
-AOEL Lexer - 토큰화 모듈
-AI-Optimized Executable Language Parser v0.2
+Vais Lexer - 토큰화 모듈
+Vibe AI SSW Language Parser v0.2
 """
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ import re
 
 
 class TokenType(Enum):
-    """AOEL 토큰 타입"""
+    """Vais 토큰 타입"""
     # 블록 키워드
     UNIT = auto()
     META = auto()
@@ -385,7 +385,7 @@ KEYWORDS = {
 
 
 class Lexer:
-    """AOEL 렉서"""
+    """Vais 렉서"""
 
     def __init__(self, source: str):
         self.source = source

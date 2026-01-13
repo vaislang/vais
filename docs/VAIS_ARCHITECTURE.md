@@ -1,4 +1,4 @@
-# AOEL Architecture: Extensibility-First Design
+# Vais Architecture: Extensibility-First Design
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -11,10 +11,10 @@
 **"AI 시대의 Python"**
 
 Python이 인간 친화적 문법으로 성공했듯이,
-AOEL은 **AI 친화적 문법 + 확장 가능한 생태계**로 성공한다.
+Vais은 **AI 친화적 문법 + 확장 가능한 생태계**로 성공한다.
 
 ```
-AOEL = 작은 코어 + 강력한 확장성 + 커뮤니티 생태계
+Vais = 작은 코어 + 강력한 확장성 + 커뮤니티 생태계
 ```
 
 ---
@@ -26,7 +26,7 @@ AOEL = 작은 코어 + 강력한 확장성 + 커뮤니티 생태계
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Community Packages                 │
-│  (aoel-numpy, aoel-web, aoel-ml, aoel-db, ...)     │
+│  (vais-numpy, vais-web, vais-ml, vais-db, ...)     │
 ├─────────────────────────────────────────────────────┤
 │                  Standard Library                    │
 │  (std.io, std.net, std.json, std.test, ...)        │
@@ -75,7 +75,7 @@ use ffi.c.sqlite as db
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        AOEL Ecosystem                         │
+│                        Vais Ecosystem                         │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
@@ -108,8 +108,8 @@ use ffi.c.sqlite as db
 
 ### Module Definition
 
-```aoel
-# math.aoel
+```vais
+# math.vais
 mod math
 
 # Public exports (default private)
@@ -125,8 +125,8 @@ fn taylor_series(x, n) = ...
 
 ### Module Usage
 
-```aoel
-# main.aoel
+```vais
+# main.vais
 use math                    # import all public
 use math.{sin, cos}         # import specific
 use math.sin as sine        # alias
@@ -137,29 +137,29 @@ use math.*                  # glob import (discouraged)
 
 ```
 project/
-├── aoel.toml              # Project config
+├── vais.toml              # Project config
 ├── src/
-│   ├── main.aoel          # Entry point
-│   ├── utils.aoel         # use utils
+│   ├── main.vais          # Entry point
+│   ├── utils.vais         # use utils
 │   └── helpers/
-│       └── string.aoel    # use helpers.string
+│       └── string.vais    # use helpers.string
 └── deps/                  # Downloaded packages
     └── http/
         └── src/
-            └── lib.aoel   # use http
+            └── lib.vais   # use http
 ```
 
 ---
 
 ## Package System
 
-### Package Definition (aoel.toml)
+### Package Definition (vais.toml)
 
 ```toml
 [package]
 name = "my-project"
 version = "1.0.0"
-description = "My awesome AOEL project"
+description = "My awesome Vais project"
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 repository = "https://github.com/you/my-project"
@@ -182,30 +182,30 @@ python = ["numpy", "pandas"]   # Python interop
 rust = ["tokio"]               # Rust interop
 ```
 
-### Package Registry (apm - AOEL Package Manager)
+### Package Registry (apm - Vais Package Manager)
 
 ```bash
 # Initialize project
-aoel init my-project
+vais init my-project
 
 # Add dependency
-aoel add http
-aoel add json --optional
+vais add http
+vais add json --optional
 
 # Install dependencies
-aoel install
+vais install
 
 # Publish package
-aoel publish
+vais publish
 
 # Search packages
-aoel search "http client"
+vais search "http client"
 ```
 
 ### Registry Structure
 
 ```
-registry.aoel.dev/
+registry.vais.dev/
 ├── api/
 │   ├── packages/           # Package metadata
 │   ├── versions/           # Version info
@@ -223,13 +223,13 @@ registry.aoel.dev/
 ### Design Goals
 
 1. **기존 생태계 활용** - Python, Rust, C 라이브러리 호출
-2. **양방향 통신** - AOEL에서 호출 & 외부에서 AOEL 호출
+2. **양방향 통신** - Vais에서 호출 & 외부에서 Vais 호출
 3. **타입 안전성** - 자동 타입 변환 및 검증
 4. **최소 오버헤드** - 효율적인 데이터 전달
 
 ### C FFI
 
-```aoel
+```vais
 # C 함수 선언
 ffi c {
     # libc
@@ -247,7 +247,7 @@ result = c.my_function(10, 20)
 
 ### Rust FFI
 
-```aoel
+```vais
 # Rust crate 연동
 ffi rust {
     @crate("tokio", version = "1.0")
@@ -263,7 +263,7 @@ handle = rust.async_runtime.spawn(my_async_fn())
 
 ### Python FFI
 
-```aoel
+```vais
 # Python 라이브러리 연동
 ffi python {
     @module("numpy")
@@ -288,7 +288,7 @@ df = python.pd.read_csv("data.csv")
 ### Type Mapping
 
 ```
-AOEL Type    <->    C Type       <->    Rust Type    <->    Python Type
+Vais Type    <->    C Type       <->    Rust Type    <->    Python Type
 ─────────────────────────────────────────────────────────────────────────
 i / i64            int64_t             i64                 int
 i32                int32_t             i32                 int
@@ -303,10 +303,10 @@ s                  char*               String              str
 
 ### Memory Safety
 
-```aoel
+```vais
 # 자동 메모리 관리
 ffi c {
-    @managed  # AOEL GC가 관리
+    @managed  # Vais GC가 관리
     fn create_buffer(size: i) -> *Buffer
 
     @manual   # 수동 해제 필요
@@ -331,69 +331,69 @@ defer c.free(ptr)  # 명시적 해제
 ```
 std/
 ├── core/              # 언어 기본 (자동 import)
-│   ├── types.aoel     # 기본 타입 정의
-│   ├── ops.aoel       # 연산자 트레잇
-│   └── prelude.aoel   # 기본 함수들
+│   ├── types.vais     # 기본 타입 정의
+│   ├── ops.vais       # 연산자 트레잇
+│   └── prelude.vais   # 기본 함수들
 │
 ├── io/                # 입출력
-│   ├── file.aoel      # 파일 읽기/쓰기
-│   ├── stdin.aoel     # 표준 입력
-│   ├── stdout.aoel    # 표준 출력
-│   └── path.aoel      # 경로 처리
+│   ├── file.vais      # 파일 읽기/쓰기
+│   ├── stdin.vais     # 표준 입력
+│   ├── stdout.vais    # 표준 출력
+│   └── path.vais      # 경로 처리
 │
 ├── net/               # 네트워킹
-│   ├── http.aoel      # HTTP 클라이언트/서버
-│   ├── tcp.aoel       # TCP 소켓
-│   ├── udp.aoel       # UDP 소켓
-│   └── url.aoel       # URL 파싱
+│   ├── http.vais      # HTTP 클라이언트/서버
+│   ├── tcp.vais       # TCP 소켓
+│   ├── udp.vais       # UDP 소켓
+│   └── url.vais       # URL 파싱
 │
 ├── data/              # 데이터 포맷
-│   ├── json.aoel      # JSON
-│   ├── csv.aoel       # CSV
-│   ├── toml.aoel      # TOML
-│   └── xml.aoel       # XML
+│   ├── json.vais      # JSON
+│   ├── csv.vais       # CSV
+│   ├── toml.vais      # TOML
+│   └── xml.vais       # XML
 │
 ├── text/              # 텍스트 처리
-│   ├── regex.aoel     # 정규표현식
-│   ├── fmt.aoel       # 포매팅
-│   └── encoding.aoel  # 인코딩
+│   ├── regex.vais     # 정규표현식
+│   ├── fmt.vais       # 포매팅
+│   └── encoding.vais  # 인코딩
 │
 ├── time/              # 시간
-│   ├── datetime.aoel  # 날짜/시간
-│   ├── duration.aoel  # 기간
-│   └── timezone.aoel  # 타임존
+│   ├── datetime.vais  # 날짜/시간
+│   ├── duration.vais  # 기간
+│   └── timezone.vais  # 타임존
 │
 ├── math/              # 수학
-│   ├── basic.aoel     # 기본 수학
-│   ├── random.aoel    # 난수
-│   └── stats.aoel     # 통계
+│   ├── basic.vais     # 기본 수학
+│   ├── random.vais    # 난수
+│   └── stats.vais     # 통계
 │
 ├── collections/       # 자료구조
-│   ├── list.aoel      # 리스트 확장
-│   ├── set.aoel       # 집합
-│   ├── map.aoel       # 맵 확장
-│   ├── queue.aoel     # 큐
-│   └── heap.aoel      # 힙
+│   ├── list.vais      # 리스트 확장
+│   ├── set.vais       # 집합
+│   ├── map.vais       # 맵 확장
+│   ├── queue.vais     # 큐
+│   └── heap.vais      # 힙
 │
 ├── async/             # 비동기
-│   ├── future.aoel    # Future/Promise
-│   ├── channel.aoel   # 채널
-│   └── spawn.aoel     # 태스크 생성
+│   ├── future.vais    # Future/Promise
+│   ├── channel.vais   # 채널
+│   └── spawn.vais     # 태스크 생성
 │
 ├── test/              # 테스팅
-│   ├── assert.aoel    # 어설션
-│   ├── mock.aoel      # 모킹
-│   └── bench.aoel     # 벤치마크
+│   ├── assert.vais    # 어설션
+│   ├── mock.vais      # 모킹
+│   └── bench.vais     # 벤치마크
 │
 └── sys/               # 시스템
-    ├── env.aoel       # 환경변수
-    ├── process.aoel   # 프로세스
-    └── os.aoel        # OS 정보
+    ├── env.vais       # 환경변수
+    ├── process.vais   # 프로세스
+    └── os.vais        # OS 정보
 ```
 
 ### Usage Examples
 
-```aoel
+```vais
 use std.io.{read_file, write_file}
 use std.net.http.{get, post}
 use std.data.json.{parse, stringify}
@@ -415,7 +415,7 @@ write_file("output.json", stringify(data))?
 
 ### 1. Custom Operators
 
-```aoel
+```vais
 # 연산자 정의 (패키지에서)
 mod matrix
 
@@ -433,7 +433,7 @@ result = mat_a ** mat_b
 
 ### 2. Custom Syntax (Macros)
 
-```aoel
+```vais
 # 매크로 정의
 mod html
 
@@ -457,7 +457,7 @@ page = html! {
 
 ### 3. Custom Types with Traits
 
-```aoel
+```vais
 # 트레잇 정의
 mod iter
 
@@ -488,11 +488,11 @@ impl Mappable<T> for MyList<T> {
 ### 4. Compiler Plugins (Future)
 
 ```toml
-# aoel.toml
+# vais.toml
 [plugins]
-lint = "aoel-clippy"           # 코드 린트
-optimize = "aoel-optimize"     # 추가 최적화
-codegen = "aoel-native"        # 네이티브 컴파일
+lint = "vais-clippy"           # 코드 린트
+optimize = "vais-optimize"     # 추가 최적화
+codegen = "vais-native"        # 네이티브 컴파일
 ```
 
 ---
@@ -502,7 +502,7 @@ codegen = "aoel-native"        # 네이티브 컴파일
 ### Project Structure
 
 ```
-AOEL Organization
+Vais Organization
 ├── Core Team              # 언어 핵심 개발
 │   ├── Language Design    # 문법, 타입 시스템
 │   ├── Runtime            # VM, GC
@@ -536,7 +536,7 @@ AOEL Organization
 ### Versioning
 
 ```
-AOEL 버전 체계:
+Vais 버전 체계:
 - Major: 호환성 깨지는 변경 (드묾)
 - Minor: 새 기능 추가 (하위 호환)
 - Patch: 버그 수정
@@ -551,15 +551,15 @@ Edition 시스템 (Rust 참고):
 
 ## Community Package Examples
 
-### Web Framework (aoel-web)
+### Web Framework (vais-web)
 
-```aoel
+```vais
 use web.{App, route, get, post}
 
 app = App.new()
 
 @get("/")
-fn index(req) = "Hello, AOEL!"
+fn index(req) = "Hello, Vais!"
 
 @get("/users/:id")
 fn get_user(req) = {
@@ -576,9 +576,9 @@ fn create_user(req) = {
 app.run(port=8080)
 ```
 
-### Data Science (aoel-data)
+### Data Science (vais-data)
 
-```aoel
+```vais
 use data.{DataFrame, Series}
 use data.plot
 
@@ -598,9 +598,9 @@ plot.bar(result, x="product", y="total")
     .save("chart.png")
 ```
 
-### Machine Learning (aoel-ml)
+### Machine Learning (vais-ml)
 
-```aoel
+```vais
 use ml.{Model, train, predict}
 use ml.nn.{Dense, Sequential}
 
@@ -683,7 +683,7 @@ predictions = model.predict(x_test)
 
 ## Summary
 
-AOEL의 성공 공식:
+Vais의 성공 공식:
 
 ```
 작은 코어 (안정적, 변경 어려움)

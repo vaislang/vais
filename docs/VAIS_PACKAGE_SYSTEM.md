@@ -1,4 +1,4 @@
-# AOEL Package System Design
+# Vais Package System Design
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -7,7 +7,7 @@
 
 ## Overview
 
-패키지 시스템은 AOEL 생태계의 **핵심 인프라**입니다.
+패키지 시스템은 Vais 생태계의 **핵심 인프라**입니다.
 
 ```
 개발자가 패키지를 쉽게:
@@ -38,40 +38,40 @@
 
 ```
 my-package/
-├── aoel.toml           # 패키지 매니페스트 (필수)
+├── vais.toml           # 패키지 매니페스트 (필수)
 ├── README.md           # 문서 (권장)
 ├── LICENSE             # 라이선스 (권장)
 ├── src/
-│   ├── lib.aoel        # 라이브러리 진입점
-│   └── main.aoel       # 실행 파일 진입점 (옵션)
+│   ├── lib.vais        # 라이브러리 진입점
+│   └── main.vais       # 실행 파일 진입점 (옵션)
 ├── tests/
-│   └── test_*.aoel     # 테스트 파일
+│   └── test_*.vais     # 테스트 파일
 ├── examples/
-│   └── *.aoel          # 예제
+│   └── *.vais          # 예제
 ├── benches/
-│   └── *.aoel          # 벤치마크
-└── aoel.lock           # 의존성 Lock (자동 생성)
+│   └── *.vais          # 벤치마크
+└── vais.lock           # 의존성 Lock (자동 생성)
 ```
 
-### Manifest (aoel.toml)
+### Manifest (vais.toml)
 
 ```toml
 [package]
 name = "http-client"
 version = "1.2.0"
 edition = "2026"
-description = "A simple HTTP client for AOEL"
+description = "A simple HTTP client for Vais"
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 repository = "https://github.com/you/http-client"
-homepage = "https://http-client.aoel.dev"
-documentation = "https://docs.aoel.dev/http-client"
+homepage = "https://http-client.vais.dev"
+documentation = "https://docs.vais.dev/http-client"
 keywords = ["http", "client", "networking"]
 categories = ["network", "web"]
 readme = "README.md"
 
-# 최소 AOEL 버전
-aoel = ">=1.0.0"
+# 최소 Vais 버전
+vais = ">=1.0.0"
 
 [dependencies]
 std = "1.0"
@@ -119,7 +119,7 @@ opt-level = 3
 lto = true
 ```
 
-### Lock File (aoel.lock)
+### Lock File (vais.lock)
 
 ```toml
 # 자동 생성 - 수동 편집 금지
@@ -164,104 +164,104 @@ dependencies = [
 
 ```bash
 # 새 프로젝트 생성
-aoel new my-project                    # 바이너리 프로젝트
-aoel new my-lib --lib                  # 라이브러리 프로젝트
-aoel new my-project --template web     # 템플릿 사용
+vais new my-project                    # 바이너리 프로젝트
+vais new my-lib --lib                  # 라이브러리 프로젝트
+vais new my-project --template web     # 템플릿 사용
 
 # 기존 디렉토리에 초기화
-aoel init
-aoel init --lib
+vais init
+vais init --lib
 ```
 
 ### Dependency Management
 
 ```bash
 # 의존성 추가
-aoel add http                          # 최신 버전
-aoel add http@1.2.0                    # 특정 버전
-aoel add http --features full          # 기능 선택
-aoel add http --optional               # 선택적 의존성
-aoel add http --dev                    # 개발 의존성
+vais add http                          # 최신 버전
+vais add http@1.2.0                    # 특정 버전
+vais add http --features full          # 기능 선택
+vais add http --optional               # 선택적 의존성
+vais add http --dev                    # 개발 의존성
 
 # 의존성 제거
-aoel remove http
+vais remove http
 
 # 의존성 업데이트
-aoel update                            # 모두 업데이트
-aoel update http                       # 특정 패키지
-aoel update --patch                    # 패치만 업데이트
+vais update                            # 모두 업데이트
+vais update http                       # 특정 패키지
+vais update --patch                    # 패치만 업데이트
 
 # 의존성 확인
-aoel deps                              # 의존성 트리
-aoel deps --outdated                   # 업데이트 가능한 것
-aoel deps --duplicates                 # 중복 확인
+vais deps                              # 의존성 트리
+vais deps --outdated                   # 업데이트 가능한 것
+vais deps --duplicates                 # 중복 확인
 ```
 
 ### Build & Run
 
 ```bash
 # 빌드
-aoel build                             # 개발 빌드
-aoel build --release                   # 릴리즈 빌드
-aoel build --target wasm32             # 크로스 컴파일
+vais build                             # 개발 빌드
+vais build --release                   # 릴리즈 빌드
+vais build --target wasm32             # 크로스 컴파일
 
 # 실행
-aoel run                               # 메인 실행
-aoel run --example hello               # 예제 실행
+vais run                               # 메인 실행
+vais run --example hello               # 예제 실행
 
 # 테스트
-aoel test                              # 모든 테스트
-aoel test test_http                    # 특정 테스트
-aoel test --coverage                   # 커버리지
+vais test                              # 모든 테스트
+vais test test_http                    # 특정 테스트
+vais test --coverage                   # 커버리지
 
 # 벤치마크
-aoel bench
+vais bench
 
 # 린트
-aoel lint
-aoel lint --fix
+vais lint
+vais lint --fix
 
 # 포맷
-aoel fmt
-aoel fmt --check
+vais fmt
+vais fmt --check
 ```
 
 ### Publishing
 
 ```bash
 # 로그인
-aoel login
+vais login
 
 # 퍼블리시 전 체크
-aoel publish --dry-run
+vais publish --dry-run
 
 # 퍼블리시
-aoel publish
+vais publish
 
 # 버전 올리기
-aoel version patch                     # 1.0.0 → 1.0.1
-aoel version minor                     # 1.0.0 → 1.1.0
-aoel version major                     # 1.0.0 → 2.0.0
+vais version patch                     # 1.0.0 → 1.0.1
+vais version minor                     # 1.0.0 → 1.1.0
+vais version major                     # 1.0.0 → 2.0.0
 
 # Yank (문제있는 버전 숨김)
-aoel yank http-client@1.2.0
-aoel yank http-client@1.2.0 --undo
+vais yank http-client@1.2.0
+vais yank http-client@1.2.0 --undo
 ```
 
 ### Search & Info
 
 ```bash
 # 패키지 검색
-aoel search http
-aoel search "http client" --category network
+vais search http
+vais search "http client" --category network
 
 # 패키지 정보
-aoel info http-client
-aoel info http-client --versions
+vais info http-client
+vais info http-client --versions
 
 # 문서 열기
-aoel doc http-client
-aoel doc http-client --open            # 브라우저에서 열기
+vais doc http-client
+vais doc http-client --open            # 브라우저에서 열기
 ```
 
 ---
@@ -272,7 +272,7 @@ aoel doc http-client --open            # 브라우저에서 열기
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     registry.aoel.dev                        │
+│                     registry.vais.dev                        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
@@ -387,7 +387,7 @@ http = "1.2.*"     # >=1.2.0, <1.3.0
 
 ```bash
 # 충돌 확인
-aoel deps --conflicts
+vais deps --conflicts
 
 # 수동 해결
 [dependencies]
@@ -406,27 +406,27 @@ url = "2.0"  # http가 url 1.x를 요구해도 2.0 사용
 
 ```
 my-workspace/
-├── aoel.toml           # 워크스페이스 설정
+├── vais.toml           # 워크스페이스 설정
 ├── packages/
 │   ├── core/
-│   │   ├── aoel.toml
+│   │   ├── vais.toml
 │   │   └── src/
 │   ├── cli/
-│   │   ├── aoel.toml
+│   │   ├── vais.toml
 │   │   └── src/
 │   └── web/
-│       ├── aoel.toml
+│       ├── vais.toml
 │       └── src/
 └── shared/
     └── utils/
-        ├── aoel.toml
+        ├── vais.toml
         └── src/
 ```
 
 ### Workspace Config
 
 ```toml
-# 루트 aoel.toml
+# 루트 vais.toml
 [workspace]
 members = [
     "packages/*",
@@ -451,7 +451,7 @@ repository = "https://github.com/org/workspace"
 ### Member Config
 
 ```toml
-# packages/cli/aoel.toml
+# packages/cli/vais.toml
 [package]
 name = "my-cli"
 version = "1.0.0"
@@ -481,41 +481,41 @@ utils = { path = "../../shared/utils" }
 version: "3"
 services:
   registry:
-    image: aoel/registry:latest
+    image: vais/registry:latest
     ports:
       - "3000:3000"
     environment:
       - STORAGE_TYPE=s3
-      - S3_BUCKET=my-aoel-packages
+      - S3_BUCKET=my-vais-packages
       - DATABASE_URL=postgres://...
     volumes:
-      - ./config:/etc/aoel-registry
+      - ./config:/etc/vais-registry
 ```
 
 ### Config
 
 ```toml
-# ~/.aoel/config.toml
+# ~/.vais/config.toml
 
 [registries]
 # 기본 레지스트리
-default = "https://registry.aoel.dev"
+default = "https://registry.vais.dev"
 
 # 프라이빗 레지스트리
 [registries.private]
-url = "https://aoel.mycompany.com"
+url = "https://vais.mycompany.com"
 token = "env:PRIVATE_REGISTRY_TOKEN"
 
 # 미러
 [registries.mirror]
-url = "https://mirror.aoel.cn"
+url = "https://mirror.vais.cn"
 fallback = "default"
 ```
 
 ### Usage
 
 ```toml
-# aoel.toml
+# vais.toml
 [dependencies]
 # 공개 레지스트리 (기본)
 http = "1.0"
@@ -531,7 +531,7 @@ internal-lib = { version = "1.0", registry = "private" }
 ### Local Cache
 
 ```
-~/.aoel/
+~/.vais/
 ├── cache/
 │   ├── packages/           # 다운로드된 패키지
 │   │   └── http-1.0.0/
@@ -545,14 +545,14 @@ internal-lib = { version = "1.0", registry = "private" }
 
 ```bash
 # 캐시 정보
-aoel cache info
+vais cache info
 
 # 캐시 정리
-aoel cache clean
-aoel cache clean --all
+vais cache clean
+vais cache clean --all
 
 # 오프라인 모드
-aoel build --offline
+vais build --offline
 ```
 
 ---
@@ -563,19 +563,19 @@ aoel build --offline
 
 ```bash
 # 1. 버전 확인
-aoel version
+vais version
 
 # 2. 테스트 통과
-aoel test
+vais test
 
 # 3. 린트 통과
-aoel lint
+vais lint
 
 # 4. 문서 빌드
-aoel doc
+vais doc
 
 # 5. dry-run
-aoel publish --dry-run
+vais publish --dry-run
 ```
 
 ### Package Quality
@@ -601,7 +601,7 @@ quality_score:
 
 ```yaml
 # GitHub Actions
-name: AOEL CI
+name: Vais CI
 
 on: [push, pull_request]
 
@@ -610,11 +610,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: aoel/setup-aoel@v1
+      - uses: vais/setup-vais@v1
         with:
           version: "1.0"
-      - run: aoel test
-      - run: aoel lint
+      - run: vais test
+      - run: vais lint
 
   publish:
     needs: test
@@ -622,10 +622,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: aoel/setup-aoel@v1
-      - run: aoel publish
+      - uses: vais/setup-vais@v1
+      - run: vais publish
         env:
-          AOEL_TOKEN: ${{ secrets.AOEL_TOKEN }}
+          VAIS_TOKEN: ${{ secrets.VAIS_TOKEN }}
 ```
 
 ### IDE Integration
@@ -633,9 +633,9 @@ jobs:
 ```json
 // VSCode settings.json
 {
-    "aoel.packageManager": "aoel",
-    "aoel.formatOnSave": true,
-    "aoel.lintOnSave": true
+    "vais.packageManager": "vais",
+    "vais.formatOnSave": true,
+    "vais.lintOnSave": true
 }
 ```
 
@@ -646,22 +646,22 @@ jobs:
 ### From npm
 
 ```bash
-# package.json → aoel.toml 변환
-aoel migrate npm
+# package.json → vais.toml 변환
+vais migrate npm
 ```
 
 ### From Cargo
 
 ```bash
-# Cargo.toml → aoel.toml 변환
-aoel migrate cargo
+# Cargo.toml → vais.toml 변환
+vais migrate cargo
 ```
 
 ### From pip
 
 ```bash
-# requirements.txt → aoel.toml 변환
-aoel migrate pip
+# requirements.txt → vais.toml 변환
+vais migrate pip
 ```
 
 ---
@@ -672,8 +672,8 @@ aoel migrate pip
 
 | 요소 | 설명 |
 |------|------|
-| **aoel.toml** | Cargo.toml 스타일 매니페스트 |
-| **aoel.lock** | 재현 가능한 빌드 보장 |
+| **vais.toml** | Cargo.toml 스타일 매니페스트 |
+| **vais.lock** | 재현 가능한 빌드 보장 |
 | **CLI** | npm + Cargo의 좋은 점 조합 |
 | **Registry** | 중앙 + 프라이빗 지원 |
 | **Workspace** | 모노레포 지원 |

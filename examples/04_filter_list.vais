@@ -1,4 +1,4 @@
-# AOEL Example 04: Filter List
+# Vais Example 04: Filter List
 # 리스트에서 조건에 맞는 요소만 필터링
 
 UNIT FUNCTION examples.filter_list V1.0.0

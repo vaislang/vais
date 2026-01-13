@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL v6b Token Benchmark - Maximum Optimization
+Vais v6b Token Benchmark - Maximum Optimization
 
 v6에서 추가 최적화:
 1. 타입 선언 생략 (추론 가능하면)
@@ -346,7 +346,7 @@ EXAMPLES = {
 
 def run_benchmark():
     print("=" * 80)
-    print("AOEL v6b Token Benchmark - Maximum Optimization")
+    print("Vais v6b Token Benchmark - Maximum Optimization")
     print("=" * 80)
     print()
     print("최적화 적용:")

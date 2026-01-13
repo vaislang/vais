@@ -1,4 +1,4 @@
-# AOEL Core Language Design Principles
+# Vais Core Language Design Principles
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -7,7 +7,7 @@
 
 ## Overview
 
-이 문서는 AOEL 코어 언어의 설계 원칙을 정의합니다.
+이 문서는 Vais 코어 언어의 설계 원칙을 정의합니다.
 코어는 **절대 변경되지 않아야 할 부분**으로, 신중하게 설계되어야 합니다.
 
 ---
@@ -37,7 +37,7 @@
 
 각 기능은 독립적이고, 조합 가능해야 합니다.
 
-```aoel
+```vais
 # 모든 것이 표현식
 result = if cond { a } else { b }  # 조건도 표현식
 value = { let x = 1; x + 2 }       # 블록도 표현식
@@ -50,7 +50,7 @@ value = { let x = 1; x + 2 }       # 블록도 표현식
 
 ### 3. Explicit over Implicit
 
-```aoel
+```vais
 # 타입은 명시하거나 추론 가능해야 함
 add(a, b) = a + b           # OK: 사용처에서 추론
 add(a:i, b:i) = a + b       # OK: 명시적 타입
@@ -64,7 +64,7 @@ fn io_fn(path) = !{         # ! = 부작용 있음
 
 ### 4. Predictable Performance
 
-```aoel
+```vais
 # 비용이 명확해야 함
 arr.@(_*2)           # O(n) - 선형
 arr.sort             # O(n log n) - 명확
@@ -103,7 +103,7 @@ arr.?(_>0).@(_*2)    # O(n) - 한 번 순회로 최적화 가능
 
 ### User-Defined Types
 
-```aoel
+```vais
 # Struct
 type User = {
     name: s,
@@ -124,7 +124,7 @@ type UserMap = {s: User}
 
 ### Generics
 
-```aoel
+```vais
 # Generic function
 fn first<T>(arr: [T]) -> ?T = arr.nth(0)
 
@@ -139,7 +139,7 @@ fn sum<T: Numeric>(arr: [T]) -> T = arr./+
 
 ### Traits
 
-```aoel
+```vais
 # Trait definition
 trait Eq {
     fn eq(self, other: Self) -> b
@@ -168,7 +168,7 @@ impl Eq for User {
 
 ### Everything is an Expression
 
-```aoel
+```vais
 # 조건문도 표현식
 x = if a > b { a } else { b }
 
@@ -188,7 +188,7 @@ result = match status {
 
 ### Operator Expressions
 
-```aoel
+```vais
 # Arithmetic
 a + b, a - b, a * b, a / b, a % b
 
@@ -209,7 +209,7 @@ a..b           # range
 
 ### Chain Expressions
 
-```aoel
+```vais
 # Method chaining
 users
     .?(_.active)
@@ -227,7 +227,7 @@ users
 
 ### Lambda Expressions
 
-```aoel
+```vais
 # Implicit parameter (_)
 arr.@(_*2)              # each element * 2
 arr.?(_.age > 18)       # filter by age
@@ -246,7 +246,7 @@ zip(a, b).@((x, y) => x + y)
 
 ### Function Definition
 
-```aoel
+```vais
 # Basic
 add(a, b) = a + b
 
@@ -269,7 +269,7 @@ create_user(name: "John", age: 30)
 
 ### Recursion
 
-```aoel
+```vais
 # Named recursion
 fact(n) = if n < 2 { 1 } else { n * fact(n-1) }
 
@@ -282,7 +282,7 @@ fact(n, acc = 1) = n < 2 ? acc : $(n-1, n*acc)
 
 ### Higher-Order Functions
 
-```aoel
+```vais
 # Function as parameter
 apply(f, x) = f(x)
 apply(_*2, 5)  # 10
@@ -302,7 +302,7 @@ compose(f, g) = (x) => f(g(x))
 
 ### Conditional
 
-```aoel
+```vais
 # If expression
 result = if cond { then_val } else { else_val }
 
@@ -319,7 +319,7 @@ category =
 
 ### Pattern Matching
 
-```aoel
+```vais
 # Match expression
 match value {
     0 => "zero",
@@ -343,7 +343,7 @@ match maybe_value {
 
 ### Iteration
 
-```aoel
+```vais
 # For each (expression)
 for x in arr { process(x) }
 
@@ -364,7 +364,7 @@ arr./(acc, x => ...)     # fold
 
 ### Option Type (?T)
 
-```aoel
+```vais
 # Creating
 maybe_val: ?i = some(42)
 nothing: ?i = nil
@@ -382,7 +382,7 @@ result = maybe_val
 
 ### Result Type (!T)
 
-```aoel
+```vais
 # Creating
 success: !i = ok(42)
 failure: !i = err("something went wrong")
@@ -403,7 +403,7 @@ match result {
 
 ### Error Propagation
 
-```aoel
+```vais
 # ? operator
 fn process() -> !Result = {
     a = step1()?        # return early if error
@@ -425,8 +425,8 @@ fn safe_process() -> !Result = try {
 
 ### Module Definition
 
-```aoel
-# file: math.aoel
+```vais
+# file: math.vais
 mod math
 
 # Public by default: pub
@@ -441,7 +441,7 @@ priv fn helper() = ...
 
 ### Import
 
-```aoel
+```vais
 # Import module
 use math
 
@@ -457,7 +457,7 @@ use math.*
 
 ### Visibility
 
-```aoel
+```vais
 pub     # public (anyone can use)
 priv    # private (same module only)
 pub(pkg)  # package-private (same package)
@@ -469,7 +469,7 @@ pub(pkg)  # package-private (same package)
 
 ### Ownership (Simplified)
 
-```aoel
+```vais
 # Values are copied by default (primitives)
 a = 5
 b = a    # copy
@@ -486,7 +486,7 @@ arr2 = arr1.clone()  # deep copy
 
 ### Mutability
 
-```aoel
+```vais
 # Immutable by default
 x = 5
 x = 10    # OK: rebinding
@@ -508,7 +508,7 @@ fn increment(mut x: i) = {
 
 ### Spawn
 
-```aoel
+```vais
 use std.async.spawn
 
 # Spawn task
@@ -522,7 +522,7 @@ result = handle.await
 
 ### Channels
 
-```aoel
+```vais
 use std.async.{channel, send, recv}
 
 # Create channel
@@ -537,7 +537,7 @@ value = rx.recv()
 
 ### Async/Await
 
-```aoel
+```vais
 # Async function
 async fn fetch_data(url: s) -> !s = {
     response = http.get(url).await?
@@ -624,7 +624,7 @@ Rationale:
 
 ## Summary
 
-AOEL 코어 설계 원칙:
+Vais 코어 설계 원칙:
 
 | 원칙 | 설명 |
 |------|------|

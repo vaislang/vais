@@ -1,4 +1,4 @@
-# AOEL v2 Grammar Specification
+# Vais v2 Grammar Specification
 
 **Version:** 0.1.0 (Draft)
 **Date:** 2026-01-12
@@ -605,7 +605,7 @@ map         = '{' (expr expr)* '}'
 
 ## 6. Token Count Comparison
 
-| Example | Python | AOEL v2 | Savings |
+| Example | Python | Vais v2 | Savings |
 |---------|--------|---------|---------|
 | Hello World | 15 | 8 | 47% |
 | Add Numbers | 20 | 12 | 40% |
@@ -649,7 +649,7 @@ digit       = "0"-"9" ;
 ## 8. Next Steps
 
 1. [ ] 토큰 벤치마크 도구 작성
-2. [ ] 10개 예제 Python/AOEL v2 비교
+2. [ ] 10개 예제 Python/Vais v2 비교
 3. [ ] LLM 생성 테스트
 4. [ ] 결과 분석 및 Go/No-Go 결정
 

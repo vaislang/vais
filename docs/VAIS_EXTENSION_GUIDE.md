@@ -1,15 +1,15 @@
-# AOEL Extension Guide
+# Vais Extension Guide
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
 
-**"누구나 AOEL을 확장할 수 있습니다"**
+**"누구나 Vais을 확장할 수 있습니다"**
 
 ---
 
 ## Overview
 
-이 가이드는 AOEL 생태계에 기여하고자 하는 **개발자를 위한 문서**입니다.
+이 가이드는 Vais 생태계에 기여하고자 하는 **개발자를 위한 문서**입니다.
 
 ```
 확장 유형:
@@ -27,30 +27,30 @@
 
 ```bash
 # 프로젝트 생성
-aoel new my-first-lib --lib
+vais new my-first-lib --lib
 cd my-first-lib
 
 # 구조
 my-first-lib/
-├── aoel.toml
+├── vais.toml
 ├── src/
-│   └── lib.aoel
+│   └── lib.vais
 └── tests/
-    └── test_lib.aoel
+    └── test_lib.vais
 ```
 
-**aoel.toml:**
+**vais.toml:**
 ```toml
 [package]
 name = "my-first-lib"
 version = "0.1.0"
 edition = "2026"
-description = "My first AOEL library"
+description = "My first Vais library"
 license = "MIT"
 ```
 
-**src/lib.aoel:**
-```aoel
+**src/lib.vais:**
+```vais
 # 모듈 정의
 mod my_first_lib
 
@@ -69,8 +69,8 @@ pub fn create_user(name: s, age: i) -> User = {
 }
 ```
 
-**tests/test_lib.aoel:**
-```aoel
+**tests/test_lib.vais:**
+```vais
 use std.test
 use my_first_lib.{greet, create_user}
 
@@ -89,17 +89,17 @@ fn test_create_user() {
 
 ```bash
 # 테스트 실행
-aoel test
+vais test
 
 # 빌드
-aoel build
+vais build
 ```
 
 ### 1.2 API 설계 베스트 프랙티스
 
 #### 일관된 네이밍
 
-```aoel
+```vais
 # Good - 동사로 시작하는 액션
 pub fn get_user(id: i) -> ?User
 pub fn create_user(data: UserInput) -> !User
@@ -117,7 +117,7 @@ pub fn check(data)        # 뭘 체크?
 
 #### 에러 처리
 
-```aoel
+```vais
 # Result 타입으로 실패 가능성 명시
 pub fn parse_config(path: s) -> !Config = {
     content = fs.read(path)?           # 파일 에러 전파
@@ -137,7 +137,7 @@ pub fn parse_config(path: s) -> Result<Config, ConfigError>
 
 #### Option 사용
 
-```aoel
+```vais
 # 없을 수 있는 값은 Option으로
 pub fn find_user(id: i) -> ?User
 
@@ -149,7 +149,7 @@ pub fn get_user_or_default(id: i, default: User) -> User = {
 
 #### 빌더 패턴
 
-```aoel
+```vais
 pub type RequestBuilder = {
     url: s,
     method: s,
@@ -190,7 +190,7 @@ response = request("https://api.example.com")
 
 ### 1.3 문서화
 
-```aoel
+```vais
 /// 사용자를 생성합니다.
 ///
 /// # Arguments
@@ -223,16 +223,16 @@ pub fn create_user(name: s, age: i) -> !User = {
 # 1. README.md 작성
 # 2. LICENSE 파일 추가
 # 3. 테스트 통과 확인
-aoel test
+vais test
 
 # 4. 린트 통과 확인
-aoel lint
+vais lint
 
 # 5. dry-run으로 확인
-aoel publish --dry-run
+vais publish --dry-run
 
 # 6. 퍼블리시
-aoel publish
+vais publish
 ```
 
 ---
@@ -243,8 +243,8 @@ aoel publish
 
 **예: SQLite 바인딩**
 
-```aoel
-# src/lib.aoel
+```vais
+# src/lib.vais
 mod sqlite
 
 # Low-level FFI 선언
@@ -320,7 +320,7 @@ impl Database {
 ```
 
 **사용:**
-```aoel
+```vais
 use sqlite
 
 db = sqlite.open("test.db")?
@@ -334,8 +334,8 @@ db.close()
 
 **예: NumPy 바인딩**
 
-```aoel
-# src/lib.aoel
+```vais
+# src/lib.vais
 mod numpy
 
 ffi python {
@@ -415,7 +415,7 @@ impl Array {
 ```
 
 **사용:**
-```aoel
+```vais
 use numpy.{array, zeros, Array}
 
 a = array([1.0, 2.0, 3.0])
@@ -434,7 +434,7 @@ m2 = m1.reshape(9, 1)
 1. Low-level FFI는 내부에 숨기기
    - 사용자는 High-level API만 사용
 
-2. 에러 처리를 AOEL 스타일로
+2. 에러 처리를 Vais 스타일로
    - C 에러 코드 → Result 타입
    - Python 예외 → Result 타입
 
@@ -443,7 +443,7 @@ m2 = m1.reshape(9, 1)
    - RAII 패턴 사용
 
 4. 타입 변환 자동화
-   - AOEL 타입 ↔ 외부 타입
+   - Vais 타입 ↔ 외부 타입
    - 변환 비용 문서화
 
 5. 테스트 철저히
@@ -457,7 +457,7 @@ m2 = m1.reshape(9, 1)
 
 ### 3.1 LSP (Language Server Protocol)
 
-AOEL LSP 서버를 만들면 모든 에디터에서 지원 가능합니다.
+Vais LSP 서버를 만들면 모든 에디터에서 지원 가능합니다.
 
 ```rust
 // Rust로 LSP 서버 구현 예시
@@ -465,12 +465,12 @@ use tower_lsp::{LspService, Server};
 use tower_lsp::lsp_types::*;
 
 #[derive(Debug)]
-struct AoelLanguageServer {
+struct VaisLanguageServer {
     // ...
 }
 
 #[tower_lsp::async_trait]
-impl LanguageServer for AoelLanguageServer {
+impl LanguageServer for VaisLanguageServer {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -498,7 +498,7 @@ impl LanguageServer for AoelLanguageServer {
 
 ### 3.2 린터 플러그인
 
-```aoel
+```vais
 # 커스텀 린트 규칙 정의
 mod my_lints
 
@@ -530,9 +530,9 @@ impl Rule for NoTodoComments {
 
 ### 3.3 코드 포매터
 
-```aoel
+```vais
 # 포매터 설정
-# .aoel-fmt.toml
+# .vais-fmt.toml
 [format]
 indent = 4
 max_line_length = 100
@@ -582,8 +582,8 @@ single_quotes = false
 
 ```bash
 # 1. Fork & Clone
-git clone https://github.com/YOUR_USERNAME/aoel
-cd aoel
+git clone https://github.com/YOUR_USERNAME/vais
+cd vais
 
 # 2. 브랜치 생성
 git checkout -b feature/my-feature
@@ -655,7 +655,7 @@ pub fn parse(source: &str) -> Result<AST, ParseError> {
 - GitHub Issues: 버그 리포트, 기능 요청
 - GitHub Discussions: 질문, 아이디어 논의
 - Discord: 실시간 채팅
-- Stack Overflow: aoel 태그로 질문
+- Stack Overflow: vais 태그로 질문
 ```
 
 ### 5.3 기여 인정
@@ -677,15 +677,15 @@ pub fn parse(source: &str) -> Result<AST, ParseError> {
 
 ### 패키지 만들기
 ```bash
-aoel new my-lib --lib
+vais new my-lib --lib
 cd my-lib
 # 코드 작성
-aoel test
-aoel publish
+vais test
+vais publish
 ```
 
 ### FFI 바인딩
-```aoel
+```vais
 ffi c { @link("lib") fn func() -> i32 }
 ffi python { @module("numpy") mod np { ... } }
 ffi rust { @crate("tokio") mod async { ... } }
@@ -693,7 +693,7 @@ ffi rust { @crate("tokio") mod async { ... } }
 
 ### 코어 기여
 ```bash
-git clone https://github.com/aoel-lang/aoel
+git clone https://github.com/vais-lang/vais
 git checkout -b feature/my-feature
 # 개발 & 테스트
 # PR 생성
@@ -703,7 +703,7 @@ git checkout -b feature/my-feature
 
 ## 결론
 
-AOEL 생태계는 **여러분의 기여**로 성장합니다.
+Vais 생태계는 **여러분의 기여**로 성장합니다.
 
 ```
 작은 기여도 환영합니다:

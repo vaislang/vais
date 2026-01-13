@@ -1,4 +1,4 @@
-# AOEL Grammar Specification v0.2
+# Vais Grammar Specification v0.2
 ## Hybrid Model: 연산 기반 + 데이터 흐름 + 제약 충족
 
 ---
@@ -19,7 +19,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    AOEL 하이브리드 모델                   │
+│                    Vais 하이브리드 모델                   │
 ├─────────────────────────────────────────────────────────┤
 │  [Layer 1] 의도 계층 (WHAT)                              │
 │    - INTENT: 목표 선언                                   │
@@ -40,7 +40,7 @@
 ## 1. 파일 구조 (v0.2)
 
 ```ebnf
-AOELFile     ::= UNIT META INPUT OUTPUT INTENT CONSTRAINT FLOW EXECUTION VERIFY END
+VaisFile     ::= UNIT META INPUT OUTPUT INTENT CONSTRAINT FLOW EXECUTION VERIFY END
 ```
 
 ### 1.1 블록 순서 (고정)
@@ -94,7 +94,7 @@ TypeRef       ::= '@' Identifier
 
 ### 2.3 타입 예시
 
-```aoel
+```vais
 # 기본 타입
 INT32
 STRING
@@ -125,15 +125,15 @@ UNION<INT32 | STRING | VOID>
 ### 3.1 UNIT 블록
 
 ```ebnf
-UnitBlock    ::= 'UNIT' UnitType UnitID Version?
+UnitBlock    ::= 'UNIT' UnitType VaisUnit Version?
 UnitType     ::= 'FUNCTION' | 'SERVICE' | 'PIPELINE' | 'MODULE'
-UnitID       ::= QualifiedName
+VaisUnit       ::= QualifiedName
 Version      ::= 'V' Number '.' Number '.' Number
 QualifiedName ::= Identifier ('.' Identifier)*
 ```
 
 **예시:**
-```aoel
+```vais
 UNIT FUNCTION auth.user.validate V1.0.0
 ```
 
@@ -149,7 +149,7 @@ TimeUnit     ::= 'ms' | 's' | 'm' | 'h'
 ```
 
 **예시:**
-```aoel
+```vais
 META
   DOMAIN finance.transaction
   DETERMINISM true
@@ -169,7 +169,7 @@ InputConstraint ::= '[' ConstraintExpr ']'
 ```
 
 **예시:**
-```aoel
+```vais
 INPUT
   user_id   : INT64        [> 0]
   email     : STRING       [MATCH /^[^@]+@[^@]+$/]
@@ -188,7 +188,7 @@ OutputConstraint ::= '[' ConstraintExpr ']'
 ```
 
 **예시:**
-```aoel
+```vais
 OUTPUT
   success   : BOOL
   result    : OPTIONAL<STRUCT {id: INT64, status: STRING}>
@@ -211,7 +211,7 @@ FailureStrategy ::= 'ABORT' | 'RETRY' | 'FALLBACK' FallbackRef | 'DEFAULT' Defau
 ```
 
 **예시:**
-```aoel
+```vais
 INTENT
   GOAL TRANSFORM: input.raw_data -> output.processed_data
   PRIORITY CORRECTNESS > LATENCY > MEMORY
@@ -238,7 +238,7 @@ ResourceExpr   ::= 'MEMORY' CompareOp Size | 'CPU' CompareOp Percentage
 ```
 
 **예시:**
-```aoel
+```vais
 CONSTRAINT
   REQUIRE input.amount > 0
   REQUIRE input.user_id != 0
@@ -273,7 +273,7 @@ EdgeCondition ::= 'WHEN' LogicalExpr
 ```
 
 **예시:**
-```aoel
+```vais
 FLOW
   # 노드 정의
   NODE validate_input  : VALIDATE (schema=@schemas.user_input)
@@ -311,7 +311,7 @@ CacheSpec      ::= 'NONE' | 'LRU' Size | 'TTL' Duration
 ```
 
 **예시:**
-```aoel
+```vais
 EXECUTION
   PARALLEL true
   TARGET WASM
@@ -336,7 +336,7 @@ VerifyExpr   ::= LogicalExpr
 ```
 
 **예시:**
-```aoel
+```vais
 VERIFY
   ASSERT output.success OR output.error != VOID
   PROPERTY FORALL item IN output.result.items: item.id > 0
@@ -412,7 +412,7 @@ LiteralRef   ::= Literal
 
 ### 5.2 참조 예시
 
-```aoel
+```vais
 # 로컬 참조
 input.user_id          # 입력 필드
 output.result          # 출력 필드
@@ -436,7 +436,7 @@ true
 
 ### 6.1 사용자 인증 유닛
 
-```aoel
+```vais
 UNIT FUNCTION auth.user.authenticate V1.0.0
 
 META
@@ -533,7 +533,7 @@ END
 
 ### 6.2 데이터 집계 파이프라인
 
-```aoel
+```vais
 UNIT PIPELINE analytics.daily_report V1.2.0
 
 META
@@ -701,9 +701,9 @@ END
 
 ---
 
-## 10. AOEL vs 기존 기술 비교
+## 10. Vais vs 기존 기술 비교
 
-| 측면 | AOEL | LLVM IR | Protobuf | SQL |
+| 측면 | Vais | LLVM IR | Protobuf | SQL |
 |------|------|---------|----------|-----|
 | **목적** | AI-생성 코드 표현 | 컴파일러 최적화 | 데이터 직렬화 | 데이터 쿼리 |
 | **1차 사용자** | AI | 컴파일러 | 개발자 | 개발자 |
@@ -719,7 +719,7 @@ END
 
 ```ebnf
 (* Top Level *)
-AOELFile     ::= UnitBlock MetaBlock InputBlock OutputBlock IntentBlock
+VaisFile     ::= UnitBlock MetaBlock InputBlock OutputBlock IntentBlock
                  ConstraintBlock FlowBlock ExecutionBlock VerifyBlock EndBlock
 
 (* Literals *)

@@ -1,4 +1,4 @@
-// AOEL 테스트 파일
+// Vais 테스트 파일
 // 44% 토큰 효율성 달성을 위한 문법
 
 // 기본 함수
@@ -19,5 +19,5 @@ double(arr)=arr.@(_*2)
 evens(arr)=arr.?(_>0)
 sum(arr)=arr./+
 
-// Quicksort (AOEL 문법의 강력함을 보여주는 예제)
+// Quicksort (Vais 문법의 강력함을 보여주는 예제)
 qs(a)=#a<2?a:let p=a[0],r=a[1:]:$(r.?(_<p))+[p]+$(r.?(_>=p))

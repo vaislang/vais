@@ -1,4 +1,4 @@
-# AOEL FFI (Foreign Function Interface) Design
+# Vais FFI (Foreign Function Interface) Design
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -7,13 +7,13 @@
 
 ## Overview
 
-FFI는 AOEL의 **핵심 경쟁력**입니다.
+FFI는 Vais의 **핵심 경쟁력**입니다.
 
-기존 생태계(Python, Rust, C)를 활용할 수 있어야 AOEL이 실용적인 언어가 됩니다.
+기존 생태계(Python, Rust, C)를 활용할 수 있어야 Vais이 실용적인 언어가 됩니다.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      AOEL Code                               │
+│                      Vais Code                               │
 ├─────────────────────────────────────────────────────────────┤
 │                      FFI Layer                               │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
@@ -34,7 +34,7 @@ FFI는 AOEL의 **핵심 경쟁력**입니다.
 | **Safety** | 메모리 안전성 보장 | 최상 |
 | **Ergonomic** | 쉬운 사용법 | 상 |
 | **Performance** | 최소 오버헤드 | 상 |
-| **Bidirectional** | AOEL ↔ 외부 양방향 | 중 |
+| **Bidirectional** | Vais ↔ 외부 양방향 | 중 |
 | **Auto-binding** | 자동 바인딩 생성 | 중 |
 
 ---
@@ -44,7 +44,7 @@ FFI는 AOEL의 **핵심 경쟁력**입니다.
 ### Universal Type Correspondence
 
 ```
-AOEL          C              Rust           Python
+Vais          C              Rust           Python
 ────────────────────────────────────────────────────
 i             int64_t        i64            int
 i32           int32_t        i32            int
@@ -70,7 +70,7 @@ fn(A)->B      fn_ptr         fn(A)->B       Callable
 
 ### Basic Declaration
 
-```aoel
+```vais
 ffi c {
     # 단순 함수
     fn abs(x: i32) -> i32
@@ -91,7 +91,7 @@ ffi c {
 
 ### Struct Mapping
 
-```aoel
+```vais
 ffi c {
     # C struct 매핑
     @repr(C)
@@ -113,14 +113,14 @@ ffi c {
 
 ### Memory Management
 
-```aoel
+```vais
 ffi c {
     # 메모리 할당
     fn malloc(size: usize) -> *void
     fn free(ptr: *void)
     fn realloc(ptr: *void, size: usize) -> *void
 
-    # AOEL 관리 (자동 해제)
+    # Vais 관리 (자동 해제)
     @managed
     fn create_buffer(size: usize) -> *Buffer
 
@@ -139,7 +139,7 @@ defer c.free(ptr)  # 명시적 해제
 
 ### Callback
 
-```aoel
+```vais
 ffi c {
     # 콜백 타입
     type Comparator = fn(*void, *void) -> i32
@@ -152,7 +152,7 @@ ffi c {
     )
 }
 
-# AOEL에서 콜백 제공
+# Vais에서 콜백 제공
 my_compare = (a, b) => {
     va = *(a as *i32)
     vb = *(b as *i32)
@@ -168,7 +168,7 @@ c.qsort(arr.ptr, arr.len, 4, my_compare)
 
 ### Crate Integration
 
-```aoel
+```vais
 ffi rust {
     # Crate 선언
     @crate("serde_json", version = "1.0")
@@ -198,7 +198,7 @@ ffi rust {
 
 ### Direct Usage
 
-```aoel
+```vais
 use ffi.rust.json
 use ffi.rust.http
 
@@ -213,9 +213,9 @@ body = response.text().await?
 
 ### Trait Mapping
 
-```aoel
+```vais
 ffi rust {
-    # Rust trait을 AOEL trait으로
+    # Rust trait을 Vais trait으로
     @trait_map(Iterator)
     trait RustIterator<T> {
         fn next(self) -> ?T
@@ -234,7 +234,7 @@ ffi rust {
 
 ### Module Import
 
-```aoel
+```vais
 ffi python {
     # NumPy
     @module("numpy")
@@ -290,7 +290,7 @@ ffi python {
 
 ### Usage Example
 
-```aoel
+```vais
 use ffi.python.{np, pd, sklearn}
 
 # 데이터 로드
@@ -313,21 +313,21 @@ print("R² Score: " + score.str)
 
 ### Type Conversion
 
-```aoel
+```vais
 # 자동 변환
-aoel_list = [1.0, 2.0, 3.0]
-np_array = np.array(aoel_list)      # AOEL list → numpy array
-back = np_array.to_list()           # numpy array → AOEL list
+vais_list = [1.0, 2.0, 3.0]
+np_array = np.array(vais_list)      # Vais list → numpy array
+back = np_array.to_list()           # numpy array → Vais list
 
-aoel_dict = {"a": [1,2], "b": [3,4]}
-df = pd.DataFrame(aoel_dict)        # AOEL dict → DataFrame
-back = df.to_dict()                 # DataFrame → AOEL dict
+vais_dict = {"a": [1,2], "b": [3,4]}
+df = pd.DataFrame(vais_dict)        # Vais dict → DataFrame
+back = df.to_dict()                 # DataFrame → Vais dict
 ```
 
 ### Error Handling
 
-```aoel
-# Python 예외를 AOEL Result로
+```vais
+# Python 예외를 Vais Result로
 result = try {
     df = pd.read_csv("nonexistent.csv")
     ok(df)
@@ -345,7 +345,7 @@ df = pd.read_csv("data.csv")?  # 실패시 에러 전파
 
 ### Import WASM Module
 
-```aoel
+```vais
 ffi wasm {
     @module("calculator.wasm")
     mod calc {
@@ -361,17 +361,17 @@ ffi wasm {
 }
 ```
 
-### Export AOEL to WASM
+### Export Vais to WASM
 
-```aoel
-# AOEL 함수를 WASM으로 컴파일
+```vais
+# Vais 함수를 WASM으로 컴파일
 @wasm_export
 pub fn process_data(input: [u8]) -> [u8] = {
     # 처리 로직
 }
 
 # 컴파일
-# aoel build --target wasm32
+# vais build --target wasm32
 ```
 
 ---
@@ -382,11 +382,11 @@ pub fn process_data(input: [u8]) -> [u8] = {
 
 ```bash
 # C 헤더에서 자동 바인딩 생성
-aoel bindgen c sqlite3.h --output sqlite.aoel
+vais bindgen c sqlite3.h --output sqlite.vais
 ```
 
-```aoel
-# 생성된 파일 (sqlite.aoel)
+```vais
+# 생성된 파일 (sqlite.vais)
 ffi c {
     @link("sqlite3")
 
@@ -410,14 +410,14 @@ ffi c {
 
 ```bash
 # Cargo.toml에서 바인딩 생성
-aoel bindgen rust serde_json --output json.aoel
+vais bindgen rust serde_json --output json.vais
 ```
 
 ### From Python Type Hints
 
 ```bash
 # Python stub 파일에서 바인딩 생성
-aoel bindgen python numpy.pyi --output numpy.aoel
+vais bindgen python numpy.pyi --output numpy.vais
 ```
 
 ---
@@ -426,7 +426,7 @@ aoel bindgen python numpy.pyi --output numpy.aoel
 
 ### Memory Safety
 
-```aoel
+```vais
 ffi c {
     # 안전하지 않은 함수는 unsafe 블록 필요
     @unsafe
@@ -441,7 +441,7 @@ unsafe {
 
 ### Null Safety
 
-```aoel
+```vais
 ffi c {
     # nullable 반환값
     fn find(arr: *i32, len: usize, val: i32) -> ?*i32
@@ -459,7 +459,7 @@ value = c.find(arr, len, target)? # nil이면 early return
 
 ### Thread Safety
 
-```aoel
+```vais
 ffi c {
     # thread-safe 표시
     @thread_safe
@@ -477,20 +477,20 @@ ffi c {
 
 ### Zero-Copy
 
-```aoel
+```vais
 ffi c {
     # 데이터 복사 없이 포인터 전달
     @zero_copy
     fn process_buffer(data: &[u8], len: usize)
 }
 
-# AOEL 배열이 직접 전달됨 (복사 없음)
+# Vais 배열이 직접 전달됨 (복사 없음)
 c.process_buffer(my_data, my_data.len)
 ```
 
 ### Batch Calls
 
-```aoel
+```vais
 # 여러 FFI 호출을 배치로
 ffi.batch {
     a = c.compute1(x)
@@ -502,7 +502,7 @@ ffi.batch {
 
 ### Caching
 
-```aoel
+```vais
 ffi python {
     # 결과 캐싱
     @cached(ttl = 60)
@@ -516,7 +516,7 @@ ffi python {
 
 ### C Errors
 
-```aoel
+```vais
 ffi c {
     # errno 기반 에러
     @errno
@@ -534,7 +534,7 @@ bytes = c.write(fd, buf, len)?
 
 ### Rust Errors
 
-```aoel
+```vais
 ffi rust {
     # Result 타입 자동 변환
     @crate("std")
@@ -548,7 +548,7 @@ content = rust.fs.read_to_string("file.txt")?
 
 ### Python Exceptions
 
-```aoel
+```vais
 ffi python {
     # 예외를 Result로 변환
     @module("json")
@@ -566,7 +566,7 @@ data = python.json.loads(json_str)?
 
 라이브러리 개발자를 위한 FFI 래퍼 작성 도구:
 
-```aoel
+```vais
 # 고수준 래퍼 생성
 mod sqlite
 
@@ -650,7 +650,7 @@ FFI 설계 원칙:
 | **Safety First** | 안전하지 않은 코드는 명시적 `unsafe` |
 | **Ergonomic** | 고수준 API로 쉽게 사용 |
 | **Zero-Cost** | 가능한 오버헤드 최소화 |
-| **Bidirectional** | AOEL ↔ 외부 양방향 지원 |
+| **Bidirectional** | Vais ↔ 외부 양방향 지원 |
 | **Auto-Binding** | 바인딩 자동 생성 도구 제공 |
 
 **기존 생태계를 활용할 수 있어야 새 언어가 성공합니다.**

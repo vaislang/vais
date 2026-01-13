@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL v5 Token Benchmark - Clear & Explicit Syntax
+Vais v5 Token Benchmark - Clear & Explicit Syntax
 
 설계 원칙:
 1. 하나의 기호는 하나의 의미만
@@ -265,7 +265,7 @@ EXAMPLES = {
 
 def run_benchmark():
     print("=" * 80)
-    print("AOEL v5 Token Benchmark - Clear & Explicit Syntax")
+    print("Vais v5 Token Benchmark - Clear & Explicit Syntax")
     print("=" * 80)
     print()
     print("문법 규칙:")

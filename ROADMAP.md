@@ -1,8 +1,8 @@
-# AOEL Development Roadmap
+# Vais Development Roadmap
 
 ## Project Overview
 
-**AOEL (AI-Optimized Executable Language)**
+**Vais (Vibe AI Script)**
 AI가 가장 효율적으로 생성, 수정, 실행할 수 있는 프로그래밍 언어
 
 ---
@@ -26,34 +26,34 @@ AI가 가장 효율적으로 생성, 수정, 실행할 수 있는 프로그래�
 
 ```bash
 # 빌드
-cd aoel-rs
+cd vais-rs
 cargo build --release
 
 # 실행
-./target/release/aoel run examples/factorial.aoel
+./target/release/vais run examples/factorial.vais
 
 # 네이티브 컴파일
-./target/release/aoel build examples/factorial.aoel --target llvm
+./target/release/vais build examples/factorial.vais --target llvm
 
 # JIT 실행 (Cranelift)
 cargo build --release --features cranelift
-./target/release/aoel jit examples/simple.aoel
+./target/release/vais jit examples/simple.vais
 
 # 패키지 매니저
-./target/release/aoel init my-project    # 새 프로젝트
-./target/release/aoel add utils          # 의존성 추가
-./target/release/aoel publish            # 레지스트리에 게시
+./target/release/vais init my-project    # 새 프로젝트
+./target/release/vais add utils          # 의존성 추가
+./target/release/vais publish            # 레지스트리에 게시
 
 # 개발 도구
-./target/release/aoel format file.aoel   # 코드 포맷팅
-./target/release/aoel profile file.aoel  # 성능 프로파일링
+./target/release/vais format file.vais   # 코드 포맷팅
+./target/release/vais profile file.vais  # 성능 프로파일링
 ```
 
 ---
 
 ## Language Syntax
 
-```aoel
+```vais
 // 함수 정의
 add(a, b) = a + b
 factorial(n) = n < 2 ? 1 : n * $(n - 1)
@@ -88,11 +88,11 @@ use math.{sin, cos}
 ### Phase 4: Native Compile
 | Backend | Command | 특징 |
 |---------|---------|------|
-| C | `aoel build file.aoel` | 가장 호환성 좋음 |
-| WASM | `aoel build file.aoel --target wasm` | 웹 지원 |
-| LLVM | `aoel build file.aoel --target llvm` | 최적화 우수 |
-| Cranelift | `aoel jit file.aoel` | 빠른 컴파일 |
-| **JIT (Adaptive)** | `aoel run file.aoel --jit` | **50-75배 성능 향상** |
+| C | `vais build file.vais` | 가장 호환성 좋음 |
+| WASM | `vais build file.vais --target wasm` | 웹 지원 |
+| LLVM | `vais build file.vais --target llvm` | 최적화 우수 |
+| Cranelift | `vais jit file.vais` | 빠른 컴파일 |
+| **JIT (Adaptive)** | `vais run file.vais --jit` | **50-75배 성능 향상** |
 
 ---
 
@@ -106,11 +106,11 @@ use math.{sin, cos}
 - [x] **std.json** - JSON 파싱/생성/조작
 - [x] **std.net** - HTTP 클라이언트 (GET/POST/PUT/DELETE)
 - [x] **LSP 완전 구현** - 자동완성, Hover, Go to Definition, Find References, Rename, Signature Help
-- [x] **패키지 매니저 (APM)** - aoel.toml, init/add/remove/install/publish
+- [x] **패키지 매니저 (VPM)** - vais.toml, init/add/remove/install/publish
 - [x] **FFI (C 바인딩)** - libc 함수 호출 (abs, sqrt, pow, sin, cos, etc.)
-- [x] **개발 도구 (aoel-tools)** - Formatter, Profiler, Debugger
-- [x] **Adaptive JIT (aoel-jit)** - Cranelift 기반 적응형 JIT 컴파일러
-- [x] **Online REPL/Playground** - 웹 기반 AOEL 실행 환경 (WASM)
+- [x] **개발 도구 (vais-tools)** - Formatter, Profiler, Debugger
+- [x] **Adaptive JIT (vais-jit)** - Cranelift 기반 적응형 JIT 컴파일러
+- [x] **Online REPL/Playground** - 웹 기반 Vais 실행 환경 (WASM)
 
 ### TODO (Future Enhancements)
 - [ ] JIT 제어 흐름 지원 (if/else, loops)
@@ -125,20 +125,20 @@ use math.{sin, cos}
 ## Project Structure
 
 ```
-aoel-rs/crates/
-├── aoel-lexer/      # 토큰화
-├── aoel-ast/        # AST 정의
-├── aoel-parser/     # 파서 + 모듈
-├── aoel-typeck/     # 타입 체커
-├── aoel-ir/         # IR + 최적화
-├── aoel-lowering/   # AST → IR
-├── aoel-vm/         # 스택 VM
-├── aoel-jit/        # Adaptive JIT (Cranelift)
-├── aoel-codegen/    # C/WASM/LLVM/Cranelift
-├── aoel-tools/      # Formatter, Profiler, Debugger
-├── aoel-lsp/        # Language Server
-├── aoel-playground/ # Web Playground (WASM)
-└── aoel-cli/        # CLI
+vais-rs/crates/
+├── vais-lexer/      # 토큰화
+├── vais-ast/        # AST 정의
+├── vais-parser/     # 파서 + 모듈
+├── vais-typeck/     # 타입 체커
+├── vais-ir/         # IR + 최적화
+├── vais-lowering/   # AST → IR
+├── vais-vm/         # 스택 VM
+├── vais-jit/        # Adaptive JIT (Cranelift)
+├── vais-codegen/    # C/WASM/LLVM/Cranelift
+├── vais-tools/      # Formatter, Profiler, Debugger
+├── vais-lsp/        # Language Server
+├── vais-playground/ # Web Playground (WASM)
+└── vais-cli/        # CLI
 ```
 
 ---
@@ -147,24 +147,30 @@ aoel-rs/crates/
 
 | Crate | Tests |
 |-------|-------|
-| aoel-lexer | 11 |
-| aoel-parser | 10 |
-| aoel-typeck | 11 |
-| aoel-ir | 20 |
-| aoel-lowering | 3 |
-| aoel-vm | 30 |
-| aoel-codegen | 14 |
-| aoel-tools | 7 |
-| aoel-cli | 3 |
+| vais-lexer | 11 |
+| vais-parser | 10 |
+| vais-typeck | 11 |
+| vais-ir | 20 |
+| vais-lowering | 3 |
+| vais-vm | 30 |
+| vais-codegen | 14 |
+| vais-tools | 7 |
+| vais-cli | 3 |
 | **Total** | **113** |
 
 ---
 
 ## Change Log (Recent)
 
+### 2026-01-13 - Project Rename: AOEL → Vais
+- **Project renamed from AOEL to Vais** (Vibe AI Script)
+- File extension changed from `.aoel` to `.vais`
+- All crate names updated: `aoel-*` → `vais-*`
+- Repository URL: https://github.com/sswoo88/vais
+
 ### 2026-01-13 - Online REPL/Playground 구현
-**aoel-playground 크레이트 추가 (WASM)**
-- 웹 브라우저에서 AOEL 코드 실행
+**vais-playground 크레이트 추가 (WASM)**
+- 웹 브라우저에서 Vais 코드 실행
 - WASM으로 컴파일된 경량 VM 사용
 - 코드 에디터 (라인 번호, 커서 위치 표시)
 - 실시간 실행 및 결과 출력
@@ -185,7 +191,7 @@ aoel-rs/crates/
 
 **빌드 방법**
 ```bash
-cd aoel-rs/crates/aoel-playground
+cd vais-rs/crates/vais-playground
 wasm-pack build --target web --out-dir www/pkg
 cd www && python3 -m http.server 8080
 ```
@@ -220,16 +226,16 @@ vm.add_ffi_search_path("/opt/mylib");
 
 **테스트**: 6개 신규 추가 (총 113개)
 
-### 2026-01-13 - 개발 도구 (aoel-tools) 구현
-**aoel-tools 크레이트 추가**
+### 2026-01-13 - 개발 도구 (vais-tools) 구현
+**vais-tools 크레이트 추가**
 - **Formatter** - AST 기반 코드 포맷터
-  - `aoel format <file>` - 코드 포맷 (stdout)
-  - `aoel format <file> --write` - 파일에 덮어쓰기
-  - `aoel format <file> --check` - 포맷 검사
+  - `vais format <file>` - 코드 포맷 (stdout)
+  - `vais format <file> --write` - 파일에 덮어쓰기
+  - `vais format <file> --check` - 포맷 검사
   - 설정: `--indent`, `--max-width`
 - **Profiler** - 함수별 실행 시간 측정
-  - `aoel profile <file>` - 텍스트 출력
-  - `aoel profile <file> --format json` - JSON 출력
+  - `vais profile <file>` - 텍스트 출력
+  - `vais profile <file> --format json` - JSON 출력
   - 호출 횟수, 평균/최소/최대 시간 측정
 - **Debugger** - 브레이크포인트, 스텝 실행
   - 브레이크포인트 설정/해제/토글
@@ -241,7 +247,7 @@ vm.add_ffi_search_path("/opt/mylib");
 
 ### 2026-01-13 - FFI (Foreign Function Interface) 구현
 **FFI 문법**
-```aoel
+```vais
 ffi "c" {
     fn abs(n: i32) -> i32
     fn sqrt(x: f64) -> f64
@@ -264,16 +270,16 @@ print(sqrt(16.0))    // 4.0
 - 실수: f32, f64
 - 기타: bool, cstr, ptr, void
 
-### 2026-01-13 - 패키지 매니저 (APM) 구현
-**APM (AOEL Package Manager)**
-- `aoel init [path]` - 새 프로젝트 초기화
-- `aoel add <pkg>` - 의존성 추가
-- `aoel remove <pkg>` - 의존성 제거
-- `aoel install` - 의존성 설치
-- `aoel list` - 의존성 목록
-- `aoel publish` - 로컬 레지스트리에 게시
+### 2026-01-13 - 패키지 매니저 (VPM) 구현
+**VPM (Vais Package Manager)**
+- `vais init [path]` - 새 프로젝트 초기화
+- `vais add <pkg>` - 의존성 추가
+- `vais remove <pkg>` - 의존성 제거
+- `vais install` - 의존성 설치
+- `vais list` - 의존성 목록
+- `vais publish` - 로컬 레지스트리에 게시
 
-**aoel.toml 지원**
+**vais.toml 지원**
 ```toml
 [package]
 name = "my-app"
@@ -317,7 +323,7 @@ utils = "1.0.0"
 
 ### 2026-01-12 - Phase 3 완료
 - 최적화 패스: 상수 전파, CSE, 명령어 융합, TCO
-- v6b 문법을 AOEL 메인으로 통합
+- v6b 문법을 Vais 메인으로 통합
 
 ### 2026-01-11 - Phase 0-2 완료
 - Python 프로토타입

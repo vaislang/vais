@@ -41,19 +41,19 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build
-        working-directory: aoel-rs
+        working-directory: vais-rs
         run: cargo build --all-targets
 
       - name: Run tests
-        working-directory: aoel-rs
+        working-directory: vais-rs
         run: cargo test --all
 
       - name: Check formatting
-        working-directory: aoel-rs
+        working-directory: vais-rs
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        working-directory: aoel-rs
+        working-directory: vais-rs
         run: cargo clippy --all-targets -- -D warnings
 
   # Verify example files parse correctly
@@ -79,12 +79,12 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build CLI
-        working-directory: aoel-rs
-        run: cargo build --release -p aoel-cli
+        working-directory: vais-rs
+        run: cargo build --release -p vais-cli
 
       - name: Check example files
         run: |
-          for f in examples/*.aoel; do
+          for f in examples/*.vais; do
             echo "Checking $f..."
-            ./aoel-rs/target/release/aoel check "$f" || true
+            ./vais-rs/target/release/vais check "$f" || true
           done

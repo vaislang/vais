@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AOEL v2 Token Benchmark Tool
+Vais v2 Token Benchmark Tool
 
-Compares token counts between Python and AOEL v2 code
+Compares token counts between Python and Vais v2 code
 using tiktoken (OpenAI's tokenizer) for accurate LLM token estimation.
 
 Usage:
@@ -29,16 +29,16 @@ except ImportError:
 class TokenResult:
     name: str
     python_code: str
-    aoel_code: str
+    vais_code: str
     python_tokens: int
-    aoel_tokens: int
+    vais_tokens: int
     savings_percent: float
 
     def to_dict(self):
         return {
             "name": self.name,
             "python_tokens": self.python_tokens,
-            "aoel_tokens": self.aoel_tokens,
+            "vais_tokens": self.vais_tokens,
             "savings_percent": round(self.savings_percent, 1)
         }
 
@@ -63,22 +63,22 @@ class TokenCounter:
             tokens = re.findall(r'\w+|[^\w\s]', code)
             return len(tokens)
 
-    def compare(self, name: str, python_code: str, aoel_code: str) -> TokenResult:
-        """Compare token counts between Python and AOEL."""
+    def compare(self, name: str, python_code: str, vais_code: str) -> TokenResult:
+        """Compare token counts between Python and Vais."""
         python_tokens = self.count(python_code)
-        aoel_tokens = self.count(aoel_code)
+        vais_tokens = self.count(vais_code)
 
         if python_tokens > 0:
-            savings = (1 - aoel_tokens / python_tokens) * 100
+            savings = (1 - vais_tokens / python_tokens) * 100
         else:
             savings = 0
 
         return TokenResult(
             name=name,
             python_code=python_code,
-            aoel_code=aoel_code,
+            vais_code=vais_code,
             python_tokens=python_tokens,
-            aoel_tokens=aoel_tokens,
+            vais_tokens=vais_tokens,
             savings_percent=savings
         )
 
@@ -88,13 +88,13 @@ EXAMPLES = {
     "hello_world": {
         "python": '''def hello():
     return "Hello, World!"''',
-        "aoel": '(fn hello [] :s "Hello, World!")'
+        "vais": '(fn hello [] :s "Hello, World!")'
     },
 
     "add_numbers": {
         "python": '''def add(a: int, b: int) -> int:
     return a + b''',
-        "aoel": '(fn add [a:i b:i] :i (+ a b))'
+        "vais": '(fn add [a:i b:i] :i (+ a b))'
     },
 
     "fibonacci": {
@@ -102,7 +102,7 @@ EXAMPLES = {
     if n <= 1:
         return n
     return fib(n - 1) + fib(n - 2)''',
-        "aoel": '''(fn fib [n:i] :i
+        "vais": '''(fn fib [n:i] :i
   (? (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))'''
     },
 
@@ -112,7 +112,7 @@ EXAMPLES = {
     for i in range(1, n + 1):
         result *= i
     return result''',
-        "aoel": '''(fn fact [n:i] :i
+        "vais": '''(fn fact [n:i] :i
   (loop [i n acc 1]
     (? (<= i 1) acc (recur (- i 1) (* acc i)))))'''
     },
@@ -120,7 +120,7 @@ EXAMPLES = {
     "filter_map": {
         "python": '''def get_active_emails(users: list[User]) -> list[str]:
     return [u.email.upper() for u in users if u.is_active]''',
-        "aoel": '''(fn active-emails [users:[User]] :[s]
+        "vais": '''(fn active-emails [users:[User]] :[s]
   (-> users (filter .active) (map .email) (map upper)))'''
     },
 
@@ -133,7 +133,7 @@ EXAMPLES = {
     if age >= 13:
         return "teen"
     return "child"''',
-        "aoel": '''(fn categorize [age:i] :s
+        "vais": '''(fn categorize [age:i] :s
   (require (>= age 0) "Age cannot be negative")
   (cond
     (>= age 18) "adult"
@@ -146,7 +146,7 @@ EXAMPLES = {
     if a > b:
         return a
     return b''',
-        "aoel": '(fn max [a:i b:i] :i (? (> a b) a b))'
+        "vais": '(fn max [a:i b:i] :i (? (> a b) a b))'
     },
 
     "sum_list": {
@@ -155,7 +155,7 @@ EXAMPLES = {
     for n in numbers:
         total += n
     return total''',
-        "aoel": '(fn sum-list [nums:[i]] :i (sum nums))'
+        "vais": '(fn sum-list [nums:[i]] :i (sum nums))'
     },
 
     "binary_search": {
@@ -170,7 +170,7 @@ EXAMPLES = {
         else:
             hi = mid - 1
     return None''',
-        "aoel": '''(fn bin-search [arr:[i] target:i] :?i
+        "vais": '''(fn bin-search [arr:[i] target:i] :?i
   (loop [lo 0 hi (- (len arr) 1)]
     (if (> lo hi)
       nil
@@ -190,7 +190,7 @@ EXAMPLES = {
     less = [x for x in arr[1:] if x < pivot]
     greater = [x for x in arr[1:] if x >= pivot]
     return quicksort(less) + [pivot] + quicksort(greater)''',
-        "aoel": '''(fn qsort [arr:[i]] :[i]
+        "vais": '''(fn qsort [arr:[i]] :[i]
   (if (<= (len arr) 1)
     arr
     (let [pivot (first arr)
@@ -212,12 +212,12 @@ def run_benchmark(examples: dict = None, verbose: bool = True) -> list[TokenResu
 
     if verbose:
         print("=" * 70)
-        print("AOEL v2 Token Benchmark")
+        print("Vais v2 Token Benchmark")
         print("=" * 70)
         print()
 
     for name, code in examples.items():
-        result = counter.compare(name, code["python"], code["aoel"])
+        result = counter.compare(name, code["python"], code["vais"])
         results.append(result)
 
         if verbose:
@@ -229,11 +229,11 @@ def run_benchmark(examples: dict = None, verbose: bool = True) -> list[TokenResu
             print("```")
             print(f"Tokens: {result.python_tokens}")
             print()
-            print("AOEL v2:")
+            print("Vais v2:")
             print("```lisp")
-            print(result.aoel_code)
+            print(result.vais_code)
             print("```")
-            print(f"Tokens: {result.aoel_tokens}")
+            print(f"Tokens: {result.vais_tokens}")
             print()
             if result.savings_percent > 0:
                 print(f"**Savings: {result.savings_percent:.1f}%**")
@@ -249,21 +249,21 @@ def run_benchmark(examples: dict = None, verbose: bool = True) -> list[TokenResu
         print("SUMMARY")
         print("=" * 70)
         print()
-        print(f"{'Example':<20} {'Python':>10} {'AOEL v2':>10} {'Savings':>10}")
+        print(f"{'Example':<20} {'Python':>10} {'Vais v2':>10} {'Savings':>10}")
         print("-" * 50)
 
         total_python = 0
-        total_aoel = 0
+        total_vais = 0
 
         for r in results:
             total_python += r.python_tokens
-            total_aoel += r.aoel_tokens
+            total_vais += r.vais_tokens
             savings_str = f"{r.savings_percent:+.1f}%"
-            print(f"{r.name:<20} {r.python_tokens:>10} {r.aoel_tokens:>10} {savings_str:>10}")
+            print(f"{r.name:<20} {r.python_tokens:>10} {r.vais_tokens:>10} {savings_str:>10}")
 
         print("-" * 50)
-        total_savings = (1 - total_aoel / total_python) * 100 if total_python > 0 else 0
-        print(f"{'TOTAL':<20} {total_python:>10} {total_aoel:>10} {total_savings:+.1f}%")
+        total_savings = (1 - total_vais / total_python) * 100 if total_python > 0 else 0
+        print(f"{'TOTAL':<20} {total_python:>10} {total_vais:>10} {total_savings:+.1f}%")
         print()
 
         if total_savings >= 40:
@@ -277,7 +277,7 @@ def run_benchmark(examples: dict = None, verbose: bool = True) -> list[TokenResu
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AOEL v2 Token Benchmark Tool")
+    parser = argparse.ArgumentParser(description="Vais v2 Token Benchmark Tool")
     parser.add_argument("--example", type=str, help="Run specific example")
     parser.add_argument("--file", type=str, help="Load examples from JSON file")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
@@ -306,7 +306,7 @@ def main():
             "results": [r.to_dict() for r in results],
             "summary": {
                 "total_python": sum(r.python_tokens for r in results),
-                "total_aoel": sum(r.aoel_tokens for r in results),
+                "total_vais": sum(r.vais_tokens for r in results),
                 "average_savings": sum(r.savings_percent for r in results) / len(results) if results else 0
             }
         }

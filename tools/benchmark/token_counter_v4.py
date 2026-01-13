@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL v4 Token Benchmark - Functional Chaining Style
+Vais v4 Token Benchmark - Functional Chaining Style
 
 Option C: 극단적 단순화 - 함수형 체이닝
 """
@@ -229,7 +229,7 @@ EXAMPLES = {
 
 def run_benchmark():
     print("=" * 80)
-    print("AOEL v4 Token Benchmark - Functional Chaining")
+    print("Vais v4 Token Benchmark - Functional Chaining")
     print("=" * 80)
     print()
     print("문법: name params = body")

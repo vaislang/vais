@@ -1,5 +1,5 @@
-# AOEL Example 01: Hello World
-# 가장 단순한 AOEL 유닛 - 문자열 반환
+# Vais Example 01: Hello World
+# 가장 단순한 Vais 유닛 - 문자열 반환
 
 UNIT FUNCTION examples.hello_world V1.0.0
 

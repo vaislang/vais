@@ -1,4 +1,4 @@
-# AOEL Example 09: CRUD User - Create
+# Vais Example 09: CRUD User - Create
 # 사용자 생성 (Create 연산)
 
 UNIT FUNCTION examples.create_user V1.0.0

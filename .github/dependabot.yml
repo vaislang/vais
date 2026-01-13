@@ -2,7 +2,7 @@ version: 2
 updates:
   # Rust dependencies
   - package-ecosystem: "cargo"
-    directory: "/aoel-rs"
+    directory: "/vais-rs"
     schedule:
       interval: "weekly"
     commit-message:

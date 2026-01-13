@@ -1,6 +1,6 @@
-# AOEL Language Syntax Guide
+# Vais Language Syntax Guide
 
-This guide covers the complete syntax of AOEL (AI-Optimized Executable Language).
+This guide covers the complete syntax of Vais (Vibe AI SSW).
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ This guide covers the complete syntax of AOEL (AI-Optimized Executable Language)
 
 ## Comments
 
-```aoel
+```vais
 // Single-line comment
 
 /*
@@ -52,7 +52,7 @@ This guide covers the complete syntax of AOEL (AI-Optimized Executable Language)
 
 ### Type Annotations (Optional)
 
-```aoel
+```vais
 // Function with type annotations
 add(a: Int, b: Int): Int = a + b
 
@@ -66,16 +66,16 @@ greet(name: String) = "Hello, " ++ name
 
 ### Declaration
 
-```aoel
+```vais
 // Immutable by default
 x = 10
-name = "AOEL"
+name = "Vais"
 numbers = [1, 2, 3]
 ```
 
 ### Destructuring
 
-```aoel
+```vais
 // Array destructuring
 [first, second, ...rest] = [1, 2, 3, 4, 5]
 // first = 1, second = 2, rest = [3, 4, 5]
@@ -131,7 +131,7 @@ numbers = [1, 2, 3]
 
 ### Basic Definition
 
-```aoel
+```vais
 // Single expression (no braces needed)
 add(a, b) = a + b
 
@@ -143,7 +143,7 @@ result = add(10, 20)  // 30
 
 The `$` operator calls the current function recursively:
 
-```aoel
+```vais
 // Factorial
 factorial(n) = n < 2 ? 1 : n * $(n - 1)
 
@@ -157,7 +157,7 @@ fib(10)  // 55
 
 ### Lambda Expressions
 
-```aoel
+```vais
 // Lambda with explicit parameter
 double = (x) => x * 2
 
@@ -171,7 +171,7 @@ triple = _ * 3
 
 ### Higher-Order Functions
 
-```aoel
+```vais
 // Function returning function
 make_adder(n) = (x) => x + n
 
@@ -185,7 +185,7 @@ apply(_ * 2, 10)  // 20
 
 ### Public Functions
 
-```aoel
+```vais
 // Exported function (visible to other modules)
 pub add(a, b) = a + b
 
@@ -199,7 +199,7 @@ helper(x) = x * 2
 
 ### Ternary Expression
 
-```aoel
+```vais
 // condition ? then : else
 max(a, b) = a > b ? a : b
 
@@ -209,7 +209,7 @@ sign(n) = n > 0 ? "positive" : n < 0 ? "negative" : "zero"
 
 ### If Expression
 
-```aoel
+```vais
 // if-then-else expression
 result = if x > 0 then "positive" else "non-positive"
 
@@ -228,7 +228,7 @@ else
 
 ### Arrays
 
-```aoel
+```vais
 // Creation
 empty = []
 numbers = [1, 2, 3, 4, 5]
@@ -244,7 +244,7 @@ one_to_ten = [1..11]    // [1, 2, 3, ..., 10]
 
 ### Maps/Structs
 
-```aoel
+```vais
 // Creation
 person = {name: "Alice", age: 30}
 
@@ -262,7 +262,7 @@ data.user.name   // "Bob"
 
 ### Ranges
 
-```aoel
+```vais
 // Exclusive range (end not included)
 1..5     // [1, 2, 3, 4]
 
@@ -274,13 +274,13 @@ data.user.name   // "Bob"
 
 ## Collection Operations
 
-AOEL provides concise operators for common functional operations.
+Vais provides concise operators for common functional operations.
 
 ### Map `.@`
 
 Transform each element:
 
-```aoel
+```vais
 [1, 2, 3].@(_ * 2)           // [2, 4, 6]
 [1, 2, 3].@((x) => x + 1)    // [2, 3, 4]
 
@@ -292,7 +292,7 @@ users.@(_.name)              // Extract names
 
 Keep elements matching predicate:
 
-```aoel
+```vais
 [1, 2, 3, 4, 5].?(_ > 2)         // [3, 4, 5]
 [1, 2, 3, 4, 5].?(_ % 2 == 0)    // [2, 4]
 
@@ -304,7 +304,7 @@ users.?(_.age >= 18)             // Adult users
 
 Fold elements into single value:
 
-```aoel
+```vais
 // Sum: ./+
 [1, 2, 3, 4, 5]./+(0, _ + _)     // 15
 
@@ -317,7 +317,7 @@ Fold elements into single value:
 
 ### Chaining Operations
 
-```aoel
+```vais
 // Filter then map
 [1..10].?(_ % 2 == 0).@(_ * _)   // [4, 16, 36, 64]
 
@@ -334,7 +334,7 @@ data
 
 ### Importing
 
-```aoel
+```vais
 // Import specific functions
 use math.{sin, cos, pi}
 
@@ -347,7 +347,7 @@ use utils.*
 
 ### Exporting
 
-```aoel
+```vais
 // Public function (exported)
 pub add(a, b) = a + b
 
@@ -364,12 +364,12 @@ helper(x) = x * 2
 
 ```
 my-project/
-├── aoel.toml
+├── vais.toml
 ├── src/
-│   ├── main.aoel
-│   └── utils.aoel
+│   ├── main.vais
+│   └── utils.vais
 └── lib/
-    └── math.aoel
+    └── math.vais
 ```
 
 ---
@@ -378,7 +378,7 @@ my-project/
 
 ### Declaring FFI Functions
 
-```aoel
+```vais
 ffi "c" {
     fn abs(n: i32) -> i32
     fn sqrt(x: f64) -> f64
@@ -390,7 +390,7 @@ ffi "c" {
 
 ### FFI Types
 
-| AOEL Type | C Type | Description |
+| Vais Type | C Type | Description |
 |-----------|--------|-------------|
 | `i8`, `i16`, `i32`, `i64` | `int8_t`, etc. | Signed integers |
 | `u8`, `u16`, `u32`, `u64` | `uint8_t`, etc. | Unsigned integers |
@@ -403,7 +403,7 @@ ffi "c" {
 
 ### Using FFI Functions
 
-```aoel
+```vais
 ffi "c" {
     fn abs(n: i32) -> i32
     fn sqrt(x: f64) -> f64
@@ -417,7 +417,7 @@ print(sqrt(16.0))    // 4.0
 
 ## Complete Example
 
-```aoel
+```vais
 // Module imports
 use std.io.{read_file, write_file}
 

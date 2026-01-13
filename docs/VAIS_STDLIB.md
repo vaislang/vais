@@ -1,4 +1,4 @@
-# AOEL Standard Library Design
+# Vais Standard Library Design
 
 **Version:** 1.0.0
 **Date:** 2026-01-12
@@ -7,7 +7,7 @@
 
 ## Overview
 
-표준 라이브러리는 **AOEL의 기본 도구 상자**입니다.
+표준 라이브러리는 **Vais의 기본 도구 상자**입니다.
 
 ```
 설계 원칙:
@@ -50,7 +50,7 @@ std/
 
 ### Types
 
-```aoel
+```vais
 # 기본 타입 (builtin)
 i, i8, i16, i32, i64       # 정수
 u8, u16, u32, u64          # 부호 없는 정수
@@ -69,7 +69,7 @@ void                       # 없음
 
 ### Basic Functions
 
-```aoel
+```vais
 # 출력
 print(value)               # 표준 출력
 println(value)             # 줄바꿈 포함
@@ -93,7 +93,7 @@ panic(msg)                 # 패닉
 
 ### Option & Result
 
-```aoel
+```vais
 # Option
 some(value) -> ?T          # 값 있음
 nil -> ?T                  # 값 없음
@@ -116,7 +116,7 @@ value! -> T                # unwrap or panic
 
 ### Traits
 
-```aoel
+```vais
 # 읽기 인터페이스
 trait Read {
     fn read(self, buf: &mut [u8]) -> !usize
@@ -140,7 +140,7 @@ trait Seek {
 
 ### Standard I/O
 
-```aoel
+```vais
 use std.io
 
 # 표준 입력
@@ -157,7 +157,7 @@ io.stderr.write_all("Error!\n".bytes())?
 
 ### Buffered I/O
 
-```aoel
+```vais
 use std.io.{BufReader, BufWriter}
 
 # 버퍼 읽기
@@ -180,7 +180,7 @@ writer.flush()?
 
 ### File Operations
 
-```aoel
+```vais
 use std.fs
 
 # 읽기
@@ -203,7 +203,7 @@ file.close()
 
 ### Path Operations
 
-```aoel
+```vais
 use std.fs.path
 
 # 경로 조작
@@ -226,7 +226,7 @@ path.absolute("relative")                    # 절대 경로로
 
 ### Directory Operations
 
-```aoel
+```vais
 use std.fs
 
 # 디렉토리 작업
@@ -243,7 +243,7 @@ for entry in entries {
 
 # 재귀 탐색
 for entry in fs.walk(".") {
-    if entry.is_file() && entry.name.ends(".aoel") {
+    if entry.is_file() && entry.name.ends(".vais") {
         println(entry.path)
     }
 }
@@ -251,7 +251,7 @@ for entry in fs.walk(".") {
 
 ### File Metadata
 
-```aoel
+```vais
 use std.fs
 
 meta = fs.metadata("file.txt")?
@@ -270,7 +270,7 @@ meta.is_readonly                             # 읽기 전용
 
 ### HTTP Client
 
-```aoel
+```vais
 use std.net.http
 
 # 간단한 GET
@@ -297,7 +297,7 @@ http.head(url)?
 
 ### HTTP Response
 
-```aoel
+```vais
 response.status                              # 200
 response.status_text                         # "OK"
 response.headers                             # {"Content-Type": "..."}
@@ -308,7 +308,7 @@ response.bytes()?                            # 바이트로
 
 ### HTTP Server
 
-```aoel
+```vais
 use std.net.http.{Server, Request, Response}
 
 server = Server.new()
@@ -334,7 +334,7 @@ server.listen(8080)?
 
 ### TCP/UDP
 
-```aoel
+```vais
 use std.net.{TcpStream, TcpListener, UdpSocket}
 
 # TCP 클라이언트
@@ -358,7 +358,7 @@ socket.send_to(data, "localhost:9000")?
 
 ### URL
 
-```aoel
+```vais
 use std.net.url
 
 u = url.parse("https://user:pass@example.com:8080/path?q=1#hash")?
@@ -384,7 +384,7 @@ url.decode("hello%20world")                  # "hello world"
 
 ### JSON
 
-```aoel
+```vais
 use std.data.json
 
 # 파싱
@@ -404,7 +404,7 @@ user: User = json.parse_as('{"name": "John", "age": 30}')?
 
 ### CSV
 
-```aoel
+```vais
 use std.data.csv
 
 # 읽기
@@ -429,7 +429,7 @@ csv.stringify([
 
 ### TOML
 
-```aoel
+```vais
 use std.data.toml
 
 # 파싱
@@ -442,7 +442,7 @@ toml.stringify(config)
 
 ### YAML
 
-```aoel
+```vais
 use std.data.yaml
 
 data = yaml.parse(content)?
@@ -457,7 +457,7 @@ yaml.stringify(data)
 
 ### Regex
 
-```aoel
+```vais
 use std.text.regex
 
 # 매칭
@@ -481,7 +481,7 @@ re.replace_first("a1b2c3", "X")              # "aXb2c3"
 
 ### String Formatting
 
-```aoel
+```vais
 use std.text.fmt
 
 # 포맷팅
@@ -497,7 +497,7 @@ fmt.bytes(1024 * 1024)                       # "1 MB"
 
 ### Template
 
-```aoel
+```vais
 use std.text.template
 
 tmpl = template.compile("Hello, {{name}}!")?
@@ -528,7 +528,7 @@ tmpl = template.compile("""
 
 ### DateTime
 
-```aoel
+```vais
 use std.time
 
 # 현재 시간
@@ -551,7 +551,7 @@ dt.format("%Y년 %m월 %d일")                   # "2026년 01월 12일"
 
 ### Duration
 
-```aoel
+```vais
 use std.time
 
 # 생성
@@ -572,7 +572,7 @@ dt2 - dt1                                    # Duration
 
 ### Timezone
 
-```aoel
+```vais
 use std.time.tz
 
 # 타임존 변환
@@ -586,7 +586,7 @@ utc_now = time.utc_now()
 
 ### Timer
 
-```aoel
+```vais
 use std.time
 
 # 슬립
@@ -608,7 +608,7 @@ println("Took: " + elapsed.as_ms().str + "ms")
 
 ### Basic
 
-```aoel
+```vais
 use std.math
 
 math.abs(-5)                                 # 5
@@ -624,7 +624,7 @@ math.trunc(3.9)                              # 3
 
 ### Constants
 
-```aoel
+```vais
 math.PI                                      # 3.14159...
 math.E                                       # 2.71828...
 math.TAU                                     # 6.28318... (2π)
@@ -634,7 +634,7 @@ math.NAN                                     # Not a Number
 
 ### Trigonometry
 
-```aoel
+```vais
 math.sin(x), math.cos(x), math.tan(x)
 math.asin(x), math.acos(x), math.atan(x)
 math.atan2(y, x)
@@ -643,7 +643,7 @@ math.sinh(x), math.cosh(x), math.tanh(x)
 
 ### Exponential
 
-```aoel
+```vais
 math.pow(2, 10)                              # 1024
 math.sqrt(16)                                # 4.0
 math.cbrt(27)                                # 3.0
@@ -655,7 +655,7 @@ math.log2(x)                                 # 이진로그
 
 ### Random
 
-```aoel
+```vais
 use std.math.random
 
 random.int(1, 100)                           # 1-100 정수
@@ -677,7 +677,7 @@ random.seed(42)
 
 ### Set
 
-```aoel
+```vais
 use std.collections.Set
 
 s = Set.new()
@@ -697,7 +697,7 @@ a ^ b                                        # 대칭차집합
 
 ### Queue
 
-```aoel
+```vais
 use std.collections.Queue
 
 q = Queue.new()
@@ -710,7 +710,7 @@ q.is_empty()
 
 ### Stack
 
-```aoel
+```vais
 use std.collections.Stack
 
 s = Stack.new()
@@ -722,7 +722,7 @@ s.peek()                                     # some(1)
 
 ### Heap (Priority Queue)
 
-```aoel
+```vais
 use std.collections.Heap
 
 # Min heap (기본)
@@ -738,7 +738,7 @@ h = Heap.max()
 
 ### LinkedList
 
-```aoel
+```vais
 use std.collections.LinkedList
 
 list = LinkedList.new()
@@ -749,7 +749,7 @@ list.pop_front()                             # some(1)
 
 ### OrderedMap
 
-```aoel
+```vais
 use std.collections.OrderedMap
 
 m = OrderedMap.new()
@@ -769,7 +769,7 @@ for (k, v) in m {
 
 ### Spawn
 
-```aoel
+```vais
 use std.async
 
 # 태스크 생성
@@ -787,7 +787,7 @@ results = async.join_all(handles).await
 
 ### Channel
 
-```aoel
+```vais
 use std.async.channel
 
 # Unbounded channel
@@ -812,7 +812,7 @@ for value in rx {
 
 ### Select
 
-```aoel
+```vais
 use std.async.select
 
 result = select {
@@ -824,7 +824,7 @@ result = select {
 
 ### Timeout
 
-```aoel
+```vais
 use std.async
 
 result = async.timeout(1.second, async_work())?
@@ -839,7 +839,7 @@ result = async.timeout(1.second, async_work())?
 
 ### Mutex
 
-```aoel
+```vais
 use std.sync.Mutex
 
 counter = Mutex.new(0)
@@ -858,7 +858,7 @@ if guard = counter.try_lock() {
 
 ### RwLock
 
-```aoel
+```vais
 use std.sync.RwLock
 
 data = RwLock.new(initial_value)
@@ -878,7 +878,7 @@ data = RwLock.new(initial_value)
 
 ### Atomic
 
-```aoel
+```vais
 use std.sync.Atomic
 
 counter = Atomic.new(0)
@@ -897,7 +897,7 @@ counter.compare_exchange(expected, new)
 
 ### Basic Tests
 
-```aoel
+```vais
 use std.test
 
 #[test]
@@ -920,7 +920,7 @@ fn test_panic() {
 
 ### Assertions
 
-```aoel
+```vais
 assert(condition)                            # 조건 확인
 assert(condition, "message")                 # 메시지 포함
 assert_eq(actual, expected)                  # 같음
@@ -935,7 +935,7 @@ assert_err(result)                           # err인지
 
 ### Test Organization
 
-```aoel
+```vais
 # 모듈 테스트
 mod tests {
     use super.*
@@ -964,7 +964,7 @@ fn test_with_db(db: Database) {
 
 로깅.
 
-```aoel
+```vais
 use std.log
 
 log.debug("Debug message")

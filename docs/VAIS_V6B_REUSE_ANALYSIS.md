@@ -1,4 +1,4 @@
-# AOEL v6b 기존 코드 재사용 분석
+# Vais v6b 기존 코드 재사용 분석
 
 **Date:** 2026-01-12
 
@@ -8,20 +8,20 @@
 
 | 컴포넌트 | 재사용 가능 | 수정 필요 | 비고 |
 |----------|-------------|-----------|------|
-| aoel-ir/value.rs | 100% | - | Value enum 그대로 사용 |
-| aoel-ir/instruction.rs | 90% | 확장 | OpCode 일부 추가 필요 |
-| aoel-vm/vm.rs | 80% | 확장 | 새 OpCode 처리 추가 |
-| aoel-vm/builtins.rs | 70% | 확장 | 새 빌트인 ~15개 추가 |
-| aoel-lexer/* | 0% | 전면 재작성 | v6b 문법 완전히 다름 |
-| aoel-parser/* | 0% | 전면 재작성 | v6b 문법 완전히 다름 |
-| aoel-ast/* | 30% | 대부분 재작성 | 표현식 노드만 일부 참조 |
-| aoel-typeck/* | 50% | 수정 | 타입 추론 로직 재사용 |
+| vais-ir/value.rs | 100% | - | Value enum 그대로 사용 |
+| vais-ir/instruction.rs | 90% | 확장 | OpCode 일부 추가 필요 |
+| vais-vm/vm.rs | 80% | 확장 | 새 OpCode 처리 추가 |
+| vais-vm/builtins.rs | 70% | 확장 | 새 빌트인 ~15개 추가 |
+| vais-lexer/* | 0% | 전면 재작성 | v6b 문법 완전히 다름 |
+| vais-parser/* | 0% | 전면 재작성 | v6b 문법 완전히 다름 |
+| vais-ast/* | 30% | 대부분 재작성 | 표현식 노드만 일부 참조 |
+| vais-typeck/* | 50% | 수정 | 타입 추론 로직 재사용 |
 
 ---
 
 ## 1. 완전 재사용 가능 (100%)
 
-### 1.1 aoel-ir/value.rs
+### 1.1 vais-ir/value.rs
 
 ```rust
 pub enum Value {
@@ -45,7 +45,7 @@ pub enum Value {
 
 ## 2. 확장 필요 (70-90%)
 
-### 2.1 aoel-ir/instruction.rs
+### 2.1 vais-ir/instruction.rs
 
 **현재 지원 OpCode:**
 - Stack: Const, Pop, Dup
@@ -68,7 +68,7 @@ In,           // @ 연산자 (포함 여부)
 RecurseCall,  // $ 재귀 호출
 ```
 
-### 2.2 aoel-vm/builtins.rs
+### 2.2 vais-vm/builtins.rs
 
 **현재 지원:**
 - LEN, UPPER, LOWER, TRIM, CONTAINS
@@ -100,7 +100,7 @@ ZIP, RANGE, ENUM, KEYS, VALS
 ERR, TRY, NILQ, OKQ
 ```
 
-### 2.3 aoel-vm/vm.rs
+### 2.3 vais-vm/vm.rs
 
 **재사용 가능:**
 - 스택 기반 실행 로직
@@ -117,7 +117,7 @@ ERR, TRY, NILQ, OKQ
 
 ## 3. 전면 재작성 필요 (0%)
 
-### 3.1 aoel-lexer
+### 3.1 vais-lexer
 
 **이유:** v1 문법과 v6b 문법이 완전히 다름
 
@@ -138,7 +138,7 @@ Lt, Gt, Lte, Gte, EqEq, Neq, And, Or, Not
 Let, Nil, Err, True, False
 ```
 
-### 3.2 aoel-parser
+### 3.2 vais-parser
 
 **이유:** 파싱 대상 문법이 완전히 다름
 
@@ -160,7 +160,7 @@ name(params) = body
 
 ## 4. 부분 재사용 가능 (30-50%)
 
-### 4.1 aoel-ast
+### 4.1 vais-ast
 
 **재사용 가능:**
 - 표현식 노드 개념 (BinaryExpr, UnaryExpr, CallExpr, IndexExpr)
@@ -173,7 +173,7 @@ name(params) = body
 - LetExpr 노드
 - TernaryExpr 노드
 
-### 4.2 aoel-typeck
+### 4.2 vais-typeck
 
 **재사용 가능:**
 - 기본 타입 추론 알고리즘
@@ -190,17 +190,17 @@ name(params) = body
 ## 5. 구현 우선순위
 
 ### Phase 1-A: 새로 구현 (핵심)
-1. **aoel-lexer-v6b** - 새 렉서
-2. **aoel-parser-v6b** - 새 파서
-3. **aoel-ast-v6b** - 새 AST 정의
+1. **vais-lexer-v6b** - 새 렉서
+2. **vais-parser-v6b** - 새 파서
+3. **vais-ast-v6b** - 새 AST 정의
 
 ### Phase 1-B: 확장 (기존 활용)
-4. **aoel-ir** - OpCode 추가
-5. **aoel-vm** - 새 OpCode 처리
-6. **aoel-vm/builtins** - 빌트인 추가
+4. **vais-ir** - OpCode 추가
+5. **vais-vm** - 새 OpCode 처리
+6. **vais-vm/builtins** - 빌트인 추가
 
 ### Phase 1-C: 통합
-7. **aoel-cli** - 새 파이프라인 연결
+7. **vais-cli** - 새 파이프라인 연결
 8. **테스트** - 벤치마크 예제로 검증
 
 ---
