@@ -16,5 +16,5 @@ vais-jit = { path = "../vais-jit", optional = true }
 thiserror = "1.0"
 serde_json = "1.0"
 ureq = { version = "2.9", features = ["json"] }
-libloading = "0.8"
+libloading = "0.9"
 rayon = "1.10"
