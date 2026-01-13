@@ -1,9 +1,9 @@
-# AOEL - AI 최적화 실행 언어
+# Vais - Vibe AI Script
 
-[![Build Status](https://github.com/sswoo88/aoel/actions/workflows/ci.yml/badge.svg)](https://github.com/sswoo88/aoel/actions)
+[![Build Status](https://github.com/sswoo88/vais/actions/workflows/ci.yml/badge.svg)](https://github.com/sswoo88/vais/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**AOEL (AI-Optimized Executable Language)**은 AI가 코드를 가장 효율적으로 생성, 수정, 실행할 수 있도록 설계된 프로그래밍 언어입니다. 토큰 효율성에 최적화된 간결한 문법을 제공하면서도 완전한 표현력을 유지합니다.
+**Vais (Vibe AI Script)**는 AI가 코드를 가장 효율적으로 생성, 수정, 실행할 수 있도록 설계된 프로그래밍 언어입니다. 토큰 효율성에 최적화된 간결한 문법을 제공하면서도 완전한 표현력을 유지합니다.
 
 [English](README.md) | [문법 가이드](docs/syntax.md) | [API 레퍼런스](docs/api.md) | [예제](docs/examples.md)
 
@@ -15,7 +15,7 @@
 - **컬렉션 연산자** - `.@` (map), `.?` (filter), `./` (reduce)
 - **다중 백엔드** - 인터프리터, JIT (50-75배 빠름), C, WASM, LLVM
 - **풍부한 생태계** - LSP, 패키지 매니저, 디버거, 포맷터, 프로파일러
-- **웹 플레이그라운드** - WebAssembly로 브라우저에서 AOEL 실행
+- **웹 플레이그라운드** - WebAssembly로 브라우저에서 Vais 실행
 
 ## 빠른 시작
 
@@ -23,8 +23,8 @@
 
 ```bash
 # 저장소 클론
-git clone https://github.com/sswoo88/aoel.git
-cd aoel/aoel-rs
+git clone https://github.com/sswoo88/vais.git
+cd vais/vais-rs
 
 # 빌드
 cargo build --release
@@ -36,21 +36,21 @@ export PATH="$PATH:$(pwd)/target/release"
 ### Hello World
 
 ```bash
-echo 'print("안녕, AOEL!")' > hello.aoel
-./target/release/aoel run hello.aoel
+echo 'print("안녕, Vais!")' > hello.vais
+./target/release/vais run hello.vais
 ```
 
 ### REPL
 
 ```bash
-./target/release/aoel repl
+./target/release/vais repl
 ```
 
 ## 언어 개요
 
 ### 함수
 
-```aoel
+```vais
 // 간단한 함수
 add(a, b) = a + b
 
@@ -63,7 +63,7 @@ fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)
 
 ### 컬렉션 연산
 
-```aoel
+```vais
 numbers = [1, 2, 3, 4, 5]
 
 // Map: 각 요소를 2배
@@ -81,7 +81,7 @@ result = [1..10].?(_ % 2 == 0).@(_ * _)  // [4, 16, 36, 64]
 
 ### 삼항 표현식
 
-```aoel
+```vais
 // 삼항 연산자
 max(a, b) = a > b ? a : b
 
@@ -91,7 +91,7 @@ grade(score) = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "F"
 
 ### 모듈
 
-```aoel
+```vais
 // 특정 함수 가져오기
 use math.{sin, cos, pi}
 
@@ -104,7 +104,7 @@ pub calculate(x) = sin(x) * cos(x)
 ### 인터프리터 (기본)
 
 ```bash
-aoel run program.aoel
+vais run program.vais
 ```
 
 ### JIT 컴파일 (50-75배 빠름)
@@ -114,20 +114,20 @@ aoel run program.aoel
 cargo build --release --features jit
 
 # JIT로 실행
-aoel run program.aoel --jit
+vais run program.vais --jit
 ```
 
 ### 네이티브 컴파일
 
 ```bash
 # C로 컴파일
-aoel build program.aoel --target c
+vais build program.vais --target c
 
 # WebAssembly로 컴파일
-aoel build program.aoel --target wasm
+vais build program.vais --target wasm
 
 # LLVM IR로 컴파일
-aoel build program.aoel --target llvm
+vais build program.vais --target llvm
 ```
 
 ## 내장 함수
@@ -164,54 +164,54 @@ aoel build program.aoel --target llvm
 
 ```bash
 # LSP 서버 시작
-aoel lsp
+vais lsp
 ```
 
 ### 패키지 매니저
 
 ```bash
 # 새 프로젝트 초기화
-aoel init my-project
+vais init my-project
 
 # 의존성 추가
-aoel add utils
+vais add utils
 
 # 의존성 설치
-aoel install
+vais install
 
 # 레지스트리에 게시
-aoel publish
+vais publish
 ```
 
 ### 코드 포맷팅
 
 ```bash
 # stdout으로 포맷
-aoel format program.aoel
+vais format program.vais
 
 # 파일에 직접 쓰기
-aoel format program.aoel --write
+vais format program.vais --write
 
 # 포맷 검사
-aoel format program.aoel --check
+vais format program.vais --check
 ```
 
 ### 프로파일러
 
 ```bash
 # 실행 프로파일
-aoel profile program.aoel
+vais profile program.vais
 
 # JSON 출력
-aoel profile program.aoel --format json
+vais profile program.vais --format json
 ```
 
 ## 웹 플레이그라운드
 
-설치 없이 브라우저에서 AOEL을 사용해보세요:
+설치 없이 브라우저에서 Vais를 사용해보세요:
 
 ```bash
-cd aoel-rs/crates/aoel-playground
+cd vais-rs/crates/vais-playground
 wasm-pack build --target web --out-dir www/pkg
 cd www && python3 -m http.server 8080
 # http://localhost:8080 열기
@@ -220,20 +220,20 @@ cd www && python3 -m http.server 8080
 ## 프로젝트 구조
 
 ```
-aoel-rs/crates/
-├── aoel-lexer/      # 토크나이저
-├── aoel-ast/        # AST 정의
-├── aoel-parser/     # 파서 + 모듈
-├── aoel-typeck/     # 타입 체커 (Hindley-Milner)
-├── aoel-ir/         # IR + 최적화
-├── aoel-lowering/   # AST → IR
-├── aoel-vm/         # 스택 기반 VM
-├── aoel-jit/        # 적응형 JIT (Cranelift)
-├── aoel-codegen/    # C/WASM/LLVM 백엔드
-├── aoel-tools/      # 포맷터, 프로파일러, 디버거
-├── aoel-lsp/        # 언어 서버
-├── aoel-playground/ # 웹 플레이그라운드 (WASM)
-└── aoel-cli/        # CLI 인터페이스
+vais-rs/crates/
+├── vais-lexer/      # 토크나이저
+├── vais-ast/        # AST 정의
+├── vais-parser/     # 파서 + 모듈
+├── vais-typeck/     # 타입 체커 (Hindley-Milner)
+├── vais-ir/         # IR + 최적화
+├── vais-lowering/   # AST → IR
+├── vais-vm/         # 스택 기반 VM
+├── vais-jit/        # 적응형 JIT (Cranelift)
+├── vais-codegen/    # C/WASM/LLVM 백엔드
+├── vais-tools/      # 포맷터, 프로파일러, 디버거
+├── vais-lsp/        # 언어 서버
+├── vais-playground/ # 웹 플레이그라운드 (WASM)
+└── vais-cli/        # CLI 인터페이스
 ```
 
 ## 성능

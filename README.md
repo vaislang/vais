@@ -1,9 +1,9 @@
-# AOEL - AI-Optimized Executable Language
+# Vais - Vibe AI Script
 
-[![Build Status](https://github.com/sswoo88/aoel/actions/workflows/ci.yml/badge.svg)](https://github.com/sswoo88/aoel/actions)
+[![Build Status](https://github.com/sswoo88/vais/actions/workflows/ci.yml/badge.svg)](https://github.com/sswoo88/vais/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**AOEL** is a programming language designed for AI to generate, modify, and execute code most efficiently. It features a concise syntax optimized for token efficiency while maintaining full expressiveness.
+**Vais** is a programming language designed for AI to generate, modify, and execute code most efficiently. It features a concise syntax optimized for token efficiency while maintaining full expressiveness.
 
 [한국어 문서](README.ko.md) | [Language Guide](docs/syntax.md) | [API Reference](docs/api.md) | [Examples](docs/examples.md)
 
@@ -15,7 +15,7 @@
 - **Collection Operators** - `.@` (map), `.?` (filter), `./` (reduce)
 - **Multiple Backends** - Interpreter, JIT (50-75x faster), C, WASM, LLVM
 - **Rich Ecosystem** - LSP, Package Manager, Debugger, Formatter, Profiler
-- **Web Playground** - Run AOEL in your browser via WebAssembly
+- **Web Playground** - Run Vais in your browser via WebAssembly
 
 ## Quick Start
 
@@ -23,8 +23,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/sswoo88/aoel.git
-cd aoel/aoel-rs
+git clone https://github.com/sswoo88/vais.git
+cd vais/vais-rs
 
 # Build
 cargo build --release
@@ -36,21 +36,21 @@ export PATH="$PATH:$(pwd)/target/release"
 ### Hello World
 
 ```bash
-echo 'print("Hello, AOEL!")' > hello.aoel
-./target/release/aoel run hello.aoel
+echo 'print("Hello, Vais!")' > hello.vais
+./target/release/vais run hello.vais
 ```
 
 ### REPL
 
 ```bash
-./target/release/aoel repl
+./target/release/vais repl
 ```
 
 ## Language Overview
 
 ### Functions
 
-```aoel
+```vais
 // Simple function
 add(a, b) = a + b
 
@@ -63,7 +63,7 @@ fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)
 
 ### Collection Operations
 
-```aoel
+```vais
 numbers = [1, 2, 3, 4, 5]
 
 // Map: double each element
@@ -81,7 +81,7 @@ result = [1..10].?(_ % 2 == 0).@(_ * _)  // [4, 16, 36, 64]
 
 ### Ternary Expressions
 
-```aoel
+```vais
 // Ternary operator
 max(a, b) = a > b ? a : b
 
@@ -91,7 +91,7 @@ grade(score) = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "F"
 
 ### Modules
 
-```aoel
+```vais
 // Import specific functions
 use math.{sin, cos, pi}
 
@@ -104,7 +104,7 @@ pub calculate(x) = sin(x) * cos(x)
 ### Interpreter (Default)
 
 ```bash
-aoel run program.aoel
+vais run program.vais
 ```
 
 ### JIT Compilation (50-75x faster)
@@ -114,20 +114,20 @@ aoel run program.aoel
 cargo build --release --features jit
 
 # Run with JIT
-aoel run program.aoel --jit
+vais run program.vais --jit
 ```
 
 ### Native Compilation
 
 ```bash
 # Compile to C
-aoel build program.aoel --target c
+vais build program.vais --target c
 
 # Compile to WebAssembly
-aoel build program.aoel --target wasm
+vais build program.vais --target wasm
 
 # Compile to LLVM IR
-aoel build program.aoel --target llvm
+vais build program.vais --target llvm
 ```
 
 ## Built-in Functions
@@ -164,54 +164,54 @@ Full IDE support with:
 
 ```bash
 # Start LSP server
-aoel lsp
+vais lsp
 ```
 
 ### Package Manager
 
 ```bash
 # Initialize a new project
-aoel init my-project
+vais init my-project
 
 # Add dependencies
-aoel add utils
+vais add utils
 
 # Install dependencies
-aoel install
+vais install
 
 # Publish to registry
-aoel publish
+vais publish
 ```
 
 ### Code Formatting
 
 ```bash
 # Format to stdout
-aoel format program.aoel
+vais format program.vais
 
 # Format in place
-aoel format program.aoel --write
+vais format program.vais --write
 
 # Check formatting
-aoel format program.aoel --check
+vais format program.vais --check
 ```
 
 ### Profiler
 
 ```bash
 # Profile execution
-aoel profile program.aoel
+vais profile program.vais
 
 # JSON output
-aoel profile program.aoel --format json
+vais profile program.vais --format json
 ```
 
 ## Web Playground
 
-Try AOEL in your browser without installation:
+Try Vais in your browser without installation:
 
 ```bash
-cd aoel-rs/crates/aoel-playground
+cd vais-rs/crates/vais-playground
 wasm-pack build --target web --out-dir www/pkg
 cd www && python3 -m http.server 8080
 # Open http://localhost:8080
@@ -220,20 +220,20 @@ cd www && python3 -m http.server 8080
 ## Project Structure
 
 ```
-aoel-rs/crates/
-├── aoel-lexer/      # Tokenizer
-├── aoel-ast/        # AST definitions
-├── aoel-parser/     # Parser + modules
-├── aoel-typeck/     # Type checker (Hindley-Milner)
-├── aoel-ir/         # IR + optimizations
-├── aoel-lowering/   # AST → IR
-├── aoel-vm/         # Stack-based VM
-├── aoel-jit/        # Adaptive JIT (Cranelift)
-├── aoel-codegen/    # C/WASM/LLVM backends
-├── aoel-tools/      # Formatter, Profiler, Debugger
-├── aoel-lsp/        # Language Server
-├── aoel-playground/ # Web Playground (WASM)
-└── aoel-cli/        # CLI interface
+vais-rs/crates/
+├── vais-lexer/      # Tokenizer
+├── vais-ast/        # AST definitions
+├── vais-parser/     # Parser + modules
+├── vais-typeck/     # Type checker (Hindley-Milner)
+├── vais-ir/         # IR + optimizations
+├── vais-lowering/   # AST → IR
+├── vais-vm/         # Stack-based VM
+├── vais-jit/        # Adaptive JIT (Cranelift)
+├── vais-codegen/    # C/WASM/LLVM backends
+├── vais-tools/      # Formatter, Profiler, Debugger
+├── vais-lsp/        # Language Server
+├── vais-playground/ # Web Playground (WASM)
+└── vais-cli/        # CLI interface
 ```
 
 ## Performance
