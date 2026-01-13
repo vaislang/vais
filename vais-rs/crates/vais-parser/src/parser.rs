@@ -1541,9 +1541,10 @@ impl<'src> Parser<'src> {
         }
 
         // 첫 번째 요소로 블록인지 맵인지 결정
-        if self.check(TokenKind::Identifier) {
-            // 다음이 : 이면 맵
-            // 간단히 맵으로 처리
+        // 맵: { key: value, ... } - Identifier 다음에 Colon이 와야 함
+        // 블록: { expr; expr; ... } - 그 외 모든 경우
+        if self.check(TokenKind::Identifier) && self.peek_is(TokenKind::Colon) {
+            // 맵으로 처리: identifier 다음에 : 가 오는 경우만
             let mut entries = Vec::new();
             loop {
                 let key = self.expect_identifier()?;
@@ -1561,7 +1562,7 @@ impl<'src> Parser<'src> {
             return Ok(Expr::Map(entries, start.merge(self.previous.span)));
         }
 
-        // 블록으로 처리
+        // 블록으로 처리: { x } 또는 { x; y; z }
         let mut exprs = Vec::new();
         loop {
             exprs.push(self.parse_expr()?);
@@ -1578,6 +1579,17 @@ impl<'src> Parser<'src> {
         }
         self.expect(TokenKind::RBrace)?;
         Ok(Expr::Block(exprs, start.merge(self.previous.span)))
+    }
+
+    /// 다음 토큰(현재 이후)이 특정 종류인지 확인 (lookahead)
+    fn peek_is(&self, kind: TokenKind) -> bool {
+        // lexer를 복제하여 다음 토큰 확인
+        let mut lexer_clone = self.lexer.clone();
+        if let Some(token) = lexer_clone.next() {
+            token.kind == kind
+        } else {
+            false
+        }
     }
 
     /// 문자열 이스케이프 시퀀스 처리
@@ -1615,13 +1627,18 @@ impl<'src> Parser<'src> {
     }
 
     /// let 표현식 파싱: let x = v : body 또는 let x = v, y = w : body
+    ///
+    /// Note: 바인딩 값에서는 parse_coalesce()를 사용하여 ternary 연산자의 ':'와
+    /// let 표현식의 ':' 구분자가 충돌하지 않도록 함
     fn parse_let(&mut self, start: Span) -> ParseResult<Expr> {
         let mut bindings = Vec::new();
 
         loop {
             let name = self.expect_identifier()?;
             self.expect(TokenKind::Eq)?;
-            let value = self.parse_expr()?;
+            // ternary (? :)를 포함하지 않도록 coalesce 레벨까지만 파싱
+            // 이렇게 하면 `let x = cond ? a : b : body`에서 `:` 충돌 방지
+            let value = self.parse_coalesce()?;
             bindings.push((name, value));
 
             if !self.match_token(TokenKind::Comma) {
@@ -2911,6 +2928,53 @@ mod tests {
             assert!(cond.is_some());
         } else {
             panic!("Expected set comprehension with filter");
+        }
+    }
+
+    // =========================================================================
+    // Bug Fix Tests - Block vs Map disambiguation
+    // =========================================================================
+
+    #[test]
+    fn test_block_with_single_identifier() {
+        // { x } should be a block containing variable x, not a map
+        let result = parse_expr("{ x }").unwrap();
+        assert!(matches!(result, Expr::Block(_, _)), "Expected Block, got {:?}", result);
+    }
+
+    #[test]
+    fn test_block_with_expression() {
+        // { x + 1 } should be a block
+        let result = parse_expr("{ x + 1 }").unwrap();
+        assert!(matches!(result, Expr::Block(_, _)));
+    }
+
+    #[test]
+    fn test_map_with_key_value() {
+        // { x: 1 } should be a map
+        let result = parse_expr("{ x: 1 }").unwrap();
+        assert!(matches!(result, Expr::Map(_, _)));
+    }
+
+    #[test]
+    fn test_map_with_multiple_entries() {
+        // { x: 1, y: 2 } should be a map
+        let result = parse_expr("{ x: 1, y: 2 }").unwrap();
+        if let Expr::Map(entries, _) = result {
+            assert_eq!(entries.len(), 2);
+        } else {
+            panic!("Expected Map");
+        }
+    }
+
+    #[test]
+    fn test_empty_braces_is_map() {
+        // { } should be an empty map
+        let result = parse_expr("{ }").unwrap();
+        if let Expr::Map(entries, _) = result {
+            assert!(entries.is_empty());
+        } else {
+            panic!("Expected empty Map");
         }
     }
 }

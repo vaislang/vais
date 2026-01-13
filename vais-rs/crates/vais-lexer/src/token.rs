@@ -395,31 +395,42 @@ impl TokenKind {
     pub fn is_operator(&self) -> bool {
         matches!(
             self,
+            // Collection operators
             TokenKind::DotAt
                 | TokenKind::DotQuestion
                 | TokenKind::DotSlash
                 | TokenKind::DotParMap
                 | TokenKind::DotParFilter
                 | TokenKind::DotParReduce
+                // Special operators
                 | TokenKind::Dollar
                 | TokenKind::Hash
+                | TokenKind::Underscore
                 | TokenKind::At
                 | TokenKind::DotDot
+                // Arithmetic operators
                 | TokenKind::Plus
                 | TokenKind::Minus
                 | TokenKind::Star
                 | TokenKind::Slash
                 | TokenKind::Percent
+                // Assignment & Arrow operators
                 | TokenKind::Eq
+                | TokenKind::Arrow
+                | TokenKind::LeftArrow
+                | TokenKind::FatArrow
+                // Comparison operators
                 | TokenKind::EqEq
                 | TokenKind::NotEq
                 | TokenKind::Lt
                 | TokenKind::Gt
                 | TokenKind::LtEq
                 | TokenKind::GtEq
+                // Logical operators
                 | TokenKind::AndAnd
                 | TokenKind::OrOr
                 | TokenKind::Bang
+                // Null coalescing
                 | TokenKind::QuestionQuestion
         )
     }

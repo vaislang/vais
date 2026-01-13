@@ -840,13 +840,15 @@ impl Vm {
                 }
             }
             OpCode::MapDivConst(c) => {
+                // 0으로 나누기 방지
+                if *c == 0 {
+                    return Err(RuntimeError::DivisionByZero);
+                }
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
                     let results: Vec<Value> = items.into_iter()
                         .map(|item| {
-                            if *c == 0 {
-                                Value::Int(0) // Division by zero returns 0
-                            } else if let Some(n) = item.as_int() {
+                            if let Some(n) = item.as_int() {
                                 Value::Int(n / c)
                             } else if let Some(f) = item.as_float() {
                                 Value::Float(f / *c as f64)
