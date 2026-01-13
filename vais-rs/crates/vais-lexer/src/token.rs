@@ -357,6 +357,7 @@ impl TokenKind {
                 | TokenKind::Mod
                 | TokenKind::Use
                 | TokenKind::Type
+                | TokenKind::Enum
                 | TokenKind::Trait
                 | TokenKind::Impl
                 | TokenKind::Async
@@ -393,6 +394,9 @@ impl TokenKind {
             TokenKind::DotAt
                 | TokenKind::DotQuestion
                 | TokenKind::DotSlash
+                | TokenKind::DotParMap
+                | TokenKind::DotParFilter
+                | TokenKind::DotParReduce
                 | TokenKind::Dollar
                 | TokenKind::Hash
                 | TokenKind::At
@@ -402,6 +406,7 @@ impl TokenKind {
                 | TokenKind::Star
                 | TokenKind::Slash
                 | TokenKind::Percent
+                | TokenKind::Eq
                 | TokenKind::EqEq
                 | TokenKind::NotEq
                 | TokenKind::Lt

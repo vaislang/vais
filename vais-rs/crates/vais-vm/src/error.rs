@@ -28,6 +28,9 @@ pub enum RuntimeError {
     #[error("Maximum recursion depth exceeded")]
     MaxRecursionDepth,
 
+    #[error("Integer overflow")]
+    IntegerOverflow,
+
     #[error("I/O error: {0}")]
     IoError(String),
 

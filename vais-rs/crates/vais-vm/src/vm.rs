@@ -1507,7 +1507,11 @@ impl Vm {
 
     fn binary_add(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
-            (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x + y)),
+            (Value::Int(x), Value::Int(y)) => {
+                x.checked_add(y)
+                    .map(Value::Int)
+                    .ok_or(RuntimeError::IntegerOverflow)
+            }
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x + y)),
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 + y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x + y as f64)),
@@ -1522,7 +1526,11 @@ impl Vm {
 
     fn binary_sub(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
-            (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x - y)),
+            (Value::Int(x), Value::Int(y)) => {
+                x.checked_sub(y)
+                    .map(Value::Int)
+                    .ok_or(RuntimeError::IntegerOverflow)
+            }
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x - y)),
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 - y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x - y as f64)),
@@ -1532,7 +1540,11 @@ impl Vm {
 
     fn binary_mul(&self, a: Value, b: Value) -> RuntimeResult<Value> {
         match (a, b) {
-            (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x * y)),
+            (Value::Int(x), Value::Int(y)) => {
+                x.checked_mul(y)
+                    .map(Value::Int)
+                    .ok_or(RuntimeError::IntegerOverflow)
+            }
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x * y)),
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 * y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x * y as f64)),
@@ -1544,7 +1556,9 @@ impl Vm {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => {
                 if y == 0 { return Err(RuntimeError::DivisionByZero); }
-                Ok(Value::Int(x / y))
+                x.checked_div(y)
+                    .map(Value::Int)
+                    .ok_or(RuntimeError::IntegerOverflow)
             }
             (Value::Float(x), Value::Float(y)) => {
                 if y == 0.0 { return Err(RuntimeError::DivisionByZero); }
@@ -1566,7 +1580,9 @@ impl Vm {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => {
                 if y == 0 { return Err(RuntimeError::DivisionByZero); }
-                Ok(Value::Int(x % y))
+                x.checked_rem(y)
+                    .map(Value::Int)
+                    .ok_or(RuntimeError::IntegerOverflow)
             }
             _ => Err(RuntimeError::TypeError("Cannot modulo these types".to_string())),
         }
@@ -1574,7 +1590,11 @@ impl Vm {
 
     fn unary_neg(&self, a: Value) -> RuntimeResult<Value> {
         match a {
-            Value::Int(x) => Ok(Value::Int(-x)),
+            Value::Int(x) => {
+                x.checked_neg()
+                    .map(Value::Int)
+                    .ok_or(RuntimeError::IntegerOverflow)
+            }
             Value::Float(x) => Ok(Value::Float(-x)),
             _ => Err(RuntimeError::TypeError("Cannot negate this type".to_string())),
         }
