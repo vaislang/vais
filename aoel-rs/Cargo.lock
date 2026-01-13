@@ -1489,7 +1489,7 @@ checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
 dependencies = [
  "getrandom",
  "libredox",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1858,7 +1858,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+dependencies = [
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -1866,6 +1875,17 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2174,7 +2194,7 @@ dependencies = [
  "cranelift-module 0.113.1",
  "cranelift-native 0.113.1",
  "target-lexicon 0.12.16",
- "thiserror",
+ "thiserror 2.0.17",
  "vais-ast",
  "vais-ir",
  "vais-lowering",
@@ -2200,7 +2220,7 @@ dependencies = [
  "cranelift-native 0.116.1",
  "criterion",
  "target-lexicon 0.13.4",
- "thiserror",
+ "thiserror 2.0.17",
  "vais-ir",
  "vais-lowering",
 ]
@@ -2212,14 +2232,14 @@ dependencies = [
  "logos",
  "pretty_assertions",
  "serde",
- "thiserror",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
 name = "vais-lowering"
 version = "1.0.0"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.17",
  "vais-ast",
  "vais-ir",
  "vais-lexer",
@@ -2246,7 +2266,7 @@ dependencies = [
 name = "vais-parser"
 version = "1.0.0"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.17",
  "vais-ast",
  "vais-lexer",
 ]
@@ -2274,7 +2294,7 @@ version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.17",
  "vais-ast",
  "vais-ir",
  "vais-lexer",
@@ -2287,7 +2307,7 @@ dependencies = [
 name = "vais-typeck"
 version = "1.0.0"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.17",
  "vais-ast",
  "vais-lexer",
  "vais-parser",
@@ -2300,7 +2320,7 @@ dependencies = [
  "libloading",
  "rayon",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.17",
  "ureq",
  "vais-ast",
  "vais-ir",

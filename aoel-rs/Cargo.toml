@@ -38,7 +38,7 @@ vais-jit = { path = "crates/vais-jit" }
 vais-tools = { path = "crates/vais-tools" }
 
 # External dependencies
-thiserror = "1.0"
+thiserror = "2.0"
 logos = "0.14"           # Fast lexer generator
 ariadne = "0.4"          # Beautiful error reporting
 clap = { version = "4.4", features = ["derive"] }
