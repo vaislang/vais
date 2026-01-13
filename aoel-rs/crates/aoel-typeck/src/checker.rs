@@ -14,6 +14,27 @@ pub fn check(program: &Program) -> TypeResult<()> {
     Ok(())
 }
 
+/// 프로그램 타입 추론 (마지막 표현식의 타입 반환)
+pub fn infer_type(program: &Program) -> TypeResult<Type> {
+    let mut checker = TypeChecker::new();
+
+    // 함수 시그니처 수집
+    for item in &program.items {
+        if let Item::Function(func) = item {
+            checker.register_function(func)?;
+        }
+    }
+
+    // 마지막 표현식의 타입 추론
+    for item in program.items.iter().rev() {
+        if let Item::Expr(expr) = item {
+            return checker.infer_expr(expr);
+        }
+    }
+
+    Ok(Type::Unit)
+}
+
 /// 타입 체커
 pub struct TypeChecker {
     env: TypeEnv,

@@ -9,5 +9,5 @@ mod error;
 
 pub use types::Type;
 pub use infer::TypeEnv;
-pub use checker::check;
+pub use checker::{check, infer_type};
 pub use error::{TypeError, TypeResult};

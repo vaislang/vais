@@ -639,24 +639,7 @@ impl Formatter {
             Expr::ReduceOp(arr, kind, _) => {
                 self.format_expr(arr);
                 self.output.push_str("./");
-                match kind {
-                    ReduceKind::Sum => self.output.push('+'),
-                    ReduceKind::Product => self.output.push('*'),
-                    ReduceKind::Min => self.output.push_str("min"),
-                    ReduceKind::Max => self.output.push_str("max"),
-                    ReduceKind::And => self.output.push_str("and"),
-                    ReduceKind::Or => self.output.push_str("or"),
-                    ReduceKind::Custom(init, func) => {
-                        self.output.push('(');
-                        self.format_expr(init);
-                        self.output.push(',');
-                        if self.config.space_after_comma {
-                            self.output.push(' ');
-                        }
-                        self.format_expr(func);
-                        self.output.push(')');
-                    }
-                }
+                self.format_reduce_kind(kind);
             }
             Expr::Range(start, end, _) => {
                 self.format_expr(start);
@@ -776,6 +759,27 @@ impl Formatter {
                 self.format_expr(arr);
                 self.output.push_str(".||/");
                 self.format_reduce_kind(kind);
+            }
+        }
+    }
+
+    fn format_reduce_kind(&mut self, kind: &ReduceKind) {
+        match kind {
+            ReduceKind::Sum => self.output.push('+'),
+            ReduceKind::Product => self.output.push('*'),
+            ReduceKind::Min => self.output.push_str("min"),
+            ReduceKind::Max => self.output.push_str("max"),
+            ReduceKind::And => self.output.push_str("and"),
+            ReduceKind::Or => self.output.push_str("or"),
+            ReduceKind::Custom(init, func) => {
+                self.output.push('(');
+                self.format_expr(init);
+                self.output.push(',');
+                if self.config.space_after_comma {
+                    self.output.push(' ');
+                }
+                self.format_expr(func);
+                self.output.push(')');
             }
         }
     }
@@ -952,6 +956,16 @@ impl Formatter {
                     }
                     self.format_type(arg);
                 }
+                self.output.push('>');
+            }
+            TypeExpr::Future(inner) => {
+                self.output.push_str("Future<");
+                self.format_type(inner);
+                self.output.push('>');
+            }
+            TypeExpr::Channel(inner) => {
+                self.output.push_str("Chan<");
+                self.format_type(inner);
                 self.output.push('>');
             }
         }

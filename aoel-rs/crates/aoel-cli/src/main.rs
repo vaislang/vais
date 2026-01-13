@@ -623,125 +623,339 @@ fn parse_args_json(json: &str) -> Vec<aoel_ir::Value> {
 }
 
 fn repl() {
-    use std::io::{self, Write};
+    use rustyline::error::ReadlineError;
+    use rustyline::DefaultEditor;
 
     println!("AOEL REPL v0.1.0");
-    println!("Type expressions to evaluate, ':help' for commands, ':quit' to exit.\n");
+    println!("Type expressions to evaluate, ':help' for commands, ':quit' to exit.");
+    println!("Use Ctrl+D to exit, Up/Down for history.\n");
+
+    // Setup rustyline editor with history
+    let mut rl = match DefaultEditor::new() {
+        Ok(editor) => editor,
+        Err(e) => {
+            eprintln!("Failed to initialize readline: {}", e);
+            return;
+        }
+    };
+
+    // Load history from file
+    let history_file = dirs::data_dir()
+        .map(|d| d.join("aoel").join("repl_history"))
+        .unwrap_or_else(|| PathBuf::from(".aoel_history"));
+
+    if let Some(parent) = history_file.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = rl.load_history(&history_file);
 
     // Store defined functions across inputs
     let mut all_functions: Vec<aoel_lowering::CompiledFunction> = Vec::new();
 
+    // Multiline input buffer
+    let mut multiline_buffer = String::new();
+    let mut in_multiline = false;
+
     loop {
-        print!("aoel> ");
-        io::stdout().flush().unwrap();
+        let prompt = if in_multiline { "....> " } else { "aoel> " };
 
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(0) => break, // EOF
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                continue;
-            }
-        }
+        match rl.readline(prompt) {
+            Ok(line) => {
+                let line = line.trim();
 
-        let input = input.trim();
-        if input.is_empty() {
-            continue;
-        }
-
-        // Handle REPL commands
-        if input.starts_with(':') {
-            match input {
-                ":quit" | ":q" | ":exit" => {
-                    println!("Goodbye!");
-                    break;
-                }
-                ":help" | ":h" => {
-                    println!("Commands:");
-                    println!("  :help, :h     Show this help");
-                    println!("  :quit, :q     Exit REPL");
-                    println!("  :list, :l     List defined functions");
-                    println!("  :clear        Clear all defined functions");
-                    println!("\nExamples:");
-                    println!("  1 + 2 * 3           Simple arithmetic");
-                    println!("  add(a, b) = a + b   Define a function");
-                    println!("  add(3, 4)           Call a function");
-                    println!("  [1,2,3].@(_ * 2)    Map operation");
+                // Check for multiline continuation
+                if line.ends_with('\\') {
+                    multiline_buffer.push_str(&line[..line.len()-1]);
+                    multiline_buffer.push(' ');
+                    in_multiline = true;
                     continue;
                 }
-                ":list" | ":l" => {
-                    if all_functions.is_empty() {
-                        println!("No functions defined.");
-                    } else {
-                        println!("Defined functions:");
-                        for f in &all_functions {
-                            if f.name != "__main__" {
-                                println!("  {}({})", f.name, f.params.join(", "));
-                            }
-                        }
+
+                // Check for block start (unclosed braces)
+                let full_input = if in_multiline {
+                    multiline_buffer.push_str(line);
+                    let result = multiline_buffer.clone();
+                    multiline_buffer.clear();
+                    in_multiline = false;
+                    result
+                } else {
+                    line.to_string()
+                };
+
+                if full_input.is_empty() {
+                    continue;
+                }
+
+                // Add to history
+                let _ = rl.add_history_entry(&full_input);
+
+                // Handle REPL commands
+                if full_input.starts_with(':') {
+                    if !handle_repl_command(&full_input, &mut all_functions, &history_file) {
+                        break; // :quit was entered
                     }
                     continue;
                 }
-                ":clear" => {
-                    all_functions.clear();
-                    println!("Cleared all functions.");
-                    continue;
+
+                // Execute the input
+                execute_repl_input(&full_input, &mut all_functions);
+            }
+            Err(ReadlineError::Interrupted) => {
+                // Ctrl+C - cancel current input
+                if in_multiline {
+                    multiline_buffer.clear();
+                    in_multiline = false;
+                    println!("^C");
+                } else {
+                    println!("^C (use :quit or Ctrl+D to exit)");
                 }
-                _ => {
-                    eprintln!("Unknown command: {}", input);
-                    continue;
+            }
+            Err(ReadlineError::Eof) => {
+                // Ctrl+D - exit
+                println!("\nGoodbye!");
+                break;
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                break;
+            }
+        }
+    }
+
+    // Save history
+    let _ = rl.save_history(&history_file);
+}
+
+/// Handle REPL commands (returns false if should quit)
+fn handle_repl_command(
+    input: &str,
+    all_functions: &mut Vec<aoel_lowering::CompiledFunction>,
+    history_file: &Path,
+) -> bool {
+    let parts: Vec<&str> = input.splitn(2, ' ').collect();
+    let cmd = parts[0];
+    let arg = parts.get(1).map(|s| *s);
+
+    match cmd {
+        ":quit" | ":q" | ":exit" => {
+            println!("Goodbye!");
+            return false;
+        }
+        ":help" | ":h" => {
+            println!("Commands:");
+            println!("  :help, :h         Show this help");
+            println!("  :quit, :q         Exit REPL");
+            println!("  :list, :l         List defined functions");
+            println!("  :clear            Clear all defined functions");
+            println!("  :type <expr>      Show type of expression");
+            println!("  :ast <expr>       Show AST of expression");
+            println!("  :save <file>      Save session to file");
+            println!("  :load <file>      Load and execute file");
+            println!("  :history          Show command history");
+            println!();
+            println!("Multiline input:");
+            println!("  End a line with \\ to continue on the next line");
+            println!();
+            println!("Examples:");
+            println!("  1 + 2 * 3           Simple arithmetic");
+            println!("  add(a, b) = a + b   Define a function");
+            println!("  add(3, 4)           Call a function");
+            println!("  [1,2,3].@(_ * 2)    Map operation");
+            println!("  async fetch() = ... Async function");
+        }
+        ":list" | ":l" => {
+            if all_functions.is_empty() {
+                println!("No functions defined.");
+            } else {
+                println!("Defined functions:");
+                for f in all_functions.iter() {
+                    if f.name != "__main__" {
+                        println!("  {}({})", f.name, f.params.join(", "));
+                    }
                 }
             }
         }
+        ":clear" => {
+            all_functions.clear();
+            println!("Cleared all functions.");
+        }
+        ":type" | ":t" => {
+            if let Some(expr_str) = arg {
+                show_type(expr_str);
+            } else {
+                println!("Usage: :type <expression>");
+            }
+        }
+        ":ast" => {
+            if let Some(expr_str) = arg {
+                show_ast(expr_str);
+            } else {
+                println!("Usage: :ast <expression>");
+            }
+        }
+        ":save" => {
+            if let Some(file) = arg {
+                save_session(all_functions, file);
+            } else {
+                println!("Usage: :save <filename>");
+            }
+        }
+        ":load" => {
+            if let Some(file) = arg {
+                load_file(file, all_functions);
+            } else {
+                println!("Usage: :load <filename>");
+            }
+        }
+        ":history" => {
+            println!("History file: {}", history_file.display());
+            if let Ok(content) = fs::read_to_string(history_file) {
+                for (i, line) in content.lines().rev().take(20).enumerate() {
+                    println!("  {:2}. {}", i + 1, line);
+                }
+            }
+        }
+        _ => {
+            eprintln!("Unknown command: {}", cmd);
+            println!("Type :help for available commands");
+        }
+    }
+    true
+}
 
-        // Try to parse as a full program (may contain function definitions)
-        match aoel_parser::parse(input) {
-            Ok(program) => {
-                let mut lowerer = aoel_lowering::Lowerer::new();
-                match lowerer.lower_program(&program) {
-                    Ok(mut functions) => {
-                        // Separate new function definitions from __main__
-                        let mut main_func = None;
-                        for func in functions.drain(..) {
-                            if func.name == "__main__" {
-                                main_func = Some(func);
-                            } else {
-                                // Update or add function definition
-                                all_functions.retain(|f| f.name != func.name);
-                                all_functions.push(func);
-                            }
-                        }
+/// Execute REPL input
+fn execute_repl_input(input: &str, all_functions: &mut Vec<aoel_lowering::CompiledFunction>) {
+    match aoel_parser::parse(input) {
+        Ok(program) => {
+            // Type check first
+            if let Err(e) = aoel_typeck::check(&program) {
+                eprintln!("Type error: {}", e);
+                return;
+            }
 
-                        // If there's a __main__, execute it
-                        if let Some(main) = main_func {
-                            let mut exec_functions = all_functions.clone();
-                            exec_functions.push(main);
-
-                            match aoel_vm::execute_function(exec_functions, "__main__", vec![]) {
-                                Ok(result) => {
-                                    if !matches!(result, aoel_ir::Value::Void) {
-                                        println!("=> {}", result);
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("Runtime error: {}", e);
-                                }
-                            }
+            let mut lowerer = aoel_lowering::Lowerer::new();
+            match lowerer.lower_program(&program) {
+                Ok(mut functions) => {
+                    // Separate new function definitions from __main__
+                    let mut main_func = None;
+                    for func in functions.drain(..) {
+                        if func.name == "__main__" {
+                            main_func = Some(func);
                         } else {
-                            // Just function definition(s), no expression to evaluate
-                            println!("Function defined.");
+                            // Update or add function definition
+                            let name = func.name.clone();
+                            all_functions.retain(|f| f.name != name);
+                            all_functions.push(func);
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Lowering error: {:?}", e);
+
+                    // If there's a __main__, execute it
+                    if let Some(main) = main_func {
+                        let mut exec_functions = all_functions.clone();
+                        exec_functions.push(main);
+
+                        match aoel_vm::execute_function(exec_functions, "__main__", vec![]) {
+                            Ok(result) => {
+                                if !matches!(result, aoel_ir::Value::Void) {
+                                    println!("=> {}", result);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Runtime error: {}", e);
+                            }
+                        }
+                    } else {
+                        // Just function definition(s), no expression to evaluate
+                        println!("Function defined.");
                     }
                 }
-            }
-            Err(e) => {
-                eprintln!("Parse error: {:?}", e);
+                Err(e) => {
+                    eprintln!("Lowering error: {:?}", e);
+                }
             }
         }
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+        }
+    }
+}
+
+/// Show type of expression
+fn show_type(expr_str: &str) {
+    match aoel_parser::parse_expr(expr_str) {
+        Ok(expr) => {
+            let program = aoel_ast::Program {
+                items: vec![aoel_ast::Item::Expr(expr)],
+                span: aoel_lexer::Span::new(0, expr_str.len()),
+            };
+
+            match aoel_typeck::infer_type(&program) {
+                Ok(ty) => println!("{}", ty),
+                Err(e) => eprintln!("Type error: {}", e),
+            }
+        }
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+        }
+    }
+}
+
+/// Show AST of expression
+fn show_ast(expr_str: &str) {
+    match aoel_parser::parse_expr(expr_str) {
+        Ok(expr) => {
+            println!("{:#?}", expr);
+        }
+        Err(e) => {
+            eprintln!("Parse error: {:?}", e);
+        }
+    }
+}
+
+/// Save session to file
+fn save_session(functions: &[aoel_lowering::CompiledFunction], filename: &str) {
+    let mut content = String::new();
+    content.push_str("// AOEL REPL Session\n\n");
+
+    for f in functions {
+        if f.name != "__main__" {
+            content.push_str(&format!("// Function: {}\n", f.name));
+            content.push_str(&format!("{}({}) = ...\n\n", f.name, f.params.join(", ")));
+        }
+    }
+
+    match fs::write(filename, &content) {
+        Ok(_) => println!("Saved session to {}", filename),
+        Err(e) => eprintln!("Failed to save: {}", e),
+    }
+}
+
+/// Load and execute file
+fn load_file(filename: &str, all_functions: &mut Vec<aoel_lowering::CompiledFunction>) {
+    match fs::read_to_string(filename) {
+        Ok(source) => {
+            match aoel_parser::parse(&source) {
+                Ok(program) => {
+                    let mut lowerer = aoel_lowering::Lowerer::new();
+                    match lowerer.lower_program(&program) {
+                        Ok(functions) => {
+                            let count = functions.iter().filter(|f| f.name != "__main__").count();
+                            for func in functions {
+                                if func.name != "__main__" {
+                                    let name = func.name.clone();
+                                    all_functions.retain(|f| f.name != name);
+                                    all_functions.push(func);
+                                }
+                            }
+                            println!("Loaded {} function(s) from {}", count, filename);
+                        }
+                        Err(e) => eprintln!("Lowering error: {:?}", e),
+                    }
+                }
+                Err(e) => eprintln!("Parse error: {:?}", e),
+            }
+        }
+        Err(e) => eprintln!("Failed to read file: {}", e),
     }
 }
 
