@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["AOEL Team"]
 license = "MIT"
@@ -57,7 +57,7 @@ lto = true
 # Root package for integration tests and benchmarks
 [package]
 name = "aoel-workspace"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 publish = false
 

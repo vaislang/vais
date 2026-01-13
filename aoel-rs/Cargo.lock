@@ -99,7 +99,7 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "aoel-ast"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-lexer",
  "serde",
@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-codegen",
@@ -131,7 +131,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-codegen"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-ir",
@@ -148,14 +148,14 @@ dependencies = [
 
 [[package]]
 name = "aoel-ir"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "aoel-jit"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ir",
  "aoel-lowering",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-lexer"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "logos",
  "pretty_assertions",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-lowering"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-ir",
@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-lsp"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-lexer",
@@ -209,7 +209,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-parser"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-lexer",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-playground"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-ir",
@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-tools"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-ir",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-typeck"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-lexer",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-vm"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ast",
  "aoel-ir",
@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "aoel-workspace"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aoel-ir",
  "aoel-jit",
