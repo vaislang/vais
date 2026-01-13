@@ -1,6 +1,6 @@
 # Getting Started with Vais
 
-Welcome to Vais (AI-Optimized Executable Language)! This guide will help you get started with Vais programming.
+Welcome to Vais (Vibe AI Script)! This guide will help you get started with Vais programming.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 [package]
 name = "vais-tools"
-version = "1.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Development tools for Vais: Formatter, Profiler, Debugger"
 
 [dependencies]

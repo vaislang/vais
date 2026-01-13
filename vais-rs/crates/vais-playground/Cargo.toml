@@ -1,7 +1,7 @@
 [package]
 name = "vais-playground"
-version = "1.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Vais Web Playground - Run Vais in the browser"
 
 [lib]
@@ -28,6 +28,4 @@ console_error_panic_hook = { version = "0.1", optional = true }
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
-[profile.release]
-opt-level = "s"
-lto = true
+# Note: profile.release moved to workspace root Cargo.toml

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-01-13
 
 ### Renamed
-- **Project renamed from AOEL to Vais** (Vibe AI SSW)
+- **Project renamed from AOEL to Vais** (Vibe AI Script)
 - File extension changed from `.aoel` to `.vais`
 - All crate names updated: `aoel-*` → `vais-*`
 

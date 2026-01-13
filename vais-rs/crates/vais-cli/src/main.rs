@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 #[command(name = "vais")]
 #[command(author = "Vais Team")]
 #[command(version = "0.1.0")]
-#[command(about = "Vais - AI-Optimized Executable Language", long_about = None)]
+#[command(about = "Vais - Vibe AI Script", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

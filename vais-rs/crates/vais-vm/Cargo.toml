@@ -1,7 +1,7 @@
 [package]
 name = "vais-vm"
-version = "1.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Vais Virtual Machine - Stack-based interpreter with JIT support"
 
 [features]

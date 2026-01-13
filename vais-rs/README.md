@@ -1,10 +1,10 @@
-# Vais - Vibe AI SSW Language
+# Vais - Vibe AI Script Language
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/vais-lang/vais)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-522%2B%20passed-brightgreen.svg)]()
 
-**Vais** (**V**ibe **AI** **S**SW) is a modern programming language designed for AI-assisted development ("vibe coding"). It combines the simplicity of Python with performance that rivals compiled languages.
+**Vais** (**V**ibe **AI** **S**cript) is a modern programming language designed for AI-assisted development ("vibe coding"). It combines the simplicity of Python with performance that rivals compiled languages.
 
 ## Features
 

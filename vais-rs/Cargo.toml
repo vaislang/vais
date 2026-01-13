@@ -22,7 +22,7 @@ edition = "2021"
 authors = ["Vais Team"]
 license = "MIT"
 repository = "https://github.com/vais-lang/vais"
-description = "Vibe AI SSW Language - AI-Optimized Programming Language"
+description = "Vais - Vibe AI Script"
 
 [workspace.dependencies]
 # Internal crates

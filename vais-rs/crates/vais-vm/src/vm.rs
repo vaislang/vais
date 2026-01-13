@@ -3,6 +3,7 @@
 //! 스택 기반 VM으로 Vais IR을 실행
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use vais_ir::{Instruction, OpCode, ReduceOp, Value};
 use vais_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
@@ -37,8 +38,8 @@ pub struct Vm {
     locals: Vec<Value>,
     /// 이름 기반 로컬 변수 (글로벌/클로저용, 폴백)
     named_locals: FastMap<String, Value>,
-    /// 컴파일된 함수들
-    functions: FastMap<String, CompiledFunction>,
+    /// 컴파일된 함수들 (Arc로 공유하여 clone 비용 제거)
+    functions: Arc<FastMap<String, Arc<CompiledFunction>>>,
     /// 현재 실행 중인 함수 (재귀용)
     current_function: Option<String>,
     /// 재귀 깊이
@@ -59,7 +60,7 @@ impl Vm {
             stack: Vec::with_capacity(256),  // Pre-allocate stack
             locals: Vec::with_capacity(64),  // Pre-allocate locals
             named_locals: FastMap::new(),
-            functions: FastMap::new(),
+            functions: Arc::new(FastMap::new()),
             current_function: None,
             recursion_depth: 0,
             closures: FastMap::new(),
@@ -97,8 +98,9 @@ impl Vm {
 
     /// 함수들을 로드
     pub fn load_functions(&mut self, functions: Vec<CompiledFunction>) {
+        let funcs = Arc::make_mut(&mut self.functions);
         for func in functions {
-            self.functions.insert(func.name.clone(), func);
+            funcs.insert(func.name.clone(), Arc::new(func));
         }
     }
 
@@ -179,7 +181,7 @@ impl Vm {
     pub fn call_function(&mut self, name: &str, args: Vec<Value>) -> RuntimeResult<Value> {
         let func = self.functions.get(name)
             .ok_or_else(|| RuntimeError::UndefinedFunction(name.to_string()))?
-            .clone();
+            .clone();  // Arc clone (cheap - just reference count increment)
 
         // 재귀 깊이 체크
         self.recursion_depth += 1;
