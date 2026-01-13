@@ -9,3 +9,6 @@ aoel-ast = { path = "../aoel-ast" }
 aoel-lexer = { path = "../aoel-lexer" }
 aoel-ir = { path = "../aoel-ir" }
 thiserror = "1.0"
+
+[dev-dependencies]
+aoel-parser = { path = "../aoel-parser" }

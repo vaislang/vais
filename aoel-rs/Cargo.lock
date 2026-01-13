@@ -186,6 +186,7 @@ dependencies = [
  "aoel-ast",
  "aoel-ir",
  "aoel-lexer",
+ "aoel-parser",
  "thiserror",
 ]
 

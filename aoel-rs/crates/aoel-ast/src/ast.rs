@@ -446,6 +446,10 @@ pub enum Pattern {
     Array(Vec<Pattern>, Span),
     /// Enum variant: Some(x), None
     Variant(String, Option<Box<Pattern>>, Span),
+    /// 범위 패턴: 1..10
+    Range(Box<Expr>, Box<Expr>, Span),
+    /// Or 패턴: a | b | c
+    Or(Vec<Pattern>, Span),
 }
 
 // =============================================================================

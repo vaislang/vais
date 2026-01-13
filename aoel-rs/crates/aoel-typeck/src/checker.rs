@@ -421,17 +421,30 @@ impl TypeChecker {
 
             // Match 표현식
             Expr::Match(scrutinee, arms, span) => {
-                // TODO: 향후 패턴 타입 검증에 사용
-                let _scrutinee_type = self.infer_expr(scrutinee)?;
+                let scrutinee_type = self.infer_expr(scrutinee)?;
                 if arms.is_empty() {
                     return Ok(Type::Never);
                 }
 
-                // 첫 번째 arm의 결과 타입
-                let first_result = self.infer_expr(&arms[0].body)?;
+                // 각 arm의 패턴 타입 체크 및 바인딩 설정
+                let first_result = {
+                    // 첫 번째 arm 처리
+                    self.check_pattern(&arms[0].pattern, &scrutinee_type, *span)?;
+                    // guard가 있으면 Bool 타입인지 확인
+                    if let Some(guard) = &arms[0].guard {
+                        let guard_type = self.infer_expr(guard)?;
+                        self.env.unify(&guard_type, &Type::Bool, *span)?;
+                    }
+                    self.infer_expr(&arms[0].body)?
+                };
 
-                // 모든 arm의 결과 타입이 동일한지 확인
+                // 나머지 arm들 처리
                 for arm in arms.iter().skip(1) {
+                    self.check_pattern(&arm.pattern, &scrutinee_type, *span)?;
+                    if let Some(guard) = &arm.guard {
+                        let guard_type = self.infer_expr(guard)?;
+                        self.env.unify(&guard_type, &Type::Bool, *span)?;
+                    }
                     let result_type = self.infer_expr(&arm.body)?;
                     self.env.unify(&first_result, &result_type, *span)?;
                 }
@@ -833,6 +846,144 @@ impl TypeChecker {
                     .map(|(k, v)| (k.clone(), self.convert_type_expr(v)))
                     .collect(),
             ),
+        }
+    }
+
+    /// 패턴 타입 체크 및 바인딩 변수 등록
+    fn check_pattern(&mut self, pattern: &Pattern, expected: &Type, span: Span) -> TypeResult<()> {
+        match pattern {
+            Pattern::Wildcard(_) => {
+                // 와일드카드는 모든 타입과 매칭
+                Ok(())
+            }
+
+            Pattern::Literal(expr) => {
+                // 리터럴 패턴의 타입이 expected와 일치하는지 확인
+                let lit_type = self.infer_expr(expr)?;
+                self.env.unify(&lit_type, expected, span)?;
+                Ok(())
+            }
+
+            Pattern::Binding(name, _) => {
+                // 바인딩 패턴: 변수에 expected 타입 할당
+                self.env.bind_var(name.clone(), expected.clone());
+                Ok(())
+            }
+
+            Pattern::Tuple(patterns, _) => {
+                // 튜플 패턴: expected가 Tuple이어야 함
+                let resolved = self.env.resolve(expected);
+                if let Type::Tuple(elem_types) = resolved {
+                    if patterns.len() != elem_types.len() {
+                        return Err(TypeError::PatternMismatch {
+                            expected: format!("tuple of {} elements", elem_types.len()),
+                            found: format!("tuple pattern with {} elements", patterns.len()),
+                            span,
+                        });
+                    }
+                    for (pat, ty) in patterns.iter().zip(elem_types.iter()) {
+                        self.check_pattern(pat, ty, span)?;
+                    }
+                    Ok(())
+                } else {
+                    // 타입 변수인 경우 튜플로 추론
+                    let elem_types: Vec<Type> = patterns.iter().map(|_| self.env.fresh_var()).collect();
+                    let tuple_type = Type::Tuple(elem_types.clone());
+                    self.env.unify(expected, &tuple_type, span)?;
+                    for (pat, ty) in patterns.iter().zip(elem_types.iter()) {
+                        self.check_pattern(pat, ty, span)?;
+                    }
+                    Ok(())
+                }
+            }
+
+            Pattern::Array(patterns, _) => {
+                // 배열 패턴: expected가 Array여야 함
+                let resolved = self.env.resolve(expected);
+                if let Type::Array(elem_type) = resolved {
+                    for pat in patterns {
+                        self.check_pattern(pat, &elem_type, span)?;
+                    }
+                    Ok(())
+                } else {
+                    // 타입 변수인 경우 배열로 추론
+                    let elem_type = self.env.fresh_var();
+                    let array_type = Type::Array(Box::new(elem_type.clone()));
+                    self.env.unify(expected, &array_type, span)?;
+                    for pat in patterns {
+                        self.check_pattern(pat, &elem_type, span)?;
+                    }
+                    Ok(())
+                }
+            }
+
+            Pattern::Struct(fields, _) => {
+                // 구조체 패턴: 각 필드 타입 확인
+                let resolved = self.env.resolve(expected);
+                if let Type::Struct(ref type_fields) = resolved {
+                    for (field_name, sub_pat) in fields {
+                        if let Some(field_type) = type_fields.get(field_name) {
+                            if let Some(pat) = sub_pat {
+                                self.check_pattern(pat, field_type, span)?;
+                            } else {
+                                // 필드 이름만 있는 경우 바인딩
+                                self.env.bind_var(field_name.clone(), field_type.clone());
+                            }
+                        } else {
+                            return Err(TypeError::InvalidField {
+                                field: field_name.clone(),
+                                ty: resolved.to_string(),
+                                span,
+                            });
+                        }
+                    }
+                    Ok(())
+                } else {
+                    // 타입 변수나 다른 타입인 경우 구조체로 추론
+                    let mut type_fields = std::collections::HashMap::new();
+                    for (field_name, sub_pat) in fields {
+                        let field_type = self.env.fresh_var();
+                        if let Some(pat) = sub_pat {
+                            self.check_pattern(pat, &field_type, span)?;
+                        } else {
+                            self.env.bind_var(field_name.clone(), field_type.clone());
+                        }
+                        type_fields.insert(field_name.clone(), field_type);
+                    }
+                    let struct_type = Type::Struct(type_fields);
+                    self.env.unify(expected, &struct_type, span)?;
+                    Ok(())
+                }
+            }
+
+            Pattern::Variant(name, inner, _) => {
+                // Enum variant 패턴 (간단한 처리)
+                // TODO: 실제 Enum 타입 시스템 구현 시 확장
+                if let Some(inner_pat) = inner {
+                    let inner_type = self.env.fresh_var();
+                    self.check_pattern(inner_pat, &inner_type, span)?;
+                }
+                // variant 이름을 변수로 등록하지는 않음
+                let _ = name; // 사용됨 표시
+                Ok(())
+            }
+
+            Pattern::Range(start, end, _) => {
+                // 범위 패턴: 숫자 타입이어야 함
+                let start_type = self.infer_expr(start)?;
+                let end_type = self.infer_expr(end)?;
+                self.env.unify(&start_type, &end_type, span)?;
+                self.env.unify(&start_type, expected, span)?;
+                Ok(())
+            }
+
+            Pattern::Or(patterns, _) => {
+                // Or 패턴: 모든 서브 패턴이 같은 타입과 매칭해야 함
+                for pat in patterns {
+                    self.check_pattern(pat, expected, span)?;
+                }
+                Ok(())
+            }
         }
     }
 }

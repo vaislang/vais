@@ -1347,10 +1347,19 @@ impl<'src> Parser<'src> {
                 Ok(Pattern::Wildcard(span))
             }
 
-            // 리터럴: 숫자, 문자열, bool
+            // 리터럴: 숫자, 문자열, bool (또는 범위 패턴)
             TokenKind::Integer | TokenKind::Float | TokenKind::String
             | TokenKind::True | TokenKind::False | TokenKind::Nil => {
                 let expr = self.parse_primary()?;
+                // 범위 패턴 확인: expr..expr
+                if self.match_token(TokenKind::DotDot) {
+                    let end = self.parse_primary()?;
+                    return Ok(Pattern::Range(
+                        Box::new(expr),
+                        Box::new(end),
+                        span.merge(self.previous.span),
+                    ));
+                }
                 Ok(Pattern::Literal(expr))
             }
 
@@ -1370,8 +1379,14 @@ impl<'src> Parser<'src> {
                         Ok(Pattern::Variant(name, Some(Box::new(inner)), span.merge(self.previous.span)))
                     }
                 } else {
-                    // 일반 바인딩
-                    Ok(Pattern::Binding(name, span))
+                    // 대문자로 시작하는 식별자는 payload 없는 variant로 처리 (None, True 등)
+                    // 소문자로 시작하면 바인딩
+                    let first_char = name.chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() {
+                        Ok(Pattern::Variant(name, None, span))
+                    } else {
+                        Ok(Pattern::Binding(name, span))
+                    }
                 }
             }
 
@@ -2055,6 +2070,131 @@ mod tests {
         assert!(result.is_ok());
         if let Item::Function(f) = &result.unwrap().items[0] {
             assert!(!f.is_pub);
+        }
+    }
+
+    // =========================================================================
+    // Pattern Matching Tests
+    // =========================================================================
+
+    #[test]
+    fn test_match_expression() {
+        let result = parse_expr("match x { 0 => \"zero\", _ => \"other\" }").unwrap();
+        if let Expr::Match(scrutinee, arms, _) = result {
+            assert!(matches!(*scrutinee, Expr::Ident(_, _)));
+            assert_eq!(arms.len(), 2);
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_match_with_guard() {
+        let result = parse_expr("match x { n if n > 0 => \"positive\", _ => \"other\" }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            assert!(arms[0].guard.is_some());
+            assert!(arms[1].guard.is_none());
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_range_pattern() {
+        let result = parse_expr("match x { 1..10 => \"small\", _ => \"other\" }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            assert!(matches!(arms[0].pattern, Pattern::Range(_, _, _)));
+        } else {
+            panic!("Expected match expression with range pattern");
+        }
+    }
+
+    #[test]
+    fn test_tuple_pattern() {
+        let result = parse_expr("match p { (a, b) => a + b }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            if let Pattern::Tuple(patterns, _) = &arms[0].pattern {
+                assert_eq!(patterns.len(), 2);
+            } else {
+                panic!("Expected tuple pattern");
+            }
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_array_pattern() {
+        let result = parse_expr("match arr { [a, b, c] => a }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            if let Pattern::Array(patterns, _) = &arms[0].pattern {
+                assert_eq!(patterns.len(), 3);
+            } else {
+                panic!("Expected array pattern");
+            }
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_struct_pattern() {
+        let result = parse_expr("match obj { { name, age } => name }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            if let Pattern::Struct(fields, _) = &arms[0].pattern {
+                assert_eq!(fields.len(), 2);
+                assert_eq!(fields[0].0, "name");
+                assert_eq!(fields[1].0, "age");
+            } else {
+                panic!("Expected struct pattern");
+            }
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_wildcard_pattern() {
+        let result = parse_expr("match x { _ => 0 }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            assert!(matches!(arms[0].pattern, Pattern::Wildcard(_)));
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_binding_pattern() {
+        let result = parse_expr("match x { n => n * 2 }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            if let Pattern::Binding(name, _) = &arms[0].pattern {
+                assert_eq!(name, "n");
+            } else {
+                panic!("Expected binding pattern");
+            }
+        } else {
+            panic!("Expected match expression");
+        }
+    }
+
+    #[test]
+    fn test_variant_pattern() {
+        let result = parse_expr("match opt { Some(x) => x, None => 0 }").unwrap();
+        if let Expr::Match(_, arms, _) = result {
+            if let Pattern::Variant(name, inner, _) = &arms[0].pattern {
+                assert_eq!(name, "Some");
+                assert!(inner.is_some());
+            } else {
+                panic!("Expected variant pattern");
+            }
+            if let Pattern::Variant(name, inner, _) = &arms[1].pattern {
+                assert_eq!(name, "None");
+                assert!(inner.is_none());
+            } else {
+                panic!("Expected variant pattern");
+            }
+        } else {
+            panic!("Expected match expression");
         }
     }
 }

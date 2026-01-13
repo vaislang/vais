@@ -690,6 +690,19 @@ impl Formatter {
                     self.output.push(')');
                 }
             }
+            Pattern::Range(start, end, _) => {
+                self.format_expr(start);
+                self.output.push_str("..");
+                self.format_expr(end);
+            }
+            Pattern::Or(patterns, _) => {
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(" | ");
+                    }
+                    self.format_pattern(p);
+                }
+            }
         }
     }
 

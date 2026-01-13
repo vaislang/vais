@@ -479,12 +479,13 @@ impl Lowerer {
     }
 
     /// 패턴을 IR로 변환 (매칭 조건 생성)
+    /// 스택에 매칭 대상 값이 있고, 결과로 Bool을 푸시
     fn lower_pattern(&mut self, pattern: &Pattern) -> LowerResult<Vec<Instruction>> {
         let mut instrs = Vec::new();
 
         match pattern {
             Pattern::Wildcard(_) => {
-                // 항상 매칭
+                // 항상 매칭 - 값 버리고 true 반환
                 instrs.push(Instruction::new(OpCode::Pop));
                 instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
             }
@@ -496,17 +497,166 @@ impl Lowerer {
             }
 
             Pattern::Binding(name, _) => {
-                // 값을 변수에 바인딩
+                // 값을 변수에 바인딩하고 true 반환
                 instrs.push(Instruction::new(OpCode::Dup));
                 instrs.push(Instruction::new(OpCode::Store(name.clone())));
                 instrs.push(Instruction::new(OpCode::Pop));
                 instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
             }
 
-            _ => {
-                // 복잡한 패턴은 나중에 구현
+            Pattern::Tuple(patterns, _) | Pattern::Array(patterns, _) => {
+                // 튜플/배열 패턴: 길이 확인 후 각 요소 매칭
+                // 스택: [value]
+
+                // 1. 길이 확인
+                instrs.push(Instruction::new(OpCode::Dup));
+                instrs.push(Instruction::new(OpCode::Len));
+                instrs.push(Instruction::new(OpCode::Const(Value::Int(patterns.len() as i64))));
+                instrs.push(Instruction::new(OpCode::Eq));
+                // 스택: [value, len_ok]
+
+                // 2. 각 요소에 대해 패턴 매칭
+                for (i, pat) in patterns.iter().enumerate() {
+                    // 현재 스택: [value, prev_result]
+                    // 이전 결과가 false면 스킵하지 않고 계속 검사 (short-circuit 생략)
+
+                    // value를 스택 맨 위로 복사 (Dup은 맨 위만 복사)
+                    // 임시 변수에 저장하고 로드하는 방식 사용
+                    instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::Dup)); // value 복사
+                    instrs.push(Instruction::new(OpCode::Const(Value::Int(i as i64))));
+                    instrs.push(Instruction::new(OpCode::Index));
+                    // 스택: [value, element]
+
+                    // 요소에 대해 재귀적 패턴 매칭
+                    instrs.extend(self.lower_pattern(pat)?);
+                    // 스택: [value, element_matched]
+
+                    // 이전 결과와 AND
+                    instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::And));
+                    // 스택: [value, combined_result]
+                }
+
+                // 최종 결과 저장, value 제거
+                instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::Pop)); // value 제거
+                instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+            }
+
+            Pattern::Struct(fields, _) => {
+                // 구조체 패턴: 각 필드 매칭
+                // 스택: [value]
+
+                if fields.is_empty() {
+                    // 빈 구조체 패턴 - 항상 매칭
+                    instrs.push(Instruction::new(OpCode::Pop));
+                    instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
+                } else {
+                    // 첫 번째 필드 처리
+                    let (first_name, first_pat) = &fields[0];
+                    instrs.push(Instruction::new(OpCode::Dup));
+                    instrs.push(Instruction::new(OpCode::GetField(first_name.clone())));
+
+                    if let Some(pat) = first_pat {
+                        instrs.extend(self.lower_pattern(pat)?);
+                    } else {
+                        // 바인딩만: field_name을 변수로 저장
+                        instrs.push(Instruction::new(OpCode::Dup));
+                        instrs.push(Instruction::new(OpCode::Store(first_name.clone())));
+                        instrs.push(Instruction::new(OpCode::Pop));
+                        instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
+                    }
+
+                    // 나머지 필드 처리
+                    for (field_name, sub_pat) in fields.iter().skip(1) {
+                        instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::Dup));
+                        instrs.push(Instruction::new(OpCode::GetField(field_name.clone())));
+
+                        if let Some(pat) = sub_pat {
+                            instrs.extend(self.lower_pattern(pat)?);
+                        } else {
+                            instrs.push(Instruction::new(OpCode::Dup));
+                            instrs.push(Instruction::new(OpCode::Store(field_name.clone())));
+                            instrs.push(Instruction::new(OpCode::Pop));
+                            instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
+                        }
+
+                        instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::And));
+                    }
+
+                    // 최종 결과 저장, value 제거
+                    instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::Pop));
+                    instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                }
+            }
+
+            Pattern::Variant(name, inner, _) => {
+                // Enum variant 패턴
+                // 현재는 간단히 이름 비교만 (태그 확인)
+                // TODO: 실제 Enum 타입 시스템 필요
+                instrs.push(Instruction::new(OpCode::Dup));
+                instrs.push(Instruction::new(OpCode::GetField("__variant__".to_string())));
+                instrs.push(Instruction::new(OpCode::Const(Value::String(name.clone()))));
+                instrs.push(Instruction::new(OpCode::Eq));
+
+                if let Some(inner_pat) = inner {
+                    // 내부 패턴 매칭
+                    instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::Dup));
+                    instrs.push(Instruction::new(OpCode::GetField("__value__".to_string())));
+                    instrs.extend(self.lower_pattern(inner_pat)?);
+                    instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::And));
+                }
+
+                // value 제거
+                instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
                 instrs.push(Instruction::new(OpCode::Pop));
-                instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
+                instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+            }
+
+            Pattern::Range(start, end, _) => {
+                // 범위 패턴: start <= value <= end
+                // 스택: [value]
+                instrs.push(Instruction::new(OpCode::Dup));
+                instrs.extend(self.lower_expr(start)?);
+                instrs.push(Instruction::new(OpCode::Gte)); // value >= start
+                // 스택: [value, gte_start]
+
+                instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                // 스택: [value]
+
+                instrs.extend(self.lower_expr(end)?);
+                instrs.push(Instruction::new(OpCode::Lte)); // value <= end
+                // 스택: [lte_end]
+
+                instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::And));
+                // 스택: [result]
+            }
+
+            Pattern::Or(patterns, _) => {
+                // Or 패턴: 하나라도 매칭되면 true
+                if patterns.is_empty() {
+                    instrs.push(Instruction::new(OpCode::Pop));
+                    instrs.push(Instruction::new(OpCode::Const(Value::Bool(false))));
+                } else {
+                    // 값을 임시 저장
+                    instrs.push(Instruction::new(OpCode::Store("__match_or_val__".to_string())));
+                    instrs.push(Instruction::new(OpCode::Const(Value::Bool(false)))); // 초기값
+
+                    for pat in patterns {
+                        instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::Load("__match_or_val__".to_string())));
+                        instrs.extend(self.lower_pattern(pat)?);
+                        instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::Or));
+                    }
+                }
             }
         }
 
@@ -1558,5 +1708,103 @@ mod tests {
 
         assert!(lowerer1.ffi_functions().is_empty());
         assert!(lowerer2.ffi_functions().is_empty());
+    }
+
+    // === Pattern Matching Lowering Tests ===
+
+    #[test]
+    fn test_lower_match_literal_pattern() {
+        // match x { 0 => "zero", 1 => "one", _ => "other" }
+        let source = r#"classify(x) = match x { 0 => "zero", 1 => "one", _ => "other" }"#;
+        let program = aoel_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "classify");
+        // Verify the function has instructions for the match expression
+        assert!(!functions[0].instructions.is_empty());
+    }
+
+    #[test]
+    fn test_lower_match_binding_pattern() {
+        // match x { n => n * 2 }
+        let source = r#"double(x) = match x { n => n * 2 }"#;
+        let program = aoel_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "double");
+        // Should contain Store for binding 'n' and Load to use it
+        let has_store = functions[0].instructions.iter().any(|i| {
+            matches!(&i.opcode, OpCode::Store(name) if name == "n")
+        });
+        let has_load = functions[0].instructions.iter().any(|i| {
+            matches!(&i.opcode, OpCode::Load(name) if name == "n")
+        });
+        assert!(has_store, "Should have Store for binding 'n'");
+        assert!(has_load, "Should have Load to use 'n'");
+    }
+
+    #[test]
+    fn test_lower_match_with_guard() {
+        // match x { n if n > 0 => "positive", _ => "other" }
+        let source = r#"sign(x) = match x { n if n > 0 => "positive", _ => "other" }"#;
+        let program = aoel_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        assert_eq!(functions.len(), 1);
+        // Should have jump instructions for the if-else chain
+        let has_jump = functions[0].instructions.iter().any(|i| {
+            matches!(&i.opcode, OpCode::Jump(_) | OpCode::JumpIfNot(_))
+        });
+        assert!(has_jump, "Match should generate jump instructions");
+    }
+
+    #[test]
+    fn test_lower_match_range_pattern() {
+        // match x { 1..10 => "small", _ => "other" }
+        let source = r#"size(x) = match x { 1..10 => "small", _ => "other" }"#;
+        let program = aoel_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        assert_eq!(functions.len(), 1);
+        // Range pattern should generate >= and <= comparisons
+        let has_gte = functions[0].instructions.iter().any(|i| {
+            matches!(&i.opcode, OpCode::Gte)
+        });
+        let has_lte = functions[0].instructions.iter().any(|i| {
+            matches!(&i.opcode, OpCode::Lte)
+        });
+        assert!(has_gte, "Range pattern should generate >= comparison");
+        assert!(has_lte, "Range pattern should generate <= comparison");
+    }
+
+    #[test]
+    fn test_lower_match_wildcard() {
+        let source = r#"always_one(x) = match x { _ => 1 }"#;
+        let program = aoel_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        assert_eq!(functions.len(), 1);
+        // Wildcard should always match (push true)
+        let has_const_true = functions[0].instructions.iter().any(|i| {
+            matches!(&i.opcode, OpCode::Const(Value::Bool(true)))
+        });
+        assert!(has_const_true, "Wildcard should push true");
+    }
+
+    #[test]
+    fn test_lower_multiple_patterns() {
+        // Test that multiple patterns generate correct if-else chain
+        let source = r#"test(x) = match x { 0 => "a", 1 => "b", 2 => "c", _ => "d" }"#;
+        let program = aoel_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        assert_eq!(functions.len(), 1);
+        // Count jump instructions - should have multiple for the chain
+        let jump_count = functions[0].instructions.iter().filter(|i| {
+            matches!(&i.opcode, OpCode::Jump(_) | OpCode::JumpIfNot(_))
+        }).count();
+        assert!(jump_count >= 3, "Should have multiple jumps for pattern chain");
     }
 }

@@ -51,6 +51,13 @@ pub enum TypeError {
     #[error("Not a function: {ty}")]
     NotAFunction { ty: String, span: Span },
 
+    #[error("Pattern mismatch: expected {expected}, found {found}")]
+    PatternMismatch {
+        expected: String,
+        found: String,
+        span: Span,
+    },
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
