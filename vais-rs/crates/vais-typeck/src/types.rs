@@ -3,6 +3,56 @@
 use std::collections::HashMap;
 use std::fmt;
 
+/// 제네릭 타입 스키마 (다형성 함수용)
+///
+/// 예: `forall T. (Array<T>) -> T`는 `first` 함수의 타입
+/// - type_params: 바인딩된 타입 변수들 (T0, T1, ...)
+/// - body: 실제 함수 타입
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeScheme {
+    /// 바인딩된 타입 변수 ID들
+    pub type_params: Vec<usize>,
+    /// 함수 타입 본체
+    pub body: Type,
+}
+
+impl TypeScheme {
+    /// 단순 타입을 스키마로 변환 (제네릭 파라미터 없음)
+    pub fn mono(ty: Type) -> Self {
+        Self {
+            type_params: vec![],
+            body: ty,
+        }
+    }
+
+    /// 제네릭 스키마 생성
+    pub fn poly(type_params: Vec<usize>, body: Type) -> Self {
+        Self { type_params, body }
+    }
+
+    /// 제네릭인지 확인
+    pub fn is_polymorphic(&self) -> bool {
+        !self.type_params.is_empty()
+    }
+}
+
+impl fmt::Display for TypeScheme {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.type_params.is_empty() {
+            write!(f, "{}", self.body)
+        } else {
+            write!(f, "forall ")?;
+            for (i, param) in self.type_params.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "T{}", param)?;
+            }
+            write!(f, ". {}", self.body)
+        }
+    }
+}
+
 /// Vais 타입
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {

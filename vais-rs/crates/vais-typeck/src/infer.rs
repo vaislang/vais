@@ -7,15 +7,15 @@ use std::collections::HashMap;
 use vais_lexer::Span;
 
 use crate::error::{TypeError, TypeResult};
-use crate::types::Type;
+use crate::types::{Type, TypeScheme};
 
 /// 타입 환경
 #[derive(Debug, Clone)]
 pub struct TypeEnv {
     /// 변수 -> 타입 매핑
     vars: HashMap<String, Type>,
-    /// 함수 -> 타입 매핑
-    functions: HashMap<String, Type>,
+    /// 함수 -> 타입 스키마 매핑 (제네릭 지원)
+    functions: HashMap<String, TypeScheme>,
     /// 현재 함수 (재귀 호출용)
     pub current_function: Option<(String, Type)>,
     /// 다음 타입 변수 ID
@@ -67,95 +67,167 @@ impl TypeEnv {
         self.vars = saved;
     }
 
+    /// 헬퍼: 단순 타입을 스키마로 등록
+    fn register_mono(&mut self, name: &str, ty: Type) {
+        self.functions.insert(name.to_string(), TypeScheme::mono(ty));
+    }
+
+    /// 헬퍼: 제네릭 타입을 스키마로 등록
+    fn register_poly(&mut self, name: &str, type_params: Vec<usize>, ty: Type) {
+        self.functions.insert(name.to_string(), TypeScheme::poly(type_params, ty));
+    }
+
     /// 빌트인 함수 등록
     fn register_builtins(&mut self) {
         // Math functions (Float -> Float) - 숫자 타입은 자동 변환됨
         let float_to_float = Type::Function(vec![Type::Float], Box::new(Type::Float));
-        self.functions.insert("sqrt".to_string(), float_to_float.clone());
-        self.functions.insert("sin".to_string(), float_to_float.clone());
-        self.functions.insert("cos".to_string(), float_to_float.clone());
-        self.functions.insert("tan".to_string(), float_to_float.clone());
-        self.functions.insert("log".to_string(), float_to_float.clone());
-        self.functions.insert("log10".to_string(), float_to_float.clone());
-        self.functions.insert("exp".to_string(), float_to_float.clone());
-        self.functions.insert("asin".to_string(), float_to_float.clone());
-        self.functions.insert("acos".to_string(), float_to_float.clone());
-        self.functions.insert("atan".to_string(), float_to_float.clone());
+        self.register_mono("sqrt", float_to_float.clone());
+        self.register_mono("sin", float_to_float.clone());
+        self.register_mono("cos", float_to_float.clone());
+        self.register_mono("tan", float_to_float.clone());
+        self.register_mono("log", float_to_float.clone());
+        self.register_mono("log10", float_to_float.clone());
+        self.register_mono("exp", float_to_float.clone());
+        self.register_mono("asin", float_to_float.clone());
+        self.register_mono("acos", float_to_float.clone());
+        self.register_mono("atan", float_to_float.clone());
 
         // Math functions (Float -> Float, but conceptually rounding)
-        self.functions.insert("floor".to_string(), float_to_float.clone());
-        self.functions.insert("ceil".to_string(), float_to_float.clone());
-        self.functions.insert("round".to_string(), float_to_float.clone());
-        self.functions.insert("abs".to_string(), float_to_float.clone());
+        self.register_mono("floor", float_to_float.clone());
+        self.register_mono("ceil", float_to_float.clone());
+        self.register_mono("round", float_to_float.clone());
+        self.register_mono("abs", float_to_float.clone());
 
         // Math functions (Float, Float -> Float)
         let float2_to_float = Type::Function(vec![Type::Float, Type::Float], Box::new(Type::Float));
-        self.functions.insert("pow".to_string(), float2_to_float.clone());
-        self.functions.insert("atan2".to_string(), float2_to_float.clone());
-        self.functions.insert("min".to_string(), float2_to_float.clone());
-        self.functions.insert("max".to_string(), float2_to_float.clone());
+        self.register_mono("pow", float2_to_float.clone());
+        self.register_mono("atan2", float2_to_float.clone());
+        self.register_mono("min", float2_to_float.clone());
+        self.register_mono("max", float2_to_float.clone());
 
-        // Collection functions
-        self.functions.insert("len".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Int)));
-        self.functions.insert("first".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Any)));
-        self.functions.insert("last".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Any)));
-        self.functions.insert("reverse".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
+        // =========================================================================
+        // Generic Collection Functions (핵심 변경!)
+        // =========================================================================
+        //
+        // 기존: first: Array<Any> -> Any  (타입 정보 손실)
+        // 변경: first: forall T. Array<T> -> T  (타입 정보 유지)
+        //
+        // 제네릭 타입 변수는 1000번대를 사용 (사용자 코드와 충돌 방지)
+
+        // len: forall T. Array<T> -> Int
+        self.register_poly("len", vec![1000],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1000)))], Box::new(Type::Int)));
+
+        // first: forall T. Array<T> -> T
+        self.register_poly("first", vec![1001],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1001)))], Box::new(Type::Var(1001))));
+
+        // last: forall T. Array<T> -> T
+        self.register_poly("last", vec![1002],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1002)))], Box::new(Type::Var(1002))));
+
+        // reverse: forall T. Array<T> -> Array<T>
+        self.register_poly("reverse", vec![1003],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1003)))],
+                          Box::new(Type::Array(Box::new(Type::Var(1003))))));
+
+        // push: forall T. (Array<T>, T) -> Array<T>
+        self.register_poly("push", vec![1004],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1004))), Type::Var(1004)],
+                          Box::new(Type::Array(Box::new(Type::Var(1004))))));
+
+        // pop: forall T. Array<T> -> Array<T>
+        self.register_poly("pop", vec![1005],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1005)))],
+                          Box::new(Type::Array(Box::new(Type::Var(1005))))));
+
+        // take: forall T. (Array<T>, Int) -> Array<T>
+        self.register_poly("take", vec![1006],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1006))), Type::Int],
+                          Box::new(Type::Array(Box::new(Type::Var(1006))))));
+
+        // drop: forall T. (Array<T>, Int) -> Array<T>
+        self.register_poly("drop", vec![1007],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1007))), Type::Int],
+                          Box::new(Type::Array(Box::new(Type::Var(1007))))));
+
+        // sort: forall T. Array<T> -> Array<T>
+        self.register_poly("sort", vec![1008],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1008)))],
+                          Box::new(Type::Array(Box::new(Type::Var(1008))))));
+
+        // unique: forall T. Array<T> -> Array<T>
+        self.register_poly("unique", vec![1009],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1009)))],
+                          Box::new(Type::Array(Box::new(Type::Var(1009))))));
+
+        // index_of: forall T. (Array<T>, T) -> Int
+        self.register_poly("index_of", vec![1010],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1010))), Type::Var(1010)],
+                          Box::new(Type::Int)));
+
+        // concat: forall T. (Array<T>, Array<T>) -> Array<T>
+        self.register_poly("concat", vec![1011],
+            Type::Function(vec![Type::Array(Box::new(Type::Var(1011))), Type::Array(Box::new(Type::Var(1011)))],
+                          Box::new(Type::Array(Box::new(Type::Var(1011))))));
+
+        // zip: forall T, U. (Array<T>, Array<U>) -> Array<(T, U)>
+        self.register_poly("zip", vec![1012, 1013],
+            Type::Function(
+                vec![Type::Array(Box::new(Type::Var(1012))), Type::Array(Box::new(Type::Var(1013)))],
+                Box::new(Type::Array(Box::new(Type::Tuple(vec![Type::Var(1012), Type::Var(1013)]))))
+            ));
+
+        // flatten: forall T. Array<Array<T>> -> Array<T>
+        self.register_poly("flatten", vec![1014],
+            Type::Function(
+                vec![Type::Array(Box::new(Type::Array(Box::new(Type::Var(1014)))))],
+                Box::new(Type::Array(Box::new(Type::Var(1014))))
+            ));
 
         // String functions
-        self.functions.insert("upper".to_string(), Type::Function(vec![Type::String], Box::new(Type::String)));
-        self.functions.insert("lower".to_string(), Type::Function(vec![Type::String], Box::new(Type::String)));
-        self.functions.insert("trim".to_string(), Type::Function(vec![Type::String], Box::new(Type::String)));
-        self.functions.insert("split".to_string(), Type::Function(vec![Type::String, Type::String], Box::new(Type::Array(Box::new(Type::String)))));
-        self.functions.insert("join".to_string(), Type::Function(vec![Type::Array(Box::new(Type::String)), Type::String], Box::new(Type::String)));
-        self.functions.insert("replace".to_string(), Type::Function(vec![Type::String, Type::String, Type::String], Box::new(Type::String)));
-        self.functions.insert("substr".to_string(), Type::Function(vec![Type::String, Type::Int, Type::Int], Box::new(Type::String)));
-        self.functions.insert("contains".to_string(), Type::Function(vec![Type::String, Type::String], Box::new(Type::Bool)));
-        self.functions.insert("starts_with".to_string(), Type::Function(vec![Type::String, Type::String], Box::new(Type::Bool)));
-        self.functions.insert("ends_with".to_string(), Type::Function(vec![Type::String, Type::String], Box::new(Type::Bool)));
+        self.register_mono("upper", Type::Function(vec![Type::String], Box::new(Type::String)));
+        self.register_mono("lower", Type::Function(vec![Type::String], Box::new(Type::String)));
+        self.register_mono("trim", Type::Function(vec![Type::String], Box::new(Type::String)));
+        self.register_mono("split", Type::Function(vec![Type::String, Type::String], Box::new(Type::Array(Box::new(Type::String)))));
+        self.register_mono("join", Type::Function(vec![Type::Array(Box::new(Type::String)), Type::String], Box::new(Type::String)));
+        self.register_mono("replace", Type::Function(vec![Type::String, Type::String, Type::String], Box::new(Type::String)));
+        self.register_mono("substr", Type::Function(vec![Type::String, Type::Int, Type::Int], Box::new(Type::String)));
+        self.register_mono("contains", Type::Function(vec![Type::String, Type::String], Box::new(Type::Bool)));
+        self.register_mono("starts_with", Type::Function(vec![Type::String, Type::String], Box::new(Type::Bool)));
+        self.register_mono("ends_with", Type::Function(vec![Type::String, Type::String], Box::new(Type::Bool)));
 
-        // Type conversion
-        self.functions.insert("int".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Int)));
-        self.functions.insert("float".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Float)));
-        self.functions.insert("str".to_string(), Type::Function(vec![Type::Any], Box::new(Type::String)));
-        self.functions.insert("bool".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        // Type conversion - 이것들은 진짜로 Any가 필요
+        self.register_mono("int", Type::Function(vec![Type::Any], Box::new(Type::Int)));
+        self.register_mono("float", Type::Function(vec![Type::Any], Box::new(Type::Float)));
+        self.register_mono("str", Type::Function(vec![Type::Any], Box::new(Type::String)));
+        self.register_mono("bool", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
 
-        // I/O functions
-        self.functions.insert("print".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Unit)));
-        self.functions.insert("println".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Unit)));
+        // I/O functions - 이것들도 진짜로 Any가 필요
+        self.register_mono("print", Type::Function(vec![Type::Any], Box::new(Type::Unit)));
+        self.register_mono("println", Type::Function(vec![Type::Any], Box::new(Type::Unit)));
 
         // Range
-        self.functions.insert("range".to_string(), Type::Function(vec![Type::Int], Box::new(Type::Array(Box::new(Type::Int)))));
-
-        // Extended array functions
-        self.functions.insert("push".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any)), Type::Any], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("pop".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("take".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any)), Type::Int], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("drop".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any)), Type::Int], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("zip".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any)), Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("flatten".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("sort".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("unique".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
-        self.functions.insert("index_of".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any)), Type::Any], Box::new(Type::Int)));
-        self.functions.insert("concat".to_string(), Type::Function(vec![Type::Array(Box::new(Type::Any)), Type::Array(Box::new(Type::Any))], Box::new(Type::Array(Box::new(Type::Any)))));
+        self.register_mono("range", Type::Function(vec![Type::Int], Box::new(Type::Array(Box::new(Type::Int)))));
 
         // Extended math functions
-        self.functions.insert("log2".to_string(), float_to_float.clone());
-        self.functions.insert("clamp".to_string(), Type::Function(vec![Type::Float, Type::Float, Type::Float], Box::new(Type::Float)));
+        self.register_mono("log2", float_to_float.clone());
+        self.register_mono("clamp", Type::Function(vec![Type::Float, Type::Float, Type::Float], Box::new(Type::Float)));
 
         // Extended string functions
-        self.functions.insert("chars".to_string(), Type::Function(vec![Type::String], Box::new(Type::Array(Box::new(Type::String)))));
-        self.functions.insert("pad_left".to_string(), Type::Function(vec![Type::String, Type::Int, Type::String], Box::new(Type::String)));
-        self.functions.insert("pad_right".to_string(), Type::Function(vec![Type::String, Type::Int, Type::String], Box::new(Type::String)));
-        self.functions.insert("repeat".to_string(), Type::Function(vec![Type::String, Type::Int], Box::new(Type::String)));
+        self.register_mono("chars", Type::Function(vec![Type::String], Box::new(Type::Array(Box::new(Type::String)))));
+        self.register_mono("pad_left", Type::Function(vec![Type::String, Type::Int, Type::String], Box::new(Type::String)));
+        self.register_mono("pad_right", Type::Function(vec![Type::String, Type::Int, Type::String], Box::new(Type::String)));
+        self.register_mono("repeat", Type::Function(vec![Type::String, Type::Int], Box::new(Type::String)));
 
-        // Type checking functions
-        self.functions.insert("type".to_string(), Type::Function(vec![Type::Any], Box::new(Type::String)));
-        self.functions.insert("is_int".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
-        self.functions.insert("is_float".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
-        self.functions.insert("is_string".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
-        self.functions.insert("is_bool".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
-        self.functions.insert("is_array".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
-        self.functions.insert("is_map".to_string(), Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        // Type checking functions - 진짜로 Any 필요
+        self.register_mono("type", Type::Function(vec![Type::Any], Box::new(Type::String)));
+        self.register_mono("is_int", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        self.register_mono("is_float", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        self.register_mono("is_string", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        self.register_mono("is_bool", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        self.register_mono("is_array", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
+        self.register_mono("is_map", Type::Function(vec![Type::Any], Box::new(Type::Bool)));
     }
 
     /// 새 타입 변수 생성
@@ -175,14 +247,74 @@ impl TypeEnv {
         self.vars.get(name)
     }
 
-    /// 함수 등록
+    /// 함수 등록 (단순 타입)
     pub fn register_function(&mut self, name: String, ty: Type) {
-        self.functions.insert(name, ty);
+        self.functions.insert(name, TypeScheme::mono(ty));
     }
 
-    /// 함수 조회
-    pub fn lookup_function(&self, name: &str) -> Option<&Type> {
+    /// 함수 스키마 조회 (제네릭 지원)
+    pub fn lookup_function_scheme(&self, name: &str) -> Option<&TypeScheme> {
         self.functions.get(name)
+    }
+
+    /// 함수 조회 및 인스턴스화
+    ///
+    /// 제네릭 함수의 경우 타입 파라미터를 새로운 타입 변수로 치환하여 반환
+    /// 이를 통해 같은 제네릭 함수를 여러 번 호출해도 각각 독립적인 타입 추론이 가능
+    pub fn lookup_function(&mut self, name: &str) -> Option<Type> {
+        let scheme = self.functions.get(name)?.clone();
+        Some(self.instantiate(&scheme))
+    }
+
+    /// 타입 스키마 인스턴스화
+    ///
+    /// forall T1, T2, ... Tn. τ 를 새로운 타입 변수로 치환
+    pub fn instantiate(&mut self, scheme: &TypeScheme) -> Type {
+        if scheme.type_params.is_empty() {
+            // 단순 타입은 그대로 반환
+            return scheme.body.clone();
+        }
+
+        // 각 타입 파라미터에 대해 새로운 타입 변수 생성
+        let mut substitutions: HashMap<usize, Type> = HashMap::new();
+        for &param in &scheme.type_params {
+            let fresh = self.fresh_var();
+            substitutions.insert(param, fresh);
+        }
+
+        // 타입 본체에 치환 적용
+        self.apply_substitutions(&scheme.body, &substitutions)
+    }
+
+    /// 치환 적용
+    fn apply_substitutions(&self, ty: &Type, subs: &HashMap<usize, Type>) -> Type {
+        match ty {
+            Type::Var(v) => {
+                if let Some(replacement) = subs.get(v) {
+                    replacement.clone()
+                } else {
+                    ty.clone()
+                }
+            }
+            Type::Array(t) => Type::Array(Box::new(self.apply_substitutions(t, subs))),
+            Type::Tuple(ts) => Type::Tuple(
+                ts.iter().map(|t| self.apply_substitutions(t, subs)).collect()
+            ),
+            Type::Map(k, v) => Type::Map(
+                Box::new(self.apply_substitutions(k, subs)),
+                Box::new(self.apply_substitutions(v, subs))
+            ),
+            Type::Function(params, ret) => Type::Function(
+                params.iter().map(|t| self.apply_substitutions(t, subs)).collect(),
+                Box::new(self.apply_substitutions(ret, subs))
+            ),
+            Type::Optional(t) => Type::Optional(Box::new(self.apply_substitutions(t, subs))),
+            Type::Result(t) => Type::Result(Box::new(self.apply_substitutions(t, subs))),
+            Type::Struct(fields) => Type::Struct(
+                fields.iter().map(|(k, v)| (k.clone(), self.apply_substitutions(v, subs))).collect()
+            ),
+            _ => ty.clone()
+        }
     }
 
     /// 타입 변수 해결
@@ -333,7 +465,7 @@ mod tests {
 
     #[test]
     fn test_builtins_math_functions() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
         // Float -> Float
         for name in ["sqrt", "sin", "cos", "tan", "log", "log10", "exp", "asin", "acos", "atan", "floor", "ceil", "round", "abs", "log2"] {
@@ -342,7 +474,7 @@ mod tests {
             match ty.unwrap() {
                 Type::Function(params, ret) => {
                     assert_eq!(params.len(), 1);
-                    assert_eq!(**ret, Type::Float);
+                    assert_eq!(*ret, Type::Float);
                 }
                 _ => panic!("{} should be a function type", name),
             }
@@ -351,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_builtins_math_binary_functions() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
         // Float, Float -> Float
         for name in ["pow", "atan2", "min", "max"] {
@@ -360,7 +492,7 @@ mod tests {
             match ty.unwrap() {
                 Type::Function(params, ret) => {
                     assert_eq!(params.len(), 2);
-                    assert_eq!(**ret, Type::Float);
+                    assert_eq!(*ret, Type::Float);
                 }
                 _ => panic!("{} should be a function type", name),
             }
@@ -369,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_builtins_string_functions() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
         // String -> String
         for name in ["upper", "lower", "trim"] {
@@ -377,8 +509,8 @@ mod tests {
             assert!(ty.is_some(), "builtin function {} should exist", name);
             match ty.unwrap() {
                 Type::Function(params, ret) => {
-                    assert_eq!(params, &vec![Type::String]);
-                    assert_eq!(**ret, Type::String);
+                    assert_eq!(params, vec![Type::String]);
+                    assert_eq!(*ret, Type::String);
                 }
                 _ => panic!("{} should be a function type", name),
             }
@@ -387,14 +519,21 @@ mod tests {
 
     #[test]
     fn test_builtins_collection_functions() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
-        // len: Any -> Int
+        // len: forall T. Array<T> -> Int (제네릭 - 인스턴스화됨)
         let len_ty = env.lookup_function("len").unwrap();
         match len_ty {
             Type::Function(params, ret) => {
-                assert_eq!(params, &vec![Type::Any]);
-                assert_eq!(**ret, Type::Int);
+                assert_eq!(params.len(), 1);
+                // 인스턴스화된 타입 변수가 있어야 함
+                match &params[0] {
+                    Type::Array(elem) => {
+                        assert!(matches!(**elem, Type::Var(_)));
+                    }
+                    _ => panic!("len should take Array<T>"),
+                }
+                assert_eq!(*ret, Type::Int);
             }
             _ => panic!("len should be a function type"),
         }
@@ -403,8 +542,8 @@ mod tests {
         let range_ty = env.lookup_function("range").unwrap();
         match range_ty {
             Type::Function(params, ret) => {
-                assert_eq!(params, &vec![Type::Int]);
-                assert_eq!(**ret, Type::Array(Box::new(Type::Int)));
+                assert_eq!(params, vec![Type::Int]);
+                assert_eq!(*ret, Type::Array(Box::new(Type::Int)));
             }
             _ => panic!("range should be a function type"),
         }
@@ -412,14 +551,14 @@ mod tests {
 
     #[test]
     fn test_builtins_io_functions() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
         for name in ["print", "println"] {
             let ty = env.lookup_function(name).unwrap();
             match ty {
                 Type::Function(params, ret) => {
-                    assert_eq!(params, &vec![Type::Any]);
-                    assert_eq!(**ret, Type::Unit);
+                    assert_eq!(params, vec![Type::Any]);
+                    assert_eq!(*ret, Type::Unit);
                 }
                 _ => panic!("{} should be a function type", name),
             }
@@ -428,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_builtins_type_conversion() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
         let int_ty = env.lookup_function("int").unwrap();
         assert_eq!(int_ty.return_type(), Some(&Type::Int));
@@ -445,17 +584,131 @@ mod tests {
 
     #[test]
     fn test_builtins_type_checking() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
 
         for name in ["is_int", "is_float", "is_string", "is_bool", "is_array", "is_map"] {
             let ty = env.lookup_function(name).unwrap();
             match ty {
                 Type::Function(params, ret) => {
-                    assert_eq!(params, &vec![Type::Any]);
-                    assert_eq!(**ret, Type::Bool);
+                    assert_eq!(params, vec![Type::Any]);
+                    assert_eq!(*ret, Type::Bool);
                 }
                 _ => panic!("{} should be a function type", name),
             }
+        }
+    }
+
+    // ==================== Generic Function Tests ====================
+
+    #[test]
+    fn test_generic_first_function() {
+        let mut env = TypeEnv::new();
+
+        // first: forall T. Array<T> -> T
+        let first_ty = env.lookup_function("first").unwrap();
+
+        match first_ty {
+            Type::Function(params, ret) => {
+                assert_eq!(params.len(), 1);
+                // Array<T> 형태여야 함
+                match &params[0] {
+                    Type::Array(elem) => {
+                        // T는 Var여야 함
+                        match **elem {
+                            Type::Var(v) => {
+                                // 반환 타입도 같은 Var여야 함
+                                assert_eq!(*ret, Type::Var(v));
+                            }
+                            _ => panic!("first element type should be Var"),
+                        }
+                    }
+                    _ => panic!("first should take Array<T>"),
+                }
+            }
+            _ => panic!("first should be a function type"),
+        }
+    }
+
+    #[test]
+    fn test_generic_instantiation_creates_fresh_vars() {
+        let mut env = TypeEnv::new();
+
+        // 같은 함수를 두 번 호출하면 서로 다른 타입 변수가 생성되어야 함
+        let first_ty1 = env.lookup_function("first").unwrap();
+        let first_ty2 = env.lookup_function("first").unwrap();
+
+        // 두 인스턴스의 타입 변수가 다른지 확인
+        let var1 = match &first_ty1 {
+            Type::Function(params, _) => match &params[0] {
+                Type::Array(elem) => match **elem {
+                    Type::Var(v) => v,
+                    _ => panic!("expected Var"),
+                },
+                _ => panic!("expected Array"),
+            },
+            _ => panic!("expected Function"),
+        };
+
+        let var2 = match &first_ty2 {
+            Type::Function(params, _) => match &params[0] {
+                Type::Array(elem) => match **elem {
+                    Type::Var(v) => v,
+                    _ => panic!("expected Var"),
+                },
+                _ => panic!("expected Array"),
+            },
+            _ => panic!("expected Function"),
+        };
+
+        assert_ne!(var1, var2, "Each instantiation should create fresh type variables");
+    }
+
+    #[test]
+    fn test_generic_zip_function() {
+        let mut env = TypeEnv::new();
+
+        // zip: forall T, U. (Array<T>, Array<U>) -> Array<(T, U)>
+        let zip_ty = env.lookup_function("zip").unwrap();
+
+        match zip_ty {
+            Type::Function(params, ret) => {
+                assert_eq!(params.len(), 2);
+
+                // 첫 번째 파라미터: Array<T>
+                let t_var = match &params[0] {
+                    Type::Array(elem) => match **elem {
+                        Type::Var(v) => v,
+                        _ => panic!("first param should be Array<Var>"),
+                    },
+                    _ => panic!("first param should be Array"),
+                };
+
+                // 두 번째 파라미터: Array<U>
+                let u_var = match &params[1] {
+                    Type::Array(elem) => match **elem {
+                        Type::Var(v) => v,
+                        _ => panic!("second param should be Array<Var>"),
+                    },
+                    _ => panic!("second param should be Array"),
+                };
+
+                // T와 U는 달라야 함
+                assert_ne!(t_var, u_var);
+
+                // 반환 타입: Array<(T, U)>
+                match *ret {
+                    Type::Array(ref elem) => match **elem {
+                        Type::Tuple(ref ts) => {
+                            assert_eq!(ts.len(), 2);
+                            assert_eq!(ts[0], Type::Var(t_var));
+                            assert_eq!(ts[1], Type::Var(u_var));
+                        }
+                        _ => panic!("return should be Array<Tuple>"),
+                    },
+                    _ => panic!("return should be Array"),
+                }
+            }
+            _ => panic!("zip should be a function type"),
         }
     }
 
@@ -531,12 +784,12 @@ mod tests {
         let func_type = Type::Function(vec![Type::Int], Box::new(Type::Int));
         env.register_function("myFunc".to_string(), func_type.clone());
 
-        assert_eq!(env.lookup_function("myFunc"), Some(&func_type));
+        assert_eq!(env.lookup_function("myFunc"), Some(func_type));
     }
 
     #[test]
     fn test_lookup_function_not_found() {
-        let env = TypeEnv::new();
+        let mut env = TypeEnv::new();
         assert_eq!(env.lookup_function("nonexistent_func"), None);
     }
 
@@ -968,7 +1221,7 @@ mod tests {
         env.bind_var("x".to_string(), Type::Int);
         env.register_function("f".to_string(), Type::Function(vec![], Box::new(Type::Unit)));
 
-        let cloned = env.clone();
+        let mut cloned = env.clone();
         assert_eq!(cloned.lookup_var("x"), Some(&Type::Int));
         assert!(cloned.lookup_function("f").is_some());
     }

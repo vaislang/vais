@@ -112,7 +112,7 @@ impl TypeChecker {
         }
 
         // 현재 함수 설정 (재귀용)
-        if let Some(func_type) = self.env.lookup_function(&func.name).cloned() {
+        if let Some(func_type) = self.env.lookup_function(&func.name) {
             self.env.current_function = Some((func.name.clone(), func_type.clone()));
 
             // 매개변수 바인딩
@@ -127,7 +127,7 @@ impl TypeChecker {
         let body_type = self.infer_expr(&func.body)?;
 
         // 반환 타입과 통일
-        if let Some(Type::Function(_, ret)) = self.env.lookup_function(&func.name).cloned() {
+        if let Some(Type::Function(_, ret)) = self.env.lookup_function(&func.name) {
             self.env.unify(&body_type, &ret, func.span)?;
         }
 
@@ -152,7 +152,7 @@ impl TypeChecker {
                 if let Some(ty) = self.env.lookup_var(name) {
                     Ok(ty.clone())
                 } else if let Some(ty) = self.env.lookup_function(name) {
-                    Ok(ty.clone())
+                    Ok(ty)
                 } else {
                     Err(TypeError::UndefinedVariable {
                         name: name.clone(),
