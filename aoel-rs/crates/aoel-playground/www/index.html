@@ -255,8 +255,17 @@
                     <button data-example="fibonacci">Fibonacci</button>
                     <button data-example="map">Map/Filter</button>
                     <button data-example="reduce">Reduce</button>
+                    <button data-example="primes">Prime Numbers</button>
+                    <button data-example="math">Math Functions</button>
+                    <button data-example="strings">String Operations</button>
                 </div>
             </div>
+            <button id="shareBtn" class="secondary">
+                Share
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
+                </svg>
+            </button>
             <button id="formatBtn" class="secondary">
                 Format
                 <span class="kbd">Ctrl+Shift+F</span>
@@ -374,7 +383,57 @@ print("Product:", product)
 
 // Custom reduce: find max
 max_val = numbers./(numbers[0], _ > _ ? _1 : _2)
-print("Max:", max_val)`
+print("Max:", max_val)`,
+
+            primes: `// Prime number checker
+is_prime(n) = n < 2 ? false : n == 2 ? true : n % 2 == 0 ? false : check_odd(n, 3)
+check_odd(n, i) = i * i > n ? true : n % i == 0 ? false : $(n, i + 2)
+
+// Find primes up to 50
+nums = range(2, 51)
+primes = nums.?(is_prime(_))
+print("Primes up to 50:", primes)
+print("Count:", len(primes))`,
+
+            math: `// Math functions
+print("Math Functions Demo")
+print("==================")
+
+// Basic operations
+x = 16.0
+print("sqrt(16) =", sqrt(x))
+print("pow(2, 10) =", pow(2.0, 10.0))
+
+// Trigonometry
+pi = 3.14159265359
+print("sin(pi/2) =", sin(pi / 2.0))
+print("cos(0) =", cos(0.0))
+
+// Other functions
+print("abs(-42) =", abs(-42))
+print("floor(3.7) =", floor(3.7))
+print("ceil(3.2) =", ceil(3.2))
+print("round(3.5) =", round(3.5))`,
+
+            strings: `// String operations
+name = "AOEL Language"
+
+// Length
+print("String:", name)
+print("Length:", len(name))
+
+// Case conversion
+print("Upper:", upper(name))
+print("Lower:", lower(name))
+
+// Split and join
+words = split(name, " ")
+print("Words:", words)
+print("Joined:", join(words, "-"))
+
+// Contains and replace
+print("Contains 'Lang':", contains(name, "Lang"))
+print("Replaced:", replace(name, "AOEL", "Amazing"))`
         };
 
         let wasmReady = false;
@@ -431,6 +490,37 @@ print("Max:", max_val)`
             editor.value = formatted;
         }
 
+        function shareCode() {
+            const code = document.getElementById('editor').value;
+            const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(code))));
+            const url = `${window.location.origin}${window.location.pathname}?code=${encoded}`;
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(url).then(() => {
+                const status = document.getElementById('status');
+                status.textContent = 'Link copied to clipboard!';
+                setTimeout(() => {
+                    status.textContent = wasmReady ? 'Ready' : 'Loading...';
+                }, 2000);
+            }).catch(() => {
+                // Fallback: show URL in prompt
+                prompt('Share this link:', url);
+            });
+        }
+
+        function loadCodeFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const encodedCode = params.get('code');
+            if (encodedCode) {
+                try {
+                    const code = decodeURIComponent(escape(atob(decodeURIComponent(encodedCode))));
+                    document.getElementById('editor').value = code;
+                } catch (e) {
+                    console.error('Failed to decode shared code:', e);
+                }
+            }
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -449,6 +539,7 @@ print("Max:", max_val)`
         // Event Listeners
         document.getElementById('runBtn').addEventListener('click', runCode);
         document.getElementById('formatBtn').addEventListener('click', formatCode);
+        document.getElementById('shareBtn').addEventListener('click', shareCode);
 
         document.getElementById('editor').addEventListener('keydown', (e) => {
             // Ctrl+Enter to run
@@ -521,6 +612,7 @@ print("Max:", max_val)`
         });
 
         // Initialize
+        loadCodeFromUrl();
         main();
         updateLineInfo();
     </script>
