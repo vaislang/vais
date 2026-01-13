@@ -1,17 +1,17 @@
 # Vais Language Roadmap
 
-> **Vais** = **V**ibe **AI** **S**SW - AI-assisted "vibe coding"을 위한 프로그래밍 언어
+> **Vais** = **V**ibe **AI** **S**cript - AI-assisted "vibe coding"을 위한 프로그래밍 언어
 
 ---
 
-## 🎉 v1.0.0 Released!
+## 🎯 Current Version: v0.0.5
 
 ### 완료된 기능
 
 #### Core Language
 - ✅ **Lexer** - 토큰화, 유니코드 지원
-- ✅ **Parser** - Pratt parser, 연산자 우선순위
-- ✅ **Type Checker** - Hindley-Milner 타입 추론
+- ✅ **Parser** - Pratt parser, 연산자 우선순위, Coalesce (??) 연산자
+- ✅ **Type Checker** - Hindley-Milner 타입 추론, 제네릭 타입 시스템
 - ✅ **IR Lowering** - AST → IR 변환, 최적화
 - ✅ **VM** - 스택 기반 인터프리터, 100+ 내장 함수
 
@@ -26,7 +26,7 @@
 - ✅ **Pattern Matching** - match 표현식, destructuring
 - ✅ **Module System** - import/export, 순환 의존성 감지
 - ✅ **Error Handling** - try/catch, ?, ?? 연산자
-- ✅ **Generic Types** - 타입 파라미터, 타입 추론
+- ✅ **Generic Types** - TypeScheme 기반 다형성, 타입 추론
 
 #### Code Generation
 - ✅ C 코드 생성
@@ -36,8 +36,10 @@
 #### Performance Optimizations
 - ✅ `hash_key()` 효율적 해싱 (10-50x 개선)
 - ✅ Fused operations (MapReduce, FilterReduce 등)
-- ✅ Parallel operations (Rayon)
+- ✅ Parallel operations (Rayon + ParallelContext 최적화)
 - ✅ Native loop optimizations
+- ✅ Checked arithmetic (integer overflow 보호)
+- ✅ Arc-based function sharing
 
 #### Tools
 - ✅ **CLI** - run, build, check, format, repl, debug, profile, doc
@@ -108,12 +110,11 @@
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| **v1.0.0** | 2026-01-13 | Stable release, 프로젝트명 Vais로 변경 |
-| v0.5.0 | 2026-01-12 | Package registry, VS Code extension, Playground |
-| v0.4.0 | 2026-01-11 | REPL, Debugger, Profiler, DocGen |
-| v0.3.0 | 2026-01-10 | Error handling, Generic types |
-| v0.2.0 | 2026-01-09 | Pattern matching, Module system |
-| v0.1.0 | 2026-01-08 | Initial release, Core language, JIT |
+| **v0.0.5** | 2026-01-13 | Generic type system (TypeScheme), Coalesce operator, ParallelContext 최적화 |
+| v0.0.4 | 2026-01-13 | Checked arithmetic, error handling 개선 |
+| v0.0.3 | 2026-01-13 | 프로젝트명 AOEL → Vais 변경, 문서 구조화 (en/ko) |
+| v0.0.2 | 2026-01-12 | Package registry, VS Code extension, Playground |
+| v0.0.1 | 2026-01-11 | Initial release, Core language, JIT |
 
 ---
 
