@@ -1,6 +1,6 @@
-# Vais Language Syntax Guide
+# Vais Syntax Guide
 
-This guide covers the complete syntax of Vais (Vibe AI SSW).
+This guide covers the complete syntax of Vais.
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@ This guide covers the complete syntax of Vais (Vibe AI SSW).
 - [Collection Operations](#collection-operations)
 - [Modules](#modules)
 - [FFI](#ffi)
+- [Best Practices](#best-practices)
 
 ---
 
@@ -92,38 +93,38 @@ numbers = [1, 2, 3]
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `+` | Addition | `5 + 3` → `8` |
-| `-` | Subtraction | `5 - 3` → `2` |
-| `*` | Multiplication | `5 * 3` → `15` |
-| `/` | Division | `10 / 3` → `3` |
-| `%` | Modulo | `10 % 3` → `1` |
-| `-` | Negation (unary) | `-5` → `-5` |
+| `+` | Addition | `5 + 3` = `8` |
+| `-` | Subtraction | `5 - 3` = `2` |
+| `*` | Multiplication | `5 * 3` = `15` |
+| `/` | Division | `10 / 3` = `3` |
+| `%` | Modulo | `10 % 3` = `1` |
+| `-` | Negation (unary) | `-5` |
 
 ### Comparison
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `==` | Equal | `5 == 5` → `true` |
-| `!=` | Not equal | `5 != 3` → `true` |
-| `<` | Less than | `3 < 5` → `true` |
-| `>` | Greater than | `5 > 3` → `true` |
-| `<=` | Less or equal | `5 <= 5` → `true` |
-| `>=` | Greater or equal | `5 >= 3` → `true` |
+| `==` | Equal | `5 == 5` = `true` |
+| `!=` | Not equal | `5 != 3` = `true` |
+| `<` | Less than | `3 < 5` = `true` |
+| `>` | Greater than | `5 > 3` = `true` |
+| `<=` | Less or equal | `5 <= 5` = `true` |
+| `>=` | Greater or equal | `5 >= 3` = `true` |
 
 ### Logical
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `&&` | Logical AND | `true && false` → `false` |
-| `\|\|` | Logical OR | `true \|\| false` → `true` |
-| `!` | Logical NOT | `!true` → `false` |
+| `&&` | Logical AND | `true && false` = `false` |
+| `\|\|` | Logical OR | `true \|\| false` = `true` |
+| `!` | Logical NOT | `!true` = `false` |
 
-### String & Collection
+### String and Collection
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `++` | Concatenation | `"a" ++ "b"` → `"ab"` |
-| `#` | Length | `#[1,2,3]` → `3` |
+| `++` | Concatenation | `"a" ++ "b"` = `"ab"` |
+| `#` | Length | `#[1,2,3]` = `3` |
 
 ---
 
@@ -165,8 +166,8 @@ double = (x) => x * 2
 triple = _ * 3
 
 // Use in collection operations
-[1, 2, 3].@(_ * 2)      // [2, 4, 6]
-[1, 2, 3].@((x) => x * 2)  // same result
+[1, 2, 3].@(_ * 2)        // [2, 4, 6]
+[1, 2, 3].@((x) => x * 2) // same result
 ```
 
 ### Higher-Order Functions
@@ -374,9 +375,11 @@ my-project/
 
 ---
 
-## FFI (Foreign Function Interface)
+## FFI
 
-### Declaring FFI Functions
+### Foreign Function Interface
+
+Declare external C functions:
 
 ```vais
 ffi "c" {
@@ -415,7 +418,16 @@ print(sqrt(16.0))    // 4.0
 
 ---
 
-## Complete Example
+## Best Practices
+
+1. **Use `$` for recursion** - More concise than repeating the function name
+2. **Use `_` in lambdas** - Cleaner for simple transformations
+3. **Chain operations** - Compose `.@`, `.?`, `./` for readable pipelines
+4. **Prefer ternary** - For simple conditionals
+5. **Type annotations** - Add for complex functions (optional but helpful)
+6. **Module organization** - Keep related functions together
+
+### Complete Example
 
 ```vais
 // Module imports
@@ -445,11 +457,8 @@ print("Fibonacci:", [0..10].@(fibonacci(_)))
 
 ---
 
-## Best Practices
+## Related Documentation
 
-1. **Use `$` for recursion** - More concise than function name
-2. **Use `_` in lambdas** - Cleaner for simple transformations
-3. **Chain operations** - Compose `.@`, `.?`, `./` for pipelines
-4. **Prefer ternary** - For simple conditionals
-5. **Type annotations** - Add for complex functions (optional but helpful)
-6. **Module organization** - Keep related functions together
+- [Getting Started](./getting-started.md) - Installation and setup
+- [API Reference](./api.md) - Built-in functions
+- [Examples](./examples.md) - More code examples

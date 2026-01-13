@@ -5,7 +5,7 @@
 
 **Vais** is a programming language designed for AI to generate, modify, and execute code most efficiently. It features a concise syntax optimized for token efficiency while maintaining full expressiveness.
 
-[한국어 문서](README.ko.md) | [Language Guide](docs/syntax.md) | [API Reference](docs/api.md) | [Examples](docs/examples.md)
+[한국어](README.ko.md) | [Documentation](docs/README.md) | [Getting Started](docs/en/getting-started.md) | [Syntax](docs/en/syntax.md) | [API](docs/en/api.md)
 
 ## Features
 

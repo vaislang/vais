@@ -5,7 +5,7 @@
 
 **Vais (Vibe AI Script)**는 AI가 코드를 가장 효율적으로 생성, 수정, 실행할 수 있도록 설계된 프로그래밍 언어입니다. 토큰 효율성에 최적화된 간결한 문법을 제공하면서도 완전한 표현력을 유지합니다.
 
-[English](README.md) | [문법 가이드](docs/syntax.md) | [API 레퍼런스](docs/api.md) | [예제](docs/examples.md)
+[English](README.md) | [문서](docs/README.md) | [시작 가이드](docs/ko/getting-started.md) | [문법](docs/ko/syntax.md) | [API](docs/ko/api.md)
 
 ## 특징
 

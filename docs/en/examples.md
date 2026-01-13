@@ -10,6 +10,7 @@ A collection of practical examples demonstrating Vais's features.
 - [Data Processing](#data-processing)
 - [Algorithms](#algorithms)
 - [Practical Applications](#practical-applications)
+- [Running Examples](#running-examples)
 
 ---
 
@@ -497,3 +498,11 @@ vais run example.vais --jit
 # Interactive REPL
 vais repl
 ```
+
+---
+
+## Related Documentation
+
+- [Getting Started](./getting-started.md) - Installation and setup
+- [Syntax Guide](./syntax.md) - Language syntax reference
+- [API Reference](./api.md) - Built-in functions
