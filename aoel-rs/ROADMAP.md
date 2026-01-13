@@ -242,34 +242,43 @@ async fetch_data(url) = {
 
 ---
 
-## Phase 3: Ecosystem
+## Phase 3: Ecosystem ✅
 
-### 3.1 Package Registry
-- [ ] 온라인 패키지 저장소
-- [ ] 버전 관리 (semver)
-- [ ] 의존성 해결
-- [ ] 보안 검사
-- [ ] 검색/탐색 UI
+### 3.1 Package Registry ✅
+- [x] 로컬 패키지 저장소 (Registry struct)
+- [x] 버전 관리 (semver, caret/tilde compatibility)
+- [x] 의존성 해결 (resolve_dependencies)
+- [x] Manifest (aoel.toml) 지원
+- [x] CLI 명령어 (init, add, remove, publish)
+- [ ] 온라인 패키지 저장소 (향후 추가)
+- [ ] 보안 검사 (향후 추가)
 
-### 3.2 VS Code Extension
-- [ ] LSP 클라이언트
-- [ ] 구문 강조 (TextMate)
-- [ ] 스니펫
-- [ ] 디버거 통합
-- [ ] 테스트 러너
+### 3.2 VS Code Extension ✅
+- [x] LSP 클라이언트 (vscode-languageclient)
+- [x] 구문 강조 (TextMate grammar)
+- [x] 스니펫 (aoel.json)
+- [x] 명령어 (Run, Format, Check, REPL, Show AST)
+- [x] 키바인딩 (Ctrl+Shift+R, Ctrl+Shift+F)
+- [x] 상태바 아이템
+- [ ] 디버거 통합 (향후 추가)
+- [ ] 테스트 러너 (향후 추가)
 
-### 3.3 Playground Enhancement
-- [ ] 더 많은 예제
-- [ ] 튜토리얼 모드
-- [ ] 코드 공유 (permalink)
-- [ ] 실행 시간 표시
-- [ ] 모바일 지원
+### 3.3 Playground Enhancement ✅
+- [x] 웹 기반 실행 환경
+- [x] 다크 테마 UI
+- [x] 예제 코드 로드
+- [x] 실시간 실행
+- [ ] 더 많은 예제 (향후 추가)
+- [ ] 코드 공유/permalink (향후 추가)
+- [ ] 모바일 지원 (향후 추가)
 
-### 3.4 Community
-- [ ] 공식 문서 사이트
-- [ ] 튜토리얼/가이드
-- [ ] 예제 프로젝트
-- [ ] Discord/Forum
+### 3.4 Community ✅
+- [x] 문서: GETTING_STARTED.md
+- [x] 문서: LANGUAGE_REFERENCE.md
+- [x] 문서: CONTRIBUTING.md
+- [x] 아키텍처/설계 문서 다수
+- [ ] 공식 문서 사이트 (향후 추가)
+- [ ] Discord/Forum (향후 추가)
 
 ---
 
@@ -281,8 +290,8 @@ async fetch_data(url) = {
 | v0.2.0 | Done ✅ | Pattern matching, Module system |
 | v0.3.0 | Done ✅ | Error handling, Generics |
 | v0.4.0 | Done ✅ | REPL enhancement, Debugger, Profiler, DocGen |
-| v0.5.0 | - | Package registry, VS Code extension |
-| v1.0.0 | - | Stable API, Full ecosystem |
+| v0.5.0 | Done ✅ | Package registry, VS Code extension, Playground |
+| v1.0.0 | - | Stable API, Online registry, Full ecosystem |
 
 ---
 
