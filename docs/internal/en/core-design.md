@@ -7,8 +7,8 @@
 
 ## Overview
 
-이 문서는 Vais 코어 언어의 설계 원칙을 정의합니다.
-코어는 **절대 변경되지 않아야 할 부분**으로, 신중하게 설계되어야 합니다.
+This document defines the design principles for the Vais core language.
+The core is the part that **should never change**, so it must be designed carefully.
 
 ---
 
@@ -17,47 +17,47 @@
 ### 1. Minimal but Complete
 
 ```
-코어에 포함되는 것:
-✅ 기본 타입 (i, f, s, b, [T], {K:V}, ?T)
-✅ 기본 연산자 (+, -, *, /, %, ==, !=, <, >, etc.)
-✅ 제어 흐름 (조건, 반복 표현)
-✅ 함수 정의/호출
-✅ 모듈 시스템 기초
-✅ 에러 처리 기초
+Included in core:
+✅ Basic types (i, f, s, b, [T], {K:V}, ?T)
+✅ Basic operators (+, -, *, /, %, ==, !=, <, >, etc.)
+✅ Control flow (conditional, loop expressions)
+✅ Function definition/calls
+✅ Module system basics
+✅ Error handling basics
 
-코어에 포함되지 않는 것:
-❌ 파일 I/O (std.io)
-❌ 네트워크 (std.net)
-❌ 데이터 포맷 (std.json)
-❌ 고급 자료구조 (std.collections)
-❌ 비동기 (std.async)
+NOT included in core:
+❌ File I/O (std.io)
+❌ Networking (std.net)
+❌ Data formats (std.json)
+❌ Advanced data structures (std.collections)
+❌ Async (std.async)
 ```
 
 ### 2. Orthogonal Design
 
-각 기능은 독립적이고, 조합 가능해야 합니다.
+Each feature should be independent and composable.
 
 ```vais
-# 모든 것이 표현식
-result = if cond { a } else { b }  # 조건도 표현식
-value = { let x = 1; x + 2 }       # 블록도 표현식
+# Everything is an expression
+result = if cond { a } else { b }  # Conditional is expression
+value = { let x = 1; x + 2 }       # Block is expression
 
-# 연산자는 일관되게 동작
-[1,2,3].@(_*2)      # 배열에 map
-"abc".@(_.up)       # 문자열에 map (각 문자)
-{a:1,b:2}.@(_*2)    # 맵의 값에 map
+# Operators work consistently
+[1,2,3].@(_*2)      # Map over array
+"abc".@(_.up)       # Map over string (each character)
+{a:1,b:2}.@(_*2)    # Map over map values
 ```
 
 ### 3. Explicit over Implicit
 
 ```vais
-# 타입은 명시하거나 추론 가능해야 함
-add(a, b) = a + b           # OK: 사용처에서 추론
-add(a:i, b:i) = a + b       # OK: 명시적 타입
+# Types are specified or inferable
+add(a, b) = a + b           # OK: inferred from usage
+add(a:i, b:i) = a + b       # OK: explicit types
 
-# 부작용은 명시적
-fn pure_fn(x) = x * 2       # 순수 함수
-fn io_fn(path) = !{         # ! = 부작용 있음
+# Side effects are explicit
+fn pure_fn(x) = x * 2       # Pure function
+fn io_fn(path) = !{         # ! = has side effects
     read_file(path)
 }
 ```
@@ -65,13 +65,13 @@ fn io_fn(path) = !{         # ! = 부작용 있음
 ### 4. Predictable Performance
 
 ```vais
-# 비용이 명확해야 함
-arr.@(_*2)           # O(n) - 선형
-arr.sort             # O(n log n) - 명확
-arr.?(_>0).@(_*2)    # O(n) - 한 번 순회로 최적화 가능
+# Costs should be clear
+arr.@(_*2)           # O(n) - linear
+arr.sort             # O(n log n) - clear
+arr.?(_>0).@(_*2)    # O(n) - can be optimized to single pass
 
-# 숨겨진 비용 없음
-# (Python의 `in`이 list는 O(n), set은 O(1)인 것과 달리)
+# No hidden costs
+# (Unlike Python where `in` is O(n) for list, O(1) for set)
 ```
 
 ---
@@ -169,16 +169,16 @@ impl Eq for User {
 ### Everything is an Expression
 
 ```vais
-# 조건문도 표현식
+# Conditionals are expressions
 x = if a > b { a } else { b }
 
-# 블록도 표현식
+# Blocks are expressions
 y = {
     let temp = compute()
     temp * 2
 }
 
-# match도 표현식
+# Match is expression
 result = match status {
     Pending => "waiting",
     Active(s) => "active since " + s.str,
@@ -432,11 +432,11 @@ mod math
 # Public by default: pub
 pub pi = 3.14159265359
 
-pub fn sin(x: f) -> f = ...
-pub fn cos(x: f) -> f = ...
+pub sin(x: f) -> f = ...
+pub cos(x: f) -> f = ...
 
 # Private (not exported)
-priv fn helper() = ...
+priv helper() = ...
 ```
 
 ### Import
@@ -552,7 +552,7 @@ data = fetch_data("https://api.example.com").await?
 
 ## Reserved for Future
 
-다음 기능은 코어에 예약되어 있지만, 초기 버전에서는 구현하지 않습니다:
+The following features are reserved in the core but not implemented in the initial version:
 
 ```
 # Macros (future)
@@ -624,15 +624,15 @@ Rationale:
 
 ## Summary
 
-Vais 코어 설계 원칙:
+Vais core design principles:
 
-| 원칙 | 설명 |
-|------|------|
-| Minimal | 필수 기능만 코어에 |
-| Orthogonal | 기능들이 독립적으로 조합 |
-| Explicit | 암묵적 동작 최소화 |
-| Expression | 모든 것이 값을 반환 |
-| Type Safe | 컴파일 타임 타입 체크 |
-| Extensible | 코어 변경 없이 확장 가능 |
+| Principle | Description |
+|-----------|-------------|
+| Minimal | Only essential features in core |
+| Orthogonal | Features combine independently |
+| Explicit | Minimize implicit behavior |
+| Expression | Everything returns a value |
+| Type Safe | Compile-time type checking |
+| Extensible | Extendable without core changes |
 
-**코어가 안정되면, 생태계가 성장합니다.**
+**Once the core is stable, the ecosystem grows.**

@@ -1,13 +1,13 @@
-# Vais Extension Guide
+# Vais 확장 가이드
 
-**Version:** 1.0.0
-**Date:** 2026-01-12
+**버전:** 1.0.0
+**날짜:** 2026-01-12
 
 **"누구나 Vais을 확장할 수 있습니다"**
 
 ---
 
-## Overview
+## 개요
 
 이 가이드는 Vais 생태계에 기여하고자 하는 **개발자를 위한 문서**입니다.
 
@@ -45,7 +45,7 @@ my-first-lib/
 name = "my-first-lib"
 version = "0.1.0"
 edition = "2026"
-description = "My first Vais library"
+description = "내 첫 번째 Vais 라이브러리"
 license = "MIT"
 ```
 
@@ -55,7 +55,7 @@ license = "MIT"
 mod my_first_lib
 
 # Public 함수
-pub fn greet(name: s) -> s = "Hello, " + name + "!"
+pub greet(name: s) -> s = "Hello, " + name + "!"
 
 # Public 타입
 pub type User = {
@@ -64,7 +64,7 @@ pub type User = {
 }
 
 # Public 함수 with 타입
-pub fn create_user(name: s, age: i) -> User = {
+pub create_user(name: s, age: i) -> User = {
     User { name: name, age: age }
 }
 ```
@@ -75,12 +75,12 @@ use std.test
 use my_first_lib.{greet, create_user}
 
 #[test]
-fn test_greet() {
+test_greet() = {
     assert_eq(greet("World"), "Hello, World!")
 }
 
 #[test]
-fn test_create_user() {
+test_create_user() = {
     user = create_user("John", 30)
     assert_eq(user.name, "John")
     assert_eq(user.age, 30)
@@ -101,25 +101,25 @@ vais build
 
 ```vais
 # Good - 동사로 시작하는 액션
-pub fn get_user(id: i) -> ?User
-pub fn create_user(data: UserInput) -> !User
-pub fn update_user(id: i, data: UserInput) -> !User
-pub fn delete_user(id: i) -> !void
+pub get_user(id: i) -> ?User
+pub create_user(data: UserInput) -> !User
+pub update_user(id: i, data: UserInput) -> !User
+pub delete_user(id: i) -> !void
 
 # Good - is/has로 시작하는 불리언
-pub fn is_valid(data) -> b
-pub fn has_permission(user, action) -> b
+pub is_valid(data) -> b
+pub has_permission(user, action) -> b
 
 # Bad - 불명확한 이름
-pub fn user(id: i)        # get? create? delete?
-pub fn check(data)        # 뭘 체크?
+pub user(id: i)        # get? create? delete?
+pub check(data)        # 뭘 체크?
 ```
 
 #### 에러 처리
 
 ```vais
 # Result 타입으로 실패 가능성 명시
-pub fn parse_config(path: s) -> !Config = {
+pub parse_config(path: s) -> !Config = {
     content = fs.read(path)?           # 파일 에러 전파
     config = json.parse(content)?      # 파싱 에러 전파
     validate(config)?                  # 검증 에러 전파
@@ -132,17 +132,17 @@ pub type ConfigError =
     | ParseError(line: i, msg: s)
     | ValidationError(field: s, msg: s)
 
-pub fn parse_config(path: s) -> Result<Config, ConfigError>
+pub parse_config(path: s) -> Result<Config, ConfigError>
 ```
 
 #### Option 사용
 
 ```vais
 # 없을 수 있는 값은 Option으로
-pub fn find_user(id: i) -> ?User
+pub find_user(id: i) -> ?User
 
 # 기본값 제공
-pub fn get_user_or_default(id: i, default: User) -> User = {
+pub get_user_or_default(id: i, default: User) -> User = {
     find_user(id) ?? default
 }
 ```
@@ -158,7 +158,7 @@ pub type RequestBuilder = {
     timeout: ?Duration,
 }
 
-pub fn request(url: s) -> RequestBuilder = {
+pub request(url: s) -> RequestBuilder = {
     RequestBuilder {
         url: url,
         method: "GET",
@@ -169,14 +169,14 @@ pub fn request(url: s) -> RequestBuilder = {
 }
 
 impl RequestBuilder {
-    pub fn method(self, m: s) -> Self = { ...self, method: m }
-    pub fn header(self, k: s, v: s) -> Self = {
+    pub method(self, m: s) -> Self = { ...self, method: m }
+    pub header(self, k: s, v: s) -> Self = {
         ...self,
         headers: { ...self.headers, [k]: v }
     }
-    pub fn body(self, b: s) -> Self = { ...self, body: some(b) }
-    pub fn timeout(self, t: Duration) -> Self = { ...self, timeout: some(t) }
-    pub fn send(self) -> !Response = { ... }
+    pub body(self, b: s) -> Self = { ...self, body: some(b) }
+    pub timeout(self, t: Duration) -> Self = { ...self, timeout: some(t) }
+    pub send(self) -> !Response = { ... }
 }
 
 # 사용
@@ -208,7 +208,7 @@ response = request("https://api.example.com")
 /// user = create_user("John", 30)?
 /// assert_eq(user.name, "John")
 /// ```
-pub fn create_user(name: s, age: i) -> !User = {
+pub create_user(name: s, age: i) -> !User = {
     if age < 0 {
         err(ValidationError("age", "must be non-negative"))
     } else {
@@ -286,22 +286,22 @@ pub type Error =
     | OpenError(msg: s)
     | QueryError(msg: s)
 
-pub fn open(path: s) -> !Database = {
+pub open(path: s) -> !Database = {
     mut db: *c.sqlite3 = nil
     result = c.sqlite3_open(path.c_str(), &db)
     if result != 0 {
-        err(OpenError("Failed to open database: " + path))
+        err(OpenError("데이터베이스 열기 실패: " + path))
     } else {
         ok(Database { handle: db })
     }
 }
 
 impl Database {
-    pub fn close(self) = {
+    pub close(self) = {
         c.sqlite3_close(self.handle)
     }
 
-    pub fn execute(self, sql: s) -> !void = {
+    pub execute(self, sql: s) -> !void = {
         mut errmsg: *i8 = nil
         result = c.sqlite3_exec(self.handle, sql.c_str(), nil, nil, &errmsg)
         if result != 0 {
@@ -313,7 +313,7 @@ impl Database {
         }
     }
 
-    pub fn query(self, sql: s) -> ![[s]] = {
+    pub query(self, sql: s) -> ![[s]] = {
         # 구현...
     }
 }
@@ -377,25 +377,25 @@ pub type Array = {
     inner: python.np.ndarray,
 }
 
-pub fn array(data: [f]) -> Array = {
+pub array(data: [f]) -> Array = {
     Array { inner: python.np.array(data) }
 }
 
-pub fn zeros(rows: i, cols: i) -> Array = {
+pub zeros(rows: i, cols: i) -> Array = {
     Array { inner: python.np.zeros((rows, cols)) }
 }
 
 impl Array {
-    pub fn shape(self) -> (i, i) = self.inner.shape
+    pub shape(self) -> (i, i) = self.inner.shape
 
-    pub fn sum(self) -> f = python.np.sum(self.inner)
-    pub fn mean(self) -> f = python.np.mean(self.inner)
+    pub sum(self) -> f = python.np.sum(self.inner)
+    pub mean(self) -> f = python.np.mean(self.inner)
 
-    pub fn reshape(self, rows: i, cols: i) -> Array = {
+    pub reshape(self, rows: i, cols: i) -> Array = {
         Array { inner: python.np.reshape(self.inner, (rows, cols)) }
     }
 
-    pub fn T(self) -> Array = {
+    pub T(self) -> Array = {
         Array { inner: python.np.transpose(self.inner) }
     }
 
@@ -516,7 +516,7 @@ impl Rule for NoTodoComments {
             if comment.text.has("TODO") || comment.text.has("FIXME") {
                 diagnostics.push(Diagnostic {
                     severity: Severity.Warning,
-                    message: "TODO/FIXME comment found",
+                    message: "TODO/FIXME 주석이 발견됨",
                     span: comment.span,
                     suggestion: nil,
                 })
@@ -622,14 +622,14 @@ fn read_file(path: &Path) -> Result<String, io::Error> {
 }
 
 // Good - 문서화
-/// Parses the given source code into an AST.
+/// 주어진 소스 코드를 AST로 파싱합니다.
 ///
 /// # Arguments
-/// * `source` - The source code to parse
+/// * `source` - 파싱할 소스 코드
 ///
 /// # Returns
-/// * `Ok(AST)` - Successfully parsed AST
-/// * `Err(ParseError)` - Parse error with location
+/// * `Ok(AST)` - 성공적으로 파싱된 AST
+/// * `Err(ParseError)` - 위치 정보가 포함된 파싱 에러
 pub fn parse(source: &str) -> Result<AST, ParseError> {
     // ...
 }
@@ -673,7 +673,7 @@ pub fn parse(source: &str) -> Result<AST, ParseError> {
 
 ---
 
-## Quick Reference
+## 빠른 참조
 
 ### 패키지 만들기
 ```bash

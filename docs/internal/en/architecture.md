@@ -8,13 +8,13 @@
 
 ## Vision
 
-**"AI 시대의 Python"**
+**"The Python of the AI Era"**
 
-Python이 인간 친화적 문법으로 성공했듯이,
-Vais은 **AI 친화적 문법 + 확장 가능한 생태계**로 성공한다.
+Just as Python succeeded with human-friendly syntax,
+Vais succeeds with **AI-friendly syntax + extensible ecosystem**.
 
 ```
-Vais = 작은 코어 + 강력한 확장성 + 커뮤니티 생태계
+Vais = Small Core + Powerful Extensibility + Community Ecosystem
 ```
 
 ---
@@ -39,31 +39,31 @@ Vais = 작은 코어 + 강력한 확장성 + 커뮤니티 생태계
 └─────────────────────────────────────────────────────┘
 ```
 
-**원칙:**
-- 코어는 최소한으로 유지 (변경 어려움)
-- 대부분의 기능은 라이브러리로 구현
-- 코어 변경 없이 언어 확장 가능
+**Principles:**
+- Keep the core minimal (hard to change)
+- Implement most features as libraries
+- Enable language extension without core changes
 
 ### 2. Everything is a Package
 
-```
-# 언어 기능도 패키지로 제공 가능
-use std.async      # async/await 지원
-use std.macro      # 매크로 시스템
-use std.typing     # 고급 타입 기능
+```vais
+# Language features can also be provided as packages
+use std.async      # async/await support
+use std.macro      # macro system
+use std.typing     # advanced type features
 ```
 
 ### 3. Zero-Cost Abstraction
 
-```
-# 사용하지 않는 기능은 비용 0
-# 필요한 것만 import하면 최적화됨
+```vais
+# Unused features have zero cost
+# Only imported items are optimized
 ```
 
 ### 4. FFI First-Class
 
-```
-# 기존 생태계 활용 가능
+```vais
+# Leverage existing ecosystems
 use ffi.python.numpy as np
 use ffi.rust.tokio as async_rt
 use ffi.c.sqlite as db
@@ -116,11 +116,11 @@ mod math
 pub pi = 3.14159265359
 pub e = 2.71828182846
 
-pub fn sin(x) = ...
-pub fn cos(x) = ...
+pub sin(x) = ...
+pub cos(x) = ...
 
 # Private helper (not exported)
-fn taylor_series(x, n) = ...
+taylor_series(x, n) = ...
 ```
 
 ### Module Usage
@@ -182,7 +182,7 @@ python = ["numpy", "pandas"]   # Python interop
 rust = ["tokio"]               # Rust interop
 ```
 
-### Package Registry (apm - Vais Package Manager)
+### Package Registry (vais Package Manager)
 
 ```bash
 # Initialize project
@@ -222,15 +222,15 @@ registry.vais.dev/
 
 ### Design Goals
 
-1. **기존 생태계 활용** - Python, Rust, C 라이브러리 호출
-2. **양방향 통신** - Vais에서 호출 & 외부에서 Vais 호출
-3. **타입 안전성** - 자동 타입 변환 및 검증
-4. **최소 오버헤드** - 효율적인 데이터 전달
+1. **Leverage existing ecosystems** - Call Python, Rust, C libraries
+2. **Bidirectional communication** - Call from Vais & call Vais from outside
+3. **Type safety** - Automatic type conversion and validation
+4. **Minimal overhead** - Efficient data transfer
 
 ### C FFI
 
 ```vais
-# C 함수 선언
+# C function declaration
 ffi c {
     # libc
     fn malloc(size: usize) -> *void
@@ -241,14 +241,14 @@ ffi c {
     fn my_function(a: i32, b: i32) -> i32
 }
 
-# 사용
+# Usage
 result = c.my_function(10, 20)
 ```
 
 ### Rust FFI
 
 ```vais
-# Rust crate 연동
+# Rust crate integration
 ffi rust {
     @crate("tokio", version = "1.0")
     mod async_runtime {
@@ -257,14 +257,14 @@ ffi rust {
     }
 }
 
-# 사용
+# Usage
 handle = rust.async_runtime.spawn(my_async_fn())
 ```
 
 ### Python FFI
 
 ```vais
-# Python 라이브러리 연동
+# Python library integration
 ffi python {
     @module("numpy")
     mod np {
@@ -280,7 +280,7 @@ ffi python {
     }
 }
 
-# 사용
+# Usage
 arr = python.np.array([1.0, 2.0, 3.0])
 df = python.pd.read_csv("data.csv")
 ```
@@ -304,22 +304,22 @@ s                  char*               String              str
 ### Memory Safety
 
 ```vais
-# 자동 메모리 관리
+# Automatic memory management
 ffi c {
-    @managed  # Vais GC가 관리
+    @managed  # Managed by Vais GC
     fn create_buffer(size: i) -> *Buffer
 
-    @manual   # 수동 해제 필요
+    @manual   # Manual release required
     fn raw_alloc(size: i) -> *void
 }
 
-# managed는 자동 해제
+# managed is auto-released
 buf = c.create_buffer(1024)
-# scope 끝나면 자동 해제
+# auto-released when scope ends
 
-# manual은 명시적 해제
+# manual requires explicit release
 ptr = c.raw_alloc(1024)
-defer c.free(ptr)  # 명시적 해제
+defer c.free(ptr)  # explicit release
 ```
 
 ---
@@ -330,65 +330,65 @@ defer c.free(ptr)  # 명시적 해제
 
 ```
 std/
-├── core/              # 언어 기본 (자동 import)
-│   ├── types.vais     # 기본 타입 정의
-│   ├── ops.vais       # 연산자 트레잇
-│   └── prelude.vais   # 기본 함수들
+├── core/              # Language basics (auto-imported)
+│   ├── types.vais     # Basic type definitions
+│   ├── ops.vais       # Operator traits
+│   └── prelude.vais   # Basic functions
 │
-├── io/                # 입출력
-│   ├── file.vais      # 파일 읽기/쓰기
-│   ├── stdin.vais     # 표준 입력
-│   ├── stdout.vais    # 표준 출력
-│   └── path.vais      # 경로 처리
+├── io/                # Input/Output
+│   ├── file.vais      # File read/write
+│   ├── stdin.vais     # Standard input
+│   ├── stdout.vais    # Standard output
+│   └── path.vais      # Path handling
 │
-├── net/               # 네트워킹
-│   ├── http.vais      # HTTP 클라이언트/서버
-│   ├── tcp.vais       # TCP 소켓
-│   ├── udp.vais       # UDP 소켓
-│   └── url.vais       # URL 파싱
+├── net/               # Networking
+│   ├── http.vais      # HTTP client/server
+│   ├── tcp.vais       # TCP socket
+│   ├── udp.vais       # UDP socket
+│   └── url.vais       # URL parsing
 │
-├── data/              # 데이터 포맷
+├── data/              # Data formats
 │   ├── json.vais      # JSON
 │   ├── csv.vais       # CSV
 │   ├── toml.vais      # TOML
 │   └── xml.vais       # XML
 │
-├── text/              # 텍스트 처리
-│   ├── regex.vais     # 정규표현식
-│   ├── fmt.vais       # 포매팅
-│   └── encoding.vais  # 인코딩
+├── text/              # Text processing
+│   ├── regex.vais     # Regular expressions
+│   ├── fmt.vais       # Formatting
+│   └── encoding.vais  # Encoding
 │
-├── time/              # 시간
-│   ├── datetime.vais  # 날짜/시간
-│   ├── duration.vais  # 기간
-│   └── timezone.vais  # 타임존
+├── time/              # Time
+│   ├── datetime.vais  # Date/Time
+│   ├── duration.vais  # Duration
+│   └── timezone.vais  # Timezone
 │
-├── math/              # 수학
-│   ├── basic.vais     # 기본 수학
-│   ├── random.vais    # 난수
-│   └── stats.vais     # 통계
+├── math/              # Mathematics
+│   ├── basic.vais     # Basic math
+│   ├── random.vais    # Random numbers
+│   └── stats.vais     # Statistics
 │
-├── collections/       # 자료구조
-│   ├── list.vais      # 리스트 확장
-│   ├── set.vais       # 집합
-│   ├── map.vais       # 맵 확장
-│   ├── queue.vais     # 큐
-│   └── heap.vais      # 힙
+├── collections/       # Data structures
+│   ├── list.vais      # List extensions
+│   ├── set.vais       # Set
+│   ├── map.vais       # Map extensions
+│   ├── queue.vais     # Queue
+│   └── heap.vais      # Heap
 │
-├── async/             # 비동기
+├── async/             # Asynchronous
 │   ├── future.vais    # Future/Promise
-│   ├── channel.vais   # 채널
-│   └── spawn.vais     # 태스크 생성
+│   ├── channel.vais   # Channel
+│   └── spawn.vais     # Task creation
 │
-├── test/              # 테스팅
-│   ├── assert.vais    # 어설션
-│   ├── mock.vais      # 모킹
-│   └── bench.vais     # 벤치마크
+├── test/              # Testing
+│   ├── assert.vais    # Assertions
+│   ├── mock.vais      # Mocking
+│   └── bench.vais     # Benchmarking
 │
-└── sys/               # 시스템
-    ├── env.vais       # 환경변수
-    ├── process.vais   # 프로세스
-    └── os.vais        # OS 정보
+└── sys/               # System
+    ├── env.vais       # Environment variables
+    ├── process.vais   # Process
+    └── os.vais        # OS info
 ```
 
 ### Usage Examples
@@ -398,14 +398,14 @@ use std.io.{read_file, write_file}
 use std.net.http.{get, post}
 use std.data.json.{parse, stringify}
 
-# 파일 읽기
+# File reading
 content = read_file("data.txt")?
 
-# HTTP 요청
+# HTTP request
 response = get("https://api.example.com/data")?
 data = parse(response.body)?
 
-# 파일 쓰기
+# File writing
 write_file("output.json", stringify(data))?
 ```
 
@@ -416,17 +416,17 @@ write_file("output.json", stringify(data))?
 ### 1. Custom Operators
 
 ```vais
-# 연산자 정의 (패키지에서)
+# Operator definition (in package)
 mod matrix
 
 pub type Matrix = [[f]]
 
-# 행렬 곱셈 연산자
+# Matrix multiplication operator
 pub op (a: Matrix) ** (b: Matrix) -> Matrix {
-    # 구현
+    # implementation
 }
 
-# 사용
+# Usage
 use matrix.{Matrix, **}
 result = mat_a ** mat_b
 ```
@@ -434,7 +434,7 @@ result = mat_a ** mat_b
 ### 2. Custom Syntax (Macros)
 
 ```vais
-# 매크로 정의
+# Macro definition
 mod html
 
 pub macro html! {
@@ -444,7 +444,7 @@ pub macro html! {
     }
 }
 
-# 사용
+# Usage
 use html.html!
 
 page = html! {
@@ -458,7 +458,7 @@ page = html! {
 ### 3. Custom Types with Traits
 
 ```vais
-# 트레잇 정의
+# Trait definition
 mod iter
 
 pub trait Iterable<T> {
@@ -469,7 +469,7 @@ pub trait Mappable<T> {
     fn map<U>(self, f: T -> U) -> Self<U>
 }
 
-# 커스텀 타입에 구현
+# Implement for custom type
 mod my_collection
 
 use iter.{Iterable, Mappable}
@@ -490,9 +490,9 @@ impl Mappable<T> for MyList<T> {
 ```toml
 # vais.toml
 [plugins]
-lint = "vais-clippy"           # 코드 린트
-optimize = "vais-optimize"     # 추가 최적화
-codegen = "vais-native"        # 네이티브 컴파일
+lint = "vais-clippy"           # Code lint
+optimize = "vais-optimize"     # Additional optimization
+codegen = "vais-native"        # Native compilation
 ```
 
 ---
@@ -503,48 +503,48 @@ codegen = "vais-native"        # 네이티브 컴파일
 
 ```
 Vais Organization
-├── Core Team              # 언어 핵심 개발
-│   ├── Language Design    # 문법, 타입 시스템
+├── Core Team              # Core language development
+│   ├── Language Design    # Syntax, type system
 │   ├── Runtime            # VM, GC
 │   └── Tooling            # CLI, LSP
 │
-├── Library Team           # 표준 라이브러리
+├── Library Team           # Standard library
 │   ├── std.io
 │   ├── std.net
 │   └── ...
 │
-├── Community Team         # 커뮤니티 관리
+├── Community Team         # Community management
 │   ├── Documentation
 │   ├── Education
 │   └── Events
 │
-└── Package Registry       # 패키지 레지스트리 운영
+└── Package Registry       # Package registry operations
 ```
 
 ### RFC Process (Request for Comments)
 
 ```
 1. Idea          → GitHub Discussion
-2. Pre-RFC       → 초기 논의
-3. RFC           → 정식 제안서
-4. Review        → 커뮤니티 리뷰
+2. Pre-RFC       → Initial discussion
+3. RFC           → Formal proposal
+4. Review        → Community review
 5. FCP           → Final Comment Period
-6. Accepted      → 구현 시작
-7. Implemented   → 릴리즈
+6. Accepted      → Implementation begins
+7. Implemented   → Release
 ```
 
 ### Versioning
 
 ```
-Vais 버전 체계:
-- Major: 호환성 깨지는 변경 (드묾)
-- Minor: 새 기능 추가 (하위 호환)
-- Patch: 버그 수정
+Vais version scheme:
+- Major: Breaking changes (rare)
+- Minor: New features (backward compatible)
+- Patch: Bug fixes
 
-Edition 시스템 (Rust 참고):
-- Edition 2026: 초기 버전
-- Edition 2027: 개선 버전
-- 이전 Edition 코드도 계속 동작
+Edition system (inspired by Rust):
+- Edition 2026: Initial version
+- Edition 2027: Improved version
+- Previous edition code continues to work
 ```
 
 ---
@@ -559,16 +559,16 @@ use web.{App, route, get, post}
 app = App.new()
 
 @get("/")
-fn index(req) = "Hello, Vais!"
+index(req) = "Hello, Vais!"
 
 @get("/users/:id")
-fn get_user(req) = {
+get_user(req) = {
     id = req.params.id
     User.find(id)?
 }
 
 @post("/users")
-fn create_user(req) = {
+create_user(req) = {
     data = req.json()?
     User.create(data)?
 }
@@ -582,17 +582,17 @@ app.run(port=8080)
 use data.{DataFrame, Series}
 use data.plot
 
-# 데이터 로드
+# Load data
 df = DataFrame.read_csv("sales.csv")
 
-# 데이터 처리
+# Data processing
 result = df
     .?(_["region"] == "Asia")
     .@{ _["revenue"] * _["quantity"] }
     .groupby("product")
     .sum()
 
-# 시각화
+# Visualization
 plot.bar(result, x="product", y="total")
     .title("Asia Revenue by Product")
     .save("chart.png")
@@ -604,18 +604,18 @@ plot.bar(result, x="product", y="total")
 use ml.{Model, train, predict}
 use ml.nn.{Dense, Sequential}
 
-# 모델 정의
+# Model definition
 model = Sequential([
     Dense(128, activation="relu"),
     Dense(64, activation="relu"),
     Dense(10, activation="softmax")
 ])
 
-# 학습
+# Training
 model.compile(optimizer="adam", loss="cross_entropy")
 model.fit(x_train, y_train, epochs=10)
 
-# 예측
+# Prediction
 predictions = model.predict(x_test)
 ```
 
@@ -623,7 +623,7 @@ predictions = model.predict(x_test)
 
 ## Implementation Priority
 
-### Phase 1: Core (Month 1-2)
+### Phase 1: Core
 ```
 [x] Language Spec (v6b)
 [ ] Lexer
@@ -634,7 +634,7 @@ predictions = model.predict(x_test)
 [ ] Basic CLI
 ```
 
-### Phase 2: Foundation (Month 2-3)
+### Phase 2: Foundation
 ```
 [ ] Module System
 [ ] Package Manager (basic)
@@ -643,14 +643,14 @@ predictions = model.predict(x_test)
 [ ] std.collections
 ```
 
-### Phase 3: FFI (Month 3-4)
+### Phase 3: FFI
 ```
 [ ] C FFI
 [ ] Rust FFI
 [ ] Python FFI
 ```
 
-### Phase 4: Ecosystem (Month 4-6)
+### Phase 4: Ecosystem
 ```
 [ ] Package Registry
 [ ] Documentation Site
@@ -659,7 +659,7 @@ predictions = model.predict(x_test)
 [ ] std.async
 ```
 
-### Phase 5: Community (Month 6+)
+### Phase 5: Community
 ```
 [ ] Community Guidelines
 [ ] RFC Process
@@ -671,8 +671,8 @@ predictions = model.predict(x_test)
 
 ## Success Metrics
 
-| Metric | Target (1년) | Target (3년) |
-|--------|-------------|--------------|
+| Metric | Target (1 year) | Target (3 years) |
+|--------|-----------------|------------------|
 | GitHub Stars | 1,000+ | 10,000+ |
 | Packages | 50+ | 500+ |
 | Contributors | 20+ | 100+ |
@@ -683,20 +683,20 @@ predictions = model.predict(x_test)
 
 ## Summary
 
-Vais의 성공 공식:
+Vais success formula:
 
 ```
-작은 코어 (안정적, 변경 어려움)
+Small Core (stable, hard to change)
     +
-강력한 FFI (기존 생태계 활용)
+Powerful FFI (leverage existing ecosystems)
     +
-쉬운 패키지 시스템 (누구나 확장)
+Easy Package System (anyone can extend)
     +
-좋은 문서 (진입장벽 낮춤)
+Good Documentation (lower entry barrier)
     +
-커뮤니티 거버넌스 (함께 성장)
+Community Governance (grow together)
     =
-지속 가능한 생태계
+Sustainable Ecosystem
 ```
 
-**Python이 30년 걸린 것을 AI 시대에는 더 빠르게 달성할 수 있습니다.**
+**What Python took 30 years to achieve, we can accomplish faster in the AI era.**

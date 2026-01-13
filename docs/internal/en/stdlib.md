@@ -7,14 +7,14 @@
 
 ## Overview
 
-표준 라이브러리는 **Vais의 기본 도구 상자**입니다.
+The standard library is **Vais's basic toolbox**.
 
 ```
-설계 원칙:
-1. 필수적인 것만 포함 (과하지 않게)
-2. 일관된 API 설계
-3. 성능과 안전성 균형
-4. 문서화 철저히
+Design Principles:
+1. Include only essentials (not too much)
+2. Consistent API design
+3. Balance between performance and safety
+4. Thorough documentation
 ```
 
 ---
@@ -23,115 +23,115 @@
 
 ```
 std/
-├── core/           # 코어 (자동 import, 언어 기본)
-├── io/             # 입출력
-├── fs/             # 파일 시스템
-├── net/            # 네트워킹
-├── data/           # 데이터 포맷
-├── text/           # 텍스트 처리
-├── time/           # 시간/날짜
-├── math/           # 수학
-├── collections/    # 자료구조
-├── async/          # 비동기
-├── sync/           # 동기화
-├── crypto/         # 암호화
-├── encoding/       # 인코딩
-├── test/           # 테스팅
-├── log/            # 로깅
-├── env/            # 환경
-└── sys/            # 시스템
+├── core/           # Core (auto-imported, language basics)
+├── io/             # Input/Output
+├── fs/             # File system
+├── net/            # Networking
+├── data/           # Data formats
+├── text/           # Text processing
+├── time/           # Time/Date
+├── math/           # Mathematics
+├── collections/    # Data structures
+├── async/          # Asynchronous
+├── sync/           # Synchronization
+├── crypto/         # Cryptography
+├── encoding/       # Encoding
+├── test/           # Testing
+├── log/            # Logging
+├── env/            # Environment
+└── sys/            # System
 ```
 
 ---
 
-## std.core (자동 import)
+## std.core (Auto-imported)
 
-언어의 기본 기능으로, 명시적 import 없이 사용 가능합니다.
+Basic language features available without explicit import.
 
 ### Types
 
 ```vais
-# 기본 타입 (builtin)
-i, i8, i16, i32, i64       # 정수
-u8, u16, u32, u64          # 부호 없는 정수
-f, f32, f64                # 실수
-b                          # 불리언
-s                          # 문자열
-void                       # 없음
+# Basic types (builtin)
+i, i8, i16, i32, i64       # Integers
+u8, u16, u32, u64          # Unsigned integers
+f, f32, f64                # Floats
+b                          # Boolean
+s                          # String
+void                       # None
 
-# 컴파운드 타입
-[T]                        # 배열
-{K: V}                     # 맵
-(T1, T2, ...)              # 튜플
-?T                         # 옵션
-!T                         # 결과
+# Compound types
+[T]                        # Array
+{K: V}                     # Map
+(T1, T2, ...)              # Tuple
+?T                         # Option
+!T                         # Result
 ```
 
 ### Basic Functions
 
 ```vais
-# 출력
-print(value)               # 표준 출력
-println(value)             # 줄바꿈 포함
-eprint(value)              # 표준 에러
-eprintln(value)            # 에러 + 줄바꿈
+# Output
+print(value)               # Standard output
+println(value)             # With newline
+eprint(value)              # Standard error
+eprintln(value)            # Error + newline
 
-# 타입 변환
-str(value) -> s            # 문자열로
-int(s) -> ?i               # 정수로
-float(s) -> ?f             # 실수로
-bool(value) -> b           # 불리언으로
+# Type conversion
+str(value) -> s            # To string
+int(s) -> ?i               # To integer
+float(s) -> ?f             # To float
+bool(value) -> b           # To boolean
 
-# 유틸리티
-len(collection) -> i       # 길이 (#과 동일)
-range(start, end) -> [i]   # 범위
-range(end) -> [i]          # 0부터
-typeof(value) -> s         # 타입 이름
-assert(cond, msg?)         # 어설션
-panic(msg)                 # 패닉
+# Utilities
+len(collection) -> i       # Length (same as #)
+range(start, end) -> [i]   # Range
+range(end) -> [i]          # From 0
+typeof(value) -> s         # Type name
+assert(cond, msg?)         # Assertion
+panic(msg)                 # Panic
 ```
 
 ### Option & Result
 
 ```vais
 # Option
-some(value) -> ?T          # 값 있음
-nil -> ?T                  # 값 없음
+some(value) -> ?T          # Has value
+nil -> ?T                  # No value
 
 # Result
-ok(value) -> !T            # 성공
-err(msg) -> !T             # 실패
+ok(value) -> !T            # Success
+err(msg) -> !T             # Failure
 
-# 조작
-value? -> T                # unwrap (nil/err면 전파)
-value ?? default -> T      # unwrap with default
-value! -> T                # unwrap or panic
+# Operations
+value? -> T                # Unwrap (propagate nil/err)
+value ?? default -> T      # Unwrap with default
+value! -> T                # Unwrap or panic
 ```
 
 ---
 
 ## std.io
 
-입출력 기본 기능.
+Basic input/output functionality.
 
 ### Traits
 
 ```vais
-# 읽기 인터페이스
+# Read interface
 trait Read {
     fn read(self, buf: &mut [u8]) -> !usize
     fn read_all(self) -> ![u8]
     fn read_line(self) -> !s
 }
 
-# 쓰기 인터페이스
+# Write interface
 trait Write {
     fn write(self, data: [u8]) -> !usize
     fn write_all(self, data: [u8]) -> !void
     fn flush(self) -> !void
 }
 
-# 탐색 인터페이스
+# Seek interface
 trait Seek {
     fn seek(self, pos: SeekFrom) -> !i64
     fn position(self) -> !i64
@@ -143,15 +143,15 @@ trait Seek {
 ```vais
 use std.io
 
-# 표준 입력
+# Standard input
 line = io.stdin.read_line()?
 all = io.stdin.read_all()?
 
-# 표준 출력
+# Standard output
 io.stdout.write_all("Hello\n".bytes())?
 io.stdout.flush()?
 
-# 표준 에러
+# Standard error
 io.stderr.write_all("Error!\n".bytes())?
 ```
 
@@ -160,13 +160,13 @@ io.stderr.write_all("Error!\n".bytes())?
 ```vais
 use std.io.{BufReader, BufWriter}
 
-# 버퍼 읽기
+# Buffered reading
 reader = BufReader.new(file)
 for line in reader.lines() {
     process(line)
 }
 
-# 버퍼 쓰기
+# Buffered writing
 writer = BufWriter.new(file)
 writer.write_all(data)?
 writer.flush()?
@@ -176,28 +176,28 @@ writer.flush()?
 
 ## std.fs
 
-파일 시스템 작업.
+File system operations.
 
 ### File Operations
 
 ```vais
 use std.fs
 
-# 읽기
-content = fs.read("file.txt")?              # 전체 읽기 (문자열)
-bytes = fs.read_bytes("file.bin")?          # 전체 읽기 (바이트)
-lines = fs.read_lines("file.txt")?          # 줄 단위
+# Reading
+content = fs.read("file.txt")?              # Read all (string)
+bytes = fs.read_bytes("file.bin")?          # Read all (bytes)
+lines = fs.read_lines("file.txt")?          # Line by line
 
-# 쓰기
-fs.write("file.txt", content)?              # 전체 쓰기
-fs.write_bytes("file.bin", bytes)?          # 바이트 쓰기
-fs.append("file.txt", more_content)?        # 추가
+# Writing
+fs.write("file.txt", content)?              # Write all
+fs.write_bytes("file.bin", bytes)?          # Write bytes
+fs.append("file.txt", more_content)?        # Append
 
-# 파일 객체
-file = fs.open("file.txt", "r")?            # 읽기 모드
-file = fs.open("file.txt", "w")?            # 쓰기 모드
-file = fs.open("file.txt", "a")?            # 추가 모드
-file = fs.open("file.txt", "rw")?           # 읽기+쓰기
+# File object
+file = fs.open("file.txt", "r")?            # Read mode
+file = fs.open("file.txt", "w")?            # Write mode
+file = fs.open("file.txt", "a")?            # Append mode
+file = fs.open("file.txt", "rw")?           # Read+Write
 file.close()
 ```
 
@@ -206,22 +206,22 @@ file.close()
 ```vais
 use std.fs.path
 
-# 경로 조작
+# Path manipulation
 p = path.join("dir", "subdir", "file.txt")
 dir = path.dirname(p)                        # "dir/subdir"
 name = path.basename(p)                      # "file.txt"
 stem = path.stem(p)                          # "file"
 ext = path.extension(p)                      # "txt"
 
-# 경로 정보
-path.exists("file.txt")                      # 존재 여부
-path.is_file("file.txt")                     # 파일인지
-path.is_dir("dir")                           # 디렉토리인지
-path.is_absolute("/usr/bin")                 # 절대 경로인지
+# Path info
+path.exists("file.txt")                      # Exists
+path.is_file("file.txt")                     # Is file
+path.is_dir("dir")                           # Is directory
+path.is_absolute("/usr/bin")                 # Is absolute
 
-# 정규화
+# Normalization
 path.normalize("./dir/../other")             # "other"
-path.absolute("relative")                    # 절대 경로로
+path.absolute("relative")                    # To absolute
 ```
 
 ### Directory Operations
@@ -229,19 +229,19 @@ path.absolute("relative")                    # 절대 경로로
 ```vais
 use std.fs
 
-# 디렉토리 작업
-fs.mkdir("new_dir")?                         # 생성
-fs.mkdir_all("a/b/c")?                       # 재귀 생성
-fs.rmdir("dir")?                             # 삭제
-fs.rmdir_all("dir")?                         # 재귀 삭제
+# Directory operations
+fs.mkdir("new_dir")?                         # Create
+fs.mkdir_all("a/b/c")?                       # Create recursive
+fs.rmdir("dir")?                             # Remove
+fs.rmdir_all("dir")?                         # Remove recursive
 
-# 목록
+# Listing
 entries = fs.read_dir(".")?
 for entry in entries {
     println(entry.name + " - " + entry.type)
 }
 
-# 재귀 탐색
+# Recursive traversal
 for entry in fs.walk(".") {
     if entry.is_file() && entry.name.ends(".vais") {
         println(entry.path)
@@ -255,29 +255,29 @@ for entry in fs.walk(".") {
 use std.fs
 
 meta = fs.metadata("file.txt")?
-meta.size                                    # 크기 (바이트)
-meta.modified                                # 수정 시간
-meta.created                                 # 생성 시간
-meta.permissions                             # 권한
-meta.is_readonly                             # 읽기 전용
+meta.size                                    # Size (bytes)
+meta.modified                                # Modified time
+meta.created                                 # Created time
+meta.permissions                             # Permissions
+meta.is_readonly                             # Read-only
 ```
 
 ---
 
 ## std.net
 
-네트워킹.
+Networking.
 
 ### HTTP Client
 
 ```vais
 use std.net.http
 
-# 간단한 GET
+# Simple GET
 response = http.get("https://api.example.com/data")?
 body = response.text()?
 
-# 옵션과 함께
+# With options
 response = http.get("https://api.example.com/data", {
     headers: {"Authorization": "Bearer token"},
     timeout: 30s,
@@ -288,7 +288,7 @@ response = http.post("https://api.example.com/data", {
     json: {"name": "John", "age": 30},
 })?
 
-# 다른 메서드
+# Other methods
 http.put(url, options)?
 http.patch(url, options)?
 http.delete(url, options)?
@@ -301,9 +301,9 @@ http.head(url)?
 response.status                              # 200
 response.status_text                         # "OK"
 response.headers                             # {"Content-Type": "..."}
-response.text()?                             # 문자열로
-response.json()?                             # JSON 파싱
-response.bytes()?                            # 바이트로
+response.text()?                             # As string
+response.json()?                             # Parse JSON
+response.bytes()?                            # As bytes
 ```
 
 ### HTTP Server
@@ -337,12 +337,12 @@ server.listen(8080)?
 ```vais
 use std.net.{TcpStream, TcpListener, UdpSocket}
 
-# TCP 클라이언트
+# TCP client
 conn = TcpStream.connect("localhost:8080")?
 conn.write_all("Hello".bytes())?
 response = conn.read_all()?
 
-# TCP 서버
+# TCP server
 listener = TcpListener.bind("0.0.0.0:8080")?
 for conn in listener.incoming() {
     spawn {
@@ -371,7 +371,7 @@ u.path                                       # "/path"
 u.query                                      # "q=1"
 u.fragment                                   # "hash"
 
-# URL 인코딩
+# URL encoding
 url.encode("hello world")                    # "hello%20world"
 url.decode("hello%20world")                  # "hello world"
 ```
@@ -380,24 +380,24 @@ url.decode("hello%20world")                  # "hello world"
 
 ## std.data
 
-데이터 포맷 처리.
+Data format processing.
 
 ### JSON
 
 ```vais
 use std.data.json
 
-# 파싱
+# Parsing
 data = json.parse('{"name": "John", "age": 30}')?
 name = data["name"].as_str()?
 age = data["age"].as_int()?
 
-# 직렬화
+# Serialization
 obj = {"name": "John", "age": 30}
 text = json.stringify(obj)
 pretty = json.stringify(obj, indent: 2)
 
-# 타입 변환
+# Type conversion
 type User = {name: s, age: i}
 user: User = json.parse_as('{"name": "John", "age": 30}')?
 ```
@@ -407,19 +407,19 @@ user: User = json.parse_as('{"name": "John", "age": 30}')?
 ```vais
 use std.data.csv
 
-# 읽기
+# Reading
 records = csv.parse(content)?
 for row in records {
     println(row[0] + ", " + row[1])
 }
 
-# 헤더 있는 CSV
+# CSV with header
 records = csv.parse(content, header: true)?
 for row in records {
     println(row["name"] + ", " + row["email"])
 }
 
-# 쓰기
+# Writing
 csv.stringify([
     ["name", "age"],
     ["John", "30"],
@@ -432,11 +432,11 @@ csv.stringify([
 ```vais
 use std.data.toml
 
-# 파싱
+# Parsing
 config = toml.parse(content)?
 version = config["package"]["version"].as_str()?
 
-# 직렬화
+# Serialization
 toml.stringify(config)
 ```
 
@@ -453,20 +453,20 @@ yaml.stringify(data)
 
 ## std.text
 
-텍스트 처리.
+Text processing.
 
 ### Regex
 
 ```vais
 use std.text.regex
 
-# 매칭
+# Matching
 re = regex.compile(r"\d+")?
 re.is_match("abc123")                        # true
 re.find("abc123")                            # some("123")
 re.find_all("a1b2c3")                        # ["1", "2", "3"]
 
-# 캡처
+# Captures
 re = regex.compile(r"(\w+)@(\w+)\.(\w+)")?
 m = re.captures("test@example.com")?
 m[0]                                         # "test@example.com"
@@ -474,7 +474,7 @@ m[1]                                         # "test"
 m[2]                                         # "example"
 m[3]                                         # "com"
 
-# 치환
+# Replacement
 re.replace("a1b2c3", "X")                    # "aXbXcX"
 re.replace_first("a1b2c3", "X")              # "aXb2c3"
 ```
@@ -484,12 +484,12 @@ re.replace_first("a1b2c3", "X")              # "aXb2c3"
 ```vais
 use std.text.fmt
 
-# 포맷팅
+# Formatting
 fmt.format("Hello, {}!", "World")            # "Hello, World!"
 fmt.format("{} + {} = {}", 1, 2, 3)          # "1 + 2 = 3"
 fmt.format("{name} is {age}", name: "John", age: 30)
 
-# 숫자 포맷
+# Number formatting
 fmt.number(1234567.89, sep: ",")             # "1,234,567.89"
 fmt.percent(0.1234, decimals: 1)             # "12.3%"
 fmt.bytes(1024 * 1024)                       # "1 MB"
@@ -503,7 +503,7 @@ use std.text.template
 tmpl = template.compile("Hello, {{name}}!")?
 result = tmpl.render({name: "World"})        # "Hello, World!"
 
-# 조건
+# Conditionals
 tmpl = template.compile("""
 {{if admin}}
   Welcome, Admin!
@@ -512,7 +512,7 @@ tmpl = template.compile("""
 {{end}}
 """)?
 
-# 반복
+# Loops
 tmpl = template.compile("""
 {{for item in items}}
   - {{item.name}}: {{item.price}}
@@ -524,29 +524,29 @@ tmpl = template.compile("""
 
 ## std.time
 
-시간과 날짜.
+Time and date.
 
 ### DateTime
 
 ```vais
 use std.time
 
-# 현재 시간
+# Current time
 now = time.now()
 now.year, now.month, now.day
 now.hour, now.minute, now.second
-now.weekday                                  # 0=월, 6=일
+now.weekday                                  # 0=Mon, 6=Sun
 
-# 생성
+# Creation
 dt = time.datetime(2026, 1, 12, 15, 30, 0)
 
-# 파싱
+# Parsing
 dt = time.parse("2026-01-12T15:30:00Z", "RFC3339")?
 dt = time.parse("2026-01-12", "%Y-%m-%d")?
 
-# 포맷팅
+# Formatting
 dt.format("RFC3339")                         # "2026-01-12T15:30:00Z"
-dt.format("%Y년 %m월 %d일")                   # "2026년 01월 12일"
+dt.format("%Y-%m-%d")                        # "2026-01-12"
 ```
 
 ### Duration
@@ -554,19 +554,19 @@ dt.format("%Y년 %m월 %d일")                   # "2026년 01월 12일"
 ```vais
 use std.time
 
-# 생성
+# Creation
 d = time.duration(hours: 2, minutes: 30)
-d = 2.hours + 30.minutes                     # 동일
-d = time.seconds(3600)                       # 1시간
+d = 2.hours + 30.minutes                     # Same
+d = time.seconds(3600)                       # 1 hour
 
-# 속성
-d.total_seconds                              # 총 초
-d.total_minutes                              # 총 분
-d.total_hours                                # 총 시간
+# Properties
+d.total_seconds                              # Total seconds
+d.total_minutes                              # Total minutes
+d.total_hours                                # Total hours
 
-# 산술
-dt + 1.day                                   # 하루 후
-dt - 1.week                                  # 일주일 전
+# Arithmetic
+dt + 1.day                                   # One day later
+dt - 1.week                                  # One week ago
 dt2 - dt1                                    # Duration
 ```
 
@@ -575,7 +575,7 @@ dt2 - dt1                                    # Duration
 ```vais
 use std.time.tz
 
-# 타임존 변환
+# Timezone conversion
 utc = time.now()
 kst = utc.in_tz("Asia/Seoul")
 pst = utc.in_tz("America/Los_Angeles")
@@ -589,11 +589,11 @@ utc_now = time.utc_now()
 ```vais
 use std.time
 
-# 슬립
+# Sleep
 time.sleep(1.second)
 time.sleep(500.ms)
 
-# 측정
+# Measurement
 start = time.instant()
 do_work()
 elapsed = start.elapsed()
@@ -604,7 +604,7 @@ println("Took: " + elapsed.as_ms().str + "ms")
 
 ## std.math
 
-수학 함수.
+Mathematical functions.
 
 ### Basic
 
@@ -614,7 +614,7 @@ use std.math
 math.abs(-5)                                 # 5
 math.min(3, 7)                               # 3
 math.max(3, 7)                               # 7
-math.clamp(x, 0, 100)                        # 0-100 사이
+math.clamp(x, 0, 100)                        # Between 0-100
 
 math.floor(3.7)                              # 3
 math.ceil(3.2)                               # 4
@@ -628,7 +628,7 @@ math.trunc(3.9)                              # 3
 math.PI                                      # 3.14159...
 math.E                                       # 2.71828...
 math.TAU                                     # 6.28318... (2π)
-math.INF                                     # 무한대
+math.INF                                     # Infinity
 math.NAN                                     # Not a Number
 ```
 
@@ -648,9 +648,9 @@ math.pow(2, 10)                              # 1024
 math.sqrt(16)                                # 4.0
 math.cbrt(27)                                # 3.0
 math.exp(1)                                  # e
-math.log(x)                                  # 자연로그
-math.log10(x)                                # 상용로그
-math.log2(x)                                 # 이진로그
+math.log(x)                                  # Natural log
+math.log10(x)                                # Common log
+math.log2(x)                                 # Binary log
 ```
 
 ### Random
@@ -658,14 +658,14 @@ math.log2(x)                                 # 이진로그
 ```vais
 use std.math.random
 
-random.int(1, 100)                           # 1-100 정수
+random.int(1, 100)                           # 1-100 integer
 random.float()                               # 0.0-1.0
 random.bool()                                # true/false
-random.choice([1, 2, 3, 4, 5])               # 랜덤 선택
-random.shuffle([1, 2, 3, 4, 5])              # 섞기
-random.sample([1, 2, 3, 4, 5], 3)            # 3개 샘플
+random.choice([1, 2, 3, 4, 5])               # Random choice
+random.shuffle([1, 2, 3, 4, 5])              # Shuffle
+random.sample([1, 2, 3, 4, 5], 3)            # Sample 3
 
-# 시드 설정
+# Seed
 random.seed(42)
 ```
 
@@ -673,7 +673,7 @@ random.seed(42)
 
 ## std.collections
 
-고급 자료구조.
+Advanced data structures.
 
 ### Set
 
@@ -688,11 +688,11 @@ s.remove(1)
 s.has(2)                                     # true
 s.len()                                      # 3
 
-# 집합 연산
-a | b                                        # 합집합
-a & b                                        # 교집합
-a - b                                        # 차집합
-a ^ b                                        # 대칭차집합
+# Set operations
+a | b                                        # Union
+a & b                                        # Intersection
+a - b                                        # Difference
+a ^ b                                        # Symmetric difference
 ```
 
 ### Queue
@@ -725,7 +725,7 @@ s.peek()                                     # some(1)
 ```vais
 use std.collections.Heap
 
-# Min heap (기본)
+# Min heap (default)
 h = Heap.new()
 h.push(3)
 h.push(1)
@@ -755,7 +755,7 @@ use std.collections.OrderedMap
 m = OrderedMap.new()
 m.set("a", 1)
 m.set("b", 2)
-# 삽입 순서 유지
+# Maintains insertion order
 for (k, v) in m {
     println(k + ": " + v.str)
 }
@@ -765,22 +765,22 @@ for (k, v) in m {
 
 ## std.async
 
-비동기 프로그래밍.
+Asynchronous programming.
 
 ### Spawn
 
 ```vais
 use std.async
 
-# 태스크 생성
+# Create task
 handle = async.spawn {
     expensive_work()
 }
 
-# 대기
+# Wait
 result = handle.await
 
-# 여러 태스크
+# Multiple tasks
 handles = [1, 2, 3].@(n => async.spawn { work(n) })
 results = async.join_all(handles).await
 ```
@@ -796,15 +796,15 @@ use std.async.channel
 # Bounded channel
 (tx, rx) = channel.bounded(100)
 
-# 송신
+# Send
 tx.send(value).await
-tx.try_send(value)?                          # 논블로킹
+tx.try_send(value)?                          # Non-blocking
 
-# 수신
+# Receive
 value = rx.recv().await
-value = rx.try_recv()?                       # 논블로킹
+value = rx.try_recv()?                       # Non-blocking
 
-# 반복 수신
+# Receive loop
 for value in rx {
     process(value)
 }
@@ -828,14 +828,14 @@ result = select {
 use std.async
 
 result = async.timeout(1.second, async_work())?
-# 1초 안에 완료되지 않으면 에러
+# Error if not completed within 1 second
 ```
 
 ---
 
 ## std.sync
 
-동기화 프리미티브.
+Synchronization primitives.
 
 ### Mutex
 
@@ -844,11 +844,11 @@ use std.sync.Mutex
 
 counter = Mutex.new(0)
 
-# 락 획득
+# Acquire lock
 {
     guard = counter.lock()
     *guard += 1
-}  # 자동 해제
+}  # Auto-release
 
 # try_lock
 if guard = counter.try_lock() {
@@ -863,13 +863,13 @@ use std.sync.RwLock
 
 data = RwLock.new(initial_value)
 
-# 읽기 (여러 스레드 동시 가능)
+# Read (multiple threads can read simultaneously)
 {
     guard = data.read()
     println(*guard)
 }
 
-# 쓰기 (독점)
+# Write (exclusive)
 {
     guard = data.write()
     *guard = new_value
@@ -893,7 +893,7 @@ counter.compare_exchange(expected, new)
 
 ## std.test
 
-테스팅.
+Testing.
 
 ### Basic Tests
 
@@ -901,19 +901,19 @@ counter.compare_exchange(expected, new)
 use std.test
 
 #[test]
-fn test_addition() {
+test_addition() = {
     assert_eq(1 + 1, 2)
 }
 
 #[test]
-fn test_string() {
+test_string() = {
     assert("hello".starts("he"))
     assert_ne("hello", "world")
 }
 
 #[test]
 #[should_panic]
-fn test_panic() {
+test_panic() = {
     panic("expected")
 }
 ```
@@ -921,39 +921,39 @@ fn test_panic() {
 ### Assertions
 
 ```vais
-assert(condition)                            # 조건 확인
-assert(condition, "message")                 # 메시지 포함
-assert_eq(actual, expected)                  # 같음
-assert_ne(actual, expected)                  # 다름
+assert(condition)                            # Check condition
+assert(condition, "message")                 # With message
+assert_eq(actual, expected)                  # Equal
+assert_ne(actual, expected)                  # Not equal
 assert_lt(a, b)                              # a < b
 assert_gt(a, b)                              # a > b
-assert_some(option)                          # some인지
-assert_none(option)                          # nil인지
-assert_ok(result)                            # ok인지
-assert_err(result)                           # err인지
+assert_some(option)                          # Is some
+assert_none(option)                          # Is nil
+assert_ok(result)                            # Is ok
+assert_err(result)                           # Is err
 ```
 
 ### Test Organization
 
 ```vais
-# 모듈 테스트
+# Module tests
 mod tests {
     use super.*
 
     #[test]
-    fn test_internal() {
+    test_internal() = {
         assert(internal_function())
     }
 }
 
-# 픽스처
+# Fixtures
 #[fixture]
-fn setup_db() -> Database {
+setup_db() -> Database = {
     Database.connect("test.db")
 }
 
 #[test]
-fn test_with_db(db: Database) {
+test_with_db(db: Database) = {
     db.query("SELECT 1")
 }
 ```
@@ -962,7 +962,7 @@ fn test_with_db(db: Database) {
 
 ## std.log
 
-로깅.
+Logging.
 
 ```vais
 use std.log
@@ -972,13 +972,13 @@ log.info("Info message")
 log.warn("Warning message")
 log.error("Error message")
 
-# 구조화된 로깅
+# Structured logging
 log.info("User logged in", {
     user_id: 123,
     ip: "192.168.1.1",
 })
 
-# 로그 레벨 설정
+# Set log level
 log.set_level(log.Level.Info)
 ```
 
@@ -986,14 +986,14 @@ log.set_level(log.Level.Info)
 
 ## Summary
 
-표준 라이브러리 설계 원칙:
+Standard library design principles:
 
-| 원칙 | 설명 |
-|------|------|
-| **Minimal** | 필수 기능만 포함 |
-| **Consistent** | 일관된 API 설계 |
-| **Safe** | 안전한 기본값 |
-| **Documented** | 모든 함수 문서화 |
-| **Tested** | 높은 테스트 커버리지 |
+| Principle | Description |
+|-----------|-------------|
+| **Minimal** | Include only essentials |
+| **Consistent** | Consistent API design |
+| **Safe** | Safe defaults |
+| **Documented** | Document all functions |
+| **Tested** | High test coverage |
 
-**잘 설계된 표준 라이브러리 = 생산적인 개발자**
+**Well-designed standard library = Productive developers**

@@ -28,12 +28,10 @@ docs/
 - [예제](ko/examples.md) - 코드 예제
 - [기여 가이드](ko/contributing.md) - 기여 방법
 
-### Internal Documents
-- [Architecture](internal/architecture.md) - System architecture
-- [Core Design](internal/core-design.md) - Core language design
-- [FFI Design](internal/ffi-design.md) - Foreign Function Interface
-- [Standard Library](internal/stdlib.md) - Standard library design
-- [Package System](internal/package-system.md) - Package manager design
+### Internal Documents (설계 문서)
+- [Internal Docs Index](internal/README.md) - All internal documents
+- English: [Architecture](internal/en/architecture.md) | [Core Design](internal/en/core-design.md) | [FFI](internal/en/ffi-design.md) | [Stdlib](internal/en/stdlib.md) | [Package System](internal/en/package-system.md) | [Extension Guide](internal/en/extension-guide.md)
+- 한국어: [아키텍처](internal/ko/architecture.md) | [코어 설계](internal/ko/core-design.md) | [FFI](internal/ko/ffi-design.md) | [표준 라이브러리](internal/ko/stdlib.md) | [패키지 시스템](internal/ko/package-system.md) | [확장 가이드](internal/ko/extension-guide.md)
 
 ## About Vais
 

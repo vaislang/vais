@@ -1,18 +1,40 @@
 # Vais Internal Design Documents
 
-이 폴더는 Vais 언어의 내부 설계 문서를 포함합니다.
-이 문서들은 언어 설계자, 컴파일러 개발자, 핵심 기여자를 위한 참고 자료입니다.
+This folder contains internal design documents for the Vais language.
+These documents serve as references for language designers, compiler developers, and core contributors.
 
-## 문서 목록
+## Language / 언어 선택
 
-| 문서 | 설명 |
-|------|------|
-| [architecture.md](architecture.md) | 확장성 중심 전체 아키텍처 설계 |
-| [core-design.md](core-design.md) | 코어 언어 설계 원칙 |
-| [ffi-design.md](ffi-design.md) | FFI (Foreign Function Interface) 설계 |
-| [stdlib.md](stdlib.md) | 표준 라이브러리 설계 |
-| [package-system.md](package-system.md) | 패키지 시스템 설계 |
-| [extension-guide.md](extension-guide.md) | 생태계 확장 가이드 |
+| Language | Description |
+|----------|-------------|
+| [English](en/README.md) | English documentation |
+| [한국어](ko/README.md) | 한국어 문서 |
+
+---
+
+## Document Overview
+
+| Document | English | 한국어 |
+|----------|---------|--------|
+| Architecture | [en/architecture.md](en/architecture.md) | [ko/architecture.md](ko/architecture.md) |
+| Core Design | [en/core-design.md](en/core-design.md) | [ko/core-design.md](ko/core-design.md) |
+| FFI Design | [en/ffi-design.md](en/ffi-design.md) | [ko/ffi-design.md](ko/ffi-design.md) |
+| Standard Library | [en/stdlib.md](en/stdlib.md) | [ko/stdlib.md](ko/stdlib.md) |
+| Package System | [en/package-system.md](en/package-system.md) | [ko/package-system.md](ko/package-system.md) |
+| Extension Guide | [en/extension-guide.md](en/extension-guide.md) | [ko/extension-guide.md](ko/extension-guide.md) |
+
+---
+
+## Design Philosophy
+
+Vais follows these principles:
+
+1. **Small Core + Big Ecosystem** - Keep core minimal, implement most features as libraries
+2. **AI-First Design** - Structure that AI can efficiently generate and understand
+3. **Token Efficiency** - 30-60% token reduction compared to Python
+4. **Functional-First** - Functional programming first approach
+
+---
 
 ## 설계 철학
 
@@ -23,6 +45,33 @@ Vais는 다음 원칙을 따릅니다:
 3. **Token Efficiency** - Python 대비 30-60% 토큰 절감
 4. **Functional-First** - 함수형 프로그래밍 우선
 
-## 히스토리 문서
+---
 
-과거 버전별 설계 문서는 `archive/` 폴더를 참조하세요.
+## Directory Structure
+
+```
+docs/internal/
+├── README.md           # This file (index)
+├── en/                 # English documentation
+│   ├── README.md
+│   ├── architecture.md
+│   ├── core-design.md
+│   ├── ffi-design.md
+│   ├── stdlib.md
+│   ├── package-system.md
+│   └── extension-guide.md
+├── ko/                 # Korean documentation (한국어 문서)
+│   ├── README.md
+│   ├── architecture.md
+│   ├── core-design.md
+│   ├── ffi-design.md
+│   ├── stdlib.md
+│   ├── package-system.md
+│   └── extension-guide.md
+└── ../archive/         # Historical documents (과거 버전)
+```
+
+## Historical Documents
+
+For design documents from previous versions, see the `../archive/` folder.
+과거 버전별 설계 문서는 `../archive/` 폴더를 참조하세요.

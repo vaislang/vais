@@ -1,11 +1,11 @@
-# Vais Package System Design
+# Vais 패키지 시스템 설계
 
-**Version:** 1.0.0
-**Date:** 2026-01-12
+**버전:** 1.0.0
+**날짜:** 2026-01-12
 
 ---
 
-## Overview
+## 개요
 
 패키지 시스템은 Vais 생태계의 **핵심 인프라**입니다.
 
@@ -20,7 +20,7 @@
 
 ---
 
-## Design Principles
+## 설계 원칙
 
 | 원칙 | 설명 | 참고 |
 |------|------|------|
@@ -32,9 +32,9 @@
 
 ---
 
-## Package Structure
+## 패키지 구조
 
-### Basic Layout
+### 기본 레이아웃
 
 ```
 my-package/
@@ -53,14 +53,14 @@ my-package/
 └── vais.lock           # 의존성 Lock (자동 생성)
 ```
 
-### Manifest (vais.toml)
+### 매니페스트 (vais.toml)
 
 ```toml
 [package]
 name = "http-client"
 version = "1.2.0"
 edition = "2026"
-description = "A simple HTTP client for Vais"
+description = "Vais용 간단한 HTTP 클라이언트"
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 repository = "https://github.com/you/http-client"
@@ -119,7 +119,7 @@ opt-level = 3
 lto = true
 ```
 
-### Lock File (vais.lock)
+### Lock 파일 (vais.lock)
 
 ```toml
 # 자동 생성 - 수동 편집 금지
@@ -158,9 +158,9 @@ dependencies = [
 
 ---
 
-## CLI Commands
+## CLI 명령어
 
-### Project Management
+### 프로젝트 관리
 
 ```bash
 # 새 프로젝트 생성
@@ -173,7 +173,7 @@ vais init
 vais init --lib
 ```
 
-### Dependency Management
+### 의존성 관리
 
 ```bash
 # 의존성 추가
@@ -197,7 +197,7 @@ vais deps --outdated                   # 업데이트 가능한 것
 vais deps --duplicates                 # 중복 확인
 ```
 
-### Build & Run
+### 빌드 & 실행
 
 ```bash
 # 빌드
@@ -226,7 +226,7 @@ vais fmt
 vais fmt --check
 ```
 
-### Publishing
+### 퍼블리싱
 
 ```bash
 # 로그인
@@ -248,7 +248,7 @@ vais yank http-client@1.2.0
 vais yank http-client@1.2.0 --undo
 ```
 
-### Search & Info
+### 검색 & 정보
 
 ```bash
 # 패키지 검색
@@ -266,9 +266,9 @@ vais doc http-client --open            # 브라우저에서 열기
 
 ---
 
-## Package Registry
+## 패키지 레지스트리
 
-### Architecture
+### 아키텍처
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -298,7 +298,7 @@ vais doc http-client --open            # 브라우저에서 열기
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### API Endpoints
+### API 엔드포인트
 
 ```
 # 패키지
@@ -325,7 +325,7 @@ GET    /api/v1/users/:username             # 프로필
 GET    /api/v1/users/:username/packages    # 사용자 패키지
 ```
 
-### Security Features
+### 보안 기능
 
 ```yaml
 # 패키지 검증
@@ -349,7 +349,7 @@ GET    /api/v1/users/:username/packages    # 사용자 패키지
 
 ---
 
-## Version Resolution
+## 버전 해석
 
 ### SemVer
 
@@ -373,7 +373,7 @@ http = "1.*"       # >=1.0.0, <2.0.0
 http = "1.2.*"     # >=1.2.0, <1.3.0
 ```
 
-### Resolution Algorithm
+### 해석 알고리즘
 
 ```
 1. 모든 의존성 요구사항 수집
@@ -383,7 +383,7 @@ http = "1.2.*"     # >=1.2.0, <1.3.0
 5. Lock 파일 생성
 ```
 
-### Conflict Resolution
+### 충돌 해결
 
 ```bash
 # 충돌 확인
@@ -400,9 +400,9 @@ url = "2.0"  # http가 url 1.x를 요구해도 2.0 사용
 
 ---
 
-## Workspaces
+## 워크스페이스
 
-### Monorepo Support
+### 모노레포 지원
 
 ```
 my-workspace/
@@ -423,7 +423,7 @@ my-workspace/
         └── src/
 ```
 
-### Workspace Config
+### 워크스페이스 설정
 
 ```toml
 # 루트 vais.toml
@@ -448,7 +448,7 @@ license = "MIT"
 repository = "https://github.com/org/workspace"
 ```
 
-### Member Config
+### 멤버 설정
 
 ```toml
 # packages/cli/vais.toml
@@ -472,9 +472,9 @@ utils = { path = "../../shared/utils" }
 
 ---
 
-## Private Registry
+## 프라이빗 레지스트리
 
-### Self-Hosted
+### 셀프 호스팅
 
 ```yaml
 # docker-compose.yml
@@ -492,7 +492,7 @@ services:
       - ./config:/etc/vais-registry
 ```
 
-### Config
+### 설정
 
 ```toml
 # ~/.vais/config.toml
@@ -512,7 +512,7 @@ url = "https://mirror.vais.cn"
 fallback = "default"
 ```
 
-### Usage
+### 사용
 
 ```toml
 # vais.toml
@@ -526,9 +526,9 @@ internal-lib = { version = "1.0", registry = "private" }
 
 ---
 
-## Caching
+## 캐싱
 
-### Local Cache
+### 로컬 캐시
 
 ```
 ~/.vais/
@@ -541,7 +541,7 @@ internal-lib = { version = "1.0", registry = "private" }
 └── config.toml
 ```
 
-### Cache Commands
+### 캐시 명령어
 
 ```bash
 # 캐시 정보
@@ -557,9 +557,9 @@ vais build --offline
 
 ---
 
-## Publishing Checklist
+## 퍼블리싱 체크리스트
 
-### Before Publishing
+### 퍼블리시 전
 
 ```bash
 # 1. 버전 확인
@@ -578,7 +578,7 @@ vais doc
 vais publish --dry-run
 ```
 
-### Package Quality
+### 패키지 품질
 
 ```yaml
 # 레지스트리 품질 점수 기준
@@ -595,7 +595,7 @@ quality_score:
 
 ---
 
-## Integration
+## 통합
 
 ### CI/CD
 
@@ -628,7 +628,7 @@ jobs:
           VAIS_TOKEN: ${{ secrets.VAIS_TOKEN }}
 ```
 
-### IDE Integration
+### IDE 통합
 
 ```json
 // VSCode settings.json
@@ -641,23 +641,23 @@ jobs:
 
 ---
 
-## Migration Guide
+## 마이그레이션 가이드
 
-### From npm
+### npm에서
 
 ```bash
 # package.json → vais.toml 변환
 vais migrate npm
 ```
 
-### From Cargo
+### Cargo에서
 
 ```bash
 # Cargo.toml → vais.toml 변환
 vais migrate cargo
 ```
 
-### From pip
+### pip에서
 
 ```bash
 # requirements.txt → vais.toml 변환
@@ -666,7 +666,7 @@ vais migrate pip
 
 ---
 
-## Summary
+## 요약
 
 패키지 시스템 설계 핵심:
 
