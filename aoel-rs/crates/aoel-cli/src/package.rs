@@ -219,6 +219,7 @@ pub struct VersionInfo {
     pub published_at: String,
 }
 
+#[allow(dead_code)]
 impl Registry {
     /// Create or open local registry
     pub fn local() -> Result<Self, String> {
@@ -561,6 +562,7 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 /// Check caret compatibility (^1.2.3)
+#[allow(dead_code)]
 fn is_caret_compatible(base: &(u32, u32, u32), ver: &(u32, u32, u32)) -> bool {
     if base.0 == 0 {
         // 0.x.y - minor must match
@@ -572,6 +574,7 @@ fn is_caret_compatible(base: &(u32, u32, u32), ver: &(u32, u32, u32)) -> bool {
 }
 
 /// Check tilde compatibility (~1.2.3)
+#[allow(dead_code)]
 fn is_tilde_compatible(base: &(u32, u32, u32), ver: &(u32, u32, u32)) -> bool {
     ver.0 == base.0 && ver.1 == base.1 && ver.2 >= base.2
 }

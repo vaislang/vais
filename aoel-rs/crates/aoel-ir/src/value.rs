@@ -143,6 +143,72 @@ impl Value {
     pub fn is_empty(&self) -> Option<bool> {
         self.len().map(|l| l == 0)
     }
+
+    /// Generate a hash key for use in HashSet/HashMap
+    /// More efficient than format!("{:?}", value)
+    pub fn hash_key(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+
+        let mut hasher = DefaultHasher::new();
+
+        // Hash the discriminant first
+        std::mem::discriminant(self).hash(&mut hasher);
+
+        match self {
+            Value::Void => {}
+            Value::Bool(b) => b.hash(&mut hasher),
+            Value::Int(n) => n.hash(&mut hasher),
+            Value::Float(f) => {
+                // Use bits for consistent hashing
+                f.to_bits().hash(&mut hasher);
+            }
+            Value::String(s) => s.hash(&mut hasher),
+            Value::Bytes(b) => b.hash(&mut hasher),
+            Value::Array(arr) => {
+                arr.len().hash(&mut hasher);
+                for item in arr {
+                    item.hash_key().hash(&mut hasher);
+                }
+            }
+            Value::Map(m) => {
+                m.len().hash(&mut hasher);
+                // Sort keys for consistent hashing
+                let mut keys: Vec<_> = m.keys().collect();
+                keys.sort();
+                for k in keys {
+                    k.hash(&mut hasher);
+                    if let Some(v) = m.get(k) {
+                        v.hash_key().hash(&mut hasher);
+                    }
+                }
+            }
+            Value::Struct(s) => {
+                s.len().hash(&mut hasher);
+                let mut keys: Vec<_> = s.keys().collect();
+                keys.sort();
+                for k in keys {
+                    k.hash(&mut hasher);
+                    if let Some(v) = s.get(k) {
+                        v.hash_key().hash(&mut hasher);
+                    }
+                }
+            }
+            Value::Optional(opt) => {
+                opt.is_some().hash(&mut hasher);
+                if let Some(v) = opt {
+                    v.hash_key().hash(&mut hasher);
+                }
+            }
+            Value::Error(e) => e.hash(&mut hasher),
+            Value::Closure { params, body_id, .. } => {
+                params.hash(&mut hasher);
+                body_id.hash(&mut hasher);
+            }
+        }
+
+        hasher.finish()
+    }
 }
 
 impl std::fmt::Display for Value {

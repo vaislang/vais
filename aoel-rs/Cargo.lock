@@ -267,6 +267,7 @@ dependencies = [
  "aoel-jit",
  "aoel-lowering",
  "libloading",
+ "rayon",
  "serde_json",
  "thiserror",
  "ureq",

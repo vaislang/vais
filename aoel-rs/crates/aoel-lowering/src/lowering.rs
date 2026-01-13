@@ -30,6 +30,8 @@ pub struct CompiledFunction {
     pub name: String,
     pub params: Vec<String>,
     pub instructions: Vec<Instruction>,
+    /// 로컬 변수 슬롯 개수 (params + locals)
+    pub local_count: u16,
 }
 
 /// FFI 함수 정보
@@ -40,6 +42,43 @@ pub struct FfiFnInfo {
     pub param_count: usize,
 }
 
+/// 로컬 변수 스코프 (변수명 -> 인덱스)
+#[derive(Debug, Clone, Default)]
+struct LocalScope {
+    /// 변수명 -> 로컬 인덱스 매핑
+    locals: HashMap<String, u16>,
+    /// 다음 할당할 인덱스
+    next_index: u16,
+}
+
+impl LocalScope {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// 변수 인덱스 조회 (없으면 None)
+    fn get(&self, name: &str) -> Option<u16> {
+        self.locals.get(name).copied()
+    }
+
+    /// 새 변수 등록하고 인덱스 반환
+    fn declare(&mut self, name: &str) -> u16 {
+        if let Some(&idx) = self.locals.get(name) {
+            idx // 이미 선언된 변수는 기존 인덱스 반환
+        } else {
+            let idx = self.next_index;
+            self.locals.insert(name.to_string(), idx);
+            self.next_index += 1;
+            idx
+        }
+    }
+
+    /// 현재까지 할당된 로컬 변수 개수
+    fn count(&self) -> u16 {
+        self.next_index
+    }
+}
+
 /// AOEL Lowerer
 pub struct Lowerer {
     /// 현재 함수 이름 (재귀 호출용)
@@ -48,6 +87,8 @@ pub struct Lowerer {
     functions: Vec<CompiledFunction>,
     /// FFI 함수 레지스트리: aoel_name -> (lib_name, extern_name, param_count)
     ffi_functions: HashMap<String, FfiFnInfo>,
+    /// 현재 함수의 로컬 스코프
+    scope: LocalScope,
 }
 
 impl Lowerer {
@@ -56,6 +97,7 @@ impl Lowerer {
             current_function: None,
             functions: Vec::new(),
             ffi_functions: HashMap::new(),
+            scope: LocalScope::new(),
         }
     }
 
@@ -74,11 +116,13 @@ impl Lowerer {
                 }
                 Item::Expr(e) => {
                     // REPL용: main 함수로 래핑
+                    self.scope = LocalScope::new();
                     let instructions = self.lower_expr(e)?;
                     self.functions.push(CompiledFunction {
                         name: "__main__".to_string(),
                         params: Vec::new(),
                         instructions,
+                        local_count: self.scope.count(),
                     });
                 }
                 Item::Ffi(ffi_block) => {
@@ -98,7 +142,15 @@ impl Lowerer {
     fn lower_function(&mut self, func: &FunctionDef) -> LowerResult<CompiledFunction> {
         self.current_function = Some(func.name.clone());
 
+        // 새 스코프 생성
+        self.scope = LocalScope::new();
+
         let params: Vec<String> = func.params.iter().map(|p| p.name.clone()).collect();
+
+        // 매개변수를 로컬 스코프에 등록 (인덱스 0부터 시작)
+        for param in &params {
+            self.scope.declare(param);
+        }
 
         let mut instructions = Vec::new();
 
@@ -111,12 +163,14 @@ impl Lowerer {
         // Return 추가
         instructions.push(Instruction::new(OpCode::Return));
 
+        let local_count = self.scope.count();
         self.current_function = None;
 
         Ok(CompiledFunction {
             name: func.name.clone(),
             params,
             instructions,
+            local_count,
         })
     }
 
@@ -148,12 +202,22 @@ impl Lowerer {
 
             // === Identifiers ===
             Expr::Ident(name, _) => {
-                instrs.push(Instruction::new(OpCode::Load(name.clone())));
+                // 로컬 변수인지 확인
+                if let Some(idx) = self.scope.get(name) {
+                    instrs.push(Instruction::new(OpCode::LoadLocal(idx)));
+                } else {
+                    // 글로벌/클로저 변수
+                    instrs.push(Instruction::new(OpCode::Load(name.clone())));
+                }
             }
 
             Expr::LambdaParam(_) => {
                 // 람다 내 _ 참조: 특수 변수 로드
-                instrs.push(Instruction::new(OpCode::Load("_".to_string())));
+                if let Some(idx) = self.scope.get("_") {
+                    instrs.push(Instruction::new(OpCode::LoadLocal(idx)));
+                } else {
+                    instrs.push(Instruction::new(OpCode::Load("_".to_string())));
+                }
             }
 
             // === Collections ===
@@ -226,14 +290,26 @@ impl Lowerer {
             // === AOEL Collection Operations ===
             Expr::MapOp(arr, transform, _) => {
                 instrs.extend(self.lower_expr(arr)?);
-                let transform_instrs = self.lower_expr(transform)?;
-                instrs.push(Instruction::new(OpCode::Map(Box::new(transform_instrs))));
+
+                // 단순 패턴 최적화: _ * const, _ + const 등
+                if let Some(opcode) = self.try_optimize_map(transform) {
+                    instrs.push(Instruction::new(opcode));
+                } else {
+                    let transform_instrs = self.lower_expr(transform)?;
+                    instrs.push(Instruction::new(OpCode::Map(Box::new(transform_instrs))));
+                }
             }
 
             Expr::FilterOp(arr, predicate, _) => {
                 instrs.extend(self.lower_expr(arr)?);
-                let pred_instrs = self.lower_expr(predicate)?;
-                instrs.push(Instruction::new(OpCode::Filter(Box::new(pred_instrs))));
+
+                // 단순 패턴 최적화: _ > const, _ < const 등
+                if let Some(opcode) = self.try_optimize_filter(predicate) {
+                    instrs.push(Instruction::new(opcode));
+                } else {
+                    let pred_instrs = self.lower_expr(predicate)?;
+                    instrs.push(Instruction::new(OpCode::Filter(Box::new(pred_instrs))));
+                }
             }
 
             Expr::ReduceOp(arr, kind, _) => {
@@ -343,7 +419,8 @@ impl Lowerer {
             Expr::Match(scrutinee, arms, _) => {
                 // scrutinee를 평가하고 임시 변수에 저장
                 instrs.extend(self.lower_expr(scrutinee)?);
-                instrs.push(Instruction::new(OpCode::Store("__match_val__".to_string())));
+                let match_idx = self.scope.declare("__match_val__");
+                instrs.push(Instruction::new(OpCode::StoreLocal(match_idx)));
 
                 if arms.is_empty() {
                     // arm이 없으면 Void 반환
@@ -355,7 +432,7 @@ impl Lowerer {
                     for arm in arms {
                         // 조건 생성: 패턴 매칭 + guard
                         let mut cond_instrs = Vec::new();
-                        cond_instrs.push(Instruction::new(OpCode::Load("__match_val__".to_string())));
+                        cond_instrs.push(Instruction::new(OpCode::LoadLocal(match_idx)));
                         cond_instrs.extend(self.lower_pattern(&arm.pattern)?);
 
                         // guard 조건이 있으면 AND
@@ -392,7 +469,9 @@ impl Lowerer {
                 // 각 바인딩 처리
                 for (name, value) in bindings {
                     instrs.extend(self.lower_expr(value)?);
-                    instrs.push(Instruction::new(OpCode::Store(name.clone())));
+                    // 로컬 변수로 등록하고 StoreLocal 사용
+                    let idx = self.scope.declare(name);
+                    instrs.push(Instruction::new(OpCode::StoreLocal(idx)));
                 }
                 // 본문 실행
                 instrs.extend(self.lower_expr(body)?);
@@ -510,7 +589,8 @@ impl Lowerer {
                 instrs.push(Instruction::new(OpCode::Jump((handler_len + 1) as i32)));
 
                 // 에러 저장 (에러 핸들러 시작점)
-                instrs.push(Instruction::new(OpCode::Store(error_name.clone())));
+                let error_idx = self.scope.declare(error_name);
+                instrs.push(Instruction::new(OpCode::StoreLocal(error_idx)));
 
                 // handler 실행
                 instrs.extend(handler_instrs);
@@ -541,6 +621,9 @@ impl Lowerer {
             // 이를 iter.@(x => cond ? expr : []).flatten() 형태로 변환
             // 또는 간단히 filter와 map 조합으로
             Expr::ListComprehension { expr, var, iter, cond, .. } => {
+                // 변수를 로컬 스코프에 등록
+                let var_idx = self.scope.declare(var);
+
                 // iter 로드
                 instrs.extend(self.lower_expr(iter)?);
 
@@ -548,7 +631,7 @@ impl Lowerer {
                 if let Some(condition) = cond {
                     let filter_body = {
                         let mut body = Vec::new();
-                        body.push(Instruction::new(OpCode::Store(var.clone())));
+                        body.push(Instruction::new(OpCode::StoreLocal(var_idx)));
                         body.extend(self.lower_expr(condition)?);
                         body
                     };
@@ -558,7 +641,7 @@ impl Lowerer {
                 // map
                 let map_body = {
                     let mut body = Vec::new();
-                    body.push(Instruction::new(OpCode::Store(var.clone())));
+                    body.push(Instruction::new(OpCode::StoreLocal(var_idx)));
                     body.extend(self.lower_expr(expr)?);
                     body
                 };
@@ -567,6 +650,9 @@ impl Lowerer {
 
             // Set comprehension: #{expr for var in iter if cond}
             Expr::SetComprehension { expr, var, iter, cond, .. } => {
+                // 변수를 로컬 스코프에 등록
+                let var_idx = self.scope.declare(var);
+
                 // iter 로드
                 instrs.extend(self.lower_expr(iter)?);
 
@@ -574,7 +660,7 @@ impl Lowerer {
                 if let Some(condition) = cond {
                     let filter_body = {
                         let mut body = Vec::new();
-                        body.push(Instruction::new(OpCode::Store(var.clone())));
+                        body.push(Instruction::new(OpCode::StoreLocal(var_idx)));
                         body.extend(self.lower_expr(condition)?);
                         body
                     };
@@ -584,7 +670,7 @@ impl Lowerer {
                 // map
                 let map_body = {
                     let mut body = Vec::new();
-                    body.push(Instruction::new(OpCode::Store(var.clone())));
+                    body.push(Instruction::new(OpCode::StoreLocal(var_idx)));
                     body.extend(self.lower_expr(expr)?);
                     body
                 };
@@ -660,6 +746,76 @@ impl Lowerer {
         Ok(instrs)
     }
 
+    /// Map 연산 최적화: 단순 패턴 감지
+    /// `_ * const`, `_ + const`, `_ - const`, `_ / const` 패턴을 네이티브 opcode로 변환
+    fn try_optimize_map(&self, transform: &Expr) -> Option<OpCode> {
+        // 패턴: _ op const 또는 const op _
+        if let Expr::Binary(left, op, right, _) = transform {
+            // _ * const
+            if matches!(left.as_ref(), Expr::LambdaParam(_)) {
+                if let Expr::Integer(n, _) = right.as_ref() {
+                    return match op {
+                        BinaryOp::Mul => Some(OpCode::MapMulConst(*n)),
+                        BinaryOp::Add => Some(OpCode::MapAddConst(*n)),
+                        BinaryOp::Sub => Some(OpCode::MapSubConst(*n)),
+                        BinaryOp::Div => Some(OpCode::MapDivConst(*n)),
+                        _ => None,
+                    };
+                }
+            }
+            // const * _ (교환 가능한 연산만)
+            if matches!(right.as_ref(), Expr::LambdaParam(_)) {
+                if let Expr::Integer(n, _) = left.as_ref() {
+                    return match op {
+                        BinaryOp::Mul => Some(OpCode::MapMulConst(*n)),
+                        BinaryOp::Add => Some(OpCode::MapAddConst(*n)),
+                        _ => None,
+                    };
+                }
+            }
+        }
+        None
+    }
+
+    /// Filter 연산 최적화: 단순 패턴 감지
+    /// `_ > const`, `_ < const`, `_ % 2 == 0` 등 패턴을 네이티브 opcode로 변환
+    fn try_optimize_filter(&self, predicate: &Expr) -> Option<OpCode> {
+        // 패턴: _ op const
+        if let Expr::Binary(left, op, right, _) = predicate {
+            // _ > const, _ < const 등
+            if matches!(left.as_ref(), Expr::LambdaParam(_)) {
+                if let Expr::Integer(n, _) = right.as_ref() {
+                    return match op {
+                        BinaryOp::Gt => Some(OpCode::FilterGtConst(*n)),
+                        BinaryOp::Lt => Some(OpCode::FilterLtConst(*n)),
+                        BinaryOp::GtEq => Some(OpCode::FilterGteConst(*n)),
+                        BinaryOp::LtEq => Some(OpCode::FilterLteConst(*n)),
+                        BinaryOp::Eq => Some(OpCode::FilterEqConst(*n)),
+                        BinaryOp::NotEq => Some(OpCode::FilterNeqConst(*n)),
+                        _ => None,
+                    };
+                }
+            }
+            // _ % 2 == 0 (짝수), _ % 2 != 0 (홀수)
+            if let Expr::Binary(mod_left, mod_op, mod_right, _) = left.as_ref() {
+                if *mod_op == BinaryOp::Mod
+                    && matches!(mod_left.as_ref(), Expr::LambdaParam(_))
+                {
+                    if let Expr::Integer(2, _) = mod_right.as_ref() {
+                        if let Expr::Integer(0, _) = right.as_ref() {
+                            return match op {
+                                BinaryOp::Eq => Some(OpCode::FilterEven),
+                                BinaryOp::NotEq => Some(OpCode::FilterOdd),
+                                _ => None,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// 패턴을 IR로 변환 (매칭 조건 생성)
     /// 스택에 매칭 대상 값이 있고, 결과로 Bool을 푸시
     fn lower_pattern(&mut self, pattern: &Pattern) -> LowerResult<Vec<Instruction>> {
@@ -681,7 +837,8 @@ impl Lowerer {
             Pattern::Binding(name, _) => {
                 // 값을 변수에 바인딩하고 true 반환
                 instrs.push(Instruction::new(OpCode::Dup));
-                instrs.push(Instruction::new(OpCode::Store(name.clone())));
+                let idx = self.scope.declare(name);
+                instrs.push(Instruction::new(OpCode::StoreLocal(idx)));
                 instrs.push(Instruction::new(OpCode::Pop));
                 instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
             }
@@ -689,6 +846,9 @@ impl Lowerer {
             Pattern::Tuple(patterns, _) | Pattern::Array(patterns, _) => {
                 // 튜플/배열 패턴: 길이 확인 후 각 요소 매칭
                 // 스택: [value]
+
+                // 임시 변수 인덱스 미리 할당
+                let pat_acc_idx = self.scope.declare("__pat_acc__");
 
                 // 1. 길이 확인
                 instrs.push(Instruction::new(OpCode::Dup));
@@ -704,7 +864,7 @@ impl Lowerer {
 
                     // value를 스택 맨 위로 복사 (Dup은 맨 위만 복사)
                     // 임시 변수에 저장하고 로드하는 방식 사용
-                    instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                     instrs.push(Instruction::new(OpCode::Dup)); // value 복사
                     instrs.push(Instruction::new(OpCode::Const(Value::Int(i as i64))));
                     instrs.push(Instruction::new(OpCode::Index));
@@ -715,15 +875,15 @@ impl Lowerer {
                     // 스택: [value, element_matched]
 
                     // 이전 결과와 AND
-                    instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
                     instrs.push(Instruction::new(OpCode::And));
                     // 스택: [value, combined_result]
                 }
 
                 // 최종 결과 저장, value 제거
-                instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                 instrs.push(Instruction::new(OpCode::Pop)); // value 제거
-                instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
             }
 
             Pattern::Struct(fields, _) => {
@@ -735,6 +895,9 @@ impl Lowerer {
                     instrs.push(Instruction::new(OpCode::Pop));
                     instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
                 } else {
+                    // 임시 변수 인덱스 미리 할당
+                    let pat_acc_idx = self.scope.declare("__pat_acc__");
+
                     // 첫 번째 필드 처리
                     let (first_name, first_pat) = &fields[0];
                     instrs.push(Instruction::new(OpCode::Dup));
@@ -745,14 +908,15 @@ impl Lowerer {
                     } else {
                         // 바인딩만: field_name을 변수로 저장
                         instrs.push(Instruction::new(OpCode::Dup));
-                        instrs.push(Instruction::new(OpCode::Store(first_name.clone())));
+                        let field_idx = self.scope.declare(first_name);
+                        instrs.push(Instruction::new(OpCode::StoreLocal(field_idx)));
                         instrs.push(Instruction::new(OpCode::Pop));
                         instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
                     }
 
                     // 나머지 필드 처리
                     for (field_name, sub_pat) in fields.iter().skip(1) {
-                        instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                         instrs.push(Instruction::new(OpCode::Dup));
                         instrs.push(Instruction::new(OpCode::GetField(field_name.clone())));
 
@@ -760,19 +924,20 @@ impl Lowerer {
                             instrs.extend(self.lower_pattern(pat)?);
                         } else {
                             instrs.push(Instruction::new(OpCode::Dup));
-                            instrs.push(Instruction::new(OpCode::Store(field_name.clone())));
+                            let field_idx = self.scope.declare(field_name);
+                            instrs.push(Instruction::new(OpCode::StoreLocal(field_idx)));
                             instrs.push(Instruction::new(OpCode::Pop));
                             instrs.push(Instruction::new(OpCode::Const(Value::Bool(true))));
                         }
 
-                        instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
                         instrs.push(Instruction::new(OpCode::And));
                     }
 
                     // 최종 결과 저장, value 제거
-                    instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                     instrs.push(Instruction::new(OpCode::Pop));
-                    instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
                 }
             }
 
@@ -780,6 +945,8 @@ impl Lowerer {
                 // Enum variant 패턴
                 // 현재는 간단히 이름 비교만 (태그 확인)
                 // TODO: 실제 Enum 타입 시스템 필요
+                let pat_acc_idx = self.scope.declare("__pat_acc__");
+
                 instrs.push(Instruction::new(OpCode::Dup));
                 instrs.push(Instruction::new(OpCode::GetField("__variant__".to_string())));
                 instrs.push(Instruction::new(OpCode::Const(Value::String(name.clone()))));
@@ -787,36 +954,38 @@ impl Lowerer {
 
                 if let Some(inner_pat) = inner {
                     // 내부 패턴 매칭
-                    instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                     instrs.push(Instruction::new(OpCode::Dup));
                     instrs.push(Instruction::new(OpCode::GetField("__value__".to_string())));
                     instrs.extend(self.lower_pattern(inner_pat)?);
-                    instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                    instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
                     instrs.push(Instruction::new(OpCode::And));
                 }
 
                 // value 제거
-                instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                 instrs.push(Instruction::new(OpCode::Pop));
-                instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
             }
 
             Pattern::Range(start, end, _) => {
                 // 범위 패턴: start <= value <= end
                 // 스택: [value]
+                let pat_acc_idx = self.scope.declare("__pat_acc__");
+
                 instrs.push(Instruction::new(OpCode::Dup));
                 instrs.extend(self.lower_expr(start)?);
                 instrs.push(Instruction::new(OpCode::Gte)); // value >= start
                 // 스택: [value, gte_start]
 
-                instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
                 // 스택: [value]
 
                 instrs.extend(self.lower_expr(end)?);
                 instrs.push(Instruction::new(OpCode::Lte)); // value <= end
                 // 스택: [lte_end]
 
-                instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
                 instrs.push(Instruction::new(OpCode::And));
                 // 스택: [result]
             }
@@ -827,15 +996,19 @@ impl Lowerer {
                     instrs.push(Instruction::new(OpCode::Pop));
                     instrs.push(Instruction::new(OpCode::Const(Value::Bool(false))));
                 } else {
+                    // 임시 변수 인덱스 할당
+                    let or_val_idx = self.scope.declare("__match_or_val__");
+                    let pat_acc_idx = self.scope.declare("__pat_acc__");
+
                     // 값을 임시 저장
-                    instrs.push(Instruction::new(OpCode::Store("__match_or_val__".to_string())));
+                    instrs.push(Instruction::new(OpCode::StoreLocal(or_val_idx)));
                     instrs.push(Instruction::new(OpCode::Const(Value::Bool(false)))); // 초기값
 
                     for pat in patterns {
-                        instrs.push(Instruction::new(OpCode::Store("__pat_acc__".to_string())));
-                        instrs.push(Instruction::new(OpCode::Load("__match_or_val__".to_string())));
+                        instrs.push(Instruction::new(OpCode::StoreLocal(pat_acc_idx)));
+                        instrs.push(Instruction::new(OpCode::LoadLocal(or_val_idx)));
                         instrs.extend(self.lower_pattern(pat)?);
-                        instrs.push(Instruction::new(OpCode::Load("__pat_acc__".to_string())));
+                        instrs.push(Instruction::new(OpCode::LoadLocal(pat_acc_idx)));
                         instrs.push(Instruction::new(OpCode::Or));
                     }
                 }
@@ -1218,8 +1391,8 @@ mod tests {
         );
         let instrs = lowerer.lower_expr(&expr).unwrap();
 
-        // Load arr + Map
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Map(_))));
+        // Load arr + Map (either optimized MapMulConst or generic Map)
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Map(_) | OpCode::MapMulConst(_))));
     }
 
     #[test]
@@ -1232,7 +1405,8 @@ mod tests {
         );
         let instrs = lowerer.lower_expr(&expr).unwrap();
 
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Filter(_))));
+        // Either optimized FilterGtConst or generic Filter
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Filter(_) | OpCode::FilterGtConst(_))));
     }
 
     #[test]
@@ -1428,8 +1602,8 @@ mod tests {
         );
         let instrs = lowerer.lower_expr(&expr).unwrap();
 
-        // Should store match value
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "__match_val__")));
+        // Should store match value using StoreLocal
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::StoreLocal(_))));
     }
 
     #[test]
@@ -1525,8 +1699,9 @@ mod tests {
         );
         let instrs = lowerer.lower_expr(&expr).unwrap();
 
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "x")));
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Load(n) if n == "x")));
+        // x is stored using StoreLocal (index 0) and loaded using LoadLocal
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::StoreLocal(0))));
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::LoadLocal(0))));
     }
 
     #[test]
@@ -1542,8 +1717,9 @@ mod tests {
         );
         let instrs = lowerer.lower_expr(&expr).unwrap();
 
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "x")));
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "y")));
+        // x is at index 0, y is at index 1
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::StoreLocal(0))));
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::StoreLocal(1))));
     }
 
     // === Function Call Tests ===
@@ -1698,7 +1874,8 @@ mod tests {
         let instrs = lowerer.lower_pattern(&Pattern::Binding("x".to_string(), dummy_span())).unwrap();
 
         assert!(instrs.iter().any(|i| matches!(i.opcode, OpCode::Dup)));
-        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::Store(n) if n == "x")));
+        // Binding pattern stores to local variable using StoreLocal
+        assert!(instrs.iter().any(|i| matches!(&i.opcode, OpCode::StoreLocal(_))));
     }
 
     // === Function Definition Tests ===
@@ -1918,15 +2095,15 @@ mod tests {
 
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].name, "double");
-        // Should contain Store for binding 'n' and Load to use it
+        // Should contain StoreLocal for binding 'n' and LoadLocal to use it
         let has_store = functions[0].instructions.iter().any(|i| {
-            matches!(&i.opcode, OpCode::Store(name) if name == "n")
+            matches!(&i.opcode, OpCode::StoreLocal(_))
         });
         let has_load = functions[0].instructions.iter().any(|i| {
-            matches!(&i.opcode, OpCode::Load(name) if name == "n")
+            matches!(&i.opcode, OpCode::LoadLocal(_))
         });
-        assert!(has_store, "Should have Store for binding 'n'");
-        assert!(has_load, "Should have Load to use 'n'");
+        assert!(has_store, "Should have StoreLocal for binding 'n'");
+        assert!(has_load, "Should have LoadLocal to use 'n'");
     }
 
     #[test]

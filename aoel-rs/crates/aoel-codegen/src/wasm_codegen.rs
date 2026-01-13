@@ -463,6 +463,7 @@ mod tests {
                 Instruction::new(OpCode::Add),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 0,
         };
 
         let wat = generate_wat(&[func]).unwrap();
@@ -484,6 +485,7 @@ mod tests {
                 Instruction::new(OpCode::Add),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 2,
         };
 
         let wat = generate_wat(&[func]).unwrap();
@@ -504,6 +506,7 @@ mod tests {
                 Instruction::new(OpCode::Lt),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 0,
         };
 
         let wat = generate_wat(&[func]).unwrap();
@@ -522,6 +525,7 @@ mod tests {
                 Instruction::new(OpCode::SelfCall(1)),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 1,
         };
 
         let wat = generate_wat(&[func]).unwrap();

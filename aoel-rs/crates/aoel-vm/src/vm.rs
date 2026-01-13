@@ -7,6 +7,10 @@ use aoel_ir::{Instruction, OpCode, ReduceOp, Value};
 use aoel_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
 use crate::ffi::FfiLoader;
+use rayon::prelude::*;
+
+// Type alias for faster HashMap (can swap implementation easily)
+type FastMap<K, V> = HashMap<K, V>;
 
 const MAX_RECURSION_DEPTH: usize = 1000;
 
@@ -29,16 +33,18 @@ struct CatchHandler {
 pub struct Vm {
     /// 스택
     stack: Vec<Value>,
-    /// 로컬 변수
-    locals: HashMap<String, Value>,
+    /// 인덱스 기반 로컬 변수 (빠른 접근)
+    locals: Vec<Value>,
+    /// 이름 기반 로컬 변수 (글로벌/클로저용, 폴백)
+    named_locals: FastMap<String, Value>,
     /// 컴파일된 함수들
-    functions: HashMap<String, CompiledFunction>,
+    functions: FastMap<String, CompiledFunction>,
     /// 현재 실행 중인 함수 (재귀용)
     current_function: Option<String>,
     /// 재귀 깊이
     recursion_depth: usize,
     /// 클로저 저장소 (body_id -> instructions)
-    closures: HashMap<usize, Vec<Instruction>>,
+    closures: FastMap<usize, Vec<Instruction>>,
     /// 다음 클로저 ID
     next_closure_id: usize,
     /// FFI 동적 라이브러리 로더
@@ -50,12 +56,13 @@ pub struct Vm {
 impl Vm {
     pub fn new() -> Self {
         Self {
-            stack: Vec::new(),
-            locals: HashMap::new(),
-            functions: HashMap::new(),
+            stack: Vec::with_capacity(256),  // Pre-allocate stack
+            locals: Vec::with_capacity(64),  // Pre-allocate locals
+            named_locals: FastMap::new(),
+            functions: FastMap::new(),
             current_function: None,
             recursion_depth: 0,
-            closures: HashMap::new(),
+            closures: FastMap::new(),
             next_closure_id: 0,
             ffi_loader: FfiLoader::new(),
             catch_stack: Vec::new(),
@@ -95,6 +102,79 @@ impl Vm {
         }
     }
 
+    /// Apply reduce operation to a vector (helper for fused operations)
+    fn apply_reduce(&self, items: &[Value], reduce_op: &ReduceOp) -> Value {
+        match reduce_op {
+            ReduceOp::Sum => {
+                let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
+                if all_ints {
+                    let sum: i64 = items.iter()
+                        .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
+                        .sum();
+                    Value::Int(sum)
+                } else {
+                    let sum: f64 = items.iter().filter_map(|v| v.as_float()).sum();
+                    if sum.fract() == 0.0 {
+                        Value::Int(sum as i64)
+                    } else {
+                        Value::Float(sum)
+                    }
+                }
+            }
+            ReduceOp::Product => {
+                let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
+                if all_ints {
+                    let product: i64 = items.iter()
+                        .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
+                        .product();
+                    Value::Int(product)
+                } else {
+                    let product: f64 = items.iter().filter_map(|v| v.as_float()).product();
+                    if product.fract() == 0.0 {
+                        Value::Int(product as i64)
+                    } else {
+                        Value::Float(product)
+                    }
+                }
+            }
+            ReduceOp::Min => {
+                if items.is_empty() {
+                    Value::Void
+                } else {
+                    items.iter()
+                        .min_by(|a, b| a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0)))
+                        .cloned()
+                        .unwrap_or(Value::Void)
+                }
+            }
+            ReduceOp::Max => {
+                if items.is_empty() {
+                    Value::Void
+                } else {
+                    items.iter()
+                        .max_by(|a, b| a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0)))
+                        .cloned()
+                        .unwrap_or(Value::Void)
+                }
+            }
+            ReduceOp::All => Value::Bool(items.iter().all(|i| i.is_truthy())),
+            ReduceOp::Any => Value::Bool(items.iter().any(|i| i.is_truthy())),
+            ReduceOp::Count => Value::Int(items.len() as i64),
+            ReduceOp::First => items.first().cloned().unwrap_or(Value::Void),
+            ReduceOp::Last => items.last().cloned().unwrap_or(Value::Void),
+            ReduceOp::Avg => {
+                if items.is_empty() {
+                    Value::Float(0.0)
+                } else {
+                    let len = items.len() as f64;
+                    let sum: f64 = items.iter().filter_map(|i| i.as_float()).sum();
+                    Value::Float(sum / len)
+                }
+            }
+            ReduceOp::Custom(_) => Value::Void, // Custom not supported in helper
+        }
+    }
+
     /// 함수 호출
     pub fn call_function(&mut self, name: &str, args: Vec<Value>) -> RuntimeResult<Value> {
         let func = self.functions.get(name)
@@ -110,13 +190,17 @@ impl Vm {
         // 이전 상태 저장 (스택 포함!)
         let prev_stack = std::mem::take(&mut self.stack);
         let prev_locals = std::mem::take(&mut self.locals);
+        let prev_named_locals = std::mem::take(&mut self.named_locals);
         let prev_function = self.current_function.take();
 
-        // 인자를 로컬 변수로 설정
+        // 로컬 변수 슬롯 초기화
+        self.locals.resize(func.local_count as usize, Value::Void);
+
+        // 인자를 로컬 변수 슬롯에 설정 (인덱스 0부터)
         let mut current_args = args;
-        for (i, param) in func.params.iter().enumerate() {
+        for (i, _param) in func.params.iter().enumerate() {
             if i < current_args.len() {
-                self.locals.insert(param.clone(), current_args[i].clone());
+                self.locals[i] = current_args[i].clone();
             }
         }
 
@@ -137,6 +221,7 @@ impl Vm {
                     // 상태 복원
                     self.stack = prev_stack;
                     self.locals = prev_locals;
+                    self.named_locals = prev_named_locals;
                     self.current_function = prev_function;
                     self.recursion_depth -= 1;
 
@@ -146,12 +231,16 @@ impl Vm {
                     // Tail call - restart with new arguments (no stack growth)
                     current_args = new_args;
                     self.stack.clear();
-                    self.locals.clear();
+                    // 로컬 슬롯 초기화 (크기는 유지)
+                    for slot in self.locals.iter_mut() {
+                        *slot = Value::Void;
+                    }
+                    self.named_locals.clear();
 
                     // Rebind parameters
-                    for (i, param) in func.params.iter().enumerate() {
+                    for (i, _param) in func.params.iter().enumerate() {
                         if i < current_args.len() {
-                            self.locals.insert(param.clone(), current_args[i].clone());
+                            self.locals[i] = current_args[i].clone();
                         }
                     }
                     // Loop continues without increasing recursion depth
@@ -160,6 +249,7 @@ impl Vm {
                     // 상태 복원
                     self.stack = prev_stack;
                     self.locals = prev_locals;
+                    self.named_locals = prev_named_locals;
                     self.current_function = prev_function;
                     self.recursion_depth -= 1;
                     return Err(e);
@@ -347,14 +437,36 @@ impl Vm {
 
             // === Variable Operations ===
             OpCode::Load(name) => {
-                let value = self.locals.get(name)
+                // 이름 기반 조회 (글로벌/클로저용)
+                let value = self.named_locals.get(name)
                     .ok_or_else(|| RuntimeError::UndefinedVariable(name.clone()))?
                     .clone();
                 self.stack.push(value);
             }
             OpCode::Store(name) => {
                 let value = self.pop()?;
-                self.locals.insert(name.clone(), value);
+                self.named_locals.insert(name.clone(), value);
+            }
+            OpCode::LoadLocal(idx) => {
+                // 인덱스 기반 로드 (빠른 경로)
+                let idx = *idx as usize;
+                if idx >= self.locals.len() {
+                    return Err(RuntimeError::Internal(format!(
+                        "Local variable index out of bounds: {} >= {}",
+                        idx, self.locals.len()
+                    )));
+                }
+                self.stack.push(self.locals[idx].clone());
+            }
+            OpCode::StoreLocal(idx) => {
+                // 인덱스 기반 저장 (빠른 경로)
+                let idx = *idx as usize;
+                let value = self.pop()?;
+                // 슬롯이 부족하면 확장
+                if idx >= self.locals.len() {
+                    self.locals.resize(idx + 1, Value::Void);
+                }
+                self.locals[idx] = value;
             }
 
             // === Arithmetic Operations ===
@@ -512,8 +624,8 @@ impl Vm {
                 if let Value::Array(items) = arr {
                     let mut results = Vec::new();
                     for item in items {
-                        // _ 변수에 현재 아이템 저장
-                        self.locals.insert("_".to_string(), item);
+                        // _ 변수에 현재 아이템 저장 (람다 파라미터용)
+                        self.named_locals.insert("_".to_string(), item);
                         self.execute_instructions(transform_instrs)?;
                         results.push(self.pop()?);
                     }
@@ -527,7 +639,8 @@ impl Vm {
                 if let Value::Array(items) = arr {
                     let mut results = Vec::new();
                     for item in items {
-                        self.locals.insert("_".to_string(), item.clone());
+                        // _ 변수에 현재 아이템 저장 (람다 파라미터용)
+                        self.named_locals.insert("_".to_string(), item.clone());
                         self.execute_instructions(pred_instrs)?;
                         let keep = self.pop()?;
                         if keep.is_truthy() {
@@ -539,39 +652,290 @@ impl Vm {
                     self.stack.push(Value::Array(vec![]));
                 }
             }
+            // === Optimized Native Array Operations ===
+            OpCode::MapMulConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .map(|item| {
+                            if let Some(n) = item.as_int() {
+                                Value::Int(n * c)
+                            } else if let Some(f) = item.as_float() {
+                                Value::Float(f * *c as f64)
+                            } else {
+                                item
+                            }
+                        })
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::MapAddConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .map(|item| {
+                            if let Some(n) = item.as_int() {
+                                Value::Int(n + c)
+                            } else if let Some(f) = item.as_float() {
+                                Value::Float(f + *c as f64)
+                            } else {
+                                item
+                            }
+                        })
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::MapSubConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .map(|item| {
+                            if let Some(n) = item.as_int() {
+                                Value::Int(n - c)
+                            } else if let Some(f) = item.as_float() {
+                                Value::Float(f - *c as f64)
+                            } else {
+                                item
+                            }
+                        })
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::MapDivConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .map(|item| {
+                            if *c == 0 {
+                                Value::Int(0) // Division by zero returns 0
+                            } else if let Some(n) = item.as_int() {
+                                Value::Int(n / c)
+                            } else if let Some(f) = item.as_float() {
+                                Value::Float(f / *c as f64)
+                            } else {
+                                item
+                            }
+                        })
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterGtConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n > *c).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterLtConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n < *c).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterGteConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n >= *c).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterLteConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n <= *c).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterEqConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n == *c).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterNeqConst(c) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n != *c).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterEven => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n % 2 == 0).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterOdd => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n % 2 != 0).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterPositive => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n > 0).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+            OpCode::FilterNegative => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_iter()
+                        .filter(|item| item.as_int().map(|n| n < 0).unwrap_or(false))
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+
             OpCode::Reduce(reduce_op, _init) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
                     let result = match reduce_op {
                         ReduceOp::Sum => {
-                            let mut sum = 0i64;
-                            for item in items {
-                                if let Some(n) = item.as_int() {
-                                    sum += n;
-                                } else if let Some(f) = item.as_float() {
-                                    sum += f as i64;
+                            // Check if all items are integers for fast path
+                            let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
+                            if all_ints {
+                                // Fast path: integer sum
+                                let sum: i64 = items.iter()
+                                    .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
+                                    .sum();
+                                Value::Int(sum)
+                            } else {
+                                // Mixed/float path: use f64 for precision
+                                let sum: f64 = items.iter()
+                                    .filter_map(|v| v.as_float())
+                                    .sum();
+                                // Return Int if result is whole number
+                                if sum.fract() == 0.0 && sum >= i64::MIN as f64 && sum <= i64::MAX as f64 {
+                                    Value::Int(sum as i64)
+                                } else {
+                                    Value::Float(sum)
                                 }
                             }
-                            Value::Int(sum)
                         }
                         ReduceOp::Product => {
-                            let mut product = 1i64;
-                            for item in items {
-                                if let Some(n) = item.as_int() {
-                                    product *= n;
+                            let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
+                            if all_ints {
+                                let product: i64 = items.iter()
+                                    .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
+                                    .product();
+                                Value::Int(product)
+                            } else {
+                                let product: f64 = items.iter()
+                                    .filter_map(|v| v.as_float())
+                                    .product();
+                                if product.fract() == 0.0 && product >= i64::MIN as f64 && product <= i64::MAX as f64 {
+                                    Value::Int(product as i64)
+                                } else {
+                                    Value::Float(product)
                                 }
                             }
-                            Value::Int(product)
                         }
                         ReduceOp::Min => {
-                            items.into_iter().min_by(|a, b| {
-                                a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
-                            }).unwrap_or(Value::Void)
+                            if items.is_empty() {
+                                Value::Void
+                            } else {
+                                // Check type of first element
+                                match &items[0] {
+                                    Value::Int(_) => {
+                                        items.iter()
+                                            .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
+                                            .min()
+                                            .map(Value::Int)
+                                            .unwrap_or(Value::Void)
+                                    }
+                                    Value::Float(_) => {
+                                        items.iter()
+                                            .filter_map(|v| v.as_float())
+                                            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                                            .map(Value::Float)
+                                            .unwrap_or(Value::Void)
+                                    }
+                                    _ => items.into_iter().min_by(|a, b| {
+                                        a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
+                                    }).unwrap_or(Value::Void)
+                                }
+                            }
                         }
                         ReduceOp::Max => {
-                            items.into_iter().max_by(|a, b| {
-                                a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
-                            }).unwrap_or(Value::Void)
+                            if items.is_empty() {
+                                Value::Void
+                            } else {
+                                match &items[0] {
+                                    Value::Int(_) => {
+                                        items.iter()
+                                            .filter_map(|v| if let Value::Int(n) = v { Some(*n) } else { None })
+                                            .max()
+                                            .map(Value::Int)
+                                            .unwrap_or(Value::Void)
+                                    }
+                                    Value::Float(_) => {
+                                        items.iter()
+                                            .filter_map(|v| v.as_float())
+                                            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                                            .map(Value::Float)
+                                            .unwrap_or(Value::Void)
+                                    }
+                                    _ => items.into_iter().max_by(|a, b| {
+                                        a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
+                                    }).unwrap_or(Value::Void)
+                                }
+                            }
                         }
                         ReduceOp::All => {
                             Value::Bool(items.iter().all(|i| i.is_truthy()))
@@ -580,16 +944,17 @@ impl Vm {
                             Value::Bool(items.iter().any(|i| i.is_truthy()))
                         }
                         ReduceOp::Count => Value::Int(items.len() as i64),
-                        ReduceOp::First => items.first().cloned().unwrap_or(Value::Void),
-                        ReduceOp::Last => items.last().cloned().unwrap_or(Value::Void),
+                        ReduceOp::First => items.into_iter().next().unwrap_or(Value::Void),
+                        ReduceOp::Last => items.into_iter().last().unwrap_or(Value::Void),
                         ReduceOp::Avg => {
                             if items.is_empty() {
                                 Value::Float(0.0)
                             } else {
+                                let len = items.len() as f64;
                                 let sum: f64 = items.iter()
                                     .filter_map(|i| i.as_float())
                                     .sum();
-                                Value::Float(sum / items.len() as f64)
+                                Value::Float(sum / len)
                             }
                         }
                         ReduceOp::Custom(reducer_instrs) => {
@@ -601,8 +966,8 @@ impl Vm {
                                 let mut acc = items[0].clone();
                                 for item in items.into_iter().skip(1) {
                                     // Set up variables for reducer
-                                    self.locals.insert("_".to_string(), item);
-                                    self.locals.insert("__acc__".to_string(), acc.clone());
+                                    self.named_locals.insert("_".to_string(), item);
+                                    self.named_locals.insert("__acc__".to_string(), acc.clone());
                                     self.execute_instructions(reducer_instrs)?;
                                     acc = self.pop()?;
                                 }
@@ -662,8 +1027,9 @@ impl Vm {
                 self.next_closure_id += 1;
                 self.closures.insert(body_id, body.as_ref().clone());
 
-                // 현재 환경에서 변수 캡처 (단순 구현: 모든 로컬 변수 캡처)
-                let captured = self.locals.clone();
+                // 현재 환경에서 변수 캡처 (named_locals만 캡처)
+                // 인덱스 기반 로컬은 클로저에서 사용되지 않음
+                let captured = self.named_locals.clone();
 
                 self.stack.push(Value::Closure {
                     params: params.clone(),
@@ -689,16 +1055,16 @@ impl Vm {
                         .ok_or_else(|| RuntimeError::Internal("Closure body not found".to_string()))?
                         .clone();
 
-                    // 상태 저장
-                    let prev_locals = std::mem::take(&mut self.locals);
+                    // 상태 저장 (named_locals만 저장/복원)
+                    let prev_named_locals = std::mem::take(&mut self.named_locals);
 
                     // 캡처된 환경 복원
-                    self.locals = captured;
+                    self.named_locals = captured;
 
-                    // 인자 바인딩
+                    // 인자 바인딩 (클로저는 named_locals 사용)
                     for (i, param) in params.iter().enumerate() {
                         if i < args.len() {
-                            self.locals.insert(param.clone(), args[i].clone());
+                            self.named_locals.insert(param.clone(), args[i].clone());
                         }
                     }
 
@@ -707,7 +1073,7 @@ impl Vm {
                     let result = self.pop()?;
 
                     // 상태 복원
-                    self.locals = prev_locals;
+                    self.named_locals = prev_named_locals;
 
                     self.stack.push(result);
                 } else {
@@ -767,6 +1133,347 @@ impl Vm {
 
                 let result = self.call_ffi(lib_name, fn_name, &args)?;
                 self.stack.push(result);
+            }
+
+            // === Parallel Collection Operations ===
+            OpCode::ParallelMap(transform_instrs) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    // Use rayon for parallel execution
+                    let results: Vec<Value> = items.into_par_iter()
+                        .map(|item| {
+                            // Create a mini-VM for each thread
+                            let mut mini_vm = Vm::new();
+                            mini_vm.named_locals.insert("_".to_string(), item);
+                            mini_vm.functions = self.functions.clone();
+
+                            if let Ok(()) = mini_vm.execute_instructions(transform_instrs) {
+                                mini_vm.stack.pop().unwrap_or(Value::Void)
+                            } else {
+                                Value::Void
+                            }
+                        })
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+
+            OpCode::ParallelFilter(predicate_instrs) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let results: Vec<Value> = items.into_par_iter()
+                        .filter(|item| {
+                            let mut mini_vm = Vm::new();
+                            mini_vm.named_locals.insert("_".to_string(), item.clone());
+                            mini_vm.functions = self.functions.clone();
+
+                            if let Ok(()) = mini_vm.execute_instructions(predicate_instrs) {
+                                mini_vm.stack.pop().map(|v| v.is_truthy()).unwrap_or(false)
+                            } else {
+                                false
+                            }
+                        })
+                        .collect();
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+
+            OpCode::ParallelReduce(reduce_op, _init) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let result = match reduce_op {
+                        ReduceOp::Sum => {
+                            let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
+                            if all_ints {
+                                let sum: i64 = items.into_par_iter()
+                                    .filter_map(|v| if let Value::Int(n) = v { Some(n) } else { None })
+                                    .sum();
+                                Value::Int(sum)
+                            } else {
+                                let sum: f64 = items.into_par_iter()
+                                    .filter_map(|v| v.as_float())
+                                    .sum();
+                                if sum.fract() == 0.0 {
+                                    Value::Int(sum as i64)
+                                } else {
+                                    Value::Float(sum)
+                                }
+                            }
+                        }
+                        ReduceOp::Product => {
+                            let all_ints = items.iter().all(|v| matches!(v, Value::Int(_)));
+                            if all_ints {
+                                let product: i64 = items.into_par_iter()
+                                    .filter_map(|v| if let Value::Int(n) = v { Some(n) } else { None })
+                                    .product();
+                                Value::Int(product)
+                            } else {
+                                let product: f64 = items.into_par_iter()
+                                    .filter_map(|v| v.as_float())
+                                    .product();
+                                if product.fract() == 0.0 {
+                                    Value::Int(product as i64)
+                                } else {
+                                    Value::Float(product)
+                                }
+                            }
+                        }
+                        ReduceOp::Min => {
+                            items.into_par_iter()
+                                .min_by(|a, b| {
+                                    a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
+                                })
+                                .unwrap_or(Value::Void)
+                        }
+                        ReduceOp::Max => {
+                            items.into_par_iter()
+                                .max_by(|a, b| {
+                                    a.as_int().unwrap_or(0).cmp(&b.as_int().unwrap_or(0))
+                                })
+                                .unwrap_or(Value::Void)
+                        }
+                        ReduceOp::All => {
+                            Value::Bool(items.into_par_iter().all(|i| i.is_truthy()))
+                        }
+                        ReduceOp::Any => {
+                            Value::Bool(items.into_par_iter().any(|i| i.is_truthy()))
+                        }
+                        ReduceOp::Count => Value::Int(items.len() as i64),
+                        // These don't benefit from parallelization
+                        ReduceOp::First => items.into_iter().next().unwrap_or(Value::Void),
+                        ReduceOp::Last => items.into_iter().last().unwrap_or(Value::Void),
+                        ReduceOp::Avg => {
+                            if items.is_empty() {
+                                Value::Float(0.0)
+                            } else {
+                                let len = items.len() as f64;
+                                let sum: f64 = items.into_par_iter()
+                                    .filter_map(|i| i.as_float())
+                                    .sum();
+                                Value::Float(sum / len)
+                            }
+                        }
+                        // Custom reduce can't be easily parallelized
+                        ReduceOp::Custom(_) => {
+                            // Fall back to sequential
+                            Value::Void
+                        }
+                    };
+                    self.stack.push(result);
+                } else {
+                    self.stack.push(Value::Void);
+                }
+            }
+
+            // === Fused Operations ===
+            OpCode::MapReduce(map_instrs, reduce_op, _init) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    // Single pass: map + reduce without intermediate array
+                    let result = match reduce_op {
+                        ReduceOp::Sum => {
+                            let mut sum = 0i64;
+                            let mut has_float = false;
+                            let mut float_sum = 0.0f64;
+
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(map_instrs)?;
+                                let mapped = self.pop()?;
+
+                                if let Value::Int(n) = mapped {
+                                    sum += n;
+                                    float_sum += n as f64;
+                                } else if let Some(f) = mapped.as_float() {
+                                    has_float = true;
+                                    float_sum += f;
+                                }
+                            }
+
+                            if has_float {
+                                Value::Float(float_sum)
+                            } else {
+                                Value::Int(sum)
+                            }
+                        }
+                        ReduceOp::Product => {
+                            let mut product = 1i64;
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(map_instrs)?;
+                                if let Value::Int(n) = self.pop()? {
+                                    product *= n;
+                                }
+                            }
+                            Value::Int(product)
+                        }
+                        ReduceOp::Count => {
+                            // Just count items
+                            Value::Int(items.len() as i64)
+                        }
+                        _ => {
+                            // Fallback: collect then reduce
+                            let mut mapped: Vec<Value> = Vec::with_capacity(items.len());
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(map_instrs)?;
+                                mapped.push(self.pop()?);
+                            }
+                            self.apply_reduce(&mapped, reduce_op)
+                        }
+                    };
+                    self.stack.push(result);
+                } else {
+                    self.stack.push(Value::Void);
+                }
+            }
+
+            OpCode::FilterReduce(filter_instrs, reduce_op, _init) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let result = match reduce_op {
+                        ReduceOp::Sum => {
+                            let mut sum = 0i64;
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item.clone());
+                                self.execute_instructions(filter_instrs)?;
+                                if self.pop()?.is_truthy() {
+                                    if let Value::Int(n) = item {
+                                        sum += n;
+                                    }
+                                }
+                            }
+                            Value::Int(sum)
+                        }
+                        ReduceOp::Count => {
+                            let mut count = 0i64;
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(filter_instrs)?;
+                                if self.pop()?.is_truthy() {
+                                    count += 1;
+                                }
+                            }
+                            Value::Int(count)
+                        }
+                        _ => {
+                            // Fallback: collect filtered then reduce
+                            let mut filtered: Vec<Value> = Vec::new();
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item.clone());
+                                self.execute_instructions(filter_instrs)?;
+                                if self.pop()?.is_truthy() {
+                                    filtered.push(item);
+                                }
+                            }
+                            self.apply_reduce(&filtered, reduce_op)
+                        }
+                    };
+                    self.stack.push(result);
+                } else {
+                    self.stack.push(Value::Void);
+                }
+            }
+
+            OpCode::MapFilter(map_instrs, filter_instrs) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let mut results = Vec::new();
+                    for item in items {
+                        // Map
+                        self.named_locals.insert("_".to_string(), item);
+                        self.execute_instructions(map_instrs)?;
+                        let mapped = self.pop()?;
+
+                        // Filter
+                        self.named_locals.insert("_".to_string(), mapped.clone());
+                        self.execute_instructions(filter_instrs)?;
+                        if self.pop()?.is_truthy() {
+                            results.push(mapped);
+                        }
+                    }
+                    self.stack.push(Value::Array(results));
+                } else {
+                    self.stack.push(Value::Array(vec![]));
+                }
+            }
+
+            OpCode::MapFilterReduce(map_instrs, filter_instrs, reduce_op, _init) => {
+                let arr = self.pop()?;
+                if let Value::Array(items) = arr {
+                    let result = match reduce_op {
+                        ReduceOp::Sum => {
+                            let mut sum = 0i64;
+                            let mut has_float = false;
+                            let mut float_sum = 0.0f64;
+
+                            for item in items {
+                                // Map
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(map_instrs)?;
+                                let mapped = self.pop()?;
+
+                                // Filter
+                                self.named_locals.insert("_".to_string(), mapped.clone());
+                                self.execute_instructions(filter_instrs)?;
+                                if self.pop()?.is_truthy() {
+                                    // Reduce (sum)
+                                    if let Value::Int(n) = mapped {
+                                        sum += n;
+                                        float_sum += n as f64;
+                                    } else if let Some(f) = mapped.as_float() {
+                                        has_float = true;
+                                        float_sum += f;
+                                    }
+                                }
+                            }
+
+                            if has_float {
+                                Value::Float(float_sum)
+                            } else {
+                                Value::Int(sum)
+                            }
+                        }
+                        ReduceOp::Count => {
+                            let mut count = 0i64;
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(map_instrs)?;
+                                let mapped = self.pop()?;
+
+                                self.named_locals.insert("_".to_string(), mapped);
+                                self.execute_instructions(filter_instrs)?;
+                                if self.pop()?.is_truthy() {
+                                    count += 1;
+                                }
+                            }
+                            Value::Int(count)
+                        }
+                        _ => {
+                            // Fallback for other reduce ops
+                            let mut collected: Vec<Value> = Vec::new();
+                            for item in items {
+                                self.named_locals.insert("_".to_string(), item);
+                                self.execute_instructions(map_instrs)?;
+                                let mapped = self.pop()?;
+
+                                self.named_locals.insert("_".to_string(), mapped.clone());
+                                self.execute_instructions(filter_instrs)?;
+                                if self.pop()?.is_truthy() {
+                                    collected.push(mapped);
+                                }
+                            }
+                            self.apply_reduce(&collected, reduce_op)
+                        }
+                    };
+                    self.stack.push(result);
+                } else {
+                    self.stack.push(Value::Void);
+                }
             }
 
             // === Special ===
@@ -1203,10 +1910,22 @@ impl Vm {
             "SPLIT" => {
                 if args.len() >= 2 {
                     if let (Value::String(s), Value::String(delim)) = (&args[0], &args[1]) {
-                        let parts: Vec<Value> = s.split(delim.as_str())
-                            .map(|p| Value::String(p.to_string()))
-                            .collect();
-                        Some(Value::Array(parts))
+                        // Optimize common cases
+                        if delim.is_empty() {
+                            // Split into characters
+                            let parts: Vec<Value> = s.chars()
+                                .map(|c| Value::String(c.to_string()))
+                                .collect();
+                            Some(Value::Array(parts))
+                        } else {
+                            // Use split with pre-allocated capacity hint
+                            let estimated_parts = s.matches(delim.as_str()).count() + 1;
+                            let mut parts = Vec::with_capacity(estimated_parts);
+                            for p in s.split(delim.as_str()) {
+                                parts.push(Value::String(p.to_string()));
+                            }
+                            Some(Value::Array(parts))
+                        }
                     } else {
                         None
                     }
@@ -1217,10 +1936,33 @@ impl Vm {
             "JOIN" => {
                 if args.len() >= 2 {
                     if let (Value::Array(arr), Value::String(delim)) = (&args[0], &args[1]) {
-                        let strings: Vec<String> = arr.iter()
-                            .map(|v| v.to_string())
-                            .collect();
-                        Some(Value::String(strings.join(delim)))
+                        // Fast path: if all elements are strings, avoid Display formatting
+                        let all_strings = arr.iter().all(|v| matches!(v, Value::String(_)));
+                        if all_strings {
+                            // Direct string extraction without formatting
+                            let mut result = String::new();
+                            for (i, v) in arr.iter().enumerate() {
+                                if i > 0 {
+                                    result.push_str(delim);
+                                }
+                                if let Value::String(s) = v {
+                                    result.push_str(s);
+                                }
+                            }
+                            Some(Value::String(result))
+                        } else {
+                            // Mixed types: use Display trait
+                            let strings: Vec<String> = arr.iter()
+                                .map(|v| match v {
+                                    Value::String(s) => s.clone(),
+                                    Value::Int(n) => n.to_string(),
+                                    Value::Float(f) => f.to_string(),
+                                    Value::Bool(b) => b.to_string(),
+                                    _ => v.to_string(),
+                                })
+                                .collect();
+                            Some(Value::String(strings.join(delim)))
+                        }
                     } else {
                         None
                     }
@@ -1455,8 +2197,8 @@ impl Vm {
                     let mut seen = std::collections::HashSet::new();
                     let mut result = Vec::new();
                     for item in arr {
-                        let key = format!("{:?}", item);
-                        if seen.insert(key) {
+                        // Use hash_key() instead of format!("{:?}")
+                        if seen.insert(item.hash_key()) {
                             result.push(item.clone());
                         }
                     }
@@ -1470,8 +2212,9 @@ impl Vm {
                 if args.len() >= 2 {
                     if let Value::Array(arr) = &args[0] {
                         let needle = &args[1];
+                        // Use PartialEq directly instead of format!("{:?}")
                         for (i, item) in arr.iter().enumerate() {
-                            if format!("{:?}", item) == format!("{:?}", needle) {
+                            if item == needle {
                                 return Ok(Some(Value::Int(i as i64)));
                             }
                         }
@@ -1558,9 +2301,13 @@ impl Vm {
             "CHARS" => {
                 // Split string into array of characters
                 if let Some(Value::String(s)) = args.first() {
-                    Some(Value::Array(
-                        s.chars().map(|c| Value::String(c.to_string())).collect()
-                    ))
+                    // Pre-allocate for better performance
+                    let char_count = s.chars().count();
+                    let mut chars = Vec::with_capacity(char_count);
+                    for c in s.chars() {
+                        chars.push(Value::String(c.to_string()));
+                    }
+                    Some(Value::Array(chars))
                 } else {
                     None
                 }
@@ -2485,7 +3232,7 @@ impl Vm {
             "TIME_PARSE" => {
                 // Parse ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
                 if let Some(Value::String(s)) = args.first() {
-                    let parts: Vec<&str> = s.split(|c| c == '-' || c == 'T' || c == ':' || c == 'Z')
+                    let parts: Vec<&str> = s.split(['-', 'T', ':', 'Z'])
                         .filter(|s| !s.is_empty())
                         .collect();
                     if parts.len() >= 6 {
@@ -2816,11 +3563,15 @@ impl Vm {
                 if let Some(Value::Array(arr)) = args.first() {
                     let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
                     for v in arr {
+                        // Use efficient key generation instead of format!("{:?}")
                         let key = match v {
                             Value::String(s) => s.clone(),
                             Value::Int(n) => n.to_string(),
-                            Value::Bool(b) => b.to_string(),
-                            _ => format!("{:?}", v),
+                            Value::Bool(b) => if *b { "true" } else { "false" }.to_string(),
+                            Value::Float(f) => f.to_string(),
+                            Value::Void => "void".to_string(),
+                            // For complex types, use hash_key as string
+                            _ => v.hash_key().to_string(),
                         };
                         groups.entry(key).or_default().push(v.clone());
                     }
@@ -3235,6 +3986,7 @@ mod tests {
                 make_const(Value::Int(1)),
                 Instruction::new(OpCode::Add),
             ],
+            local_count: 0,
         };
 
         let result = execute(vec![func]).unwrap();
@@ -3244,16 +3996,17 @@ mod tests {
     #[test]
     fn test_function_call() {
         // add(a, b) = a + b
-        // 인자는 VM이 locals에 직접 넣어주므로 Store 불필요
+        // 인자는 VM이 locals에 직접 넣어주므로 LoadLocal로 접근
         let add = CompiledFunction {
             name: "add".to_string(),
             params: vec!["a".to_string(), "b".to_string()],
             instructions: vec![
-                Instruction::new(OpCode::Load("a".to_string())),
-                Instruction::new(OpCode::Load("b".to_string())),
+                Instruction::new(OpCode::LoadLocal(0)),  // a
+                Instruction::new(OpCode::LoadLocal(1)),  // b
                 Instruction::new(OpCode::Add),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 2,
         };
 
         let result = execute_function(vec![add], "add", vec![Value::Int(3), Value::Int(4)]).unwrap();
@@ -3263,17 +4016,17 @@ mod tests {
     #[test]
     fn test_recursion() {
         // fact(n) = n < 2 ? 1 : n * $(n-1)
-        // 인자는 VM이 locals에 직접 넣어주므로 Store 불필요
+        // 인자는 VM이 locals에 직접 넣어주므로 LoadLocal로 접근
         //
         // 명령어 인덱스:
-        // 0: Load("n")
+        // 0: LoadLocal(0)  -- n
         // 1: Const(2)
         // 2: Lt
         // 3: JumpIfNot(2)  -- if n >= 2, jump to index 6 (else branch)
         // 4: Const(1)      -- then: push 1
         // 5: Return        -- return 1
-        // 6: Load("n")     -- else: push n
-        // 7: Load("n")     -- push n again
+        // 6: LoadLocal(0)  -- else: push n
+        // 7: LoadLocal(0)  -- push n again
         // 8: Const(1)
         // 9: Sub           -- n-1
         // 10: SelfCall(1)  -- fact(n-1)
@@ -3284,7 +4037,7 @@ mod tests {
             params: vec!["n".to_string()],
             instructions: vec![
                 // 0: n < 2
-                Instruction::new(OpCode::Load("n".to_string())),
+                Instruction::new(OpCode::LoadLocal(0)),  // n
                 // 1
                 make_const(Value::Int(2)),
                 // 2
@@ -3296,9 +4049,9 @@ mod tests {
                 // 5: return
                 Instruction::new(OpCode::Return),
                 // 6: else: n * $(n-1)
-                Instruction::new(OpCode::Load("n".to_string())),
+                Instruction::new(OpCode::LoadLocal(0)),  // n
                 // 7
-                Instruction::new(OpCode::Load("n".to_string())),
+                Instruction::new(OpCode::LoadLocal(0)),  // n
                 // 8
                 make_const(Value::Int(1)),
                 // 9
@@ -3310,6 +4063,7 @@ mod tests {
                 // 12
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 1,
         };
 
         let result = execute_function(vec![fact], "fact", vec![Value::Int(5)]).unwrap();
@@ -3333,6 +4087,7 @@ mod tests {
                     Instruction::new(OpCode::Mul),
                 ]))),
             ],
+            local_count: 0,
         };
 
         let result = execute(vec![main]).unwrap();
@@ -3358,6 +4113,7 @@ mod tests {
                     Instruction::new(OpCode::Gt),
                 ]))),
             ],
+            local_count: 0,
         };
 
         let result = execute(vec![main]).unwrap();
@@ -3379,6 +4135,7 @@ mod tests {
                 Instruction::new(OpCode::MakeArray(5)),
                 Instruction::new(OpCode::Reduce(ReduceOp::Sum, Value::Int(0))),
             ],
+            local_count: 0,
         };
 
         let result = execute(vec![main]).unwrap();

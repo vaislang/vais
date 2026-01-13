@@ -840,6 +840,7 @@ mod tests {
                 Instruction::new(OpCode::Add),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 2,
         };
 
         let code = generate_c(&[func]).unwrap();
@@ -867,6 +868,7 @@ mod tests {
                 Instruction::new(OpCode::Mul),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 1,
         };
 
         let code = generate_c(&[func]).unwrap();
@@ -886,6 +888,7 @@ mod tests {
                 Instruction::new(OpCode::MakeArray(3)),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 0,
         };
 
         let code = generate_c(&[func]).unwrap();
@@ -909,6 +912,7 @@ mod tests {
                 Instruction::new(OpCode::Map(Box::new(transform))),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 1,
         };
 
         let code = generate_c(&[func]).unwrap();
@@ -928,6 +932,7 @@ mod tests {
                 Instruction::new(OpCode::Reduce(ReduceOp::Sum, Value::Int(0))),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 1,
         };
 
         let code = generate_c(&[func]).unwrap();

@@ -15,10 +15,14 @@ pub enum OpCode {
     Dup,
 
     // === Variable Operations ===
-    /// Load a variable by name
+    /// Load a variable by name (for globals/closures)
     Load(String),
-    /// Store top of stack to variable
+    /// Store top of stack to variable (for globals/closures)
     Store(String),
+    /// Load local variable by index (fast path)
+    LoadLocal(u16),
+    /// Store to local variable by index (fast path)
+    StoreLocal(u16),
     /// Load input field
     LoadInput(String),
     /// Store to output field
@@ -90,6 +94,36 @@ pub enum OpCode {
     /// Reduce operation with initial value
     Reduce(ReduceOp, Value),
 
+    // === Optimized Array Operations (Native) ===
+    /// Native map: multiply each element by constant
+    MapMulConst(i64),
+    /// Native map: add constant to each element
+    MapAddConst(i64),
+    /// Native map: subtract constant from each element
+    MapSubConst(i64),
+    /// Native map: divide each element by constant
+    MapDivConst(i64),
+    /// Native filter: keep elements greater than constant
+    FilterGtConst(i64),
+    /// Native filter: keep elements less than constant
+    FilterLtConst(i64),
+    /// Native filter: keep elements greater than or equal to constant
+    FilterGteConst(i64),
+    /// Native filter: keep elements less than or equal to constant
+    FilterLteConst(i64),
+    /// Native filter: keep elements equal to constant
+    FilterEqConst(i64),
+    /// Native filter: keep elements not equal to constant
+    FilterNeqConst(i64),
+    /// Native filter: keep even numbers
+    FilterEven,
+    /// Native filter: keep odd numbers
+    FilterOdd,
+    /// Native filter: keep positive numbers
+    FilterPositive,
+    /// Native filter: keep negative numbers
+    FilterNegative,
+
     // === Control Flow ===
     /// Jump to instruction offset
     Jump(i32),
@@ -151,6 +185,16 @@ pub enum OpCode {
     ParallelFilter(Box<Vec<Instruction>>),
     /// Parallel reduce
     ParallelReduce(ReduceOp, Value),
+
+    // === Fused Operations (single-pass, no intermediate arrays) ===
+    /// Map then Reduce in single pass
+    MapReduce(Box<Vec<Instruction>>, ReduceOp, Value),
+    /// Filter then Reduce in single pass
+    FilterReduce(Box<Vec<Instruction>>, ReduceOp, Value),
+    /// Map then Filter in single pass
+    MapFilter(Box<Vec<Instruction>>, Box<Vec<Instruction>>),
+    /// Map, Filter, then Reduce in single pass
+    MapFilterReduce(Box<Vec<Instruction>>, Box<Vec<Instruction>>, ReduceOp, Value),
 
     // === Special ===
     /// No operation

@@ -730,8 +730,8 @@ fn repl() {
                 let line = line.trim();
 
                 // Check for multiline continuation
-                if line.ends_with('\\') {
-                    multiline_buffer.push_str(&line[..line.len()-1]);
+                if let Some(stripped) = line.strip_suffix('\\') {
+                    multiline_buffer.push_str(stripped);
                     multiline_buffer.push(' ');
                     in_multiline = true;
                     continue;
@@ -800,7 +800,7 @@ fn handle_repl_command(
 ) -> bool {
     let parts: Vec<&str> = input.splitn(2, ' ').collect();
     let cmd = parts[0];
-    let arg = parts.get(1).map(|s| *s);
+    let arg = parts.get(1).copied();
 
     match cmd {
         ":quit" | ":q" | ":exit" => {
@@ -2021,6 +2021,7 @@ fn cmd_format(path: &PathBuf, write: bool, check: bool, indent: usize, max_width
 fn cmd_debug(path: &PathBuf, func_name: Option<&str>, breakpoints: &[String]) {
     use rustyline::error::ReadlineError;
     use rustyline::DefaultEditor;
+    #[allow(unused_imports)]
     use aoel_tools::debugger::{Debugger, DebugEvent, DebugState};
 
     let source = match read_file(path) {
@@ -2308,10 +2309,11 @@ fn print_debug_event(event: &aoel_tools::debugger::DebugEvent) {
 }
 
 fn cmd_doc(path: &PathBuf, output: Option<&PathBuf>, format: &str) {
+    #[allow(unused_imports)]
     use aoel_tools::docgen::{DocGenerator, DocFormat};
 
     // Determine output format
-    let doc_format = DocFormat::from_str(format).unwrap_or_else(|| {
+    let doc_format = DocFormat::parse(format).unwrap_or_else(|| {
         eprintln!("Unknown format: {}. Using markdown.", format);
         DocFormat::Markdown
     });
@@ -2330,10 +2332,10 @@ fn cmd_doc(path: &PathBuf, output: Option<&PathBuf>, format: &str) {
         if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.filter_map(|e| e.ok()) {
                 let file_path = entry.path();
-                if file_path.extension().map(|e| e == "aoel").unwrap_or(false) {
-                    if generate_doc_for_file(&file_path, &output_dir, doc_format) {
-                        count += 1;
-                    }
+                if file_path.extension().map(|e| e == "aoel").unwrap_or(false)
+                    && generate_doc_for_file(&file_path, &output_dir, doc_format)
+                {
+                    count += 1;
                 }
             }
         }

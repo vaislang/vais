@@ -267,7 +267,7 @@ impl DocGenerator {
                         let type_str = ty.as_deref().unwrap_or("-");
                         output.push_str(&format!("| `{}` | `{}` |\n", name, type_str));
                     }
-                    output.push_str("\n");
+                    output.push('\n');
                 }
 
                 if let Some(ret) = &func.return_type {
@@ -471,7 +471,7 @@ impl Default for DocGenerator {
 
 impl DocFormat {
     /// Parse format from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "markdown" | "md" => Some(DocFormat::Markdown),
             "html" | "htm" => Some(DocFormat::Html),
