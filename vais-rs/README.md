@@ -1,6 +1,6 @@
 # Vais - Vibe AI Script Language
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/vais-lang/vais)
+[![Version](https://img.shields.io/badge/version-0.0.5-blue.svg)](https://github.com/vais-lang/vais)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-522%2B%20passed-brightgreen.svg)]()
 

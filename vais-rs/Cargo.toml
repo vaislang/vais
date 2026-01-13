@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "0.0.5"
 edition = "2021"
 authors = ["Vais Team"]
 license = "MIT"
@@ -57,7 +57,7 @@ lto = true
 # Root package for integration tests and benchmarks
 [package]
 name = "vais-workspace"
-version = "1.0.0"
+version = "0.0.5"
 edition = "2021"
 publish = false
 
