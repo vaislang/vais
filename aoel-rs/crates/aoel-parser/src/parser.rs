@@ -387,13 +387,18 @@ impl<'src> Parser<'src> {
     }
 
     /// use 문 파싱
+    /// 지원 형식:
+    /// - use path.module          (전체 import)
+    /// - use path.module as alias (alias import)
+    /// - use path.{a, b}          (선택적 import)
+    /// - use path.*               (star import)
     fn parse_use(&mut self) -> ParseResult<UseDef> {
         let start = self.previous.span;
         let mut path = vec![self.expect_identifier()?];
 
         while self.match_token(TokenKind::Dot) {
+            // use path.{a, b} - 선택적 import
             if self.check(TokenKind::LBrace) {
-                // use path.{a, b}
                 self.advance();
                 let mut items = Vec::new();
                 loop {
@@ -407,16 +412,38 @@ impl<'src> Parser<'src> {
                     path,
                     items: Some(items),
                     alias: None,
+                    star: false,
                     span: start.merge(self.previous.span),
                 });
             }
+
+            // use path.* - star import
+            if self.check(TokenKind::Star) {
+                self.advance();
+                return Ok(UseDef {
+                    path,
+                    items: None,
+                    alias: None,
+                    star: true,
+                    span: start.merge(self.previous.span),
+                });
+            }
+
             path.push(self.expect_identifier()?);
         }
+
+        // use path as alias
+        let alias = if self.match_token(TokenKind::As) {
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
 
         Ok(UseDef {
             path,
             items: None,
-            alias: None,
+            alias,
+            star: false,
             span: start.merge(self.previous.span),
         })
     }
@@ -2195,6 +2222,73 @@ mod tests {
             }
         } else {
             panic!("Expected match expression");
+        }
+    }
+
+    // === Module System Tests ===
+
+    #[test]
+    fn test_use_simple() {
+        let result = parse("use math").unwrap();
+        if let Item::Use(use_def) = &result.items[0] {
+            assert_eq!(use_def.path, vec!["math"]);
+            assert!(use_def.items.is_none());
+            assert!(use_def.alias.is_none());
+            assert!(!use_def.star);
+        } else {
+            panic!("Expected use statement");
+        }
+    }
+
+    #[test]
+    fn test_use_path() {
+        let result = parse("use lib.math").unwrap();
+        if let Item::Use(use_def) = &result.items[0] {
+            assert_eq!(use_def.path, vec!["lib", "math"]);
+            assert!(use_def.items.is_none());
+            assert!(use_def.alias.is_none());
+            assert!(!use_def.star);
+        } else {
+            panic!("Expected use statement");
+        }
+    }
+
+    #[test]
+    fn test_use_selective() {
+        let result = parse("use math.{add, mul}").unwrap();
+        if let Item::Use(use_def) = &result.items[0] {
+            assert_eq!(use_def.path, vec!["math"]);
+            assert_eq!(use_def.items, Some(vec!["add".to_string(), "mul".to_string()]));
+            assert!(use_def.alias.is_none());
+            assert!(!use_def.star);
+        } else {
+            panic!("Expected use statement");
+        }
+    }
+
+    #[test]
+    fn test_use_star() {
+        let result = parse("use lib.math.*").unwrap();
+        if let Item::Use(use_def) = &result.items[0] {
+            assert_eq!(use_def.path, vec!["lib", "math"]);
+            assert!(use_def.items.is_none());
+            assert!(use_def.alias.is_none());
+            assert!(use_def.star);
+        } else {
+            panic!("Expected use statement");
+        }
+    }
+
+    #[test]
+    fn test_use_alias() {
+        let result = parse("use lib.math as m").unwrap();
+        if let Item::Use(use_def) = &result.items[0] {
+            assert_eq!(use_def.path, vec!["lib", "math"]);
+            assert!(use_def.items.is_none());
+            assert_eq!(use_def.alias, Some("m".to_string()));
+            assert!(!use_def.star);
+        } else {
+            panic!("Expected use statement");
         }
     }
 }

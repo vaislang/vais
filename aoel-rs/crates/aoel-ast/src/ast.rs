@@ -118,6 +118,8 @@ pub struct UseDef {
     pub items: Option<Vec<String>>,
     /// alias: use path as name
     pub alias: Option<String>,
+    /// star import: use path.*
+    pub star: bool,
     pub span: Span,
 }
 
@@ -524,6 +526,7 @@ mod tests {
             path: vec!["std".to_string(), "io".to_string()],
             items: None,
             alias: None,
+            star: false,
             span: dummy_span(),
         };
         assert!(matches!(Item::Use(use_def), Item::Use(_)));

@@ -86,9 +86,13 @@ impl ModuleResolver {
 
     /// Check if a specific item should be imported based on use statement
     fn should_import(&self, name: &str, use_def: &UseDef) -> bool {
+        // Star import: import all public items
+        if use_def.star {
+            return true;
+        }
         match &use_def.items {
             Some(items) => items.iter().any(|i| i == name),
-            None => true, // Import all public items
+            None => true, // Import all public items (default behavior)
         }
     }
 
@@ -221,6 +225,7 @@ mod tests {
             path: vec!["math".to_string()],
             items: Some(vec!["add".to_string(), "mul".to_string()]),
             alias: None,
+            star: false,
             span: aoel_lexer::Span::default(),
         };
         assert!(resolver.should_import("add", &use_def));
@@ -232,8 +237,19 @@ mod tests {
             path: vec!["math".to_string()],
             items: None,
             alias: None,
+            star: false,
             span: aoel_lexer::Span::default(),
         };
         assert!(resolver.should_import("anything", &use_def_all));
+
+        // Test star import
+        let use_def_star = UseDef {
+            path: vec!["math".to_string()],
+            items: None,
+            alias: None,
+            star: true,
+            span: aoel_lexer::Span::default(),
+        };
+        assert!(resolver.should_import("any_function", &use_def_star));
     }
 }
