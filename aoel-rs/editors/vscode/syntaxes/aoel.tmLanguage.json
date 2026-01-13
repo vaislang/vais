@@ -10,6 +10,7 @@
     { "include": "#operators" },
     { "include": "#functions" },
     { "include": "#types" },
+    { "include": "#constants" },
     { "include": "#variables" }
   ],
   "repository": {
@@ -56,7 +57,15 @@
       "patterns": [
         {
           "name": "constant.numeric.float.aoel",
-          "match": "\\b\\d+\\.\\d+\\b"
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.hex.aoel",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.aoel",
+          "match": "\\b0[bB][01]+\\b"
         },
         {
           "name": "constant.numeric.integer.aoel",
@@ -68,63 +77,51 @@
       "patterns": [
         {
           "name": "keyword.control.aoel",
-          "match": "\\b(if|else|let|match)\\b"
+          "match": "\\b(if|then|else|match|for|in|while|return|break|continue|try|catch|throw)\\b"
         },
         {
-          "name": "keyword.other.aoel",
-          "match": "\\b(mod|use|type|pub)\\b"
+          "name": "keyword.declaration.aoel",
+          "match": "\\b(let|mut|fn|type|enum|struct|mod|use|import|export|pub|async|await|spawn)\\b"
         },
         {
-          "name": "constant.language.aoel",
-          "match": "\\b(true|false|nil)\\b"
-        },
-        {
-          "name": "keyword.operator.error.aoel",
-          "match": "\\berr\\b"
+          "name": "keyword.operator.aoel",
+          "match": "\\b(and|or|not|is|as)\\b"
         }
       ]
     },
     "operators": {
       "patterns": [
         {
+          "name": "keyword.operator.arrow.aoel",
+          "match": "->|=>|<-"
+        },
+        {
+          "name": "keyword.operator.pipeline.aoel",
+          "match": "\\|>"
+        },
+        {
           "name": "keyword.operator.collection.aoel",
-          "match": "\\.@|\\.\\?|\\./\\+|\\./\\*|\\./min|\\./max|\\./and|\\./or"
+          "match": "\\.@|\\.\\?|\\./|\\.\\|\\|@|\\.\\|\\|\\?|\\.\\|\\|/"
         },
         {
           "name": "keyword.operator.comparison.aoel",
           "match": "==|!=|<=|>=|<|>"
         },
         {
-          "name": "keyword.operator.logical.aoel",
-          "match": "&&|\\|\\||!"
+          "name": "keyword.operator.assignment.aoel",
+          "match": "="
         },
         {
           "name": "keyword.operator.arithmetic.aoel",
-          "match": "\\+|-|\\*|/|%"
-        },
-        {
-          "name": "keyword.operator.assignment.aoel",
-          "match": "="
+          "match": "\\+|-|\\*|/|%|\\^"
         },
         {
           "name": "keyword.operator.range.aoel",
           "match": "\\.\\."
         },
         {
-          "name": "keyword.operator.arrow.aoel",
-          "match": "->"
-        },
-        {
-          "name": "keyword.operator.ternary.aoel",
-          "match": "\\?|:"
-        },
-        {
-          "name": "keyword.operator.self-call.aoel",
-          "match": "\\$"
-        },
-        {
-          "name": "keyword.operator.lambda-param.aoel",
-          "match": "\\b_\\b"
+          "name": "keyword.operator.optional.aoel",
+          "match": "\\?|!"
         }
       ]
     },
@@ -133,6 +130,10 @@
         {
           "name": "entity.name.function.aoel",
           "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        },
+        {
+          "name": "support.function.builtin.aoel",
+          "match": "\\b(print|println|len|first|last|reverse|concat|push|pop|map|filter|reduce|fold|zip|flatten|sort|unique|sum|product|min|max|abs|sqrt|pow|sin|cos|tan|log|exp|floor|ceil|round|upper|lower|trim|split|join|replace|contains|starts_with|ends_with|int|float|str|bool|type_of|range|enumerate|random|time_now|sleep)\\b"
         }
       ]
     },
@@ -140,16 +141,36 @@
       "patterns": [
         {
           "name": "support.type.primitive.aoel",
-          "match": "\\b(Int|Float|String|Bool|Unit|Any|Never)\\b"
+          "match": "\\b(Int|Float|String|Bool|Void|Any)\\b"
         },
         {
-          "name": "support.type.aoel",
+          "name": "support.type.collection.aoel",
+          "match": "\\b(Array|Map|Set|Option|Result|Future|Channel)\\b"
+        },
+        {
+          "name": "entity.name.type.aoel",
           "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.aoel",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.aoel",
+          "match": "\\b(nil|none|void)\\b"
         }
       ]
     },
     "variables": {
       "patterns": [
+        {
+          "name": "variable.parameter.aoel",
+          "match": "\\b_\\b"
+        },
         {
           "name": "variable.other.aoel",
           "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"

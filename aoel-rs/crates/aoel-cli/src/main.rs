@@ -176,6 +176,27 @@ enum Commands {
         path: Option<PathBuf>,
     },
 
+    /// Search for packages in the registry
+    Search {
+        /// Search query (matches name, description, keywords)
+        #[arg(value_name = "QUERY")]
+        query: String,
+    },
+
+    /// Show package information
+    Info {
+        /// Package name
+        #[arg(value_name = "PACKAGE")]
+        package: String,
+    },
+
+    /// Update dependencies to latest compatible versions
+    Update {
+        /// Specific package to update (default: all)
+        #[arg(value_name = "PACKAGE")]
+        package: Option<String>,
+    },
+
     // === Development Tools ===
 
     /// Format AOEL source code
@@ -291,6 +312,15 @@ fn main() {
         }
         Commands::Publish { path } => {
             cmd_publish(path.as_ref());
+        }
+        Commands::Search { query } => {
+            cmd_search(&query);
+        }
+        Commands::Info { package } => {
+            cmd_info(&package);
+        }
+        Commands::Update { package } => {
+            cmd_update(package.as_deref());
         }
         Commands::Format { file, write, check, indent, max_width } => {
             cmd_format(&file, write, check, indent, max_width);
@@ -1732,6 +1762,206 @@ fn cmd_publish(path: Option<&PathBuf>) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+    }
+}
+
+fn cmd_search(query: &str) {
+    let registry = match package::Registry::local() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match registry.search(query) {
+        Ok(results) => {
+            if results.is_empty() {
+                println!("No packages found matching '{}'", query);
+                return;
+            }
+
+            println!("Found {} package(s) matching '{}':\n", results.len(), query);
+            for pkg in results {
+                let versions_str = if pkg.versions.is_empty() {
+                    "no versions".to_string()
+                } else {
+                    pkg.versions.first().map(|v| v.version.clone()).unwrap_or_default()
+                };
+
+                println!("  {} ({})", pkg.name, versions_str);
+                if !pkg.description.is_empty() {
+                    println!("    {}", pkg.description);
+                }
+                if !pkg.keywords.is_empty() {
+                    println!("    Keywords: {}", pkg.keywords.join(", "));
+                }
+                println!();
+            }
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_info(package_name: &str) {
+    let registry = match package::Registry::local() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Check if package exists
+    let versions = match registry.list_versions(package_name) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if versions.is_empty() {
+        eprintln!("Package '{}' not found in registry", package_name);
+        std::process::exit(1);
+    }
+
+    println!("Package: {}", package_name);
+    println!();
+
+    // Try to load manifest from latest version
+    let latest = &versions[0];
+    let pkg_path = registry.get_package_path(package_name, latest);
+
+    if let Ok(manifest) = package::Manifest::load(&pkg_path) {
+        if !manifest.package.description.is_empty() {
+            println!("Description: {}", manifest.package.description);
+        }
+        if !manifest.package.authors.is_empty() {
+            println!("Authors: {}", manifest.package.authors.join(", "));
+        }
+        if let Some(license) = &manifest.package.license {
+            println!("License: {}", license);
+        }
+        if let Some(repo) = &manifest.package.repository {
+            println!("Repository: {}", repo);
+        }
+        if !manifest.package.keywords.is_empty() {
+            println!("Keywords: {}", manifest.package.keywords.join(", "));
+        }
+        println!();
+
+        if !manifest.dependencies.is_empty() {
+            println!("Dependencies:");
+            for (name, dep) in &manifest.dependencies {
+                match dep {
+                    package::Dependency::Version(v) => println!("  {} = \"{}\"", name, v),
+                    package::Dependency::Detailed(d) => {
+                        println!("  {} = \"{}\"", name, d.version.as_deref().unwrap_or("*"));
+                    }
+                }
+            }
+            println!();
+        }
+    }
+
+    println!("Available versions:");
+    for (i, ver) in versions.iter().enumerate() {
+        let marker = if i == 0 { " (latest)" } else { "" };
+        println!("  {}{}", ver, marker);
+    }
+}
+
+fn cmd_update(package_name: Option<&str>) {
+    let cwd = std::env::current_dir().expect("Failed to get current directory");
+    let project_root = match package::find_project_root(&cwd) {
+        Some(p) => p,
+        None => {
+            eprintln!("Error: No aoel.toml found in current directory or any parent");
+            std::process::exit(1);
+        }
+    };
+
+    let mut manifest = match package::Manifest::load(&project_root) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let registry = match package::Registry::local() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut updated = 0;
+
+    // Update specific package or all
+    let deps_to_update: Vec<String> = if let Some(name) = package_name {
+        if manifest.dependencies.contains_key(name) || manifest.dev_dependencies.contains_key(name) {
+            vec![name.to_string()]
+        } else {
+            eprintln!("Package '{}' not found in dependencies", name);
+            std::process::exit(1);
+        }
+    } else {
+        manifest.dependencies.keys()
+            .chain(manifest.dev_dependencies.keys())
+            .cloned()
+            .collect()
+    };
+
+    println!("Checking for updates...\n");
+
+    for name in deps_to_update {
+        let is_dev = manifest.dev_dependencies.contains_key(&name);
+        let current_dep = if is_dev {
+            manifest.dev_dependencies.get(&name)
+        } else {
+            manifest.dependencies.get(&name)
+        };
+
+        let current_version = current_dep.map(|d| match d {
+            package::Dependency::Version(v) => v.clone(),
+            package::Dependency::Detailed(d) => d.version.clone().unwrap_or_else(|| "*".to_string()),
+        }).unwrap_or_else(|| "*".to_string());
+
+        // Get latest version
+        if let Ok(Some(latest)) = registry.get_latest_version(&name) {
+            if current_version != latest && current_version != "*" {
+                println!("  {} {} -> {}", name, current_version, latest);
+
+                // Update manifest
+                let new_dep = package::Dependency::Version(latest);
+                if is_dev {
+                    manifest.dev_dependencies.insert(name, new_dep);
+                } else {
+                    manifest.dependencies.insert(name, new_dep);
+                }
+                updated += 1;
+            } else {
+                println!("  {} {} (up to date)", name, current_version);
+            }
+        } else {
+            println!("  {} {} (not in registry)", name, current_version);
+        }
+    }
+
+    if updated > 0 {
+        if let Err(e) = manifest.save(&project_root) {
+            eprintln!("\nError saving manifest: {}", e);
+            std::process::exit(1);
+        }
+        println!("\nUpdated {} package(s)", updated);
+    } else {
+        println!("\nAll packages are up to date");
     }
 }
 

@@ -1,19 +1,27 @@
 {
-  "name": "aoel-language",
-  "displayName": "AOEL Language",
-  "description": "Language support for AOEL (AI-Optimized Executable Language)",
+  "name": "aoel-lang",
+  "displayName": "AOEL Language Support",
+  "description": "Syntax highlighting, LSP support, and snippets for AOEL programming language",
   "version": "0.1.0",
-  "publisher": "aoel-team",
+  "publisher": "aoel",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets",
+    "Formatters"
+  ],
+  "keywords": [
+    "aoel",
+    "functional",
+    "programming language"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/aoel-lang/aoel"
   },
-  "engines": {
-    "vscode": "^1.75.0"
-  },
-  "categories": [
-    "Programming Languages"
-  ],
   "activationEvents": [
     "onLanguage:aoel"
   ],
@@ -24,7 +32,11 @@
         "id": "aoel",
         "aliases": ["AOEL", "aoel"],
         "extensions": [".aoel"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/aoel-light.png",
+          "dark": "./icons/aoel-dark.png"
+        }
       }
     ],
     "grammars": [
@@ -34,29 +46,112 @@
         "path": "./syntaxes/aoel.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "aoel",
+        "path": "./snippets/aoel.json"
+      }
+    ],
     "configuration": {
-      "type": "object",
       "title": "AOEL",
       "properties": {
-        "aoel.server.path": {
+        "aoel.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AOEL Language Server"
+        },
+        "aoel.lsp.path": {
           "type": "string",
           "default": "aoel-lsp",
-          "description": "Path to the AOEL language server executable"
+          "description": "Path to AOEL LSP server executable"
+        },
+        "aoel.format.onSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Format AOEL files on save"
+        },
+        "aoel.format.indentWidth": {
+          "type": "number",
+          "default": 4,
+          "description": "Indentation width for formatting"
+        },
+        "aoel.run.jit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use JIT compilation when running AOEL files"
         }
       }
+    },
+    "commands": [
+      {
+        "command": "aoel.run",
+        "title": "Run AOEL File",
+        "category": "AOEL"
+      },
+      {
+        "command": "aoel.format",
+        "title": "Format AOEL File",
+        "category": "AOEL"
+      },
+      {
+        "command": "aoel.check",
+        "title": "Check AOEL File",
+        "category": "AOEL"
+      },
+      {
+        "command": "aoel.repl",
+        "title": "Start AOEL REPL",
+        "category": "AOEL"
+      },
+      {
+        "command": "aoel.showAst",
+        "title": "Show AST",
+        "category": "AOEL"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "aoel.run",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorLangId == aoel"
+      },
+      {
+        "command": "aoel.format",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorLangId == aoel"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "aoel.run",
+          "when": "editorLangId == aoel",
+          "group": "aoel@1"
+        },
+        {
+          "command": "aoel.format",
+          "when": "editorLangId == aoel",
+          "group": "aoel@2"
+        }
+      ]
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
-    "@types/vscode": "^1.75.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
   }
 }

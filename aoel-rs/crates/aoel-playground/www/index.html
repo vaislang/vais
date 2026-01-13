@@ -233,6 +233,112 @@
                 cursor: row-resize;
             }
         }
+
+        /* Tutorial Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 1.2rem;
+            color: var(--accent);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .tutorial-step {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .tutorial-explanation {
+            background: var(--bg-tertiary);
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tutorial-progress {
+            display: flex;
+            gap: 6px;
+        }
+
+        .progress-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+        }
+
+        .progress-dot.active {
+            background: var(--accent);
+        }
+
+        .progress-dot.completed {
+            background: var(--success);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -258,8 +364,18 @@
                     <button data-example="primes">Prime Numbers</button>
                     <button data-example="math">Math Functions</button>
                     <button data-example="strings">String Operations</button>
+                    <button data-example="pattern">Pattern Matching</button>
+                    <button data-example="pipeline">Pipeline Operators</button>
+                    <button data-example="async">Async/Channels</button>
+                    <button data-example="structs">Structs & Enums</button>
                 </div>
             </div>
+            <button id="tutorialBtn" class="secondary">
+                Tutorial
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+            </button>
             <button id="shareBtn" class="secondary">
                 Share
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -321,6 +437,29 @@ print("Evens:", evens)
     <div class="status-bar">
         <span>AOEL v0.1.0</span>
         <span id="status">Ready</span>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div class="modal-overlay" id="tutorialModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="tutorialTitle">Tutorial</h2>
+                <button class="modal-close" id="closeTutorial">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="tutorial-step" id="tutorialStep">Step 1 of 8</div>
+                <div class="tutorial-explanation" id="tutorialExplanation">
+                    Welcome to the AOEL tutorial!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="tutorial-progress" id="tutorialProgress"></div>
+                <div class="modal-actions">
+                    <button class="secondary" id="tutorialPrev">Previous</button>
+                    <button id="tutorialNext">Next</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script type="module">
@@ -433,8 +572,240 @@ print("Joined:", join(words, "-"))
 
 // Contains and replace
 print("Contains 'Lang':", contains(name, "Lang"))
-print("Replaced:", replace(name, "AOEL", "Amazing"))`
+print("Replaced:", replace(name, "AOEL", "Amazing"))`,
+
+            pattern: `// Pattern Matching in AOEL
+describe(x) = match x {
+    0 => "zero",
+    1 => "one",
+    n if n < 0 => "negative",
+    n if n > 100 => "large",
+    _ => "other positive"
+}
+
+print("describe(0):", describe(0))
+print("describe(1):", describe(1))
+print("describe(-5):", describe(-5))
+print("describe(200):", describe(200))
+print("describe(42):", describe(42))
+
+// Destructuring tuples
+swap((a, b)) = (b, a)
+result = swap((1, 2))
+print("swap((1,2)):", result)`,
+
+            pipeline: `// Pipeline Operators
+// Use |> to chain operations
+
+data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// Traditional nesting
+result1 = sum(filter(map(data, _ * 2), _ > 10))
+
+// Pipeline style (cleaner!)
+result2 = data
+    |> @(_ * 2)      // map: double each
+    |> ?(_ > 10)     // filter: > 10
+    |> sum           // reduce: sum
+
+print("Nested result:", result1)
+print("Pipeline result:", result2)
+
+// More complex pipeline
+words = ["hello", "world", "aoel", "is", "awesome"]
+long_upper = words
+    |> ?(_ => len(_) > 3)
+    |> @(upper(_))
+print("Long words uppercase:", long_upper)`,
+
+            async: `// Async/Await and Channels
+// AOEL supports concurrent programming
+
+// Async function definition
+async fetch_data(id) = {
+    // Simulated async operation
+    "data_" ++ str(id)
+}
+
+// Channel communication
+producer(ch) = {
+    ch <- 1
+    ch <- 2
+    ch <- 3
+}
+
+consumer(ch) = {
+    a = <- ch
+    b = <- ch
+    c = <- ch
+    [a, b, c]
+}
+
+// Parallel operations on collections
+numbers = [1, 2, 3, 4, 5]
+
+// Parallel map (when available)
+// doubled = numbers.||@(_ * 2)
+
+print("Async/Channel syntax demo")
+print("async fn, spawn, <- send/recv")`,
+
+            structs: `// Structs and Enums
+
+// Struct literal
+person = {
+    name: "Alice",
+    age: 30,
+    active: true
+}
+
+print("Person:", person)
+print("Name:", person.name)
+print("Age:", person.age)
+
+// Enum example
+enum Color { Red, Green, Blue }
+enum Option { Some(value), None }
+
+// Result type for error handling
+enum Result { Ok(value), Err(message) }
+
+safe_divide(a, b) =
+    if b == 0
+    then Result::Err("Division by zero")
+    else Result::Ok(a / b)
+
+print("10/2:", safe_divide(10, 2))
+print("10/0:", safe_divide(10, 0))`
         };
+
+        // Tutorial content
+        const tutorials = [
+            {
+                title: "Welcome to AOEL!",
+                code: `// Welcome to AOEL - AI-Optimized Executable Language!
+//
+// AOEL is a functional language designed for
+// AI code generation with clean, concise syntax.
+//
+// Click "Next" to learn the basics!
+
+print("Hello, AOEL!")`,
+                explanation: "AOEL is a modern functional programming language with powerful features like pattern matching, pipelines, and collection operations."
+            },
+            {
+                title: "Functions",
+                code: `// Functions use simple math-like syntax
+add(a, b) = a + b
+multiply(x, y) = x * y
+
+// Call functions
+result = add(3, multiply(4, 5))
+print("3 + (4 * 5) =", result)
+
+// Conditional expression
+max(a, b) = if a > b then a else b
+print("max(10, 20) =", max(10, 20))`,
+                explanation: "Functions are defined with name(params) = body. The ternary operator (? :) and if-then-else both work for conditionals."
+            },
+            {
+                title: "Self-Recursion ($)",
+                code: `// $ refers to the current function (recursion)
+factorial(n) = n < 2 ? 1 : n * $(n - 1)
+
+print("5! =", factorial(5))
+print("10! =", factorial(10))
+
+// Fibonacci
+fib(n) = n < 2 ? n : $(n-1) + $(n-2)
+print("fib(10) =", fib(10))`,
+                explanation: "Use $ for recursive calls instead of repeating the function name. This makes refactoring easier!"
+            },
+            {
+                title: "Collections & Map",
+                code: `// Arrays
+numbers = [1, 2, 3, 4, 5]
+
+// Map with .@ operator
+// _ is the placeholder for each element
+doubled = numbers.@(_ * 2)
+print("Doubled:", doubled)
+
+// You can also use a named parameter
+squared = numbers.@(x => x * x)
+print("Squared:", squared)`,
+                explanation: "The .@ operator maps a function over each element. Use _ as a shorthand for the element, or x => expr for explicit naming."
+            },
+            {
+                title: "Filter",
+                code: `numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// Filter with .? operator
+evens = numbers.?(_ % 2 == 0)
+print("Evens:", evens)
+
+odds = numbers.?(_ % 2 == 1)
+print("Odds:", odds)
+
+// Chain operations
+big_evens = numbers.?(_ > 5).?(_ % 2 == 0)
+print("Evens > 5:", big_evens)`,
+                explanation: "The .? operator filters elements that match the predicate. Chain multiple operations for complex transformations."
+            },
+            {
+                title: "Reduce",
+                code: `numbers = [1, 2, 3, 4, 5]
+
+// Reduce with ./ operator
+// ./+(init, combiner) - + is shorthand
+sum = numbers./+(0, _ + _)
+print("Sum:", sum)
+
+product = numbers./*(1, _ * _)
+print("Product:", product)
+
+// Custom reduce
+str_nums = numbers.@(str(_))
+joined = str_nums./("", _ ++ "," ++ _)
+print("Joined:", joined)`,
+                explanation: "The ./ operator reduces a collection to a single value. Use ./+ for sum, ./* for product, or provide a custom combiner."
+            },
+            {
+                title: "Pattern Matching",
+                code: `// match expressions for complex conditions
+classify(n) = match n {
+    0 => "zero",
+    1 => "one",
+    x if x < 0 => "negative",
+    x if x > 100 => "big",
+    _ => "other"
+}
+
+print(classify(0))
+print(classify(1))
+print(classify(-5))
+print(classify(200))
+print(classify(42))`,
+                explanation: "Pattern matching with guards (if conditions) provides powerful branching. _ is the wildcard that matches anything."
+            },
+            {
+                title: "Congratulations!",
+                code: `// You've completed the AOEL tutorial!
+//
+// Key concepts learned:
+// - Functions: name(params) = body
+// - Self-recursion: $
+// - Map: .@(transform)
+// - Filter: .?(predicate)
+// - Reduce: ./(init, combiner)
+// - Pattern matching: match { ... }
+//
+// Explore more examples in the dropdown!
+
+print("Happy coding with AOEL!")`,
+                explanation: "You're now ready to write AOEL! Check out the Examples dropdown for more advanced patterns like pipelines, async, and structs."
+            }
+        ];
 
         let wasmReady = false;
 
@@ -609,6 +980,71 @@ print("Replaced:", replace(name, "AOEL", "Amazing"))`
         document.addEventListener('mouseup', () => {
             isResizing = false;
             document.body.style.cursor = '';
+        });
+
+        // Tutorial functionality
+        let currentTutorialStep = 0;
+
+        function openTutorial() {
+            currentTutorialStep = 0;
+            updateTutorialUI();
+            document.getElementById('tutorialModal').classList.add('show');
+        }
+
+        function closeTutorial() {
+            document.getElementById('tutorialModal').classList.remove('show');
+        }
+
+        function nextTutorialStep() {
+            if (currentTutorialStep < tutorials.length - 1) {
+                currentTutorialStep++;
+                updateTutorialUI();
+            } else {
+                closeTutorial();
+            }
+        }
+
+        function prevTutorialStep() {
+            if (currentTutorialStep > 0) {
+                currentTutorialStep--;
+                updateTutorialUI();
+            }
+        }
+
+        function updateTutorialUI() {
+            const tutorial = tutorials[currentTutorialStep];
+            document.getElementById('tutorialTitle').textContent = tutorial.title;
+            document.getElementById('tutorialStep').textContent =
+                `Step ${currentTutorialStep + 1} of ${tutorials.length}`;
+            document.getElementById('tutorialExplanation').textContent = tutorial.explanation;
+
+            // Update editor with tutorial code
+            document.getElementById('editor').value = tutorial.code;
+
+            // Update progress dots
+            const progressContainer = document.getElementById('tutorialProgress');
+            progressContainer.innerHTML = tutorials.map((_, i) => {
+                const cls = i < currentTutorialStep ? 'completed' : i === currentTutorialStep ? 'active' : '';
+                return `<div class="progress-dot ${cls}"></div>`;
+            }).join('');
+
+            // Update buttons
+            document.getElementById('tutorialPrev').disabled = currentTutorialStep === 0;
+            const nextBtn = document.getElementById('tutorialNext');
+            nextBtn.textContent = currentTutorialStep === tutorials.length - 1 ? 'Finish' : 'Next';
+        }
+
+        // Tutorial event listeners
+        document.getElementById('tutorialBtn').addEventListener('click', openTutorial);
+        document.getElementById('closeTutorial').addEventListener('click', closeTutorial);
+        document.getElementById('tutorialNext').addEventListener('click', nextTutorialStep);
+        document.getElementById('tutorialPrev').addEventListener('click', prevTutorialStep);
+
+        // Close modal on overlay click
+        document.getElementById('tutorialModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('tutorialModal')) {
+                closeTutorial();
+            }
         });
 
         // Initialize

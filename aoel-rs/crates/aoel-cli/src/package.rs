@@ -199,6 +199,26 @@ pub struct Registry {
     pub path: PathBuf,
 }
 
+/// Package metadata stored in registry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageMeta {
+    pub name: String,
+    pub versions: Vec<VersionInfo>,
+    pub description: String,
+    pub keywords: Vec<String>,
+    pub downloads: u64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionInfo {
+    pub version: String,
+    pub checksum: Option<String>,
+    pub dependencies: HashMap<String, String>,
+    pub published_at: String,
+}
+
 impl Registry {
     /// Create or open local registry
     pub fn local() -> Result<Self, String> {
@@ -234,6 +254,102 @@ impl Registry {
         Ok(packages)
     }
 
+    /// List packages with metadata
+    pub fn list_packages_detailed(&self) -> Result<Vec<PackageMeta>, String> {
+        let mut packages = Vec::new();
+
+        if self.path.exists() {
+            for entry in fs::read_dir(&self.path)
+                .map_err(|e| format!("Failed to read registry: {}", e))?
+            {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let pkg_path = entry.path();
+
+                if pkg_path.is_dir() {
+                    if let Some(meta) = self.get_package_meta(&pkg_path) {
+                        packages.push(meta);
+                    }
+                }
+            }
+        }
+
+        Ok(packages)
+    }
+
+    /// Get package metadata
+    fn get_package_meta(&self, pkg_path: &Path) -> Option<PackageMeta> {
+        let name = pkg_path.file_name()?.to_str()?.to_string();
+        let meta_path = pkg_path.join("meta.json");
+
+        if meta_path.exists() {
+            let content = fs::read_to_string(&meta_path).ok()?;
+            serde_json::from_str(&content).ok()
+        } else {
+            // Build metadata from versions
+            let versions = self.list_versions(&name).ok()?;
+            Some(PackageMeta {
+                name: name.clone(),
+                versions: versions.iter().map(|v| VersionInfo {
+                    version: v.clone(),
+                    checksum: None,
+                    dependencies: HashMap::new(),
+                    published_at: String::new(),
+                }).collect(),
+                description: String::new(),
+                keywords: Vec::new(),
+                downloads: 0,
+                created_at: String::new(),
+                updated_at: String::new(),
+            })
+        }
+    }
+
+    /// List all versions of a package
+    pub fn list_versions(&self, name: &str) -> Result<Vec<String>, String> {
+        let pkg_path = self.path.join(name);
+        let mut versions = Vec::new();
+
+        if pkg_path.exists() {
+            for entry in fs::read_dir(&pkg_path)
+                .map_err(|e| format!("Failed to read package: {}", e))?
+            {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                if entry.path().is_dir() {
+                    if let Some(ver) = entry.file_name().to_str() {
+                        if ver != "meta.json" {
+                            versions.push(ver.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort versions (semver)
+        versions.sort_by(|a, b| compare_versions(b, a));
+        Ok(versions)
+    }
+
+    /// Get latest version of a package
+    pub fn get_latest_version(&self, name: &str) -> Result<Option<String>, String> {
+        let versions = self.list_versions(name)?;
+        Ok(versions.into_iter().next())
+    }
+
+    /// Search packages by keyword
+    pub fn search(&self, query: &str) -> Result<Vec<PackageMeta>, String> {
+        let all_packages = self.list_packages_detailed()?;
+        let query_lower = query.to_lowercase();
+
+        Ok(all_packages
+            .into_iter()
+            .filter(|pkg| {
+                pkg.name.to_lowercase().contains(&query_lower)
+                    || pkg.description.to_lowercase().contains(&query_lower)
+                    || pkg.keywords.iter().any(|k| k.to_lowercase().contains(&query_lower))
+            })
+            .collect())
+    }
+
     /// Get package path
     pub fn get_package_path(&self, name: &str, version: &str) -> PathBuf {
         self.path.join(name).join(version)
@@ -242,6 +358,56 @@ impl Registry {
     /// Check if package exists
     pub fn has_package(&self, name: &str, version: &str) -> bool {
         self.get_package_path(name, version).exists()
+    }
+
+    /// Resolve dependency version (supports *, ^, ~, ranges)
+    pub fn resolve_version(&self, name: &str, version_req: &str) -> Result<Option<String>, String> {
+        let versions = self.list_versions(name)?;
+
+        if version_req == "*" || version_req == "latest" {
+            return Ok(versions.into_iter().next());
+        }
+
+        // Handle caret (^) - compatible versions
+        if let Some(base) = version_req.strip_prefix('^') {
+            let base_parts = parse_version(base);
+            for ver in &versions {
+                let ver_parts = parse_version(ver);
+                if is_caret_compatible(&base_parts, &ver_parts) {
+                    return Ok(Some(ver.clone()));
+                }
+            }
+            return Ok(None);
+        }
+
+        // Handle tilde (~) - patch updates only
+        if let Some(base) = version_req.strip_prefix('~') {
+            let base_parts = parse_version(base);
+            for ver in &versions {
+                let ver_parts = parse_version(ver);
+                if is_tilde_compatible(&base_parts, &ver_parts) {
+                    return Ok(Some(ver.clone()));
+                }
+            }
+            return Ok(None);
+        }
+
+        // Handle >= and <=
+        if let Some(min) = version_req.strip_prefix(">=") {
+            for ver in &versions {
+                if compare_versions(ver, min.trim()) >= std::cmp::Ordering::Equal {
+                    return Ok(Some(ver.clone()));
+                }
+            }
+            return Ok(None);
+        }
+
+        // Exact version
+        if versions.contains(&version_req.to_string()) {
+            return Ok(Some(version_req.to_string()));
+        }
+
+        Ok(None)
     }
 
     /// Install package from path (for local development)
@@ -260,8 +426,163 @@ impl Registry {
                 .map_err(|e| format!("Failed to copy manifest: {}", e))?;
         }
 
+        // Update package metadata
+        self.update_package_meta(name, version, src)?;
+
         Ok(())
     }
+
+    /// Update package metadata
+    fn update_package_meta(&self, name: &str, version: &str, src: &Path) -> Result<(), String> {
+        let pkg_path = self.path.join(name);
+        let meta_path = pkg_path.join("meta.json");
+
+        let mut meta = if meta_path.exists() {
+            let content = fs::read_to_string(&meta_path)
+                .map_err(|e| format!("Failed to read meta: {}", e))?;
+            serde_json::from_str(&content).unwrap_or_else(|_| PackageMeta {
+                name: name.to_string(),
+                versions: Vec::new(),
+                description: String::new(),
+                keywords: Vec::new(),
+                downloads: 0,
+                created_at: chrono_now(),
+                updated_at: chrono_now(),
+            })
+        } else {
+            PackageMeta {
+                name: name.to_string(),
+                versions: Vec::new(),
+                description: String::new(),
+                keywords: Vec::new(),
+                downloads: 0,
+                created_at: chrono_now(),
+                updated_at: chrono_now(),
+            }
+        };
+
+        // Load manifest if available
+        let manifest_path = src.join("aoel.toml");
+        if manifest_path.exists() {
+            if let Ok(manifest) = Manifest::load(src) {
+                meta.description = manifest.package.description;
+                meta.keywords = manifest.package.keywords;
+            }
+        }
+
+        // Add version if not exists
+        if !meta.versions.iter().any(|v| v.version == version) {
+            meta.versions.push(VersionInfo {
+                version: version.to_string(),
+                checksum: None,
+                dependencies: HashMap::new(),
+                published_at: chrono_now(),
+            });
+        }
+
+        meta.updated_at = chrono_now();
+
+        let content = serde_json::to_string_pretty(&meta)
+            .map_err(|e| format!("Failed to serialize meta: {}", e))?;
+        fs::write(&meta_path, content)
+            .map_err(|e| format!("Failed to write meta: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Resolve all dependencies for a package
+    pub fn resolve_dependencies(&self, manifest: &Manifest) -> Result<Vec<LockedPackage>, String> {
+        let mut resolved = Vec::new();
+        let mut to_resolve: Vec<(String, String)> = manifest
+            .dependencies
+            .iter()
+            .map(|(name, dep)| {
+                let version = match dep {
+                    Dependency::Version(v) => v.clone(),
+                    Dependency::Detailed(d) => d.version.clone().unwrap_or_else(|| "*".to_string()),
+                };
+                (name.clone(), version)
+            })
+            .collect();
+
+        while let Some((name, version_req)) = to_resolve.pop() {
+            // Skip if already resolved
+            if resolved.iter().any(|p: &LockedPackage| p.name == name) {
+                continue;
+            }
+
+            // Resolve version
+            let resolved_version = self
+                .resolve_version(&name, &version_req)?
+                .ok_or_else(|| format!("Could not resolve {} {}", name, version_req))?;
+
+            // Load package manifest for transitive dependencies
+            let pkg_path = self.get_package_path(&name, &resolved_version);
+            if let Ok(pkg_manifest) = Manifest::load(&pkg_path) {
+                for (dep_name, dep) in &pkg_manifest.dependencies {
+                    let dep_version = match dep {
+                        Dependency::Version(v) => v.clone(),
+                        Dependency::Detailed(d) => d.version.clone().unwrap_or_else(|| "*".to_string()),
+                    };
+                    to_resolve.push((dep_name.clone(), dep_version));
+                }
+            }
+
+            resolved.push(LockedPackage {
+                name,
+                version: resolved_version,
+                checksum: None,
+                source: Some("registry".to_string()),
+            });
+        }
+
+        Ok(resolved)
+    }
+}
+
+/// Parse version string into (major, minor, patch)
+fn parse_version(v: &str) -> (u32, u32, u32) {
+    let parts: Vec<u32> = v
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    (
+        parts.first().copied().unwrap_or(0),
+        parts.get(1).copied().unwrap_or(0),
+        parts.get(2).copied().unwrap_or(0),
+    )
+}
+
+/// Compare two version strings
+fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let a_parts = parse_version(a);
+    let b_parts = parse_version(b);
+    a_parts.cmp(&b_parts)
+}
+
+/// Check caret compatibility (^1.2.3)
+fn is_caret_compatible(base: &(u32, u32, u32), ver: &(u32, u32, u32)) -> bool {
+    if base.0 == 0 {
+        // 0.x.y - minor must match
+        ver.0 == base.0 && ver.1 == base.1 && ver.2 >= base.2
+    } else {
+        // x.y.z - major must match, version >= base
+        ver.0 == base.0 && (ver.1, ver.2) >= (base.1, base.2)
+    }
+}
+
+/// Check tilde compatibility (~1.2.3)
+fn is_tilde_compatible(base: &(u32, u32, u32), ver: &(u32, u32, u32)) -> bool {
+    ver.0 == base.0 && ver.1 == base.1 && ver.2 >= base.2
+}
+
+/// Get current timestamp
+fn chrono_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    format!("{}", duration.as_secs())
 }
 
 /// Copy .aoel files recursively
