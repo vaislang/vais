@@ -1,4 +1,4 @@
-//! AOEL JIT vs 인터프리터 성능 벤치마크
+//! Vais JIT vs 인터프리터 성능 벤치마크
 //!
 //! JIT 컴파일이 활성화된 경우와 인터프리터의 성능을 비교합니다.
 //!
@@ -7,10 +7,10 @@
 #![cfg(feature = "jit")]
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use aoel_ir::{Instruction, OpCode, Value};
-use aoel_lowering::CompiledFunction;
-use aoel_vm::{execute_function, JitVm, JitConfig};
-use aoel_jit::JitCompiler;
+use vais_ir::{Instruction, OpCode, Value};
+use vais_lowering::CompiledFunction;
+use vais_vm::{execute_function, JitVm, JitConfig};
+use vais_jit::JitCompiler;
 
 /// 간단한 더하기 함수 생성
 fn make_add_function() -> CompiledFunction {

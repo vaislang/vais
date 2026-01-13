@@ -1,11 +1,16 @@
 # Changelog
 
-All notable changes to the AOEL project will be documented in this file.
+All notable changes to the Vais project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0] - 2026-01-13
+
+### Renamed
+- **Project renamed from AOEL to Vais** (Vibe AI SSW)
+- File extension changed from `.aoel` to `.vais`
+- All crate names updated: `aoel-*` → `vais-*`
 
 ### Core Language
 - **Lexer**: Full Unicode support, comprehensive token types
@@ -40,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - String operation optimizations with capacity reservation
 
 ### Tools
-- **CLI (aoel)**: run, build, check, format, repl, debug, profile, doc
+- **CLI (vais)**: run, build, check, format, repl, debug, profile, doc
 - **LSP Server**: Auto-completion, diagnostics, hover
 - **REPL**: rustyline history, multiline input, :commands
 - **Debugger**: Breakpoints, stepping, variable inspection, call stack

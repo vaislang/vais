@@ -1,0 +1,22 @@
+[package]
+name = "vais-jit"
+version = "1.0.0"
+edition = "2021"
+description = "Vais JIT Compiler - High-performance native code generation"
+
+[dependencies]
+vais-ir = { path = "../vais-ir" }
+vais-lowering = { path = "../vais-lowering" }
+thiserror = "1.0"
+
+# Cranelift JIT backend
+cranelift = "0.116"
+cranelift-jit = "0.116"
+cranelift-module = "0.116"
+cranelift-codegen = "0.116"
+cranelift-frontend = "0.116"
+cranelift-native = "0.116"
+target-lexicon = "0.13"
+
+[dev-dependencies]
+criterion = "0.5"

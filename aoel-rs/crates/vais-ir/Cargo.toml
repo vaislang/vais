@@ -1,0 +1,8 @@
+[package]
+name = "vais-ir"
+version.workspace = true
+edition.workspace = true
+description = "Vais Intermediate Representation"
+
+[dependencies]
+serde = { workspace = true }

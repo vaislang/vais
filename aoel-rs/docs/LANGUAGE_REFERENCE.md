@@ -1,6 +1,6 @@
-# AOEL Language Reference
+# Vais Language Reference
 
-Complete reference for the AOEL programming language.
+Complete reference for the Vais programming language.
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@ Complete reference for the AOEL programming language.
 
 ### Comments
 
-```aoel
+```vais
 // Single-line comment
 /* Multi-line
    comment */
@@ -29,15 +29,15 @@ Complete reference for the AOEL programming language.
 
 ### Variables
 
-```aoel
+```vais
 x = 42           // Immutable binding
-name = "AOEL"    // String
+name = "Vais"    // String
 active = true    // Boolean
 ```
 
 ### Literals
 
-```aoel
+```vais
 // Numbers
 42        // Integer
 3.14      // Float
@@ -89,7 +89,7 @@ active = true    // Boolean
 
 ### Type Annotations
 
-```aoel
+```vais
 // Function with types
 add(a: Int, b: Int) -> Int = a + b
 
@@ -106,7 +106,7 @@ process(data: [Int], fn: Int -> Int) -> [Int] = data.@(fn)
 
 ### Basic Functions
 
-```aoel
+```vais
 // Simple function
 square(x) = x * x
 
@@ -119,7 +119,7 @@ multiply(x: Int, y: Int) -> Int = x * y
 
 ### Block Body
 
-```aoel
+```vais
 calculate(x, y) = {
     sum = x + y
     product = x * y
@@ -129,7 +129,7 @@ calculate(x, y) = {
 
 ### Self-Recursion ($)
 
-```aoel
+```vais
 // $ refers to the enclosing function
 factorial(n) = n < 2 ? 1 : n * $(n - 1)
 fibonacci(n) = n < 2 ? n : $(n-1) + $(n-2)
@@ -140,7 +140,7 @@ sum_to(n, acc) = n == 0 ? acc : $(n - 1, acc + n)
 
 ### Lambda Expressions
 
-```aoel
+```vais
 // Full syntax
 double = (x) => x * 2
 
@@ -152,7 +152,7 @@ numbers./(_ + _)      // _1, _2 for multiple args
 
 ### Async Functions
 
-```aoel
+```vais
 async fetch_data(url) = {
     response = await http_get(url)
     await json_parse(response.body)
@@ -205,7 +205,7 @@ async fetch_data(url) = {
 
 ### Pipeline
 
-```aoel
+```vais
 // |> passes left side as argument to right side
 data |> process |> format |> output
 
@@ -225,7 +225,7 @@ output(format(process(data)))
 
 ### Arrays
 
-```aoel
+```vais
 nums = [1, 2, 3, 4, 5]
 
 // Access
@@ -242,7 +242,7 @@ concat(nums, [6,7]) // [1, 2, 3, 4, 5, 6, 7]
 
 ### Sets
 
-```aoel
+```vais
 s = #{1, 2, 3}
 
 // Operations
@@ -253,16 +253,16 @@ intersect(s, #{2})  // #{2}
 
 ### Maps
 
-```aoel
-m = {"name": "AOEL", "version": "0.1"}
+```vais
+m = {"name": "Vais", "version": "0.1"}
 
 // Access
-m["name"]           // "AOEL"
-m.name              // "AOEL" (dot notation)
+m["name"]           // "Vais"
+m.name              // "Vais" (dot notation)
 
 // Operations
 keys(m)             // ["name", "version"]
-values(m)           // ["AOEL", "0.1"]
+values(m)           // ["Vais", "0.1"]
 ```
 
 ---
@@ -271,7 +271,7 @@ values(m)           // ["AOEL", "0.1"]
 
 ### Conditionals
 
-```aoel
+```vais
 // Ternary operator
 result = condition ? value_if_true : value_if_false
 
@@ -290,7 +290,7 @@ result = if x > 0 {
 
 ### Loops
 
-```aoel
+```vais
 // For loop
 for i in range(1, 10) {
     print(i)
@@ -313,7 +313,7 @@ while condition {
 
 ### Match Expression
 
-```aoel
+```vais
 result = match value {
     0 => "zero",
     1 => "one",
@@ -325,7 +325,7 @@ result = match value {
 
 ### Destructuring
 
-```aoel
+```vais
 // Tuple destructuring
 (a, b) = (1, 2)
 
@@ -342,7 +342,7 @@ result = match value {
 
 ### Import
 
-```aoel
+```vais
 // Import entire module
 use math
 
@@ -355,7 +355,7 @@ use math as m
 
 ### Export
 
-```aoel
+```vais
 // Public function
 pub add(a, b) = a + b
 
@@ -369,7 +369,7 @@ helper(x) = x * 2
 
 ### Try-Catch
 
-```aoel
+```vais
 result = try {
     risky_operation()
 } catch e {
@@ -379,7 +379,7 @@ result = try {
 
 ### Result Type
 
-```aoel
+```vais
 safe_divide(a, b) = 
     if b == 0 
     then Err("Division by zero") 
@@ -394,7 +394,7 @@ match safe_divide(10, 2) {
 
 ### Optional Chaining
 
-```aoel
+```vais
 // ? operator for early return on error
 value = get_data()?
 processed = process(value)?
@@ -407,7 +407,7 @@ result = format(processed)?
 
 ### Async Functions
 
-```aoel
+```vais
 async fetch(url) = {
     response = await http_get(url)
     response.body
@@ -416,7 +416,7 @@ async fetch(url) = {
 
 ### Channels
 
-```aoel
+```vais
 // Create channel
 ch = channel(10)  // buffered channel
 
@@ -429,7 +429,7 @@ value = <- ch
 
 ### Spawn
 
-```aoel
+```vais
 // Spawn concurrent task
 handle = spawn async_task(args)
 
@@ -439,7 +439,7 @@ result = await handle
 
 ### Parallel Operations
 
-```aoel
+```vais
 // Parallel map
 results = data.||@(expensive_operation)
 

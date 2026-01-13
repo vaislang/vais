@@ -1,9 +1,9 @@
 {
-  "name": "aoel-lang",
-  "displayName": "AOEL Language Support",
-  "description": "Syntax highlighting, LSP support, and snippets for AOEL programming language",
+  "name": "vais-lang",
+  "displayName": "Vais Language Support",
+  "description": "Syntax highlighting, LSP support, and snippets for Vais programming language",
   "version": "0.1.0",
-  "publisher": "aoel",
+  "publisher": "vais",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -14,126 +14,126 @@
     "Formatters"
   ],
   "keywords": [
-    "aoel",
+    "vais",
     "functional",
     "programming language"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/aoel-lang/aoel"
+    "url": "https://github.com/vais-lang/vais"
   },
   "activationEvents": [
-    "onLanguage:aoel"
+    "onLanguage:vais"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
-        "id": "aoel",
-        "aliases": ["AOEL", "aoel"],
-        "extensions": [".aoel"],
+        "id": "vais",
+        "aliases": ["Vais", "vais"],
+        "extensions": [".vais"],
         "configuration": "./language-configuration.json",
         "icon": {
-          "light": "./icons/aoel-light.png",
-          "dark": "./icons/aoel-dark.png"
+          "light": "./icons/vais-light.png",
+          "dark": "./icons/vais-dark.png"
         }
       }
     ],
     "grammars": [
       {
-        "language": "aoel",
-        "scopeName": "source.aoel",
-        "path": "./syntaxes/aoel.tmLanguage.json"
+        "language": "vais",
+        "scopeName": "source.vais",
+        "path": "./syntaxes/vais.tmLanguage.json"
       }
     ],
     "snippets": [
       {
-        "language": "aoel",
-        "path": "./snippets/aoel.json"
+        "language": "vais",
+        "path": "./snippets/vais.json"
       }
     ],
     "configuration": {
-      "title": "AOEL",
+      "title": "Vais",
       "properties": {
-        "aoel.lsp.enabled": {
+        "vais.lsp.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable AOEL Language Server"
+          "description": "Enable Vais Language Server"
         },
-        "aoel.lsp.path": {
+        "vais.lsp.path": {
           "type": "string",
-          "default": "aoel-lsp",
-          "description": "Path to AOEL LSP server executable"
+          "default": "vais-lsp",
+          "description": "Path to Vais LSP server executable"
         },
-        "aoel.format.onSave": {
+        "vais.format.onSave": {
           "type": "boolean",
           "default": false,
-          "description": "Format AOEL files on save"
+          "description": "Format Vais files on save"
         },
-        "aoel.format.indentWidth": {
+        "vais.format.indentWidth": {
           "type": "number",
           "default": 4,
           "description": "Indentation width for formatting"
         },
-        "aoel.run.jit": {
+        "vais.run.jit": {
           "type": "boolean",
           "default": false,
-          "description": "Use JIT compilation when running AOEL files"
+          "description": "Use JIT compilation when running Vais files"
         }
       }
     },
     "commands": [
       {
-        "command": "aoel.run",
-        "title": "Run AOEL File",
-        "category": "AOEL"
+        "command": "vais.run",
+        "title": "Run Vais File",
+        "category": "Vais"
       },
       {
-        "command": "aoel.format",
-        "title": "Format AOEL File",
-        "category": "AOEL"
+        "command": "vais.format",
+        "title": "Format Vais File",
+        "category": "Vais"
       },
       {
-        "command": "aoel.check",
-        "title": "Check AOEL File",
-        "category": "AOEL"
+        "command": "vais.check",
+        "title": "Check Vais File",
+        "category": "Vais"
       },
       {
-        "command": "aoel.repl",
-        "title": "Start AOEL REPL",
-        "category": "AOEL"
+        "command": "vais.repl",
+        "title": "Start Vais REPL",
+        "category": "Vais"
       },
       {
-        "command": "aoel.showAst",
+        "command": "vais.showAst",
         "title": "Show AST",
-        "category": "AOEL"
+        "category": "Vais"
       }
     ],
     "keybindings": [
       {
-        "command": "aoel.run",
+        "command": "vais.run",
         "key": "ctrl+shift+r",
         "mac": "cmd+shift+r",
-        "when": "editorLangId == aoel"
+        "when": "editorLangId == vais"
       },
       {
-        "command": "aoel.format",
+        "command": "vais.format",
         "key": "ctrl+shift+f",
         "mac": "cmd+shift+f",
-        "when": "editorLangId == aoel"
+        "when": "editorLangId == vais"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "aoel.run",
-          "when": "editorLangId == aoel",
-          "group": "aoel@1"
+          "command": "vais.run",
+          "when": "editorLangId == vais",
+          "group": "vais@1"
         },
         {
-          "command": "aoel.format",
-          "when": "editorLangId == aoel",
-          "group": "aoel@2"
+          "command": "vais.format",
+          "when": "editorLangId == vais",
+          "group": "vais@2"
         }
       ]
     }

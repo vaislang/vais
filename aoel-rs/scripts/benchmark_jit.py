@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL JIT vs 인터프리터 성능 비교 벤치마크
+Vais JIT vs 인터프리터 성능 비교 벤치마크
 
 JIT 컴파일이 활성화된 경우와 그렇지 않은 경우의 성능을 비교합니다.
 """
@@ -10,7 +10,7 @@ import time
 import os
 import sys
 
-# 테스트할 AOEL 프로그램들
+# 테스트할 Vais 프로그램들
 BENCHMARKS = {
     "add": {
         "source": "add(a, b) = a + b",
@@ -33,8 +33,8 @@ BENCHMARKS = {
 }
 
 def write_temp_file(source: str) -> str:
-    """임시 AOEL 파일 생성"""
-    temp_path = "/tmp/aoel_bench.aoel"
+    """임시 Vais 파일 생성"""
+    temp_path = "/tmp/vais_bench.vais"
     with open(temp_path, "w") as f:
         f.write(source)
     return temp_path
@@ -43,7 +43,7 @@ def run_benchmark(name: str, source: str, func: str, args: str, iterations: int,
     """벤치마크 실행 및 시간 측정"""
     temp_path = write_temp_file(source)
 
-    cmd = ["cargo", "run", "--release", "-p", "aoel-cli"]
+    cmd = ["cargo", "run", "--release", "-p", "vais-cli"]
     if use_jit:
         cmd.extend(["--features", "jit"])
     cmd.extend(["--", "run", temp_path, "-f", func, "-a", args])
@@ -52,12 +52,12 @@ def run_benchmark(name: str, source: str, func: str, args: str, iterations: int,
 
     # Warmup
     for _ in range(3):
-        subprocess.run(cmd, capture_output=True, cwd="/Users/sswoo/study/projects/aoel/aoel-rs")
+        subprocess.run(cmd, capture_output=True, cwd="/Users/sswoo/study/projects/vais/vais-rs")
 
     # Benchmark
     start = time.perf_counter()
     for _ in range(iterations):
-        result = subprocess.run(cmd, capture_output=True, cwd="/Users/sswoo/study/projects/aoel/aoel-rs")
+        result = subprocess.run(cmd, capture_output=True, cwd="/Users/sswoo/study/projects/vais/vais-rs")
         if result.returncode != 0:
             print(f"Error running {name}: {result.stderr.decode()}")
             return -1
@@ -67,7 +67,7 @@ def run_benchmark(name: str, source: str, func: str, args: str, iterations: int,
 
 def main():
     print("=" * 80)
-    print("AOEL JIT vs 인터프리터 성능 비교")
+    print("Vais JIT vs 인터프리터 성능 비교")
     print("=" * 80)
     print()
     print("⚠️  참고: 프로세스 시작 오버헤드가 포함됨 (순수 VM 성능은 Rust 벤치마크 참고)")

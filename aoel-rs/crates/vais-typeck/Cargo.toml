@@ -1,0 +1,13 @@
+[package]
+name = "vais-typeck"
+version.workspace = true
+edition.workspace = true
+description = "Vais Type Checker"
+
+[dependencies]
+vais-ast = { workspace = true }
+vais-lexer = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+vais-parser = { workspace = true }

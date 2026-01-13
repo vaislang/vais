@@ -1,6 +1,6 @@
-# Getting Started with AOEL
+# Getting Started with Vais
 
-Welcome to AOEL (AI-Optimized Executable Language)! This guide will help you get started with AOEL programming.
+Welcome to Vais (AI-Optimized Executable Language)! This guide will help you get started with Vais programming.
 
 ## Installation
 
@@ -8,8 +8,8 @@ Welcome to AOEL (AI-Optimized Executable Language)! This guide will help you get
 
 ```bash
 # Clone the repository
-git clone https://github.com/aoel-lang/aoel.git
-cd aoel/aoel-rs
+git clone https://github.com/vais-lang/vais.git
+cd vais/vais-rs
 
 # Build with Cargo
 cargo build --release
@@ -21,16 +21,16 @@ export PATH="$PATH:$(pwd)/target/release"
 ### Verify Installation
 
 ```bash
-aoel --version
-# Output: aoel 0.1.0
+vais --version
+# Output: vais 0.1.0
 ```
 
 ## Your First Program
 
-Create a file called `hello.aoel`:
+Create a file called `hello.vais`:
 
-```aoel
-// hello.aoel
+```vais
+// hello.vais
 greet(name) = "Hello, " ++ name ++ "!"
 
 print(greet("World"))
@@ -39,7 +39,7 @@ print(greet("World"))
 Run it:
 
 ```bash
-aoel run hello.aoel
+vais run hello.vais
 # Output: Hello, World!
 ```
 
@@ -49,7 +49,7 @@ aoel run hello.aoel
 
 Functions use a simple mathematical notation:
 
-```aoel
+```vais
 // Simple function
 add(a, b) = a + b
 
@@ -67,14 +67,14 @@ abs(n) = n < 0 ? -n : n
 
 Use `$` to refer to the current function:
 
-```aoel
+```vais
 factorial(n) = n < 2 ? 1 : n * $(n - 1)
 fibonacci(n) = n < 2 ? n : $(n-1) + $(n-2)
 ```
 
 ### Collections
 
-```aoel
+```vais
 // Arrays
 numbers = [1, 2, 3, 4, 5]
 
@@ -96,7 +96,7 @@ result = numbers
 
 ### Pattern Matching
 
-```aoel
+```vais
 classify(n) = match n {
     0 => "zero",
     1 => "one",
@@ -107,7 +107,7 @@ classify(n) = match n {
 
 ### Pipeline Operator
 
-```aoel
+```vais
 // Instead of nested calls
 result = sum(filter(map(data, double), is_even))
 
@@ -122,7 +122,7 @@ result = data |> @(double) |> ?(is_even) |> sum
 Interactive shell for experimenting:
 
 ```bash
-aoel repl
+vais repl
 ```
 
 Commands:
@@ -135,10 +135,10 @@ Commands:
 
 ```bash
 # Type check a file
-aoel check myfile.aoel
+vais check myfile.vais
 
 # Format code
-aoel format myfile.aoel --write
+vais format myfile.vais --write
 ```
 
 ### Build
@@ -147,13 +147,13 @@ Compile to native executables:
 
 ```bash
 # Build to C + compile
-aoel build program.aoel
+vais build program.vais
 
 # Build to WebAssembly
-aoel build program.aoel --target wasm
+vais build program.vais --target wasm
 
 # Build to LLVM IR
-aoel build program.aoel --target llvm
+vais build program.vais --target llvm
 ```
 
 ## Project Setup
@@ -161,26 +161,26 @@ aoel build program.aoel --target llvm
 Create a new project:
 
 ```bash
-aoel init my-project
+vais init my-project
 cd my-project
 ```
 
 This creates:
-- `aoel.toml` - Project manifest
-- `src/main.aoel` - Entry point
+- `vais.toml` - Project manifest
+- `src/main.vais` - Entry point
 - `.gitignore` - Git ignore file
 
 ### Dependencies
 
 ```bash
 # Add a dependency
-aoel add utils
+vais add utils
 
 # Install all dependencies
-aoel install
+vais install
 
 # List dependencies
-aoel list
+vais list
 ```
 
 ## Next Steps
@@ -188,7 +188,7 @@ aoel list
 - **[Language Reference](./LANGUAGE_REFERENCE.md)** - Complete language documentation
 - **[Standard Library](./STDLIB.md)** - Built-in functions
 - **[Examples](../examples/)** - Code examples
-- **[Playground](https://aoel-lang.github.io/playground)** - Try AOEL in browser
+- **[Playground](https://vais-lang.github.io/playground)** - Try Vais in browser
 
 ## Getting Help
 
@@ -196,4 +196,4 @@ aoel list
 - **Discussions**: Ask questions and share ideas
 - **Discord**: Join our community chat
 
-Happy coding with AOEL! 🚀
+Happy coding with Vais! 🚀

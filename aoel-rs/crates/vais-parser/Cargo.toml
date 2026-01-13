@@ -1,0 +1,10 @@
+[package]
+name = "vais-parser"
+version = "1.0.0"
+edition = "2021"
+description = "Vais Parser"
+
+[dependencies]
+thiserror = "1.0"
+vais-lexer = { path = "../vais-lexer" }
+vais-ast = { path = "../vais-ast" }

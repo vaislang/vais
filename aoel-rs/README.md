@@ -1,10 +1,10 @@
-# AOEL - AI-Optimized Executable Language
+# Vais - Vibe AI SSW Language
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/aoel-lang/aoel)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/vais-lang/vais)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-522%2B%20passed-brightgreen.svg)]()
 
-AOEL is a modern programming language designed for AI-assisted development ("vibe coding"). It combines the simplicity of Python with performance that rivals compiled languages.
+**Vais** (**V**ibe **AI** **S**SW) is a modern programming language designed for AI-assisted development ("vibe coding"). It combines the simplicity of Python with performance that rivals compiled languages.
 
 ## Features
 
@@ -20,8 +20,8 @@ AOEL is a modern programming language designed for AI-assisted development ("vib
 
 ```bash
 # Build from source
-git clone https://github.com/aoel-lang/aoel.git
-cd aoel/aoel-rs
+git clone https://github.com/vais-lang/vais.git
+cd vais/vais-rs
 cargo build --release
 
 # Add to PATH
@@ -30,18 +30,18 @@ export PATH="$PATH:$(pwd)/target/release"
 
 ### Hello World
 
-```aoel
-// hello.aoel
+```vais
+// hello.vais
 println("Hello, World!")
 ```
 
 ```bash
-aoel run hello.aoel
+vais run hello.vais
 ```
 
 ### Examples
 
-```aoel
+```vais
 // Factorial with recursion
 factorial(n) = n <= 1 ? 1 : n * $(n - 1)
 println(factorial(10))  // 3628800
@@ -68,24 +68,24 @@ classify(n) = match n {
 
 | Tool | Command | Description |
 |------|---------|-------------|
-| Run | `aoel run file.aoel` | Execute AOEL file |
-| REPL | `aoel repl` | Interactive shell |
-| Check | `aoel check file.aoel` | Type check without running |
-| Format | `aoel format file.aoel` | Format source code |
-| Debug | `aoel debug file.aoel` | Debug with breakpoints |
-| Profile | `aoel profile file.aoel` | Profile execution time |
-| Doc | `aoel doc file.aoel` | Generate documentation |
+| Run | `vais run file.vais` | Execute Vais file |
+| REPL | `vais repl` | Interactive shell |
+| Check | `vais check file.vais` | Type check without running |
+| Format | `vais format file.vais` | Format source code |
+| Debug | `vais debug file.vais` | Debug with breakpoints |
+| Profile | `vais profile file.vais` | Profile execution time |
+| Doc | `vais doc file.vais` | Generate documentation |
 
 ### JIT Compilation
 
 ```bash
 # Run with JIT for maximum performance
-aoel run --jit compute_heavy.aoel
+vais run --jit compute_heavy.vais
 ```
 
 ## VS Code Extension
 
-Install the AOEL extension for syntax highlighting, LSP support, and snippets:
+Install the Vais extension for syntax highlighting, LSP support, and snippets:
 
 ```bash
 cd editors/vscode
@@ -97,21 +97,21 @@ npm run compile
 ## Project Structure
 
 ```
-aoel-rs/
+vais-rs/
 ├── crates/
-│   ├── aoel-lexer/      # Tokenizer
-│   ├── aoel-parser/     # Parser (Pratt)
-│   ├── aoel-ast/        # Abstract Syntax Tree
-│   ├── aoel-typeck/     # Type checker
-│   ├── aoel-lowering/   # AST → IR
-│   ├── aoel-ir/         # Intermediate Representation
-│   ├── aoel-vm/         # Virtual Machine
-│   ├── aoel-jit/        # JIT Compiler (Cranelift)
-│   ├── aoel-codegen/    # Code generation (C, WASM, LLVM)
-│   ├── aoel-tools/      # Debugger, Profiler, Formatter
-│   ├── aoel-lsp/        # Language Server
-│   ├── aoel-cli/        # Command Line Interface
-│   └── aoel-playground/ # Web Playground
+│   ├── vais-lexer/      # Tokenizer
+│   ├── vais-parser/     # Parser (Pratt)
+│   ├── vais-ast/        # Abstract Syntax Tree
+│   ├── vais-typeck/     # Type checker
+│   ├── vais-lowering/   # AST → IR
+│   ├── vais-ir/         # Intermediate Representation
+│   ├── vais-vm/         # Virtual Machine
+│   ├── vais-jit/        # JIT Compiler (Cranelift)
+│   ├── vais-codegen/    # Code generation (C, WASM, LLVM)
+│   ├── vais-tools/      # Debugger, Profiler, Formatter
+│   ├── vais-lsp/        # Language Server
+│   ├── vais-cli/        # Command Line Interface
+│   └── vais-playground/ # Web Playground
 ├── docs/                # Documentation
 ├── editors/             # Editor integrations
 └── examples/            # Example programs
@@ -127,7 +127,7 @@ aoel-rs/
 
 ## Performance
 
-| Operation | Python | AOEL VM | AOEL JIT |
+| Operation | Python | Vais VM | Vais JIT |
 |-----------|--------|---------|----------|
 | Map (1000 elements) | 27.4µs | 24.7µs | - |
 | Filter (1000 elements) | 28.0µs | 24.0µs | - |

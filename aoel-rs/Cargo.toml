@@ -1,41 +1,41 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/aoel-lexer",
-    "crates/aoel-ast",
-    "crates/aoel-parser",
-    "crates/aoel-typeck",
-    "crates/aoel-lowering",
-    "crates/aoel-ir",
-    "crates/aoel-vm",
-    "crates/aoel-codegen",
-    "crates/aoel-jit",
-    "crates/aoel-tools",
-    "crates/aoel-lsp",
-    "crates/aoel-cli",
-    "crates/aoel-playground",
+    "crates/vais-lexer",
+    "crates/vais-ast",
+    "crates/vais-parser",
+    "crates/vais-typeck",
+    "crates/vais-lowering",
+    "crates/vais-ir",
+    "crates/vais-vm",
+    "crates/vais-codegen",
+    "crates/vais-jit",
+    "crates/vais-tools",
+    "crates/vais-lsp",
+    "crates/vais-cli",
+    "crates/vais-playground",
 ]
 
 [workspace.package]
 version = "1.0.0"
 edition = "2021"
-authors = ["AOEL Team"]
+authors = ["Vais Team"]
 license = "MIT"
-repository = "https://github.com/aoel-lang/aoel"
-description = "AI-Optimized Executable Language"
+repository = "https://github.com/vais-lang/vais"
+description = "Vibe AI SSW Language - AI-Optimized Programming Language"
 
 [workspace.dependencies]
 # Internal crates
-aoel-lexer = { path = "crates/aoel-lexer" }
-aoel-ast = { path = "crates/aoel-ast" }
-aoel-parser = { path = "crates/aoel-parser" }
-aoel-typeck = { path = "crates/aoel-typeck" }
-aoel-lowering = { path = "crates/aoel-lowering" }
-aoel-ir = { path = "crates/aoel-ir" }
-aoel-vm = { path = "crates/aoel-vm" }
-aoel-codegen = { path = "crates/aoel-codegen" }
-aoel-jit = { path = "crates/aoel-jit" }
-aoel-tools = { path = "crates/aoel-tools" }
+vais-lexer = { path = "crates/vais-lexer" }
+vais-ast = { path = "crates/vais-ast" }
+vais-parser = { path = "crates/vais-parser" }
+vais-typeck = { path = "crates/vais-typeck" }
+vais-lowering = { path = "crates/vais-lowering" }
+vais-ir = { path = "crates/vais-ir" }
+vais-vm = { path = "crates/vais-vm" }
+vais-codegen = { path = "crates/vais-codegen" }
+vais-jit = { path = "crates/vais-jit" }
+vais-tools = { path = "crates/vais-tools" }
 
 # External dependencies
 thiserror = "1.0"
@@ -56,22 +56,22 @@ lto = true
 
 # Root package for integration tests and benchmarks
 [package]
-name = "aoel-workspace"
+name = "vais-workspace"
 version = "1.0.0"
 edition = "2021"
 publish = false
 
 [features]
 default = []
-jit = ["aoel-vm/jit", "aoel-jit"]
+jit = ["vais-vm/jit", "vais-jit"]
 
 [dependencies]
-aoel-lexer = { path = "crates/aoel-lexer" }
-aoel-parser = { path = "crates/aoel-parser" }
-aoel-lowering = { path = "crates/aoel-lowering" }
-aoel-ir = { path = "crates/aoel-ir" }
-aoel-vm = { path = "crates/aoel-vm" }
-aoel-jit = { path = "crates/aoel-jit", optional = true }
+vais-lexer = { path = "crates/vais-lexer" }
+vais-parser = { path = "crates/vais-parser" }
+vais-lowering = { path = "crates/vais-lowering" }
+vais-ir = { path = "crates/vais-ir" }
+vais-vm = { path = "crates/vais-vm" }
+vais-jit = { path = "crates/vais-jit", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

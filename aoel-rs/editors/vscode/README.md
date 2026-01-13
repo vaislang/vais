@@ -1,13 +1,13 @@
-# AOEL Language Support for VS Code
+# Vais Language Support for VS Code
 
-Syntax highlighting, LSP support, snippets, and tools for the AOEL programming language.
+Syntax highlighting, LSP support, snippets, and tools for the Vais programming language.
 
 ## Features
 
-- **Syntax Highlighting**: Full TextMate grammar for AOEL syntax
+- **Syntax Highlighting**: Full TextMate grammar for Vais syntax
 - **Language Server**: Autocompletion, diagnostics, hover information
-- **Code Snippets**: Common AOEL patterns and constructs
-- **Run & Debug**: Execute AOEL files directly from VS Code
+- **Code Snippets**: Common Vais patterns and constructs
+- **Run & Debug**: Execute Vais files directly from VS Code
 - **Format**: Automatic code formatting
 
 ## Installation
@@ -29,28 +29,28 @@ Syntax highlighting, LSP support, snippets, and tools for the AOEL programming l
 
 ### Prerequisites
 
-- [AOEL CLI](../../README.md) installed and in PATH
+- [Vais CLI](../../README.md) installed and in PATH
 - Node.js 18+ (for development)
 
 ## Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `aoel.lsp.enabled` | `true` | Enable AOEL Language Server |
-| `aoel.lsp.path` | `aoel-lsp` | Path to LSP executable |
-| `aoel.format.onSave` | `false` | Format on save |
-| `aoel.format.indentWidth` | `4` | Indentation width |
-| `aoel.run.jit` | `false` | Use JIT compilation |
+| `vais.lsp.enabled` | `true` | Enable Vais Language Server |
+| `vais.lsp.path` | `vais-lsp` | Path to LSP executable |
+| `vais.format.onSave` | `false` | Format on save |
+| `vais.format.indentWidth` | `4` | Indentation width |
+| `vais.run.jit` | `false` | Use JIT compilation |
 
 ## Commands
 
 | Command | Keybinding | Description |
 |---------|------------|-------------|
-| AOEL: Run File | `Cmd+Shift+R` | Execute current file |
-| AOEL: Format File | `Cmd+Shift+F` | Format current file |
-| AOEL: Check File | - | Type check current file |
-| AOEL: Start REPL | - | Open AOEL REPL |
-| AOEL: Show AST | - | Display AST tree |
+| Vais: Run File | `Cmd+Shift+R` | Execute current file |
+| Vais: Format File | `Cmd+Shift+F` | Format current file |
+| Vais: Check File | - | Type check current file |
+| Vais: Start REPL | - | Open Vais REPL |
+| Vais: Show AST | - | Display AST tree |
 
 ## Snippets
 

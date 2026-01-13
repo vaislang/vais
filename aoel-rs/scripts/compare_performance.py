@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AOEL vs Python: 실행 성능 비교
+Vais vs Python: 실행 성능 비교
 
 동일한 로직의 실행 시간을 비교합니다.
 """
@@ -19,18 +19,18 @@ def measure_python(func, *args, iterations=1000):
     avg_time = (end - start) / iterations * 1_000_000  # microseconds
     return result, avg_time
 
-def measure_aoel(source, func_name, args, iterations=100):
-    """AOEL 함수 실행 시간 측정 (CLI 호출)"""
-    # AOEL CLI를 통해 실행
+def measure_vais(source, func_name, args, iterations=100):
+    """Vais 함수 실행 시간 측정 (CLI 호출)"""
+    # Vais CLI를 통해 실행
     # 참고: 이 방식은 프로세스 오버헤드가 포함됨
     # 실제 VM 성능은 Criterion 벤치마크 참고
     try:
-        cmd = ["cargo", "run", "--release", "-p", "aoel-cli", "--", "eval", "-e", source, "-f", func_name]
+        cmd = ["cargo", "run", "--release", "-p", "vais-cli", "--", "eval", "-e", source, "-f", func_name]
         for arg in args:
             cmd.extend(["-a", str(arg)])
 
         start = time.perf_counter()
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd="/Users/sswoo/study/projects/aoel/aoel-rs")
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd="/Users/sswoo/study/projects/vais/vais-rs")
         end = time.perf_counter()
 
         return result.stdout.strip(), (end - start) * 1_000_000
@@ -67,10 +67,10 @@ def py_chained(arr):
 
 def main():
     print("=" * 80)
-    print("AOEL vs Python: 실행 성능 비교")
+    print("Vais vs Python: 실행 성능 비교")
     print("=" * 80)
     print()
-    print("⚠️  참고: AOEL은 Rust Criterion 벤치마크 결과 사용 (순수 VM 성능)")
+    print("⚠️  참고: Vais은 Rust Criterion 벤치마크 결과 사용 (순수 VM 성능)")
     print("         Python은 1000회 반복 평균 (마이크로초)")
     print()
 
@@ -154,8 +154,8 @@ def main():
         print(f"  chained({size:5d} elements): Python = {py_time:>10.2f} µs")
     print()
 
-    # AOEL Criterion 벤치마크 결과 (이전 실행 결과에서 추출)
-    aoel_results = {
+    # Vais Criterion 벤치마크 결과 (이전 실행 결과에서 추출)
+    vais_results = {
         "factorial(5)": 0.65,
         "factorial(10)": 1.89,
         "factorial(15)": 4.19,
@@ -182,22 +182,22 @@ def main():
     }
 
     print("=" * 80)
-    print("📊 AOEL vs Python 성능 비교표")
+    print("📊 Vais vs Python 성능 비교표")
     print("=" * 80)
     print()
-    print(f"  {'벤치마크':<25} {'AOEL (µs)':>12} {'Python (µs)':>12} {'비율':>10}")
+    print(f"  {'벤치마크':<25} {'Vais (µs)':>12} {'Python (µs)':>12} {'비율':>10}")
     print(f"  {'-'*25} {'-'*12} {'-'*12} {'-'*10}")
 
     for bench in benchmarks:
         name = bench["name"]
         py_time = bench["python_us"]
-        aoel_time = aoel_results.get(name, None)
+        vais_time = vais_results.get(name, None)
 
-        if aoel_time:
-            ratio = py_time / aoel_time if aoel_time > 0 else float('inf')
+        if vais_time:
+            ratio = py_time / vais_time if vais_time > 0 else float('inf')
             ratio_str = f"{ratio:.1f}x" if ratio >= 1 else f"1/{1/ratio:.1f}x"
-            faster = "AOEL" if ratio > 1 else "Python"
-            print(f"  {name:<25} {aoel_time:>12.2f} {py_time:>12.2f} {ratio_str:>10} ({faster})")
+            faster = "Vais" if ratio > 1 else "Python"
+            print(f"  {name:<25} {vais_time:>12.2f} {py_time:>12.2f} {ratio_str:>10} ({faster})")
         else:
             print(f"  {name:<25} {'N/A':>12} {py_time:>12.2f}")
 
@@ -208,14 +208,14 @@ def main():
     print("""
   1. 재귀 연산 (factorial, fibonacci):
      - Python이 더 빠름 (네이티브 인터프리터 최적화)
-     - AOEL은 VM 오버헤드 있지만 코드가 훨씬 간결
+     - Vais은 VM 오버헤드 있지만 코드가 훨씬 간결
 
   2. 컬렉션 연산 (map, filter, reduce):
      - 작은 배열에서는 Python과 비슷한 성능
-     - AOEL 컬렉션 연산자(.@, .?, ./) 덕분에 코드 간결성 우수
+     - Vais 컬렉션 연산자(.@, .?, ./) 덕분에 코드 간결성 우수
 
   3. 종합:
-     - AOEL은 코드 토큰 수 ~30% 절감, 문자 수 ~60% 절감
+     - Vais은 코드 토큰 수 ~30% 절감, 문자 수 ~60% 절감
      - LLM 토큰 비용 절감에 효과적
      - 성능은 Python과 비교 가능한 수준
     """)

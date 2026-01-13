@@ -1,6 +1,6 @@
-# Contributing to AOEL
+# Contributing to Vais
 
-Thank you for your interest in contributing to AOEL! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Vais! This document provides guidelines and information for contributors.
 
 ## Table of Contents
 
@@ -28,8 +28,8 @@ By participating in this project, you agree to maintain a respectful and inclusi
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/aoel-lang/aoel.git
-cd aoel/aoel-rs
+git clone https://github.com/vais-lang/vais.git
+cd vais/vais-rs
 ```
 
 ### Build
@@ -63,26 +63,26 @@ cargo test --workspace
 
 For VS Code, install:
 - rust-analyzer
-- AOEL Language Support (from `editors/vscode`)
+- Vais Language Support (from `editors/vscode`)
 
 ## Project Structure
 
 ```
-aoel-rs/
+vais-rs/
 ├── crates/
-│   ├── aoel-lexer/      # Tokenizer
-│   ├── aoel-parser/     # Parser & AST
-│   ├── aoel-ast/        # AST definitions
-│   ├── aoel-typeck/     # Type checker
-│   ├── aoel-ir/         # Intermediate representation
-│   ├── aoel-lowering/   # AST to IR
-│   ├── aoel-vm/         # Stack-based VM
-│   ├── aoel-codegen/    # Code generators (C, WASM, LLVM)
-│   ├── aoel-jit/        # Cranelift JIT compiler
-│   ├── aoel-cli/        # Command-line interface
-│   ├── aoel-lsp/        # Language Server Protocol
-│   ├── aoel-tools/      # Dev tools (formatter, profiler, debugger)
-│   └── aoel-playground/ # Web playground (WASM)
+│   ├── vais-lexer/      # Tokenizer
+│   ├── vais-parser/     # Parser & AST
+│   ├── vais-ast/        # AST definitions
+│   ├── vais-typeck/     # Type checker
+│   ├── vais-ir/         # Intermediate representation
+│   ├── vais-lowering/   # AST to IR
+│   ├── vais-vm/         # Stack-based VM
+│   ├── vais-codegen/    # Code generators (C, WASM, LLVM)
+│   ├── vais-jit/        # Cranelift JIT compiler
+│   ├── vais-cli/        # Command-line interface
+│   ├── vais-lsp/        # Language Server Protocol
+│   ├── vais-tools/      # Dev tools (formatter, profiler, debugger)
+│   └── vais-playground/ # Web playground (WASM)
 ├── docs/                # Documentation
 ├── editors/             # Editor extensions
 │   └── vscode/         # VS Code extension
@@ -139,7 +139,7 @@ cargo test --workspace
 
 ```bash
 # Run tests in a specific crate
-cargo test -p aoel-parser
+cargo test -p vais-parser
 
 # Run a specific test
 cargo test test_name
@@ -201,13 +201,13 @@ pub fn function_name(param: Type) -> ReturnType {
 }
 ```
 
-### AOEL Code Examples
+### Vais Code Examples
 
 - Use 4-space indentation
 - Use descriptive names
 - Add comments for complex logic
 
-```aoel
+```vais
 // Good
 calculate_total(items, tax_rate) = {
     subtotal = items./+(0, _.price)
@@ -242,4 +242,4 @@ Look for issues labeled `good first issue`:
 - Join our Discord server
 - Check existing issues
 
-Thank you for contributing to AOEL! 🎉
+Thank you for contributing to Vais! 🎉

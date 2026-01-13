@@ -1,15 +1,15 @@
-//! AOEL Benchmarks
+//! Vais Benchmarks
 //!
-//! Performance benchmarks for the AOEL compiler and runtime.
+//! Performance benchmarks for the Vais compiler and runtime.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use aoel_ir::Value;
-use aoel_lowering::Lowerer;
-use aoel_vm::execute_function;
+use vais_ir::Value;
+use vais_lowering::Lowerer;
+use vais_vm::execute_function;
 
-/// Helper to compile AOEL source to functions
-fn compile(source: &str) -> Vec<aoel_lowering::CompiledFunction> {
-    let program = aoel_parser::parse(source).unwrap();
+/// Helper to compile Vais source to functions
+fn compile(source: &str) -> Vec<vais_lowering::CompiledFunction> {
+    let program = vais_parser::parse(source).unwrap();
     let mut lowerer = Lowerer::new();
     lowerer.lower_program(&program).unwrap()
 }
@@ -31,7 +31,7 @@ fn bench_lexer(c: &mut Criterion) {
     for (name, source) in sources {
         group.bench_with_input(BenchmarkId::new("tokenize", name), source, |b, src| {
             b.iter(|| {
-                let mut lexer = aoel_lexer::Lexer::new(black_box(src));
+                let mut lexer = vais_lexer::Lexer::new(black_box(src));
                 let _ = lexer.tokenize();
             });
         });
@@ -58,7 +58,7 @@ fn bench_parser(c: &mut Criterion) {
     for (name, source) in sources {
         group.bench_with_input(BenchmarkId::new("parse", name), source, |b, src| {
             b.iter(|| {
-                let _ = aoel_parser::parse(black_box(src));
+                let _ = vais_parser::parse(black_box(src));
             });
         });
     }
@@ -79,7 +79,7 @@ fn bench_lowering(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("lowering");
     for (name, source) in sources {
-        let program = aoel_parser::parse(source).unwrap();
+        let program = vais_parser::parse(source).unwrap();
         group.bench_with_input(BenchmarkId::new("lower", name), &program, |b, prog| {
             b.iter(|| {
                 let mut lowerer = Lowerer::new();
@@ -191,11 +191,11 @@ fn bench_chained_operations(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: VM builtin functions (via AOEL functions)
+/// Benchmark: VM builtin functions (via Vais functions)
 fn bench_builtins(c: &mut Criterion) {
     let mut group = c.benchmark_group("builtins");
 
-    // Array length via AOEL
+    // Array length via Vais
     let len_funcs = compile("len_fn(arr) = #arr");
     let arr = Value::Array((0..100).map(Value::Int).collect());
     group.bench_function("len", |b| {
@@ -204,7 +204,7 @@ fn bench_builtins(c: &mut Criterion) {
         });
     });
 
-    // Reverse via AOEL
+    // Reverse via Vais
     let rev_funcs = compile("rev(arr) = reverse(arr)");
     group.bench_function("reverse", |b| {
         b.iter(|| {
@@ -212,7 +212,7 @@ fn bench_builtins(c: &mut Criterion) {
         });
     });
 
-    // Sort via AOEL
+    // Sort via Vais
     let sort_funcs = compile("sort_fn(arr) = sort(arr)");
     let unsorted = Value::Array(vec![
         Value::Int(5), Value::Int(2), Value::Int(8), Value::Int(1),
@@ -224,7 +224,7 @@ fn bench_builtins(c: &mut Criterion) {
         });
     });
 
-    // String concat via AOEL
+    // String concat via Vais
     let concat_funcs = compile("concat_fn(a, b) = a + b");
     let s1 = Value::String("Hello, ".to_string());
     let s2 = Value::String("World!".to_string());
@@ -234,7 +234,7 @@ fn bench_builtins(c: &mut Criterion) {
         });
     });
 
-    // Abs via AOEL
+    // Abs via Vais
     let abs_funcs = compile("abs_fn(n) = abs(n)");
     group.bench_function("abs", |b| {
         b.iter(|| {
@@ -242,7 +242,7 @@ fn bench_builtins(c: &mut Criterion) {
         });
     });
 
-    // Sqrt via AOEL
+    // Sqrt via Vais
     let sqrt_funcs = compile("sqrt_fn(x) = sqrt(x)");
     group.bench_function("sqrt", |b| {
         b.iter(|| {
@@ -261,7 +261,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
     group.bench_function("simple_add", |b| {
         let source = "add(a, b) = a + b";
         b.iter(|| {
-            let program = aoel_parser::parse(black_box(source)).unwrap();
+            let program = vais_parser::parse(black_box(source)).unwrap();
             let mut lowerer = Lowerer::new();
             let functions = lowerer.lower_program(&program).unwrap();
             execute_function(functions, "add", vec![Value::Int(3), Value::Int(5)]).unwrap()
@@ -272,7 +272,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
     group.bench_function("factorial_10", |b| {
         let source = "fact(n) = n < 2 ? 1 : n * $(n - 1)";
         b.iter(|| {
-            let program = aoel_parser::parse(black_box(source)).unwrap();
+            let program = vais_parser::parse(black_box(source)).unwrap();
             let mut lowerer = Lowerer::new();
             let functions = lowerer.lower_program(&program).unwrap();
             execute_function(functions, "fact", vec![Value::Int(10)]).unwrap()
@@ -284,7 +284,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
         let source = "double(arr) = arr.@(_ * 2)";
         let arr = Value::Array((0..100).map(Value::Int).collect());
         b.iter(|| {
-            let program = aoel_parser::parse(black_box(source)).unwrap();
+            let program = vais_parser::parse(black_box(source)).unwrap();
             let mut lowerer = Lowerer::new();
             let functions = lowerer.lower_program(&program).unwrap();
             execute_function(functions, "double", vec![arr.clone()]).unwrap()

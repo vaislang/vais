@@ -1,4 +1,4 @@
-# AOEL Language Roadmap
+# Vais Language Roadmap
 
 ## Current Status (v0.1.0)
 
@@ -24,7 +24,7 @@
 - [x] LLVM IR 생성
 
 #### Tools
-- [x] CLI (aoel) - 실행, 빌드, REPL
+- [x] CLI (vais) - 실행, 빌드, REPL
 - [x] LSP Server - 자동완성, 진단
 - [x] Playground - 웹 기반 실행 환경
 - [x] Package Manager - init, add, publish
@@ -72,7 +72,7 @@
 
 ### 0.2 성능 목표
 
-| 연산 | Python | AOEL VM | AOEL JIT |
+| 연산 | Python | Vais VM | Vais JIT |
 |------|--------|---------|----------|
 | Map (1000) | 27.4µs | 24.7µs ✅ | - |
 | Filter (1000) | 28.0µs | 24.0µs ✅ | - |
@@ -89,7 +89,7 @@
 ## Phase 1: Language Features ✅
 
 ### 1.1 Pattern Matching ✅
-```aoel
+```vais
 // match 표현식
 result = match value {
   0 => "zero",
@@ -112,13 +112,13 @@ result = match value {
 - [x] 테스트 추가
 
 ### 1.2 Module System ✅
-```aoel
-// math.aoel
+```vais
+// math.vais
 export add(a, b) = a + b
 export sub(a, b) = a - b
 private helper(x) = x * 2
 
-// main.aoel
+// main.vais
 import { add, sub } from "./math"
 import * as math from "./math"
 ```
@@ -131,7 +131,7 @@ import * as math from "./math"
 - [x] 테스트 추가
 
 ### 1.3 Error Handling ✅
-```aoel
+```vais
 // Result 타입
 read_file(path) -> Result<String, Error>
 
@@ -156,7 +156,7 @@ config = read_file("config.json")?
 - [x] 테스트 추가
 
 ### 1.4 Generic Types ✅
-```aoel
+```vais
 // 제너릭 함수
 map<T, U>(arr: [T], f: T -> U) -> [U] = arr.@(f)
 
@@ -176,7 +176,7 @@ type Stack<T> = {
 - [x] 테스트 추가
 
 ### 1.5 Macro System (우선순위: 낮음)
-```aoel
+```vais
 // 컴파일 타임 코드 생성
 macro debug!(expr) {
   println!("DEBUG: {} = {}", stringify!(expr), expr)
@@ -186,7 +186,7 @@ debug!(x + y)  // => println("DEBUG: x + y = ", x + y)
 ```
 
 ### 1.6 Async/Await (우선순위: 낮음)
-```aoel
+```vais
 async fetch_data(url) = {
   response = await http_get(url)
   await json_parse(response.body)
@@ -218,13 +218,13 @@ async fetch_data(url) = {
 - [x] 변수 검사 (get_variable, locals)
 - [x] 콜스택 표시 (call_stack)
 - [x] 감시 표현식 (add_watch, remove_watch)
-- [x] CLI 통합 (`aoel debug`)
+- [x] CLI 통합 (`vais debug`)
 - [ ] DAP (Debug Adapter Protocol) 지원 (향후 추가)
 
 ### 2.3 Profiler ✅
 - [x] 함수별 실행 시간 (FunctionProfile)
 - [x] 호출 횟수, min/max/avg 시간
-- [x] CLI 통합 (`aoel profile`)
+- [x] CLI 통합 (`vais profile`)
 - [x] JSON 출력 (to_json)
 - [x] 요약 출력 (summary)
 - [ ] 메모리 사용량 (향후 추가)
@@ -236,7 +236,7 @@ async fetch_data(url) = {
 - [x] HTML 출력 (스타일 포함)
 - [x] JSON 출력
 - [x] 타입 시그니처 자동 생성
-- [x] CLI 통합 (`aoel doc`)
+- [x] CLI 통합 (`vais doc`)
 - [ ] 주석에서 doc comment 추출 (향후 추가)
 - [ ] 예제 코드 실행 검증 (향후 추가)
 
@@ -248,7 +248,7 @@ async fetch_data(url) = {
 - [x] 로컬 패키지 저장소 (Registry struct)
 - [x] 버전 관리 (semver, caret/tilde compatibility)
 - [x] 의존성 해결 (resolve_dependencies)
-- [x] Manifest (aoel.toml) 지원
+- [x] Manifest (vais.toml) 지원
 - [x] CLI 명령어 (init, add, remove, publish)
 - [ ] 온라인 패키지 저장소 (향후 추가)
 - [ ] 보안 검사 (향후 추가)
@@ -256,7 +256,7 @@ async fetch_data(url) = {
 ### 3.2 VS Code Extension ✅
 - [x] LSP 클라이언트 (vscode-languageclient)
 - [x] 구문 강조 (TextMate grammar)
-- [x] 스니펫 (aoel.json)
+- [x] 스니펫 (vais.json)
 - [x] 명령어 (Run, Format, Check, REPL, Show AST)
 - [x] 키바인딩 (Ctrl+Shift+R, Ctrl+Shift+F)
 - [x] 상태바 아이템

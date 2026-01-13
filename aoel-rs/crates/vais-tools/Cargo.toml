@@ -1,0 +1,16 @@
+[package]
+name = "vais-tools"
+version = "1.0.0"
+edition = "2021"
+description = "Development tools for Vais: Formatter, Profiler, Debugger"
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-parser = { path = "../vais-parser" }
+vais-lexer = { path = "../vais-lexer" }
+vais-ir = { path = "../vais-ir" }
+vais-vm = { path = "../vais-vm" }
+vais-lowering = { path = "../vais-lowering" }
+thiserror = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

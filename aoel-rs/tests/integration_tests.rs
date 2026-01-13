@@ -1,16 +1,16 @@
-//! AOEL Integration Tests
+//! Vais Integration Tests
 //!
 //! End-to-end tests that verify the complete pipeline:
 //! Source -> Lexer -> Parser -> Lowering -> VM Execution
 
-use aoel_ir::Value;
-use aoel_lowering::Lowerer;
-use aoel_vm::{execute, execute_function};
+use vais_ir::Value;
+use vais_lowering::Lowerer;
+use vais_vm::{execute, execute_function};
 
-/// Helper function to run AOEL source code and return the result
+/// Helper function to run Vais source code and return the result
 #[allow(dead_code)]
-fn run_aoel(source: &str) -> Result<Value, String> {
-    let program = aoel_parser::parse(source).map_err(|e| format!("Parse error: {:?}", e))?;
+fn run_vais(source: &str) -> Result<Value, String> {
+    let program = vais_parser::parse(source).map_err(|e| format!("Parse error: {:?}", e))?;
     let mut lowerer = Lowerer::new();
     let functions = lowerer
         .lower_program(&program)
@@ -20,7 +20,7 @@ fn run_aoel(source: &str) -> Result<Value, String> {
 
 /// Helper to run a specific function with arguments
 fn run_function(source: &str, func_name: &str, args: Vec<Value>) -> Result<Value, String> {
-    let program = aoel_parser::parse(source).map_err(|e| format!("Parse error: {:?}", e))?;
+    let program = vais_parser::parse(source).map_err(|e| format!("Parse error: {:?}", e))?;
     let mut lowerer = Lowerer::new();
     let functions = lowerer
         .lower_program(&program)

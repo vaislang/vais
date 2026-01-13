@@ -1,0 +1,24 @@
+[package]
+name = "vais-codegen"
+version.workspace = true
+edition.workspace = true
+description = "Vais Native Code Generator (C, WASM, LLVM, Cranelift backends)"
+
+[features]
+default = []
+cranelift = ["cranelift-codegen", "cranelift-frontend", "cranelift-module", "cranelift-jit", "cranelift-native", "target-lexicon"]
+
+[dependencies]
+vais-ast = { workspace = true }
+vais-parser = { workspace = true }
+vais-lowering = { workspace = true }
+vais-ir = { workspace = true }
+thiserror = { workspace = true }
+
+# Cranelift dependencies (optional)
+cranelift-codegen = { version = "0.113", optional = true }
+cranelift-frontend = { version = "0.113", optional = true }
+cranelift-module = { version = "0.113", optional = true }
+cranelift-jit = { version = "0.113", optional = true }
+cranelift-native = { version = "0.113", optional = true }
+target-lexicon = { version = "0.12", optional = true }

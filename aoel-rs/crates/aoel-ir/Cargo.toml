@@ -1,8 +1,0 @@
-[package]
-name = "aoel-ir"
-version.workspace = true
-edition.workspace = true
-description = "AOEL Intermediate Representation"
-
-[dependencies]
-serde = { workspace = true }

@@ -2,13 +2,13 @@
 //! Run: cargo run --release --example jit_bench --features jit
 
 #[cfg(feature = "jit")]
-use aoel_ir::{Instruction, OpCode, Value};
+use vais_ir::{Instruction, OpCode, Value};
 #[cfg(feature = "jit")]
-use aoel_jit::JitCompiler;
+use vais_jit::JitCompiler;
 #[cfg(feature = "jit")]
-use aoel_lowering::{CompiledFunction, Lowerer};
+use vais_lowering::{CompiledFunction, Lowerer};
 #[cfg(feature = "jit")]
-use aoel_vm::execute_function;
+use vais_vm::execute_function;
 #[cfg(feature = "jit")]
 use std::time::Instant;
 
@@ -25,7 +25,7 @@ fn main() {
 #[cfg(feature = "jit")]
 fn main() {
     println!("{}", "=".repeat(70));
-    println!("AOEL JIT vs VM vs Python 벤치마크");
+    println!("Vais JIT vs VM vs Python 벤치마크");
     println!("{}", "=".repeat(70));
     println!();
 
@@ -41,9 +41,9 @@ fn bench_factorial() {
     println!("📌 Factorial(20)");
     println!("{}", "-".repeat(50));
 
-    // Compile AOEL source
+    // Compile Vais source
     let source = "fact(n) = n < 2 ? 1 : n * $(n - 1)";
-    let program = aoel_parser::parse(source).unwrap();
+    let program = vais_parser::parse(source).unwrap();
     let functions = Lowerer::new().lower_program(&program).unwrap();
 
     let n = 20i64;
@@ -109,9 +109,9 @@ fn bench_fibonacci() {
     println!("📌 Fibonacci(20)");
     println!("{}", "-".repeat(50));
 
-    // Compile AOEL source
+    // Compile Vais source
     let source = "fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)";
-    let program = aoel_parser::parse(source).unwrap();
+    let program = vais_parser::parse(source).unwrap();
     let functions = Lowerer::new().lower_program(&program).unwrap();
 
     let n = 20i64;

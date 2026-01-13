@@ -98,195 +98,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
-name = "aoel-ast"
-version = "1.0.0"
-dependencies = [
- "aoel-lexer",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "aoel-cli"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-codegen",
- "aoel-ir",
- "aoel-jit",
- "aoel-lexer",
- "aoel-lowering",
- "aoel-parser",
- "aoel-tools",
- "aoel-typeck",
- "aoel-vm",
- "ariadne",
- "clap",
- "dirs",
- "rustyline",
- "serde",
- "serde_json",
- "toml",
-]
-
-[[package]]
-name = "aoel-codegen"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-ir",
- "aoel-lowering",
- "aoel-parser",
- "cranelift-codegen 0.113.1",
- "cranelift-frontend 0.113.1",
- "cranelift-jit 0.113.1",
- "cranelift-module 0.113.1",
- "cranelift-native 0.113.1",
- "target-lexicon 0.12.16",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-ir"
-version = "1.0.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "aoel-jit"
-version = "1.0.0"
-dependencies = [
- "aoel-ir",
- "aoel-lowering",
- "cranelift",
- "cranelift-codegen 0.116.1",
- "cranelift-frontend 0.116.1",
- "cranelift-jit 0.116.1",
- "cranelift-module 0.116.1",
- "cranelift-native 0.116.1",
- "criterion",
- "target-lexicon 0.13.4",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-lexer"
-version = "1.0.0"
-dependencies = [
- "logos",
- "pretty_assertions",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-lowering"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-ir",
- "aoel-lexer",
- "aoel-parser",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-lsp"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-lexer",
- "aoel-parser",
- "aoel-typeck",
- "dashmap",
- "ropey",
- "serde",
- "serde_json",
- "tokio",
- "tower-lsp",
-]
-
-[[package]]
-name = "aoel-parser"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-lexer",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-playground"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-ir",
- "aoel-lexer",
- "aoel-lowering",
- "aoel-parser",
- "aoel-typeck",
- "console_error_panic_hook",
- "serde",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-test",
-]
-
-[[package]]
-name = "aoel-tools"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-ir",
- "aoel-lexer",
- "aoel-lowering",
- "aoel-parser",
- "aoel-vm",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-typeck"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-lexer",
- "aoel-parser",
- "thiserror",
-]
-
-[[package]]
-name = "aoel-vm"
-version = "1.0.0"
-dependencies = [
- "aoel-ast",
- "aoel-ir",
- "aoel-jit",
- "aoel-lowering",
- "libloading",
- "rayon",
- "serde_json",
- "thiserror",
- "ureq",
-]
-
-[[package]]
-name = "aoel-workspace"
-version = "1.0.0"
-dependencies = [
- "aoel-ir",
- "aoel-jit",
- "aoel-lexer",
- "aoel-lowering",
- "aoel-parser",
- "aoel-vm",
- "criterion",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2320,6 +2131,195 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "vais-ast"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vais-lexer",
+]
+
+[[package]]
+name = "vais-cli"
+version = "1.0.0"
+dependencies = [
+ "ariadne",
+ "clap",
+ "dirs",
+ "rustyline",
+ "serde",
+ "serde_json",
+ "toml",
+ "vais-ast",
+ "vais-codegen",
+ "vais-ir",
+ "vais-jit",
+ "vais-lexer",
+ "vais-lowering",
+ "vais-parser",
+ "vais-tools",
+ "vais-typeck",
+ "vais-vm",
+]
+
+[[package]]
+name = "vais-codegen"
+version = "1.0.0"
+dependencies = [
+ "cranelift-codegen 0.113.1",
+ "cranelift-frontend 0.113.1",
+ "cranelift-jit 0.113.1",
+ "cranelift-module 0.113.1",
+ "cranelift-native 0.113.1",
+ "target-lexicon 0.12.16",
+ "thiserror",
+ "vais-ast",
+ "vais-ir",
+ "vais-lowering",
+ "vais-parser",
+]
+
+[[package]]
+name = "vais-ir"
+version = "1.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "vais-jit"
+version = "1.0.0"
+dependencies = [
+ "cranelift",
+ "cranelift-codegen 0.116.1",
+ "cranelift-frontend 0.116.1",
+ "cranelift-jit 0.116.1",
+ "cranelift-module 0.116.1",
+ "cranelift-native 0.116.1",
+ "criterion",
+ "target-lexicon 0.13.4",
+ "thiserror",
+ "vais-ir",
+ "vais-lowering",
+]
+
+[[package]]
+name = "vais-lexer"
+version = "1.0.0"
+dependencies = [
+ "logos",
+ "pretty_assertions",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "vais-lowering"
+version = "1.0.0"
+dependencies = [
+ "thiserror",
+ "vais-ast",
+ "vais-ir",
+ "vais-lexer",
+ "vais-parser",
+]
+
+[[package]]
+name = "vais-lsp"
+version = "1.0.0"
+dependencies = [
+ "dashmap",
+ "ropey",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-lsp",
+ "vais-ast",
+ "vais-lexer",
+ "vais-parser",
+ "vais-typeck",
+]
+
+[[package]]
+name = "vais-parser"
+version = "1.0.0"
+dependencies = [
+ "thiserror",
+ "vais-ast",
+ "vais-lexer",
+]
+
+[[package]]
+name = "vais-playground"
+version = "1.0.0"
+dependencies = [
+ "console_error_panic_hook",
+ "serde",
+ "serde_json",
+ "vais-ast",
+ "vais-ir",
+ "vais-lexer",
+ "vais-lowering",
+ "vais-parser",
+ "vais-typeck",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+]
+
+[[package]]
+name = "vais-tools"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "vais-ast",
+ "vais-ir",
+ "vais-lexer",
+ "vais-lowering",
+ "vais-parser",
+ "vais-vm",
+]
+
+[[package]]
+name = "vais-typeck"
+version = "1.0.0"
+dependencies = [
+ "thiserror",
+ "vais-ast",
+ "vais-lexer",
+ "vais-parser",
+]
+
+[[package]]
+name = "vais-vm"
+version = "1.0.0"
+dependencies = [
+ "libloading",
+ "rayon",
+ "serde_json",
+ "thiserror",
+ "ureq",
+ "vais-ast",
+ "vais-ir",
+ "vais-jit",
+ "vais-lowering",
+]
+
+[[package]]
+name = "vais-workspace"
+version = "1.0.0"
+dependencies = [
+ "criterion",
+ "vais-ir",
+ "vais-jit",
+ "vais-lexer",
+ "vais-lowering",
+ "vais-parser",
+ "vais-vm",
+]
 
 [[package]]
 name = "version_check"
