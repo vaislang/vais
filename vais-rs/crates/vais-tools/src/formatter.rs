@@ -103,6 +103,8 @@ impl Formatter {
             Item::Module(m) => self.format_module(m),
             Item::Use(u) => self.format_use(u),
             Item::Ffi(f) => self.format_ffi(f),
+            Item::Macro(m) => self.format_macro(m),
+            Item::Effect(e) => self.format_effect(e),
             Item::Expr(e) => {
                 self.write_indent();
                 self.format_expr(e);
@@ -405,6 +407,133 @@ impl Formatter {
         }
         self.indent_level -= 1;
 
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    fn format_macro(&mut self, macro_def: &MacroDef) {
+        self.write_indent();
+        if macro_def.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("macro ");
+        self.output.push_str(&macro_def.name);
+        self.output.push_str(" {\n");
+        self.indent_level += 1;
+
+        for rule in &macro_def.rules {
+            self.write_indent();
+            self.output.push('(');
+            self.format_macro_tokens(&rule.pattern);
+            self.output.push_str(") => {\n");
+            self.indent_level += 1;
+            self.write_indent();
+            self.format_macro_tokens(&rule.body);
+            self.output.push('\n');
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push_str("}\n");
+        }
+
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    fn format_macro_tokens(&mut self, tokens: &[MacroToken]) {
+        for (i, token) in tokens.iter().enumerate() {
+            if i > 0 {
+                self.output.push(' ');
+            }
+            match token {
+                MacroToken::Literal(s) => self.output.push_str(s),
+                MacroToken::Capture(name, kind) => {
+                    self.output.push('$');
+                    self.output.push_str(name);
+                    self.output.push(':');
+                    match kind {
+                        MacroCaptureKind::Expr => self.output.push_str("expr"),
+                        MacroCaptureKind::Ident => self.output.push_str("ident"),
+                        MacroCaptureKind::Type => self.output.push_str("ty"),
+                        MacroCaptureKind::TokenTree => self.output.push_str("tt"),
+                        MacroCaptureKind::Literal => self.output.push_str("lit"),
+                        MacroCaptureKind::Pattern => self.output.push_str("pat"),
+                        MacroCaptureKind::Block => self.output.push_str("block"),
+                    }
+                }
+                MacroToken::Repetition(inner, rep_kind) => {
+                    self.output.push_str("$(");
+                    self.format_macro_tokens(inner);
+                    self.output.push(')');
+                    match rep_kind {
+                        MacroRepKind::ZeroOrMore => self.output.push('*'),
+                        MacroRepKind::OneOrMore => self.output.push('+'),
+                        MacroRepKind::ZeroOrOne => self.output.push('?'),
+                    }
+                }
+                MacroToken::Group(delim, inner) => {
+                    match delim {
+                        MacroDelimiter::Paren => self.output.push('('),
+                        MacroDelimiter::Bracket => self.output.push('['),
+                        MacroDelimiter::Brace => self.output.push('{'),
+                    }
+                    self.format_macro_tokens(inner);
+                    match delim {
+                        MacroDelimiter::Paren => self.output.push(')'),
+                        MacroDelimiter::Bracket => self.output.push(']'),
+                        MacroDelimiter::Brace => self.output.push('}'),
+                    }
+                }
+            }
+        }
+    }
+
+    fn format_effect(&mut self, effect_def: &EffectDef) {
+        self.write_indent();
+        if effect_def.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("effect ");
+        self.output.push_str(&effect_def.name);
+
+        // 타입 파라미터
+        if !effect_def.type_params.is_empty() {
+            self.output.push('<');
+            for (i, param) in effect_def.type_params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+            }
+            self.output.push('>');
+        }
+
+        self.output.push_str(" {\n");
+        self.indent_level += 1;
+
+        for op in &effect_def.operations {
+            self.write_indent();
+            self.output.push_str(&op.name);
+            self.output.push('(');
+            for (i, param) in op.params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+                if let Some(ty) = &param.ty {
+                    self.output.push_str(": ");
+                    self.format_type(ty);
+                }
+            }
+            self.output.push(')');
+            if let Some(ret_type) = &op.return_type {
+                self.output.push_str(" -> ");
+                self.format_type(ret_type);
+            }
+            self.output.push('\n');
+        }
+
+        self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
     }
@@ -863,6 +992,63 @@ impl Formatter {
                 self.format_expr(arr);
                 self.output.push_str(".||/");
                 self.format_reduce_kind(kind);
+            }
+            Expr::MacroCall { name, args, .. } => {
+                self.output.push_str(name);
+                self.output.push_str("!(");
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.format_expr(arg);
+                }
+                self.output.push(')');
+            }
+            Expr::Perform { effect, operation, args, .. } => {
+                self.output.push_str("perform ");
+                self.output.push_str(effect);
+                self.output.push('.');
+                self.output.push_str(operation);
+                self.output.push('(');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.format_expr(arg);
+                }
+                self.output.push(')');
+            }
+            Expr::Handle { body, handlers, .. } => {
+                self.output.push_str("handle ");
+                self.format_expr(body);
+                self.output.push_str(" with {\n");
+                self.indent_level += 1;
+                for handler in handlers {
+                    self.write_indent();
+                    self.output.push_str(&handler.effect);
+                    self.output.push('.');
+                    self.output.push_str(&handler.operation);
+                    self.output.push('(');
+                    for (i, param) in handler.params.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.output.push_str(param);
+                    }
+                    if let Some(resume) = &handler.resume {
+                        if !handler.params.is_empty() {
+                            self.output.push_str(", ");
+                        }
+                        self.output.push_str("resume ");
+                        self.output.push_str(resume);
+                    }
+                    self.output.push_str(") => ");
+                    self.format_expr(&handler.body);
+                    self.output.push('\n');
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
             }
         }
     }

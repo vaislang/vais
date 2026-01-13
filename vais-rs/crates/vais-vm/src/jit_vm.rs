@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use vais_ir::Value;
-use vais_jit::{JitCompiler, ExecutionProfiler, JIT_THRESHOLD, JittedFnInt};
+use vais_jit::{JitCompiler, ExecutionProfiler, JIT_THRESHOLD, JittedFnInt, FnSignature};
 use vais_lowering::CompiledFunction;
 
 use crate::error::{RuntimeError, RuntimeResult};
@@ -54,12 +54,24 @@ pub struct JitVm {
     config: JitConfig,
 }
 
+/// JIT 컴파일된 Float 함수 시그니처
+pub type JittedFnFloat = unsafe extern "C" fn(*const f64, usize) -> f64;
+
 /// JIT 컴파일된 함수 정보
 struct JittedFunction {
     /// 함수 포인터
     ptr: *const u8,
     /// 파라미터 개수
     param_count: usize,
+    /// 컴파일 타입
+    fn_type: JittedFnType,
+}
+
+/// JIT 컴파일된 함수 타입
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum JittedFnType {
+    IntOnly,
+    FloatOnly,
 }
 
 impl JitVm {
@@ -114,30 +126,56 @@ impl JitVm {
             self.profiler.begin_call(name, &type_sig);
         }
 
-        // JIT 컴파일된 함수가 있고 모든 인자가 Int인지 확인
+        // JIT 컴파일된 함수 실행
         if self.config.enabled {
             if let Some(jitted) = self.jitted_functions.get(name) {
-                if Self::all_ints(&args) {
-                    // Int 전용 JIT 경로
-                    let int_args: Vec<i64> = args.iter()
-                        .filter_map(|v| match v {
-                            Value::Int(n) => Some(*n),
-                            _ => None,
-                        })
-                        .collect();
+                match jitted.fn_type {
+                    JittedFnType::IntOnly if Self::all_ints(&args) => {
+                        // Int 전용 JIT 경로
+                        let int_args: Vec<i64> = args.iter()
+                            .filter_map(|v| match v {
+                                Value::Int(n) => Some(*n),
+                                _ => None,
+                            })
+                            .collect();
 
-                    if int_args.len() == jitted.param_count {
-                        unsafe {
-                            let func: JittedFnInt = std::mem::transmute(jitted.ptr);
-                            let result = func(int_args.as_ptr(), int_args.len());
+                        if int_args.len() == jitted.param_count {
+                            unsafe {
+                                let func: JittedFnInt = std::mem::transmute(jitted.ptr);
+                                let result = func(int_args.as_ptr(), int_args.len());
 
-                            if self.config.profiling {
-                                self.profiler.end_call(name);
+                                if self.config.profiling {
+                                    self.profiler.end_call(name);
+                                }
+
+                                return Ok(Value::Int(result));
                             }
-
-                            return Ok(Value::Int(result));
                         }
                     }
+                    JittedFnType::FloatOnly if Self::all_floats(&args) => {
+                        // Float 전용 JIT 경로
+                        let float_args: Vec<f64> = args.iter()
+                            .filter_map(|v| match v {
+                                Value::Float(f) => Some(*f),
+                                Value::Int(n) => Some(*n as f64), // Int -> Float promotion
+                                _ => None,
+                            })
+                            .collect();
+
+                        if float_args.len() == jitted.param_count {
+                            unsafe {
+                                let func: JittedFnFloat = std::mem::transmute(jitted.ptr);
+                                let result = func(float_args.as_ptr(), float_args.len());
+
+                                if self.config.profiling {
+                                    self.profiler.end_call(name);
+                                }
+
+                                return Ok(Value::Float(result));
+                            }
+                        }
+                    }
+                    _ => {} // 타입 불일치 - 인터프리터로 폴백
                 }
             }
         }
@@ -146,21 +184,50 @@ impl JitVm {
         if self.config.auto_jit && self.config.enabled && self.jit.is_some() {
             if let Some(profile) = self.profiler.get_profile(name) {
                 if profile.call_count >= self.config.threshold && !profile.is_jitted {
-                    // Int 전용으로 특화 가능한지 확인
-                    if let Some(pattern) = profile.dominant_type_pattern() {
-                        let is_int_only = pattern.split(',').all(|t| t == "Int" || t.is_empty());
-                        if is_int_only {
-                            if let Some(func) = self.functions.get(name).cloned() {
-                                if JitCompiler::can_jit(&func) {
-                                    match self.compile_function_internal(&func) {
-                                        Ok(_) => {
-                                            self.profiler.mark_jitted(name);
+                    if let Some(func) = self.functions.get(name).cloned() {
+                        if JitCompiler::can_jit(&func) {
+                            // 함수 타입 분석 및 최적 경로 결정
+                            let fn_sig = JitCompiler::analyze_function_type(&func);
+
+                            let compile_result = match &fn_sig {
+                                FnSignature::IntOnly { .. } => {
+                                    // Int 전용으로 특화 가능한지 확인
+                                    if let Some(pattern) = profile.dominant_type_pattern() {
+                                        let is_int_only = pattern.split(',').all(|t| t == "Int" || t.is_empty());
+                                        if is_int_only {
+                                            self.compile_function_int_internal(&func)
+                                        } else {
+                                            Ok(()) // 패턴 불일치
                                         }
-                                        Err(e) => {
-                                            // JIT 실패 시 조용히 인터프리터로 폴백
-                                            eprintln!("JIT compilation failed for {}: {:?}", name, e);
-                                        }
+                                    } else {
+                                        Ok(())
                                     }
+                                }
+                                FnSignature::FloatOnly { .. } => {
+                                    // Float 전용 컴파일
+                                    if let Some(pattern) = profile.dominant_type_pattern() {
+                                        let is_float_ok = pattern.split(',').all(|t|
+                                            t == "Float" || t == "Int" || t.is_empty()
+                                        );
+                                        if is_float_ok {
+                                            self.compile_function_float_internal(&func)
+                                        } else {
+                                            Ok(())
+                                        }
+                                    } else {
+                                        Ok(())
+                                    }
+                                }
+                                _ => Ok(()), // Generic은 아직 미지원
+                            };
+
+                            match compile_result {
+                                Ok(_) => {
+                                    self.profiler.mark_jitted(name);
+                                }
+                                Err(e) => {
+                                    // JIT 실패 시 조용히 인터프리터로 폴백
+                                    eprintln!("JIT compilation failed for {}: {:?}", name, e);
                                 }
                             }
                         }
@@ -179,21 +246,58 @@ impl JitVm {
         result
     }
 
-    /// 함수를 명시적으로 JIT 컴파일
+    /// 함수를 명시적으로 JIT 컴파일 (자동 타입 선택)
     pub fn compile_function(&mut self, name: &str) -> RuntimeResult<()> {
         let func = self.functions.get(name)
             .ok_or_else(|| RuntimeError::UndefinedFunction(name.to_string()))?
             .clone();
 
-        self.compile_function_internal(&func)
+        // 함수 타입 분석
+        let fn_sig = JitCompiler::analyze_function_type(&func);
+
+        let result = match fn_sig {
+            FnSignature::IntOnly { .. } => self.compile_function_int_internal(&func),
+            FnSignature::FloatOnly { .. } => self.compile_function_float_internal(&func),
+            FnSignature::Generic { .. } => {
+                // Generic은 Int로 폴백
+                self.compile_function_int_internal(&func)
+            }
+        };
+
+        result.map_err(|e| RuntimeError::Internal(format!("JIT error: {:?}", e)))?;
+
+        self.profiler.mark_jitted(name);
+        Ok(())
+    }
+
+    /// 함수를 Int 전용으로 JIT 컴파일
+    pub fn compile_function_int(&mut self, name: &str) -> RuntimeResult<()> {
+        let func = self.functions.get(name)
+            .ok_or_else(|| RuntimeError::UndefinedFunction(name.to_string()))?
+            .clone();
+
+        self.compile_function_int_internal(&func)
             .map_err(|e| RuntimeError::Internal(format!("JIT error: {:?}", e)))?;
 
         self.profiler.mark_jitted(name);
         Ok(())
     }
 
-    /// 내부 JIT 컴파일
-    fn compile_function_internal(&mut self, func: &CompiledFunction) -> Result<(), vais_jit::JitError> {
+    /// 함수를 Float 전용으로 JIT 컴파일
+    pub fn compile_function_float(&mut self, name: &str) -> RuntimeResult<()> {
+        let func = self.functions.get(name)
+            .ok_or_else(|| RuntimeError::UndefinedFunction(name.to_string()))?
+            .clone();
+
+        self.compile_function_float_internal(&func)
+            .map_err(|e| RuntimeError::Internal(format!("JIT error: {:?}", e)))?;
+
+        self.profiler.mark_jitted(name);
+        Ok(())
+    }
+
+    /// 내부 Int JIT 컴파일
+    fn compile_function_int_internal(&mut self, func: &CompiledFunction) -> Result<(), vais_jit::JitError> {
         let jit = self.jit.as_mut()
             .ok_or_else(|| vais_jit::JitError::Internal("JIT not available".to_string()))?;
 
@@ -202,6 +306,23 @@ impl JitVm {
         self.jitted_functions.insert(func.name.clone(), JittedFunction {
             ptr,
             param_count: func.params.len(),
+            fn_type: JittedFnType::IntOnly,
+        });
+
+        Ok(())
+    }
+
+    /// 내부 Float JIT 컴파일
+    fn compile_function_float_internal(&mut self, func: &CompiledFunction) -> Result<(), vais_jit::JitError> {
+        let jit = self.jit.as_mut()
+            .ok_or_else(|| vais_jit::JitError::Internal("JIT not available".to_string()))?;
+
+        let ptr = jit.compile_function_float(func)?;
+
+        self.jitted_functions.insert(func.name.clone(), JittedFunction {
+            ptr,
+            param_count: func.params.len(),
+            fn_type: JittedFnType::FloatOnly,
         });
 
         Ok(())
@@ -210,6 +331,11 @@ impl JitVm {
     /// 모든 인자가 Int인지 확인
     fn all_ints(args: &[Value]) -> bool {
         args.iter().all(|v| matches!(v, Value::Int(_)))
+    }
+
+    /// 모든 인자가 Float 또는 Int인지 확인 (Float로 변환 가능)
+    fn all_floats(args: &[Value]) -> bool {
+        args.iter().all(|v| matches!(v, Value::Float(_) | Value::Int(_)))
     }
 
     /// 함수가 JIT 컴파일되었는지 확인
@@ -232,10 +358,22 @@ impl JitVm {
 
         if !self.jitted_functions.is_empty() {
             println!("\nJIT compiled:");
-            for name in self.jitted_functions.keys() {
-                println!("  - {}", name);
+            for (name, jitted) in &self.jitted_functions {
+                let type_str = match jitted.fn_type {
+                    JittedFnType::IntOnly => "Int",
+                    JittedFnType::FloatOnly => "Float",
+                };
+                println!("  - {} ({})", name, type_str);
             }
         }
+    }
+
+    /// JIT 컴파일된 함수 타입 조회
+    pub fn get_jit_type(&self, name: &str) -> Option<&'static str> {
+        self.jitted_functions.get(name).map(|f| match f.fn_type {
+            JittedFnType::IntOnly => "Int",
+            JittedFnType::FloatOnly => "Float",
+        })
     }
 
     /// 인터프리터 VM에 대한 참조 반환
@@ -305,6 +443,7 @@ mod tests {
                 Instruction::new(OpCode::Add),
                 Instruction::new(OpCode::Return),
             ],
+            local_count: 2,
         }
     }
 
@@ -313,7 +452,8 @@ mod tests {
         let mut vm = JitVm::new();
         vm.load_functions(vec![make_add_function()]);
 
-        // 인터프리터 실행
+        // JIT 컴파일 후 실행
+        vm.compile_function("add").unwrap();
         let result = vm.call_function("add", vec![Value::Int(3), Value::Int(5)]).unwrap();
         assert_eq!(result, Value::Int(8));
     }
@@ -357,5 +497,92 @@ mod tests {
         // JIT 실행 확인
         let result = vm.call_function("add", vec![Value::Int(100), Value::Int(200)]).unwrap();
         assert_eq!(result, Value::Int(300));
+    }
+
+    #[allow(dead_code)]
+    fn make_float_add_function() -> CompiledFunction {
+        CompiledFunction {
+            name: "add_float".to_string(),
+            params: vec!["a".to_string(), "b".to_string()],
+            instructions: vec![
+                Instruction::new(OpCode::Load("a".to_string())),
+                Instruction::new(OpCode::Load("b".to_string())),
+                Instruction::new(OpCode::Add),
+                Instruction::new(OpCode::Return),
+            ],
+            local_count: 2,
+        }
+    }
+
+    #[test]
+    fn test_jit_vm_float_compile() {
+        let mut vm = JitVm::new();
+
+        // Float 상수 사용하는 함수
+        let func = CompiledFunction {
+            name: "mul_by_pi".to_string(),
+            params: vec!["x".to_string()],
+            instructions: vec![
+                Instruction::new(OpCode::Load("x".to_string())),
+                Instruction::new(OpCode::Const(Value::Float(3.14159))),
+                Instruction::new(OpCode::Mul),
+                Instruction::new(OpCode::Return),
+            ],
+            local_count: 1,
+        };
+        vm.load_functions(vec![func]);
+
+        // Float 전용 JIT 컴파일
+        vm.compile_function_float("mul_by_pi").unwrap();
+        assert!(vm.is_jitted("mul_by_pi"));
+        assert_eq!(vm.get_jit_type("mul_by_pi"), Some("Float"));
+
+        // Float 인자로 JIT 실행
+        let result = vm.call_function("mul_by_pi", vec![Value::Float(2.0)]).unwrap();
+        match result {
+            Value::Float(f) => assert!((f - 6.28318).abs() < 0.0001),
+            _ => panic!("Expected Float result"),
+        }
+    }
+
+    #[test]
+    fn test_jit_vm_auto_type_detection() {
+        let mut vm = JitVm::new();
+
+        // Float 상수 사용하는 함수 -> 자동으로 Float로 컴파일됨
+        let float_func = CompiledFunction {
+            name: "square".to_string(),
+            params: vec!["x".to_string()],
+            instructions: vec![
+                Instruction::new(OpCode::Load("x".to_string())),
+                Instruction::new(OpCode::Load("x".to_string())),
+                Instruction::new(OpCode::Mul),
+                Instruction::new(OpCode::Return),
+            ],
+            local_count: 1,
+        };
+
+        // Int 상수 사용하는 함수 -> 자동으로 Int로 컴파일됨
+        let int_func = CompiledFunction {
+            name: "double".to_string(),
+            params: vec!["n".to_string()],
+            instructions: vec![
+                Instruction::new(OpCode::Load("n".to_string())),
+                Instruction::new(OpCode::Const(Value::Int(2))),
+                Instruction::new(OpCode::Mul),
+                Instruction::new(OpCode::Return),
+            ],
+            local_count: 1,
+        };
+
+        vm.load_functions(vec![float_func, int_func]);
+
+        // 자동 타입 선택 컴파일
+        vm.compile_function("double").unwrap();
+        assert_eq!(vm.get_jit_type("double"), Some("Int"));
+
+        // Int 실행
+        let result = vm.call_function("double", vec![Value::Int(21)]).unwrap();
+        assert_eq!(result, Value::Int(42));
     }
 }

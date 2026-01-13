@@ -16,7 +16,7 @@
 ## 📄 `VAIS_MASTER_SPEC.md`
 
 ````md
-# Vais – AI-Optimized Executable Language
+# Vais – Vibe AI Script
 ## AI가 가장 빠르게 이해 · 수정 · 컴파일하는 실행 언어
 
 ---

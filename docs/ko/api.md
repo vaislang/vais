@@ -725,7 +725,7 @@ json_type(42)                  // "number"
 json_type("hi")                // "string"
 json_type([1,2])               // "array"
 json_type({})                  // "object"
-json_type(null)                // "null"
+json_type(nil)                 // "null"
 ```
 
 ### json_is_null(value)

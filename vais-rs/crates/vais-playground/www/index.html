@@ -223,14 +223,149 @@
             margin-left: 8px;
         }
 
+        /* Mobile Responsive Design */
         @media (max-width: 768px) {
             main {
                 flex-direction: column;
             }
+
             .divider {
                 width: 100%;
                 height: 4px;
                 cursor: row-resize;
+            }
+
+            header {
+                padding: 8px 12px;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .logo h1 {
+                font-size: 1.1rem;
+            }
+
+            .logo span {
+                display: none;
+            }
+
+            .toolbar {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .toolbar button {
+                padding: 6px 10px;
+                font-size: 0.85rem;
+            }
+
+            .toolbar button span.btn-text {
+                display: none;
+            }
+
+            .panel-header {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+
+            #editor, #output {
+                font-size: 13px;
+                padding: 12px;
+            }
+
+            .status-bar {
+                padding: 4px 12px;
+                font-size: 0.75rem;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+
+            .kbd {
+                display: none;
+            }
+
+            .examples-menu {
+                position: fixed;
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                border-radius: 12px 12px 0 0;
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+
+            .modal-content {
+                margin: 10px;
+                max-height: 90vh;
+                width: calc(100% - 20px);
+            }
+
+            /* Mobile Tab Bar */
+            .mobile-tab-bar {
+                display: flex;
+                background-color: var(--bg-secondary);
+                border-top: 1px solid var(--border);
+            }
+
+            .mobile-tab {
+                flex: 1;
+                padding: 12px;
+                text-align: center;
+                background: none;
+                border: none;
+                color: var(--text-secondary);
+                font-size: 0.85rem;
+                border-radius: 0;
+            }
+
+            .mobile-tab.active {
+                color: var(--accent);
+                background-color: var(--bg-tertiary);
+            }
+        }
+
+        @media (min-width: 769px) {
+            .mobile-tab-bar {
+                display: none;
+            }
+        }
+
+        /* Touch-friendly improvements */
+        @media (pointer: coarse) {
+            button {
+                min-height: 44px;
+                min-width: 44px;
+            }
+
+            .examples-menu button {
+                padding: 14px 16px;
+            }
+
+            .divider {
+                min-width: 8px;
+                min-height: 8px;
+            }
+        }
+
+        /* Mobile portrait specific */
+        @media (max-width: 480px) {
+            .toolbar {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .toolbar button {
+                padding: 8px;
+            }
+
+            header {
+                flex-direction: column;
+            }
+
+            .logo {
+                width: 100%;
+                justify-content: center;
             }
         }
 

@@ -125,6 +125,21 @@ pub enum TokenKind {
     #[token("ffi")]
     Ffi,
 
+    #[token("macro")]
+    Macro,
+
+    #[token("effect")]
+    Effect,
+
+    #[token("handle")]
+    Handle,
+
+    #[token("perform")]
+    Perform,
+
+    #[token("resume")]
+    Resume,
+
     // =========================================================================
     // Literals
     // =========================================================================
@@ -380,6 +395,11 @@ impl TokenKind {
                 | TokenKind::Try
                 | TokenKind::Catch
                 | TokenKind::Ffi
+                | TokenKind::Macro
+                | TokenKind::Effect
+                | TokenKind::Handle
+                | TokenKind::Perform
+                | TokenKind::Resume
         )
     }
 
@@ -484,6 +504,11 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Try => write!(f, "try"),
             TokenKind::Catch => write!(f, "catch"),
             TokenKind::Ffi => write!(f, "ffi"),
+            TokenKind::Macro => write!(f, "macro"),
+            TokenKind::Effect => write!(f, "effect"),
+            TokenKind::Handle => write!(f, "handle"),
+            TokenKind::Perform => write!(f, "perform"),
+            TokenKind::Resume => write!(f, "resume"),
             TokenKind::True => write!(f, "true"),
             TokenKind::False => write!(f, "false"),
             TokenKind::Nil => write!(f, "nil"),

@@ -35,8 +35,117 @@ pub enum Item {
     Use(UseDef),
     /// FFI 선언: ffi "lib" { ... }
     Ffi(FfiBlock),
+    /// 매크로 정의: macro name!(pattern) => body
+    Macro(MacroDef),
+    /// Effect 정의: effect Name { op(params) -> T }
+    Effect(EffectDef),
     /// 표현식 (REPL용)
     Expr(Expr),
+}
+
+// =============================================================================
+// Macro Definition
+// =============================================================================
+
+/// 매크로 정의
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MacroDef {
+    /// 매크로 이름 (! 제외)
+    pub name: String,
+    /// 매크로 규칙들
+    pub rules: Vec<MacroRule>,
+    pub is_pub: bool,
+    pub span: Span,
+}
+
+/// 매크로 규칙
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MacroRule {
+    /// 매크로 패턴 (매칭할 토큰들)
+    pub pattern: Vec<MacroToken>,
+    /// 확장 결과 (생성할 토큰들)
+    pub body: Vec<MacroToken>,
+    pub span: Span,
+}
+
+/// 매크로 토큰 (패턴/바디에서 사용)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MacroToken {
+    /// 리터럴 토큰 (그대로 매칭/출력)
+    Literal(String),
+    /// 변수 캡처: $name:kind (expr, ident, ty, tt 등)
+    Capture(String, MacroCaptureKind),
+    /// 반복: $(...)*  또는 $(...)+
+    Repetition(Vec<MacroToken>, MacroRepKind),
+    /// 그룹: (...), [...], {...}
+    Group(MacroDelimiter, Vec<MacroToken>),
+}
+
+/// 매크로 캡처 종류
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MacroCaptureKind {
+    /// $e:expr - 표현식
+    Expr,
+    /// $i:ident - 식별자
+    Ident,
+    /// $t:ty - 타입
+    Type,
+    /// $tt:tt - 토큰 트리
+    TokenTree,
+    /// $l:literal - 리터럴
+    Literal,
+    /// $p:pat - 패턴
+    Pattern,
+    /// $b:block - 블록
+    Block,
+}
+
+/// 매크로 반복 종류
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MacroRepKind {
+    /// * - 0회 이상
+    ZeroOrMore,
+    /// + - 1회 이상
+    OneOrMore,
+    /// ? - 0 또는 1회
+    ZeroOrOne,
+}
+
+/// 매크로 구분자
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MacroDelimiter {
+    Paren,   // ()
+    Bracket, // []
+    Brace,   // {}
+}
+
+// =============================================================================
+// Algebraic Effects
+// =============================================================================
+
+/// Effect 정의: effect Name { op(params) -> T }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectDef {
+    /// Effect 이름
+    pub name: String,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
+    /// Effect 연산들
+    pub operations: Vec<EffectOp>,
+    pub is_pub: bool,
+    pub span: Span,
+}
+
+/// Effect 연산
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectOp {
+    /// 연산 이름
+    pub name: String,
+    /// 매개변수
+    pub params: Vec<Param>,
+    /// 반환 타입
+    pub return_type: Option<TypeExpr>,
+    pub span: Span,
 }
 
 // =============================================================================
@@ -435,6 +544,41 @@ pub enum Expr {
     ParallelFilter(Box<Expr>, Box<Expr>, Span),
     /// Parallel reduce: arr.||/+
     ParallelReduce(Box<Expr>, ReduceKind, Span),
+    /// 매크로 호출: name!(args)
+    MacroCall {
+        name: String,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    /// Effect 수행: perform Effect.op(args)
+    Perform {
+        effect: String,
+        operation: String,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    /// Effect 핸들링: handle expr { Effect.op(params) => handler, ... }
+    Handle {
+        body: Box<Expr>,
+        handlers: Vec<EffectHandler>,
+        span: Span,
+    },
+}
+
+/// Effect 핸들러
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectHandler {
+    /// Effect 이름
+    pub effect: String,
+    /// 연산 이름
+    pub operation: String,
+    /// 매개변수
+    pub params: Vec<String>,
+    /// resume 콜백 이름 (옵션)
+    pub resume: Option<String>,
+    /// 핸들러 본문
+    pub body: Expr,
+    pub span: Span,
 }
 
 impl Expr {
@@ -485,6 +629,9 @@ impl Expr {
             Expr::ParallelMap(_, _, s) => *s,
             Expr::ParallelFilter(_, _, s) => *s,
             Expr::ParallelReduce(_, _, s) => *s,
+            Expr::MacroCall { span, .. } => *span,
+            Expr::Perform { span, .. } => *span,
+            Expr::Handle { span, .. } => *span,
         }
     }
 }

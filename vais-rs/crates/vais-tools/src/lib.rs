@@ -13,7 +13,7 @@ pub mod docgen;
 pub mod dap;
 
 pub use formatter::Formatter;
-pub use profiler::Profiler;
+pub use profiler::{Profiler, FlameGraph, FlameEvent, MemoryProfiler, MemoryEvent, MemoryEventType};
 pub use debugger::Debugger;
 pub use docgen::{DocGenerator, DocFormat};
 pub use dap::DapServer;

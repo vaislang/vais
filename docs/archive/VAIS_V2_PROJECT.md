@@ -1,4 +1,4 @@
-# Vais v2: AI-Optimized Executable Language
+# Vais v2: Vibe AI Script
 
 ## Project Vision
 

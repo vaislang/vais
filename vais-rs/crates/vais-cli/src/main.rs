@@ -2,6 +2,7 @@
 //!
 //! Command-line interface for the Vais language.
 
+mod error_format;
 mod package;
 
 use clap::{Parser, Subcommand};
