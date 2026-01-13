@@ -174,7 +174,8 @@ pub enum TokenKind {
     Integer,
 
     /// 실수 리터럴 (음수 부호는 단항 연산자로 처리)
-    #[regex(r"[0-9]+\.[0-9]+")]
+    /// 과학적 표기법 지원: 1.5e10, 2.3e-5, 1e6
+    #[regex(r"[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+")]
     Float,
 
     /// 문자열 리터럴
@@ -357,9 +358,13 @@ pub enum TokenKind {
     #[token("\n")]
     Newline,
 
-    /// 주석
+    /// 한줄 주석
     #[regex(r"//[^\n]*")]
     Comment,
+
+    /// 멀티라인 주석
+    #[regex(r"/\*([^*]|\*[^/])*\*/")]
+    MultiLineComment,
 
     /// 파일 끝
     Eof,
@@ -567,6 +572,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Ampersand => write!(f, "&"),
             TokenKind::Newline => write!(f, "newline"),
             TokenKind::Comment => write!(f, "comment"),
+            TokenKind::MultiLineComment => write!(f, "multi-line comment"),
             TokenKind::Eof => write!(f, "EOF"),
             TokenKind::Error => write!(f, "error"),
         }

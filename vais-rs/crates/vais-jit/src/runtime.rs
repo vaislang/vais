@@ -1,6 +1,7 @@
 //! JIT 런타임
 //!
 //! JIT 컴파일된 함수와 인터프리터 사이의 통합 레이어.
+//! SIMD 최적화와 Tiered 컴파일을 포함.
 
 use std::collections::HashMap;
 
@@ -10,6 +11,8 @@ use vais_lowering::CompiledFunction;
 use crate::compiler::{JitCompiler, JittedFnInt};
 use crate::error::{JitError, JitResult};
 use crate::profiler::{ExecutionProfiler, JIT_THRESHOLD};
+use crate::simd::SimdCompiler;
+use crate::tiered::{CompilationTier, TieredManager, TierThresholds};
 
 /// 컴파일된 코드 정보
 #[derive(Debug)]
@@ -26,6 +29,7 @@ pub struct CompiledCode {
 ///
 /// 프로파일링 기반 적응형 컴파일을 수행.
 /// 핫 함수를 자동으로 감지하고 JIT 컴파일.
+/// SIMD 최적화와 Tiered 컴파일을 지원.
 pub struct JitRuntime {
     /// JIT 컴파일러
     compiler: JitCompiler,
@@ -39,6 +43,12 @@ pub struct JitRuntime {
     jit_enabled: bool,
     /// 자동 JIT 컴파일 활성화 여부
     auto_jit: bool,
+    /// SIMD 컴파일러
+    simd_compiler: SimdCompiler,
+    /// Tiered 컴파일 매니저
+    tiered_manager: TieredManager,
+    /// Tier 임계값
+    tier_thresholds: TierThresholds,
 }
 
 impl JitRuntime {
@@ -51,6 +61,9 @@ impl JitRuntime {
             compiled_cache: HashMap::new(),
             jit_enabled: true,
             auto_jit: true,
+            simd_compiler: SimdCompiler::new(),
+            tiered_manager: TieredManager::new(),
+            tier_thresholds: TierThresholds::default(),
         })
     }
 
@@ -208,6 +221,104 @@ impl JitRuntime {
     /// 컴파일된 함수 목록 반환
     pub fn get_jitted_functions(&self) -> Vec<&str> {
         self.compiled_cache.keys().map(|s| s.as_str()).collect()
+    }
+
+    // === SIMD 최적화 ===
+
+    /// SIMD map multiply (Int array)
+    pub fn simd_map_mul_int(&self, arr: &[i64], multiplier: i64) -> Vec<i64> {
+        SimdCompiler::map_mul_int(arr, multiplier)
+    }
+
+    /// SIMD map add (Int array)
+    pub fn simd_map_add_int(&self, arr: &[i64], addend: i64) -> Vec<i64> {
+        SimdCompiler::map_add_int(arr, addend)
+    }
+
+    /// SIMD reduce sum (Int array)
+    pub fn simd_reduce_sum_int(&self, arr: &[i64]) -> i64 {
+        SimdCompiler::reduce_sum_int(arr)
+    }
+
+    /// SIMD reduce product (Int array)
+    pub fn simd_reduce_product_int(&self, arr: &[i64]) -> i64 {
+        SimdCompiler::reduce_product_int(arr)
+    }
+
+    /// SIMD reduce min (Int array)
+    pub fn simd_reduce_min_int(&self, arr: &[i64]) -> Option<i64> {
+        SimdCompiler::reduce_min_int(arr)
+    }
+
+    /// SIMD reduce max (Int array)
+    pub fn simd_reduce_max_int(&self, arr: &[i64]) -> Option<i64> {
+        SimdCompiler::reduce_max_int(arr)
+    }
+
+    /// SIMD filter greater than (Int array)
+    pub fn simd_filter_gt_int(&self, arr: &[i64], threshold: i64) -> Vec<i64> {
+        SimdCompiler::filter_gt_int(arr, threshold)
+    }
+
+    /// SIMD filter less than (Int array)
+    pub fn simd_filter_lt_int(&self, arr: &[i64], threshold: i64) -> Vec<i64> {
+        SimdCompiler::filter_lt_int(arr, threshold)
+    }
+
+    /// SIMD fused map-reduce sum (Int array)
+    pub fn simd_fused_map_reduce_sum_int(&self, arr: &[i64], multiplier: i64) -> i64 {
+        SimdCompiler::fused_map_reduce_sum_int(arr, multiplier)
+    }
+
+    /// Check if SIMD is available
+    pub fn simd_available(&self) -> bool {
+        SimdCompiler::is_simd_available()
+    }
+
+    /// Get SIMD width
+    pub fn simd_width(&self) -> usize {
+        SimdCompiler::simd_width()
+    }
+
+    // === Tiered 컴파일 ===
+
+    /// 함수 호출 기록 (Tiered 컴파일용)
+    pub fn record_tiered_call(&mut self, name: &str, execution_time: std::time::Duration) {
+        let _ = self.tiered_manager.record_call(name, execution_time);
+    }
+
+    /// 함수의 현재 Tier 조회
+    pub fn get_tier(&self, name: &str) -> CompilationTier {
+        self.tiered_manager.current_tier(name)
+    }
+
+    /// Tier 업그레이드 후보 조회
+    pub fn get_tier_upgrade_candidates(&self) -> Vec<String> {
+        self.tiered_manager.get_upgrade_candidates()
+            .iter()
+            .map(|info| info.name.clone())
+            .collect()
+    }
+
+    /// Tier 임계값 설정
+    pub fn set_tier_thresholds(&mut self, thresholds: TierThresholds) {
+        self.tier_thresholds = thresholds;
+    }
+
+    /// Tiered 컴파일 완료 기록
+    pub fn complete_tier_compilation(&mut self, name: &str, new_tier: CompilationTier, code_ptr: *const u8) {
+        self.tiered_manager.complete_compilation(name, new_tier, code_ptr, std::time::Duration::ZERO);
+    }
+
+    /// Tiered 매니저 참조 반환
+    pub fn tiered_manager(&self) -> &TieredManager {
+        &self.tiered_manager
+    }
+
+    /// SIMD 컴파일러 참조 (unused 경고 방지)
+    #[allow(dead_code)]
+    pub fn simd_compiler(&self) -> &SimdCompiler {
+        &self.simd_compiler
     }
 }
 

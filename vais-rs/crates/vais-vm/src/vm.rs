@@ -31,6 +31,23 @@ struct CatchHandler {
     stack_depth: usize,
 }
 
+/// Effect handler information for algebraic effects
+#[derive(Clone)]
+#[allow(dead_code)]
+struct EffectHandler {
+    effect_name: String,
+    handler_label: usize,
+    stack_depth: usize,
+    locals_snapshot: FastMap<String, Value>,
+}
+
+/// FLOW node I/O context
+#[derive(Clone, Default)]
+struct FlowContext {
+    inputs: FastMap<String, Value>,
+    outputs: FastMap<String, Value>,
+}
+
 /// Lightweight execution context for parallel operations
 /// Avoids full VM initialization overhead
 struct ParallelContext {
@@ -288,6 +305,10 @@ pub struct Vm {
     catch_stack: Vec<CatchHandler>,
     /// Async runtime
     async_runtime: Arc<Mutex<AsyncRuntime>>,
+    /// Effect handler stack for algebraic effects
+    effect_handlers: Vec<EffectHandler>,
+    /// FLOW node I/O context
+    flow_context: FlowContext,
 }
 
 impl Vm {
@@ -304,6 +325,8 @@ impl Vm {
             ffi_loader: FfiLoader::new(),
             catch_stack: Vec::new(),
             async_runtime: Arc::new(Mutex::new(AsyncRuntime::new())),
+            effect_handlers: Vec::new(),
+            flow_context: FlowContext::default(),
         }
     }
 
@@ -1888,6 +1911,125 @@ impl Vm {
                         return Err(RuntimeError::TypeError("Expected channel for recv".to_string()));
                     }
                 }
+            }
+
+            // === Effect System Operations ===
+
+            OpCode::Perform(effect_name, op_name, arg_count) => {
+                // Perform an effect operation
+                let mut args = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count {
+                    args.push(self.pop()?);
+                }
+                args.reverse();
+
+                // Find handler for this effect
+                if let Some(handler) = self.effect_handlers.iter().rev()
+                    .find(|h| h.effect_name == *effect_name)
+                {
+                    let handler = handler.clone();
+                    // Restore locals and push operation info + args
+                    self.named_locals = handler.locals_snapshot;
+                    self.stack.push(Value::String(op_name.clone()));
+                    for arg in args {
+                        self.stack.push(arg);
+                    }
+                    // Note: In full implementation, would update pc/ip
+                    // For now, just signal the effect was performed
+                } else {
+                    return Err(RuntimeError::Internal(format!("No handler for effect: {}", effect_name)));
+                }
+            }
+
+            OpCode::InstallHandlers(count) => {
+                // Install N effect handlers (labels follow on stack)
+                for _ in 0..*count {
+                    let handler_label = match self.pop()? {
+                        Value::Int(l) => l as usize,
+                        _ => return Err(RuntimeError::TypeError("Handler label must be int".to_string())),
+                    };
+                    let effect_name = match self.pop()? {
+                        Value::String(s) => s,
+                        _ => return Err(RuntimeError::TypeError("Effect name must be string".to_string())),
+                    };
+                    self.effect_handlers.push(EffectHandler {
+                        effect_name,
+                        handler_label,
+                        stack_depth: self.stack.len(),
+                        locals_snapshot: self.named_locals.clone(),
+                    });
+                }
+            }
+
+            OpCode::DefineHandler(effect_name, _op_name, _param_count, _has_resume) => {
+                // Define a single effect handler (simplified)
+                self.effect_handlers.push(EffectHandler {
+                    effect_name: effect_name.clone(),
+                    handler_label: 0, // Would be set by lowering
+                    stack_depth: self.stack.len(),
+                    locals_snapshot: self.named_locals.clone(),
+                });
+            }
+
+            OpCode::EndHandler => {
+                // Pop the most recent effect handler
+                self.effect_handlers.pop();
+            }
+
+            OpCode::UninstallHandlers => {
+                // Remove most recent handler
+                self.effect_handlers.pop();
+            }
+
+            OpCode::Resume => {
+                // Resume from effect handler with value on stack
+                // The value is already on stack, just continue execution
+            }
+
+            // === FLOW Node Operations ===
+
+            OpCode::LoadInput(name) => {
+                // Load value from FLOW input port
+                let value = self.flow_context.inputs.get(name)
+                    .cloned()
+                    .unwrap_or(Value::Void);
+                self.stack.push(value);
+            }
+
+            OpCode::StoreOutput(name) => {
+                // Store value to FLOW output port
+                let value = self.pop()?;
+                self.flow_context.outputs.insert(name.clone(), value);
+            }
+
+            OpCode::CallNode(node_name) => {
+                // Call another FLOW node (simplified - just call as function)
+                if let Some(func) = self.functions.get(node_name).cloned() {
+                    let result = self.call_function(&func.name, vec![])?;
+                    self.stack.push(result);
+                } else {
+                    return Err(RuntimeError::UndefinedFunction(node_name.clone()));
+                }
+            }
+
+            OpCode::MakeSet(count) => {
+                // Create a set from N elements on stack (with deduplication)
+                let mut items = Vec::with_capacity(*count);
+                for _ in 0..*count {
+                    items.push(self.pop()?);
+                }
+                items.reverse();
+
+                // Deduplicate
+                let mut seen = std::collections::HashSet::new();
+                let unique: Vec<Value> = items
+                    .into_iter()
+                    .filter(|v| {
+                        let key = format!("{:?}", v);
+                        seen.insert(key)
+                    })
+                    .collect();
+                self.stack.push(Value::Array(unique));
             }
 
             // Unhandled opcodes - should not happen

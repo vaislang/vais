@@ -85,6 +85,65 @@ impl<'src> Parser<'src> {
         }
     }
 
+    /// 에러 복구: 동기화 지점까지 토큰 스킵
+    /// 문장/아이템 경계에서 복구 시도
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.is_at_end() {
+            // 이전 토큰이 문장 종료자인 경우
+            if self.previous.kind == TokenKind::Newline {
+                return;
+            }
+
+            // 새 문장/아이템 시작 토큰
+            match self.current.kind {
+                TokenKind::Fn
+                | TokenKind::Let
+                | TokenKind::If
+                | TokenKind::For
+                | TokenKind::Match
+                | TokenKind::Mod
+                | TokenKind::Use
+                | TokenKind::Type
+                | TokenKind::Enum
+                | TokenKind::Trait
+                | TokenKind::Impl
+                | TokenKind::Pub
+                | TokenKind::Async
+                | TokenKind::Ffi
+                | TokenKind::Macro
+                | TokenKind::Effect => return,
+                _ => {}
+            }
+
+            self.advance();
+        }
+    }
+
+    /// 여러 에러를 수집하며 프로그램 파싱
+    pub fn parse_program_with_recovery(&mut self) -> (Program, Vec<ParseError>) {
+        let start = self.current.span;
+        let mut items = Vec::new();
+        let mut errors = Vec::new();
+
+        while !self.is_at_end() {
+            match self.parse_item() {
+                Ok(item) => items.push(item),
+                Err(e) => {
+                    errors.push(e);
+                    self.synchronize();
+                }
+            }
+        }
+
+        let end = self.previous.span;
+        (Program {
+            items,
+            span: start.merge(end),
+        }, errors)
+    }
+
     // =========================================================================
     // 파싱 메서드
     // =========================================================================
