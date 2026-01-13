@@ -359,4 +359,48 @@ mod tests {
         let errors: Vec<_> = tokens.iter().filter(|t| t.kind == TokenKind::Error).collect();
         assert!(errors.is_empty(), "Should have no error tokens: {:?}", errors);
     }
+
+    #[test]
+    fn test_hex_literal() {
+        let source = "0xFF 0x1a2B 0X10";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize_no_newlines().unwrap();
+
+        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                &TokenKind::HexInteger, // 0xFF
+                &TokenKind::HexInteger, // 0x1a2B
+                &TokenKind::HexInteger, // 0X10
+                &TokenKind::Eof,
+            ]
+        );
+
+        assert_eq!(tokens[0].text, "0xFF");
+        assert_eq!(tokens[1].text, "0x1a2B");
+        assert_eq!(tokens[2].text, "0X10");
+    }
+
+    #[test]
+    fn test_binary_literal() {
+        let source = "0b1010 0B11110000 0b0";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize_no_newlines().unwrap();
+
+        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                &TokenKind::BinaryInteger, // 0b1010
+                &TokenKind::BinaryInteger, // 0B11110000
+                &TokenKind::BinaryInteger, // 0b0
+                &TokenKind::Eof,
+            ]
+        );
+
+        assert_eq!(tokens[0].text, "0b1010");
+        assert_eq!(tokens[1].text, "0B11110000");
+        assert_eq!(tokens[2].text, "0b0");
+    }
 }

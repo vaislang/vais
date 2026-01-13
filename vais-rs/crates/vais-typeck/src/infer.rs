@@ -9,6 +9,22 @@ use vais_lexer::Span;
 use crate::error::{TypeError, TypeResult};
 use crate::types::{Type, TypeScheme};
 
+/// Trait 정의 정보
+#[derive(Debug, Clone)]
+pub struct TraitInfo {
+    pub name: String,
+    pub type_params: Vec<String>,
+    pub methods: HashMap<String, TypeScheme>,
+}
+
+/// Impl 정보 (trait 구현)
+#[derive(Debug, Clone)]
+pub struct ImplInfo {
+    pub trait_name: Option<String>,
+    pub target_type: Type,
+    pub methods: HashMap<String, TypeScheme>,
+}
+
 /// 타입 환경
 #[derive(Debug, Clone)]
 pub struct TypeEnv {
@@ -24,6 +40,10 @@ pub struct TypeEnv {
     substitution: HashMap<usize, Type>,
     /// 타입 파라미터 -> 타입 변수 매핑 (제네릭용)
     type_params: HashMap<String, Type>,
+    /// Trait 정의들
+    traits: HashMap<String, TraitInfo>,
+    /// Impl 정의들 (타입별)
+    impls: Vec<ImplInfo>,
 }
 
 impl TypeEnv {
@@ -35,6 +55,8 @@ impl TypeEnv {
             next_var: 0,
             substitution: HashMap::new(),
             type_params: HashMap::new(),
+            traits: HashMap::new(),
+            impls: Vec::new(),
         };
         env.register_builtins();
         env
@@ -423,6 +445,112 @@ impl TypeEnv {
                 found: t2.to_string(),
                 span,
             }),
+        }
+    }
+
+    // =========================================================================
+    // Trait/Impl 관련 메서드
+    // =========================================================================
+
+    /// Trait 등록
+    pub fn register_trait(&mut self, name: String, type_params: Vec<String>, methods: HashMap<String, TypeScheme>) {
+        self.traits.insert(name.clone(), TraitInfo {
+            name,
+            type_params,
+            methods,
+        });
+    }
+
+    /// Trait 조회
+    pub fn lookup_trait(&self, name: &str) -> Option<&TraitInfo> {
+        self.traits.get(name)
+    }
+
+    /// Impl 등록
+    pub fn register_impl(&mut self, trait_name: Option<String>, target_type: Type, methods: HashMap<String, TypeScheme>) {
+        self.impls.push(ImplInfo {
+            trait_name,
+            target_type,
+            methods,
+        });
+    }
+
+    /// 특정 타입의 메서드 조회
+    pub fn lookup_method(&mut self, target_type: &Type, method_name: &str) -> Option<Type> {
+        let resolved = self.resolve(target_type);
+
+        // 먼저 찾은 scheme를 저장할 변수
+        let mut found_scheme: Option<TypeScheme> = None;
+
+        // 1. 먼저 inherent impl에서 찾기
+        for impl_info in &self.impls {
+            if impl_info.trait_name.is_none() {
+                // 타입 매칭 (간단한 비교, 추후 더 정교한 매칭 필요)
+                if self.types_match(&impl_info.target_type, &resolved) {
+                    if let Some(scheme) = impl_info.methods.get(method_name) {
+                        found_scheme = Some(scheme.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        // inherent impl에서 찾았으면 반환
+        if let Some(scheme) = found_scheme {
+            return Some(self.instantiate(&scheme));
+        }
+
+        // 2. trait impl에서 찾기
+        for impl_info in &self.impls {
+            if impl_info.trait_name.is_some() {
+                if self.types_match(&impl_info.target_type, &resolved) {
+                    if let Some(scheme) = impl_info.methods.get(method_name) {
+                        found_scheme = Some(scheme.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        // trait impl에서 찾았으면 반환
+        if let Some(scheme) = found_scheme {
+            return Some(self.instantiate(&scheme));
+        }
+
+        None
+    }
+
+    /// 타입이 특정 trait을 구현하는지 확인
+    pub fn implements_trait(&self, target_type: &Type, trait_name: &str) -> bool {
+        let resolved = self.resolve(target_type);
+
+        for impl_info in &self.impls {
+            if impl_info.trait_name.as_deref() == Some(trait_name) {
+                if self.types_match(&impl_info.target_type, &resolved) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// 타입 매칭 (단순 비교)
+    fn types_match(&self, t1: &Type, t2: &Type) -> bool {
+        match (t1, t2) {
+            (Type::Int, Type::Int) => true,
+            (Type::Float, Type::Float) => true,
+            (Type::String, Type::String) => true,
+            (Type::Bool, Type::Bool) => true,
+            (Type::Unit, Type::Unit) => true,
+            (Type::Any, _) | (_, Type::Any) => true,
+            (Type::Array(a), Type::Array(b)) => self.types_match(a, b),
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| self.types_match(x, y))
+            }
+            (Type::Map(k1, v1), Type::Map(k2, v2)) => {
+                self.types_match(k1, k2) && self.types_match(v1, v2)
+            }
+            _ => false,
         }
     }
 }

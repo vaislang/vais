@@ -165,6 +165,34 @@ impl<'src> Parser<'src> {
                 let enum_def = self.parse_enum_def(is_pub)?;
                 Ok(Item::Enum(enum_def))
             }
+            TokenKind::Trait => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "trait definitions cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                self.advance();
+                let trait_def = self.parse_trait_def(is_pub)?;
+                Ok(Item::Trait(trait_def))
+            }
+            TokenKind::Impl => {
+                if is_pub {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "impl blocks cannot be pub".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "impl blocks cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                self.advance();
+                let impl_def = self.parse_impl_def()?;
+                Ok(Item::Impl(impl_def))
+            }
             TokenKind::Ffi => {
                 if is_pub {
                     return Err(ParseError::InvalidSyntax {
@@ -630,6 +658,183 @@ impl<'src> Parser<'src> {
     }
 
     // =========================================================================
+    // Trait/Impl 파싱
+    // =========================================================================
+
+    /// Trait 정의 파싱: trait Name<T> { fn method(self) -> Type }
+    fn parse_trait_def(&mut self, is_pub: bool) -> ParseResult<TraitDef> {
+        let start = self.previous.span;
+        let name = self.expect_identifier()?;
+
+        // 타입 파라미터 (옵션): <T, U>
+        let type_params = if self.match_token(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+
+        self.expect(TokenKind::LBrace)?;
+
+        let mut methods = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+            let method = self.parse_trait_method()?;
+            methods.push(method);
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(TraitDef {
+            name,
+            type_params,
+            methods,
+            is_pub,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// Trait 메서드 파싱: fn name(params) -> Type 또는 fn name(params) = default_body
+    fn parse_trait_method(&mut self) -> ParseResult<TraitMethod> {
+        let start = self.current.span;
+
+        // fn 키워드 (옵션, Vais 스타일에서는 생략 가능)
+        let has_fn = self.match_token(TokenKind::Fn);
+
+        let name = self.expect_identifier()?;
+
+        // 타입 파라미터 (옵션): <T, U>
+        let type_params = if self.match_token(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+
+        // (params)
+        self.expect(TokenKind::LParen)?;
+        let params = self.parse_params()?;
+        self.expect(TokenKind::RParen)?;
+
+        // 옵션 반환 타입: -> Type
+        let return_type = if self.match_token(TokenKind::Arrow) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        // 기본 구현 (옵션): = body
+        let default_impl = if self.match_token(TokenKind::Eq) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        // fn 키워드가 있었거나 기본 구현이 없으면 문장 종료
+        // (Vais 스타일은 간결함을 추구하므로 세미콜론 없이도 처리)
+        let _ = has_fn; // suppress unused warning
+
+        Ok(TraitMethod {
+            name,
+            type_params,
+            params,
+            return_type,
+            default_impl,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// Impl 블록 파싱: impl Trait for Type { ... } 또는 impl Type { ... }
+    fn parse_impl_def(&mut self) -> ParseResult<ImplDef> {
+        let start = self.previous.span;
+
+        // 타입 파라미터 (옵션): <T, U>
+        let type_params = if self.match_token(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+
+        // 첫 번째 타입 파싱 (Trait 이름 또는 대상 타입)
+        let first_type = self.parse_type()?;
+
+        // for 키워드가 있으면 trait impl, 없으면 inherent impl
+        let (trait_name, trait_type_params, target_type) = if self.match_token(TokenKind::For) {
+            // impl Trait<T> for Type
+            let (name, params) = match &first_type {
+                TypeExpr::Simple(name) => (Some(name.clone()), Vec::new()),
+                TypeExpr::Generic(name, params) => (Some(name.clone()), params.clone()),
+                _ => {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "expected trait name".to_string(),
+                        span: self.current.span,
+                    });
+                }
+            };
+            let target = self.parse_type()?;
+            (name, params, target)
+        } else {
+            // impl Type { ... } (inherent impl)
+            (None, Vec::new(), first_type)
+        };
+
+        self.expect(TokenKind::LBrace)?;
+
+        let mut methods = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+            // 메서드 파싱 (함수 정의와 동일)
+            let method_start = self.current.span;
+
+            // fn 키워드 (옵션)
+            self.match_token(TokenKind::Fn);
+
+            let name = self.expect_identifier()?;
+
+            // 타입 파라미터 (옵션)
+            let method_type_params = if self.match_token(TokenKind::Lt) {
+                self.parse_type_params()?
+            } else {
+                Vec::new()
+            };
+
+            // (params)
+            self.expect(TokenKind::LParen)?;
+            let params = self.parse_params()?;
+            self.expect(TokenKind::RParen)?;
+
+            // 옵션 반환 타입: -> Type
+            let return_type = if self.match_token(TokenKind::Arrow) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            // = body (필수)
+            self.expect(TokenKind::Eq)?;
+            let body = self.parse_expr()?;
+
+            methods.push(FunctionDef {
+                name,
+                type_params: method_type_params,
+                params,
+                return_type,
+                body,
+                is_pub: false,  // impl 내부 메서드는 pub을 별도로 지정하지 않음
+                is_async: false,
+                span: method_start.merge(self.previous.span),
+            });
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(ImplDef {
+            trait_name,
+            trait_type_params,
+            target_type,
+            type_params,
+            methods,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    // =========================================================================
     // FFI 파싱
     // =========================================================================
 
@@ -784,7 +989,30 @@ impl<'src> Parser<'src> {
 
     /// 표현식 파싱
     fn parse_expr(&mut self) -> ParseResult<Expr> {
+        // 재할당 체크: identifier = value (함수 정의가 아닌 경우)
+        if self.check(TokenKind::Identifier) && self.peek_is(TokenKind::Eq) {
+            // lookahead를 더 해서 함수 정의가 아닌지 확인
+            // 함수 정의는 identifier() = ... 형식
+            // 재할당은 identifier = ... 형식
+            if !self.is_function_def() {
+                return self.parse_assignment();
+            }
+        }
         self.parse_ternary()
+    }
+
+    /// 재할당 파싱: x = v
+    fn parse_assignment(&mut self) -> ParseResult<Expr> {
+        let start = self.current.span;
+        let name = self.expect_identifier()?;
+        self.expect(TokenKind::Eq)?;
+        let value = self.parse_expr()?;
+
+        Ok(Expr::Assign(
+            name,
+            Box::new(value),
+            start.merge(self.previous.span),
+        ))
     }
 
     /// 삼항 연산자: cond ? then : else
@@ -1260,6 +1488,30 @@ impl<'src> Parser<'src> {
                 self.advance();
                 Ok(Expr::Integer(value, span))
             }
+            TokenKind::HexInteger => {
+                // 0x or 0X prefix 제거 후 16진수 파싱
+                let text = &self.current.text[2..];
+                let value = i64::from_str_radix(text, 16).map_err(|_| {
+                    ParseError::InvalidNumber {
+                        message: "Invalid hex integer".to_string(),
+                        span,
+                    }
+                })?;
+                self.advance();
+                Ok(Expr::Integer(value, span))
+            }
+            TokenKind::BinaryInteger => {
+                // 0b or 0B prefix 제거 후 2진수 파싱
+                let text = &self.current.text[2..];
+                let value = i64::from_str_radix(text, 2).map_err(|_| {
+                    ParseError::InvalidNumber {
+                        message: "Invalid binary integer".to_string(),
+                        span,
+                    }
+                })?;
+                self.advance();
+                Ok(Expr::Integer(value, span))
+            }
             TokenKind::Float => {
                 let value: f64 = self.current.text.parse().map_err(|_| {
                     ParseError::InvalidNumber {
@@ -1310,6 +1562,29 @@ impl<'src> Parser<'src> {
             TokenKind::Underscore => {
                 self.advance();
                 Ok(Expr::LambdaParam(span))
+            }
+
+            // Pipe 람다: |x| expr 또는 |x, y| expr
+            TokenKind::Pipe => {
+                self.advance();  // consume '|'
+                let mut params = Vec::new();
+
+                // 빈 파라미터 체크 ||
+                if !self.check(TokenKind::Pipe) {
+                    // 파라미터 수집
+                    loop {
+                        let param = self.expect_identifier()?;
+                        params.push(param);
+                        if !self.match_token(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                self.expect(TokenKind::Pipe)?;  // closing '|'
+                let body = self.parse_expr()?;
+
+                Ok(Expr::Lambda(params, Box::new(body), span.merge(self.previous.span)))
             }
 
             // 재귀 호출: $(args)
@@ -1416,12 +1691,18 @@ impl<'src> Parser<'src> {
                 self.parse_brace_expr(span)
             }
 
-            // 그룹 또는 튜플: (expr) 또는 (a, b)
+            // 그룹 또는 튜플 또는 람다: (expr) 또는 (a, b) 또는 (x) => body
             TokenKind::LParen => {
                 self.advance();
                 if self.check(TokenKind::RParen) {
-                    // 빈 튜플
+                    // 빈 괄호
                     self.advance();
+                    // 람다 체크: () => body
+                    if self.match_token(TokenKind::FatArrow) {
+                        let body = self.parse_expr()?;
+                        return Ok(Expr::Lambda(vec![], Box::new(body), span.merge(self.previous.span)));
+                    }
+                    // 빈 튜플
                     let end_span = self.previous.span;
                     return Ok(Expr::Tuple(vec![], span.merge(end_span)));
                 }
@@ -1429,7 +1710,7 @@ impl<'src> Parser<'src> {
                 let first = self.parse_expr()?;
 
                 if self.match_token(TokenKind::Comma) {
-                    // 튜플
+                    // 튜플 또는 다중 파라미터 람다
                     let mut elements = vec![first];
                     if !self.check(TokenKind::RParen) {
                         loop {
@@ -1440,11 +1721,37 @@ impl<'src> Parser<'src> {
                         }
                     }
                     self.expect(TokenKind::RParen)?;
+
+                    // 람다 체크: (x, y) => body
+                    if self.match_token(TokenKind::FatArrow) {
+                        // 모든 요소가 식별자인지 확인
+                        let params: Vec<String> = elements.iter().filter_map(|e| {
+                            if let Expr::Ident(name, _) = e {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        }).collect();
+                        if params.len() == elements.len() {
+                            let body = self.parse_expr()?;
+                            return Ok(Expr::Lambda(params, Box::new(body), span.merge(self.previous.span)));
+                        }
+                    }
+
                     let end_span = self.previous.span;
                     Ok(Expr::Tuple(elements, span.merge(end_span)))
                 } else {
-                    // 그룹
+                    // 그룹 또는 단일 파라미터 람다
                     self.expect(TokenKind::RParen)?;
+
+                    // 람다 체크: (x) => body
+                    if self.match_token(TokenKind::FatArrow) {
+                        if let Expr::Ident(name, _) = &first {
+                            let body = self.parse_expr()?;
+                            return Ok(Expr::Lambda(vec![name.clone()], Box::new(body), span.merge(self.previous.span)));
+                        }
+                    }
+
                     Ok(first)
                 }
             }
@@ -1627,7 +1934,7 @@ impl<'src> Parser<'src> {
         result
     }
 
-    /// let 표현식 파싱: let x = v : body 또는 let x = v, y = w : body
+    /// let 표현식 파싱: let x = v : body 또는 let mut x = v : body
     ///
     /// Note: 바인딩 값에서는 parse_coalesce()를 사용하여 ternary 연산자의 ':'와
     /// let 표현식의 ':' 구분자가 충돌하지 않도록 함
@@ -1635,12 +1942,15 @@ impl<'src> Parser<'src> {
         let mut bindings = Vec::new();
 
         loop {
+            // mut 키워드 확인
+            let is_mut = self.match_token(TokenKind::Mut);
+
             let name = self.expect_identifier()?;
             self.expect(TokenKind::Eq)?;
             // ternary (? :)를 포함하지 않도록 coalesce 레벨까지만 파싱
             // 이렇게 하면 `let x = cond ? a : b : body`에서 `:` 충돌 방지
             let value = self.parse_coalesce()?;
-            bindings.push((name, value));
+            bindings.push((name, value, is_mut));
 
             if !self.match_token(TokenKind::Comma) {
                 break;
@@ -1763,7 +2073,8 @@ impl<'src> Parser<'src> {
             }
 
             // 리터럴: 숫자, 문자열, bool (또는 범위 패턴)
-            TokenKind::Integer | TokenKind::Float | TokenKind::String
+            TokenKind::Integer | TokenKind::HexInteger | TokenKind::BinaryInteger
+            | TokenKind::Float | TokenKind::String
             | TokenKind::True | TokenKind::False | TokenKind::Nil => {
                 let expr = self.parse_primary()?;
                 // 범위 패턴 확인: expr..expr
@@ -2976,6 +3287,219 @@ mod tests {
             assert!(entries.is_empty());
         } else {
             panic!("Expected empty Map");
+        }
+    }
+
+    // ==================== Trait/Impl Tests ====================
+
+    #[test]
+    fn test_simple_trait_definition() {
+        let source = "trait Show { show(self) -> String }";
+        let mut parser = Parser::new(source);
+        let program = parser.parse_program().unwrap();
+
+        if let Item::Trait(trait_def) = &program.items[0] {
+            assert_eq!(trait_def.name, "Show");
+            assert!(trait_def.type_params.is_empty());
+            assert_eq!(trait_def.methods.len(), 1);
+            assert_eq!(trait_def.methods[0].name, "show");
+        } else {
+            panic!("Expected Trait item");
+        }
+    }
+
+    #[test]
+    fn test_trait_with_type_params() {
+        let source = "trait Container<T> { get(self, idx: Int) -> T }";
+        let mut parser = Parser::new(source);
+        let program = parser.parse_program().unwrap();
+
+        if let Item::Trait(trait_def) = &program.items[0] {
+            assert_eq!(trait_def.name, "Container");
+            assert_eq!(trait_def.type_params.len(), 1);
+            assert_eq!(trait_def.type_params[0].name, "T");
+            assert_eq!(trait_def.methods.len(), 1);
+        } else {
+            panic!("Expected Trait item");
+        }
+    }
+
+    #[test]
+    fn test_trait_with_default_impl() {
+        let source = "trait Numeric { double(self) = self * 2 }";
+        let mut parser = Parser::new(source);
+        let program = parser.parse_program().unwrap();
+
+        if let Item::Trait(trait_def) = &program.items[0] {
+            assert!(trait_def.methods[0].default_impl.is_some());
+        } else {
+            panic!("Expected Trait item");
+        }
+    }
+
+    #[test]
+    fn test_simple_impl() {
+        let source = "impl Int { square(self) = self * self }";
+        let mut parser = Parser::new(source);
+        let program = parser.parse_program().unwrap();
+
+        if let Item::Impl(impl_def) = &program.items[0] {
+            assert!(impl_def.trait_name.is_none());  // inherent impl
+            assert_eq!(impl_def.methods.len(), 1);
+            assert_eq!(impl_def.methods[0].name, "square");
+        } else {
+            panic!("Expected Impl item");
+        }
+    }
+
+    #[test]
+    fn test_trait_impl_for_type() {
+        let source = "impl Show for Int { show(self) = str(self) }";
+        let mut parser = Parser::new(source);
+        let program = parser.parse_program().unwrap();
+
+        if let Item::Impl(impl_def) = &program.items[0] {
+            assert_eq!(impl_def.trait_name.as_deref(), Some("Show"));
+            assert_eq!(impl_def.methods.len(), 1);
+        } else {
+            panic!("Expected Impl item");
+        }
+    }
+
+    #[test]
+    fn test_impl_with_multiple_methods() {
+        let source = "impl Point {
+            x(self) = self.x
+            y(self) = self.y
+            sum(self) = self.x + self.y
+        }";
+        let mut parser = Parser::new(source);
+        let program = parser.parse_program().unwrap();
+
+        if let Item::Impl(impl_def) = &program.items[0] {
+            assert_eq!(impl_def.methods.len(), 3);
+        } else {
+            panic!("Expected Impl item");
+        }
+    }
+
+    // ==================== Pipe Lambda Tests ====================
+
+    #[test]
+    fn test_pipe_lambda_single_param() {
+        let result = parse_expr("|x| x + 1").unwrap();
+        if let Expr::Lambda(params, body, _) = result {
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0], "x");
+            // body is x + 1
+            assert!(matches!(*body, Expr::Binary(_, _, _, _)));
+        } else {
+            panic!("Expected Lambda");
+        }
+    }
+
+    #[test]
+    fn test_pipe_lambda_multiple_params() {
+        let result = parse_expr("|x, y| x + y").unwrap();
+        if let Expr::Lambda(params, body, _) = result {
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0], "x");
+            assert_eq!(params[1], "y");
+            assert!(matches!(*body, Expr::Binary(_, _, _, _)));
+        } else {
+            panic!("Expected Lambda");
+        }
+    }
+
+    #[test]
+    fn test_pipe_lambda_no_params() {
+        // Note: || is lexed as OrOr token, so we use empty parentheses style instead
+        // For no-param lambdas, use () => expr syntax
+        let result = parse_expr("() => 42").unwrap();
+        if let Expr::Lambda(params, body, _) = result {
+            assert!(params.is_empty());
+            assert!(matches!(*body, Expr::Integer(42, _)));
+        } else {
+            panic!("Expected Lambda");
+        }
+    }
+
+    #[test]
+    fn test_pipe_lambda_in_map() {
+        // [1, 2, 3].@(|x| x * 2)
+        let result = parse_expr("[1, 2, 3].@(|x| x * 2)").unwrap();
+        if let Expr::MapOp(_, lambda, _) = result {
+            if let Expr::Lambda(params, _, _) = *lambda {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0], "x");
+            } else {
+                panic!("Expected Lambda in MapOp");
+            }
+        } else {
+            panic!("Expected MapOp");
+        }
+    }
+
+    // ==================== Hex/Binary Literal Tests ====================
+
+    #[test]
+    fn test_hex_integer() {
+        let result = parse_expr("0xFF").unwrap();
+        if let Expr::Integer(value, _) = result {
+            assert_eq!(value, 255);
+        } else {
+            panic!("Expected Integer");
+        }
+    }
+
+    #[test]
+    fn test_hex_integer_uppercase() {
+        let result = parse_expr("0X1A2B").unwrap();
+        if let Expr::Integer(value, _) = result {
+            assert_eq!(value, 0x1A2B);
+        } else {
+            panic!("Expected Integer");
+        }
+    }
+
+    #[test]
+    fn test_binary_integer() {
+        let result = parse_expr("0b1010").unwrap();
+        if let Expr::Integer(value, _) = result {
+            assert_eq!(value, 10);
+        } else {
+            panic!("Expected Integer");
+        }
+    }
+
+    #[test]
+    fn test_binary_integer_uppercase() {
+        let result = parse_expr("0B11110000").unwrap();
+        if let Expr::Integer(value, _) = result {
+            assert_eq!(value, 0b11110000);
+        } else {
+            panic!("Expected Integer");
+        }
+    }
+
+    #[test]
+    fn test_hex_binary_in_expression() {
+        // 0xFF + 0b1010 = 255 + 10 = expression
+        let result = parse_expr("0xFF + 0b1010").unwrap();
+        if let Expr::Binary(left, op, right, _) = result {
+            assert_eq!(op, BinaryOp::Add);
+            if let Expr::Integer(l, _) = *left {
+                assert_eq!(l, 255);
+            } else {
+                panic!("Expected Integer on left");
+            }
+            if let Expr::Integer(r, _) = *right {
+                assert_eq!(r, 10);
+            } else {
+                panic!("Expected Integer on right");
+            }
+        } else {
+            panic!("Expected Binary expression");
         }
     }
 }

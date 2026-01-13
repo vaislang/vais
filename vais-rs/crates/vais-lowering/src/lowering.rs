@@ -4,7 +4,7 @@
 
 use vais_ir::{Instruction, OpCode, ReduceOp as IrReduceOp, Value};
 use vais_ast::{
-    BinaryOp, Expr, FfiBlock, FunctionDef, IndexKind, Item, Pattern, Program, ReduceKind, UnaryOp,
+    BinaryOp, Expr, FfiBlock, FunctionDef, ImplDef, IndexKind, Item, Pattern, Program, ReduceKind, TraitDef, UnaryOp,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -129,8 +129,16 @@ impl Lowerer {
                     // FFI 블록 처리: 함수 레지스트리에 등록
                     self.register_ffi_block(ffi_block);
                 }
+                Item::Trait(trait_def) => {
+                    // Trait 기본 구현 컴파일
+                    self.lower_trait(trait_def)?;
+                }
+                Item::Impl(impl_def) => {
+                    // Impl 메서드 컴파일
+                    self.lower_impl(impl_def)?;
+                }
                 _ => {
-                    // TypeDef, Module, Use는 런타임에 직접 영향 없음
+                    // TypeDef, Module, Use, Enum은 런타임에 직접 영향 없음
                 }
             }
         }
@@ -172,6 +180,100 @@ impl Lowerer {
             instructions,
             local_count,
         })
+    }
+
+    /// Trait 정의를 컴파일 (기본 구현이 있는 메서드만)
+    fn lower_trait(&mut self, trait_def: &TraitDef) -> LowerResult<()> {
+        for method in &trait_def.methods {
+            // 기본 구현이 있는 경우에만 컴파일
+            if let Some(ref default_body) = method.default_impl {
+                self.current_function = Some(format!("{}::{}", trait_def.name, method.name));
+
+                // 새 스코프 생성
+                self.scope = LocalScope::new();
+
+                let params: Vec<String> = method.params.iter().map(|p| p.name.clone()).collect();
+
+                // 매개변수를 로컬 스코프에 등록
+                for param in &params {
+                    self.scope.declare(param);
+                }
+
+                let mut instructions = Vec::new();
+                let body_instrs = self.lower_expr(default_body)?;
+                instructions.extend(body_instrs);
+                instructions.push(Instruction::new(OpCode::Return));
+
+                let local_count = self.scope.count();
+                self.current_function = None;
+
+                self.functions.push(CompiledFunction {
+                    name: format!("{}::{}", trait_def.name, method.name),
+                    params,
+                    instructions,
+                    local_count,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Impl 블록을 컴파일
+    fn lower_impl(&mut self, impl_def: &ImplDef) -> LowerResult<()> {
+        // 타입 이름 추출 (간단한 버전)
+        let type_name = self.type_expr_to_string(&impl_def.target_type);
+
+        for method in &impl_def.methods {
+            // 메서드 이름: Type::method 형식
+            let method_name = format!("{}::{}", type_name, method.name);
+
+            self.current_function = Some(method_name.clone());
+
+            // 새 스코프 생성
+            self.scope = LocalScope::new();
+
+            let params: Vec<String> = method.params.iter().map(|p| p.name.clone()).collect();
+
+            // 매개변수를 로컬 스코프에 등록
+            for param in &params {
+                self.scope.declare(param);
+            }
+
+            let mut instructions = Vec::new();
+            let body_instrs = self.lower_expr(&method.body)?;
+            instructions.extend(body_instrs);
+            instructions.push(Instruction::new(OpCode::Return));
+
+            let local_count = self.scope.count();
+            self.current_function = None;
+
+            self.functions.push(CompiledFunction {
+                name: method_name,
+                params,
+                instructions,
+                local_count,
+            });
+        }
+        Ok(())
+    }
+
+    /// TypeExpr를 문자열로 변환 (간단한 버전)
+    fn type_expr_to_string(&self, type_expr: &vais_ast::TypeExpr) -> String {
+        match type_expr {
+            vais_ast::TypeExpr::Simple(name) => name.clone(),
+            vais_ast::TypeExpr::TypeVar(name) => name.clone(),
+            vais_ast::TypeExpr::Generic(name, _) => name.clone(),
+            vais_ast::TypeExpr::Array(_) => "Array".to_string(),
+            vais_ast::TypeExpr::Set(_) => "Set".to_string(),
+            vais_ast::TypeExpr::Map(_, _) => "Map".to_string(),
+            vais_ast::TypeExpr::Tuple(_) => "Tuple".to_string(),
+            vais_ast::TypeExpr::Optional(_) => "Optional".to_string(),
+            vais_ast::TypeExpr::Result(_) => "Result".to_string(),
+            vais_ast::TypeExpr::Function(_, _) => "Function".to_string(),
+            vais_ast::TypeExpr::Struct(_) => "Struct".to_string(),
+            vais_ast::TypeExpr::Future(_) => "Future".to_string(),
+            vais_ast::TypeExpr::Channel(_) => "Channel".to_string(),
+        }
     }
 
     /// 표현식을 IR로 변환
@@ -467,14 +569,33 @@ impl Lowerer {
             // === Binding ===
             Expr::Let(bindings, body, _) => {
                 // 각 바인딩 처리
-                for (name, value) in bindings {
+                for (name, value, _is_mut) in bindings {
                     instrs.extend(self.lower_expr(value)?);
                     // 로컬 변수로 등록하고 StoreLocal 사용
+                    // (is_mut는 런타임에서는 특별히 처리하지 않음, 타입 체커에서 검증)
                     let idx = self.scope.declare(name);
                     instrs.push(Instruction::new(OpCode::StoreLocal(idx)));
                 }
                 // 본문 실행
                 instrs.extend(self.lower_expr(body)?);
+            }
+
+            // 재할당
+            Expr::Assign(name, value, _) => {
+                instrs.extend(self.lower_expr(value)?);
+                // 기존 변수에 재할당 (StoreLocal 사용)
+                if let Some(idx) = self.scope.get(name) {
+                    instrs.push(Instruction::new(OpCode::StoreLocal(idx)));
+                } else {
+                    // 글로벌 변수로 Store (fallback)
+                    instrs.push(Instruction::new(OpCode::Store(name.clone())));
+                }
+                // 할당 후 값 반환 (스택에 다시 로드)
+                if let Some(idx) = self.scope.get(name) {
+                    instrs.push(Instruction::new(OpCode::LoadLocal(idx)));
+                } else {
+                    instrs.push(Instruction::new(OpCode::Load(name.clone())));
+                }
             }
 
             // === Function ===
@@ -1693,7 +1814,7 @@ mod tests {
     fn test_let_binding() {
         let mut lowerer = Lowerer::new();
         let expr = Expr::Let(
-            vec![("x".to_string(), int(42))],
+            vec![("x".to_string(), int(42), false)],
             Box::new(ident("x")),
             dummy_span(),
         );
@@ -1709,8 +1830,8 @@ mod tests {
         let mut lowerer = Lowerer::new();
         let expr = Expr::Let(
             vec![
-                ("x".to_string(), int(1)),
-                ("y".to_string(), int(2)),
+                ("x".to_string(), int(1), false),
+                ("y".to_string(), int(2), false),
             ],
             Box::new(binary(ident("x"), BinaryOp::Add, ident("y"))),
             dummy_span(),

@@ -25,6 +25,10 @@ pub enum Item {
     TypeDef(TypeDef),
     /// Enum 정의: enum Name { Variant1, Variant2(T), ... }
     Enum(EnumDef),
+    /// Trait 정의: trait Name { fn method(self) -> T }
+    Trait(TraitDef),
+    /// Impl 블록: impl Trait for Type { ... }
+    Impl(ImplDef),
     /// 모듈: mod name
     Module(ModuleDef),
     /// import: use path
@@ -111,6 +115,53 @@ pub struct EnumVariant {
     pub name: String,
     /// 연관 데이터 타입 (있는 경우)
     pub fields: Vec<TypeExpr>,
+    pub span: Span,
+}
+
+// =============================================================================
+// Trait & Impl
+// =============================================================================
+
+/// Trait 정의: trait Name<T> { fn method(self) -> T }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraitDef {
+    pub name: String,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
+    /// 메서드 시그니처들
+    pub methods: Vec<TraitMethod>,
+    pub is_pub: bool,
+    pub span: Span,
+}
+
+/// Trait 메서드 시그니처
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraitMethod {
+    pub name: String,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
+    /// 매개변수 (self 포함 가능)
+    pub params: Vec<Param>,
+    /// 반환 타입
+    pub return_type: Option<TypeExpr>,
+    /// 기본 구현 (옵션)
+    pub default_impl: Option<Expr>,
+    pub span: Span,
+}
+
+/// Impl 블록: impl Trait for Type { ... } 또는 impl Type { ... }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImplDef {
+    /// 구현할 Trait 이름 (없으면 inherent impl)
+    pub trait_name: Option<String>,
+    /// Trait 타입 파라미터
+    pub trait_type_params: Vec<TypeExpr>,
+    /// 대상 타입
+    pub target_type: TypeExpr,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
+    /// 메서드 구현들
+    pub methods: Vec<FunctionDef>,
     pub span: Span,
 }
 
@@ -319,7 +370,10 @@ pub enum Expr {
 
     // === Binding ===
     /// let 바인딩: let x = v : body 또는 let x = v; body
-    Let(Vec<(String, Expr)>, Box<Expr>, Span),
+    /// Vec<(name, value, is_mut)>
+    Let(Vec<(String, Expr, bool)>, Box<Expr>, Span),
+    /// 재할당: x = v
+    Assign(String, Box<Expr>, Span),
 
     // === Function ===
     /// 함수 호출: f(args)
@@ -409,6 +463,7 @@ impl Expr {
             Expr::Match(_, _, s) => *s,
             Expr::Block(_, s) => *s,
             Expr::Let(_, _, s) => *s,
+            Expr::Assign(_, _, s) => *s,
             Expr::Call(_, _, s) => *s,
             Expr::SelfCall(_, s) => *s,
             Expr::Lambda(_, _, s) => *s,

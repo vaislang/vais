@@ -146,6 +146,14 @@ pub enum TokenKind {
     #[token("err")]
     Err,
 
+    /// 16진수 리터럴 (0xFF, 0XFF)
+    #[regex(r"0[xX][0-9a-fA-F]+", priority = 3)]
+    HexInteger,
+
+    /// 2진수 리터럴 (0b1010, 0B1010)
+    #[regex(r"0[bB][01]+", priority = 3)]
+    BinaryInteger,
+
     /// 정수 리터럴 (음수 부호는 단항 연산자로 처리)
     #[regex(r"[0-9]+", priority = 2)]
     Integer,
@@ -386,6 +394,8 @@ impl TokenKind {
                 | TokenKind::Ok
                 | TokenKind::Err
                 | TokenKind::Integer
+                | TokenKind::HexInteger
+                | TokenKind::BinaryInteger
                 | TokenKind::Float
                 | TokenKind::String
         )
@@ -481,6 +491,8 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Ok => write!(f, "ok"),
             TokenKind::Err => write!(f, "err"),
             TokenKind::Integer => write!(f, "integer"),
+            TokenKind::HexInteger => write!(f, "hex integer"),
+            TokenKind::BinaryInteger => write!(f, "binary integer"),
             TokenKind::Float => write!(f, "float"),
             TokenKind::String => write!(f, "string"),
             TokenKind::Identifier => write!(f, "identifier"),

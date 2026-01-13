@@ -27,6 +27,10 @@
 - ✅ **Module System** - import/export, 순환 의존성 감지
 - ✅ **Error Handling** - try/catch, ?, ?? 연산자
 - ✅ **Generic Types** - TypeScheme 기반 다형성, 타입 추론
+- ✅ **Trait/Impl System** - 타입 추상화, 메서드 디스패치
+- ✅ **Mutation/Assignment** - `let mut`, 변수 재할당
+- ✅ **Lambda Syntax** - `|x| expr`, `(x) => expr`
+- ✅ **Hex/Binary Literals** - `0xFF`, `0b1010`
 
 #### Code Generation
 - ✅ C 코드 생성
@@ -61,7 +65,7 @@
 - ✅ File I/O, JSON, HTTP, Time, Random
 
 #### Quality
-- ✅ 522+ 단위 테스트
+- ✅ 530+ 단위 테스트
 - ✅ 31개 통합 테스트
 - ✅ 벤치마크
 
@@ -85,7 +89,7 @@
 |------|------|----------|
 | Macro System | 컴파일 타임 코드 생성 | 낮음 |
 | Async/Await | 비동기 프로그래밍 | 중간 |
-| Traits/Interfaces | 타입 추상화 | 중간 |
+| ~~Traits/Interfaces~~ | ~~타입 추상화~~ | ✅ 완료 |
 | Algebraic Effects | 부작용 관리 | 낮음 |
 
 ### 도구 개선
@@ -110,7 +114,7 @@
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| **v0.0.5** | 2026-01-13 | Generic type system (TypeScheme), Coalesce operator, ParallelContext 최적화 |
+| **v0.0.5** | 2026-01-13 | Generic type system, Trait/Impl, Mutation, Lambda syntax, Hex/Binary literals |
 | v0.0.4 | 2026-01-13 | Checked arithmetic, error handling 개선 |
 | v0.0.3 | 2026-01-13 | 프로젝트명 AOEL → Vais 변경, 문서 구조화 (en/ko) |
 | v0.0.2 | 2026-01-12 | Package registry, VS Code extension, Playground |

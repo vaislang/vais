@@ -49,14 +49,28 @@ impl TypeChecker {
 
     /// 프로그램 타입 체크
     pub fn check_program(&mut self, program: &Program) -> TypeResult<()> {
-        // 1단계: 함수 시그니처 수집
+        // 1단계: Trait 정의 수집
+        for item in &program.items {
+            if let Item::Trait(trait_def) = item {
+                self.register_trait(trait_def)?;
+            }
+        }
+
+        // 2단계: 함수 시그니처 수집
         for item in &program.items {
             if let Item::Function(func) = item {
                 self.register_function(func)?;
             }
         }
 
-        // 2단계: 함수 본문 체크
+        // 3단계: Impl 블록 처리
+        for item in &program.items {
+            if let Item::Impl(impl_def) = item {
+                self.register_impl(impl_def)?;
+            }
+        }
+
+        // 4단계: 함수 본문 체크
         for item in &program.items {
             match item {
                 Item::Function(func) => {
@@ -99,6 +113,104 @@ impl TypeChecker {
         self.env.register_function(func.name.clone(), func_type);
 
         // 타입 파라미터 스코프 클리어
+        self.env.clear_type_params();
+
+        Ok(())
+    }
+
+    /// Trait 등록
+    fn register_trait(&mut self, trait_def: &TraitDef) -> TypeResult<()> {
+        use std::collections::HashMap;
+        use crate::types::TypeScheme;
+
+        let type_params: Vec<String> = trait_def
+            .type_params
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+
+        let mut methods: HashMap<String, TypeScheme> = HashMap::new();
+
+        // 타입 파라미터 바인딩
+        for param in &trait_def.type_params {
+            self.env.bind_type_param(param.name.clone());
+        }
+
+        // 메서드 시그니처 수집
+        for method in &trait_def.methods {
+            // 메서드 타입 파라미터 바인딩
+            for param in &method.type_params {
+                self.env.bind_type_param(param.name.clone());
+            }
+
+            let param_types: Vec<Type> = method
+                .params
+                .iter()
+                .map(|p| {
+                    p.ty.as_ref()
+                        .map(|t| self.convert_type_expr(t))
+                        .unwrap_or_else(|| self.env.fresh_var())
+                })
+                .collect();
+
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|t| self.convert_type_expr(t))
+                .unwrap_or_else(|| self.env.fresh_var());
+
+            let method_type = Type::Function(param_types, Box::new(return_type));
+            methods.insert(method.name.clone(), TypeScheme::mono(method_type));
+        }
+
+        self.env.register_trait(trait_def.name.clone(), type_params, methods);
+        self.env.clear_type_params();
+
+        Ok(())
+    }
+
+    /// Impl 등록
+    fn register_impl(&mut self, impl_def: &ImplDef) -> TypeResult<()> {
+        use std::collections::HashMap;
+        use crate::types::TypeScheme;
+
+        // 타입 파라미터 바인딩
+        for param in &impl_def.type_params {
+            self.env.bind_type_param(param.name.clone());
+        }
+
+        let target_type = self.convert_type_expr(&impl_def.target_type);
+
+        let mut methods: HashMap<String, TypeScheme> = HashMap::new();
+
+        // 메서드 수집
+        for method in &impl_def.methods {
+            // 메서드 타입 파라미터 바인딩
+            for param in &method.type_params {
+                self.env.bind_type_param(param.name.clone());
+            }
+
+            let param_types: Vec<Type> = method
+                .params
+                .iter()
+                .map(|p| {
+                    p.ty.as_ref()
+                        .map(|t| self.convert_type_expr(t))
+                        .unwrap_or_else(|| self.env.fresh_var())
+                })
+                .collect();
+
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|t| self.convert_type_expr(t))
+                .unwrap_or_else(|| self.env.fresh_var());
+
+            let method_type = Type::Function(param_types, Box::new(return_type));
+            methods.insert(method.name.clone(), TypeScheme::mono(method_type));
+        }
+
+        self.env.register_impl(impl_def.trait_name.clone(), target_type, methods);
         self.env.clear_type_params();
 
         Ok(())
@@ -392,11 +504,28 @@ impl TypeChecker {
 
             // Let 바인딩
             Expr::Let(bindings, body, _) => {
-                for (name, value) in bindings {
+                for (name, value, _is_mut) in bindings {
                     let value_type = self.infer_expr(value)?;
                     self.env.bind_var(name.clone(), value_type);
                 }
                 self.infer_expr(body)
+            }
+
+            // 재할당
+            Expr::Assign(name, value, span) => {
+                // 변수가 존재하는지 확인
+                let expected_type = self.env.lookup_var(name).cloned();
+                if let Some(expected) = expected_type {
+                    let value_type = self.infer_expr(value)?;
+                    // 타입 일치 확인
+                    self.env.unify(&value_type, &expected, *span)?;
+                    Ok(value_type)
+                } else {
+                    Err(TypeError::UndefinedVariable {
+                        name: name.clone(),
+                        span: *span,
+                    })
+                }
             }
 
             // If 표현식

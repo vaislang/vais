@@ -98,6 +98,8 @@ impl Formatter {
             Item::Function(f) => self.format_function(f),
             Item::TypeDef(t) => self.format_typedef(t),
             Item::Enum(e) => self.format_enum(e),
+            Item::Trait(t) => self.format_trait(t),
+            Item::Impl(i) => self.format_impl(i),
             Item::Module(m) => self.format_module(m),
             Item::Use(u) => self.format_use(u),
             Item::Ffi(f) => self.format_ffi(f),
@@ -226,6 +228,96 @@ impl Formatter {
             if i < enum_def.variants.len() - 1 {
                 self.output.push(',');
             }
+            self.output.push('\n');
+        }
+
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    fn format_trait(&mut self, trait_def: &vais_ast::TraitDef) {
+        self.write_indent();
+        if trait_def.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("trait ");
+        self.output.push_str(&trait_def.name);
+
+        // 타입 파라미터
+        if !trait_def.type_params.is_empty() {
+            self.output.push('<');
+            for (i, param) in trait_def.type_params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+            }
+            self.output.push('>');
+        }
+
+        self.output.push_str(" {\n");
+        self.indent_level += 1;
+
+        for method in &trait_def.methods {
+            self.write_indent();
+            self.output.push_str(&method.name);
+            self.output.push('(');
+            for (i, param) in method.params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+                if let Some(ty) = &param.ty {
+                    self.output.push_str(": ");
+                    self.format_type(ty);
+                }
+            }
+            self.output.push(')');
+            if let Some(ret_type) = &method.return_type {
+                self.output.push_str(" -> ");
+                self.format_type(ret_type);
+            }
+            if let Some(default) = &method.default_impl {
+                self.output.push_str(" = ");
+                self.format_expr(default);
+            }
+            self.output.push('\n');
+        }
+
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
+    }
+
+    fn format_impl(&mut self, impl_def: &vais_ast::ImplDef) {
+        self.write_indent();
+        self.output.push_str("impl ");
+
+        // 타입 파라미터
+        if !impl_def.type_params.is_empty() {
+            self.output.push('<');
+            for (i, param) in impl_def.type_params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+            }
+            self.output.push_str("> ");
+        }
+
+        // trait impl이면 trait 이름 추가
+        if let Some(trait_name) = &impl_def.trait_name {
+            self.output.push_str(trait_name);
+            self.output.push_str(" for ");
+        }
+
+        self.format_type(&impl_def.target_type);
+        self.output.push_str(" {\n");
+        self.indent_level += 1;
+
+        for method in &impl_def.methods {
+            self.format_function(method);
             self.output.push('\n');
         }
 
@@ -525,12 +617,15 @@ impl Formatter {
             }
             Expr::Let(bindings, body, _) => {
                 self.output.push_str("let ");
-                for (i, (name, value)) in bindings.iter().enumerate() {
+                for (i, (name, value, is_mut)) in bindings.iter().enumerate() {
                     if i > 0 {
                         self.output.push(',');
                         if self.config.space_after_comma {
                             self.output.push(' ');
                         }
+                    }
+                    if *is_mut {
+                        self.output.push_str("mut ");
                     }
                     self.output.push_str(name);
                     if self.config.space_around_operators {
@@ -540,8 +635,17 @@ impl Formatter {
                     }
                     self.format_expr(value);
                 }
-                self.output.push_str(" in ");
+                self.output.push_str(" : ");
                 self.format_expr(body);
+            }
+            Expr::Assign(name, value, _) => {
+                self.output.push_str(name);
+                if self.config.space_around_operators {
+                    self.output.push_str(" = ");
+                } else {
+                    self.output.push('=');
+                }
+                self.format_expr(value);
             }
             Expr::Call(func, args, _) => {
                 self.format_expr(func);
