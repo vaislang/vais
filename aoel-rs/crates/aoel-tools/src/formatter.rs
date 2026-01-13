@@ -622,6 +622,25 @@ impl Formatter {
                     self.output.push(')');
                 }
             }
+            Expr::TryCatch { body, error_name, handler, .. } => {
+                self.output.push_str("try {\n");
+                self.indent_level += 1;
+                self.write_indent();
+                self.format_expr(body);
+                self.output.push('\n');
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push_str("} catch ");
+                self.output.push_str(error_name);
+                self.output.push_str(" {\n");
+                self.indent_level += 1;
+                self.write_indent();
+                self.format_expr(handler);
+                self.output.push('\n');
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+            }
         }
     }
 

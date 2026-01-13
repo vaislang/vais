@@ -1163,6 +1163,12 @@ impl<'src> Parser<'src> {
                 self.parse_match(span)
             }
 
+            // try-catch 블록
+            TokenKind::Try => {
+                self.advance();
+                self.parse_try_catch(span)
+            }
+
             // err
             TokenKind::Err => {
                 self.advance();
@@ -1313,6 +1319,28 @@ impl<'src> Parser<'src> {
             else_expr,
             start.merge(self.previous.span),
         ))
+    }
+
+    /// try-catch 블록 파싱: try { body } catch e { handler }
+    fn parse_try_catch(&mut self, start: Span) -> ParseResult<Expr> {
+        // try { ... }
+        self.expect(TokenKind::LBrace)?;
+        let body = self.parse_expr()?;
+        self.expect(TokenKind::RBrace)?;
+
+        // catch e { ... }
+        self.expect(TokenKind::Catch)?;
+        let error_name = self.expect_identifier()?;
+        self.expect(TokenKind::LBrace)?;
+        let handler = self.parse_expr()?;
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(Expr::TryCatch {
+            body: Box::new(body),
+            error_name,
+            handler: Box::new(handler),
+            span: start.merge(self.previous.span),
+        })
     }
 
     /// Match 표현식 파싱: match expr { pattern => body, ... }
@@ -2289,6 +2317,30 @@ mod tests {
             assert!(!use_def.star);
         } else {
             panic!("Expected use statement");
+        }
+    }
+
+    // === Error Handling Tests ===
+
+    #[test]
+    fn test_try_catch() {
+        let result = parse_expr("try { risky() } catch e { default() }").unwrap();
+        if let Expr::TryCatch { error_name, .. } = result {
+            assert_eq!(error_name, "e");
+        } else {
+            panic!("Expected try-catch expression");
+        }
+    }
+
+    #[test]
+    fn test_try_catch_simple() {
+        let result = parse_expr("try { 1 / x } catch e { 0 }").unwrap();
+        if let Expr::TryCatch { body, handler, error_name, .. } = result {
+            assert_eq!(error_name, "e");
+            assert!(matches!(*body, Expr::Binary(..)));
+            assert!(matches!(*handler, Expr::Integer(0, _)));
+        } else {
+            panic!("Expected try-catch expression");
         }
     }
 }

@@ -110,6 +110,12 @@ pub enum TokenKind {
     #[token("as")]
     As,
 
+    #[token("try")]
+    Try,
+
+    #[token("catch")]
+    Catch,
+
     #[token("ffi")]
     Ffi,
 
@@ -333,6 +339,8 @@ impl TokenKind {
                 | TokenKind::Await
                 | TokenKind::Mut
                 | TokenKind::As
+                | TokenKind::Try
+                | TokenKind::Catch
                 | TokenKind::Ffi
         )
     }
@@ -410,6 +418,8 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Await => write!(f, "await"),
             TokenKind::Mut => write!(f, "mut"),
             TokenKind::As => write!(f, "as"),
+            TokenKind::Try => write!(f, "try"),
+            TokenKind::Catch => write!(f, "catch"),
             TokenKind::Ffi => write!(f, "ffi"),
             TokenKind::True => write!(f, "true"),
             TokenKind::False => write!(f, "false"),

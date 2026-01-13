@@ -18,6 +18,13 @@ enum TcoResult {
     TailCall(Vec<Value>),
 }
 
+/// Catch handler information
+#[derive(Clone)]
+struct CatchHandler {
+    label: usize,
+    stack_depth: usize,
+}
+
 /// AOEL Virtual Machine
 pub struct Vm {
     /// 스택
@@ -36,6 +43,8 @@ pub struct Vm {
     next_closure_id: usize,
     /// FFI 동적 라이브러리 로더
     ffi_loader: FfiLoader,
+    /// Catch handler stack for try-catch
+    catch_stack: Vec<CatchHandler>,
 }
 
 impl Vm {
@@ -49,6 +58,7 @@ impl Vm {
             closures: HashMap::new(),
             next_closure_id: 0,
             ffi_loader: FfiLoader::new(),
+            catch_stack: Vec::new(),
         }
     }
 
@@ -287,8 +297,32 @@ impl Vm {
                     // Signal tail call to caller
                     return Ok(TcoResult::TailCall(args));
                 }
+                OpCode::SetCatch(offset) => {
+                    // 핸들러 위치는 현재 ip + offset + 1
+                    self.catch_stack.push(CatchHandler {
+                        label: ip + offset + 1,
+                        stack_depth: self.stack.len(),
+                    });
+                }
+                OpCode::ClearCatch => {
+                    self.catch_stack.pop();
+                }
                 _ => {
-                    self.execute_instruction(instr)?;
+                    // execute_instruction에서 에러가 발생하면 catch 핸들러로 점프
+                    let result = self.execute_instruction(instr);
+                    if let Err(e) = result {
+                        if let Some(handler) = self.catch_stack.pop() {
+                            // 스택 복원
+                            self.stack.truncate(handler.stack_depth);
+                            // 에러 메시지를 스택에 푸시
+                            self.stack.push(Value::String(e.to_string()));
+                            // 핸들러로 점프
+                            ip = handler.label;
+                            continue;
+                        } else {
+                            return Err(e);
+                        }
+                    }
                 }
             }
             ip += 1;
@@ -700,6 +734,11 @@ impl Vm {
                     Value::Optional(None) | Value::Void => self.stack.push(default),
                     other => self.stack.push(other),
                 }
+            }
+
+            // SetCatch and ClearCatch are handled in execute_instructions_with_tco
+            OpCode::SetCatch(_) | OpCode::ClearCatch => {
+                // No-op here, handled in the main loop
             }
 
             // === Builtin Function Call ===

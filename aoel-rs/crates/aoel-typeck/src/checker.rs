@@ -481,6 +481,23 @@ impl TypeChecker {
                     Ok(left_type)
                 }
             }
+
+            // try-catch 표현식
+            Expr::TryCatch { body, error_name, handler, span } => {
+                // body 타입 추론
+                let body_type = self.infer_expr(body)?;
+
+                // catch 블록에서 에러 변수 바인딩
+                self.env.bind_var(error_name.clone(), Type::String);
+
+                // handler 타입 추론
+                let handler_type = self.infer_expr(handler)?;
+
+                // body와 handler 타입이 호환되어야 함
+                self.env.unify(&body_type, &handler_type, *span)?;
+
+                Ok(body_type)
+            }
         }
     }
 

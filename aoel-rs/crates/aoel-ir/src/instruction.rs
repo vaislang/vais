@@ -115,6 +115,10 @@ pub enum OpCode {
     Try,
     /// Coalesce: value ?? default
     Coalesce,
+    /// Set catch handler: relative offset to handler on error
+    SetCatch(usize),
+    /// Clear catch handler
+    ClearCatch,
 
     // === Built-in Functions ===
     /// Call built-in function by name

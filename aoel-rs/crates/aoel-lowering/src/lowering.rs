@@ -473,6 +473,41 @@ impl Lowerer {
                 instrs.extend(self.lower_expr(default)?);
                 instrs.push(Instruction::new(OpCode::Coalesce));
             }
+
+            Expr::TryCatch { body, error_name, handler, .. } => {
+                // try-catch 구현 (상대 점프 사용):
+                // [SetCatch relative_offset]  - body_len + 2 (ClearCatch + Jump)
+                // [body 명령어들]
+                // [ClearCatch]
+                // [Jump relative_offset]      - handler_len + 1 (Store 포함)
+                // [Store error_name]
+                // [handler 명령어들]
+
+                // 먼저 body와 handler를 컴파일
+                let body_instrs = self.lower_expr(body)?;
+                let handler_instrs = self.lower_expr(handler)?;
+
+                let body_len = body_instrs.len();
+                let handler_len = handler_instrs.len();
+
+                // SetCatch: body 다음의 Store 위치로 (body_len + 2: ClearCatch, Jump)
+                instrs.push(Instruction::new(OpCode::SetCatch(body_len + 2)));
+
+                // body 실행
+                instrs.extend(body_instrs);
+
+                // 핸들러 제거
+                instrs.push(Instruction::new(OpCode::ClearCatch));
+
+                // 성공 시 handler 건너뜀 (handler_len + 1: Store 포함)
+                instrs.push(Instruction::new(OpCode::Jump((handler_len + 1) as i32)));
+
+                // 에러 저장 (에러 핸들러 시작점)
+                instrs.push(Instruction::new(OpCode::Store(error_name.clone())));
+
+                // handler 실행
+                instrs.extend(handler_instrs);
+            }
         }
 
         Ok(instrs)

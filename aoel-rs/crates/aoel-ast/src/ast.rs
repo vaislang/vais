@@ -292,6 +292,13 @@ pub enum Expr {
     Try(Box<Expr>, Span),
     /// Optional with default: expr ?? default
     Coalesce(Box<Expr>, Box<Expr>, Span),
+    /// try-catch 블록: try { body } catch e { handler }
+    TryCatch {
+        body: Box<Expr>,
+        error_name: String,
+        handler: Box<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -329,6 +336,7 @@ impl Expr {
             Expr::Error(_, s) => *s,
             Expr::Try(_, s) => *s,
             Expr::Coalesce(_, _, s) => *s,
+            Expr::TryCatch { span, .. } => *span,
         }
     }
 }
