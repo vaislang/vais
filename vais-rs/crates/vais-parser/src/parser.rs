@@ -112,6 +112,32 @@ impl<'src> Parser<'src> {
 
     /// 아이템 파싱
     fn parse_item(&mut self) -> ParseResult<Item> {
+        // #[test] 어트리뷰트 확인
+        let is_test = if self.check(TokenKind::Hash) {
+            // Lookahead for #[test]
+            let saved_current = self.current.clone();
+            self.advance(); // consume #
+            if self.check(TokenKind::LBracket) {
+                self.advance(); // consume [
+                if self.check(TokenKind::Identifier) && self.current.text == "test" {
+                    self.advance(); // consume test
+                    self.expect(TokenKind::RBracket)?; // consume ]
+                    true
+                } else {
+                    // Not a #[test], restore state - this is a length operator
+                    self.current = saved_current;
+                    // Re-lex from position (simplified: just mark as not test)
+                    false
+                }
+            } else {
+                // Not #[...], restore and continue (could be length operator)
+                self.current = saved_current;
+                false
+            }
+        } else {
+            false
+        };
+
         // pub 키워드 확인
         let is_pub = self.match_token(TokenKind::Pub);
         // async 키워드 확인
@@ -215,7 +241,7 @@ impl<'src> Parser<'src> {
                 // 또는 함수 호출/표현식
                 // Lookahead: identifier( 다음이 identifier 또는 ) 이면 함수 정의
                 if self.is_function_def() {
-                    let func = self.parse_function_def(is_pub, is_async)?;
+                    let func = self.parse_function_def(is_pub, is_async, is_test)?;
                     Ok(Item::Function(func))
                 } else {
                     if is_pub {
@@ -320,7 +346,7 @@ impl<'src> Parser<'src> {
     }
 
     /// 함수 정의 파싱: name(params) = body 또는 async name(params) = body
-    fn parse_function_def(&mut self, is_pub: bool, is_async: bool) -> ParseResult<FunctionDef> {
+    fn parse_function_def(&mut self, is_pub: bool, is_async: bool, is_test: bool) -> ParseResult<FunctionDef> {
         let start = self.current.span;
         let name = self.expect_identifier()?;
 
@@ -355,6 +381,7 @@ impl<'src> Parser<'src> {
             body,
             is_pub,
             is_async,
+            is_test,
             span: start.merge(self.previous.span),
         })
     }
@@ -818,6 +845,7 @@ impl<'src> Parser<'src> {
                 body,
                 is_pub: false,  // impl 내부 메서드는 pub을 별도로 지정하지 않음
                 is_async: false,
+                is_test: false,
                 span: method_start.merge(self.previous.span),
             });
         }

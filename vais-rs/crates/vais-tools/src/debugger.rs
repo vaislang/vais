@@ -326,6 +326,41 @@ impl Debugger {
         self.step()
     }
 
+    /// 라인 넘기기 (step over) - 함수 호출을 건너뜀
+    pub fn step_over(&mut self) -> Option<DebugEvent> {
+        let current_depth = self.call_stack.len();
+
+        loop {
+            match self.step() {
+                Some(event @ DebugEvent::StepComplete { .. }) => {
+                    // 같은 깊이로 돌아오면 완료
+                    if self.call_stack.len() <= current_depth {
+                        return Some(event);
+                    }
+                }
+                Some(DebugEvent::FunctionExit { .. }) => {
+                    if self.call_stack.len() < current_depth {
+                        return self.events.last().cloned();
+                    }
+                }
+                Some(DebugEvent::Finished { .. }) | Some(DebugEvent::Error { .. }) | None => {
+                    return self.events.last().cloned();
+                }
+                Some(DebugEvent::BreakpointHit { .. }) => {
+                    return self.events.last().cloned();
+                }
+                _ => continue,
+            }
+        }
+    }
+
+    /// 일시 정지
+    pub fn pause(&mut self) {
+        if self.state == DebugState::Running {
+            self.state = DebugState::Paused;
+        }
+    }
+
     /// 함수 나가기 (step out)
     pub fn step_out(&mut self) -> Option<DebugEvent> {
         let current_depth = self.call_stack.len();
@@ -350,6 +385,11 @@ impl Debugger {
         let frame = self.call_stack.last()?;
         let func = self.functions.get(&frame.function)?;
         func.instructions.get(frame.instruction_pointer)
+    }
+
+    /// 콜 스택 반환
+    pub fn get_call_stack(&self) -> &[StackFrame] {
+        &self.call_stack
     }
 
     /// 디버그 정보 요약

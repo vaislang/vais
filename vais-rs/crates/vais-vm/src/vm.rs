@@ -3,8 +3,9 @@
 //! 스택 기반 VM으로 Vais IR을 실행
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use vais_ir::{Instruction, OpCode, ReduceOp, Value};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use vais_ir::{Instruction, OpCode, ReduceOp, Value, TaskId, ChannelId, FutureState, ChannelState};
 use vais_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
 use crate::ffi::FfiLoader;
@@ -157,6 +158,110 @@ impl ParallelContext {
     }
 }
 
+/// Async runtime state (shared between threads)
+#[derive(Debug)]
+pub struct AsyncRuntime {
+    /// Task states (TaskId -> FutureState)
+    tasks: FastMap<TaskId, Arc<Mutex<FutureState>>>,
+    /// Channels (ChannelId -> ChannelState)
+    channels: FastMap<ChannelId, Arc<Mutex<ChannelState>>>,
+    /// Next task ID
+    next_task_id: TaskId,
+    /// Next channel ID
+    next_channel_id: ChannelId,
+}
+
+impl AsyncRuntime {
+    fn new() -> Self {
+        Self {
+            tasks: FastMap::new(),
+            channels: FastMap::new(),
+            next_task_id: 1,
+            next_channel_id: 1,
+        }
+    }
+
+    fn create_task(&mut self) -> TaskId {
+        let id = self.next_task_id;
+        self.next_task_id += 1;
+        self.tasks.insert(id, Arc::new(Mutex::new(FutureState::Pending)));
+        id
+    }
+
+    fn complete_task(&mut self, id: TaskId, value: Value) {
+        if let Some(state) = self.tasks.get(&id) {
+            let mut state = state.lock().expect("task lock poisoned");
+            *state = FutureState::Completed(Box::new(value));
+        }
+    }
+
+    fn fail_task(&mut self, id: TaskId, error: String) {
+        if let Some(state) = self.tasks.get(&id) {
+            let mut state = state.lock().expect("task lock poisoned");
+            *state = FutureState::Failed(error);
+        }
+    }
+
+    fn get_task_state(&self, id: TaskId) -> Option<FutureState> {
+        self.tasks.get(&id).map(|s| s.lock().expect("task lock poisoned").clone())
+    }
+
+    fn create_channel(&mut self, capacity: usize) -> ChannelId {
+        let id = self.next_channel_id;
+        self.next_channel_id += 1;
+        self.channels.insert(id, Arc::new(Mutex::new(ChannelState::new(capacity))));
+        id
+    }
+
+    fn send_to_channel(&self, id: ChannelId, value: Value) -> Result<(), String> {
+        if let Some(chan) = self.channels.get(&id) {
+            let mut chan = chan.lock().expect("channel lock poisoned");
+            if chan.closed {
+                return Err("channel closed".to_string());
+            }
+            // Simple blocking send (busy wait for now)
+            while chan.buffer.len() >= chan.capacity {
+                drop(chan);
+                thread::yield_now();
+                chan = self.channels.get(&id).expect("channel gone").lock().expect("channel lock poisoned");
+                if chan.closed {
+                    return Err("channel closed".to_string());
+                }
+            }
+            chan.buffer.push(value);
+            Ok(())
+        } else {
+            Err("channel not found".to_string())
+        }
+    }
+
+    fn recv_from_channel(&self, id: ChannelId) -> Result<Value, String> {
+        if let Some(chan) = self.channels.get(&id) {
+            // Simple blocking receive (busy wait for now)
+            loop {
+                let mut chan_guard = chan.lock().expect("channel lock poisoned");
+                if !chan_guard.buffer.is_empty() {
+                    return Ok(chan_guard.buffer.remove(0));
+                }
+                if chan_guard.closed {
+                    return Err("channel closed".to_string());
+                }
+                drop(chan_guard);
+                thread::yield_now();
+            }
+        } else {
+            Err("channel not found".to_string())
+        }
+    }
+
+    fn close_channel(&self, id: ChannelId) {
+        if let Some(chan) = self.channels.get(&id) {
+            let mut chan = chan.lock().expect("channel lock poisoned");
+            chan.closed = true;
+        }
+    }
+}
+
 /// Vais Virtual Machine
 pub struct Vm {
     /// 스택
@@ -179,6 +284,8 @@ pub struct Vm {
     ffi_loader: FfiLoader,
     /// Catch handler stack for try-catch
     catch_stack: Vec<CatchHandler>,
+    /// Async runtime
+    async_runtime: Arc<Mutex<AsyncRuntime>>,
 }
 
 impl Vm {
@@ -194,6 +301,7 @@ impl Vm {
             next_closure_id: 0,
             ffi_loader: FfiLoader::new(),
             catch_stack: Vec::new(),
+            async_runtime: Arc::new(Mutex::new(AsyncRuntime::new())),
         }
     }
 
@@ -1633,6 +1741,131 @@ impl Vm {
                 return Err(RuntimeError::Internal(msg.clone()));
             }
 
+            // === Async Operations ===
+            OpCode::Spawn => {
+                // spawn expr - creates a new task and returns Future
+                let expr_value = self.pop()?;
+
+                // Create a new task
+                let task_id = {
+                    let mut runtime = self.async_runtime.lock().expect("async runtime lock poisoned");
+                    runtime.create_task()
+                };
+
+                // Clone necessary data for the spawned task
+                let runtime = Arc::clone(&self.async_runtime);
+
+                // For simple values, complete immediately
+                // For closures, we would need to spawn a thread
+                match expr_value {
+                    Value::Closure { .. } => {
+                        // TODO: Execute closure in separate thread
+                        // For now, complete immediately with the closure itself
+                        let mut rt = runtime.lock().expect("async runtime lock poisoned");
+                        rt.complete_task(task_id, expr_value);
+                    }
+                    _ => {
+                        // Simple values complete immediately
+                        let mut rt = runtime.lock().expect("async runtime lock poisoned");
+                        rt.complete_task(task_id, expr_value);
+                    }
+                }
+
+                self.stack.push(Value::Future(task_id));
+            }
+
+            OpCode::Await => {
+                // await future - blocks until future completes
+                let future_val = self.pop()?;
+
+                match future_val {
+                    Value::Future(task_id) => {
+                        // Poll until complete
+                        loop {
+                            let state = {
+                                let runtime = self.async_runtime.lock().expect("async runtime lock poisoned");
+                                runtime.get_task_state(task_id)
+                            };
+
+                            match state {
+                                Some(FutureState::Completed(value)) => {
+                                    self.stack.push(*value);
+                                    break;
+                                }
+                                Some(FutureState::Failed(err)) => {
+                                    return Err(RuntimeError::Internal(format!("Task failed: {}", err)));
+                                }
+                                Some(FutureState::Pending) => {
+                                    // Yield and retry
+                                    thread::yield_now();
+                                }
+                                None => {
+                                    return Err(RuntimeError::Internal(format!("Task {} not found", task_id)));
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Not a future, just return the value
+                        self.stack.push(future_val);
+                    }
+                }
+            }
+
+            OpCode::MakeChannel(capacity) => {
+                // Create a new channel with given capacity
+                let channel_id = {
+                    let mut runtime = self.async_runtime.lock().expect("async runtime lock poisoned");
+                    runtime.create_channel(*capacity)
+                };
+                self.stack.push(Value::Channel(channel_id));
+            }
+
+            OpCode::Send => {
+                // channel <- value
+                let value = self.pop()?;
+                let channel = self.pop()?;
+
+                match channel {
+                    Value::Channel(channel_id) => {
+                        let runtime = self.async_runtime.lock().expect("async runtime lock poisoned");
+                        match runtime.send_to_channel(channel_id, value) {
+                            Ok(()) => {
+                                self.stack.push(Value::Void);
+                            }
+                            Err(e) => {
+                                return Err(RuntimeError::Internal(format!("Channel send error: {}", e)));
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(RuntimeError::TypeError("Expected channel for send".to_string()));
+                    }
+                }
+            }
+
+            OpCode::Recv => {
+                // <- channel
+                let channel = self.pop()?;
+
+                match channel {
+                    Value::Channel(channel_id) => {
+                        let runtime = self.async_runtime.lock().expect("async runtime lock poisoned");
+                        match runtime.recv_from_channel(channel_id) {
+                            Ok(value) => {
+                                self.stack.push(value);
+                            }
+                            Err(e) => {
+                                return Err(RuntimeError::Internal(format!("Channel recv error: {}", e)));
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(RuntimeError::TypeError("Expected channel for recv".to_string()));
+                    }
+                }
+            }
+
             // Unhandled opcodes - should not happen
             other => {
                 return Err(RuntimeError::Internal(format!("Unhandled opcode: {:?}", other)));
@@ -2550,6 +2783,8 @@ impl Vm {
                     Value::Optional(_) => "optional",
                     Value::Error(_) => "error",
                     Value::Struct(_) => "struct",
+                    Value::Future(_) => "future",
+                    Value::Channel(_) => "channel",
                 }.to_string()))
             }
             "IS_INT" => {

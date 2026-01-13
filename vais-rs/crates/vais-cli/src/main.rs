@@ -262,6 +262,21 @@ enum Commands {
         #[arg(long, default_value = "markdown")]
         format: String,
     },
+
+    /// Run tests in Vais files
+    Test {
+        /// File or directory to test (default: current directory)
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
+
+        /// Filter tests by name pattern
+        #[arg(short, long)]
+        filter: Option<String>,
+
+        /// Show verbose output
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }
 
 fn main() {
@@ -333,6 +348,9 @@ fn main() {
         }
         Commands::Doc { path, output, format } => {
             cmd_doc(&path, output.as_ref(), &format);
+        }
+        Commands::Test { path, filter, verbose } => {
+            cmd_test(path.as_ref(), filter.as_deref(), verbose);
         }
     }
 }
@@ -2524,6 +2542,189 @@ fn cmd_profile(path: &PathBuf, output_format: &str) {
         }
         _ => {
             println!("{}", result.summary());
+        }
+    }
+}
+
+/// Test runner for Vais files
+fn cmd_test(path: Option<&PathBuf>, filter: Option<&str>, verbose: bool) {
+    let target_path = path.cloned().unwrap_or_else(|| PathBuf::from("."));
+
+    // Collect .vais files
+    let mut vais_files = Vec::new();
+    if target_path.is_file() {
+        vais_files.push(target_path.clone());
+    } else if target_path.is_dir() {
+        collect_vais_files(&target_path, &mut vais_files);
+    } else {
+        eprintln!("Path not found: {}", target_path.display());
+        std::process::exit(1);
+    }
+
+    if vais_files.is_empty() {
+        println!("No .vais files found");
+        return;
+    }
+
+    let mut total_tests = 0;
+    let mut passed_tests = 0;
+    let mut failed_tests = 0;
+    let mut test_results: Vec<(String, String, bool, Option<String>)> = Vec::new();
+
+    for file_path in &vais_files {
+        let source = match read_file(file_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error reading {}: {}", file_path.display(), e);
+                continue;
+            }
+        };
+
+        // Parse
+        let program = match vais_parser::parse(&source) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Parse error in {}: {:?}", file_path.display(), e);
+                continue;
+            }
+        };
+
+        // Find test functions
+        let test_funcs: Vec<_> = program.items.iter()
+            .filter_map(|item| {
+                if let vais_ast::Item::Function(func) = item {
+                    if func.is_test {
+                        // Apply filter if provided
+                        if let Some(f) = filter {
+                            if !func.name.contains(f) {
+                                return None;
+                            }
+                        }
+                        return Some(func.clone());
+                    }
+                }
+                None
+            })
+            .collect();
+
+        if test_funcs.is_empty() {
+            continue;
+        }
+
+        // Resolve modules
+        let base_dir = file_path.parent().unwrap_or(std::path::Path::new("."));
+        let program = match vais_parser::resolve_modules(program, base_dir) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Module error in {}: {:?}", file_path.display(), e);
+                continue;
+            }
+        };
+
+        // Lower to IR
+        let mut lowerer = vais_lowering::Lowerer::new();
+        let functions = match lowerer.lower_program(&program) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Lowering error in {}: {:?}", file_path.display(), e);
+                continue;
+            }
+        };
+
+        // Create VM
+        let mut vm = vais_vm::Vm::new();
+        vm.load_functions(functions);
+
+        // Run test functions
+        for test_func in &test_funcs {
+            total_tests += 1;
+            let file_name = file_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown");
+
+            if verbose {
+                print!("  Running {}::{} ... ", file_name, test_func.name);
+            }
+
+            match vm.call_function(&test_func.name, vec![]) {
+                Ok(result) => {
+                    // Test passes if result is truthy or is Void (no assertion failure)
+                    let passed = match &result {
+                        vais_ir::Value::Bool(false) => false,
+                        vais_ir::Value::Error(e) => {
+                            test_results.push((file_name.to_string(), test_func.name.clone(), false, Some(e.clone())));
+                            failed_tests += 1;
+                            if verbose {
+                                println!("FAILED ({})", e);
+                            }
+                            continue;
+                        }
+                        _ => true,
+                    };
+
+                    if passed {
+                        passed_tests += 1;
+                        test_results.push((file_name.to_string(), test_func.name.clone(), true, None));
+                        if verbose {
+                            println!("ok");
+                        }
+                    } else {
+                        failed_tests += 1;
+                        test_results.push((file_name.to_string(), test_func.name.clone(), false, Some("returned false".to_string())));
+                        if verbose {
+                            println!("FAILED (returned false)");
+                        }
+                    }
+                }
+                Err(e) => {
+                    failed_tests += 1;
+                    test_results.push((file_name.to_string(), test_func.name.clone(), false, Some(format!("{:?}", e))));
+                    if verbose {
+                        println!("FAILED ({:?})", e);
+                    }
+                }
+            }
+        }
+    }
+
+    // Print summary
+    println!();
+    println!("test result: {}. {} passed; {} failed; {} total",
+        if failed_tests == 0 { "ok" } else { "FAILED" },
+        passed_tests,
+        failed_tests,
+        total_tests
+    );
+
+    // Print failed tests details
+    if !verbose && failed_tests > 0 {
+        println!();
+        println!("failures:");
+        for (file, test, passed, err) in &test_results {
+            if !passed {
+                println!("  {}::{}", file, test);
+                if let Some(e) = err {
+                    println!("    error: {}", e);
+                }
+            }
+        }
+    }
+
+    if failed_tests > 0 {
+        std::process::exit(1);
+    }
+}
+
+/// Recursively collect .vais files
+fn collect_vais_files(dir: &Path, files: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_vais_files(&path, files);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("vais") {
+                files.push(path);
+            }
         }
     }
 }

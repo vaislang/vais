@@ -1254,6 +1254,7 @@ mod tests {
             body,
             is_pub: false,
             is_async: false,
+            is_test: false,
             span: dummy_span(),
         }
     }

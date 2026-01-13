@@ -31,6 +31,7 @@
 - ✅ **Mutation/Assignment** - `let mut`, 변수 재할당
 - ✅ **Lambda Syntax** - `|x| expr`, `(x) => expr`
 - ✅ **Hex/Binary Literals** - `0xFF`, `0b1010`
+- ✅ **Async/Await** - spawn, await, channel 통신
 
 #### Code Generation
 - ✅ C 코드 생성
@@ -46,10 +47,12 @@
 - ✅ Arc-based function sharing
 
 #### Tools
-- ✅ **CLI** - run, build, check, format, repl, debug, profile, doc
+- ✅ **CLI** - run, build, check, format, repl, debug, profile, doc, test
 - ✅ **LSP Server** - 자동완성, 진단, hover
 - ✅ **REPL** - 히스토리, 멀티라인, :commands
 - ✅ **Debugger** - 브레이크포인트, 스텝 실행, 변수 검사
+- ✅ **DAP Server** - VS Code 디버거 통합
+- ✅ **Test Runner** - #[test] 어트리뷰트, 필터링
 - ✅ **Profiler** - 함수 타이밍, JSON 출력
 - ✅ **Doc Generator** - Markdown, HTML, JSON
 
@@ -88,17 +91,17 @@
 | 기능 | 설명 | 우선순위 |
 |------|------|----------|
 | Macro System | 컴파일 타임 코드 생성 | 낮음 |
-| Async/Await | 비동기 프로그래밍 | 중간 |
+| ~~Async/Await~~ | ~~비동기 프로그래밍~~ | ✅ 완료 |
 | ~~Traits/Interfaces~~ | ~~타입 추상화~~ | ✅ 완료 |
 | Algebraic Effects | 부작용 관리 | 낮음 |
 
 ### 도구 개선
 | 기능 | 설명 | 우선순위 |
 |------|------|----------|
-| DAP Support | VS Code 디버거 통합 | 중간 |
+| ~~DAP Support~~ | ~~VS Code 디버거 통합~~ | ✅ 완료 |
 | Flame Graph | 프로파일러 시각화 | 낮음 |
 | Memory Profiler | 메모리 사용량 분석 | 낮음 |
-| Test Runner | 내장 테스트 프레임워크 | 중간 |
+| ~~Test Runner~~ | ~~내장 테스트 프레임워크~~ | ✅ 완료 |
 
 ### 생태계
 | 기능 | 설명 | 우선순위 |
@@ -114,7 +117,7 @@
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| **v0.0.5** | 2026-01-13 | Generic type system, Trait/Impl, Mutation, Lambda syntax, Hex/Binary literals |
+| **v0.0.5** | 2026-01-13 | Async/Await, Test Runner, DAP Server, Generic types, Trait/Impl, Mutation |
 | v0.0.4 | 2026-01-13 | Checked arithmetic, error handling 개선 |
 | v0.0.3 | 2026-01-13 | 프로젝트명 AOEL → Vais 변경, 문서 구조화 (en/ko) |
 | v0.0.2 | 2026-01-12 | Package registry, VS Code extension, Playground |

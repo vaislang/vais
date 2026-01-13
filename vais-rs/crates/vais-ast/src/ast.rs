@@ -67,6 +67,8 @@ pub struct FunctionDef {
     pub is_pub: bool,
     /// async 함수 여부
     pub is_async: bool,
+    /// test 함수 여부 (#[test] 어트리뷰트)
+    pub is_test: bool,
     pub span: Span,
 }
 
@@ -641,6 +643,7 @@ mod tests {
             body: Expr::Integer(42, dummy_span()),
             is_pub: false,
             is_async: false,
+            is_test: false,
             span: dummy_span(),
         };
         let program = Program {
@@ -662,6 +665,7 @@ mod tests {
             body: Expr::Nil(dummy_span()),
             is_pub: false,
             is_async: false,
+            is_test: false,
             span: dummy_span(),
         };
         assert!(matches!(Item::Function(func), Item::Function(_)));
@@ -723,6 +727,7 @@ mod tests {
             ),
             is_pub: true,
             is_async: false,
+            is_test: false,
             span: dummy_span(),
         };
         assert_eq!(func.name, "add");
@@ -1139,6 +1144,7 @@ mod tests {
             ),
             is_pub: false,
             is_async: false,
+            is_test: false,
             span: dummy_span(),
         };
 

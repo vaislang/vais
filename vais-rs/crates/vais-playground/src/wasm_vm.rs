@@ -705,6 +705,8 @@ impl WasmVm {
                     Value::Bytes(_) => "bytes",
                     Value::Optional(_) => "optional",
                     Value::Error(_) => "error",
+                    Value::Future(_) => "future",
+                    Value::Channel(_) => "channel",
                 };
                 Ok(Value::String(t.to_string()))
             }

@@ -8,7 +8,7 @@ mod instruction;
 mod module;
 mod optimize;
 
-pub use value::{Value, ValueType};
+pub use value::{Value, ValueType, TaskId, ChannelId, FutureState, ChannelState};
 pub use instruction::{Instruction, OpCode, NodeIR, EdgeIR, NodeOpType, ReduceOp};
 pub use module::{Module, Function, FieldDef, ModuleMetadata};
 pub use optimize::{

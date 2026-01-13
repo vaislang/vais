@@ -3,6 +3,41 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Unique ID for async tasks
+pub type TaskId = u64;
+
+/// Unique ID for channels
+pub type ChannelId = u64;
+
+/// Future state
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FutureState {
+    /// Task is still running
+    Pending,
+    /// Task completed with a value
+    Completed(Box<Value>),
+    /// Task failed with an error
+    Failed(String),
+}
+
+/// Channel state (non-serializable due to Mutex)
+#[derive(Debug)]
+pub struct ChannelState {
+    pub buffer: Vec<Value>,
+    pub capacity: usize,
+    pub closed: bool,
+}
+
+impl ChannelState {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            buffer: Vec::with_capacity(capacity.max(1)),
+            capacity: capacity.max(1),
+            closed: false,
+        }
+    }
+}
+
 /// Runtime value types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
@@ -46,6 +81,12 @@ pub enum Value {
         captured: HashMap<String, Value>,
         body_id: usize,
     },
+
+    /// Future/Promise - async computation result
+    Future(TaskId),
+
+    /// Channel for async communication
+    Channel(ChannelId),
 }
 
 impl Value {
@@ -64,6 +105,8 @@ impl Value {
             Value::Optional(o) => o.is_some(),
             Value::Error(_) => false,
             Value::Closure { .. } => true,
+            Value::Future(_) => true,
+            Value::Channel(_) => true,
         }
     }
 
@@ -82,6 +125,8 @@ impl Value {
             Value::Optional(_) => ValueType::Optional,
             Value::Error(_) => ValueType::Error,
             Value::Closure { .. } => ValueType::Closure,
+            Value::Future(_) => ValueType::Future,
+            Value::Channel(_) => ValueType::Channel,
         }
     }
 
@@ -205,6 +250,8 @@ impl Value {
                 params.hash(&mut hasher);
                 body_id.hash(&mut hasher);
             }
+            Value::Future(id) => id.hash(&mut hasher),
+            Value::Channel(id) => id.hash(&mut hasher),
         }
 
         hasher.finish()
@@ -254,6 +301,8 @@ impl std::fmt::Display for Value {
             Value::Optional(None) => write!(f, "None"),
             Value::Error(e) => write!(f, "Error({})", e),
             Value::Closure { params, .. } => write!(f, "<closure({})>", params.join(", ")),
+            Value::Future(id) => write!(f, "<future:{}>", id),
+            Value::Channel(id) => write!(f, "<channel:{}>", id),
         }
     }
 }
@@ -273,6 +322,8 @@ pub enum ValueType {
     Optional,
     Error,
     Closure,
+    Future,
+    Channel,
 }
 
 impl std::fmt::Display for ValueType {
@@ -290,6 +341,8 @@ impl std::fmt::Display for ValueType {
             ValueType::Optional => write!(f, "OPTIONAL"),
             ValueType::Error => write!(f, "ERROR"),
             ValueType::Closure => write!(f, "CLOSURE"),
+            ValueType::Future => write!(f, "FUTURE"),
+            ValueType::Channel => write!(f, "CHANNEL"),
         }
     }
 }
