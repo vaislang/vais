@@ -598,15 +598,17 @@ fn copy_vais_files(src: &Path, dest: &Path) -> Result<(), String> {
             let path = entry.path();
 
             if path.is_dir() {
-                let name = path.file_name().unwrap();
-                let new_dest = dest.join(name);
-                fs::create_dir_all(&new_dest)
-                    .map_err(|e| format!("Failed to create directory: {}", e))?;
-                copy_vais_files(&path, &new_dest)?;
+                if let Some(name) = path.file_name() {
+                    let new_dest = dest.join(name);
+                    fs::create_dir_all(&new_dest)
+                        .map_err(|e| format!("Failed to create directory: {}", e))?;
+                    copy_vais_files(&path, &new_dest)?;
+                }
             } else if path.extension().is_some_and(|e| e == "vais") {
-                let name = path.file_name().unwrap();
-                fs::copy(&path, dest.join(name))
-                    .map_err(|e| format!("Failed to copy file: {}", e))?;
+                if let Some(name) = path.file_name() {
+                    fs::copy(&path, dest.join(name))
+                        .map_err(|e| format!("Failed to copy file: {}", e))?;
+                }
             }
         }
     }

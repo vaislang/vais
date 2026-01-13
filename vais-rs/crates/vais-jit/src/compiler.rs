@@ -487,7 +487,8 @@ impl JitCompiler {
         }
 
         // 3단계: Cranelift 블록 생성 (첫 블록은 loop_header를 사용)
-        let current_block = builder.current_block().unwrap();
+        let current_block = builder.current_block()
+            .ok_or_else(|| JitError::Internal("No current block in builder".to_string()))?;
         let mut blocks: Vec<Block> = Vec::new();
         blocks.push(current_block); // 블록 0은 현재 블록 (loop_header 내부)
 
@@ -722,7 +723,8 @@ impl JitCompiler {
         }
 
         // 3단계: Cranelift 블록 생성
-        let entry_block = builder.current_block().unwrap();
+        let entry_block = builder.current_block()
+            .ok_or_else(|| JitError::Internal("No current block in builder".to_string()))?;
         let mut blocks: Vec<Block> = Vec::new();
         blocks.push(entry_block);
 
@@ -1577,7 +1579,8 @@ impl JitCompiler {
             }
         }
 
-        let entry_block = builder.current_block().unwrap();
+        let entry_block = builder.current_block()
+            .ok_or_else(|| JitError::Internal("No current block in builder".to_string()))?;
         let mut blocks: Vec<Block> = Vec::new();
         blocks.push(entry_block);
 
@@ -1758,7 +1761,8 @@ impl JitCompiler {
             }
         }
 
-        let current_block = builder.current_block().unwrap();
+        let current_block = builder.current_block()
+            .ok_or_else(|| JitError::Internal("No current block in builder".to_string()))?;
         let mut blocks: Vec<Block> = Vec::new();
         blocks.push(current_block);
 
@@ -2378,7 +2382,8 @@ impl JitCompiler {
         block_starts.dedup();
 
         // 블록 생성
-        let entry_block = builder.current_block().unwrap();
+        let entry_block = builder.current_block()
+            .ok_or_else(|| JitError::Internal("No current block in builder".to_string()))?;
         let mut blocks: Vec<Block> = vec![entry_block];
         let mut ip_to_block: HashMap<usize, usize> = HashMap::new();
         ip_to_block.insert(0, 0);

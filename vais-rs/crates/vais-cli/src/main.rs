@@ -518,7 +518,10 @@ fn compile_file(path: &PathBuf, output: Option<&PathBuf>) {
             "params": f.params,
             "instructions": f.instructions.iter().map(|i| format!("{:?}", i.opcode)).collect::<Vec<_>>()
         })
-    }).collect::<Vec<_>>()).unwrap();
+    }).collect::<Vec<_>>()).unwrap_or_else(|e| {
+        eprintln!("Failed to serialize JSON: {}", e);
+        std::process::exit(1);
+    });
 
     match output {
         Some(out_path) => {
@@ -1410,7 +1413,10 @@ fn cmd_init(path: Option<&PathBuf>, name: Option<&str>) {
 
     match package::init_project(&project_path, name) {
         Ok(()) => {
-            let manifest = package::Manifest::load(&project_path).unwrap();
+            let manifest = package::Manifest::load(&project_path).unwrap_or_else(|e| {
+                eprintln!("Warning: Failed to load manifest: {}", e);
+                std::process::exit(1);
+            });
             println!("Initialized Vais project '{}'", manifest.package.name);
             println!();
             println!("Created files:");
