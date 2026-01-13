@@ -893,6 +893,38 @@ impl TypeChecker {
                     ReduceKind::Custom(_, _) => Ok(Type::Any),
                 }
             }
+
+            // Macro call - 매크로 호출 (타입 체크 시점에서는 확장되어 있어야 함)
+            Expr::MacroCall { name, span, .. } => {
+                // 매크로가 아직 확장되지 않았으면 에러
+                Err(TypeError::Internal(format!(
+                    "Unexpanded macro call: {}! at {:?}",
+                    name, span
+                )))
+            }
+
+            // Effect perform - 이펙트 수행
+            Expr::Perform { effect: _, operation: _, args, span: _ } => {
+                // 이펙트 핸들러 컨텍스트에서 타입이 결정됨
+                // 일반적으로 Any 반환
+                for arg in args {
+                    self.infer_expr(arg)?;
+                }
+                Ok(Type::Any)
+            }
+
+            // Effect handle - 이펙트 핸들링
+            Expr::Handle { body, handlers, span: _ } => {
+                // body의 타입 추론
+                let body_type = self.infer_expr(body)?;
+
+                // 각 핸들러의 body 타입이 일관성 있는지 확인
+                for handler in handlers {
+                    self.infer_expr(&handler.body)?;
+                }
+
+                Ok(body_type)
+            }
         }
     }
 

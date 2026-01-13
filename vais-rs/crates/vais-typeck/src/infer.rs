@@ -335,6 +335,9 @@ impl TypeEnv {
             Type::Struct(fields) => Type::Struct(
                 fields.iter().map(|(k, v)| (k.clone(), self.apply_substitutions(v, subs))).collect()
             ),
+            Type::Set(t) => Type::Set(Box::new(self.apply_substitutions(t, subs))),
+            Type::Future(t) => Type::Future(Box::new(self.apply_substitutions(t, subs))),
+            Type::Channel(t) => Type::Channel(Box::new(self.apply_substitutions(t, subs))),
             _ => ty.clone()
         }
     }
@@ -363,6 +366,9 @@ impl TypeEnv {
             ),
             Type::Optional(t) => Type::Optional(Box::new(self.resolve(t))),
             Type::Result(t) => Type::Result(Box::new(self.resolve(t))),
+            Type::Set(t) => Type::Set(Box::new(self.resolve(t))),
+            Type::Future(t) => Type::Future(Box::new(self.resolve(t))),
+            Type::Channel(t) => Type::Channel(Box::new(self.resolve(t))),
             _ => ty.clone(),
         }
     }
@@ -419,6 +425,15 @@ impl TypeEnv {
                 self.unify(k1, k2, span)?;
                 self.unify(v1, v2, span)
             }
+
+            // Set 통일
+            (Type::Set(a), Type::Set(b)) => self.unify(a, b, span),
+
+            // Future 통일
+            (Type::Future(a), Type::Future(b)) => self.unify(a, b, span),
+
+            // Channel 통일
+            (Type::Channel(a), Type::Channel(b)) => self.unify(a, b, span),
 
             // Struct 통일 (필드 이름과 타입이 모두 일치해야 함)
             (Type::Struct(f1), Type::Struct(f2)) if f1.len() == f2.len() => {
@@ -550,6 +565,26 @@ impl TypeEnv {
             (Type::Map(k1, v1), Type::Map(k2, v2)) => {
                 self.types_match(k1, k2) && self.types_match(v1, v2)
             }
+            (Type::Set(a), Type::Set(b)) => self.types_match(a, b),
+            (Type::Function(p1, r1), Type::Function(p2, r2)) => {
+                p1.len() == p2.len()
+                    && p1.iter().zip(p2.iter()).all(|(x, y)| self.types_match(x, y))
+                    && self.types_match(r1, r2)
+            }
+            (Type::Optional(a), Type::Optional(b)) => self.types_match(a, b),
+            (Type::Result(a), Type::Result(b)) => self.types_match(a, b),
+            (Type::Future(a), Type::Future(b)) => self.types_match(a, b),
+            (Type::Channel(a), Type::Channel(b)) => self.types_match(a, b),
+            (Type::Struct(f1), Type::Struct(f2)) => {
+                f1.len() == f2.len()
+                    && f1.iter().all(|(name, ty1)| {
+                        f2.iter()
+                            .find(|(n, _)| n == name)
+                            .is_some_and(|(_, ty2)| self.types_match(ty1, ty2))
+                    })
+            }
+            (Type::Named(n1), Type::Named(n2)) => n1 == n2,
+            (Type::Generic(g1), Type::Generic(g2)) => g1 == g2,
             _ => false,
         }
     }

@@ -797,9 +797,8 @@ impl Lowerer {
                 };
                 instrs.push(Instruction::new(OpCode::Map(Box::new(map_body))));
 
-                // 배열을 세트로 변환 (MakeSet은 스택의 배열을 변환)
-                // 여기서는 결과를 배열로 남기고 런타임에서 세트로 변환하도록 함
-                // TODO: ArrayToSet opcode 추가 필요
+                // 배열을 세트로 변환 (중복 제거)
+                instrs.push(Instruction::new(OpCode::ArrayToSet));
             }
 
             // Await 표현식
@@ -861,6 +860,66 @@ impl Lowerer {
                 };
 
                 instrs.push(Instruction::new(OpCode::ParallelReduce(reduce_op, init_value)));
+            }
+
+            // 매크로 호출 (컴파일 타임에 확장되어야 함)
+            Expr::MacroCall { name, args: _, span: _ } => {
+                // 런타임에는 매크로가 이미 확장되어 있어야 함
+                // 여기서는 에러를 반환하거나, 빌트인 매크로를 처리
+                return Err(LowerError::UnsupportedExpr(format!(
+                    "Macro '{}!' was not expanded at compile time",
+                    name
+                )));
+            }
+
+            // Effect 수행
+            Expr::Perform { effect, operation, args, span: _ } => {
+                // perform Effect.op(args) -> 런타임에 핸들러를 찾아서 실행
+                for arg in args {
+                    instrs.extend(self.lower_expr(arg)?);
+                }
+                instrs.push(Instruction::new(OpCode::Perform(
+                    effect.clone(),
+                    operation.clone(),
+                    args.len(),
+                )));
+            }
+
+            // Effect 핸들링
+            Expr::Handle { body, handlers, span: _ } => {
+                // handle expr { handlers } -> 핸들러를 등록하고 body 실행
+                // 핸들러 정보를 IR로 변환
+                let body_instrs = self.lower_expr(body)?;
+
+                // 핸들러들을 컴파일
+                let mut handler_data = Vec::new();
+                for handler in handlers {
+                    let handler_body = self.lower_expr(&handler.body)?;
+                    handler_data.push((
+                        handler.effect.clone(),
+                        handler.operation.clone(),
+                        handler.params.clone(),
+                        handler.resume.clone(),
+                        handler_body,
+                    ));
+                }
+
+                instrs.push(Instruction::new(OpCode::InstallHandlers(handler_data.len())));
+
+                // 핸들러 바디들을 저장
+                for (effect, op, params, resume, body_instrs) in handler_data {
+                    instrs.push(Instruction::new(OpCode::DefineHandler(
+                        effect,
+                        op,
+                        params.len(),
+                        resume.is_some(),
+                    )));
+                    instrs.extend(body_instrs);
+                    instrs.push(Instruction::new(OpCode::EndHandler));
+                }
+
+                instrs.extend(body_instrs);
+                instrs.push(Instruction::new(OpCode::UninstallHandlers));
             }
         }
 

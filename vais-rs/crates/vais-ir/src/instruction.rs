@@ -75,6 +75,8 @@ pub enum OpCode {
     MakeArray(usize),
     /// Create set from top N elements
     MakeSet(usize),
+    /// Convert array on stack to set
+    ArrayToSet,
     /// Create struct from field names
     MakeStruct(Vec<String>),
     /// Slice array: arr[start:end]
@@ -195,6 +197,20 @@ pub enum OpCode {
     MapFilter(Box<Vec<Instruction>>, Box<Vec<Instruction>>),
     /// Map, Filter, then Reduce in single pass
     MapFilterReduce(Box<Vec<Instruction>>, Box<Vec<Instruction>>, ReduceOp, Value),
+
+    // === Algebraic Effects ===
+    /// Perform an effect operation: (effect_name, operation_name, arg_count)
+    Perform(String, String, usize),
+    /// Install effect handlers: (handler_count)
+    InstallHandlers(usize),
+    /// Define a handler: (effect, op, param_count, has_resume)
+    DefineHandler(String, String, usize, bool),
+    /// End of handler definition
+    EndHandler,
+    /// Uninstall effect handlers
+    UninstallHandlers,
+    /// Resume a continuation
+    Resume,
 
     // === Special ===
     /// No operation

@@ -195,6 +195,7 @@ impl AsyncRuntime {
         }
     }
 
+    #[allow(dead_code)]
     fn fail_task(&mut self, id: TaskId, error: String) {
         if let Some(state) = self.tasks.get(&id) {
             let mut state = state.lock().expect("task lock poisoned");
@@ -254,6 +255,7 @@ impl AsyncRuntime {
         }
     }
 
+    #[allow(dead_code)]
     fn close_channel(&self, id: ChannelId) {
         if let Some(chan) = self.channels.get(&id) {
             let mut chan = chan.lock().expect("channel lock poisoned");
@@ -828,6 +830,28 @@ impl Vm {
                     struct_val.insert(field.clone(), value);
                 }
                 self.stack.push(Value::Struct(struct_val));
+            }
+            OpCode::ArrayToSet => {
+                let arr = self.pop()?;
+                match arr {
+                    Value::Array(items) => {
+                        // 배열을 Set으로 변환 (중복 제거)
+                        let mut seen = std::collections::HashSet::new();
+                        let unique: Vec<Value> = items
+                            .into_iter()
+                            .filter(|v| {
+                                let key = format!("{:?}", v);
+                                seen.insert(key)
+                            })
+                            .collect();
+                        self.stack.push(Value::Array(unique)); // Set은 내부적으로 Array로 표현
+                    }
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "ArrayToSet requires an array".to_string(),
+                        ));
+                    }
+                }
             }
             OpCode::Slice => {
                 let end = self.pop()?;

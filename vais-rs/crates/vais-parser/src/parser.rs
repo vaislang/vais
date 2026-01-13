@@ -236,6 +236,28 @@ impl<'src> Parser<'src> {
                 let ffi_block = self.parse_ffi_block()?;
                 Ok(Item::Ffi(ffi_block))
             }
+            TokenKind::Macro => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "macro definitions cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                self.advance();
+                let macro_def = self.parse_macro_def(is_pub)?;
+                Ok(Item::Macro(macro_def))
+            }
+            TokenKind::Effect => {
+                if is_async {
+                    return Err(ParseError::InvalidSyntax {
+                        message: "effect definitions cannot be async".to_string(),
+                        span: self.current.span,
+                    });
+                }
+                self.advance();
+                let effect_def = self.parse_effect_def(is_pub)?;
+                Ok(Item::Effect(effect_def))
+            }
             TokenKind::Identifier => {
                 // 함수 정의: name(params) = body
                 // 또는 함수 호출/표현식
@@ -1012,6 +1034,200 @@ impl<'src> Parser<'src> {
     }
 
     // =========================================================================
+    // 매크로 파싱
+    // =========================================================================
+
+    /// 매크로 정의 파싱: macro name! { (pattern) => { body }, ... }
+    fn parse_macro_def(&mut self, is_pub: bool) -> ParseResult<MacroDef> {
+        #[allow(unused_imports)]
+        use vais_ast::{MacroDef, MacroRule, MacroToken, MacroCaptureKind, MacroRepKind, MacroDelimiter};
+
+        let start = self.current.span;
+        let name = self.expect_identifier()?;
+
+        // name! 형식 확인
+        self.expect(TokenKind::Bang)?;
+
+        self.expect(TokenKind::LBrace)?;
+        while self.match_token(TokenKind::Newline) {}
+
+        let mut rules = Vec::new();
+
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+            let rule_start = self.current.span;
+
+            // 패턴: (...)
+            self.expect(TokenKind::LParen)?;
+            let pattern = self.parse_macro_tokens(TokenKind::RParen)?;
+            self.expect(TokenKind::RParen)?;
+
+            self.expect(TokenKind::FatArrow)?;
+
+            // 바디: {...}
+            self.expect(TokenKind::LBrace)?;
+            let body = self.parse_macro_tokens(TokenKind::RBrace)?;
+            self.expect(TokenKind::RBrace)?;
+
+            rules.push(MacroRule {
+                pattern,
+                body,
+                span: rule_start.merge(self.previous.span),
+            });
+
+            while self.match_token(TokenKind::Newline) {}
+            // 쉼표는 옵션
+            self.match_token(TokenKind::Comma);
+            while self.match_token(TokenKind::Newline) {}
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(MacroDef {
+            name,
+            rules,
+            is_pub,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// 매크로 토큰들 파싱
+    fn parse_macro_tokens(&mut self, end_token: TokenKind) -> ParseResult<Vec<MacroToken>> {
+        use vais_ast::{MacroToken, MacroCaptureKind, MacroRepKind, MacroDelimiter};
+
+        let mut tokens = Vec::new();
+
+        while !self.check(end_token.clone()) && !self.check(TokenKind::Eof) {
+            if self.check(TokenKind::Dollar) {
+                self.advance();
+
+                if self.check(TokenKind::LParen) {
+                    // 반복: $(...)*
+                    self.advance();
+                    let inner = self.parse_macro_tokens(TokenKind::RParen)?;
+                    self.expect(TokenKind::RParen)?;
+
+                    let rep_kind = if self.match_token(TokenKind::Star) {
+                        MacroRepKind::ZeroOrMore
+                    } else if self.match_token(TokenKind::Plus) {
+                        MacroRepKind::OneOrMore
+                    } else if self.match_token(TokenKind::Question) {
+                        MacroRepKind::ZeroOrOne
+                    } else {
+                        MacroRepKind::ZeroOrMore
+                    };
+
+                    tokens.push(MacroToken::Repetition(inner, rep_kind));
+                } else if self.check(TokenKind::Identifier) {
+                    // 캡처: $name:kind
+                    let name = self.current.text.clone();
+                    self.advance();
+
+                    if self.match_token(TokenKind::Colon) {
+                        let kind_name = self.expect_identifier()?;
+                        let kind = match kind_name.as_str() {
+                            "expr" => MacroCaptureKind::Expr,
+                            "ident" => MacroCaptureKind::Ident,
+                            "ty" => MacroCaptureKind::Type,
+                            "tt" => MacroCaptureKind::TokenTree,
+                            "literal" => MacroCaptureKind::Literal,
+                            "pat" => MacroCaptureKind::Pattern,
+                            "block" => MacroCaptureKind::Block,
+                            _ => MacroCaptureKind::TokenTree,
+                        };
+                        tokens.push(MacroToken::Capture(name, kind));
+                    } else {
+                        // $name만 있으면 TokenTree로 간주
+                        tokens.push(MacroToken::Capture(name, MacroCaptureKind::TokenTree));
+                    }
+                }
+            } else if self.check(TokenKind::LParen) {
+                self.advance();
+                let inner = self.parse_macro_tokens(TokenKind::RParen)?;
+                self.expect(TokenKind::RParen)?;
+                tokens.push(MacroToken::Group(MacroDelimiter::Paren, inner));
+            } else if self.check(TokenKind::LBracket) {
+                self.advance();
+                let inner = self.parse_macro_tokens(TokenKind::RBracket)?;
+                self.expect(TokenKind::RBracket)?;
+                tokens.push(MacroToken::Group(MacroDelimiter::Bracket, inner));
+            } else if self.check(TokenKind::LBrace) {
+                self.advance();
+                let inner = self.parse_macro_tokens(TokenKind::RBrace)?;
+                self.expect(TokenKind::RBrace)?;
+                tokens.push(MacroToken::Group(MacroDelimiter::Brace, inner));
+            } else {
+                // 리터럴 토큰
+                tokens.push(MacroToken::Literal(self.current.text.clone()));
+                self.advance();
+            }
+        }
+
+        Ok(tokens)
+    }
+
+    // =========================================================================
+    // Algebraic Effects 파싱
+    // =========================================================================
+
+    /// Effect 정의 파싱: effect Name { op(params) -> T, ... }
+    fn parse_effect_def(&mut self, is_pub: bool) -> ParseResult<EffectDef> {
+        use vais_ast::{EffectDef, EffectOp};
+
+        let start = self.current.span;
+        let name = self.expect_identifier()?;
+
+        // 타입 파라미터 (옵션)
+        let type_params = if self.check(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            vec![]
+        };
+
+        self.expect(TokenKind::LBrace)?;
+        while self.match_token(TokenKind::Newline) {}
+
+        let mut operations = Vec::new();
+
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+            let op_start = self.current.span;
+            let op_name = self.expect_identifier()?;
+
+            // 파라미터
+            self.expect(TokenKind::LParen)?;
+            let params = self.parse_params()?;
+            self.expect(TokenKind::RParen)?;
+
+            // 반환 타입 (옵션)
+            let return_type = if self.match_token(TokenKind::Arrow) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            operations.push(EffectOp {
+                name: op_name,
+                params,
+                return_type,
+                span: op_start.merge(self.previous.span),
+            });
+
+            while self.match_token(TokenKind::Newline) {}
+            self.match_token(TokenKind::Comma);
+            while self.match_token(TokenKind::Newline) {}
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(EffectDef {
+            name,
+            type_params,
+            operations,
+            is_pub,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    // =========================================================================
     // 표현식 파싱 (Pratt Parser)
     // =========================================================================
 
@@ -1571,10 +1787,23 @@ impl<'src> Parser<'src> {
                 Ok(Expr::Nil(span))
             }
 
-            // 식별자 또는 Struct 리터럴
+            // 식별자, Struct 리터럴, 또는 매크로 호출
             TokenKind::Identifier => {
                 let name = self.current.text.clone();
                 self.advance();
+
+                // 매크로 호출: name!(args)
+                if self.check(TokenKind::Bang) {
+                    self.advance(); // consume '!'
+                    self.expect(TokenKind::LParen)?;
+                    let args = self.parse_args()?;
+                    self.expect(TokenKind::RParen)?;
+                    return Ok(Expr::MacroCall {
+                        name,
+                        args,
+                        span: span.merge(self.previous.span),
+                    });
+                }
 
                 // Struct 리터럴: TypeName { field: value, ... }
                 // 대문자로 시작하는 식별자만 Struct 리터럴로 처리
@@ -1835,6 +2064,83 @@ impl<'src> Parser<'src> {
                 let expr = self.parse_unary()?;
                 let end_span = expr.span();
                 Ok(Expr::Spawn(Box::new(expr), span.merge(end_span)))
+            }
+
+            // perform Effect.op(args)
+            TokenKind::Perform => {
+                self.advance();
+                let effect = self.expect_identifier()?;
+                self.expect(TokenKind::Dot)?;
+                let operation = self.expect_identifier()?;
+                self.expect(TokenKind::LParen)?;
+                let args = self.parse_args()?;
+                self.expect(TokenKind::RParen)?;
+                Ok(Expr::Perform {
+                    effect,
+                    operation,
+                    args,
+                    span: span.merge(self.previous.span),
+                })
+            }
+
+            // handle expr { Effect.op(params) => handler, ... }
+            TokenKind::Handle => {
+                self.advance();
+                let body = Box::new(self.parse_unary()?);
+                self.expect(TokenKind::LBrace)?;
+                while self.match_token(TokenKind::Newline) {}
+
+                let mut handlers = Vec::new();
+                while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+                    let handler_start = self.current.span;
+                    let effect = self.expect_identifier()?;
+                    self.expect(TokenKind::Dot)?;
+                    let operation = self.expect_identifier()?;
+
+                    self.expect(TokenKind::LParen)?;
+                    let mut params = Vec::new();
+                    if !self.check(TokenKind::RParen) {
+                        loop {
+                            params.push(self.expect_identifier()?);
+                            if !self.match_token(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RParen)?;
+
+                    // resume 콜백 이름 (옵션): with resume
+                    let resume = if self.check(TokenKind::Identifier) && self.current.text == "with" {
+                        self.advance();
+                        Some(self.expect_identifier()?)
+                    } else {
+                        None
+                    };
+
+                    self.expect(TokenKind::FatArrow)?;
+                    let handler_body = self.parse_expr()?;
+
+                    handlers.push(vais_ast::EffectHandler {
+                        effect,
+                        operation,
+                        params,
+                        resume,
+                        body: handler_body,
+                        span: handler_start.merge(self.previous.span),
+                    });
+
+                    while self.match_token(TokenKind::Newline) {}
+                    self.match_token(TokenKind::Comma);
+                    while self.match_token(TokenKind::Newline) {}
+                }
+
+                self.expect(TokenKind::RBrace)?;
+
+                Ok(Expr::Handle {
+                    body,
+                    handlers,
+                    span: span.merge(self.previous.span),
+                })
             }
 
             _ => Err(ParseError::UnexpectedToken {
