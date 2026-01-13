@@ -474,7 +474,7 @@ impl WasmVm {
         }
     }
 
-    fn map_op(&mut self, body: &Box<Vec<Instruction>>) -> WasmVmResult<()> {
+    fn map_op(&mut self, body: &[Instruction]) -> WasmVmResult<()> {
         let arr = self.pop()?;
 
         if let Value::Array(items) = arr {
@@ -496,7 +496,7 @@ impl WasmVm {
         }
     }
 
-    fn filter_op(&mut self, body: &Box<Vec<Instruction>>) -> WasmVmResult<()> {
+    fn filter_op(&mut self, body: &[Instruction]) -> WasmVmResult<()> {
         let arr = self.pop()?;
 
         if let Value::Array(items) = arr {

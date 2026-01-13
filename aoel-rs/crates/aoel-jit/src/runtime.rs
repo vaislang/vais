@@ -171,6 +171,12 @@ impl JitRuntime {
     }
 
     /// JIT 컴파일된 함수 직접 호출 (Int 전용)
+    ///
+    /// # Safety
+    ///
+    /// - 함수가 JIT 컴파일되어 있어야 함 (`is_jitted(name)`이 true)
+    /// - `args` 배열의 길이가 함수의 파라미터 개수와 일치해야 함
+    /// - 함수가 정수 전용으로 컴파일되어 있어야 함
     pub unsafe fn call_jit_int(&self, name: &str, args: &[i64]) -> JitResult<i64> {
         let compiled = self.compiled_cache.get(name)
             .ok_or_else(|| JitError::FunctionNotFound(name.to_string()))?;

@@ -279,7 +279,7 @@ fn copy_aoel_files(src: &Path, dest: &Path) -> Result<(), String> {
                 fs::create_dir_all(&new_dest)
                     .map_err(|e| format!("Failed to create directory: {}", e))?;
                 copy_aoel_files(&path, &new_dest)?;
-            } else if path.extension().map_or(false, |e| e == "aoel") {
+            } else if path.extension().is_some_and(|e| e == "aoel") {
                 let name = path.file_name().unwrap();
                 fs::copy(&path, dest.join(name))
                     .map_err(|e| format!("Failed to copy file: {}", e))?;

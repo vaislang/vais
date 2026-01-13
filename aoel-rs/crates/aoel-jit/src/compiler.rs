@@ -1008,6 +1008,10 @@ impl JitCompiler {
     }
 
     /// 컴파일된 함수 호출 (Int 전용)
+    ///
+    /// # Safety
+    /// - 함수가 `compile_function_int`로 컴파일되어 있어야 함
+    /// - `args` 배열의 길이가 함수의 파라미터 개수와 일치해야 함
     pub unsafe fn call_int(&self, name: &str, args: &[i64]) -> JitResult<i64> {
         let compiled = self.compiled_functions.get(name)
             .ok_or_else(|| JitError::FunctionNotFound(name.to_string()))?;
@@ -1904,6 +1908,855 @@ impl JitCompiler {
 
         Ok(())
     }
+
+    // ========================================================================
+    // Float Support
+    // ========================================================================
+
+    /// 함수를 JIT 컴파일 (Float 전용 최적화)
+    pub fn compile_function_float(&mut self, func: &CompiledFunction) -> JitResult<*const u8> {
+        let name = &func.name;
+
+        // 이미 컴파일된 경우 캐시에서 반환
+        if let Some(compiled) = self.compiled_functions.get(name) {
+            return Ok(compiled.ptr);
+        }
+
+        // 재귀 호출이 있는지 확인
+        let has_self_call = func.instructions.iter().any(|i| {
+            matches!(i.opcode, OpCode::SelfCall(_) | OpCode::TailSelfCall(_))
+        });
+
+        if has_self_call {
+            self.compile_recursive_function_float(func)
+        } else {
+            self.compile_simple_function_float(func)
+        }
+    }
+
+    /// 단순 함수 컴파일 (Float, 재귀 없음)
+    fn compile_simple_function_float(&mut self, func: &CompiledFunction) -> JitResult<*const u8> {
+        let name = &func.name;
+
+        // 함수 시그니처 정의: (f64*, usize) -> f64
+        let ptr_type = self.module.target_config().pointer_type();
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(ptr_type)); // args pointer
+        sig.params.push(AbiParam::new(types::I64)); // arg count
+        sig.returns.push(AbiParam::new(types::F64)); // return value
+
+        // 함수 선언
+        let func_id = self.module
+            .declare_function(name, Linkage::Local, &sig)?;
+
+        // 컨텍스트 생성
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig;
+        ctx.func.name = cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32());
+
+        // 함수 빌더 컨텍스트
+        let mut func_ctx = FunctionBuilderContext::new();
+
+        {
+            let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
+
+            // 엔트리 블록 생성
+            let entry_block = builder.create_block();
+            builder.append_block_params_for_function_params(entry_block);
+            builder.switch_to_block(entry_block);
+
+            // 인자 추출
+            let args_ptr = builder.block_params(entry_block)[0];
+
+            // 로컬 변수 맵 (파라미터 -> SSA value)
+            let mut locals: HashMap<String, cranelift::prelude::Value> = HashMap::new();
+
+            // 파라미터를 로컬 변수로 로드 (f64로)
+            for (i, param) in func.params.iter().enumerate() {
+                let offset = (i * 8) as i32;
+                let val = builder.ins().load(types::F64, MemFlags::trusted(), args_ptr, offset);
+                locals.insert(param.clone(), val);
+            }
+
+            // 스택 시뮬레이션
+            let mut stack: Vec<cranelift::prelude::Value> = Vec::new();
+
+            // 제어 흐름이 있는지 확인
+            let has_control_flow = func.instructions.iter().any(|i| {
+                matches!(i.opcode, OpCode::Jump(_) | OpCode::JumpIf(_) | OpCode::JumpIfNot(_))
+            });
+
+            if has_control_flow {
+                Self::compile_float_instructions_with_control_flow(&mut builder, &func.instructions, &mut locals, &mut stack)?;
+            } else {
+                builder.seal_block(entry_block);
+                Self::compile_float_linear_instructions(&mut builder, &func.instructions, &mut locals, &mut stack)?;
+
+                let result = stack.pop().ok_or_else(|| JitError::CodeGen("Empty stack at return".to_string()))?;
+                builder.ins().return_(&[result]);
+            }
+
+            builder.finalize();
+        }
+
+        // 컴파일 및 함수 포인터 획득
+        self.module
+            .define_function(func_id, &mut ctx)
+            .map_err(|e| JitError::CodeGen(e.to_string()))?;
+
+        self.module.clear_context(&mut ctx);
+        self.module.finalize_definitions()
+            .map_err(|e| JitError::Module(e.to_string()))?;
+
+        let code_ptr = self.module.get_finalized_function(func_id);
+
+        // 캐시에 저장
+        self.compiled_functions.insert(name.clone(), CompiledFn {
+            name: name.clone(),
+            ptr: code_ptr,
+            signature: FnSignature::FloatOnly { param_count: func.params.len() },
+        });
+
+        Ok(code_ptr)
+    }
+
+    /// 재귀 함수 컴파일 (Float, SelfCall/TailSelfCall 지원)
+    fn compile_recursive_function_float(&mut self, func: &CompiledFunction) -> JitResult<*const u8> {
+        let name = &func.name;
+        let param_count = func.params.len();
+
+        // 함수 시그니처 정의: (f64*, usize) -> f64
+        let ptr_type = self.module.target_config().pointer_type();
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(ptr_type));
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::F64));
+
+        // 함수 선언
+        let func_id = self.module
+            .declare_function(name, Linkage::Local, &sig)?;
+
+        // 컨텍스트 생성
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = sig.clone();
+        ctx.func.name = cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32());
+
+        // 함수 참조
+        let self_func_ref = self.module.declare_func_in_func(func_id, &mut ctx.func);
+
+        // 함수 빌더 컨텍스트
+        let mut func_ctx = FunctionBuilderContext::new();
+
+        {
+            let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
+
+            let entry_block = builder.create_block();
+            builder.append_block_params_for_function_params(entry_block);
+
+            // 루프 헤더 블록 - Float 파라미터
+            let loop_header = builder.create_block();
+            for _ in 0..param_count {
+                builder.append_block_param(loop_header, types::F64);
+            }
+
+            let return_block = builder.create_block();
+
+            // 결과 변수
+            let result_var = Variable::new(0);
+            builder.declare_var(result_var, types::F64);
+
+            // 파라미터 변수들
+            let mut param_vars: Vec<Variable> = Vec::new();
+            for i in 0..param_count {
+                let var = Variable::new(i + 1);
+                builder.declare_var(var, types::F64);
+                param_vars.push(var);
+            }
+
+            // === Entry Block ===
+            builder.switch_to_block(entry_block);
+            let args_ptr = builder.block_params(entry_block)[0];
+
+            // 초기 파라미터 로드 (f64)
+            let mut initial_params: Vec<cranelift::prelude::Value> = Vec::new();
+            for i in 0..param_count {
+                let offset = (i * 8) as i32;
+                let val = builder.ins().load(types::F64, MemFlags::trusted(), args_ptr, offset);
+                initial_params.push(val);
+            }
+
+            // 기본 result 초기화
+            let zero = builder.ins().f64const(0.0);
+            builder.def_var(result_var, zero);
+
+            // 루프 헤더로 점프
+            builder.ins().jump(loop_header, &initial_params);
+            builder.seal_block(entry_block);
+
+            // === Loop Header Block ===
+            builder.switch_to_block(loop_header);
+
+            let loop_params = builder.block_params(loop_header).to_vec();
+            for (i, &val) in loop_params.iter().enumerate() {
+                builder.def_var(param_vars[i], val);
+            }
+
+            // 스택 및 로컬
+            let mut stack: Vec<cranelift::prelude::Value> = Vec::new();
+            let mut locals: HashMap<String, cranelift::prelude::Value> = HashMap::new();
+
+            for (i, param_name) in func.params.iter().enumerate() {
+                locals.insert(param_name.clone(), loop_params[i]);
+            }
+
+            // 제어 흐름 분석
+            let has_control_flow = func.instructions.iter().any(|i| {
+                matches!(i.opcode, OpCode::Jump(_) | OpCode::JumpIf(_) | OpCode::JumpIfNot(_))
+            });
+
+            if has_control_flow {
+                Self::compile_float_recursive_with_cf(
+                    &mut builder,
+                    func,
+                    &mut locals,
+                    &mut stack,
+                    result_var,
+                    &param_vars,
+                    loop_header,
+                    return_block,
+                    self_func_ref,
+                    ptr_type,
+                )?;
+            } else {
+                // 선형 코드
+                Self::compile_float_recursive_linear(
+                    &mut builder,
+                    func,
+                    &mut locals,
+                    &mut stack,
+                    result_var,
+                    loop_header,
+                    return_block,
+                    self_func_ref,
+                    ptr_type,
+                )?;
+            }
+
+            // === Return Block ===
+            builder.switch_to_block(return_block);
+            builder.seal_block(return_block);
+            let final_result = builder.use_var(result_var);
+            builder.ins().return_(&[final_result]);
+
+            builder.finalize();
+        }
+
+        // 컴파일 및 함수 포인터 획득
+        self.module
+            .define_function(func_id, &mut ctx)
+            .map_err(|e| JitError::CodeGen(e.to_string()))?;
+
+        self.module.clear_context(&mut ctx);
+        self.module.finalize_definitions()
+            .map_err(|e| JitError::Module(e.to_string()))?;
+
+        let code_ptr = self.module.get_finalized_function(func_id);
+
+        // 캐시에 저장
+        self.compiled_functions.insert(name.clone(), CompiledFn {
+            name: name.clone(),
+            ptr: code_ptr,
+            signature: FnSignature::FloatOnly { param_count: func.params.len() },
+        });
+
+        Ok(code_ptr)
+    }
+
+    /// Float 선형 명령어 컴파일
+    fn compile_float_linear_instructions(
+        builder: &mut FunctionBuilder,
+        instructions: &[Instruction],
+        locals: &mut HashMap<String, cranelift::prelude::Value>,
+        stack: &mut Vec<cranelift::prelude::Value>,
+    ) -> JitResult<()> {
+        for instr in instructions {
+            Self::compile_float_single_instruction(builder, &instr.opcode, locals, stack)?;
+        }
+        Ok(())
+    }
+
+    /// Float 단일 명령어 컴파일
+    fn compile_float_single_instruction(
+        builder: &mut FunctionBuilder,
+        opcode: &OpCode,
+        locals: &mut HashMap<String, cranelift::prelude::Value>,
+        stack: &mut Vec<cranelift::prelude::Value>,
+    ) -> JitResult<()> {
+        match opcode {
+            // === 상수 ===
+            OpCode::Const(Value::Float(f)) => {
+                let val = builder.ins().f64const(*f);
+                stack.push(val);
+            }
+            OpCode::Const(Value::Int(n)) => {
+                // Int를 Float로 변환
+                let int_val = builder.ins().iconst(types::I64, *n);
+                let val = builder.ins().fcvt_from_sint(types::F64, int_val);
+                stack.push(val);
+            }
+            OpCode::Const(Value::Bool(b)) => {
+                let val = builder.ins().f64const(if *b { 1.0 } else { 0.0 });
+                stack.push(val);
+            }
+
+            // === 변수 ===
+            OpCode::Load(name) => {
+                let val = locals.get(name)
+                    .ok_or_else(|| JitError::CodeGen(format!("Undefined variable: {}", name)))?;
+                stack.push(*val);
+            }
+            OpCode::Store(name) => {
+                let val = stack.pop()
+                    .ok_or_else(|| JitError::CodeGen("Stack underflow at Store".to_string()))?;
+                locals.insert(name.clone(), val);
+            }
+
+            // === 산술 연산 (Float) ===
+            OpCode::Add => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let result = builder.ins().fadd(a, b);
+                stack.push(result);
+            }
+            OpCode::Sub => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let result = builder.ins().fsub(a, b);
+                stack.push(result);
+            }
+            OpCode::Mul => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let result = builder.ins().fmul(a, b);
+                stack.push(result);
+            }
+            OpCode::Div => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let result = builder.ins().fdiv(a, b);
+                stack.push(result);
+            }
+            OpCode::Neg => {
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let result = builder.ins().fneg(a);
+                stack.push(result);
+            }
+
+            // === 비교 연산 (Float -> Float로 결과 반환: 0.0 또는 1.0) ===
+            OpCode::Lt => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let cmp = builder.ins().fcmp(FloatCC::LessThan, a, b);
+                let int_result = builder.ins().uextend(types::I64, cmp);
+                let result = builder.ins().fcvt_from_sint(types::F64, int_result);
+                stack.push(result);
+            }
+            OpCode::Gt => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let cmp = builder.ins().fcmp(FloatCC::GreaterThan, a, b);
+                let int_result = builder.ins().uextend(types::I64, cmp);
+                let result = builder.ins().fcvt_from_sint(types::F64, int_result);
+                stack.push(result);
+            }
+            OpCode::Lte => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let cmp = builder.ins().fcmp(FloatCC::LessThanOrEqual, a, b);
+                let int_result = builder.ins().uextend(types::I64, cmp);
+                let result = builder.ins().fcvt_from_sint(types::F64, int_result);
+                stack.push(result);
+            }
+            OpCode::Gte => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let cmp = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, a, b);
+                let int_result = builder.ins().uextend(types::I64, cmp);
+                let result = builder.ins().fcvt_from_sint(types::F64, int_result);
+                stack.push(result);
+            }
+            OpCode::Eq => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let cmp = builder.ins().fcmp(FloatCC::Equal, a, b);
+                let int_result = builder.ins().uextend(types::I64, cmp);
+                let result = builder.ins().fcvt_from_sint(types::F64, int_result);
+                stack.push(result);
+            }
+            OpCode::Neq => {
+                let b = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let a = stack.pop().ok_or_else(|| JitError::CodeGen("Stack underflow".to_string()))?;
+                let cmp = builder.ins().fcmp(FloatCC::NotEqual, a, b);
+                let int_result = builder.ins().uextend(types::I64, cmp);
+                let result = builder.ins().fcvt_from_sint(types::F64, int_result);
+                stack.push(result);
+            }
+
+            // === 스택 연산 ===
+            OpCode::Dup => {
+                let val = stack.last()
+                    .ok_or_else(|| JitError::CodeGen("Stack underflow at Dup".to_string()))?;
+                stack.push(*val);
+            }
+            OpCode::Pop => {
+                stack.pop();
+            }
+            OpCode::Nop => {}
+
+            // Return, Jump 등은 caller에서 처리
+            OpCode::Return | OpCode::Jump(_) | OpCode::JumpIf(_) | OpCode::JumpIfNot(_) => {}
+
+            // Mod는 Float에서 지원하지 않음 (필요시 fmod 호출)
+            OpCode::Mod => {
+                return Err(JitError::UnsupportedOpcode("Mod not supported for float".to_string()));
+            }
+
+            // And, Or, Not은 Float에서 비트연산 불가
+            OpCode::And | OpCode::Or | OpCode::Not => {
+                return Err(JitError::UnsupportedOpcode(format!("{:?} not supported for float", opcode)));
+            }
+
+            _ => {
+                return Err(JitError::UnsupportedOpcode(format!("{:?}", opcode)));
+            }
+        }
+        Ok(())
+    }
+
+    /// Float 제어 흐름 명령어 컴파일
+    fn compile_float_instructions_with_control_flow(
+        builder: &mut FunctionBuilder,
+        instructions: &[Instruction],
+        locals: &mut HashMap<String, cranelift::prelude::Value>,
+        stack: &mut Vec<cranelift::prelude::Value>,
+    ) -> JitResult<()> {
+        // 블록 경계 분석
+        let mut block_starts: Vec<usize> = vec![0];
+        for (ip, instr) in instructions.iter().enumerate() {
+            match &instr.opcode {
+                OpCode::Jump(offset) | OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
+                    let target = ((ip as i32) + *offset) as usize;
+                    if !block_starts.contains(&target) {
+                        block_starts.push(target);
+                    }
+                    if !block_starts.contains(&(ip + 1)) {
+                        block_starts.push(ip + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+        block_starts.sort();
+        block_starts.dedup();
+
+        // 블록 생성
+        let entry_block = builder.current_block().unwrap();
+        let mut blocks: Vec<Block> = vec![entry_block];
+        let mut ip_to_block: HashMap<usize, usize> = HashMap::new();
+        ip_to_block.insert(0, 0);
+
+        for &start in block_starts.iter().skip(1) {
+            let block = builder.create_block();
+            ip_to_block.insert(start, blocks.len());
+            blocks.push(block);
+        }
+
+        // 결과 변수
+        let result_var = Variable::new(0);
+        builder.declare_var(result_var, types::F64);
+        let zero = builder.ins().f64const(0.0);
+        builder.def_var(result_var, zero);
+
+        // 블록별 컴파일
+        for (block_idx, block) in blocks.iter().enumerate() {
+            if block_idx > 0 {
+                builder.switch_to_block(*block);
+            }
+
+            let start_ip = block_starts[block_idx];
+            let end_ip = if block_idx + 1 < block_starts.len() {
+                block_starts[block_idx + 1]
+            } else {
+                instructions.len()
+            };
+
+            let mut terminated = false;
+
+            for ip in start_ip..end_ip {
+                let instr = &instructions[ip];
+
+                match &instr.opcode {
+                    OpCode::Jump(offset) => {
+                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_block_idx = ip_to_block.get(&target_ip)
+                            .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
+                        let target_block = blocks[*target_block_idx];
+                        builder.ins().jump(target_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::JumpIf(offset) => {
+                        let cond = stack.pop()
+                            .ok_or_else(|| JitError::CodeGen("Stack underflow at JumpIf".to_string()))?;
+                        let zero_f = builder.ins().f64const(0.0);
+                        let cmp = builder.ins().fcmp(FloatCC::NotEqual, cond, zero_f);
+
+                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_block_idx = ip_to_block.get(&target_ip)
+                            .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
+                        let target_block = blocks[*target_block_idx];
+
+                        let fallthrough_block_idx = ip_to_block.get(&(ip + 1))
+                            .ok_or_else(|| JitError::CodeGen("Invalid fallthrough".to_string()))?;
+                        let fallthrough_block = blocks[*fallthrough_block_idx];
+
+                        builder.ins().brif(cmp, target_block, &[], fallthrough_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::JumpIfNot(offset) => {
+                        let cond = stack.pop()
+                            .ok_or_else(|| JitError::CodeGen("Stack underflow at JumpIfNot".to_string()))?;
+                        let zero_f = builder.ins().f64const(0.0);
+                        let cmp = builder.ins().fcmp(FloatCC::Equal, cond, zero_f);
+
+                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_block_idx = ip_to_block.get(&target_ip)
+                            .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
+                        let target_block = blocks[*target_block_idx];
+
+                        let fallthrough_block_idx = ip_to_block.get(&(ip + 1))
+                            .ok_or_else(|| JitError::CodeGen("Invalid fallthrough".to_string()))?;
+                        let fallthrough_block = blocks[*fallthrough_block_idx];
+
+                        builder.ins().brif(cmp, target_block, &[], fallthrough_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::Return => {
+                        let result = stack.pop()
+                            .ok_or_else(|| JitError::CodeGen("Stack underflow at Return".to_string()))?;
+                        builder.ins().return_(&[result]);
+                        terminated = true;
+                        break;
+                    }
+                    _ => {
+                        Self::compile_float_single_instruction(builder, &instr.opcode, locals, stack)?;
+                    }
+                }
+            }
+
+            if !terminated {
+                if block_idx + 1 < blocks.len() {
+                    builder.ins().jump(blocks[block_idx + 1], &[]);
+                } else if let Some(result) = stack.pop() {
+                    builder.ins().return_(&[result]);
+                }
+            }
+        }
+
+        // 블록 seal
+        for block in &blocks {
+            builder.seal_block(*block);
+        }
+
+        Ok(())
+    }
+
+    /// Float 재귀 선형 컴파일
+    fn compile_float_recursive_linear(
+        builder: &mut FunctionBuilder,
+        func: &CompiledFunction,
+        locals: &mut HashMap<String, cranelift::prelude::Value>,
+        stack: &mut Vec<cranelift::prelude::Value>,
+        result_var: Variable,
+        loop_header: Block,
+        return_block: Block,
+        self_func_ref: FuncRef,
+        ptr_type: Type,
+    ) -> JitResult<()> {
+        for instr in &func.instructions {
+            match &instr.opcode {
+                OpCode::Return => {
+                    let result = stack.pop()
+                        .ok_or_else(|| JitError::CodeGen("Stack underflow at Return".to_string()))?;
+                    builder.def_var(result_var, result);
+                    builder.ins().jump(return_block, &[]);
+                    builder.seal_block(loop_header);
+                    return Ok(());
+                }
+                OpCode::TailSelfCall(arg_count) => {
+                    let mut new_args: Vec<cranelift::prelude::Value> = Vec::new();
+                    for _ in 0..*arg_count {
+                        new_args.push(stack.pop()
+                            .ok_or_else(|| JitError::CodeGen("Stack underflow at TailSelfCall".to_string()))?);
+                    }
+                    new_args.reverse();
+                    builder.ins().jump(loop_header, &new_args);
+                    builder.seal_block(loop_header);
+                    return Ok(());
+                }
+                OpCode::SelfCall(arg_count) => {
+                    Self::compile_float_self_call(builder, stack, *arg_count, self_func_ref, ptr_type)?;
+                }
+                _ => {
+                    Self::compile_float_single_instruction(builder, &instr.opcode, locals, stack)?;
+                }
+            }
+        }
+
+        builder.seal_block(loop_header);
+        Ok(())
+    }
+
+    /// Float 재귀 제어 흐름 컴파일
+    #[allow(clippy::too_many_arguments)]
+    fn compile_float_recursive_with_cf(
+        builder: &mut FunctionBuilder,
+        func: &CompiledFunction,
+        locals: &mut HashMap<String, cranelift::prelude::Value>,
+        stack: &mut Vec<cranelift::prelude::Value>,
+        result_var: Variable,
+        param_vars: &[Variable],
+        loop_header: Block,
+        return_block: Block,
+        self_func_ref: FuncRef,
+        ptr_type: Type,
+    ) -> JitResult<()> {
+        let instructions = &func.instructions;
+
+        // 블록 경계 분석
+        let mut block_starts: Vec<usize> = vec![0];
+        for (ip, instr) in instructions.iter().enumerate() {
+            match &instr.opcode {
+                OpCode::Jump(offset) | OpCode::JumpIf(offset) | OpCode::JumpIfNot(offset) => {
+                    let target = ((ip as i32) + *offset) as usize;
+                    if !block_starts.contains(&target) {
+                        block_starts.push(target);
+                    }
+                    if !block_starts.contains(&(ip + 1)) {
+                        block_starts.push(ip + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+        block_starts.sort();
+        block_starts.dedup();
+
+        // 블록 생성
+        let mut blocks: Vec<Block> = Vec::new();
+        let mut ip_to_block: HashMap<usize, usize> = HashMap::new();
+
+        for &start in &block_starts {
+            if start == 0 {
+                blocks.push(loop_header);
+            } else {
+                blocks.push(builder.create_block());
+            }
+            ip_to_block.insert(start, blocks.len() - 1);
+        }
+
+        // 블록별 컴파일
+        for (block_idx, block) in blocks.iter().enumerate() {
+            if block_idx > 0 {
+                builder.switch_to_block(*block);
+            }
+
+            let start_ip = block_starts[block_idx];
+            let end_ip = if block_idx + 1 < block_starts.len() {
+                block_starts[block_idx + 1]
+            } else {
+                instructions.len()
+            };
+
+            let mut terminated = false;
+
+            for ip in start_ip..end_ip {
+                let instr = &instructions[ip];
+
+                match &instr.opcode {
+                    OpCode::Jump(offset) => {
+                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_block_idx = ip_to_block.get(&target_ip)
+                            .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
+                        let target_block = blocks[*target_block_idx];
+                        builder.ins().jump(target_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::JumpIf(offset) => {
+                        let cond = stack.pop()
+                            .ok_or_else(|| JitError::CodeGen("Stack underflow at JumpIf".to_string()))?;
+                        let zero_f = builder.ins().f64const(0.0);
+                        let cmp = builder.ins().fcmp(FloatCC::NotEqual, cond, zero_f);
+
+                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_block_idx = ip_to_block.get(&target_ip)
+                            .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
+                        let target_block = blocks[*target_block_idx];
+
+                        let fallthrough_block_idx = ip_to_block.get(&(ip + 1))
+                            .ok_or_else(|| JitError::CodeGen("Invalid fallthrough".to_string()))?;
+                        let fallthrough_block = blocks[*fallthrough_block_idx];
+
+                        builder.ins().brif(cmp, target_block, &[], fallthrough_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::JumpIfNot(offset) => {
+                        let cond = stack.pop()
+                            .ok_or_else(|| JitError::CodeGen("Stack underflow at JumpIfNot".to_string()))?;
+                        let zero_f = builder.ins().f64const(0.0);
+                        let cmp = builder.ins().fcmp(FloatCC::Equal, cond, zero_f);
+
+                        let target_ip = ((ip as i32) + *offset) as usize;
+                        let target_block_idx = ip_to_block.get(&target_ip)
+                            .ok_or_else(|| JitError::CodeGen(format!("Invalid jump target: {}", target_ip)))?;
+                        let target_block = blocks[*target_block_idx];
+
+                        let fallthrough_block_idx = ip_to_block.get(&(ip + 1))
+                            .ok_or_else(|| JitError::CodeGen("Invalid fallthrough".to_string()))?;
+                        let fallthrough_block = blocks[*fallthrough_block_idx];
+
+                        builder.ins().brif(cmp, target_block, &[], fallthrough_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::Return => {
+                        if let Some(result) = stack.pop() {
+                            builder.def_var(result_var, result);
+                        }
+                        builder.ins().jump(return_block, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::TailSelfCall(arg_count) => {
+                        let mut new_args: Vec<cranelift::prelude::Value> = Vec::new();
+                        for _ in 0..*arg_count {
+                            new_args.push(stack.pop()
+                                .ok_or_else(|| JitError::CodeGen("Stack underflow at TailSelfCall".to_string()))?);
+                        }
+                        new_args.reverse();
+                        builder.ins().jump(loop_header, &new_args);
+                        terminated = true;
+                        break;
+                    }
+                    OpCode::SelfCall(arg_count) => {
+                        Self::compile_float_self_call(builder, stack, *arg_count, self_func_ref, ptr_type)?;
+                    }
+                    _ => {
+                        Self::compile_float_single_instruction(builder, &instr.opcode, locals, stack)?;
+                    }
+                }
+            }
+
+            if !terminated {
+                if let Some(val) = stack.last() {
+                    builder.def_var(result_var, *val);
+                }
+                if block_idx + 1 < blocks.len() {
+                    builder.ins().jump(blocks[block_idx + 1], &[]);
+                } else {
+                    builder.ins().jump(return_block, &[]);
+                }
+            }
+        }
+
+        // 블록 seal
+        for (i, block) in blocks.iter().enumerate() {
+            if i > 0 {
+                builder.seal_block(*block);
+            }
+        }
+        builder.seal_block(loop_header);
+
+        // param_vars 사용 (미사용 경고 방지)
+        let _ = param_vars;
+
+        Ok(())
+    }
+
+    /// Float SelfCall 컴파일
+    fn compile_float_self_call(
+        builder: &mut FunctionBuilder,
+        stack: &mut Vec<cranelift::prelude::Value>,
+        arg_count: usize,
+        self_func_ref: FuncRef,
+        ptr_type: Type,
+    ) -> JitResult<()> {
+        // 인자 pop
+        let mut args: Vec<cranelift::prelude::Value> = Vec::new();
+        for _ in 0..arg_count {
+            args.push(stack.pop()
+                .ok_or_else(|| JitError::CodeGen("Stack underflow at SelfCall".to_string()))?);
+        }
+        args.reverse();
+
+        // 스택 슬롯에 인자 저장
+        let slot_size = (arg_count * 8) as u32;
+        let slot = builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, slot_size.max(8), 0));
+        let slot_addr = builder.ins().stack_addr(ptr_type, slot, 0);
+
+        for (i, arg) in args.iter().enumerate() {
+            let offset = (i * 8) as i32;
+            builder.ins().store(MemFlags::trusted(), *arg, slot_addr, offset);
+        }
+
+        // 함수 호출
+        let arg_count_val = builder.ins().iconst(types::I64, arg_count as i64);
+        let call = builder.ins().call(self_func_ref, &[slot_addr, arg_count_val]);
+        let result = builder.inst_results(call)[0];
+        stack.push(result);
+
+        Ok(())
+    }
+
+    /// 컴파일된 함수 호출 (Float 전용)
+    ///
+    /// # Safety
+    /// - 함수가 `compile_function_float`로 컴파일되어 있어야 함
+    /// - `args` 배열의 길이가 함수의 파라미터 개수와 일치해야 함
+    pub unsafe fn call_float(&self, name: &str, args: &[f64]) -> JitResult<f64> {
+        let compiled = self.compiled_functions.get(name)
+            .ok_or_else(|| JitError::FunctionNotFound(name.to_string()))?;
+
+        let func: JittedFnFloat = std::mem::transmute(compiled.ptr);
+        Ok(func(args.as_ptr(), args.len()))
+    }
+
+    /// 함수 분석 - Float 타입 감지
+    pub fn analyze_function_type(func: &CompiledFunction) -> FnSignature {
+        let mut has_float = false;
+        let mut has_int_only = true;
+
+        for instr in &func.instructions {
+            match &instr.opcode {
+                OpCode::Const(Value::Float(_)) => {
+                    has_float = true;
+                    has_int_only = false;
+                }
+                OpCode::Const(Value::Int(_)) | OpCode::Const(Value::Bool(_)) => {}
+                _ => {}
+            }
+        }
+
+        if has_float && !has_int_only {
+            FnSignature::FloatOnly { param_count: func.params.len() }
+        } else {
+            FnSignature::IntOnly { param_count: func.params.len() }
+        }
+    }
 }
 
 impl Default for JitCompiler {
@@ -2554,6 +3407,276 @@ mod tests {
             assert_eq!(jit.call_int("sum_recursive", &[10, 0]).unwrap(), 55);
             // sum_recursive(100, 0) = 5050
             assert_eq!(jit.call_int("sum_recursive", &[100, 0]).unwrap(), 5050);
+        }
+    }
+
+    // ========================================================================
+    // Float JIT Tests
+    // ========================================================================
+
+    #[test]
+    fn test_float_simple_add() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // add(a, b) = a + b
+        let func = CompiledFunction {
+            name: "add_float".to_string(),
+            params: vec!["a".to_string(), "b".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Load("b".to_string())),
+                make_instruction(OpCode::Add),
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            let result = jit.call_float("add_float", &[1.5, 2.5]).unwrap();
+            assert!((result - 4.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_float_arithmetic() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // calc(a, b) = (a + b) * (a - b) / 2.0
+        // = (a² - b²) / 2
+        let func = CompiledFunction {
+            name: "calc_float".to_string(),
+            params: vec!["a".to_string(), "b".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Load("b".to_string())),
+                make_instruction(OpCode::Add),                    // a + b
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Load("b".to_string())),
+                make_instruction(OpCode::Sub),                    // a - b
+                make_instruction(OpCode::Mul),                    // (a+b) * (a-b)
+                make_instruction(OpCode::Const(Value::Float(2.0))),
+                make_instruction(OpCode::Div),                    // / 2.0
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            // (5+3)*(5-3)/2 = 8*2/2 = 8
+            let result = jit.call_float("calc_float", &[5.0, 3.0]).unwrap();
+            assert!((result - 8.0).abs() < 1e-10);
+
+            // (10+2)*(10-2)/2 = 12*8/2 = 48
+            let result = jit.call_float("calc_float", &[10.0, 2.0]).unwrap();
+            assert!((result - 48.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_float_negation() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // neg(x) = -x
+        let func = CompiledFunction {
+            name: "neg_float".to_string(),
+            params: vec!["x".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("x".to_string())),
+                make_instruction(OpCode::Neg),
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            let result = jit.call_float("neg_float", &[3.15]).unwrap();
+            assert!((result + 3.15).abs() < 1e-10);
+
+            let result = jit.call_float("neg_float", &[-2.5]).unwrap();
+            assert!((result - 2.5).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_float_comparison() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // is_greater(a, b) = a > b ? 1.0 : 0.0
+        let func = CompiledFunction {
+            name: "is_greater".to_string(),
+            params: vec!["a".to_string(), "b".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Load("b".to_string())),
+                make_instruction(OpCode::Gt),
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            let result = jit.call_float("is_greater", &[5.0, 3.0]).unwrap();
+            assert!((result - 1.0).abs() < 1e-10);
+
+            let result = jit.call_float("is_greater", &[2.0, 4.0]).unwrap();
+            assert!(result.abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_float_conditional() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // max(a, b) = a > b ? a : b
+        // IR:
+        //   0: Load a
+        //   1: Load b
+        //   2: Gt           ; a > b
+        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   4: Load a
+        //   5: Return
+        //   6: Load b
+        //   7: Return
+        let func = CompiledFunction {
+            name: "max_float".to_string(),
+            params: vec!["a".to_string(), "b".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),  // 0
+                make_instruction(OpCode::Load("b".to_string())),  // 1
+                make_instruction(OpCode::Gt),                      // 2
+                make_instruction(OpCode::JumpIfNot(3)),            // 3: jump to 6
+                make_instruction(OpCode::Load("a".to_string())),  // 4
+                make_instruction(OpCode::Return),                  // 5
+                make_instruction(OpCode::Load("b".to_string())),  // 6
+                make_instruction(OpCode::Return),                  // 7
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            let result = jit.call_float("max_float", &[5.0, 3.0]).unwrap();
+            assert!((result - 5.0).abs() < 1e-10);
+
+            let result = jit.call_float("max_float", &[2.0, 7.0]).unwrap();
+            assert!((result - 7.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_float_recursive_sum() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // sum(n, acc) = n <= 0 ? acc : sum(n - 1, acc + n)
+        // IR:
+        //   0: Load n
+        //   1: Const 0.0
+        //   2: Lte          ; n <= 0
+        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   4: Load acc
+        //   5: Return
+        //   6: Load n       ; n - 1
+        //   7: Const 1.0
+        //   8: Sub
+        //   9: Load acc     ; acc + n
+        //  10: Load n
+        //  11: Add
+        //  12: TailSelfCall(2)
+        let func = CompiledFunction {
+            name: "sum_float".to_string(),
+            params: vec!["n".to_string(), "acc".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("n".to_string())),       // 0
+                make_instruction(OpCode::Const(Value::Float(0.0))),    // 1
+                make_instruction(OpCode::Lte),                          // 2
+                make_instruction(OpCode::JumpIfNot(3)),                 // 3
+                make_instruction(OpCode::Load("acc".to_string())),     // 4
+                make_instruction(OpCode::Return),                       // 5
+                make_instruction(OpCode::Load("n".to_string())),       // 6
+                make_instruction(OpCode::Const(Value::Float(1.0))),    // 7
+                make_instruction(OpCode::Sub),                          // 8
+                make_instruction(OpCode::Load("acc".to_string())),     // 9
+                make_instruction(OpCode::Load("n".to_string())),       // 10
+                make_instruction(OpCode::Add),                          // 11
+                make_instruction(OpCode::TailSelfCall(2)),              // 12
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            // sum(10, 0) = 55
+            let result = jit.call_float("sum_float", &[10.0, 0.0]).unwrap();
+            assert!((result - 55.0).abs() < 1e-10);
+
+            // sum(100, 0) = 5050
+            let result = jit.call_float("sum_float", &[100.0, 0.0]).unwrap();
+            assert!((result - 5050.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_float_int_conversion() {
+        let mut jit = JitCompiler::new().unwrap();
+
+        // add_int_to_float(a) = a + 10 (10 is int constant)
+        let func = CompiledFunction {
+            name: "add_int_to_float".to_string(),
+            params: vec!["a".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Const(Value::Int(10))),  // Int constant
+                make_instruction(OpCode::Add),
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        jit.compile_function_float(&func).unwrap();
+
+        unsafe {
+            let result = jit.call_float("add_int_to_float", &[2.5]).unwrap();
+            assert!((result - 12.5).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_analyze_function_type() {
+        // Int only function
+        let int_func = CompiledFunction {
+            name: "int_func".to_string(),
+            params: vec!["a".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Const(Value::Int(1))),
+                make_instruction(OpCode::Add),
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        match JitCompiler::analyze_function_type(&int_func) {
+            FnSignature::IntOnly { param_count } => assert_eq!(param_count, 1),
+            _ => panic!("Expected IntOnly"),
+        }
+
+        // Float function
+        let float_func = CompiledFunction {
+            name: "float_func".to_string(),
+            params: vec!["a".to_string()],
+            instructions: vec![
+                make_instruction(OpCode::Load("a".to_string())),
+                make_instruction(OpCode::Const(Value::Float(1.5))),
+                make_instruction(OpCode::Add),
+                make_instruction(OpCode::Return),
+            ],
+        };
+
+        match JitCompiler::analyze_function_type(&float_func) {
+            FnSignature::FloatOnly { param_count } => assert_eq!(param_count, 1),
+            _ => panic!("Expected FloatOnly"),
         }
     }
 }

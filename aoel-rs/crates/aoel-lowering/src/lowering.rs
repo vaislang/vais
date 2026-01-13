@@ -671,10 +671,10 @@ mod tests {
     #[test]
     fn test_literal_float() {
         let mut lowerer = Lowerer::new();
-        let instrs = lowerer.lower_expr(&float(3.14)).unwrap();
+        let instrs = lowerer.lower_expr(&float(3.15)).unwrap();
         assert_eq!(instrs.len(), 1);
         if let OpCode::Const(Value::Float(f)) = &instrs[0].opcode {
-            assert!((*f - 3.14).abs() < f64::EPSILON);
+            assert!((*f - 3.15).abs() < f64::EPSILON);
         } else {
             panic!("Expected float constant");
         }

@@ -639,7 +639,7 @@ mod tests {
         let span = Span::new(10, 20);
 
         assert_eq!(Expr::Integer(42, span).span(), span);
-        assert_eq!(Expr::Float(3.14, span).span(), span);
+        assert_eq!(Expr::Float(3.15, span).span(), span);
         assert_eq!(Expr::String("test".to_string(), span).span(), span);
         assert_eq!(Expr::Bool(true, span).span(), span);
         assert_eq!(Expr::Nil(span).span(), span);
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn test_expr_literals() {
         assert!(matches!(Expr::Integer(42, dummy_span()), Expr::Integer(42, _)));
-        assert!(matches!(Expr::Float(3.14, dummy_span()), Expr::Float(f, _) if (f - 3.14).abs() < f64::EPSILON));
+        assert!(matches!(Expr::Float(3.15, dummy_span()), Expr::Float(f, _) if (f - 3.15).abs() < f64::EPSILON));
         assert!(matches!(Expr::String("hello".to_string(), dummy_span()), Expr::String(s, _) if s == "hello"));
         assert!(matches!(Expr::Bool(true, dummy_span()), Expr::Bool(true, _)));
         assert!(matches!(Expr::Nil(dummy_span()), Expr::Nil(_)));

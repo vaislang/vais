@@ -1558,10 +1558,10 @@ mod tests {
 
     #[test]
     fn test_float_literal() {
-        let result = parse_expr("3.14");
+        let result = parse_expr("3.15");
         assert!(result.is_ok());
         if let Expr::Float(f, _) = result.unwrap() {
-            assert!((f - 3.14).abs() < f64::EPSILON);
+            assert!((f - 3.15).abs() < f64::EPSILON);
         } else {
             panic!("Expected float");
         }

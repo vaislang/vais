@@ -7,7 +7,7 @@ mod package;
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "aoel")]
@@ -468,7 +468,7 @@ fn compile_file(path: &PathBuf, output: Option<&PathBuf>) {
     }
 }
 
-fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str, use_jit: bool, show_stats: bool) {
+fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str, use_jit: bool, _show_stats: bool) {
     let source = match read_file(path) {
         Ok(s) => s,
         Err(e) => {
@@ -798,9 +798,9 @@ fn build_file(path: &PathBuf, output: Option<&PathBuf>, keep_c: bool, no_typeche
     }
 
     match target.to_lowercase().as_str() {
-        "c" => build_c_target(path, output, keep_c, &functions),
-        "wasm" | "wat" => build_wasm_target(path, output, &functions),
-        "llvm" | "ll" => build_llvm_target(path, output, &functions),
+        "c" => build_c_target(path, output.map(|p| p.as_path()), keep_c, &functions),
+        "wasm" | "wat" => build_wasm_target(path, output.map(|p| p.as_path()), &functions),
+        "llvm" | "ll" => build_llvm_target(path, output.map(|p| p.as_path()), &functions),
         _ => {
             eprintln!("Unknown target: {}. Supported targets: c, wasm, llvm", target);
             std::process::exit(1);
@@ -809,8 +809,8 @@ fn build_file(path: &PathBuf, output: Option<&PathBuf>, keep_c: bool, no_typeche
 }
 
 fn build_c_target(
-    path: &PathBuf,
-    output: Option<&PathBuf>,
+    path: &Path,
+    output: Option<&Path>,
     keep_c: bool,
     functions: &[aoel_lowering::CompiledFunction],
 ) {
@@ -827,7 +827,7 @@ fn build_c_target(
 
     // Determine output paths
     let c_file = path.with_extension("c");
-    let exe_file = output.cloned().unwrap_or_else(|| {
+    let exe_file = output.map(Path::to_path_buf).unwrap_or_else(|| {
         if cfg!(windows) {
             path.with_extension("exe")
         } else {
@@ -876,8 +876,8 @@ fn build_c_target(
 }
 
 fn build_wasm_target(
-    path: &PathBuf,
-    output: Option<&PathBuf>,
+    path: &Path,
+    output: Option<&Path>,
     functions: &[aoel_lowering::CompiledFunction],
 ) {
     use std::process::Command;
@@ -893,7 +893,7 @@ fn build_wasm_target(
 
     // Determine output paths
     let wat_file = path.with_extension("wat");
-    let wasm_file = output.cloned().unwrap_or_else(|| path.with_extension("wasm"));
+    let wasm_file = output.map(Path::to_path_buf).unwrap_or_else(|| path.with_extension("wasm"));
 
     // Write WAT file
     if let Err(e) = fs::write(&wat_file, &wat_code) {
@@ -922,19 +922,19 @@ fn build_wasm_target(
         }
         Err(_) => {
             println!("✓ Generated WAT file: {}", wat_file.display());
-            println!("");
+            println!();
             println!("Note: wat2wasm not found. To compile to WASM binary:");
             println!("  1. Install wabt: https://github.com/WebAssembly/wabt");
             println!("  2. Run: wat2wasm {} -o {}", wat_file.display(), wasm_file.display());
-            println!("");
+            println!();
             println!("Or use the WAT file directly with a WASM runtime that supports text format.");
         }
     }
 }
 
 fn build_llvm_target(
-    path: &PathBuf,
-    output: Option<&PathBuf>,
+    path: &Path,
+    output: Option<&Path>,
     functions: &[aoel_lowering::CompiledFunction],
 ) {
     use std::process::Command;
@@ -950,7 +950,7 @@ fn build_llvm_target(
 
     // Determine output paths
     let ll_file = path.with_extension("ll");
-    let exe_file = output.cloned().unwrap_or_else(|| {
+    let exe_file = output.map(Path::to_path_buf).unwrap_or_else(|| {
         if cfg!(windows) {
             path.with_extension("exe")
         } else {
@@ -1019,11 +1019,11 @@ fn build_llvm_target(
                 }
                 _ => {
                     println!("✓ Generated LLVM IR file: {}", ll_file.display());
-                    println!("");
+                    println!();
                     println!("Note: Neither clang nor llc found. To compile to native binary:");
                     println!("  1. Install LLVM: https://llvm.org/");
                     println!("  2. Run: clang {} -o {}", ll_file.display(), exe_file.display());
-                    println!("");
+                    println!();
                     println!("Or use llc to compile to object file:");
                     println!("  llc -filetype=obj {} -o {}.o", ll_file.display(), path.display());
                 }
@@ -1099,7 +1099,7 @@ fn jit_run(path: &PathBuf, no_typecheck: bool) {
         }
         Err(e) => {
             eprintln!("JIT error: {}", e);
-            eprintln!("");
+            eprintln!();
             eprintln!("Note: Cranelift JIT requires the 'cranelift' feature.");
             eprintln!("Build with: cargo build --release --features cranelift");
             std::process::exit(1);
@@ -1132,12 +1132,12 @@ fn cmd_init(path: Option<&PathBuf>, name: Option<&str>) {
         Ok(()) => {
             let manifest = package::Manifest::load(&project_path).unwrap();
             println!("Initialized AOEL project '{}'", manifest.package.name);
-            println!("");
+            println!();
             println!("Created files:");
             println!("  - aoel.toml");
             println!("  - src/main.aoel");
             println!("  - .gitignore");
-            println!("");
+            println!();
             println!("Run your project with:");
             println!("  cd {}", project_path.display());
             println!("  aoel run src/main.aoel");
@@ -1323,7 +1323,7 @@ fn cmd_install() {
         eprintln!("Warning: Failed to save lock file: {}", e);
     }
 
-    println!("");
+    println!();
     println!("Installed {} of {} dependencies", installed, total_deps);
 }
 
@@ -1342,7 +1342,7 @@ fn cmd_list(available: bool) {
             Ok(packages) => {
                 if packages.is_empty() {
                     println!("No packages in registry");
-                    println!("");
+                    println!();
                     println!("Publish a package with:");
                     println!("  aoel publish");
                 } else {
@@ -1377,7 +1377,7 @@ fn cmd_list(available: bool) {
         };
 
         println!("{} v{}", manifest.package.name, manifest.package.version);
-        println!("");
+        println!();
 
         if manifest.dependencies.is_empty() && manifest.dev_dependencies.is_empty() {
             println!("No dependencies");
@@ -1403,7 +1403,7 @@ fn cmd_list(available: bool) {
         }
 
         if !manifest.dev_dependencies.is_empty() {
-            println!("");
+            println!();
             println!("Dev Dependencies:");
             for (name, dep) in &manifest.dev_dependencies {
                 match dep {
@@ -1474,7 +1474,7 @@ fn cmd_publish(path: Option<&PathBuf>) {
             let _ = fs::copy(project_root.join("aoel.toml"), pkg_path.join("aoel.toml"));
 
             println!("Published {} v{} to local registry", name, version);
-            println!("");
+            println!();
             println!("Other projects can use it with:");
             println!("  aoel add {} --version {}", name, version);
         }
@@ -1590,7 +1590,7 @@ fn cmd_profile(path: &PathBuf, output_format: &str) {
         "json" => {
             println!("{}", result.to_json());
         }
-        "text" | _ => {
+        _ => {
             println!("{}", result.summary());
         }
     }

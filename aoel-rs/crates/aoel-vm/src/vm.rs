@@ -2406,6 +2406,425 @@ impl Vm {
                 }
             }
 
+            // === Time functions ===
+            "TIME_NOW" => {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default();
+                Some(Value::Int(now.as_secs() as i64))
+            }
+            "TIME_NOW_MS" => {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default();
+                Some(Value::Int(now.as_millis() as i64))
+            }
+            "TIME_FORMAT" => {
+                // time_format(timestamp, format) - basic ISO 8601 format
+                if let Some(Value::Int(ts)) = args.first() {
+                    // Simple formatting without chrono dependency
+                    let secs = *ts;
+                    let days = secs / 86400;
+                    let remaining = secs % 86400;
+                    let hours = remaining / 3600;
+                    let mins = (remaining % 3600) / 60;
+                    let sec = remaining % 60;
+
+                    // Calculate year/month/day from days since epoch (1970-01-01)
+                    let (year, month, day) = Self::days_to_ymd(days as i32 + 719468);
+
+                    Some(Value::String(format!(
+                        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+                        year, month, day, hours, mins, sec
+                    )))
+                } else {
+                    Some(Value::Error("time_format: expected timestamp".to_string()))
+                }
+            }
+            "TIME_PARSE" => {
+                // Parse ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
+                if let Some(Value::String(s)) = args.first() {
+                    let parts: Vec<&str> = s.split(|c| c == '-' || c == 'T' || c == ':' || c == 'Z')
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    if parts.len() >= 6 {
+                        if let (Ok(year), Ok(month), Ok(day), Ok(hour), Ok(min), Ok(sec)) = (
+                            parts[0].parse::<i32>(),
+                            parts[1].parse::<u32>(),
+                            parts[2].parse::<u32>(),
+                            parts[3].parse::<i64>(),
+                            parts[4].parse::<i64>(),
+                            parts[5].parse::<i64>(),
+                        ) {
+                            let days = Self::ymd_to_days(year, month, day) - 719468;
+                            let timestamp = days as i64 * 86400 + hour * 3600 + min * 60 + sec;
+                            Some(Value::Int(timestamp))
+                        } else {
+                            Some(Value::Error("time_parse: invalid date format".to_string()))
+                        }
+                    } else {
+                        Some(Value::Error("time_parse: expected YYYY-MM-DDTHH:MM:SSZ".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("time_parse: expected string".to_string()))
+                }
+            }
+            "SLEEP" => {
+                if let Some(Value::Int(ms)) = args.first() {
+                    if *ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(*ms as u64));
+                    }
+                    Some(Value::Void)
+                } else {
+                    Some(Value::Error("sleep: expected milliseconds".to_string()))
+                }
+            }
+
+            // === Random functions ===
+            "RANDOM" => {
+                // Simple random number between 0.0 and 1.0
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let seed = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos() as u64;
+                // Simple LCG random
+                let random = ((seed.wrapping_mul(6364136223846793005).wrapping_add(1)) % (1 << 32)) as f64 / (1u64 << 32) as f64;
+                Some(Value::Float(random))
+            }
+            "RANDOM_INT" => {
+                // random_int(min, max) - random integer in range [min, max]
+                if args.len() >= 2 {
+                    if let (Value::Int(min), Value::Int(max)) = (&args[0], &args[1]) {
+                        use std::time::{SystemTime, UNIX_EPOCH};
+                        let seed = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as u64;
+                        let range = (max - min + 1) as u64;
+                        let random = (seed.wrapping_mul(6364136223846793005).wrapping_add(1)) % range;
+                        Some(Value::Int(min + random as i64))
+                    } else {
+                        Some(Value::Error("random_int: expected (min, max)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("random_int: expected 2 arguments".to_string()))
+                }
+            }
+            "SHUFFLE" => {
+                if let Some(Value::Array(arr)) = args.first() {
+                    use std::time::{SystemTime, UNIX_EPOCH};
+                    let mut result = arr.clone();
+                    let mut seed = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_nanos() as u64;
+
+                    // Fisher-Yates shuffle
+                    for i in (1..result.len()).rev() {
+                        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                        let j = (seed as usize) % (i + 1);
+                        result.swap(i, j);
+                    }
+                    Some(Value::Array(result))
+                } else {
+                    Some(Value::Error("shuffle: expected array".to_string()))
+                }
+            }
+            "SAMPLE" => {
+                // sample(array, n) - pick n random elements
+                if args.len() >= 2 {
+                    if let (Value::Array(arr), Value::Int(n)) = (&args[0], &args[1]) {
+                        use std::time::{SystemTime, UNIX_EPOCH};
+                        let n = (*n as usize).min(arr.len());
+                        let mut indices: Vec<usize> = (0..arr.len()).collect();
+                        let mut seed = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as u64;
+
+                        // Partial Fisher-Yates
+                        for i in 0..n {
+                            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                            let j = i + (seed as usize) % (indices.len() - i);
+                            indices.swap(i, j);
+                        }
+
+                        let result: Vec<Value> = indices[..n].iter().map(|&i| arr[i].clone()).collect();
+                        Some(Value::Array(result))
+                    } else {
+                        Some(Value::Error("sample: expected (array, n)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("sample: expected 2 arguments".to_string()))
+                }
+            }
+
+            // === Additional Math functions ===
+            "SIGN" => {
+                match args.first() {
+                    Some(Value::Int(n)) => Some(Value::Int(n.signum())),
+                    Some(Value::Float(n)) => Some(Value::Float(if *n > 0.0 { 1.0 } else if *n < 0.0 { -1.0 } else { 0.0 })),
+                    _ => Some(Value::Error("sign: expected number".to_string())),
+                }
+            }
+            "HYPOT" => {
+                // hypot(a, b) = sqrt(a^2 + b^2)
+                if args.len() >= 2 {
+                    let a = match &args[0] {
+                        Value::Int(n) => *n as f64,
+                        Value::Float(n) => *n,
+                        _ => return Ok(Some(Value::Error("hypot: expected numbers".to_string()))),
+                    };
+                    let b = match &args[1] {
+                        Value::Int(n) => *n as f64,
+                        Value::Float(n) => *n,
+                        _ => return Ok(Some(Value::Error("hypot: expected numbers".to_string()))),
+                    };
+                    Some(Value::Float(a.hypot(b)))
+                } else {
+                    Some(Value::Error("hypot: expected 2 arguments".to_string()))
+                }
+            }
+            "SINH" => {
+                match args.first() {
+                    Some(Value::Int(n)) => Some(Value::Float((*n as f64).sinh())),
+                    Some(Value::Float(n)) => Some(Value::Float(n.sinh())),
+                    _ => Some(Value::Error("sinh: expected number".to_string())),
+                }
+            }
+            "COSH" => {
+                match args.first() {
+                    Some(Value::Int(n)) => Some(Value::Float((*n as f64).cosh())),
+                    Some(Value::Float(n)) => Some(Value::Float(n.cosh())),
+                    _ => Some(Value::Error("cosh: expected number".to_string())),
+                }
+            }
+            "TANH" => {
+                match args.first() {
+                    Some(Value::Int(n)) => Some(Value::Float((*n as f64).tanh())),
+                    Some(Value::Float(n)) => Some(Value::Float(n.tanh())),
+                    _ => Some(Value::Error("tanh: expected number".to_string())),
+                }
+            }
+
+            // === String functions ===
+            "CHAR_CODE" => {
+                if let Some(Value::String(s)) = args.first() {
+                    Some(Value::Int(s.chars().next().map(|c| c as i64).unwrap_or(0)))
+                } else if let Some(Value::Int(n)) = args.first() {
+                    // int -> char
+                    Some(Value::String(char::from_u32(*n as u32).map(|c| c.to_string()).unwrap_or_default()))
+                } else {
+                    Some(Value::Error("char_code: expected string or int".to_string()))
+                }
+            }
+            "HEX" => {
+                if let Some(Value::Int(n)) = args.first() {
+                    Some(Value::String(format!("{:x}", n)))
+                } else if let Some(Value::String(s)) = args.first() {
+                    // hex string -> int
+                    let s = s.trim_start_matches("0x").trim_start_matches("0X");
+                    i64::from_str_radix(s, 16)
+                        .map(Value::Int)
+                        .ok()
+                        .or(Some(Value::Error("hex: invalid hex string".to_string())))
+                } else {
+                    Some(Value::Error("hex: expected int or string".to_string()))
+                }
+            }
+            "BIN" => {
+                if let Some(Value::Int(n)) = args.first() {
+                    Some(Value::String(format!("{:b}", n)))
+                } else if let Some(Value::String(s)) = args.first() {
+                    // binary string -> int
+                    let s = s.trim_start_matches("0b").trim_start_matches("0B");
+                    i64::from_str_radix(s, 2)
+                        .map(Value::Int)
+                        .ok()
+                        .or(Some(Value::Error("bin: invalid binary string".to_string())))
+                } else {
+                    Some(Value::Error("bin: expected int or string".to_string()))
+                }
+            }
+            "FORMAT" => {
+                // format(template, ...args) - simple string formatting with {}
+                if !args.is_empty() {
+                    if let Value::String(template) = &args[0] {
+                        let mut result = template.clone();
+                        for (i, arg) in args.iter().skip(1).enumerate() {
+                            let placeholder = format!("{{{}}}", i);
+                            let value_str = match arg {
+                                Value::String(s) => s.clone(),
+                                Value::Int(n) => n.to_string(),
+                                Value::Float(n) => n.to_string(),
+                                Value::Bool(b) => b.to_string(),
+                                _ => format!("{:?}", arg),
+                            };
+                            result = result.replace(&placeholder, &value_str);
+                            // Also replace {} in order
+                            result = result.replacen("{}", &value_str, 1);
+                        }
+                        Some(Value::String(result))
+                    } else {
+                        Some(Value::Error("format: first arg must be string".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("format: expected template string".to_string()))
+                }
+            }
+
+            // === Array functions ===
+            "SUM" => {
+                if let Some(Value::Array(arr)) = args.first() {
+                    let mut int_sum: i64 = 0;
+                    let mut float_sum: f64 = 0.0;
+                    let mut has_float = false;
+
+                    for v in arr {
+                        match v {
+                            Value::Int(n) => int_sum += n,
+                            Value::Float(n) => { float_sum += n; has_float = true; }
+                            _ => {}
+                        }
+                    }
+
+                    if has_float {
+                        Some(Value::Float(int_sum as f64 + float_sum))
+                    } else {
+                        Some(Value::Int(int_sum))
+                    }
+                } else {
+                    Some(Value::Error("sum: expected array".to_string()))
+                }
+            }
+            "PRODUCT" => {
+                if let Some(Value::Array(arr)) = args.first() {
+                    let mut int_prod: i64 = 1;
+                    let mut float_prod: f64 = 1.0;
+                    let mut has_float = false;
+
+                    for v in arr {
+                        match v {
+                            Value::Int(n) => int_prod *= n,
+                            Value::Float(n) => { float_prod *= n; has_float = true; }
+                            _ => {}
+                        }
+                    }
+
+                    if has_float {
+                        Some(Value::Float(int_prod as f64 * float_prod))
+                    } else {
+                        Some(Value::Int(int_prod))
+                    }
+                } else {
+                    Some(Value::Error("product: expected array".to_string()))
+                }
+            }
+            "AVERAGE" => {
+                if let Some(Value::Array(arr)) = args.first() {
+                    if arr.is_empty() {
+                        return Ok(Some(Value::Float(0.0)));
+                    }
+                    let mut sum: f64 = 0.0;
+                    let mut count = 0;
+
+                    for v in arr {
+                        match v {
+                            Value::Int(n) => { sum += *n as f64; count += 1; }
+                            Value::Float(n) => { sum += n; count += 1; }
+                            _ => {}
+                        }
+                    }
+
+                    Some(Value::Float(if count > 0 { sum / count as f64 } else { 0.0 }))
+                } else {
+                    Some(Value::Error("average: expected array".to_string()))
+                }
+            }
+            "FIND" => {
+                // find(array, value) - returns index or -1
+                if args.len() >= 2 {
+                    if let Value::Array(arr) = &args[0] {
+                        let target = &args[1];
+                        let idx = arr.iter().position(|v| v == target);
+                        Some(Value::Int(idx.map(|i| i as i64).unwrap_or(-1)))
+                    } else {
+                        Some(Value::Error("find: expected array".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("find: expected 2 arguments".to_string()))
+                }
+            }
+            "COUNT" => {
+                // count(array, value) - count occurrences
+                if args.len() >= 2 {
+                    if let Value::Array(arr) = &args[0] {
+                        let target = &args[1];
+                        let count = arr.iter().filter(|v| *v == target).count();
+                        Some(Value::Int(count as i64))
+                    } else {
+                        Some(Value::Error("count: expected array".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("count: expected 2 arguments".to_string()))
+                }
+            }
+            "GROUP_BY" => {
+                // group_by(array, key_fn) - for now, just group by value
+                if let Some(Value::Array(arr)) = args.first() {
+                    let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
+                    for v in arr {
+                        let key = match v {
+                            Value::String(s) => s.clone(),
+                            Value::Int(n) => n.to_string(),
+                            Value::Bool(b) => b.to_string(),
+                            _ => format!("{:?}", v),
+                        };
+                        groups.entry(key).or_default().push(v.clone());
+                    }
+                    let result: HashMap<String, Value> = groups.into_iter()
+                        .map(|(k, v)| (k, Value::Array(v)))
+                        .collect();
+                    Some(Value::Map(result))
+                } else {
+                    Some(Value::Error("group_by: expected array".to_string()))
+                }
+            }
+            "PARTITION" => {
+                // partition(array, index) - split array at index
+                if args.len() >= 2 {
+                    if let (Value::Array(arr), Value::Int(idx)) = (&args[0], &args[1]) {
+                        let idx = (*idx as usize).min(arr.len());
+                        let left: Vec<Value> = arr[..idx].to_vec();
+                        let right: Vec<Value> = arr[idx..].to_vec();
+                        Some(Value::Array(vec![Value::Array(left), Value::Array(right)]))
+                    } else {
+                        Some(Value::Error("partition: expected (array, index)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("partition: expected 2 arguments".to_string()))
+                }
+            }
+            "CHUNK" => {
+                // chunk(array, size) - split array into chunks
+                if args.len() >= 2 {
+                    if let (Value::Array(arr), Value::Int(size)) = (&args[0], &args[1]) {
+                        let size = (*size as usize).max(1);
+                        let chunks: Vec<Value> = arr.chunks(size)
+                            .map(|c| Value::Array(c.to_vec()))
+                            .collect();
+                        Some(Value::Array(chunks))
+                    } else {
+                        Some(Value::Error("chunk: expected (array, size)".to_string()))
+                    }
+                } else {
+                    Some(Value::Error("chunk: expected 2 arguments".to_string()))
+                }
+            }
+
             _ => None,
         };
         Ok(result)
@@ -2540,6 +2959,32 @@ impl Vm {
                 _ => val.clone()
             }
         }
+    }
+
+    /// Convert days since March 1, year 0 to year/month/day
+    /// Using the algorithm from https://howardhinnant.github.io/date_algorithms.html
+    fn days_to_ymd(days: i32) -> (i32, u32, u32) {
+        let era = if days >= 0 { days } else { days - 146096 } / 146097;
+        let doe = (days - era * 146097) as u32;
+        let yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365;
+        let y = yoe as i32 + era * 400;
+        let doy = doe - (365*yoe + yoe/4 - yoe/100);
+        let mp = (5*doy + 2) / 153;
+        let d = doy - (153*mp + 2)/5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let year = if m <= 2 { y + 1 } else { y };
+        (year, m, d)
+    }
+
+    /// Convert year/month/day to days since March 1, year 0
+    fn ymd_to_days(year: i32, month: u32, day: u32) -> i32 {
+        let y = if month <= 2 { year - 1 } else { year };
+        let m = if month <= 2 { month + 12 } else { month };
+        let era = if y >= 0 { y } else { y - 399 } / 400;
+        let yoe = (y - era * 400) as u32;
+        let doy = (153 * (m - 3) + 2) / 5 + day - 1;
+        let doe = yoe * 365 + yoe/4 - yoe/100 + doy;
+        era * 146097 + doe as i32
     }
 
     /// FFI 함수 호출
@@ -3301,7 +3746,7 @@ mod tests {
         let obj = Value::Map(map);
 
         // Test json_keys
-        let result = vm.call_builtin("JSON_KEYS", &[obj.clone()]).unwrap();
+        let result = vm.call_builtin("JSON_KEYS", std::slice::from_ref(&obj)).unwrap();
         if let Some(Value::Array(keys)) = result {
             assert_eq!(keys.len(), 2);
             assert!(keys.contains(&Value::String("a".to_string())));
@@ -3487,6 +3932,217 @@ mod tests {
             assert!(m.contains_key("url"));
         } else {
             panic!("Expected Map from http_get_json");
+        }
+    }
+
+    // === New stdlib tests ===
+
+    #[test]
+    fn test_time_functions() {
+        let vm = Vm::new();
+
+        // Test time_now returns a timestamp
+        let result = vm.call_builtin("TIME_NOW", &[]).unwrap();
+        assert!(matches!(result, Some(Value::Int(_))));
+
+        // Test time_now_ms returns milliseconds
+        let result = vm.call_builtin("TIME_NOW_MS", &[]).unwrap();
+        assert!(matches!(result, Some(Value::Int(_))));
+
+        // Test time_format
+        let result = vm.call_builtin("TIME_FORMAT", &[Value::Int(0)]).unwrap();
+        assert!(matches!(result, Some(Value::String(_))));
+        if let Some(Value::String(s)) = result {
+            assert!(s.starts_with("1970-01-01T"));
+        }
+
+        // Test time_parse
+        let result = vm.call_builtin("TIME_PARSE", &[
+            Value::String("1970-01-01T00:00:00Z".to_string())
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Int(0)));
+    }
+
+    #[test]
+    fn test_random_functions() {
+        let vm = Vm::new();
+
+        // Test random returns float between 0 and 1
+        let result = vm.call_builtin("RANDOM", &[]).unwrap();
+        if let Some(Value::Float(f)) = result {
+            assert!(f >= 0.0 && f < 1.0);
+        } else {
+            panic!("Expected float from random");
+        }
+
+        // Test random_int
+        let result = vm.call_builtin("RANDOM_INT", &[
+            Value::Int(1),
+            Value::Int(10)
+        ]).unwrap();
+        if let Some(Value::Int(n)) = result {
+            assert!(n >= 1 && n <= 10);
+        } else {
+            panic!("Expected int from random_int");
+        }
+
+        // Test shuffle
+        let result = vm.call_builtin("SHUFFLE", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+        ]).unwrap();
+        if let Some(Value::Array(arr)) = result {
+            assert_eq!(arr.len(), 3);
+        } else {
+            panic!("Expected array from shuffle");
+        }
+
+        // Test sample
+        let result = vm.call_builtin("SAMPLE", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4), Value::Int(5)]),
+            Value::Int(2)
+        ]).unwrap();
+        if let Some(Value::Array(arr)) = result {
+            assert_eq!(arr.len(), 2);
+        } else {
+            panic!("Expected array from sample");
+        }
+    }
+
+    #[test]
+    fn test_new_math_functions() {
+        let vm = Vm::new();
+
+        // Test sign
+        assert_eq!(vm.call_builtin("SIGN", &[Value::Int(-5)]).unwrap(), Some(Value::Int(-1)));
+        assert_eq!(vm.call_builtin("SIGN", &[Value::Int(0)]).unwrap(), Some(Value::Int(0)));
+        assert_eq!(vm.call_builtin("SIGN", &[Value::Int(5)]).unwrap(), Some(Value::Int(1)));
+
+        // Test hypot
+        let result = vm.call_builtin("HYPOT", &[Value::Int(3), Value::Int(4)]).unwrap();
+        if let Some(Value::Float(f)) = result {
+            assert!((f - 5.0).abs() < 1e-10);
+        } else {
+            panic!("Expected float from hypot");
+        }
+
+        // Test sinh/cosh/tanh
+        let result = vm.call_builtin("SINH", &[Value::Int(0)]).unwrap();
+        if let Some(Value::Float(f)) = result {
+            assert!(f.abs() < 1e-10);
+        }
+
+        let result = vm.call_builtin("COSH", &[Value::Int(0)]).unwrap();
+        if let Some(Value::Float(f)) = result {
+            assert!((f - 1.0).abs() < 1e-10);
+        }
+
+        let result = vm.call_builtin("TANH", &[Value::Int(0)]).unwrap();
+        if let Some(Value::Float(f)) = result {
+            assert!(f.abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_string_functions() {
+        let vm = Vm::new();
+
+        // Test char_code (string to int)
+        assert_eq!(vm.call_builtin("CHAR_CODE", &[Value::String("A".to_string())]).unwrap(), Some(Value::Int(65)));
+
+        // Test char_code (int to string)
+        assert_eq!(vm.call_builtin("CHAR_CODE", &[Value::Int(65)]).unwrap(), Some(Value::String("A".to_string())));
+
+        // Test hex (int to hex)
+        assert_eq!(vm.call_builtin("HEX", &[Value::Int(255)]).unwrap(), Some(Value::String("ff".to_string())));
+
+        // Test hex (hex to int)
+        assert_eq!(vm.call_builtin("HEX", &[Value::String("ff".to_string())]).unwrap(), Some(Value::Int(255)));
+
+        // Test bin (int to binary)
+        assert_eq!(vm.call_builtin("BIN", &[Value::Int(5)]).unwrap(), Some(Value::String("101".to_string())));
+
+        // Test bin (binary to int)
+        assert_eq!(vm.call_builtin("BIN", &[Value::String("101".to_string())]).unwrap(), Some(Value::Int(5)));
+
+        // Test format
+        let result = vm.call_builtin("FORMAT", &[
+            Value::String("Hello, {}!".to_string()),
+            Value::String("World".to_string())
+        ]).unwrap();
+        assert_eq!(result, Some(Value::String("Hello, World!".to_string())));
+    }
+
+    #[test]
+    fn test_array_functions() {
+        let vm = Vm::new();
+
+        // Test sum
+        let result = vm.call_builtin("SUM", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Int(6)));
+
+        // Test product
+        let result = vm.call_builtin("PRODUCT", &[
+            Value::Array(vec![Value::Int(2), Value::Int(3), Value::Int(4)])
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Int(24)));
+
+        // Test average
+        let result = vm.call_builtin("AVERAGE", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+        ]).unwrap();
+        if let Some(Value::Float(f)) = result {
+            assert!((f - 2.0).abs() < 1e-10);
+        }
+
+        // Test find
+        let result = vm.call_builtin("FIND", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]),
+            Value::Int(2)
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Int(1)));
+
+        // Test count
+        let result = vm.call_builtin("COUNT", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(1), Value::Int(1)]),
+            Value::Int(1)
+        ]).unwrap();
+        assert_eq!(result, Some(Value::Int(3)));
+
+        // Test group_by
+        let result = vm.call_builtin("GROUP_BY", &[
+            Value::Array(vec![
+                Value::String("a".to_string()),
+                Value::String("b".to_string()),
+                Value::String("a".to_string())
+            ])
+        ]).unwrap();
+        if let Some(Value::Map(m)) = result {
+            assert!(m.contains_key("a"));
+            assert!(m.contains_key("b"));
+        }
+
+        // Test partition
+        let result = vm.call_builtin("PARTITION", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4)]),
+            Value::Int(2)
+        ]).unwrap();
+        if let Some(Value::Array(arr)) = result {
+            assert_eq!(arr.len(), 2);
+            if let (Value::Array(left), Value::Array(right)) = (&arr[0], &arr[1]) {
+                assert_eq!(left.len(), 2);
+                assert_eq!(right.len(), 2);
+            }
+        }
+
+        // Test chunk
+        let result = vm.call_builtin("CHUNK", &[
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4), Value::Int(5)]),
+            Value::Int(2)
+        ]).unwrap();
+        if let Some(Value::Array(chunks)) = result {
+            assert_eq!(chunks.len(), 3);
         }
     }
 }

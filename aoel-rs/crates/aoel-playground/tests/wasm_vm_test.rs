@@ -1,6 +1,5 @@
 //! Tests for WASM VM (can run without wasm-pack)
 
-use aoel_parser;
 use aoel_lowering::Lowerer;
 
 // Note: These tests verify the non-WASM parts of the playground

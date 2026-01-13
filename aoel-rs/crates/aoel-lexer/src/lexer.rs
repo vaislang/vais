@@ -350,7 +350,7 @@ mod tests {
         let tokens = lexer.tokenize_no_newlines().unwrap();
 
         // 토큰화 성공 확인
-        assert!(tokens.len() > 0);
+        assert!(!tokens.is_empty());
         assert_eq!(tokens.last().unwrap().kind, TokenKind::Eof);
 
         // 에러 토큰 없음 확인

@@ -93,10 +93,8 @@ impl TypeChecker {
         let body_type = self.infer_expr(&func.body)?;
 
         // 반환 타입과 통일
-        if let Some(func_type) = self.env.lookup_function(&func.name).cloned() {
-            if let Type::Function(_, ret) = func_type {
-                self.env.unify(&body_type, &ret, func.span)?;
-            }
+        if let Some(Type::Function(_, ret)) = self.env.lookup_function(&func.name).cloned() {
+            self.env.unify(&body_type, &ret, func.span)?;
         }
 
         self.env.current_function = None;

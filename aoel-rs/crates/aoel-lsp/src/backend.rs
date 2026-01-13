@@ -385,9 +385,9 @@ impl Backend {
 
             // Check it's a whole word (not part of larger identifier)
             let before_ok = abs_pos == 0 ||
-                text.chars().nth(abs_pos - 1).map_or(true, |c| !c.is_alphanumeric());
+                text.chars().nth(abs_pos - 1).is_none_or(|c| !c.is_alphanumeric());
             let after_ok = abs_pos + word.len() >= text.len() ||
-                text.chars().nth(abs_pos + word.len()).map_or(true, |c| !c.is_alphanumeric());
+                text.chars().nth(abs_pos + word.len()).is_none_or(|c| !c.is_alphanumeric());
 
             if before_ok && after_ok {
                 let start = doc.offset_to_position(abs_pos);
