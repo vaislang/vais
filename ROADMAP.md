@@ -117,7 +117,7 @@ use math.{sin, cos}
 - [ ] JIT 재귀 함수 컴파일
 - [ ] JIT Float 전용 최적화 경로
 - [ ] SIMD 벡터화 (배열 연산)
-- [ ] 문서화 (README, 사용자 가이드)
+- [x] 문서화 (README, 사용자 가이드)
 - [ ] GitHub Pages 배포
 
 ---
