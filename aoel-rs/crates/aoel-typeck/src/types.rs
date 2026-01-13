@@ -18,6 +18,8 @@ pub enum Type {
     Unit,
     /// 배열 타입
     Array(Box<Type>),
+    /// 세트 타입
+    Set(Box<Type>),
     /// 튜플 타입
     Tuple(Vec<Type>),
     /// 맵/딕셔너리 타입
@@ -162,6 +164,7 @@ impl fmt::Display for Type {
             Type::Bool => write!(f, "Bool"),
             Type::Unit => write!(f, "()"),
             Type::Array(t) => write!(f, "[{}]", t),
+            Type::Set(t) => write!(f, "#{{{}}}", t),
             Type::Tuple(ts) => {
                 write!(f, "(")?;
                 for (i, t) in ts.iter().enumerate() {

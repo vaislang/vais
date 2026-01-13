@@ -97,6 +97,7 @@ impl Formatter {
         match item {
             Item::Function(f) => self.format_function(f),
             Item::TypeDef(t) => self.format_typedef(t),
+            Item::Enum(e) => self.format_enum(e),
             Item::Module(m) => self.format_module(m),
             Item::Use(u) => self.format_use(u),
             Item::Ffi(f) => self.format_ffi(f),
@@ -179,6 +180,53 @@ impl Formatter {
             self.output.push('=');
         }
         self.format_type(&typedef.ty);
+    }
+
+    fn format_enum(&mut self, enum_def: &EnumDef) {
+        self.write_indent();
+        if enum_def.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("enum ");
+        self.output.push_str(&enum_def.name);
+
+        // 타입 파라미터
+        if !enum_def.type_params.is_empty() {
+            self.output.push('<');
+            for (i, param) in enum_def.type_params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str(&param.name);
+            }
+            self.output.push('>');
+        }
+
+        self.output.push_str(" {\n");
+        self.indent_level += 1;
+
+        for (i, variant) in enum_def.variants.iter().enumerate() {
+            self.write_indent();
+            self.output.push_str(&variant.name);
+            if !variant.fields.is_empty() {
+                self.output.push('(');
+                for (j, field) in variant.fields.iter().enumerate() {
+                    if j > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.format_type(field);
+                }
+                self.output.push(')');
+            }
+            if i < enum_def.variants.len() - 1 {
+                self.output.push(',');
+            }
+            self.output.push('\n');
+        }
+
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push('}');
     }
 
     fn format_module(&mut self, module: &ModuleDef) {
@@ -357,6 +405,16 @@ impl Formatter {
                     self.write_indent();
                 }
                 self.output.push(']');
+            }
+            Expr::Set(elements, _) => {
+                self.output.push_str("#{");
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.format_expr(elem);
+                }
+                self.output.push('}');
             }
             Expr::Map(fields, _) => {
                 self.output.push('{');
@@ -641,6 +699,45 @@ impl Formatter {
                 self.write_indent();
                 self.output.push('}');
             }
+            Expr::Struct(type_name, fields, _) => {
+                self.output.push_str(type_name);
+                self.output.push_str(" { ");
+                for (i, (name, value)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(name);
+                    self.output.push_str(": ");
+                    self.format_expr(value);
+                }
+                self.output.push_str(" }");
+            }
+            Expr::ListComprehension { expr, var, iter, cond, .. } => {
+                self.output.push('[');
+                self.format_expr(expr);
+                self.output.push_str(" for ");
+                self.output.push_str(var);
+                self.output.push_str(" in ");
+                self.format_expr(iter);
+                if let Some(condition) = cond {
+                    self.output.push_str(" if ");
+                    self.format_expr(condition);
+                }
+                self.output.push(']');
+            }
+            Expr::SetComprehension { expr, var, iter, cond, .. } => {
+                self.output.push_str("#{");
+                self.format_expr(expr);
+                self.output.push_str(" for ");
+                self.output.push_str(var);
+                self.output.push_str(" in ");
+                self.format_expr(iter);
+                if let Some(condition) = cond {
+                    self.output.push_str(" if ");
+                    self.format_expr(condition);
+                }
+                self.output.push('}');
+            }
         }
     }
 
@@ -732,6 +829,11 @@ impl Formatter {
                 self.output.push('[');
                 self.format_type(inner);
                 self.output.push(']');
+            }
+            TypeExpr::Set(inner) => {
+                self.output.push_str("#{");
+                self.format_type(inner);
+                self.output.push('}');
             }
             TypeExpr::Map(key, value) => {
                 self.output.push('{');

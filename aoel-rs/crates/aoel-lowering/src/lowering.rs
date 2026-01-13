@@ -164,6 +164,13 @@ impl Lowerer {
                 instrs.push(Instruction::new(OpCode::MakeArray(elements.len())));
             }
 
+            Expr::Set(elements, _) => {
+                for elem in elements {
+                    instrs.extend(self.lower_expr(elem)?);
+                }
+                instrs.push(Instruction::new(OpCode::MakeSet(elements.len())));
+            }
+
             Expr::Map(fields, _) => {
                 let field_names: Vec<String> = fields.iter().map(|(k, _)| k.clone()).collect();
                 for (_, v) in fields {
@@ -507,6 +514,85 @@ impl Lowerer {
 
                 // handler 실행
                 instrs.extend(handler_instrs);
+            }
+
+            Expr::Struct(type_name, fields, _) => {
+                // Struct 리터럴은 Map처럼 처리 (MakeStruct 사용)
+                // __type__ 필드를 추가하여 타입 정보 저장
+
+                // __type__ 값 먼저 push
+                instrs.push(Instruction::new(OpCode::Const(Value::String(
+                    type_name.clone(),
+                ))));
+
+                // 나머지 필드 값 push
+                for (_, value) in fields {
+                    instrs.extend(self.lower_expr(value)?);
+                }
+
+                // 필드 이름 목록 생성 (__type__ 포함)
+                let mut field_names = vec!["__type__".to_string()];
+                field_names.extend(fields.iter().map(|(k, _)| k.clone()));
+
+                instrs.push(Instruction::new(OpCode::MakeStruct(field_names)));
+            }
+
+            // List comprehension: [expr for var in iter if cond]
+            // 이를 iter.@(x => cond ? expr : []).flatten() 형태로 변환
+            // 또는 간단히 filter와 map 조합으로
+            Expr::ListComprehension { expr, var, iter, cond, .. } => {
+                // iter 로드
+                instrs.extend(self.lower_expr(iter)?);
+
+                // filter (조건이 있는 경우)
+                if let Some(condition) = cond {
+                    let filter_body = {
+                        let mut body = Vec::new();
+                        body.push(Instruction::new(OpCode::Store(var.clone())));
+                        body.extend(self.lower_expr(condition)?);
+                        body
+                    };
+                    instrs.push(Instruction::new(OpCode::Filter(Box::new(filter_body))));
+                }
+
+                // map
+                let map_body = {
+                    let mut body = Vec::new();
+                    body.push(Instruction::new(OpCode::Store(var.clone())));
+                    body.extend(self.lower_expr(expr)?);
+                    body
+                };
+                instrs.push(Instruction::new(OpCode::Map(Box::new(map_body))));
+            }
+
+            // Set comprehension: #{expr for var in iter if cond}
+            Expr::SetComprehension { expr, var, iter, cond, .. } => {
+                // iter 로드
+                instrs.extend(self.lower_expr(iter)?);
+
+                // filter (조건이 있는 경우)
+                if let Some(condition) = cond {
+                    let filter_body = {
+                        let mut body = Vec::new();
+                        body.push(Instruction::new(OpCode::Store(var.clone())));
+                        body.extend(self.lower_expr(condition)?);
+                        body
+                    };
+                    instrs.push(Instruction::new(OpCode::Filter(Box::new(filter_body))));
+                }
+
+                // map
+                let map_body = {
+                    let mut body = Vec::new();
+                    body.push(Instruction::new(OpCode::Store(var.clone())));
+                    body.extend(self.lower_expr(expr)?);
+                    body
+                };
+                instrs.push(Instruction::new(OpCode::Map(Box::new(map_body))));
+
+                // 배열을 세트로 변환 (MakeSet은 스택의 배열을 변환)
+                // 여기서는 결과를 배열로 남기고 런타임에서 세트로 변환하도록 함
+                // TODO: ArrayToSet opcode 추가 필요
             }
         }
 

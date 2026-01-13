@@ -134,6 +134,11 @@ impl<'src> Parser<'src> {
                 let type_def = self.parse_type_def(is_pub)?;
                 Ok(Item::TypeDef(type_def))
             }
+            TokenKind::Enum => {
+                self.advance();
+                let enum_def = self.parse_enum_def(is_pub)?;
+                Ok(Item::Enum(enum_def))
+            }
             TokenKind::Ffi => {
                 if is_pub {
                     return Err(ParseError::InvalidSyntax {
@@ -510,6 +515,68 @@ impl<'src> Parser<'src> {
             type_params,
             ty,
             is_pub,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// Enum 정의 파싱: enum Name { Variant1, Variant2(T), ... }
+    fn parse_enum_def(&mut self, is_pub: bool) -> ParseResult<EnumDef> {
+        let start = self.previous.span;
+        let name = self.expect_identifier()?;
+
+        // 타입 파라미터 (옵션): <T, U>
+        let type_params = if self.match_token(TokenKind::Lt) {
+            self.parse_type_params()?
+        } else {
+            Vec::new()
+        };
+
+        self.expect(TokenKind::LBrace)?;
+
+        let mut variants = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.check(TokenKind::Eof) {
+            let variant = self.parse_enum_variant()?;
+            variants.push(variant);
+            if !self.match_token(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(EnumDef {
+            name,
+            type_params,
+            variants,
+            is_pub,
+            span: start.merge(self.previous.span),
+        })
+    }
+
+    /// Enum variant 파싱: VariantName 또는 VariantName(Type1, Type2)
+    fn parse_enum_variant(&mut self) -> ParseResult<EnumVariant> {
+        let start = self.current.span;
+        let name = self.expect_identifier()?;
+
+        let fields = if self.match_token(TokenKind::LParen) {
+            let mut field_types = Vec::new();
+            if !self.check(TokenKind::RParen) {
+                loop {
+                    field_types.push(self.parse_type()?);
+                    if !self.match_token(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen)?;
+            field_types
+        } else {
+            Vec::new()
+        };
+
+        Ok(EnumVariant {
+            name,
+            fields,
             span: start.merge(self.previous.span),
         })
     }
@@ -1117,11 +1184,19 @@ impl<'src> Parser<'src> {
                 Ok(Expr::Nil(span))
             }
 
-            // 식별자
+            // 식별자 또는 Struct 리터럴
             TokenKind::Identifier => {
                 let name = self.current.text.clone();
                 self.advance();
-                Ok(Expr::Ident(name, span))
+
+                // Struct 리터럴: TypeName { field: value, ... }
+                // 대문자로 시작하는 식별자만 Struct 리터럴로 처리
+                let is_type_name = name.chars().next().is_some_and(|c| c.is_uppercase());
+                if is_type_name && self.current.kind == TokenKind::LBrace {
+                    self.parse_struct_literal(name, span)
+                } else {
+                    Ok(Expr::Ident(name, span))
+                }
             }
 
             // 람다 파라미터
@@ -1140,21 +1215,92 @@ impl<'src> Parser<'src> {
                 Ok(Expr::SelfCall(args, span.merge(end_span)))
             }
 
-            // 배열: [a, b, c]
+            // 배열 또는 list comprehension: [a, b, c] 또는 [expr for x in iter]
             TokenKind::LBracket => {
                 self.advance();
-                let mut elements = Vec::new();
-                if !self.check(TokenKind::RBracket) {
-                    loop {
-                        elements.push(self.parse_expr()?);
-                        if !self.match_token(TokenKind::Comma) {
-                            break;
-                        }
+                if self.check(TokenKind::RBracket) {
+                    // 빈 배열
+                    self.advance();
+                    return Ok(Expr::Array(vec![], span.merge(self.previous.span)));
+                }
+
+                // 첫 번째 표현식 파싱
+                let first = self.parse_expr()?;
+
+                // list comprehension: [expr for var in iter if cond]
+                if self.match_token(TokenKind::For) {
+                    let var = self.expect_identifier()?;
+                    self.expect(TokenKind::In)?;
+                    let iter = self.parse_expr()?;
+                    let cond = if self.match_token(TokenKind::If) {
+                        Some(Box::new(self.parse_expr()?))
+                    } else {
+                        None
+                    };
+                    self.expect(TokenKind::RBracket)?;
+                    return Ok(Expr::ListComprehension {
+                        expr: Box::new(first),
+                        var,
+                        iter: Box::new(iter),
+                        cond,
+                        span: span.merge(self.previous.span),
+                    });
+                }
+
+                // 일반 배열
+                let mut elements = vec![first];
+                while self.match_token(TokenKind::Comma) {
+                    if self.check(TokenKind::RBracket) {
+                        break;
                     }
+                    elements.push(self.parse_expr()?);
                 }
                 self.expect(TokenKind::RBracket)?;
-                let end_span = self.previous.span;
-                Ok(Expr::Array(elements, span.merge(end_span)))
+                Ok(Expr::Array(elements, span.merge(self.previous.span)))
+            }
+
+            // 세트 또는 set comprehension: #{a, b, c} 또는 #{expr for x in iter}
+            TokenKind::HashBrace => {
+                self.advance();
+                if self.check(TokenKind::RBrace) {
+                    // 빈 세트
+                    self.advance();
+                    return Ok(Expr::Set(vec![], span.merge(self.previous.span)));
+                }
+
+                // 첫 번째 표현식 파싱
+                let first = self.parse_expr()?;
+
+                // set comprehension: #{expr for var in iter if cond}
+                if self.match_token(TokenKind::For) {
+                    let var = self.expect_identifier()?;
+                    self.expect(TokenKind::In)?;
+                    let iter = self.parse_expr()?;
+                    let cond = if self.match_token(TokenKind::If) {
+                        Some(Box::new(self.parse_expr()?))
+                    } else {
+                        None
+                    };
+                    self.expect(TokenKind::RBrace)?;
+                    return Ok(Expr::SetComprehension {
+                        expr: Box::new(first),
+                        var,
+                        iter: Box::new(iter),
+                        cond,
+                        span: span.merge(self.previous.span),
+                    });
+                }
+
+                // 일반 세트
+                let mut elements = vec![first];
+                while self.match_token(TokenKind::Comma) {
+                    if self.check(TokenKind::RBrace) {
+                        break;
+                    }
+                    elements.push(self.parse_expr()?);
+                }
+                self.expect(TokenKind::RBrace)?;
+                Ok(Expr::Set(elements, span.merge(self.previous.span)))
             }
 
             // 블록 또는 맵: { ... }
@@ -1242,6 +1388,29 @@ impl<'src> Parser<'src> {
     }
 
     /// 중괄호 표현식 파싱 (블록 또는 맵)
+    /// Struct 리터럴 파싱: TypeName { field: value, ... }
+    fn parse_struct_literal(&mut self, name: String, start: Span) -> ParseResult<Expr> {
+        self.expect(TokenKind::LBrace)?;
+
+        let mut fields = Vec::new();
+        if !self.check(TokenKind::RBrace) {
+            loop {
+                let field_name = self.expect_identifier()?;
+                self.expect(TokenKind::Colon)?;
+                let value = self.parse_expr()?;
+                fields.push((field_name, value));
+                if !self.match_token(TokenKind::Comma) {
+                    break;
+                }
+                if self.check(TokenKind::RBrace) {
+                    break;
+                }
+            }
+        }
+        self.expect(TokenKind::RBrace)?;
+        Ok(Expr::Struct(name, fields, start.merge(self.previous.span)))
+    }
+
     fn parse_brace_expr(&mut self, start: Span) -> ParseResult<Expr> {
         if self.check(TokenKind::RBrace) {
             // 빈 맵
@@ -2430,6 +2599,188 @@ mod tests {
             assert!(func.type_params.is_empty());
         } else {
             panic!("Expected function");
+        }
+    }
+
+    // =========================================================================
+    // Struct Literal Tests
+    // =========================================================================
+
+    #[test]
+    fn test_struct_literal() {
+        let result = parse_expr("Point { x: 1, y: 2 }").unwrap();
+        if let Expr::Struct(name, fields, _) = result {
+            assert_eq!(name, "Point");
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0].0, "x");
+            assert_eq!(fields[1].0, "y");
+        } else {
+            panic!("Expected struct literal");
+        }
+    }
+
+    #[test]
+    fn test_struct_literal_empty() {
+        let result = parse_expr("Empty {}").unwrap();
+        if let Expr::Struct(name, fields, _) = result {
+            assert_eq!(name, "Empty");
+            assert!(fields.is_empty());
+        } else {
+            panic!("Expected struct literal");
+        }
+    }
+
+    #[test]
+    fn test_struct_literal_nested() {
+        let result = parse_expr("Line { start: Point { x: 0, y: 0 }, end: Point { x: 1, y: 1 } }").unwrap();
+        if let Expr::Struct(name, fields, _) = result {
+            assert_eq!(name, "Line");
+            assert_eq!(fields.len(), 2);
+            assert!(matches!(fields[0].1, Expr::Struct(_, _, _)));
+            assert!(matches!(fields[1].1, Expr::Struct(_, _, _)));
+        } else {
+            panic!("Expected struct literal");
+        }
+    }
+
+    #[test]
+    fn test_lowercase_identifier_not_struct() {
+        // 소문자로 시작하는 식별자는 Struct 리터럴로 처리되지 않음
+        let result = parse_expr("point { x: 1 }").unwrap();
+        // 이 경우 `point`는 identifier, `{ x: 1 }`은 블록으로 파싱됨
+        assert!(matches!(result, Expr::Ident(_, _)));
+    }
+
+    // =========================================================================
+    // Enum Definition Tests
+    // =========================================================================
+
+    #[test]
+    fn test_enum_simple() {
+        let result = parse("enum Color { Red, Green, Blue }").unwrap();
+        if let Item::Enum(e) = &result.items[0] {
+            assert_eq!(e.name, "Color");
+            assert_eq!(e.variants.len(), 3);
+            assert_eq!(e.variants[0].name, "Red");
+            assert_eq!(e.variants[1].name, "Green");
+            assert_eq!(e.variants[2].name, "Blue");
+            assert!(e.variants[0].fields.is_empty());
+        } else {
+            panic!("Expected enum");
+        }
+    }
+
+    #[test]
+    fn test_enum_with_data() {
+        let result = parse("enum Option<T> { Some(T), None }").unwrap();
+        if let Item::Enum(e) = &result.items[0] {
+            assert_eq!(e.name, "Option");
+            assert_eq!(e.type_params.len(), 1);
+            assert_eq!(e.type_params[0].name, "T");
+            assert_eq!(e.variants.len(), 2);
+            assert_eq!(e.variants[0].name, "Some");
+            assert_eq!(e.variants[0].fields.len(), 1);
+            assert_eq!(e.variants[1].name, "None");
+            assert!(e.variants[1].fields.is_empty());
+        } else {
+            panic!("Expected enum");
+        }
+    }
+
+    #[test]
+    fn test_enum_result() {
+        let result = parse("enum Result<T, E> { Ok(T), Err(E) }").unwrap();
+        if let Item::Enum(e) = &result.items[0] {
+            assert_eq!(e.name, "Result");
+            assert_eq!(e.type_params.len(), 2);
+            assert_eq!(e.variants.len(), 2);
+            assert_eq!(e.variants[0].name, "Ok");
+            assert_eq!(e.variants[1].name, "Err");
+        } else {
+            panic!("Expected enum");
+        }
+    }
+
+    // =========================================================================
+    // Set Literal Tests
+    // =========================================================================
+
+    #[test]
+    fn test_set_literal() {
+        let result = parse_expr("#{1, 2, 3}").unwrap();
+        if let Expr::Set(elements, _) = result {
+            assert_eq!(elements.len(), 3);
+        } else {
+            panic!("Expected set literal");
+        }
+    }
+
+    #[test]
+    fn test_set_empty() {
+        let result = parse_expr("#{}").unwrap();
+        if let Expr::Set(elements, _) = result {
+            assert!(elements.is_empty());
+        } else {
+            panic!("Expected empty set");
+        }
+    }
+
+    #[test]
+    fn test_set_expressions() {
+        let result = parse_expr("#{a + 1, b * 2}").unwrap();
+        if let Expr::Set(elements, _) = result {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(elements[0], Expr::Binary(_, _, _, _)));
+        } else {
+            panic!("Expected set literal with expressions");
+        }
+    }
+
+    // =========================================================================
+    // Comprehension Tests
+    // =========================================================================
+
+    #[test]
+    fn test_list_comprehension() {
+        let result = parse_expr("[x * 2 for x in arr]").unwrap();
+        if let Expr::ListComprehension { var, cond, .. } = result {
+            assert_eq!(var, "x");
+            assert!(cond.is_none());
+        } else {
+            panic!("Expected list comprehension");
+        }
+    }
+
+    #[test]
+    fn test_list_comprehension_with_filter() {
+        let result = parse_expr("[x * 2 for x in arr if x > 0]").unwrap();
+        if let Expr::ListComprehension { var, cond, .. } = result {
+            assert_eq!(var, "x");
+            assert!(cond.is_some());
+        } else {
+            panic!("Expected list comprehension with filter");
+        }
+    }
+
+    #[test]
+    fn test_set_comprehension() {
+        let result = parse_expr("#{x * 2 for x in arr}").unwrap();
+        if let Expr::SetComprehension { var, cond, .. } = result {
+            assert_eq!(var, "x");
+            assert!(cond.is_none());
+        } else {
+            panic!("Expected set comprehension");
+        }
+    }
+
+    #[test]
+    fn test_set_comprehension_with_filter() {
+        let result = parse_expr("#{x for x in arr if x > 0}").unwrap();
+        if let Expr::SetComprehension { var, cond, .. } = result {
+            assert_eq!(var, "x");
+            assert!(cond.is_some());
+        } else {
+            panic!("Expected set comprehension with filter");
         }
     }
 }

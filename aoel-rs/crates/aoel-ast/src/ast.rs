@@ -23,6 +23,8 @@ pub enum Item {
     Function(FunctionDef),
     /// 타입 정의: type Name = ...
     TypeDef(TypeDef),
+    /// Enum 정의: enum Name { Variant1, Variant2(T), ... }
+    Enum(EnumDef),
     /// 모듈: mod name
     Module(ModuleDef),
     /// import: use path
@@ -89,6 +91,27 @@ pub struct TypeDef {
     pub span: Span,
 }
 
+/// Enum 정의
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnumDef {
+    pub name: String,
+    /// 타입 파라미터 (제네릭)
+    pub type_params: Vec<TypeParam>,
+    /// Enum 변형들
+    pub variants: Vec<EnumVariant>,
+    pub is_pub: bool,
+    pub span: Span,
+}
+
+/// Enum 변형
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnumVariant {
+    pub name: String,
+    /// 연관 데이터 타입 (있는 경우)
+    pub fields: Vec<TypeExpr>,
+    pub span: Span,
+}
+
 /// 타입 표현식
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeExpr {
@@ -100,6 +123,8 @@ pub enum TypeExpr {
     Generic(String, Vec<TypeExpr>),
     /// 배열: [T]
     Array(Box<TypeExpr>),
+    /// 세트: #{T}
+    Set(Box<TypeExpr>),
     /// 맵: {K: V}
     Map(Box<TypeExpr>, Box<TypeExpr>),
     /// 튜플: (T1, T2, ...)
@@ -247,6 +272,8 @@ pub enum Expr {
     // === Collections ===
     /// 배열: [a, b, c]
     Array(Vec<Expr>, Span),
+    /// 세트: #{a, b, c}
+    Set(Vec<Expr>, Span),
     /// 맵/구조체: {key: value, ...}
     Map(Vec<(String, Expr)>, Span),
     /// 튜플: (a, b, c)
@@ -314,6 +341,24 @@ pub enum Expr {
         handler: Box<Expr>,
         span: Span,
     },
+    /// Struct 리터럴: TypeName { field: value, ... }
+    Struct(String, Vec<(String, Expr)>, Span),
+    /// List comprehension: [expr for var in iter if cond]
+    ListComprehension {
+        expr: Box<Expr>,
+        var: String,
+        iter: Box<Expr>,
+        cond: Option<Box<Expr>>,
+        span: Span,
+    },
+    /// Set comprehension: #{expr for var in iter if cond}
+    SetComprehension {
+        expr: Box<Expr>,
+        var: String,
+        iter: Box<Expr>,
+        cond: Option<Box<Expr>>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -328,6 +373,7 @@ impl Expr {
             Expr::Ident(_, s) => *s,
             Expr::LambdaParam(s) => *s,
             Expr::Array(_, s) => *s,
+            Expr::Set(_, s) => *s,
             Expr::Map(_, s) => *s,
             Expr::Tuple(_, s) => *s,
             Expr::Binary(_, _, _, s) => *s,
@@ -352,6 +398,9 @@ impl Expr {
             Expr::Try(_, s) => *s,
             Expr::Coalesce(_, _, s) => *s,
             Expr::TryCatch { span, .. } => *span,
+            Expr::Struct(_, _, s) => *s,
+            Expr::ListComprehension { span, .. } => *span,
+            Expr::SetComprehension { span, .. } => *span,
         }
     }
 }

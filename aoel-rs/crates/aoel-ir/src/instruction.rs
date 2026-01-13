@@ -69,6 +69,8 @@ pub enum OpCode {
     GetField(String),
     /// Create array from top N elements
     MakeArray(usize),
+    /// Create set from top N elements
+    MakeSet(usize),
     /// Create struct from field names
     MakeStruct(Vec<String>),
     /// Slice array: arr[start:end]

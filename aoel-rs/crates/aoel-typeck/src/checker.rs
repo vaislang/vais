@@ -208,6 +208,21 @@ impl TypeChecker {
                 }
             }
 
+            // 세트
+            Expr::Set(elements, span) => {
+                if elements.is_empty() {
+                    let elem_type = self.env.fresh_var();
+                    Ok(Type::Set(Box::new(elem_type)))
+                } else {
+                    let first_type = self.infer_expr(&elements[0])?;
+                    for elem in elements.iter().skip(1) {
+                        let elem_type = self.infer_expr(elem)?;
+                        self.env.unify(&first_type, &elem_type, *span)?;
+                    }
+                    Ok(Type::Set(Box::new(first_type)))
+                }
+            }
+
             // 튜플
             Expr::Tuple(elements, _) => {
                 let types: Vec<Type> = elements
@@ -512,6 +527,63 @@ impl TypeChecker {
                 self.env.unify(&body_type, &handler_type, *span)?;
 
                 Ok(body_type)
+            }
+
+            // Struct 리터럴
+            Expr::Struct(_type_name, fields, _span) => {
+                // 각 필드의 타입 추론
+                let mut field_types = std::collections::HashMap::new();
+                for (name, value) in fields {
+                    let ty = self.infer_expr(value)?;
+                    field_types.insert(name.clone(), ty);
+                }
+                Ok(Type::Struct(field_types))
+            }
+
+            // List comprehension: [expr for var in iter if cond]
+            Expr::ListComprehension { expr, var, iter, cond, span } => {
+                // iter는 배열이어야 함
+                let iter_type = self.infer_expr(iter)?;
+                let elem_type = match iter_type {
+                    Type::Array(inner) => *inner,
+                    _ => self.env.fresh_var(),
+                };
+
+                // var를 elem_type으로 바인딩
+                self.env.bind_var(var.clone(), elem_type);
+
+                // cond가 있으면 Bool이어야 함
+                if let Some(condition) = cond {
+                    let cond_type = self.infer_expr(condition)?;
+                    self.env.unify(&cond_type, &Type::Bool, *span)?;
+                }
+
+                // expr 타입 추론
+                let result_type = self.infer_expr(expr)?;
+                Ok(Type::Array(Box::new(result_type)))
+            }
+
+            // Set comprehension: #{expr for var in iter if cond}
+            Expr::SetComprehension { expr, var, iter, cond, span } => {
+                // iter는 배열이어야 함
+                let iter_type = self.infer_expr(iter)?;
+                let elem_type = match iter_type {
+                    Type::Array(inner) => *inner,
+                    _ => self.env.fresh_var(),
+                };
+
+                // var를 elem_type으로 바인딩
+                self.env.bind_var(var.clone(), elem_type);
+
+                // cond가 있으면 Bool이어야 함
+                if let Some(condition) = cond {
+                    let cond_type = self.infer_expr(condition)?;
+                    self.env.unify(&cond_type, &Type::Bool, *span)?;
+                }
+
+                // expr 타입 추론
+                let result_type = self.infer_expr(expr)?;
+                Ok(Type::Set(Box::new(result_type)))
             }
         }
     }
@@ -859,6 +931,7 @@ impl TypeChecker {
                 _ => Type::Any, // 사용자 정의 타입은 Any로 처리
             },
             TypeExpr::Array(inner) => Type::Array(Box::new(self.convert_type_expr(inner))),
+            TypeExpr::Set(inner) => Type::Set(Box::new(self.convert_type_expr(inner))),
             TypeExpr::Tuple(types) => {
                 Type::Tuple(types.iter().map(|t| self.convert_type_expr(t)).collect())
             }

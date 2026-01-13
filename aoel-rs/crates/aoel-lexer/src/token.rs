@@ -92,6 +92,9 @@ pub enum TokenKind {
     #[token("type")]
     Type,
 
+    #[token("enum")]
+    Enum,
+
     #[token("trait")]
     Trait,
 
@@ -272,6 +275,9 @@ pub enum TokenKind {
     #[token("]")]
     RBracket,
 
+    #[token("#{")]
+    HashBrace,
+
     #[token("{")]
     LBrace,
 
@@ -412,6 +418,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Mod => write!(f, "mod"),
             TokenKind::Use => write!(f, "use"),
             TokenKind::Type => write!(f, "type"),
+            TokenKind::Enum => write!(f, "enum"),
             TokenKind::Trait => write!(f, "trait"),
             TokenKind::Impl => write!(f, "impl"),
             TokenKind::Async => write!(f, "async"),
@@ -460,6 +467,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::RParen => write!(f, ")"),
             TokenKind::LBracket => write!(f, "["),
             TokenKind::RBracket => write!(f, "]"),
+            TokenKind::HashBrace => write!(f, "#{{"),
             TokenKind::LBrace => write!(f, "{{"),
             TokenKind::RBrace => write!(f, "}}"),
             TokenKind::Comma => write!(f, ","),
