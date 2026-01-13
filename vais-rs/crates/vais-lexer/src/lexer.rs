@@ -121,7 +121,8 @@ impl<'src> Lexer<'src> {
         if errors.is_empty() {
             Ok(tokens)
         } else {
-            Err(errors.into_iter().next().unwrap())
+            // errors가 비어있지 않음이 보장됨 (if 조건)
+            Err(errors.into_iter().next().expect("errors is non-empty after check"))
         }
     }
 
@@ -153,7 +154,8 @@ impl<'src> Lexer<'src> {
         if errors.is_empty() {
             Ok(tokens)
         } else {
-            Err(errors.into_iter().next().unwrap())
+            // errors가 비어있지 않음이 보장됨 (if 조건)
+            Err(errors.into_iter().next().expect("errors is non-empty after check"))
         }
     }
 }

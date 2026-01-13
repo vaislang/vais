@@ -2276,7 +2276,8 @@ impl Vm {
                         None
                     } else {
                         let mut new_arr = arr.clone();
-                        let popped = new_arr.pop().unwrap();
+                        // arr.is_empty() == false 조건으로 pop이 성공함이 보장됨
+                        let popped = new_arr.pop().expect("array is non-empty after check");
                         Some(Value::Array(vec![Value::Array(new_arr), popped]))
                     }
                 } else {

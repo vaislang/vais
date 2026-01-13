@@ -463,7 +463,8 @@ impl<'src> Parser<'src> {
 
                 if fields.len() == 1 && fields[0].0.len() == 1 {
                     // {K: V} - 맵 타입
-                    let (k, v) = fields.pop().unwrap();
+                    // fields.len() == 1 조건으로 pop이 성공함이 보장됨
+                    let (k, v) = fields.pop().expect("fields has exactly one element");
                     Ok(TypeExpr::Map(
                         Box::new(TypeExpr::Simple(k)),
                         Box::new(v),
