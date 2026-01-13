@@ -11,6 +11,7 @@ path = "src/main.rs"
 [features]
 default = []
 cranelift = ["aoel-codegen/cranelift"]
+jit = ["aoel-vm/jit", "aoel-jit"]
 
 [dependencies]
 aoel-lexer = { workspace = true }
@@ -22,6 +23,7 @@ aoel-vm = { workspace = true }
 aoel-ir = { workspace = true }
 aoel-codegen = { workspace = true }
 aoel-tools = { workspace = true }
+aoel-jit = { workspace = true, optional = true }
 
 clap = { version = "4.4", features = ["derive"] }
 ariadne = { workspace = true }

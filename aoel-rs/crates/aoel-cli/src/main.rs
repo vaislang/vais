@@ -73,6 +73,14 @@ enum Commands {
         /// Arguments as JSON array (e.g., '[1, 2, 3]')
         #[arg(short, long, default_value = "[]")]
         args: String,
+
+        /// Enable JIT compilation (requires --features jit)
+        #[arg(long)]
+        jit: bool,
+
+        /// Show JIT/profiling statistics after execution
+        #[arg(long)]
+        stats: bool,
     },
 
     /// Start interactive REPL
@@ -224,8 +232,8 @@ fn main() {
         Commands::Compile { file, output } => {
             compile_file(&file, output.as_ref());
         }
-        Commands::Run { file, func, args } => {
-            run_file(&file, func.as_deref(), &args);
+        Commands::Run { file, func, args, jit, stats } => {
+            run_file(&file, func.as_deref(), &args, jit, stats);
         }
         Commands::Repl => {
             repl();
@@ -460,7 +468,7 @@ fn compile_file(path: &PathBuf, output: Option<&PathBuf>) {
     }
 }
 
-fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str) {
+fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str, use_jit: bool, show_stats: bool) {
     let source = match read_file(path) {
         Ok(s) => s,
         Err(e) => {
@@ -514,10 +522,52 @@ fn run_file(path: &PathBuf, func_name: Option<&str>, args_json: &str) {
         })
         .unwrap_or_else(|| functions[0].name.clone());
 
-    // Execute
+    // Execute with JIT or interpreter
+    #[cfg(feature = "jit")]
+    if use_jit {
+        run_with_jit(functions, &target_func, args, show_stats);
+        return;
+    }
+
+    #[cfg(not(feature = "jit"))]
+    if use_jit {
+        eprintln!("JIT support not enabled. Build with: cargo build --features jit");
+        std::process::exit(1);
+    }
+
+    // Execute with interpreter
     match aoel_vm::execute_function(functions, &target_func, args) {
         Ok(result) => {
             println!("{}", result);
+        }
+        Err(e) => {
+            eprintln!("Runtime error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(feature = "jit")]
+fn run_with_jit(functions: Vec<aoel_lowering::CompiledFunction>, func_name: &str, args: Vec<aoel_ir::Value>, show_stats: bool) {
+    use aoel_vm::{JitVm, JitConfig};
+
+    let mut vm = JitVm::with_config(JitConfig {
+        enabled: true,
+        auto_jit: true,
+        profiling: true,
+        threshold: 10, // Lower threshold for CLI execution
+    });
+
+    vm.load_functions(functions);
+
+    match vm.call_function(func_name, args) {
+        Ok(result) => {
+            println!("{}", result);
+
+            if show_stats {
+                vm.print_jit_stats();
+                vm.print_profile_stats();
+            }
         }
         Err(e) => {
             eprintln!("Runtime error: {}", e);

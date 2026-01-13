@@ -9,6 +9,7 @@ members = [
     "crates/aoel-ir",
     "crates/aoel-vm",
     "crates/aoel-codegen",
+    "crates/aoel-jit",
     "crates/aoel-tools",
     "crates/aoel-lsp",
     "crates/aoel-cli",
@@ -33,6 +34,7 @@ aoel-lowering = { path = "crates/aoel-lowering" }
 aoel-ir = { path = "crates/aoel-ir" }
 aoel-vm = { path = "crates/aoel-vm" }
 aoel-codegen = { path = "crates/aoel-codegen" }
+aoel-jit = { path = "crates/aoel-jit" }
 aoel-tools = { path = "crates/aoel-tools" }
 
 # External dependencies
@@ -59,12 +61,17 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+default = []
+jit = ["aoel-vm/jit", "aoel-jit"]
+
 [dependencies]
 aoel-lexer = { path = "crates/aoel-lexer" }
 aoel-parser = { path = "crates/aoel-parser" }
 aoel-lowering = { path = "crates/aoel-lowering" }
 aoel-ir = { path = "crates/aoel-ir" }
 aoel-vm = { path = "crates/aoel-vm" }
+aoel-jit = { path = "crates/aoel-jit", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -72,3 +79,8 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[[bench]]
+name = "jit_benchmarks"
+harness = false
+required-features = ["jit"]
