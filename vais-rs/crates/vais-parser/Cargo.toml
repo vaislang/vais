@@ -5,6 +5,6 @@ edition.workspace = true
 description = "Vais Parser"
 
 [dependencies]
-thiserror = "1.0"
+thiserror = "2.0"
 vais-lexer = { path = "../vais-lexer" }
 vais-ast = { path = "../vais-ast" }

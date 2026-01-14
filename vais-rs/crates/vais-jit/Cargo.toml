@@ -7,7 +7,7 @@ description = "Vais JIT Compiler - High-performance native code generation"
 [dependencies]
 vais-ir = { path = "../vais-ir" }
 vais-lowering = { path = "../vais-lowering" }
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Cranelift JIT backend
 cranelift = "0.116"

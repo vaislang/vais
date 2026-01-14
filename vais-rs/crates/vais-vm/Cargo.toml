@@ -13,7 +13,7 @@ vais-ir = { path = "../vais-ir" }
 vais-ast = { path = "../vais-ast" }
 vais-lowering = { path = "../vais-lowering" }
 vais-jit = { path = "../vais-jit", optional = true }
-thiserror = "1.0"
+thiserror = "2.0"
 serde_json = "1.0"
 ureq = { version = "2.9", features = ["json"] }
 libloading = "0.8"
