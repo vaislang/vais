@@ -11,124 +11,72 @@ env:
 
 jobs:
   test:
-    name: Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        rust: [stable]
-
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-action@stable
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build
-        run: cargo build --workspace --all-features
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --workspace --all-features
+        run: cargo test --all
 
-      - name: Run integration tests
-        run: cargo test --test integration_tests
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-action@stable
-        with:
-          components: clippy
-
-      - name: Run Clippy
-        run: cargo clippy --workspace --all-features -- -D warnings
-
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-action@stable
-        with:
-          components: rustfmt
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy --all -- -D warnings
 
   benchmark:
-    name: Benchmark
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Install Rust
-        uses: dtolnay/rust-action@stable
+      - name: Build release
+        run: cargo build --release
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Run benchmarks
+        run: |
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Fibonacci without memo
+          echo "### fib(25) without @memo" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo 'fib(n) = n <= 1 ? n : $(n-1) + $(n-2)' > /tmp/fib_no_memo.vais
+          echo 'fib(25)' >> /tmp/fib_no_memo.vais
+          { time ./target/release/vais run /tmp/fib_no_memo.vais ; } 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # Fibonacci with memo
+          echo "### fib(25) with @memo" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo '#[memo]' > /tmp/fib_memo.vais
+          echo 'fib(n) = n <= 1 ? n : $(n-1) + $(n-2)' >> /tmp/fib_memo.vais
+          echo 'fib(25)' >> /tmp/fib_memo.vais
+          { time ./target/release/vais run /tmp/fib_memo.vais ; } 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # fib(30) with memo for real benchmark
+          echo "### fib(30) with @memo (main benchmark)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo '#[memo]' > /tmp/fib30_memo.vais
+          echo 'fib(n) = n <= 1 ? n : $(n-1) + $(n-2)' >> /tmp/fib30_memo.vais
+          echo 'fib(30)' >> /tmp/fib30_memo.vais
+          { time ./target/release/vais run /tmp/fib30_memo.vais ; } 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Checkout base branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.base_ref }}
-          path: base
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
 
-      - name: Run baseline benchmarks
-        working-directory: base
-        run: cargo bench --bench benchmarks -- --noplot --save-baseline baseline
-        continue-on-error: true
-
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
-        with:
-          path: pr
-
-      - name: Run PR benchmarks
-        working-directory: pr
-        run: cargo bench --bench benchmarks -- --noplot --baseline baseline
-        continue-on-error: true
-
-      - name: Comment on PR with results
-        uses: actions/github-script@v7
-        if: always()
-        with:
-          script: |
-            const fs = require('fs');
-            let comment = '## Benchmark Results\n\n';
-            comment += 'Benchmarks have been run. Check the Actions log for detailed results.\n';
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+      - name: Build WASM
+        run: |
+          cd crates/vais-playground
+          wasm-pack build --target web

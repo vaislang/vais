@@ -12,7 +12,7 @@
 //! - For parallel operations, values are deep-cloned across thread boundaries anyway
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 /// Unique ID for async tasks
@@ -33,9 +33,10 @@ pub enum FutureState {
 }
 
 /// Channel state (non-serializable due to Mutex)
+/// Uses VecDeque for O(1) push_back and pop_front operations
 #[derive(Debug)]
 pub struct ChannelState {
-    pub buffer: Vec<Value>,
+    pub buffer: VecDeque<Value>,
     pub capacity: usize,
     pub closed: bool,
 }
@@ -43,7 +44,7 @@ pub struct ChannelState {
 impl ChannelState {
     pub fn new(capacity: usize) -> Self {
         Self {
-            buffer: Vec::with_capacity(capacity.max(1)),
+            buffer: VecDeque::with_capacity(capacity.max(1)),
             capacity: capacity.max(1),
             closed: false,
         }

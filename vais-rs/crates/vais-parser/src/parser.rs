@@ -173,31 +173,50 @@ impl<'src> Parser<'src> {
 
     /// 아이템 파싱
     fn parse_item(&mut self) -> ParseResult<Item> {
-        // #[test] 어트리뷰트 확인
-        let is_test = if self.check(TokenKind::Hash) {
-            // Lookahead for #[test]
+        // #[test] 또는 #[memo] 어트리뷰트 확인
+        let mut is_test = false;
+        let mut is_memo = false;
+
+        while self.check(TokenKind::Hash) {
+            // Lookahead for #[attr]
             let saved_current = self.current.clone();
+            let saved_previous = self.previous.clone();
             self.advance(); // consume #
             if self.check(TokenKind::LBracket) {
                 self.advance(); // consume [
-                if self.check(TokenKind::Identifier) && self.current.text == "test" {
-                    self.advance(); // consume test
-                    self.expect(TokenKind::RBracket)?; // consume ]
-                    true
+                if self.check(TokenKind::Identifier) {
+                    let attr_name = self.current.text.clone();
+                    self.advance(); // consume identifier
+                    if self.check(TokenKind::RBracket) {
+                        self.advance(); // consume ]
+                        // Skip optional newline after attribute
+                        while self.check(TokenKind::Newline) {
+                            self.advance();
+                        }
+                        match attr_name.as_str() {
+                            "test" => is_test = true,
+                            "memo" => is_memo = true,
+                            _ => {} // ignore unknown attributes
+                        }
+                    } else {
+                        // Missing ], restore state
+                        self.current = saved_current;
+                        self.previous = saved_previous;
+                        break;
+                    }
                 } else {
-                    // Not a #[test], restore state - this is a length operator
+                    // Not a valid attribute, restore state
                     self.current = saved_current;
-                    // Re-lex from position (simplified: just mark as not test)
-                    false
+                    self.previous = saved_previous;
+                    break;
                 }
             } else {
                 // Not #[...], restore and continue (could be length operator)
                 self.current = saved_current;
-                false
+                self.previous = saved_previous;
+                break;
             }
-        } else {
-            false
-        };
+        }
 
         // pub 키워드 확인
         let is_pub = self.match_token(TokenKind::Pub);
@@ -324,7 +343,7 @@ impl<'src> Parser<'src> {
                 // 또는 함수 호출/표현식
                 // Lookahead: identifier( 다음이 identifier 또는 ) 이면 함수 정의
                 if self.is_function_def() {
-                    let func = self.parse_function_def(is_pub, is_async, is_test)?;
+                    let func = self.parse_function_def(is_pub, is_async, is_test, is_memo)?;
                     Ok(Item::Function(func))
                 } else {
                     if is_pub {
@@ -444,7 +463,7 @@ impl<'src> Parser<'src> {
     }
 
     /// 함수 정의 파싱: name(params) = body 또는 async name(params) = body
-    fn parse_function_def(&mut self, is_pub: bool, is_async: bool, is_test: bool) -> ParseResult<FunctionDef> {
+    fn parse_function_def(&mut self, is_pub: bool, is_async: bool, is_test: bool, is_memo: bool) -> ParseResult<FunctionDef> {
         let start = self.current.span;
         let name = self.expect_identifier()?;
 
@@ -480,6 +499,7 @@ impl<'src> Parser<'src> {
             is_pub,
             is_async,
             is_test,
+            is_memo,
             span: start.merge(self.previous.span),
         })
     }
@@ -944,6 +964,7 @@ impl<'src> Parser<'src> {
                 is_pub: false,  // impl 내부 메서드는 pub을 별도로 지정하지 않음
                 is_async: false,
                 is_test: false,
+                is_memo: false,
                 span: method_start.merge(self.previous.span),
             });
         }

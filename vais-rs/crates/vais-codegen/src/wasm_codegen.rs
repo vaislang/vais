@@ -464,6 +464,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let wat = generate_wat(&[func]).unwrap();
@@ -486,6 +487,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         let wat = generate_wat(&[func]).unwrap();
@@ -507,6 +509,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let wat = generate_wat(&[func]).unwrap();
@@ -526,6 +529,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         let wat = generate_wat(&[func]).unwrap();

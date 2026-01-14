@@ -8,13 +8,18 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use vais_ir::{Value, TaskId, ChannelId, FutureState, ChannelState};
 
 // Type alias for faster HashMap
+#[allow(dead_code)]
 type FastMap<K, V> = HashMap<K, V>;
 
 /// Async runtime state (shared between threads)
+///
+/// Note: Currently unused as async/await is planned but not fully implemented.
+/// This module provides the infrastructure for future async support.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct AsyncRuntime {
@@ -51,23 +56,24 @@ impl AsyncRuntime {
     /// Complete a task with a value
     pub fn complete_task(&mut self, id: TaskId, value: Value) {
         if let Some(state) = self.tasks.get(&id) {
-            let mut state = state.lock().expect("task lock poisoned");
-            *state = FutureState::Completed(Box::new(value));
+            if let Ok(mut state) = state.lock() {
+                *state = FutureState::Completed(Box::new(value));
+            }
         }
     }
 
-    /// Mark a task as failed
-    #[allow(dead_code)]
+    /// Mark a task as failed (reserved for error propagation in async operations)
     pub fn fail_task(&mut self, id: TaskId, error: String) {
         if let Some(state) = self.tasks.get(&id) {
-            let mut state = state.lock().expect("task lock poisoned");
-            *state = FutureState::Failed(error);
+            if let Ok(mut state) = state.lock() {
+                *state = FutureState::Failed(error);
+            }
         }
     }
 
     /// Get the current state of a task
     pub fn get_task_state(&self, id: TaskId) -> Option<FutureState> {
-        self.tasks.get(&id).map(|s| s.lock().expect("task lock poisoned").clone())
+        self.tasks.get(&id).and_then(|s| s.lock().ok().map(|g| g.clone()))
     }
 
     /// Create a new channel with the given capacity
@@ -80,53 +86,48 @@ impl AsyncRuntime {
 
     /// Send a value to a channel (blocking)
     pub fn send_to_channel(&self, id: ChannelId, value: Value) -> Result<(), String> {
-        if let Some(chan) = self.channels.get(&id) {
-            let mut chan = chan.lock().expect("channel lock poisoned");
-            if chan.closed {
+        let chan = self.channels.get(&id).ok_or("channel not found")?;
+        let mut guard = chan.lock().map_err(|_| "channel lock poisoned")?;
+        if guard.closed {
+            return Err("channel closed".to_string());
+        }
+        // Blocking send with backoff sleep to reduce CPU usage
+        while guard.buffer.len() >= guard.capacity {
+            drop(guard);
+            thread::sleep(Duration::from_micros(100)); // Backoff instead of busy spin
+            let chan = self.channels.get(&id).ok_or("channel gone")?;
+            guard = chan.lock().map_err(|_| "channel lock poisoned")?;
+            if guard.closed {
                 return Err("channel closed".to_string());
             }
-            // Simple blocking send (busy wait for now)
-            while chan.buffer.len() >= chan.capacity {
-                drop(chan);
-                thread::yield_now();
-                chan = self.channels.get(&id).expect("channel gone").lock().expect("channel lock poisoned");
-                if chan.closed {
-                    return Err("channel closed".to_string());
-                }
-            }
-            chan.buffer.push(value);
-            Ok(())
-        } else {
-            Err("channel not found".to_string())
         }
+        guard.buffer.push_back(value);
+        Ok(())
     }
 
     /// Receive a value from a channel (blocking)
     pub fn recv_from_channel(&self, id: ChannelId) -> Result<Value, String> {
-        if let Some(chan) = self.channels.get(&id) {
-            // Simple blocking receive (busy wait for now)
-            loop {
-                let mut chan_guard = chan.lock().expect("channel lock poisoned");
-                if !chan_guard.buffer.is_empty() {
-                    return Ok(chan_guard.buffer.remove(0));
-                }
-                if chan_guard.closed {
-                    return Err("channel closed".to_string());
-                }
-                drop(chan_guard);
-                thread::yield_now();
+        let chan = self.channels.get(&id).ok_or("channel not found")?;
+        // Blocking receive with backoff sleep to reduce CPU usage
+        loop {
+            let mut guard = chan.lock().map_err(|_| "channel lock poisoned")?;
+            if let Some(value) = guard.buffer.pop_front() {
+                return Ok(value);
             }
-        } else {
-            Err("channel not found".to_string())
+            if guard.closed {
+                return Err("channel closed".to_string());
+            }
+            drop(guard);
+            thread::sleep(Duration::from_micros(100)); // Backoff instead of busy spin
         }
     }
 
-    /// Close a channel
-    #[allow(dead_code)]
+    /// Close a channel (reserved for cleanup operations)
     pub fn close_channel(&self, id: ChannelId) {
         if let Some(chan) = self.channels.get(&id) {
-            let mut chan = chan.lock().expect("channel lock poisoned");
-            chan.closed = true;
+            if let Ok(mut guard) = chan.lock() {
+                guard.closed = true;
+            }
         }
     }
 }

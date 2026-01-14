@@ -353,6 +353,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         }
     }
 

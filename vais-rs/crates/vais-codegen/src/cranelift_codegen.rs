@@ -497,6 +497,7 @@ mod implementation {
                     Instruction::new(OpCode::Return),
                 ],
                 local_count: 0,
+            is_memo: false,
             };
 
             let result = jit_execute(&[func]).unwrap();
@@ -518,6 +519,7 @@ mod implementation {
                     Instruction::new(OpCode::Return),
                 ],
                 local_count: 0,
+            is_memo: false,
             };
 
             let result = jit_execute(&[func]).unwrap();
@@ -537,6 +539,7 @@ mod implementation {
                     Instruction::new(OpCode::Return),
                 ],
                 local_count: 0,
+            is_memo: false,
             };
 
             let result = jit_execute(&[func]).unwrap();

@@ -1029,6 +1029,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let ir = generate_llvm_ir(&[func]).unwrap();
@@ -1050,6 +1051,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         let ir = generate_llvm_ir(&[func]).unwrap();
@@ -1069,6 +1071,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let ir = generate_llvm_ir(&[func]).unwrap();
@@ -1088,6 +1091,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         let ir = generate_llvm_ir(&[func]).unwrap();
@@ -1131,6 +1135,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         let ir = generate_llvm_ir(&[func]).unwrap();

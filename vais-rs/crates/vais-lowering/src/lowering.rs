@@ -32,6 +32,8 @@ pub struct CompiledFunction {
     pub instructions: Vec<Instruction>,
     /// 로컬 변수 슬롯 개수 (params + locals)
     pub local_count: u16,
+    /// 메모이제이션 활성화 여부 (#[memo] 어트리뷰트)
+    pub is_memo: bool,
 }
 
 /// FFI 함수 정보
@@ -161,6 +163,7 @@ impl Lowerer {
                 params: Vec::new(),
                 instructions: main_instructions,
                 local_count: self.scope.count(),
+                is_memo: false,
             });
         }
 
@@ -200,6 +203,7 @@ impl Lowerer {
             params,
             instructions,
             local_count,
+            is_memo: func.is_memo,
         })
     }
 
@@ -233,6 +237,7 @@ impl Lowerer {
                     params,
                     instructions,
                     local_count,
+                    is_memo: false,
                 });
             }
         }
@@ -273,6 +278,7 @@ impl Lowerer {
                 params,
                 instructions,
                 local_count,
+                is_memo: false,
             });
         }
         Ok(())
@@ -1485,6 +1491,7 @@ mod tests {
             is_pub: false,
             is_async: false,
             is_test: false,
+            is_memo: false,
             span: dummy_span(),
         }
     }

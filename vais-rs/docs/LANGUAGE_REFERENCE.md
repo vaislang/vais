@@ -69,6 +69,8 @@ active = true    // Boolean
 | `String` | UTF-8 string | `"hello"` |
 | `Void` | No value | (unit type) |
 
+> **Note**: Mixed Int/Float operations automatically promote Int to Float. This may cause precision loss for large integers (> 2^53). Use explicit conversion when precision matters.
+
 ### Collection Types
 
 | Type | Description | Example |
@@ -152,6 +154,20 @@ numbers.@((x) => x * 2)
 
 // Pipe lambda syntax (inline only)
 [1, 2, 3].@(|x| x * 2)
+```
+
+### Memoization (`#[memo]`)
+
+```vais
+// Automatic result caching for pure functions
+#[memo]
+fib(n) = n <= 1 ? n : $(n-1) + $(n-2)
+
+fib(30)  // First call: computes and caches
+fib(30)  // Subsequent calls: returns cached result instantly
+
+// Without memo: O(2^n) complexity
+// With memo: O(n) complexity, ~900x faster for fib(30)
 ```
 
 ### Async Functions

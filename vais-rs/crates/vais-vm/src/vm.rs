@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 use vais_ir::{Instruction, OpCode, ReduceOp, Value, TaskId, ChannelId, FutureState, ChannelState};
 use vais_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
@@ -39,6 +40,7 @@ struct CatchHandler {
 }
 
 /// Effect handler information for algebraic effects
+/// Reserved for future algebraic effects implementation (resume/handle pattern)
 #[derive(Clone)]
 #[allow(dead_code)]
 struct EffectHandler {
@@ -56,7 +58,7 @@ struct FlowContext {
 }
 
 /// Lightweight execution context for parallel operations
-/// Avoids full VM initialization overhead
+/// Reserved for future parallel map/filter operations (rayon integration)
 #[allow(dead_code)]
 struct ParallelContext {
     stack: Vec<Value>,
@@ -216,21 +218,24 @@ impl AsyncRuntime {
 
     fn complete_task(&mut self, id: TaskId, value: Value) {
         if let Some(state) = self.tasks.get(&id) {
-            let mut state = state.lock().expect("task lock poisoned");
-            *state = FutureState::Completed(Box::new(value));
+            if let Ok(mut state) = state.lock() {
+                *state = FutureState::Completed(Box::new(value));
+            }
         }
     }
 
+    /// Mark a task as failed (reserved for error propagation in async operations)
     #[allow(dead_code)]
     fn fail_task(&mut self, id: TaskId, error: String) {
         if let Some(state) = self.tasks.get(&id) {
-            let mut state = state.lock().expect("task lock poisoned");
-            *state = FutureState::Failed(error);
+            if let Ok(mut state) = state.lock() {
+                *state = FutureState::Failed(error);
+            }
         }
     }
 
     fn get_task_state(&self, id: TaskId) -> Option<FutureState> {
-        self.tasks.get(&id).map(|s| s.lock().expect("task lock poisoned").clone())
+        self.tasks.get(&id).and_then(|s| s.lock().ok().map(|g| g.clone()))
     }
 
     fn create_channel(&mut self, capacity: usize) -> ChannelId {
@@ -241,51 +246,48 @@ impl AsyncRuntime {
     }
 
     fn send_to_channel(&self, id: ChannelId, value: Value) -> Result<(), String> {
-        if let Some(chan) = self.channels.get(&id) {
-            let mut chan = chan.lock().expect("channel lock poisoned");
-            if chan.closed {
+        let chan = self.channels.get(&id).ok_or("channel not found")?;
+        let mut guard = chan.lock().map_err(|_| "channel lock poisoned")?;
+        if guard.closed {
+            return Err("channel closed".to_string());
+        }
+        // Blocking send with backoff sleep to reduce CPU usage
+        while guard.buffer.len() >= guard.capacity {
+            drop(guard);
+            thread::sleep(Duration::from_micros(100)); // Backoff instead of busy spin
+            let chan = self.channels.get(&id).ok_or("channel gone")?;
+            guard = chan.lock().map_err(|_| "channel lock poisoned")?;
+            if guard.closed {
                 return Err("channel closed".to_string());
             }
-            // Simple blocking send (busy wait for now)
-            while chan.buffer.len() >= chan.capacity {
-                drop(chan);
-                thread::yield_now();
-                chan = self.channels.get(&id).expect("channel gone").lock().expect("channel lock poisoned");
-                if chan.closed {
-                    return Err("channel closed".to_string());
-                }
-            }
-            chan.buffer.push(value);
-            Ok(())
-        } else {
-            Err("channel not found".to_string())
         }
+        guard.buffer.push_back(value);
+        Ok(())
     }
 
     fn recv_from_channel(&self, id: ChannelId) -> Result<Value, String> {
-        if let Some(chan) = self.channels.get(&id) {
-            // Simple blocking receive (busy wait for now)
-            loop {
-                let mut chan_guard = chan.lock().expect("channel lock poisoned");
-                if !chan_guard.buffer.is_empty() {
-                    return Ok(chan_guard.buffer.remove(0));
-                }
-                if chan_guard.closed {
-                    return Err("channel closed".to_string());
-                }
-                drop(chan_guard);
-                thread::yield_now();
+        let chan = self.channels.get(&id).ok_or("channel not found")?;
+        // Blocking receive with backoff sleep to reduce CPU usage
+        loop {
+            let mut guard = chan.lock().map_err(|_| "channel lock poisoned")?;
+            if let Some(value) = guard.buffer.pop_front() {
+                return Ok(value);
             }
-        } else {
-            Err("channel not found".to_string())
+            if guard.closed {
+                return Err("channel closed".to_string());
+            }
+            drop(guard);
+            thread::sleep(Duration::from_micros(100)); // Backoff instead of busy spin
         }
     }
 
+    /// Close a channel (reserved for cleanup operations)
     #[allow(dead_code)]
     fn close_channel(&self, id: ChannelId) {
         if let Some(chan) = self.channels.get(&id) {
-            let mut chan = chan.lock().expect("channel lock poisoned");
-            chan.closed = true;
+            if let Ok(mut guard) = chan.lock() {
+                guard.closed = true;
+            }
         }
     }
 }
@@ -328,6 +330,8 @@ pub struct Vm {
     flow_context: FlowContext,
     /// 로드된 모듈들 (module_name -> LoadedModule)
     loaded_modules: FastMap<String, LoadedModule>,
+    /// Memoization cache for #[memo] functions (cache_key -> result)
+    memo_cache: FastMap<String, Value>,
 }
 
 impl Vm {
@@ -348,6 +352,7 @@ impl Vm {
             effect_handlers: Vec::new(),
             flow_context: FlowContext::default(),
             loaded_modules: FastMap::new(),
+            memo_cache: FastMap::new(),
         }
     }
 
@@ -405,6 +410,30 @@ impl Vm {
         for func in functions {
             funcs.insert(func.name.clone(), Arc::new(func));
         }
+    }
+
+    /// Generate memoization cache key from function name and arguments
+    fn make_memo_key(name: &str, args: &[Value]) -> String {
+        use std::fmt::Write;
+        let mut key = String::with_capacity(64);
+        key.push_str(name);
+        for arg in args {
+            key.push(':');
+            // Simple serialization for hashable values
+            match arg {
+                Value::Void => key.push_str("void"),
+                Value::Bool(b) => write!(key, "{}", b).unwrap(),
+                Value::Int(n) => write!(key, "{}", n).unwrap(),
+                Value::Float(f) => write!(key, "{:?}", f).unwrap(),
+                Value::String(s) => {
+                    key.push('"');
+                    key.push_str(s);
+                    key.push('"');
+                }
+                _ => write!(key, "{:?}", arg).unwrap(), // Fallback for complex types
+            }
+        }
+        key
     }
 
     /// Apply reduce operation to a vector (helper for fused operations)
@@ -531,6 +560,17 @@ impl Vm {
             .ok_or_else(|| RuntimeError::UndefinedFunction(name.to_string()))?
             .clone();  // Arc clone (cheap - just reference count increment)
 
+        // Memoization: check cache for #[memo] functions
+        let memo_key = if func.is_memo {
+            let key = Self::make_memo_key(name, &args);
+            if let Some(cached) = self.memo_cache.get(&key) {
+                return Ok(cached.clone());
+            }
+            Some(key)
+        } else {
+            None
+        };
+
         // 재귀 깊이 체크
         self.recursion_depth += 1;
         if self.recursion_depth > MAX_RECURSION_DEPTH {
@@ -580,6 +620,11 @@ impl Vm {
                 Ok(TcoResult::Return) => {
                     // Normal return - get result from stack
                     let return_value = self.pop()?;
+
+                    // Memoization: store result in cache
+                    if let Some(key) = &memo_key {
+                        self.memo_cache.insert(key.clone(), return_value.clone());
+                    }
 
                     // 상태 복원 (스택 트렁케이트로 효율적 복원)
                     self.stack.truncate(prev_stack_len);
@@ -1990,8 +2035,8 @@ impl Vm {
                                     return Err(RuntimeError::Internal(format!("Task failed: {}", err)));
                                 }
                                 Some(FutureState::Pending) => {
-                                    // Yield and retry
-                                    thread::yield_now();
+                                    // Backoff sleep and retry
+                                    thread::sleep(Duration::from_micros(100));
                                 }
                                 None => {
                                     return Err(RuntimeError::Internal(format!("Task {} not found", task_id)));
@@ -2180,6 +2225,7 @@ impl Vm {
         self.stack.pop().ok_or(RuntimeError::StackUnderflow)
     }
 
+    /// Peek at the top of the stack without removing (reserved for debugging)
     #[allow(dead_code)]
     fn peek(&self) -> RuntimeResult<&Value> {
         self.stack.last().ok_or(RuntimeError::StackUnderflow)
@@ -2193,6 +2239,7 @@ impl Vm {
                 Ok(Value::Int(x.wrapping_add(y)))
             }
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x + y)),
+            // Implicit Int→Float promotion (may lose precision for large integers > 2^53)
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 + y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x + y as f64)),
             (Value::String(x), Value::String(y)) => Ok(Value::String(format!("{}{}", x, y))),
@@ -2212,6 +2259,7 @@ impl Vm {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x.wrapping_sub(y))),
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x - y)),
+            // Implicit Int→Float promotion
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 - y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x - y as f64)),
             _ => Err(RuntimeError::TypeError("Cannot subtract these types".to_string())),
@@ -2223,6 +2271,7 @@ impl Vm {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x.wrapping_mul(y))),
             (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x * y)),
+            // Implicit Int→Float promotion
             (Value::Int(x), Value::Float(y)) => Ok(Value::Float(x as f64 * y)),
             (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x * y as f64)),
             _ => Err(RuntimeError::TypeError("Cannot multiply these types".to_string())),
@@ -2242,6 +2291,7 @@ impl Vm {
                 if y == 0.0 { return Err(RuntimeError::DivisionByZero); }
                 Ok(Value::Float(x / y))
             }
+            // Implicit Int→Float promotion
             (Value::Int(x), Value::Float(y)) => {
                 if y == 0.0 { return Err(RuntimeError::DivisionByZero); }
                 Ok(Value::Float(x as f64 / y))
@@ -2337,11 +2387,12 @@ impl Vm {
                 Ok(Value::Array(Rc::new(arr[actual_start..actual_end].to_vec())))
             }
             Value::String(s) => {
-                // Use char count for proper Unicode handling
-                let char_count = s.chars().count();
+                // Collect chars once for O(n) instead of O(n*2)
+                let chars: Vec<char> = s.chars().collect();
+                let char_count = chars.len();
                 let actual_end = if end_idx < 0 { char_count } else { (end_idx as usize).min(char_count) };
                 let actual_start = start_idx.min(char_count);
-                Ok(Value::String(s.chars().skip(actual_start).take(actual_end.saturating_sub(actual_start)).collect()))
+                Ok(Value::String(chars[actual_start..actual_end].iter().collect()))
             }
             _ => Ok(Value::Void),
         }
@@ -3005,12 +3056,10 @@ impl Vm {
             "CHARS" => {
                 // Split string into array of characters
                 if let Some(Value::String(s)) = args.first() {
-                    // Pre-allocate for better performance
-                    let char_count = s.chars().count();
-                    let mut chars = Vec::with_capacity(char_count);
-                    for c in s.chars() {
-                        chars.push(Value::String(c.to_string()));
-                    }
+                    // Single pass: collect chars directly into Value array
+                    let chars: Vec<Value> = s.chars()
+                        .map(|c| Value::String(c.to_string()))
+                        .collect();
                     Some(Value::Array(Rc::new(chars)))
                 } else {
                     None
@@ -4695,6 +4744,7 @@ mod tests {
                 Instruction::new(OpCode::Add),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let result = execute(vec![func]).unwrap();
@@ -4715,6 +4765,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         let result = execute_function(vec![add], "add", vec![Value::Int(3), Value::Int(4)]).unwrap();
@@ -4772,6 +4823,7 @@ mod tests {
                 Instruction::new(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         let result = execute_function(vec![fact], "fact", vec![Value::Int(5)]).unwrap();
@@ -4796,6 +4848,7 @@ mod tests {
                 ]))),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let result = execute(vec![main]).unwrap();
@@ -4822,6 +4875,7 @@ mod tests {
                 ]))),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let result = execute(vec![main]).unwrap();
@@ -4844,6 +4898,7 @@ mod tests {
                 Instruction::new(OpCode::Reduce(ReduceOp::Sum, Value::Int(0))),
             ],
             local_count: 0,
+            is_memo: false,
         };
 
         let result = execute(vec![main]).unwrap();

@@ -2822,6 +2822,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         let _ptr = jit.compile_function_int(&func).unwrap();
@@ -2854,6 +2855,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -2880,6 +2882,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -2919,6 +2922,7 @@ mod tests {
                 make_instruction(OpCode::Return),                   // 7
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -2960,6 +2964,7 @@ mod tests {
                 make_instruction(OpCode::Return),                   // 8
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -3009,6 +3014,7 @@ mod tests {
                 make_instruction(OpCode::Return),                    // 12
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -3059,6 +3065,7 @@ mod tests {
                 make_instruction(OpCode::TailSelfCall(2)),           // 12: tail call
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -3111,6 +3118,7 @@ mod tests {
                 make_instruction(OpCode::TailSelfCall(2)),           // 12
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -3168,6 +3176,7 @@ mod tests {
                 make_instruction(OpCode::Return),                    // 15
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         jit.compile_function_int(&func).unwrap();
@@ -3198,6 +3207,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         // quadruple(x) = double(double(x))
@@ -3212,6 +3222,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         // 배치 컴파일
@@ -3242,6 +3253,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         // add2(x) = add1(add1(x)) = x + 2
@@ -3255,6 +3267,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         // add4(x) = add2(add2(x)) = x + 4
@@ -3268,6 +3281,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         jit.compile_functions_batch(&[add1_func, add2_func, add4_func]).unwrap();
@@ -3295,6 +3309,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         // mul(a, b) = a * b
@@ -3308,6 +3323,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         // calc(a, b) = add(a, b) * mul(a, b) = (a+b) * (a*b)
@@ -3325,6 +3341,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_functions_batch(&[add_func, mul_func, calc_func]).unwrap();
@@ -3356,6 +3373,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         // max_double(a, b) = a > b ? double(a) : double(b)
@@ -3386,6 +3404,7 @@ mod tests {
                 make_instruction(OpCode::Return),                    // 9
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_functions_batch(&[double_func, max_double_func]).unwrap();
@@ -3415,6 +3434,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         // sum_recursive(n, acc) = n <= 0 ? acc : sum_recursive(n-1, add(acc, n))
@@ -3452,6 +3472,7 @@ mod tests {
                 make_instruction(OpCode::TailSelfCall(2)),           // 12
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_functions_batch(&[add_func, sum_func]).unwrap();
@@ -3483,6 +3504,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3515,6 +3537,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3544,6 +3567,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3572,6 +3596,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3613,6 +3638,7 @@ mod tests {
                 make_instruction(OpCode::Return),                  // 7
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3664,6 +3690,7 @@ mod tests {
                 make_instruction(OpCode::TailSelfCall(2)),              // 12
             ],
             local_count: 2,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3694,6 +3721,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         jit.compile_function_float(&func).unwrap();
@@ -3717,6 +3745,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         match JitCompiler::analyze_function_type(&int_func) {
@@ -3735,6 +3764,7 @@ mod tests {
                 make_instruction(OpCode::Return),
             ],
             local_count: 1,
+            is_memo: false,
         };
 
         match JitCompiler::analyze_function_type(&float_func) {

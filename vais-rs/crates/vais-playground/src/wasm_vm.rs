@@ -49,6 +49,8 @@ pub struct WasmVm {
     closures: HashMap<usize, Vec<Instruction>>,
     next_closure_id: usize,
     output: String,
+    /// Memoization cache for #[memo] functions
+    memo_cache: HashMap<String, Value>,
 }
 
 impl WasmVm {
@@ -62,6 +64,7 @@ impl WasmVm {
             closures: HashMap::new(),
             next_closure_id: 0,
             output: String::new(),
+            memo_cache: HashMap::new(),
         }
     }
 
@@ -83,10 +86,44 @@ impl WasmVm {
         self.output.clone()
     }
 
+    /// Generate memoization cache key
+    fn make_memo_key(name: &str, args: &[Value]) -> String {
+        use std::fmt::Write;
+        let mut key = String::with_capacity(64);
+        key.push_str(name);
+        for arg in args {
+            key.push(':');
+            match arg {
+                Value::Void => key.push_str("void"),
+                Value::Bool(b) => write!(key, "{}", b).unwrap(),
+                Value::Int(n) => write!(key, "{}", n).unwrap(),
+                Value::Float(f) => write!(key, "{:?}", f).unwrap(),
+                Value::String(s) => {
+                    key.push('"');
+                    key.push_str(s);
+                    key.push('"');
+                }
+                _ => write!(key, "{:?}", arg).unwrap(),
+            }
+        }
+        key
+    }
+
     pub fn call_function(&mut self, name: &str, args: Vec<Value>) -> WasmVmResult<Value> {
         let func = self.functions.get(name)
             .ok_or_else(|| WasmVmError::UndefinedFunction(name.to_string()))?
             .clone();
+
+        // Memoization: check cache for #[memo] functions
+        let memo_key = if func.is_memo {
+            let key = Self::make_memo_key(name, &args);
+            if let Some(cached) = self.memo_cache.get(&key) {
+                return Ok(cached.clone());
+            }
+            Some(key)
+        } else {
+            None
+        };
 
         self.recursion_depth += 1;
         if self.recursion_depth > MAX_RECURSION_DEPTH {
@@ -108,6 +145,11 @@ impl WasmVm {
         self.execute_instructions(&func.instructions)?;
 
         let return_value = self.pop().unwrap_or(Value::Void);
+
+        // Memoization: store result in cache
+        if let Some(key) = memo_key {
+            self.memo_cache.insert(key, return_value.clone());
+        }
 
         self.stack = prev_stack;
         self.locals = prev_locals;

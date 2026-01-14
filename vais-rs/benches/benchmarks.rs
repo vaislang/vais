@@ -107,7 +107,7 @@ fn bench_factorial(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: VM execution - Fibonacci
+/// Benchmark: VM execution - Fibonacci (naive, exponential)
 fn bench_fibonacci(c: &mut Criterion) {
     let source = "fib(n) = n < 2 ? n : $(n - 1) + $(n - 2)";
     let functions = compile(source);
@@ -115,6 +115,23 @@ fn bench_fibonacci(c: &mut Criterion) {
     let mut group = c.benchmark_group("fibonacci");
     // Smaller values since fibonacci is exponential without memoization
     for n in [5, 10, 15, 20] {
+        group.bench_with_input(BenchmarkId::new("compute", n), &n, |b, &n| {
+            b.iter(|| {
+                execute_function(functions.clone(), "fib", vec![Value::Int(black_box(n))]).unwrap()
+            });
+        });
+    }
+    group.finish();
+}
+
+/// Benchmark: VM execution - Fibonacci with memoization
+fn bench_fibonacci_memo(c: &mut Criterion) {
+    let source = "#[memo]\nfib(n) = n <= 1 ? n : $(n-1) + $(n-2)";
+    let functions = compile(source);
+
+    let mut group = c.benchmark_group("fibonacci_memo");
+    // With memoization, we can test larger values
+    for n in [10, 20, 30, 40] {
         group.bench_with_input(BenchmarkId::new("compute", n), &n, |b, &n| {
             b.iter(|| {
                 execute_function(functions.clone(), "fib", vec![Value::Int(black_box(n))]).unwrap()
@@ -302,6 +319,7 @@ criterion_group!(
     bench_lowering,
     bench_factorial,
     bench_fibonacci,
+    bench_fibonacci_memo,
     bench_map,
     bench_filter,
     bench_reduce,
