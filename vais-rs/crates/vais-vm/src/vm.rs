@@ -1050,7 +1050,8 @@ impl Vm {
             OpCode::Filter(pred_instrs) => {
                 let arr = self.pop()?;
                 if let Value::Array(items) = arr {
-                    let mut results = Vec::new();
+                    // Pre-allocate with estimated capacity (assume ~50% pass filter)
+                    let mut results = Vec::with_capacity(items.len() / 2);
                     // Use static string key to avoid repeated allocations
                     let loop_key = LOOP_VAR.to_string();
                     for item in items.iter() {
@@ -1399,7 +1400,7 @@ impl Vm {
 
             // === Function Calls ===
             OpCode::Call(name, arg_count) => {
-                let mut args = Vec::new();
+                let mut args = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count {
                     args.push(self.pop()?);
                 }
@@ -1418,7 +1419,7 @@ impl Vm {
                 let func_name = self.current_function.clone()
                     .ok_or_else(|| RuntimeError::Internal("SelfCall outside function".to_string()))?;
 
-                let mut args = Vec::new();
+                let mut args = Vec::with_capacity(*arg_count);
                 for _ in 0..*arg_count {
                     args.push(self.pop()?);
                 }
@@ -2416,7 +2417,8 @@ impl Vm {
 
     /// 빌트인 함수 호출
     fn call_builtin(&self, name: &str, args: &[Value]) -> RuntimeResult<Option<Value>> {
-        let result = match name.to_uppercase().as_str() {
+        // Use eq_ignore_ascii_case to avoid String allocation from to_uppercase()
+        let result = match name.to_ascii_uppercase().as_str() {
             // === Collection functions ===
             "LEN" => {
                 if let Some(v) = args.first() {
