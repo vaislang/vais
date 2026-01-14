@@ -291,6 +291,12 @@ impl AsyncRuntime {
 }
 
 /// Vais Virtual Machine
+/// 로드된 모듈 정보
+struct LoadedModule {
+    /// 모듈에서 export된 함수들
+    functions: FastMap<String, Arc<CompiledFunction>>,
+}
+
 pub struct Vm {
     /// 스택
     stack: Vec<Value>,
@@ -320,6 +326,8 @@ pub struct Vm {
     effect_handlers: Vec<EffectHandler>,
     /// FLOW node I/O context
     flow_context: FlowContext,
+    /// 로드된 모듈들 (module_name -> LoadedModule)
+    loaded_modules: FastMap<String, LoadedModule>,
 }
 
 impl Vm {
@@ -339,7 +347,30 @@ impl Vm {
             async_runtime: Arc::new(Mutex::new(AsyncRuntime::new())),
             effect_handlers: Vec::new(),
             flow_context: FlowContext::default(),
+            loaded_modules: FastMap::new(),
         }
+    }
+
+    /// 모듈을 로드하여 VM에 등록
+    pub fn load_module(&mut self, module_name: &str, functions: FastMap<String, Arc<CompiledFunction>>) {
+        self.loaded_modules.insert(module_name.to_string(), LoadedModule { functions });
+    }
+
+    /// 모듈에서 함수 조회
+    fn get_module_function(&self, module_path: &[String], func_name: &str) -> Option<Arc<CompiledFunction>> {
+        // module_path가 하나면 단순 모듈 이름
+        if module_path.len() == 1 {
+            let module_name = &module_path[0];
+            if let Some(module) = self.loaded_modules.get(module_name) {
+                return module.functions.get(func_name).cloned();
+            }
+        }
+        // 중첩 모듈 경로 (예: std.math.trig.sin)
+        let full_module_name = module_path.join("::");
+        if let Some(module) = self.loaded_modules.get(&full_module_name) {
+            return module.functions.get(func_name).cloned();
+        }
+        None
     }
 
     /// FFI 함수 등록 (동적 라이브러리용)
@@ -1497,6 +1528,51 @@ impl Vm {
                 } else {
                     // builtin이 None을 반환하면 Void 푸시
                     self.stack.push(Value::Void);
+                }
+            }
+
+            // === Module Function Call ===
+            OpCode::CallModule(module_path, func_name, arg_count) => {
+                let mut args = Vec::with_capacity(*arg_count);
+                for _ in 0..*arg_count {
+                    args.push(self.pop()?);
+                }
+                args.reverse();
+
+                // 모듈에서 함수 조회
+                if let Some(func) = self.get_module_function(module_path, func_name) {
+                    // 현재 로컬 상태 저장
+                    let saved_locals = std::mem::take(&mut self.locals);
+                    let saved_base = self.locals_base;
+                    self.locals_base = 0;
+
+                    // 인자를 로컬 변수로 설정
+                    self.locals = args;
+
+                    // 함수 실행
+                    self.execute_instructions(&func.instructions)?;
+
+                    // 로컬 상태 복원
+                    self.locals = saved_locals;
+                    self.locals_base = saved_base;
+                } else {
+                    // 모듈에서 함수를 찾지 못한 경우, 현재 스코프의 함수에서 검색
+                    let qualified_name = format!("{}::{}", module_path.join("::"), func_name);
+                    if let Some(func) = self.functions.get(&qualified_name).cloned() {
+                        let saved_locals = std::mem::take(&mut self.locals);
+                        let saved_base = self.locals_base;
+                        self.locals_base = 0;
+                        self.locals = args;
+                        self.execute_instructions(&func.instructions)?;
+                        self.locals = saved_locals;
+                        self.locals_base = saved_base;
+                    } else {
+                        return Err(RuntimeError::UndefinedFunction(format!(
+                            "{}::{}",
+                            module_path.join("::"),
+                            func_name
+                        )));
+                    }
                 }
             }
 

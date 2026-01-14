@@ -273,6 +273,19 @@ impl TypeChecker {
                 }
             }
 
+            // 모듈 qualified 식별자 (module.function)
+            Expr::QualifiedIdent(module_path, func_name, _span) => {
+                // 모듈에서 함수를 찾으면 해당 타입 반환
+                // 현재 단순화를 위해 Any 타입 반환 (실제 모듈 시스템에서는 모듈 타입 정보 조회)
+                let qualified_name = format!("{}::{}", module_path.join("::"), func_name);
+                if let Some(ty) = self.env.lookup_function(&qualified_name) {
+                    Ok(ty)
+                } else {
+                    // 모듈 함수는 런타임에 해결되므로 Any 타입으로 허용
+                    Ok(Type::Any)
+                }
+            }
+
             // 람다 파라미터 (_)
             Expr::LambdaParam(span) => {
                 if let Some(ty) = self.env.lookup_var("_") {

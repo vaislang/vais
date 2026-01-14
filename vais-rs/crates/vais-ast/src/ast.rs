@@ -434,6 +434,8 @@ pub enum Expr {
     // === Identifiers ===
     /// 변수/함수 참조
     Ident(String, Span),
+    /// 모듈 qualified 식별자: module.function
+    QualifiedIdent(Vec<String>, String, Span),
     /// 람다 매개변수 (_)
     LambdaParam(Span),
 
@@ -600,6 +602,7 @@ impl Expr {
             Expr::Bool(_, s) => *s,
             Expr::Nil(s) => *s,
             Expr::Ident(_, s) => *s,
+            Expr::QualifiedIdent(_, _, s) => *s,
             Expr::LambdaParam(s) => *s,
             Expr::Array(_, s) => *s,
             Expr::Set(_, s) => *s,

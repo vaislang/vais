@@ -162,6 +162,10 @@ pub enum OpCode {
     /// Call built-in function by name
     CallBuiltin(String, usize), // (name, arg_count)
 
+    // === Module ===
+    /// Call function from a module: (module_path, fn_name, arg_count)
+    CallModule(Vec<String>, String, usize),
+
     // === FFI (Foreign Function Interface) ===
     /// Call FFI function: (lib_name, fn_name, arg_count)
     CallFfi(String, String, usize),

@@ -1570,16 +1570,33 @@ impl<'src> Parser<'src> {
 
         loop {
             match self.current.kind {
-                // 필드 접근 또는 메서드 호출: a.b 또는 a.b()
+                // 필드 접근, 메서드 호출, 또는 모듈 qualified 호출: a.b, a.b(), module.func()
                 TokenKind::Dot => {
                     self.advance();
                     let name = self.expect_identifier()?;
                     if self.match_token(TokenKind::LParen) {
-                        // 메서드 호출
+                        // 함수 호출 형태
                         let args = self.parse_args()?;
                         self.expect(TokenKind::RParen)?;
                         let span = start.merge(self.previous.span);
-                        expr = Expr::MethodCall(Box::new(expr), name, args, span);
+
+                        // 왼쪽이 단순 식별자면 모듈 qualified 호출일 수 있음
+                        if let Expr::Ident(module_name, _) = &expr {
+                            // QualifiedIdent: module.function(args) 형태
+                            // 모듈 경로와 함수 이름 분리
+                            expr = Expr::Call(
+                                Box::new(Expr::QualifiedIdent(
+                                    vec![module_name.clone()],
+                                    name,
+                                    span,
+                                )),
+                                args,
+                                span,
+                            );
+                        } else {
+                            // 일반 메서드 호출: obj.method(args)
+                            expr = Expr::MethodCall(Box::new(expr), name, args, span);
+                        }
                     } else {
                         // 필드 접근
                         let span = start.merge(self.previous.span);

@@ -46,18 +46,32 @@ impl ModuleResolver {
         for item in &program.items {
             if let Item::Use(use_def) = item {
                 let imported = self.load_module(use_def)?;
+                // 모듈 이름 (alias가 있으면 alias, 없으면 마지막 path 컴포넌트)
+                let module_name = use_def.alias.clone()
+                    .unwrap_or_else(|| use_def.path.last().cloned().unwrap_or_default());
+
                 for imp_item in imported.items {
                     // Only import functions and type definitions
-                    match &imp_item {
+                    match imp_item {
                         Item::Function(func) => {
                             // Check if function is public or if we're importing specific items
                             if func.is_pub || self.should_import(&func.name, use_def) {
-                                merged_items.push(imp_item);
+                                // 원래 이름도 유지하면서 qualified 이름도 추가
+                                let original_name = func.name.clone();
+                                let qualified_name = format!("{}::{}", module_name, original_name);
+
+                                // qualified 이름으로 함수 추가
+                                let mut qualified_func = func.clone();
+                                qualified_func.name = qualified_name;
+                                merged_items.push(Item::Function(qualified_func));
+
+                                // 원래 이름으로도 함수 추가 (use 하면 직접 호출 가능)
+                                merged_items.push(Item::Function(func));
                             }
                         }
                         Item::TypeDef(typedef) => {
                             if typedef.is_pub || self.should_import(&typedef.name, use_def) {
-                                merged_items.push(imp_item);
+                                merged_items.push(Item::TypeDef(typedef));
                             }
                         }
                         _ => {}

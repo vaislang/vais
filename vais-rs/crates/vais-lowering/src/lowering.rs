@@ -761,6 +761,13 @@ impl Lowerer {
                     } else {
                         instrs.push(Instruction::new(OpCode::Call(name.clone(), args.len())));
                     }
+                } else if let Expr::QualifiedIdent(module_path, func_name, _) = func.as_ref() {
+                    // 모듈 qualified 함수 호출: module.function(args)
+                    instrs.push(Instruction::new(OpCode::CallModule(
+                        module_path.clone(),
+                        func_name.clone(),
+                        args.len(),
+                    )));
                 } else {
                     // 함수 표현식 (람다 등)
                     instrs.extend(self.lower_expr(func)?);
@@ -1075,6 +1082,14 @@ impl Lowerer {
 
                 // Note: 실제 핸들러 body는 Perform에서 inline으로 처리하거나
                 // 핸들러를 클로저로 저장하여 호출하는 방식으로 확장 가능
+            }
+
+            // QualifiedIdent는 단독으로 사용될 때 (Call 없이)
+            // 함수 참조로 처리 - 나중에 Call에서 호출됨
+            Expr::QualifiedIdent(module_path, func_name, _) => {
+                // 모듈 qualified 함수 참조를 스택에 로드
+                let qualified_name = format!("{}::{}", module_path.join("::"), func_name);
+                instrs.push(Instruction::new(OpCode::Load(qualified_name)));
             }
         }
 

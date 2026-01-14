@@ -600,6 +600,11 @@ impl Formatter {
             Expr::Ident(name, _) => {
                 self.output.push_str(name);
             }
+            Expr::QualifiedIdent(module_path, func_name, _) => {
+                self.output.push_str(&module_path.join("."));
+                self.output.push('.');
+                self.output.push_str(func_name);
+            }
             Expr::LambdaParam(_) => {
                 self.output.push('_');
             }
