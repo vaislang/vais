@@ -7,6 +7,8 @@ use vais_ast::{
     BinaryOp, Expr, FfiBlock, FunctionDef, ImplDef, IndexKind, Item, Pattern, Program, ReduceKind, TraitDef, UnaryOp,
 };
 use std::collections::HashMap;
+use std::io::{Read, Write};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Lowering 에러
@@ -25,7 +27,7 @@ pub enum LowerError {
 pub type LowerResult<T> = Result<T, LowerError>;
 
 /// 컴파일된 함수
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledFunction {
     pub name: String,
     pub params: Vec<String>,
@@ -34,6 +36,113 @@ pub struct CompiledFunction {
     pub local_count: u16,
     /// 메모이제이션 활성화 여부 (#[memo] 어트리뷰트)
     pub is_memo: bool,
+}
+
+/// 바이트코드 파일 매직 넘버
+const BYTECODE_MAGIC: &[u8; 4] = b"VAIS";
+/// 바이트코드 버전
+const BYTECODE_VERSION: u32 = 1;
+
+/// 바이트코드 직렬화 에러
+#[derive(Debug, Error)]
+pub enum BytecodeError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Serialization error: {0}")]
+    Serialize(String),
+
+    #[error("Deserialization error: {0}")]
+    Deserialize(String),
+
+    #[error("Invalid magic number")]
+    InvalidMagic,
+
+    #[error("Unsupported bytecode version: {0}")]
+    UnsupportedVersion(u32),
+}
+
+impl CompiledFunction {
+    /// 함수들을 바이너리 바이트코드로 직렬화
+    pub fn serialize_to_bytes(functions: &[CompiledFunction]) -> Result<Vec<u8>, BytecodeError> {
+        let mut bytes = Vec::new();
+
+        // 매직 넘버
+        bytes.extend_from_slice(BYTECODE_MAGIC);
+
+        // 버전 (little-endian)
+        bytes.extend_from_slice(&BYTECODE_VERSION.to_le_bytes());
+
+        // bincode로 함수 직렬화
+        let encoded = bincode::serialize(functions)
+            .map_err(|e| BytecodeError::Serialize(e.to_string()))?;
+
+        // 데이터 길이
+        bytes.extend_from_slice(&(encoded.len() as u64).to_le_bytes());
+
+        // 데이터
+        bytes.extend(encoded);
+
+        Ok(bytes)
+    }
+
+    /// 바이너리 바이트코드에서 함수들 역직렬화
+    pub fn deserialize_from_bytes(bytes: &[u8]) -> Result<Vec<CompiledFunction>, BytecodeError> {
+        if bytes.len() < 16 {
+            return Err(BytecodeError::InvalidMagic);
+        }
+
+        // 매직 넘버 확인
+        if &bytes[0..4] != BYTECODE_MAGIC {
+            return Err(BytecodeError::InvalidMagic);
+        }
+
+        // 버전 확인
+        let version = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        if version != BYTECODE_VERSION {
+            return Err(BytecodeError::UnsupportedVersion(version));
+        }
+
+        // 데이터 길이
+        let data_len = u64::from_le_bytes([
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15],
+        ]) as usize;
+
+        if bytes.len() < 16 + data_len {
+            return Err(BytecodeError::Deserialize("Truncated data".to_string()));
+        }
+
+        // bincode로 역직렬화
+        bincode::deserialize(&bytes[16..16 + data_len])
+            .map_err(|e| BytecodeError::Deserialize(e.to_string()))
+    }
+
+    /// 파일에 바이트코드 저장
+    pub fn save_to_file<W: Write>(functions: &[CompiledFunction], writer: &mut W) -> Result<(), BytecodeError> {
+        let bytes = Self::serialize_to_bytes(functions)?;
+        writer.write_all(&bytes)?;
+        Ok(())
+    }
+
+    /// 파일에서 바이트코드 로드
+    pub fn load_from_file<R: Read>(reader: &mut R) -> Result<Vec<CompiledFunction>, BytecodeError> {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes)?;
+        Self::deserialize_from_bytes(&bytes)
+    }
+
+    /// JSON으로 직렬화 (디버깅용)
+    pub fn to_json(functions: &[CompiledFunction]) -> Result<String, BytecodeError> {
+        serde_json::to_string_pretty(functions)
+            .map_err(|e| BytecodeError::Serialize(e.to_string()))
+    }
+
+    /// JSON에서 역직렬화 (디버깅용)
+    pub fn from_json(json: &str) -> Result<Vec<CompiledFunction>, BytecodeError> {
+        serde_json::from_str(json)
+            .map_err(|e| BytecodeError::Deserialize(e.to_string()))
+    }
 }
 
 /// FFI 함수 정보
@@ -2526,5 +2635,112 @@ mod tests {
             matches!(&i.opcode, OpCode::Jump(_) | OpCode::JumpIfNot(_))
         }).count();
         assert!(jump_count >= 3, "Should have multiple jumps for pattern chain");
+    }
+
+    // === Bytecode Serialization Tests ===
+
+    #[test]
+    fn test_bytecode_serialize_deserialize() {
+        let source = r#"
+            add(a, b) = a + b
+            fact(n) = n < 2 ? 1 : n * $(n - 1)
+        "#;
+        let program = vais_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        // Serialize to bytes
+        let bytes = CompiledFunction::serialize_to_bytes(&functions).unwrap();
+
+        // Verify magic number
+        assert_eq!(&bytes[0..4], b"VAIS");
+
+        // Deserialize back
+        let loaded = CompiledFunction::deserialize_from_bytes(&bytes).unwrap();
+
+        // Verify functions match
+        assert_eq!(loaded.len(), functions.len());
+        assert_eq!(loaded[0].name, functions[0].name);
+        assert_eq!(loaded[1].name, functions[1].name);
+        assert_eq!(loaded[0].params, functions[0].params);
+        assert_eq!(loaded[1].params, functions[1].params);
+        assert_eq!(loaded[0].instructions.len(), functions[0].instructions.len());
+        assert_eq!(loaded[1].instructions.len(), functions[1].instructions.len());
+    }
+
+    #[test]
+    fn test_bytecode_file_io() {
+        use std::io::Cursor;
+
+        let source = "double(x) = x * 2";
+        let program = vais_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        // Write to in-memory buffer
+        let mut buffer = Vec::new();
+        CompiledFunction::save_to_file(&functions, &mut buffer).unwrap();
+
+        // Read back
+        let mut cursor = Cursor::new(buffer);
+        let loaded = CompiledFunction::load_from_file(&mut cursor).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "double");
+    }
+
+    #[test]
+    fn test_bytecode_json_roundtrip() {
+        let source = "#[memo]\nfib(n) = n < 2 ? n : $(n-1) + $(n-2)";
+        let program = vais_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        // Serialize to JSON
+        let json = CompiledFunction::to_json(&functions).unwrap();
+
+        // Deserialize from JSON
+        let loaded = CompiledFunction::from_json(&json).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "fib");
+        assert_eq!(loaded[0].is_memo, true);
+    }
+
+    #[test]
+    fn test_bytecode_invalid_magic() {
+        let bytes = vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let result = CompiledFunction::deserialize_from_bytes(&bytes);
+        assert!(matches!(result, Err(BytecodeError::InvalidMagic)));
+    }
+
+    #[test]
+    fn test_bytecode_unsupported_version() {
+        // Valid magic but wrong version
+        let mut bytes = vec![b'V', b'A', b'I', b'S'];
+        bytes.extend_from_slice(&99u32.to_le_bytes()); // version 99
+        bytes.extend_from_slice(&0u64.to_le_bytes());  // data length 0
+
+        let result = CompiledFunction::deserialize_from_bytes(&bytes);
+        assert!(matches!(result, Err(BytecodeError::UnsupportedVersion(99))));
+    }
+
+    #[test]
+    fn test_bytecode_size_comparison() {
+        // Compare binary vs JSON size
+        let source = r#"
+            add(a, b) = a + b
+            sub(a, b) = a - b
+            mul(a, b) = a * b
+            div(a, b) = a / b
+            fact(n) = n < 2 ? 1 : n * $(n - 1)
+        "#;
+        let program = vais_parser::parse(source).unwrap();
+        let functions = Lowerer::new().lower_program(&program).unwrap();
+
+        let binary_bytes = CompiledFunction::serialize_to_bytes(&functions).unwrap();
+        let json_str = CompiledFunction::to_json(&functions).unwrap();
+
+        // Binary should be significantly smaller than JSON
+        assert!(binary_bytes.len() < json_str.len(),
+            "Binary ({} bytes) should be smaller than JSON ({} bytes)",
+            binary_bytes.len(), json_str.len());
     }
 }

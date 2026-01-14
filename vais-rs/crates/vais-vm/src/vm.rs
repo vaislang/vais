@@ -11,10 +11,11 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use vais_ir::{Instruction, OpCode, ReduceOp, Value, TaskId, ChannelId, FutureState, ChannelState};
+use vais_ir::{Instruction, OpCode, ReduceOp, Value, TaskId, ChannelId, FutureState};
 use vais_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
 use crate::ffi::FfiLoader;
+use crate::async_runtime::CondvarChannel;
 // Type alias for faster HashMap (can swap implementation easily)
 type FastMap<K, V> = HashMap<K, V>;
 
@@ -187,12 +188,13 @@ impl ParallelContext {
 }
 
 /// Async runtime state (shared between threads)
+/// Uses CondvarChannel for efficient blocking without busy-wait
 #[derive(Debug)]
 pub struct AsyncRuntime {
     /// Task states (TaskId -> FutureState)
     tasks: FastMap<TaskId, Arc<Mutex<FutureState>>>,
-    /// Channels (ChannelId -> ChannelState)
-    channels: FastMap<ChannelId, Arc<Mutex<ChannelState>>>,
+    /// Channels with Condvar for efficient blocking
+    channels: FastMap<ChannelId, Arc<CondvarChannel>>,
     /// Next task ID
     next_task_id: TaskId,
     /// Next channel ID
@@ -241,53 +243,27 @@ impl AsyncRuntime {
     fn create_channel(&mut self, capacity: usize) -> ChannelId {
         let id = self.next_channel_id;
         self.next_channel_id += 1;
-        self.channels.insert(id, Arc::new(Mutex::new(ChannelState::new(capacity))));
+        self.channels.insert(id, Arc::new(CondvarChannel::new(capacity)));
         id
     }
 
+    /// Send a value to a channel (blocking with Condvar - no busy-wait)
     fn send_to_channel(&self, id: ChannelId, value: Value) -> Result<(), String> {
         let chan = self.channels.get(&id).ok_or("channel not found")?;
-        let mut guard = chan.lock().map_err(|_| "channel lock poisoned")?;
-        if guard.closed {
-            return Err("channel closed".to_string());
-        }
-        // Blocking send with backoff sleep to reduce CPU usage
-        while guard.buffer.len() >= guard.capacity {
-            drop(guard);
-            thread::sleep(Duration::from_micros(100)); // Backoff instead of busy spin
-            let chan = self.channels.get(&id).ok_or("channel gone")?;
-            guard = chan.lock().map_err(|_| "channel lock poisoned")?;
-            if guard.closed {
-                return Err("channel closed".to_string());
-            }
-        }
-        guard.buffer.push_back(value);
-        Ok(())
+        chan.send(value)
     }
 
+    /// Receive a value from a channel (blocking with Condvar - no busy-wait)
     fn recv_from_channel(&self, id: ChannelId) -> Result<Value, String> {
         let chan = self.channels.get(&id).ok_or("channel not found")?;
-        // Blocking receive with backoff sleep to reduce CPU usage
-        loop {
-            let mut guard = chan.lock().map_err(|_| "channel lock poisoned")?;
-            if let Some(value) = guard.buffer.pop_front() {
-                return Ok(value);
-            }
-            if guard.closed {
-                return Err("channel closed".to_string());
-            }
-            drop(guard);
-            thread::sleep(Duration::from_micros(100)); // Backoff instead of busy spin
-        }
+        chan.recv()
     }
 
-    /// Close a channel (reserved for cleanup operations)
+    /// Close a channel
     #[allow(dead_code)]
     fn close_channel(&self, id: ChannelId) {
         if let Some(chan) = self.channels.get(&id) {
-            if let Ok(mut guard) = chan.lock() {
-                guard.closed = true;
-            }
+            chan.close();
         }
     }
 }
