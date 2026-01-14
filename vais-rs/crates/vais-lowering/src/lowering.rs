@@ -648,12 +648,13 @@ impl Lowerer {
                 instrs.push(Instruction::new(OpCode::Lt));
 
                 // 본문 코드 준비
-                let mut body_instrs = Vec::new();
-                // var = iter[idx]
-                body_instrs.push(Instruction::new(OpCode::LoadLocal(iter_idx)));
-                body_instrs.push(Instruction::new(OpCode::LoadLocal(idx_var)));
-                body_instrs.push(Instruction::new(OpCode::Index));
-                body_instrs.push(Instruction::new(OpCode::StoreLocal(var_idx)));
+                let mut body_instrs = vec![
+                    // var = iter[idx]
+                    Instruction::new(OpCode::LoadLocal(iter_idx)),
+                    Instruction::new(OpCode::LoadLocal(idx_var)),
+                    Instruction::new(OpCode::Index),
+                    Instruction::new(OpCode::StoreLocal(var_idx)),
+                ];
                 // body 실행
                 body_instrs.extend(self.lower_expr(body)?);
                 body_instrs.push(Instruction::new(OpCode::Pop)); // body 결과 버림
