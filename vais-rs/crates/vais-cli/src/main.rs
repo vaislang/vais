@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(name = "vais")]
 #[command(author = "Vais Team")]
-#[command(version = "0.1.0")]
+#[command(version = "0.0.6")]
 #[command(about = "Vais - Vibe AI Script", long_about = None)]
 struct Cli {
     #[command(subcommand)]

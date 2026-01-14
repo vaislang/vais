@@ -1,0 +1,10 @@
+// Fibonacci with memoization
+// Using #[memo] decorator for automatic result caching
+// Without memo: O(2^n) - extremely slow for large n
+// With memo: O(n) - instant even for large values
+
+#[memo]
+fib(n) = n <= 1 ? n : $(n-1) + $(n-2)
+
+// Calculate fib(30) - instant with memoization
+fib(30)

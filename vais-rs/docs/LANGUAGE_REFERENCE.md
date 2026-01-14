@@ -192,7 +192,7 @@ async fetch_data(url) = {
 | `*` | Multiplication |
 | `/` | Division |
 | `%` | Modulo |
-| `^` | Power |
+| `pow(a, b)` | Power (function) |
 
 ### Comparison
 
@@ -269,11 +269,13 @@ concat(nums, [6,7]) // [1, 2, 3, 4, 5, 6, 7]
 ```vais
 s = #{1, 2, 3}
 
-// Operations
-contains(s, 2)      // true
-union(s, #{4, 5})   // #{1, 2, 3, 4, 5}
-intersect(s, #{2})  // #{2}
+// Sets are converted to arrays internally
+// Use array operations for set-like behavior
+2 @ s               // true (contains check)
 ```
+
+> **Note**: Set operations like `union` and `intersect` are planned for future versions.
+> Currently sets are converted to arrays at runtime.
 
 ### Structs
 
