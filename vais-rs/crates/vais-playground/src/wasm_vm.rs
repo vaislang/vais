@@ -423,7 +423,7 @@ impl WasmVm {
                     let arr = self.pop()?;
                     let elem = self.pop()?;
                     if let Value::Array(items) = arr {
-                        let found = items.iter().any(|x| *x == elem);
+                        let found = items.contains(&elem);
                         self.stack.push(Value::Bool(found));
                     } else {
                         self.stack.push(Value::Bool(false));

@@ -166,11 +166,13 @@ impl CondvarChannel {
     }
 
     /// Get current buffer length
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.state.lock().map(|s| s.buffer.len()).unwrap_or(0)
     }
 
     /// Check if buffer is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
