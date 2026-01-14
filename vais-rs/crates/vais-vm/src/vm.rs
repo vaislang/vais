@@ -1846,7 +1846,17 @@ impl Vm {
                 return Err(RuntimeError::Internal("Halt".to_string()));
             }
             OpCode::Error(msg) => {
-                return Err(RuntimeError::Internal(msg.clone()));
+                // 빈 문자열이면 스택에서 에러 메시지를 가져옴
+                if msg.is_empty() {
+                    let err_val = self.pop()?;
+                    let err_msg = match err_val {
+                        Value::String(s) => s,
+                        _ => format!("{:?}", err_val),
+                    };
+                    return Err(RuntimeError::Internal(err_msg));
+                } else {
+                    return Err(RuntimeError::Internal(msg.clone()));
+                }
             }
 
             // === Async Operations ===

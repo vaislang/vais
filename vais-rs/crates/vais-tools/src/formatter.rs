@@ -767,6 +767,19 @@ impl Formatter {
                 self.output.push_str(" : ");
                 self.format_expr(body);
             }
+            Expr::LetDestructure(names, value, body, _) => {
+                self.output.push_str("let (");
+                for (i, name) in names.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(name);
+                }
+                self.output.push_str(") = ");
+                self.format_expr(value);
+                self.output.push_str(" : ");
+                self.format_expr(body);
+            }
             Expr::Assign(name, value, _) => {
                 self.output.push_str(name);
                 if self.config.space_around_operators {
@@ -1049,6 +1062,37 @@ impl Formatter {
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push('}');
+            }
+            Expr::For(var, iter, body, _) => {
+                self.output.push_str("for ");
+                self.output.push_str(var);
+                self.output.push_str(" in ");
+                self.format_expr(iter);
+                self.output.push_str(" {\n");
+                self.indent_level += 1;
+                self.write_indent();
+                self.format_expr(body);
+                self.output.push('\n');
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+            }
+            Expr::While(cond, body, _) => {
+                self.output.push_str("while ");
+                self.format_expr(cond);
+                self.output.push_str(" {\n");
+                self.indent_level += 1;
+                self.write_indent();
+                self.format_expr(body);
+                self.output.push('\n');
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+            }
+            Expr::Pipeline(value, func, _) => {
+                self.format_expr(value);
+                self.output.push_str(" |> ");
+                self.format_expr(func);
             }
         }
     }

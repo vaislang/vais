@@ -476,6 +476,12 @@ pub enum Expr {
     If(Box<Expr>, Box<Expr>, Option<Box<Expr>>, Span),
     /// Match 표현식
     Match(Box<Expr>, Vec<MatchArm>, Span),
+    /// For 루프: for var in iter { body }
+    For(String, Box<Expr>, Box<Expr>, Span),
+    /// While 루프: while cond { body }
+    While(Box<Expr>, Box<Expr>, Span),
+    /// Pipeline: expr |> func
+    Pipeline(Box<Expr>, Box<Expr>, Span),
     /// 블록: { expr1; expr2 }
     Block(Vec<Expr>, Span),
 
@@ -483,6 +489,9 @@ pub enum Expr {
     /// let 바인딩: let x = v : body 또는 let x = v; body
     /// Vec<(name, value, is_mut)>
     Let(Vec<(String, Expr, bool)>, Box<Expr>, Span),
+    /// 튜플 디스트럭처링: let (a, b) = (1, 2) : body
+    /// Vec<String> = 바인딩할 변수들, Expr = 튜플 값, Box<Expr> = body
+    LetDestructure(Vec<String>, Box<Expr>, Box<Expr>, Span),
     /// 재할당: x = v
     Assign(String, Box<Expr>, Span),
 
@@ -609,6 +618,7 @@ impl Expr {
             Expr::Match(_, _, s) => *s,
             Expr::Block(_, s) => *s,
             Expr::Let(_, _, s) => *s,
+            Expr::LetDestructure(_, _, _, s) => *s,
             Expr::Assign(_, _, s) => *s,
             Expr::Call(_, _, s) => *s,
             Expr::SelfCall(_, s) => *s,
@@ -632,6 +642,9 @@ impl Expr {
             Expr::MacroCall { span, .. } => *span,
             Expr::Perform { span, .. } => *span,
             Expr::Handle { span, .. } => *span,
+            Expr::For(_, _, _, s) => *s,
+            Expr::While(_, _, s) => *s,
+            Expr::Pipeline(_, _, s) => *s,
         }
     }
 }

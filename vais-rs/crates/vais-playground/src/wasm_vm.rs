@@ -306,6 +306,16 @@ impl WasmVm {
                     self.stack.push(result);
                 }
 
+                OpCode::CallBuiltin(name, arg_count) => {
+                    let mut args = Vec::with_capacity(*arg_count);
+                    for _ in 0..*arg_count {
+                        args.push(self.pop()?);
+                    }
+                    args.reverse();
+                    let result = self.call_builtin(name, args)?;
+                    self.stack.push(result);
+                }
+
                 OpCode::Return => break,
                 OpCode::Nop => {}
 

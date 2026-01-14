@@ -68,11 +68,17 @@ pub enum TokenKind {
     #[token("else")]
     Else,
 
+    #[token("then")]
+    Then,
+
     #[token("match")]
     Match,
 
     #[token("for")]
     For,
+
+    #[token("while")]
+    While,
 
     #[token("in")]
     In,
@@ -239,6 +245,10 @@ pub enum TokenKind {
     // =========================================================================
     // Operators - Arithmetic
     // =========================================================================
+    /// ++ - String/Array concatenation (must be before Plus to match first)
+    #[token("++")]
+    PlusPlus,
+
     #[token("+")]
     Plus,
 
@@ -344,6 +354,10 @@ pub enum TokenKind {
 
     #[token("?")]
     Question,
+
+    /// Pipeline operator
+    #[token("|>")]
+    PipeArrow,
 
     #[token("|")]
     Pipe,
@@ -490,8 +504,10 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Let => write!(f, "let"),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
+            TokenKind::Then => write!(f, "then"),
             TokenKind::Match => write!(f, "match"),
             TokenKind::For => write!(f, "for"),
+            TokenKind::While => write!(f, "while"),
             TokenKind::In => write!(f, "in"),
             TokenKind::Fn => write!(f, "fn"),
             TokenKind::Pub => write!(f, "pub"),
@@ -537,6 +553,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Underscore => write!(f, "_"),
             TokenKind::At => write!(f, "@"),
             TokenKind::DotDot => write!(f, ".."),
+            TokenKind::PlusPlus => write!(f, "++"),
             TokenKind::Plus => write!(f, "+"),
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Star => write!(f, "*"),
@@ -568,6 +585,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Dot => write!(f, "."),
             TokenKind::Question => write!(f, "?"),
             TokenKind::QuestionQuestion => write!(f, "??"),
+            TokenKind::PipeArrow => write!(f, "|>"),
             TokenKind::Pipe => write!(f, "|"),
             TokenKind::Ampersand => write!(f, "&"),
             TokenKind::Newline => write!(f, "newline"),

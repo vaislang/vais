@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.0.6-blue.svg)](https://github.com/vais-lang/vais)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-613%2B%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-616%2B%20passed-brightgreen.svg)]()
 
 **Vais** (**V**ibe **AI** **S**cript) is a modern programming language designed for AI-assisted development ("vibe coding"). It combines the simplicity of Python with performance that rivals compiled languages.
 

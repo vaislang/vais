@@ -38,7 +38,7 @@ fn main() {
 
     // FastVM
     let start = Instant::now();
-    let result = execute_fast(functions.clone(), "fib", args.clone());
+    let _result = execute_fast(functions.clone(), "fib", args.clone());
     let fast_ms = start.elapsed().as_secs_f64() * 1000.0;
     println!("FastVM:             {:>12.2} ms  ({:.2}x faster)", fast_ms, std_ms / fast_ms);
 

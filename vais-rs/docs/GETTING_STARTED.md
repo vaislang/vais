@@ -53,13 +53,10 @@ Functions use a simple mathematical notation:
 // Simple function
 add(a, b) = a + b
 
-// With type annotations (optional)
-multiply(x: Int, y: Int) -> Int = x * y
+// Conditional with ternary operator
+max(a, b) = a > b ? a : b
 
-// Conditional expression
-max(a, b) = if a > b then a else b
-
-// Ternary shorthand
+// Nested ternary for multiple conditions
 abs(n) = n < 0 ? -n : n
 ```
 
@@ -84,14 +81,15 @@ doubled = numbers.@(_ * 2)  // [2, 4, 6, 8, 10]
 // Filter with .?
 evens = numbers.?(_ % 2 == 0)  // [2, 4]
 
-// Reduce with ./
-sum = numbers./+(0, _ + _)  // 15
+// Reduce with ./+, ./*
+sum = numbers./+      // 15
+product = numbers./*  // 120
 
 // Chain operations
 result = numbers
-    .?(_ > 2)      // filter
-    .@(_ * 2)      // map
-    ./+(0, _ + _)  // reduce
+    .?(_ > 2)     // filter: [3, 4, 5]
+    .@(_ * 2)     // map: [6, 8, 10]
+    ./+           // reduce: 24
 ```
 
 ### Pattern Matching
@@ -105,14 +103,18 @@ classify(n) = match n {
 }
 ```
 
-### Pipeline Operator
+### Chaining Operations
 
 ```vais
-// Instead of nested calls
-result = sum(filter(map(data, double), is_even))
+// Chain collection operators for data transformation
+data = [1, 2, 3, 4, 5]
 
-// Use pipelines
-result = data |> @(double) |> ?(is_even) |> sum
+// Double -> filter evens -> sum
+result = data.@(_ * 2).?(_ % 2 == 0)./+
+
+// Long words to uppercase
+words = ["hello", "world", "hi"]
+result = words.?(len(_) > 3).@(upper(_))  // ["HELLO", "WORLD"]
 ```
 
 ## Development Tools

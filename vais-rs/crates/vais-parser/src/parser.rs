@@ -405,9 +405,24 @@ impl<'src> Parser<'src> {
                 matches!(after_rparen.kind, TokenKind::Eq | TokenKind::Arrow)
             }
             TokenKind::Identifier => {
-                // f(x 형태 - 다음이 , 또는 ) 또는 : 이면 함수 정의
-                let next_after_id = Self::next_significant_token(&mut lexer_clone);
-                matches!(next_after_id.kind, TokenKind::Comma | TokenKind::RParen | TokenKind::Colon)
+                // f(x, ...) 형태 - ) 다음에 = 또는 -> 가 있는지 확인해야 함
+                // 괄호를 끝까지 스캔
+                let mut depth = 1;
+                let mut tok = Self::next_significant_token(&mut lexer_clone);
+                while depth > 0 {
+                    match tok.kind {
+                        TokenKind::LParen => depth += 1,
+                        TokenKind::RParen => depth -= 1,
+                        TokenKind::Eof => return false,
+                        _ => {}
+                    }
+                    if depth > 0 {
+                        tok = Self::next_significant_token(&mut lexer_clone);
+                    }
+                }
+                // ) 다음 토큰이 = 또는 -> 이면 함수 정의
+                let after_rparen = Self::next_significant_token(&mut lexer_clone);
+                matches!(after_rparen.kind, TokenKind::Eq | TokenKind::Arrow)
             }
             _ => false, // f(10 등 - 함수 호출
         }
@@ -1323,7 +1338,7 @@ impl<'src> Parser<'src> {
     /// 삼항 연산자: cond ? then : else
     fn parse_ternary(&mut self) -> ParseResult<Expr> {
         let start = self.current.span;
-        let mut expr = self.parse_coalesce()?;
+        let mut expr = self.parse_pipeline()?;
 
         while self.match_token(TokenKind::Question) {
             let then_expr = self.parse_expr()?;
@@ -1337,6 +1352,20 @@ impl<'src> Parser<'src> {
                 Box::new(else_expr),
                 span,
             );
+        }
+
+        Ok(expr)
+    }
+
+    /// Pipeline: a |> f (왼쪽 값을 오른쪽 함수에 전달)
+    fn parse_pipeline(&mut self) -> ParseResult<Expr> {
+        let start = self.current.span;
+        let mut expr = self.parse_coalesce()?;
+
+        while self.match_token(TokenKind::PipeArrow) {
+            let func = self.parse_coalesce()?;
+            let span = start.merge(self.previous.span);
+            expr = Expr::Pipeline(Box::new(expr), Box::new(func), span);
         }
 
         Ok(expr)
@@ -1472,6 +1501,7 @@ impl<'src> Parser<'src> {
             let op = match self.current.kind {
                 TokenKind::Plus => BinaryOp::Add,
                 TokenKind::Minus => BinaryOp::Sub,
+                TokenKind::PlusPlus => BinaryOp::Concat,
                 _ => break,
             };
             self.advance();
@@ -1675,6 +1705,7 @@ impl<'src> Parser<'src> {
 
             // 이항 연산자들 -> Try
             TokenKind::Plus
+            | TokenKind::PlusPlus
             | TokenKind::Minus
             | TokenKind::Star
             | TokenKind::Slash
@@ -2092,6 +2123,18 @@ impl<'src> Parser<'src> {
                 self.parse_match(span)
             }
 
+            // for 루프: for var in iter { body }
+            TokenKind::For => {
+                self.advance();
+                self.parse_for(span)
+            }
+
+            // while 루프: while cond { body }
+            TokenKind::While => {
+                self.advance();
+                self.parse_while(span)
+            }
+
             // try-catch 블록
             TokenKind::Try => {
                 self.advance();
@@ -2330,10 +2373,16 @@ impl<'src> Parser<'src> {
     }
 
     /// let 표현식 파싱: let x = v : body 또는 let mut x = v : body
+    /// 튜플 디스트럭처링: let (a, b) = (1, 2) : body
     ///
     /// Note: 바인딩 값에서는 parse_coalesce()를 사용하여 ternary 연산자의 ':'와
     /// let 표현식의 ':' 구분자가 충돌하지 않도록 함
     fn parse_let(&mut self, start: Span) -> ParseResult<Expr> {
+        // 튜플 디스트럭처링 체크: let (a, b) = ...
+        if self.check(TokenKind::LParen) {
+            return self.parse_let_destructure(start);
+        }
+
         let mut bindings = Vec::new();
 
         loop {
@@ -2342,9 +2391,10 @@ impl<'src> Parser<'src> {
 
             let name = self.expect_identifier()?;
             self.expect(TokenKind::Eq)?;
-            // ternary (? :)를 포함하지 않도록 coalesce 레벨까지만 파싱
+            // ternary (? :)를 포함하지 않도록 pipeline 레벨까지만 파싱
             // 이렇게 하면 `let x = cond ? a : b : body`에서 `:` 충돌 방지
-            let value = self.parse_coalesce()?;
+            // pipeline |> 는 `:` 충돌이 없으므로 포함
+            let value = self.parse_pipeline()?;
             bindings.push((name, value, is_mut));
 
             if !self.match_token(TokenKind::Comma) {
@@ -2362,18 +2412,71 @@ impl<'src> Parser<'src> {
         ))
     }
 
+    /// 튜플 디스트럭처링 파싱: let (a, b) = (1, 2) : body
+    fn parse_let_destructure(&mut self, start: Span) -> ParseResult<Expr> {
+        self.expect(TokenKind::LParen)?;
+
+        let mut names = Vec::new();
+        loop {
+            let name = self.expect_identifier()?;
+            names.push(name);
+
+            if !self.match_token(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::RParen)?;
+        self.expect(TokenKind::Eq)?;
+        let value = self.parse_pipeline()?;
+        self.expect(TokenKind::Colon)?;
+        let body = self.parse_expr()?;
+
+        Ok(Expr::LetDestructure(
+            names,
+            Box::new(value),
+            Box::new(body),
+            start.merge(self.previous.span),
+        ))
+    }
+
     /// if 표현식 파싱
+    /// 지원 형식:
+    /// - if cond { then } else { else }
+    /// - if cond then expr else expr
     fn parse_if(&mut self, start: Span) -> ParseResult<Expr> {
         let cond = self.parse_expr()?;
+
+        // if cond then expr else expr 형식
+        if self.match_token(TokenKind::Then) {
+            let then_expr = self.parse_expr()?;
+            self.expect(TokenKind::Else)?;
+            let else_expr = self.parse_expr()?;
+            return Ok(Expr::If(
+                Box::new(cond),
+                Box::new(then_expr),
+                Some(Box::new(else_expr)),
+                start.merge(self.previous.span),
+            ));
+        }
+
+        // if cond { then } else { else } 형식
         self.expect(TokenKind::LBrace)?;
         let then_expr = self.parse_expr()?;
         self.expect(TokenKind::RBrace)?;
 
         let else_expr = if self.match_token(TokenKind::Else) {
-            self.expect(TokenKind::LBrace)?;
-            let e = self.parse_expr()?;
-            self.expect(TokenKind::RBrace)?;
-            Some(Box::new(e))
+            if self.check(TokenKind::If) {
+                // else if 처리
+                self.advance();
+                let nested_if = self.parse_if(self.previous.span)?;
+                Some(Box::new(nested_if))
+            } else {
+                self.expect(TokenKind::LBrace)?;
+                let e = self.parse_expr()?;
+                self.expect(TokenKind::RBrace)?;
+                Some(Box::new(e))
+            }
         } else {
             None
         };
@@ -2382,6 +2485,37 @@ impl<'src> Parser<'src> {
             Box::new(cond),
             Box::new(then_expr),
             else_expr,
+            start.merge(self.previous.span),
+        ))
+    }
+
+    /// for 루프 파싱: for var in iter { body }
+    fn parse_for(&mut self, start: Span) -> ParseResult<Expr> {
+        let var = self.expect_identifier()?;
+        self.expect(TokenKind::In)?;
+        let iter = self.parse_expr()?;
+        self.expect(TokenKind::LBrace)?;
+        let body = self.parse_expr()?;
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(Expr::For(
+            var,
+            Box::new(iter),
+            Box::new(body),
+            start.merge(self.previous.span),
+        ))
+    }
+
+    /// while 루프 파싱: while cond { body }
+    fn parse_while(&mut self, start: Span) -> ParseResult<Expr> {
+        let cond = self.parse_expr()?;
+        self.expect(TokenKind::LBrace)?;
+        let body = self.parse_expr()?;
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(Expr::While(
+            Box::new(cond),
+            Box::new(body),
             start.merge(self.previous.span),
         ))
     }
@@ -3039,9 +3173,13 @@ mod tests {
     }
 
     #[test]
-    fn test_error_missing_equals_in_function() {
+    fn test_func_call_followed_by_expr() {
+        // "f(x) x + 1" should now parse as function call f(x) followed by expression x + 1
+        // (not as a malformed function definition)
         let result = parse("f(x) x + 1");
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let program = result.unwrap();
+        assert_eq!(program.items.len(), 2);
     }
 
     #[test]

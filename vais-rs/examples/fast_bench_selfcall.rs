@@ -5,7 +5,7 @@
 use std::time::Instant;
 use vais_ir::Value;
 use vais_lowering::Lowerer;
-use vais_vm::{execute_function, execute_fast};
+use vais_vm::execute_fast;
 
 fn main() {
     println!("{}", "=".repeat(70));

@@ -50,8 +50,8 @@ active = true    // Boolean
 
 // Collections
 [1, 2, 3]           // Array
-#{1, 2, 3}          // Set
-{"a": 1, "b": 2}    // Map
+#{1, 2, 3}          // Set (converted to Array)
+{a: 1, b: 2}        // Struct
 (1, "two", 3.0)     // Tuple
 ```
 
@@ -142,15 +142,16 @@ sum_to(n, acc) = n == 0 ? acc : $(n - 1, acc + n)
 ### Lambda Expressions
 
 ```vais
-// Full syntax
-double = (x) => x * 2
+// Shorthand with _ (placeholder) - recommended
+numbers.@(_ * 2)      // Double each element
+numbers.?(_ > 0)      // Filter positive numbers
+numbers.@(_ * _)      // Square each element
 
-// Pipe lambda syntax
-add = |x, y| x + y
+// Arrow syntax (in collection operations)
+numbers.@((x) => x * 2)
 
-// Shorthand with _ (placeholder)
-numbers.@(_ * 2)      // Same as: numbers.@(x => x * 2)
-numbers.?(_ > 0)      // Same as: numbers.?(x => x > 0)
+// Pipe lambda syntax (inline only)
+[1, 2, 3].@(|x| x * 2)
 ```
 
 ### Async Functions
@@ -210,14 +211,14 @@ async fetch_data(url) = {
 | `./or` | Logical OR reduce | `[false,true]./or` |
 | `elem @ arr` | Contains | `2 @ [1,2,3]` → true |
 
-### Pipeline
+### Chaining Operations
 
 ```vais
-// |> passes left side as argument to right side
-data |> process |> format |> output
+// Chain collection operators instead of pipeline
+data.@(process).@(format).@(output)
 
-// Equivalent to:
-output(format(process(data)))
+// Example: double -> filter > 10 -> sum
+[1, 2, 3, 4, 5].@(_ * 2).?(_ > 5)./+  // 24
 ```
 
 ### String
@@ -258,18 +259,22 @@ union(s, #{4, 5})   // #{1, 2, 3, 4, 5}
 intersect(s, #{2})  // #{2}
 ```
 
-### Maps
+### Structs
 
 ```vais
-m = {"name": "Vais", "version": "0.1"}
+// Struct literal (use identifiers as keys, not strings)
+person = {name: "Vais", version: "0.1"}
 
-// Access
-m["name"]           // "Vais"
-m.name              // "Vais" (dot notation)
+// Access with dot notation
+person.name         // "Vais"
+person.version      // "0.1"
 
-// Operations
-keys(m)             // ["name", "version"]
-values(m)           // ["Vais", "0.1"]
+// Nested structs
+config = {
+    server: {host: "localhost", port: 8080},
+    debug: true
+}
+config.server.host  // "localhost"
 ```
 
 ---
@@ -279,39 +284,32 @@ values(m)           // ["Vais", "0.1"]
 ### Conditionals
 
 ```vais
-// Ternary operator
+// Ternary operator (primary conditional)
 result = condition ? value_if_true : value_if_false
 
-// If-then-else
-result = if x > 0 then "positive" else "non-positive"
+// Nested ternary
+classify(n) = n < 0 ? "negative" : n == 0 ? "zero" : "positive"
 
-// If block
-result = if x > 0 {
-    "positive"
-} else if x < 0 {
-    "negative"
-} else {
-    "zero"
-}
+// In functions
+max(a, b) = a > b ? a : b
+abs(n) = n < 0 ? -n : n
 ```
 
-### Loops
+### Iteration (Functional Style)
 
 ```vais
-// For loop
-for i in range(1, 10) {
-    print(i)
-}
+// Use collection operators instead of loops
+// Map over range
+range(1, 10).@(print(_))
 
-// For with collection
-for item in items {
-    process(item)
-}
+// Process each item
+items.@(process(_))
 
-// While loop
-while condition {
-    do_something()
-}
+// Sum with reduce
+range(1, 100)./+  // Sum 1 to 99
+
+// Recursive iteration
+count_down(n) = n <= 0 ? "done" : { print(n); $(n - 1) }
 ```
 
 ---
@@ -330,132 +328,120 @@ result = match value {
 }
 ```
 
-### Destructuring
+### Destructuring (Planned)
+
+> Note: Destructuring is planned for a future version.
 
 ```vais
-// Tuple destructuring
-(a, b) = (1, 2)
+// Planned syntax:
+// (a, b) = (1, 2)
+// [first, ...rest] = [1, 2, 3]
+// {name, age} = person
 
-// Array destructuring
-[first, second, ...rest] = [1, 2, 3, 4, 5]
-
-// Struct destructuring
-{name, age} = person
+// Current workaround: access elements directly
+tuple = (1, 2)
+// Use tuple[0], tuple[1] or pattern match
 ```
 
 ---
 
-## Modules
+## Modules (Planned)
 
-### Import
+> Note: Module system is planned for a future version.
+
+### Import (Planned)
 
 ```vais
-// Import entire module
-use math
-
-// Import specific items
-use math::{sin, cos, PI}
-
-// Import with alias
-use math as m
+// Planned syntax:
+// use math
+// use math::{sin, cos, PI}
+// use math as m
 ```
 
-### Export
+### Current Built-in Functions
 
 ```vais
-// Public function
-pub add(a, b) = a + b
-
-// Private (default)
-helper(x) = x * 2
-```
-
----
-
-## Error Handling
-
-### Try-Catch
-
-```vais
-result = try {
-    risky_operation()
-} catch e {
-    handle_error(e)
-}
-```
-
-### Result Type
-
-```vais
-safe_divide(a, b) = 
-    if b == 0 
-    then Err("Division by zero") 
-    else Ok(a / b)
-
-// Using the result
-match safe_divide(10, 2) {
-    Ok(value) => print(value),
-    Err(msg) => print("Error: " ++ msg)
-}
-```
-
-### Optional Chaining
-
-```vais
-// ? operator for early return on error
-value = get_data()?
-processed = process(value)?
-result = format(processed)?
+// Math functions are available globally
+print(sin(0))       // 0
+print(cos(0))       // 1
+print(sqrt(16))     // 4
+print(abs(-5))      // 5
 ```
 
 ---
 
-## Async/Concurrency
+## Error Handling (Planned)
 
-### Async Functions
+> Note: Try-catch is planned for a future version.
+
+### Try-Catch (Planned)
 
 ```vais
-async fetch(url) = {
-    response = await http_get(url)
-    response.body
+// Planned syntax:
+// result = try {
+//     risky_operation()
+// } catch e {
+//     handle_error(e)
+// }
+```
+
+### Current Error Handling
+
+```vais
+// Use ternary operator for validation
+safe_divide(a, b) = b == 0 ? "Error: Division by zero" : a / b
+
+// Pattern matching for error handling
+handle_result(x) = match x {
+    0 => "Error: zero",
+    n if n < 0 => "Error: negative",
+    _ => "Success: " ++ str(x)
 }
 ```
 
-### Channels
+---
+
+## Async/Concurrency (Planned)
+
+> Note: Full async/await is planned for a future version.
+
+### Async Functions (Planned)
 
 ```vais
-// Create channel
-ch = channel(10)  // buffered channel
-
-// Send
-ch <- value
-
-// Receive
-value = <- ch
+// Planned syntax:
+// async fetch(url) = {
+//     response = await http_get(url)
+//     response.body
+// }
 ```
 
-### Spawn
+### Current Status
 
-```vais
-// Spawn concurrent task
-handle = spawn async_task(args)
-
-// Wait for result
-result = await handle
-```
-
-### Parallel Operations
-
-```vais
-// Parallel map
-results = data.||@(expensive_operation)
-
-// Parallel filter
-filtered = data.||?(slow_predicate)
-```
+The `async` keyword is recognized but full async/await runtime is not yet implemented.
 
 ---
 
 ## Standard Library
 
-See [STDLIB.md](./STDLIB.md) for the complete standard library reference.
+### Available Built-in Functions
+
+```vais
+// I/O
+print(...)          // Print values
+println(...)        // Print with newline
+
+// Math
+sqrt(n), pow(a, b), abs(n)
+sin(x), cos(x), tan(x)
+floor(x), ceil(x), round(x)
+
+// String
+len(s), upper(s), lower(s)
+split(s, delim), join(arr, delim)
+contains(s, sub), replace(s, old, new)
+str(value)          // Convert to string
+
+// Array
+len(arr), range(start, end)
+first(arr), last(arr), reverse(arr)
+```

@@ -108,22 +108,28 @@ impl Lowerer {
 
     /// 프로그램을 컴파일
     pub fn lower_program(&mut self, program: &Program) -> LowerResult<Vec<CompiledFunction>> {
+        // 모든 Item::Expr을 하나의 __main__ 함수로 합침
+        let mut main_instructions: Vec<Instruction> = Vec::new();
+        self.scope = LocalScope::new();
+        let mut has_main_exprs = false;
+
         for item in &program.items {
             match item {
                 Item::Function(f) => {
+                    // 함수는 별도로 컴파일하기 전에 현재 스코프 저장
+                    let saved_scope = std::mem::take(&mut self.scope);
                     let compiled = self.lower_function(f)?;
                     self.functions.push(compiled);
+                    // 스코프 복원
+                    self.scope = saved_scope;
                 }
                 Item::Expr(e) => {
-                    // REPL용: main 함수로 래핑
-                    self.scope = LocalScope::new();
+                    // 모든 표현식을 하나의 __main__에 누적
+                    has_main_exprs = true;
                     let instructions = self.lower_expr(e)?;
-                    self.functions.push(CompiledFunction {
-                        name: "__main__".to_string(),
-                        params: Vec::new(),
-                        instructions,
-                        local_count: self.scope.count(),
-                    });
+                    main_instructions.extend(instructions);
+                    // 결과값은 다음 표현식을 위해 Pop (마지막 제외)
+                    // 마지막은 반환값으로 유지
                 }
                 Item::Ffi(ffi_block) => {
                     // FFI 블록 처리: 함수 레지스트리에 등록
@@ -131,16 +137,31 @@ impl Lowerer {
                 }
                 Item::Trait(trait_def) => {
                     // Trait 기본 구현 컴파일
+                    let saved_scope = std::mem::take(&mut self.scope);
                     self.lower_trait(trait_def)?;
+                    self.scope = saved_scope;
                 }
                 Item::Impl(impl_def) => {
                     // Impl 메서드 컴파일
+                    let saved_scope = std::mem::take(&mut self.scope);
                     self.lower_impl(impl_def)?;
+                    self.scope = saved_scope;
                 }
                 _ => {
                     // TypeDef, Module, Use, Enum은 런타임에 직접 영향 없음
                 }
             }
+        }
+
+        // __main__ 함수가 있으면 추가
+        if has_main_exprs {
+            main_instructions.push(Instruction::new(OpCode::Return));
+            self.functions.push(CompiledFunction {
+                name: "__main__".to_string(),
+                params: Vec::new(),
+                instructions: main_instructions,
+                local_count: self.scope.count(),
+            });
         }
 
         Ok(std::mem::take(&mut self.functions))
@@ -580,6 +601,126 @@ impl Lowerer {
                 instrs.extend(self.lower_expr(body)?);
             }
 
+            // 튜플 디스트럭처링: let (a, b) = (1, 2) : body
+            Expr::LetDestructure(names, value, body, _) => {
+                // 튜플 값을 평가하고 저장
+                instrs.extend(self.lower_expr(value)?);
+                let tuple_idx = self.scope.declare("__tuple_tmp__");
+                instrs.push(Instruction::new(OpCode::StoreLocal(tuple_idx)));
+
+                // 각 변수에 튜플 요소 할당
+                for (i, name) in names.iter().enumerate() {
+                    // tuple[i] 접근
+                    instrs.push(Instruction::new(OpCode::LoadLocal(tuple_idx)));
+                    instrs.push(Instruction::new(OpCode::Const(Value::Int(i as i64))));
+                    instrs.push(Instruction::new(OpCode::Index));
+                    // 변수에 저장
+                    let var_idx = self.scope.declare(name);
+                    instrs.push(Instruction::new(OpCode::StoreLocal(var_idx)));
+                }
+                // 본문 실행
+                instrs.extend(self.lower_expr(body)?);
+            }
+
+            // For 루프: for var in iter { body }
+            // range() 기반 반복은 iter 내부의 __iter_next__ 호출로 처리
+            Expr::For(var, iter, body, _) => {
+                // iter를 평가하고 저장
+                instrs.extend(self.lower_expr(iter)?);
+                let iter_idx = self.scope.declare("__for_iter__");
+                instrs.push(Instruction::new(OpCode::StoreLocal(iter_idx)));
+
+                // 인덱스 초기화
+                instrs.push(Instruction::new(OpCode::Const(Value::Int(0))));
+                let idx_var = self.scope.declare("__for_idx__");
+                instrs.push(Instruction::new(OpCode::StoreLocal(idx_var)));
+
+                // 루프 변수 선언
+                let var_idx = self.scope.declare(var);
+
+                // 루프 시작 (조건 체크)
+                let loop_start = instrs.len();
+
+                // idx < len(iter) 체크
+                instrs.push(Instruction::new(OpCode::LoadLocal(idx_var)));
+                instrs.push(Instruction::new(OpCode::LoadLocal(iter_idx)));
+                instrs.push(Instruction::new(OpCode::CallBuiltin("len".to_string(), 1)));
+                instrs.push(Instruction::new(OpCode::Lt));
+
+                // 본문 코드 준비
+                let mut body_instrs = Vec::new();
+                // var = iter[idx]
+                body_instrs.push(Instruction::new(OpCode::LoadLocal(iter_idx)));
+                body_instrs.push(Instruction::new(OpCode::LoadLocal(idx_var)));
+                body_instrs.push(Instruction::new(OpCode::Index));
+                body_instrs.push(Instruction::new(OpCode::StoreLocal(var_idx)));
+                // body 실행
+                body_instrs.extend(self.lower_expr(body)?);
+                body_instrs.push(Instruction::new(OpCode::Pop)); // body 결과 버림
+                // idx++
+                body_instrs.push(Instruction::new(OpCode::LoadLocal(idx_var)));
+                body_instrs.push(Instruction::new(OpCode::Const(Value::Int(1))));
+                body_instrs.push(Instruction::new(OpCode::Add));
+                body_instrs.push(Instruction::new(OpCode::StoreLocal(idx_var)));
+
+                let body_len = body_instrs.len() as i32;
+                // 조건이 false면 루프 종료로 점프
+                instrs.push(Instruction::new(OpCode::JumpIfNot(body_len + 1)));
+                instrs.extend(body_instrs);
+                // 루프 시작으로 점프 (뒤로 점프)
+                let jump_back = -((instrs.len() - loop_start) as i32) - 1;
+                instrs.push(Instruction::new(OpCode::Jump(jump_back)));
+
+                // 루프 끝나면 Void 반환
+                instrs.push(Instruction::new(OpCode::Const(Value::Void)));
+            }
+
+            // While 루프: while cond { body }
+            Expr::While(cond, body, _) => {
+                let loop_start = instrs.len();
+
+                // 조건 평가
+                instrs.extend(self.lower_expr(cond)?);
+
+                // 본문 준비
+                let mut body_instrs = self.lower_expr(body)?;
+                body_instrs.push(Instruction::new(OpCode::Pop)); // body 결과 버림
+
+                let body_len = body_instrs.len() as i32;
+                // 조건이 false면 루프 종료로 점프
+                instrs.push(Instruction::new(OpCode::JumpIfNot(body_len + 1)));
+                instrs.extend(body_instrs);
+                // 루프 시작으로 점프
+                let jump_back = -((instrs.len() - loop_start) as i32) - 1;
+                instrs.push(Instruction::new(OpCode::Jump(jump_back)));
+
+                // 루프 끝나면 Void 반환
+                instrs.push(Instruction::new(OpCode::Const(Value::Void)));
+            }
+
+            // Pipeline: a |> f -> f(a)
+            Expr::Pipeline(value, func, _) => {
+                // func가 Ident인 경우 직접 호출
+                if let Expr::Ident(name, _) = func.as_ref() {
+                    // 먼저 value를 평가
+                    instrs.extend(self.lower_expr(value)?);
+                    // 빌트인 함수 체크
+                    if Self::is_builtin(name) {
+                        instrs.push(Instruction::new(OpCode::CallBuiltin(name.clone(), 1)));
+                    } else {
+                        instrs.push(Instruction::new(OpCode::Call(name.clone(), 1)));
+                    }
+                } else {
+                    // 람다 또는 동적 함수 호출
+                    // 먼저 value를 평가
+                    instrs.extend(self.lower_expr(value)?);
+                    // func를 평가 (스택에 함수 올림)
+                    instrs.extend(self.lower_expr(func)?);
+                    // __call__(func, value) 형태로 호출 (인자 2개: value와 func)
+                    instrs.push(Instruction::new(OpCode::CallBuiltin("__call__".to_string(), 2)));
+                }
+            }
+
             // 재할당
             Expr::Assign(name, value, _) => {
                 instrs.extend(self.lower_expr(value)?);
@@ -690,7 +831,10 @@ impl Lowerer {
                 // [Store error_name]
                 // [handler 명령어들]
 
-                // 먼저 body와 handler를 컴파일
+                // 에러 변수를 먼저 선언 (handler가 참조할 수 있도록)
+                let error_idx = self.scope.declare(error_name);
+
+                // body와 handler를 컴파일
                 let body_instrs = self.lower_expr(body)?;
                 let handler_instrs = self.lower_expr(handler)?;
 
@@ -710,7 +854,6 @@ impl Lowerer {
                 instrs.push(Instruction::new(OpCode::Jump((handler_len + 1) as i32)));
 
                 // 에러 저장 (에러 핸들러 시작점)
-                let error_idx = self.scope.declare(error_name);
                 instrs.push(Instruction::new(OpCode::StoreLocal(error_idx)));
 
                 // handler 실행

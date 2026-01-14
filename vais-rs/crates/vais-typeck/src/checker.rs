@@ -530,6 +530,34 @@ impl TypeChecker {
                 self.infer_expr(body)
             }
 
+            // 튜플 디스트럭처링
+            Expr::LetDestructure(names, value, body, span) => {
+                let value_type = self.infer_expr(value)?;
+                // value가 튜플 타입이어야 함
+                match value_type {
+                    Type::Tuple(elem_types) => {
+                        if elem_types.len() != names.len() {
+                            return Err(TypeError::Mismatch {
+                                expected: format!("tuple of {} elements", names.len()),
+                                found: format!("tuple of {} elements", elem_types.len()),
+                                span: *span,
+                            });
+                        }
+                        // 각 변수에 해당 타입 바인딩
+                        for (name, ty) in names.iter().zip(elem_types.iter()) {
+                            self.env.bind_var(name.clone(), ty.clone());
+                        }
+                    }
+                    _ => {
+                        // 타입을 정확히 알 수 없으면 Any로 바인딩
+                        for name in names {
+                            self.env.bind_var(name.clone(), Type::Any);
+                        }
+                    }
+                }
+                self.infer_expr(body)
+            }
+
             // 재할당
             Expr::Assign(name, value, span) => {
                 // 변수가 존재하는지 확인
@@ -943,6 +971,41 @@ impl TypeChecker {
                 }
 
                 Ok(body_type)
+            }
+
+            // For 루프
+            Expr::For(_var, iter, body, _span) => {
+                self.infer_expr(iter)?;
+                self.infer_expr(body)?;
+                Ok(Type::Unit)
+            }
+
+            // While 루프
+            Expr::While(cond, body, _span) => {
+                self.infer_expr(cond)?;
+                self.infer_expr(body)?;
+                Ok(Type::Unit)
+            }
+
+            // Pipeline: value |> func
+            Expr::Pipeline(value, func, _span) => {
+                let value_ty = self.infer_expr(value)?;
+                let func_ty = self.infer_expr(func)?;
+                // func는 Function 타입이어야 함
+                match func_ty {
+                    Type::Function(params, return_ty) => {
+                        // 인자 타입 체크 (첫 번째 인자와 value 타입이 호환되어야 함)
+                        if !params.is_empty() {
+                            // 타입 호환성은 느슨하게 체크
+                            let _ = value_ty;
+                        }
+                        Ok(*return_ty)
+                    }
+                    _ => {
+                        // 타입을 정확히 알 수 없는 경우 Any 반환
+                        Ok(Type::Any)
+                    }
+                }
             }
         }
     }

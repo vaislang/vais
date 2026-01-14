@@ -616,7 +616,7 @@ print("5! =", factorial(5))
 print("10! =", factorial(10))
 
 // Using reduce for factorial
-fact_reduce(n) = range(1, n + 1)./*(1, _ * _)
+fact_reduce(n) = range(1, n + 1)./*
 print("5! (reduce) =", fact_reduce(5))`,
 
             fibonacci: `// Fibonacci using self-recursion ($)
@@ -627,7 +627,7 @@ fibs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].@(fib(_))
 print("Fibonacci:", fibs)
 
 // Sum of first 10 Fibonacci numbers
-print("Sum:", fibs./+(0, _ + _))`,
+print("Sum:", fibs./+)`,
 
             map: `// Map and Filter operations
 numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -647,17 +647,22 @@ print("Squared evens:", squared_evens)`,
             reduce: `// Reduce operations
 numbers = [1, 2, 3, 4, 5]
 
-// Sum
-sum = numbers./+(0, _ + _)
+// Sum using ./+
+sum = numbers./+
 print("Sum:", sum)
 
-// Product
-product = numbers./*(1, _ * _)
+// Product using ./*
+product = numbers./*
 print("Product:", product)
 
-// Custom reduce: find max
-max_val = numbers./(numbers[0], _ > _ ? _1 : _2)
-print("Max:", max_val)`,
+// Min and Max
+print("Min:", numbers./min)
+print("Max:", numbers./max)
+
+// Boolean reduce (all/any)
+bools = [true, true, false]
+print("All true?:", bools./and)
+print("Any true?:", bools./or)`,
 
             primes: `// Prime number checker
 is_prime(n) = n < 2 ? false : n == 2 ? true : n % 2 == 0 ? false : check_odd(n, 3)
@@ -722,70 +727,56 @@ print("describe(0):", describe(0))
 print("describe(1):", describe(1))
 print("describe(-5):", describe(-5))
 print("describe(200):", describe(200))
-print("describe(42):", describe(42))
+print("describe(42):", describe(42))`,
 
-// Destructuring tuples
-swap((a, b)) = (b, a)
-result = swap((1, 2))
-print("swap((1,2)):", result)`,
-
-            pipeline: `// Pipeline Operators
-// Use |> to chain operations
+            pipeline: `// Chained Operations in Vais
+// Use .@ (map), .? (filter), ./ (reduce)
 
 data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-// Traditional nesting
-result1 = sum(filter(map(data, _ * 2), _ > 10))
+// Chain: double -> filter > 10 -> sum
+result = data.@(_ * 2).?(_ > 10)./+
+print("Chained result:", result)
 
-// Pipeline style (cleaner!)
-result2 = data
-    |> @(_ * 2)      // map: double each
-    |> ?(_ > 10)     // filter: > 10
-    |> sum           // reduce: sum
+// Step by step
+doubled = data.@(_ * 2)
+print("Doubled:", doubled)
 
-print("Nested result:", result1)
-print("Pipeline result:", result2)
+filtered = doubled.?(_ > 10)
+print("Filtered > 10:", filtered)
 
-// More complex pipeline
+print("Sum:", filtered./+)
+
+// More complex chain
 words = ["hello", "world", "vais", "is", "awesome"]
-long_upper = words
-    |> ?(_ => len(_) > 3)
-    |> @(upper(_))
+long_upper = words.?(len(_) > 3).@(upper(_))
 print("Long words uppercase:", long_upper)`,
 
-            async: `// Async/Await and Channels
-// Vais supports concurrent programming
+            async: `// Advanced Functions in Vais
 
-// Async function definition
-async fetch_data(id) = {
-    // Simulated async operation
-    "data_" ++ str(id)
-}
+// String building with ++
+greet(name) = "Hello, " ++ name ++ "!"
+message = greet("Vais")
+print(message)
 
-// Channel communication
-producer(ch) = {
-    ch <- 1
-    ch <- 2
-    ch <- 3
-}
+// Nested function calls
+square(n) = n * n
+cube(n) = n * n * n
+print("square(5) =", square(5))
+print("cube(3) =", cube(3))
 
-consumer(ch) = {
-    a = <- ch
-    b = <- ch
-    c = <- ch
-    [a, b, c]
-}
-
-// Parallel operations on collections
+// Using functions in map
 numbers = [1, 2, 3, 4, 5]
+squared = numbers.@(square(_))
+cubed = numbers.@(cube(_))
+print("Squared:", squared)
+print("Cubed:", cubed)
 
-// Parallel map (when available)
-// doubled = numbers.||@(_ * 2)
+// Combining operations
+result = numbers.@(_ * 2).?(_ > 5)./+
+print("Pipeline result:", result)`,
 
-print("Async/Channel syntax demo")
-print("async fn, spawn, <- send/recv")`,
-
-            structs: `// Structs and Enums
+            structs: `// Structs in Vais
 
 // Struct literal
 person = {
@@ -798,20 +789,20 @@ print("Person:", person)
 print("Name:", person.name)
 print("Age:", person.age)
 
-// Enum example
-enum Color { Red, Green, Blue }
-enum Option { Some(value), None }
+// Nested structs
+address = {
+    city: "Seoul",
+    country: "Korea"
+}
 
-// Result type for error handling
-enum Result { Ok(value), Err(message) }
+employee = {
+    name: "Bob",
+    title: "Engineer",
+    location: address
+}
 
-safe_divide(a, b) =
-    if b == 0
-    then Result::Err("Division by zero")
-    else Result::Ok(a / b)
-
-print("10/2:", safe_divide(10, 2))
-print("10/0:", safe_divide(10, 0))`
+print("Employee:", employee)
+print("City:", employee.location.city)`
         };
 
         // Tutorial content
@@ -866,10 +857,10 @@ numbers = [1, 2, 3, 4, 5]
 doubled = numbers.@(_ * 2)
 print("Doubled:", doubled)
 
-// You can also use a named parameter
-squared = numbers.@(x => x * x)
+// Squaring each element
+squared = numbers.@(_ * _)
 print("Squared:", squared)`,
-                explanation: "The .@ operator maps a function over each element. Use _ as a shorthand for the element, or x => expr for explicit naming."
+                explanation: "The .@ operator maps a function over each element. Use _ as a shorthand for the element."
             },
             {
                 title: "Filter",
@@ -892,18 +883,17 @@ print("Evens > 5:", big_evens)`,
                 code: `numbers = [1, 2, 3, 4, 5]
 
 // Reduce with ./ operator
-// ./+(init, combiner) - + is shorthand
-sum = numbers./+(0, _ + _)
+// ./+ for sum, ./* for product
+sum = numbers./+
 print("Sum:", sum)
 
-product = numbers./*(1, _ * _)
+product = numbers./*
 print("Product:", product)
 
-// Custom reduce
-str_nums = numbers.@(str(_))
-joined = str_nums./("", _ ++ "," ++ _)
-print("Joined:", joined)`,
-                explanation: "The ./ operator reduces a collection to a single value. Use ./+ for sum, ./* for product, or provide a custom combiner."
+// Other reduce operations
+print("Min:", numbers./min)
+print("Max:", numbers./max)`,
+                explanation: "The ./ operator reduces a collection to a single value. Use ./+ for sum, ./* for product, ./min, ./max for extremes."
             },
             {
                 title: "Pattern Matching",
@@ -932,13 +922,13 @@ print(classify(42))`,
 // - Self-recursion: $
 // - Map: .@(transform)
 // - Filter: .?(predicate)
-// - Reduce: ./(init, combiner)
+// - Reduce: ./+, ./*, ./min, ./max
 // - Pattern matching: match { ... }
 //
 // Explore more examples in the dropdown!
 
 print("Happy coding with Vais!")`,
-                explanation: "You're now ready to write Vais! Check out the Examples dropdown for more advanced patterns like pipelines, async, and structs."
+                explanation: "You're now ready to write Vais! Check out the Examples dropdown for more advanced patterns like chained operations, async, and structs."
             }
         ];
 
