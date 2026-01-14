@@ -3010,14 +3010,25 @@ mod tests {
 
     #[test]
     fn test_method_call() {
+        // 단순 식별자 뒤의 메서드 호출은 이제 QualifiedIdent로 파싱됨 (모듈 호출)
         let result = parse_expr("str.upper()").unwrap();
-        assert!(matches!(result, Expr::MethodCall(_, method, args, _) if method == "upper" && args.is_empty()));
+        // str.upper() -> Call(QualifiedIdent(["str"], "upper"), [])
+        assert!(matches!(result, Expr::Call(_, args, _) if args.is_empty()));
     }
 
     #[test]
     fn test_method_call_with_args() {
+        // 단순 식별자 뒤의 메서드 호출은 이제 QualifiedIdent로 파싱됨 (모듈 호출)
         let result = parse_expr("str.replace(a, b)").unwrap();
-        assert!(matches!(result, Expr::MethodCall(_, _, args, _) if args.len() == 2));
+        // str.replace(a, b) -> Call(QualifiedIdent(["str"], "replace"), [a, b])
+        assert!(matches!(result, Expr::Call(_, args, _) if args.len() == 2));
+    }
+
+    #[test]
+    fn test_method_call_on_expression() {
+        // 복잡한 표현식 뒤의 메서드 호출은 MethodCall로 유지됨
+        let result = parse_expr("(a + b).method()").unwrap();
+        assert!(matches!(result, Expr::MethodCall(_, method, args, _) if method == "method" && args.is_empty()));
     }
 
     // =========================================================================

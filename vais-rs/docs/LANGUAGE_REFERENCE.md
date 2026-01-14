@@ -287,12 +287,46 @@ config.server.host  // "localhost"
 // Ternary operator (primary conditional)
 result = condition ? value_if_true : value_if_false
 
+// If-then-else expression (alternative syntax)
+result = if condition then value_if_true else value_if_false
+
 // Nested ternary
 classify(n) = n < 0 ? "negative" : n == 0 ? "zero" : "positive"
+
+// If-then-else in function
+classify(n) = if n > 0 then "positive" else "non-positive"
 
 // In functions
 max(a, b) = a > b ? a : b
 abs(n) = n < 0 ? -n : n
+```
+
+### For Loop
+
+```vais
+// Iterate over array
+for i in [1, 2, 3] {
+    print(i)
+}
+
+// With range
+for n in range(1, 10) {
+    print(n)
+}
+```
+
+### Pipeline Operator
+
+```vais
+// Pipeline: pass value to function
+double(x) = x * 2
+triple(x) = x * 3
+
+5 |> double           // 10
+5 |> double |> triple // 30
+
+// Chained processing
+value |> process |> format |> output
 ```
 
 ### Iteration (Functional Style)
@@ -328,37 +362,55 @@ result = match value {
 }
 ```
 
-### Destructuring (Planned)
-
-> Note: Destructuring is planned for a future version.
+### Tuple Destructuring
 
 ```vais
-// Planned syntax:
-// (a, b) = (1, 2)
-// [first, ...rest] = [1, 2, 3]
-// {name, age} = person
+// Destructure tuple in let binding
+let (a, b) = (1, 2) : a + b    // 3
 
-// Current workaround: access elements directly
-tuple = (1, 2)
-// Use tuple[0], tuple[1] or pattern match
+// Multiple elements
+let (x, y, z) = (10, 20, 30) : x * y * z  // 6000
+
+// Nested in expressions
+result = let (first, second) = get_pair() : first + second
 ```
 
 ---
 
-## Modules (Planned)
+## Modules
 
-> Note: Module system is planned for a future version.
-
-### Import (Planned)
+### Import
 
 ```vais
-// Planned syntax:
-// use math
-// use math::{sin, cos, PI}
-// use math as m
+// Import entire module
+use math
+
+// Use functions directly after import
+let x = add(1, 2)
+
+// Or use qualified calls
+let y = math.mul(3, 4)
 ```
 
-### Current Built-in Functions
+### Module File Structure
+
+```
+project/
+├── main.vais
+└── lib/
+    └── math.vais     // use lib.math
+```
+
+### Module Definition (math.vais)
+
+```vais
+// lib/math.vais
+double(x) = x * 2
+triple(x) = x * 3
+add(a, b) = a + b
+```
+
+### Built-in Functions
 
 ```vais
 // Math functions are available globally
@@ -370,32 +422,50 @@ print(abs(-5))      // 5
 
 ---
 
-## Error Handling (Planned)
+## Error Handling
 
-> Note: Try-catch is planned for a future version.
-
-### Try-Catch (Planned)
+### Try-Catch
 
 ```vais
-// Planned syntax:
-// result = try {
-//     risky_operation()
-// } catch e {
-//     handle_error(e)
-// }
+// Basic try-catch
+result = try {
+    risky_operation()
+} catch e {
+    "Error: " ++ e
+}
+
+// Error propagation
+let caught = try {
+    err("something went wrong")
+} catch e {
+    "Caught: " ++ e
+}
+
+// Safe execution (returns value if no error)
+let safe = try { 42 } catch e { 0 }
 ```
 
-### Current Error Handling
+### Error Function
+
+```vais
+// Raise an error
+err("error message")
+
+// In conditional
+validate(x) = x < 0 ? err("negative not allowed") : x
+```
+
+### Validation Pattern
 
 ```vais
 // Use ternary operator for validation
-safe_divide(a, b) = b == 0 ? "Error: Division by zero" : a / b
+safe_divide(a, b) = b == 0 ? err("Division by zero") : a / b
 
 // Pattern matching for error handling
 handle_result(x) = match x {
-    0 => "Error: zero",
-    n if n < 0 => "Error: negative",
-    _ => "Success: " ++ str(x)
+    0 => err("zero not allowed"),
+    n if n < 0 => err("negative"),
+    _ => x * 2
 }
 ```
 

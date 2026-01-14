@@ -319,6 +319,104 @@ impl WasmVm {
                 OpCode::Return => break,
                 OpCode::Nop => {}
 
+                // Error: 에러 생성
+                OpCode::Error(msg) => {
+                    if msg.is_empty() {
+                        // 스택에서 에러 메시지를 가져옴
+                        let err_val = self.pop()?;
+                        let err_msg = match err_val {
+                            Value::String(s) => s,
+                            _ => format!("{:?}", err_val),
+                        };
+                        return Err(WasmVmError::Internal(err_msg));
+                    } else {
+                        return Err(WasmVmError::Internal(msg.clone()));
+                    }
+                }
+
+                // try-catch는 간단히 처리 (WASM에서는 제한적)
+                OpCode::SetCatch(_) | OpCode::ClearCatch => {
+                    // WASM에서는 try-catch 지원 제한적
+                }
+
+                // 모듈 함수 호출
+                OpCode::CallModule(module_path, func_name, arg_count) => {
+                    let qualified_name = format!("{}::{}", module_path.join("::"), func_name);
+                    let mut args = Vec::with_capacity(*arg_count);
+                    for _ in 0..*arg_count {
+                        args.push(self.pop()?);
+                    }
+                    args.reverse();
+
+                    if let Some(func) = self.functions.get(&qualified_name).cloned() {
+                        let result = self.call_function_internal(&func, args)?;
+                        self.stack.push(result);
+                    } else {
+                        return Err(WasmVmError::UndefinedFunction(qualified_name));
+                    }
+                }
+
+                // Coalesce: a ?? b
+                OpCode::Coalesce => {
+                    let default = self.pop()?;
+                    let value = self.pop()?;
+                    match value {
+                        Value::Optional(None) | Value::Void => self.stack.push(default),
+                        other => self.stack.push(other),
+                    }
+                }
+
+                // Try: value? (옵셔널 언래핑)
+                OpCode::Try => {
+                    let value = self.pop()?;
+                    match value {
+                        Value::Optional(Some(v)) => self.stack.push((*v).clone()),
+                        Value::Optional(None) => self.stack.push(Value::Optional(None)),
+                        other => self.stack.push(other),
+                    }
+                }
+
+                // Contains: elem @ arr
+                OpCode::Contains => {
+                    let arr = self.pop()?;
+                    let elem = self.pop()?;
+                    if let Value::Array(items) = arr {
+                        let found = items.iter().any(|x| *x == elem);
+                        self.stack.push(Value::Bool(found));
+                    } else {
+                        self.stack.push(Value::Bool(false));
+                    }
+                }
+
+                // Slice: arr[start:end]
+                OpCode::Slice => {
+                    let end = self.pop_int()?;
+                    let start = self.pop_int()?;
+                    let arr = self.pop()?;
+                    if let Value::Array(items) = arr {
+                        let len = items.len() as i64;
+                        let start = if start < 0 { (len + start).max(0) as usize } else { start as usize };
+                        let end = if end < 0 { (len + end).max(0) as usize } else { end.min(len) as usize };
+                        let slice: Vec<Value> = items[start..end].to_vec();
+                        self.stack.push(Value::Array(Rc::new(slice)));
+                    } else {
+                        self.stack.push(Value::Array(Rc::new(vec![])));
+                    }
+                }
+
+                // LoadLocal/StoreLocal: 인덱스 기반 로컬 변수
+                OpCode::LoadLocal(idx) => {
+                    // 인덱스 기반 로컬은 이름 기반으로 폴백
+                    let name = format!("__local_{}", idx);
+                    let value = self.locals.get(&name).cloned().unwrap_or(Value::Void);
+                    self.stack.push(value);
+                }
+                OpCode::StoreLocal(idx) => {
+                    let name = format!("__local_{}", idx);
+                    let value = self.pop()?;
+                    self.locals.insert(name, value);
+                }
+
                 _ => {
                     // 지원하지 않는 opcode는 무시
                 }
@@ -326,6 +424,37 @@ impl WasmVm {
         }
 
         Ok(())
+    }
+
+    fn call_function_internal(&mut self, func: &CompiledFunction, args: Vec<Value>) -> WasmVmResult<Value> {
+        self.recursion_depth += 1;
+        if self.recursion_depth > MAX_RECURSION_DEPTH {
+            return Err(WasmVmError::MaxRecursionDepth);
+        }
+
+        let prev_stack = std::mem::take(&mut self.stack);
+        let prev_locals = std::mem::take(&mut self.locals);
+        let prev_function = self.current_function.take();
+
+        for (i, param) in func.params.iter().enumerate() {
+            if let Some(value) = args.get(i) {
+                self.locals.insert(param.clone(), value.clone());
+                // 인덱스 기반 접근도 지원
+                self.locals.insert(format!("__local_{}", i), value.clone());
+            }
+        }
+
+        self.current_function = Some(func.name.clone());
+        self.execute_instructions(&func.instructions)?;
+
+        let result = self.stack.pop().unwrap_or(Value::Void);
+
+        self.stack = prev_stack;
+        self.locals = prev_locals;
+        self.current_function = prev_function;
+        self.recursion_depth -= 1;
+
+        Ok(result)
     }
 
     fn pop(&mut self) -> WasmVmResult<Value> {
