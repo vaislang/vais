@@ -33,7 +33,6 @@ use std::rc::Rc;
 /// 1001 = Pointer to Bytes (Rc<Vec<u8>>)
 /// 1010 = Error (pointer to String)
 /// 1011 = Optional (pointer or special None marker)
-
 const QNAN: u64 = 0x7FF8_0000_0000_0000; // Quiet NaN base
 const TAG_MASK: u64 = 0x000F_0000_0000_0000; // Tag bits (48-51)
 const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF; // Lower 48 bits
@@ -54,7 +53,7 @@ const TAG_OPTIONAL: u64 = 0x000B_0000_0000_0000;
 // Special values
 const VOID_VALUE: u64 = QNAN | TAG_VOID;
 const TRUE_VALUE: u64 = QNAN | TAG_BOOL | 1;
-const FALSE_VALUE: u64 = QNAN | TAG_BOOL | 0;
+const FALSE_VALUE: u64 = QNAN | TAG_BOOL;
 const NONE_VALUE: u64 = QNAN | TAG_OPTIONAL; // None marker (payload = 0)
 
 /// Closure data stored on heap
@@ -398,7 +397,7 @@ impl NanBoxedValue {
     #[inline]
     pub fn inc_ref(&self) {
         let tag = self.0 & TAG_MASK;
-        if tag >= TAG_ARRAY && tag <= TAG_ERROR {
+        if (TAG_ARRAY..=TAG_ERROR).contains(&tag) {
             // It's a pointer type - need to increment Rc
             match tag {
                 TAG_ARRAY => unsafe {
@@ -425,7 +424,7 @@ impl NanBoxedValue {
     #[inline]
     pub fn dec_ref(&self) {
         let tag = self.0 & TAG_MASK;
-        if tag >= TAG_ARRAY && tag <= TAG_ERROR {
+        if (TAG_ARRAY..=TAG_ERROR).contains(&tag) {
             match tag {
                 TAG_ARRAY => unsafe {
                     Rc::decrement_strong_count(self.get_ptr::<Vec<NanBoxedValue>>());

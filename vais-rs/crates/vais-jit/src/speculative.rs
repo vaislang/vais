@@ -385,17 +385,19 @@ mod tests {
 
     #[test]
     fn test_spec_type_from_value() {
+        use std::rc::Rc;
+
         assert_eq!(SpecType::from_value(&Value::Int(42)), SpecType::Int);
         assert_eq!(SpecType::from_value(&Value::Float(3.14)), SpecType::Float);
         assert_eq!(SpecType::from_value(&Value::Bool(true)), SpecType::Bool);
 
-        let int_array = Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+        let int_array = Value::Array(Rc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
         assert_eq!(SpecType::from_value(&int_array), SpecType::ArrayInt);
 
-        let float_array = Value::Array(vec![Value::Float(1.0), Value::Float(2.0)]);
+        let float_array = Value::Array(Rc::new(vec![Value::Float(1.0), Value::Float(2.0)]));
         assert_eq!(SpecType::from_value(&float_array), SpecType::ArrayFloat);
 
-        let mixed_array = Value::Array(vec![Value::Int(1), Value::Float(2.0)]);
+        let mixed_array = Value::Array(Rc::new(vec![Value::Int(1), Value::Float(2.0)]));
         assert_eq!(SpecType::from_value(&mixed_array), SpecType::ArrayMixed);
     }
 

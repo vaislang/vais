@@ -2,12 +2,15 @@
 //!
 //! Compares: Python vs Standard VM vs FastVM vs JIT VM
 //!
-//! Run with: cargo run --release --example full_bench
+//! Run with: cargo run --release --example full_bench --features jit
 
 use std::time::Instant;
 use vais_ir::Value;
 use vais_lowering::Lowerer;
-use vais_vm::{execute_function, execute_fast, JitVm, JitConfig};
+use vais_vm::{execute_function, execute_fast};
+
+#[cfg(feature = "jit")]
+use vais_vm::{JitVm, JitConfig};
 
 fn main() {
     println!("{}", "=".repeat(75));
@@ -80,88 +83,111 @@ fn main() {
         std_ms / fast_selfcall_ms
     );
 
-    // 4. JIT VM (normal call)
-    let program = vais_parser::parse(source_call).expect("Parse failed");
-    let mut lowerer = Lowerer::new();
-    let functions = lowerer.lower_program(&program).expect("Lowering failed");
+    // JIT benchmarks (only available with jit feature)
+    #[cfg(feature = "jit")]
+    let (jit_ms, jit_selfcall_ms) = {
+        // 4. JIT VM (normal call)
+        let program = vais_parser::parse(source_call).expect("Parse failed");
+        let mut lowerer = Lowerer::new();
+        let functions = lowerer.lower_program(&program).expect("Lowering failed");
 
-    let mut jit_vm = JitVm::with_config(JitConfig {
-        enabled: true,
-        auto_jit: false,  // Manual compile
-        profiling: false,
-        threshold: 1,
-    });
-    jit_vm.load_functions(functions.clone());
+        let mut jit_vm = JitVm::with_config(JitConfig {
+            enabled: true,
+            auto_jit: false,  // Manual compile
+            profiling: false,
+            threshold: 1,
+        });
+        jit_vm.load_functions(functions.clone());
 
-    // Pre-compile the function
-    if let Err(e) = jit_vm.compile_function("fib") {
-        println!("JIT compilation failed: {:?}", e);
-    }
-
-    let start = Instant::now();
-    let result = jit_vm.call_function("fib", args.clone());
-    let jit_time = start.elapsed();
-    let jit_ms = jit_time.as_secs_f64() * 1000.0;
-
-    match result {
-        Ok(_) => {
-            println!("{:<30} | {:>12.2} | {:>11.2}x | {:>11.2}x",
-                "JIT VM (Cranelift)",
-                jit_ms,
-                jit_ms / python_time_ms,
-                std_ms / jit_ms
-            );
+        // Pre-compile the function
+        if let Err(e) = jit_vm.compile_function("fib") {
+            println!("JIT compilation failed: {:?}", e);
         }
-        Err(e) => {
-            println!("{:<30} | {:>12} | {:>12} | {:>12}",
-                "JIT VM (Cranelift)",
-                format!("Error: {:?}", e),
-                "-",
-                "-"
-            );
+
+        let start = Instant::now();
+        let result = jit_vm.call_function("fib", args.clone());
+        let jit_time = start.elapsed();
+        let jit_ms = jit_time.as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(_) => {
+                println!("{:<30} | {:>12.2} | {:>11.2}x | {:>11.2}x",
+                    "JIT VM (Cranelift)",
+                    jit_ms,
+                    jit_ms / python_time_ms,
+                    std_ms / jit_ms
+                );
+            }
+            Err(e) => {
+                println!("{:<30} | {:>12} | {:>12} | {:>12}",
+                    "JIT VM (Cranelift)",
+                    format!("Error: {:?}", e),
+                    "-",
+                    "-"
+                );
+            }
         }
-    }
 
-    // 5. JIT VM with SelfCall (if applicable)
-    let program = vais_parser::parse(source_selfcall).expect("Parse failed");
-    let mut lowerer = Lowerer::new();
-    let functions_selfcall = lowerer.lower_program(&program).expect("Lowering failed");
+        // 5. JIT VM with SelfCall (if applicable)
+        let program = vais_parser::parse(source_selfcall).expect("Parse failed");
+        let mut lowerer = Lowerer::new();
+        let functions_selfcall = lowerer.lower_program(&program).expect("Lowering failed");
 
-    let mut jit_vm_selfcall = JitVm::with_config(JitConfig {
-        enabled: true,
-        auto_jit: false,
-        profiling: false,
-        threshold: 1,
-    });
-    jit_vm_selfcall.load_functions(functions_selfcall.clone());
+        let mut jit_vm_selfcall = JitVm::with_config(JitConfig {
+            enabled: true,
+            auto_jit: false,
+            profiling: false,
+            threshold: 1,
+        });
+        jit_vm_selfcall.load_functions(functions_selfcall.clone());
 
-    if let Err(e) = jit_vm_selfcall.compile_function("fib") {
-        println!("JIT (SelfCall) compilation failed: {:?}", e);
-    }
-
-    let start = Instant::now();
-    let result = jit_vm_selfcall.call_function("fib", args.clone());
-    let jit_selfcall_time = start.elapsed();
-    let jit_selfcall_ms = jit_selfcall_time.as_secs_f64() * 1000.0;
-
-    match result {
-        Ok(_) => {
-            println!("{:<30} | {:>12.2} | {:>11.2}x | {:>11.2}x",
-                "JIT VM + SelfCall",
-                jit_selfcall_ms,
-                jit_selfcall_ms / python_time_ms,
-                std_ms / jit_selfcall_ms
-            );
+        if let Err(e) = jit_vm_selfcall.compile_function("fib") {
+            println!("JIT (SelfCall) compilation failed: {:?}", e);
         }
-        Err(e) => {
-            println!("{:<30} | {:>12} | {:>12} | {:>12}",
-                "JIT VM + SelfCall",
-                format!("Err: {:?}", e),
-                "-",
-                "-"
-            );
+
+        let start = Instant::now();
+        let result = jit_vm_selfcall.call_function("fib", args.clone());
+        let jit_selfcall_time = start.elapsed();
+        let jit_selfcall_ms = jit_selfcall_time.as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(_) => {
+                println!("{:<30} | {:>12.2} | {:>11.2}x | {:>11.2}x",
+                    "JIT VM + SelfCall",
+                    jit_selfcall_ms,
+                    jit_selfcall_ms / python_time_ms,
+                    std_ms / jit_selfcall_ms
+                );
+            }
+            Err(e) => {
+                println!("{:<30} | {:>12} | {:>12} | {:>12}",
+                    "JIT VM + SelfCall",
+                    format!("Err: {:?}", e),
+                    "-",
+                    "-"
+                );
+            }
         }
-    }
+
+        (jit_ms, jit_selfcall_ms)
+    };
+
+    #[cfg(not(feature = "jit"))]
+    let (jit_ms, jit_selfcall_ms) = {
+        println!("{:<30} | {:>12} | {:>12} | {:>12}",
+            "JIT VM (Cranelift)",
+            "N/A",
+            "(needs --features jit)",
+            "-"
+        );
+        println!("{:<30} | {:>12} | {:>12} | {:>12}",
+            "JIT VM + SelfCall",
+            "N/A",
+            "(needs --features jit)",
+            "-"
+        );
+        (f64::MAX, f64::MAX)
+    };
 
     println!("{}", "-".repeat(75));
     println!();

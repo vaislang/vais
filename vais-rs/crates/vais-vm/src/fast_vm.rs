@@ -6,9 +6,12 @@
 //! - Trampoline: Non-recursive execution with manual call stack
 //! - Inline operations: No bounds checking in hot path
 
+// Allow Arc for shared function storage
+#![allow(clippy::arc_with_non_send_sync)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use vais_ir::{Instruction, OpCode, NanBoxedValue};
+use vais_ir::{OpCode, NanBoxedValue};
 use vais_lowering::CompiledFunction;
 use crate::error::{RuntimeError, RuntimeResult};
 

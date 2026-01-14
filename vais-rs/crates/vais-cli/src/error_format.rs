@@ -185,9 +185,8 @@ impl<'a> ErrorFormatter<'a> {
     fn position_to_line_col(&self, offset: usize) -> (usize, usize) {
         let mut line = 0;
         let mut col = 0;
-        let mut pos = 0;
 
-        for ch in self.source.chars() {
+        for (pos, ch) in self.source.chars().enumerate() {
             if pos >= offset {
                 break;
             }
@@ -197,7 +196,6 @@ impl<'a> ErrorFormatter<'a> {
             } else {
                 col += 1;
             }
-            pos += 1;
         }
 
         (line, col)

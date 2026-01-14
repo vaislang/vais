@@ -3,6 +3,7 @@
 //! Performance benchmarks for the Vais compiler and runtime.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use std::rc::Rc;
 use vais_ir::Value;
 use vais_lowering::Lowerer;
 use vais_vm::execute_function;
@@ -130,7 +131,7 @@ fn bench_map(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("map");
     for size in [10, 100, 1000, 10000] {
-        let arr = Value::Array((0..size).map(Value::Int).collect());
+        let arr = Value::Array(Rc::new((0..size).map(Value::Int).collect()));
         group.bench_with_input(BenchmarkId::new("double", size), &arr, |b, arr| {
             b.iter(|| {
                 execute_function(functions.clone(), "double", vec![black_box(arr.clone())]).unwrap()
@@ -147,7 +148,7 @@ fn bench_filter(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("filter");
     for size in [10, 100, 1000, 10000] {
-        let arr = Value::Array((0..size).map(Value::Int).collect());
+        let arr = Value::Array(Rc::new((0..size).map(Value::Int).collect()));
         group.bench_with_input(BenchmarkId::new("evens", size), &arr, |b, arr| {
             b.iter(|| {
                 execute_function(functions.clone(), "evens", vec![black_box(arr.clone())]).unwrap()
@@ -164,7 +165,7 @@ fn bench_reduce(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("reduce");
     for size in [10, 100, 1000, 10000] {
-        let arr = Value::Array((0..size).map(Value::Int).collect());
+        let arr = Value::Array(Rc::new((0..size).map(Value::Int).collect()));
         group.bench_with_input(BenchmarkId::new("sum", size), &arr, |b, arr| {
             b.iter(|| {
                 execute_function(functions.clone(), "sum", vec![black_box(arr.clone())]).unwrap()
@@ -181,7 +182,7 @@ fn bench_chained_operations(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("chained");
     for size in [10, 100, 1000] {
-        let arr = Value::Array((0..size).map(Value::Int).collect());
+        let arr = Value::Array(Rc::new((0..size).map(Value::Int).collect()));
         group.bench_with_input(BenchmarkId::new("map_filter_reduce", size), &arr, |b, arr| {
             b.iter(|| {
                 execute_function(functions.clone(), "process", vec![black_box(arr.clone())]).unwrap()
@@ -197,7 +198,7 @@ fn bench_builtins(c: &mut Criterion) {
 
     // Array length via Vais
     let len_funcs = compile("len_fn(arr) = #arr");
-    let arr = Value::Array((0..100).map(Value::Int).collect());
+    let arr = Value::Array(Rc::new((0..100).map(Value::Int).collect()));
     group.bench_function("len", |b| {
         b.iter(|| {
             execute_function(len_funcs.clone(), "len_fn", vec![black_box(arr.clone())]).unwrap()
@@ -214,10 +215,10 @@ fn bench_builtins(c: &mut Criterion) {
 
     // Sort via Vais
     let sort_funcs = compile("sort_fn(arr) = sort(arr)");
-    let unsorted = Value::Array(vec![
+    let unsorted = Value::Array(Rc::new(vec![
         Value::Int(5), Value::Int(2), Value::Int(8), Value::Int(1),
         Value::Int(9), Value::Int(3), Value::Int(7), Value::Int(4),
-    ]);
+    ]));
     group.bench_function("sort", |b| {
         b.iter(|| {
             execute_function(sort_funcs.clone(), "sort_fn", vec![black_box(unsorted.clone())]).unwrap()
@@ -282,7 +283,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
     // Collection operation
     group.bench_function("map_100_elements", |b| {
         let source = "double(arr) = arr.@(_ * 2)";
-        let arr = Value::Array((0..100).map(Value::Int).collect());
+        let arr = Value::Array(Rc::new((0..100).map(Value::Int).collect()));
         b.iter(|| {
             let program = vais_parser::parse(black_box(source)).unwrap();
             let mut lowerer = Lowerer::new();

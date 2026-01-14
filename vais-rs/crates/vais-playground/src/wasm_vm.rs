@@ -3,6 +3,7 @@
 //! 웹 브라우저에서 실행되므로 파일 I/O, 네트워크 등은 제외
 
 use std::collections::HashMap;
+use std::rc::Rc;
 use vais_ir::{Instruction, OpCode, ReduceOp, Value};
 use vais_lowering::CompiledFunction;
 
@@ -228,7 +229,7 @@ impl WasmVm {
                         elems.push(self.pop()?);
                     }
                     elems.reverse();
-                    self.stack.push(Value::Array(elems));
+                    self.stack.push(Value::Array(elems.into()));
                 }
                 OpCode::MakeStruct(fields) => {
                     let mut map = HashMap::new();
@@ -236,7 +237,7 @@ impl WasmVm {
                         let value = self.pop()?;
                         map.insert(field.clone(), value);
                     }
-                    self.stack.push(Value::Struct(map));
+                    self.stack.push(Value::Struct(map.into()));
                 }
                 OpCode::Index => {
                     let index = self.pop()?;
@@ -273,8 +274,13 @@ impl WasmVm {
                 OpCode::Range => {
                     let end = self.pop_int()?;
                     let start = self.pop_int()?;
-                    let range: Vec<Value> = (start..end).map(Value::Int).collect();
-                    self.stack.push(Value::Array(range));
+                    // Optimization: Pre-allocate with exact capacity
+                    let len = (end - start).max(0) as usize;
+                    let mut range = Vec::with_capacity(len);
+                    for i in start..end {
+                        range.push(Value::Int(i));
+                    }
+                    self.stack.push(Value::Array(range.into()));
                 }
 
                 // 클로저
@@ -284,7 +290,7 @@ impl WasmVm {
                     self.closures.insert(id, (**body).clone());
                     self.stack.push(Value::Closure {
                         params: params.clone(),
-                        captured: HashMap::new(),
+                        captured: Rc::new(HashMap::new()),
                         body_id: id,
                     });
                 }
@@ -464,9 +470,10 @@ impl WasmVm {
     fn concat_op(&self, a: Value, b: Value) -> WasmVmResult<Value> {
         match (a, b) {
             (Value::String(x), Value::String(y)) => Ok(Value::String(x + &y)),
-            (Value::Array(mut x), Value::Array(y)) => {
-                x.extend(y);
-                Ok(Value::Array(x))
+            (Value::Array(x), Value::Array(y)) => {
+                let mut result = (*x).clone();
+                result.extend((*y).iter().cloned());
+                Ok(Value::Array(Rc::new(result)))
             }
             (Value::String(x), y) => Ok(Value::String(x + &format!("{}", y))),
             (x, Value::String(y)) => Ok(Value::String(format!("{}", x) + &y)),
@@ -479,17 +486,23 @@ impl WasmVm {
 
         if let Value::Array(items) = arr {
             let mut result = Vec::with_capacity(items.len());
-            for item in items {
-                let prev_locals = std::mem::take(&mut self.locals);
+            // Optimization: Save only the loop variable instead of entire HashMap
+            let saved_loop_var = self.locals.get("_").cloned();
+
+            for item in items.iter().cloned() {
                 self.locals.insert("_".to_string(), item);
-
                 self.execute_instructions(body)?;
-
                 let mapped = self.pop().unwrap_or(Value::Void);
-                self.locals = prev_locals;
                 result.push(mapped);
             }
-            self.stack.push(Value::Array(result));
+
+            // Restore or remove loop variable
+            match saved_loop_var {
+                Some(v) => { self.locals.insert("_".to_string(), v); }
+                None => { self.locals.remove("_"); }
+            }
+
+            self.stack.push(Value::Array(Rc::new(result)));
             Ok(())
         } else {
             Err(WasmVmError::TypeError("Map requires array".into()))
@@ -501,19 +514,25 @@ impl WasmVm {
 
         if let Value::Array(items) = arr {
             let mut result = Vec::new();
-            for item in items {
-                let prev_locals = std::mem::take(&mut self.locals);
+            // Optimization: Save only the loop variable instead of entire HashMap
+            let saved_loop_var = self.locals.get("_").cloned();
+
+            for item in items.iter().cloned() {
                 self.locals.insert("_".to_string(), item.clone());
-
                 self.execute_instructions(body)?;
-
                 let keep = self.pop().unwrap_or(Value::Bool(false));
-                self.locals = prev_locals;
                 if matches!(keep, Value::Bool(true)) {
                     result.push(item);
                 }
             }
-            self.stack.push(Value::Array(result));
+
+            // Restore or remove loop variable
+            match saved_loop_var {
+                Some(v) => { self.locals.insert("_".to_string(), v); }
+                None => { self.locals.remove("_"); }
+            }
+
+            self.stack.push(Value::Array(Rc::new(result)));
             Ok(())
         } else {
             Err(WasmVmError::TypeError("Filter requires array".into()))
@@ -527,24 +546,24 @@ impl WasmVm {
             let result = match op {
                 ReduceOp::Sum => {
                     let mut sum = Value::Int(0);
-                    for item in items {
+                    for item in items.iter().cloned() {
                         sum = self.add_values(sum, item)?;
                     }
                     sum
                 }
                 ReduceOp::Product => {
                     let mut prod = Value::Int(1);
-                    for item in items {
+                    for item in items.iter().cloned() {
                         prod = self.mul_values(prod, item)?;
                     }
                     prod
                 }
                 ReduceOp::Min => {
-                    items.into_iter().reduce(|a, b| self.min_value(a, b))
+                    items.iter().cloned().reduce(|a, b| self.min_value(a, b))
                         .unwrap_or(Value::Void)
                 }
                 ReduceOp::Max => {
-                    items.into_iter().reduce(|a, b| self.max_value(a, b))
+                    items.iter().cloned().reduce(|a, b| self.max_value(a, b))
                         .unwrap_or(Value::Void)
                 }
                 ReduceOp::All => {
@@ -563,7 +582,7 @@ impl WasmVm {
                         Value::Float(0.0)
                     } else {
                         let mut sum = 0.0;
-                        for item in &items {
+                        for item in items.iter() {
                             match item {
                                 Value::Int(n) => sum += *n as f64,
                                 Value::Float(f) => sum += *f,
@@ -574,10 +593,10 @@ impl WasmVm {
                     }
                 }
                 ReduceOp::First => {
-                    items.into_iter().next().unwrap_or(Value::Void)
+                    items.first().cloned().unwrap_or(Value::Void)
                 }
                 ReduceOp::Last => {
-                    items.into_iter().last().unwrap_or(Value::Void)
+                    items.last().cloned().unwrap_or(Value::Void)
                 }
                 ReduceOp::Custom(_body) => {
                     // Custom reduce는 미지원
@@ -598,23 +617,37 @@ impl WasmVm {
                     .ok_or_else(|| WasmVmError::Internal("Closure not found".into()))?
                     .clone();
 
-                let prev_locals = std::mem::take(&mut self.locals);
+                // Optimization: Save only the variables we'll overwrite
+                let mut saved_vars: Vec<(String, Option<Value>)> = Vec::with_capacity(params.len() + 1);
 
-                // 파라미터 바인딩
+                // Save existing values for params and "_"
+                for param in params.iter() {
+                    saved_vars.push((param.clone(), self.locals.get(param).cloned()));
+                }
+                saved_vars.push(("_".to_string(), self.locals.get("_").cloned()));
+
+                // Bind parameters
                 for (i, param) in params.iter().enumerate() {
                     if i < args.len() {
                         self.locals.insert(param.clone(), args[i].clone());
                     }
                 }
-                // _ 파라미터도 설정
+                // Also set "_" parameter
                 if let Some(arg) = args.first() {
                     self.locals.insert("_".to_string(), arg.clone());
                 }
 
                 self.execute_instructions(&body)?;
-
                 let result = self.pop().unwrap_or(Value::Void);
-                self.locals = prev_locals;
+
+                // Restore saved variables
+                for (key, maybe_val) in saved_vars {
+                    match maybe_val {
+                        Some(v) => { self.locals.insert(key, v); }
+                        None => { self.locals.remove(&key); }
+                    }
+                }
+
                 Ok(result)
             }
             _ => Err(WasmVmError::TypeError("Not a closure".into())),
@@ -673,12 +706,17 @@ impl WasmVm {
     fn call_builtin(&mut self, name: &str, args: Vec<Value>) -> WasmVmResult<Value> {
         match name {
             "print" | "println" => {
-                let output: Vec<String> = args.iter().map(|v| format!("{}", v)).collect();
-                let line = output.join(" ");
+                // Optimization: Build string directly without intermediate Vec
                 if !self.output.is_empty() {
                     self.output.push('\n');
                 }
-                self.output.push_str(&line);
+                for (i, v) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push(' ');
+                    }
+                    use std::fmt::Write;
+                    let _ = write!(self.output, "{}", v);
+                }
                 Ok(Value::Void)
             }
             "len" => {
@@ -853,9 +891,9 @@ impl WasmVm {
                 match arr {
                     Value::Array(a) => {
                         if a.is_empty() {
-                            Ok(Value::Array(vec![]))
+                            Ok(Value::Array(Rc::new(vec![])))
                         } else {
-                            Ok(Value::Array(a[1..].to_vec()))
+                            Ok(Value::Array(Rc::new(a[1..].to_vec())))
                         }
                     }
                     _ => Err(WasmVmError::TypeError("tail: expected array".into())),
@@ -866,9 +904,9 @@ impl WasmVm {
                 match arr {
                     Value::Array(a) => {
                         if a.is_empty() {
-                            Ok(Value::Array(vec![]))
+                            Ok(Value::Array(Rc::new(vec![])))
                         } else {
-                            Ok(Value::Array(a[..a.len()-1].to_vec()))
+                            Ok(Value::Array(Rc::new(a[..a.len()-1].to_vec())))
                         }
                     }
                     _ => Err(WasmVmError::TypeError("init: expected array".into())),
@@ -885,9 +923,9 @@ impl WasmVm {
                 let arr = args.first().ok_or(WasmVmError::TypeError("reverse requires 1 argument".into()))?;
                 match arr {
                     Value::Array(a) => {
-                        let mut reversed = a.clone();
+                        let mut reversed = (**a).clone();
                         reversed.reverse();
-                        Ok(Value::Array(reversed))
+                        Ok(Value::Array(Rc::new(reversed)))
                     }
                     Value::String(s) => Ok(Value::String(s.chars().rev().collect())),
                     _ => Err(WasmVmError::TypeError("reverse: expected array or string".into())),
@@ -897,7 +935,7 @@ impl WasmVm {
                 let arr = args.first().ok_or(WasmVmError::TypeError("sort requires 1 argument".into()))?;
                 match arr {
                     Value::Array(a) => {
-                        let mut sorted = a.clone();
+                        let mut sorted = (**a).clone();
                         sorted.sort_by(|a, b| {
                             match (a, b) {
                                 (Value::Int(x), Value::Int(y)) => x.cmp(y),
@@ -906,7 +944,7 @@ impl WasmVm {
                                 _ => std::cmp::Ordering::Equal,
                             }
                         });
-                        Ok(Value::Array(sorted))
+                        Ok(Value::Array(Rc::new(sorted)))
                     }
                     _ => Err(WasmVmError::TypeError("sort: expected array".into())),
                 }
@@ -916,7 +954,7 @@ impl WasmVm {
                 match arr {
                     Value::Array(a) => {
                         let mut total = Value::Int(0);
-                        for item in a {
+                        for item in a.iter() {
                             total = self.add_values(total, item.clone())?;
                         }
                         Ok(total)
@@ -929,7 +967,7 @@ impl WasmVm {
                 match arr {
                     Value::Array(a) => {
                         let mut total = Value::Int(1);
-                        for item in a {
+                        for item in a.iter() {
                             total = self.mul_values(total, item.clone())?;
                         }
                         Ok(total)
@@ -946,7 +984,7 @@ impl WasmVm {
                         let parts: Vec<Value> = s.split(sep.as_str())
                             .map(|p| Value::String(p.to_string()))
                             .collect();
-                        Ok(Value::Array(parts))
+                        Ok(Value::Array(Rc::new(parts)))
                     }
                     _ => Err(WasmVmError::TypeError("split: expected strings".into())),
                 }
@@ -1012,7 +1050,7 @@ impl WasmVm {
                 match val {
                     Value::Map(m) => {
                         let keys: Vec<Value> = m.keys().map(|k| Value::String(k.clone())).collect();
-                        Ok(Value::Array(keys))
+                        Ok(Value::Array(Rc::new(keys)))
                     }
                     _ => Err(WasmVmError::TypeError("keys: expected map".into())),
                 }
@@ -1022,7 +1060,7 @@ impl WasmVm {
                 match val {
                     Value::Map(m) => {
                         let values: Vec<Value> = m.values().cloned().collect();
-                        Ok(Value::Array(values))
+                        Ok(Value::Array(Rc::new(values)))
                     }
                     _ => Err(WasmVmError::TypeError("values: expected map".into())),
                 }
@@ -1043,7 +1081,7 @@ impl WasmVm {
                 match (&args[0], &args[1]) {
                     (Value::Int(start), Value::Int(end)) => {
                         let range: Vec<Value> = (*start..*end).map(Value::Int).collect();
-                        Ok(Value::Array(range))
+                        Ok(Value::Array(Rc::new(range)))
                     }
                     _ => Err(WasmVmError::TypeError("range: expected integers".into())),
                 }
@@ -1055,7 +1093,7 @@ impl WasmVm {
                 match (&args[0], &args[1]) {
                     (Value::Array(a), Value::Int(n)) => {
                         let n = *n as usize;
-                        Ok(Value::Array(a.iter().take(n).cloned().collect()))
+                        Ok(Value::Array(Rc::new(a.iter().take(n).cloned().collect())))
                     }
                     _ => Err(WasmVmError::TypeError("take: expected array and int".into())),
                 }
@@ -1067,7 +1105,7 @@ impl WasmVm {
                 match (&args[0], &args[1]) {
                     (Value::Array(a), Value::Int(n)) => {
                         let n = *n as usize;
-                        Ok(Value::Array(a.iter().skip(n).cloned().collect()))
+                        Ok(Value::Array(Rc::new(a.iter().skip(n).cloned().collect())))
                     }
                     _ => Err(WasmVmError::TypeError("drop: expected array and int".into())),
                 }

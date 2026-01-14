@@ -2896,13 +2896,13 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // max(a, b) = a > b ? a : b
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load a
         //   1: Load b
         //   2: Gt          ; stack: [a > b]
-        //   3: JumpIfNot 3 ; if false, jump to 6
+        //   3: JumpIfNot 2 ; if false, jump to 6 (3+2+1=6)
         //   4: Load a      ; then branch
-        //   5: Jump 2      ; jump to 7 (return)
+        //   5: Jump 1      ; jump to 7 (5+1+1=7)
         //   6: Load b      ; else branch
         //   7: Return
         let func = CompiledFunction {
@@ -2912,9 +2912,9 @@ mod tests {
                 make_instruction(OpCode::Load("a".to_string())),   // 0
                 make_instruction(OpCode::Load("b".to_string())),   // 1
                 make_instruction(OpCode::Gt),                       // 2
-                make_instruction(OpCode::JumpIfNot(3)),             // 3: if !(a > b), jump to 6
+                make_instruction(OpCode::JumpIfNot(2)),             // 3: if !(a > b), jump to 6
                 make_instruction(OpCode::Load("a".to_string())),   // 4: then
-                make_instruction(OpCode::Jump(2)),                  // 5: jump to 7
+                make_instruction(OpCode::Jump(1)),                  // 5: jump to 7
                 make_instruction(OpCode::Load("b".to_string())),   // 6: else
                 make_instruction(OpCode::Return),                   // 7
             ],
@@ -2935,14 +2935,14 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // abs(n) = n < 0 ? -n : n
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 0
         //   2: Lt          ; n < 0
-        //   3: JumpIfNot 3 ; if false, jump to 6
+        //   3: JumpIfNot 3 ; if false, jump to 7 (3+3+1=7)
         //   4: Load n
         //   5: Neg         ; -n
-        //   6: Jump 1      ; jump to 7
+        //   6: Jump 1      ; jump to 8 (6+1+1=8)
         //   7: Load n      ; else: n
         //   8: Return
         let func = CompiledFunction {
@@ -2952,10 +2952,10 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),   // 0
                 make_instruction(OpCode::Const(Value::Int(0))),    // 1
                 make_instruction(OpCode::Lt),                       // 2
-                make_instruction(OpCode::JumpIfNot(4)),             // 3: if !(n < 0), jump to 7
+                make_instruction(OpCode::JumpIfNot(3)),             // 3: if !(n < 0), jump to 7
                 make_instruction(OpCode::Load("n".to_string())),   // 4: then
                 make_instruction(OpCode::Neg),                      // 5
-                make_instruction(OpCode::Jump(2)),                  // 6: jump to 8
+                make_instruction(OpCode::Jump(1)),                  // 6: jump to 8
                 make_instruction(OpCode::Load("n".to_string())),   // 7: else
                 make_instruction(OpCode::Return),                   // 8
             ],
@@ -2976,11 +2976,11 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // factorial(n) = n <= 1 ? 1 : n * factorial(n - 1)
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 1
         //   2: Lte          ; n <= 1
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Const 1      ; then: return 1
         //   5: Return
         //   6: Load n       ; else: n * factorial(n-1)
@@ -2997,7 +2997,7 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),    // 0
                 make_instruction(OpCode::Const(Value::Int(1))),     // 1
                 make_instruction(OpCode::Lte),                       // 2
-                make_instruction(OpCode::JumpIfNot(3)),              // 3: if !(n <= 1), jump to 6
+                make_instruction(OpCode::JumpIfNot(2)),              // 3: if !(n <= 1), jump to 6
                 make_instruction(OpCode::Const(Value::Int(1))),     // 4: return 1
                 make_instruction(OpCode::Return),                    // 5
                 make_instruction(OpCode::Load("n".to_string())),    // 6: else
@@ -3026,11 +3026,11 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // sum_tail(n, acc) = n <= 0 ? acc : sum_tail(n - 1, acc + n)
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 0
         //   2: Lte          ; n <= 0
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Load acc     ; return acc
         //   5: Return
         //   6: Load n       ; else: tail call
@@ -3047,7 +3047,7 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),    // 0
                 make_instruction(OpCode::Const(Value::Int(0))),     // 1
                 make_instruction(OpCode::Lte),                       // 2
-                make_instruction(OpCode::JumpIfNot(3)),              // 3: if !(n <= 0), jump to 6
+                make_instruction(OpCode::JumpIfNot(2)),              // 3: if !(n <= 0), jump to 6
                 make_instruction(OpCode::Load("acc".to_string())),  // 4: return acc
                 make_instruction(OpCode::Return),                    // 5
                 make_instruction(OpCode::Load("n".to_string())),    // 6: n - 1
@@ -3078,11 +3078,11 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // fact_tail(n, acc) = n <= 1 ? acc : fact_tail(n - 1, acc * n)
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 1
         //   2: Lte          ; n <= 1
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Load acc     ; return acc
         //   5: Return
         //   6: Load n       ; else: tail call
@@ -3099,7 +3099,7 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),    // 0
                 make_instruction(OpCode::Const(Value::Int(1))),     // 1
                 make_instruction(OpCode::Lte),                       // 2
-                make_instruction(OpCode::JumpIfNot(3)),              // 3
+                make_instruction(OpCode::JumpIfNot(2)),              // 3: jump to 6
                 make_instruction(OpCode::Load("acc".to_string())),  // 4
                 make_instruction(OpCode::Return),                    // 5
                 make_instruction(OpCode::Load("n".to_string())),    // 6
@@ -3129,11 +3129,11 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // fib(n) = n <= 1 ? n : fib(n-1) + fib(n-2)
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 1
         //   2: Lte          ; n <= 1
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Load n       ; return n
         //   5: Return
         //   6: Load n       ; fib(n-1)
@@ -3153,7 +3153,7 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),    // 0
                 make_instruction(OpCode::Const(Value::Int(1))),     // 1
                 make_instruction(OpCode::Lte),                       // 2
-                make_instruction(OpCode::JumpIfNot(3)),              // 3
+                make_instruction(OpCode::JumpIfNot(2)),              // 3: jump to 6
                 make_instruction(OpCode::Load("n".to_string())),    // 4
                 make_instruction(OpCode::Return),                    // 5
                 make_instruction(OpCode::Load("n".to_string())),    // 6
@@ -3359,14 +3359,14 @@ mod tests {
         };
 
         // max_double(a, b) = a > b ? double(a) : double(b)
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load a
         //   1: Load b
         //   2: Gt           ; a > b
-        //   3: JumpIfNot 4  ; if false, jump to 7
+        //   3: JumpIfNot 3  ; if false, jump to 7 (3+3+1=7)
         //   4: Load a       ; then: double(a)
         //   5: Call double, 1
-        //   6: Jump 3       ; jump to 9
+        //   6: Jump 2       ; jump to 9 (6+2+1=9)
         //   7: Load b       ; else: double(b)
         //   8: Call double, 1
         //   9: Return
@@ -3377,10 +3377,10 @@ mod tests {
                 make_instruction(OpCode::Load("a".to_string())),    // 0
                 make_instruction(OpCode::Load("b".to_string())),    // 1
                 make_instruction(OpCode::Gt),                        // 2
-                make_instruction(OpCode::JumpIfNot(4)),              // 3
+                make_instruction(OpCode::JumpIfNot(3)),              // 3: jump to 7
                 make_instruction(OpCode::Load("a".to_string())),    // 4
                 make_instruction(OpCode::Call("double".to_string(), 1)), // 5
-                make_instruction(OpCode::Jump(3)),                   // 6
+                make_instruction(OpCode::Jump(2)),                   // 6: jump to 9
                 make_instruction(OpCode::Load("b".to_string())),    // 7
                 make_instruction(OpCode::Call("double".to_string(), 1)), // 8
                 make_instruction(OpCode::Return),                    // 9
@@ -3419,11 +3419,11 @@ mod tests {
 
         // sum_recursive(n, acc) = n <= 0 ? acc : sum_recursive(n-1, add(acc, n))
         // 즉, sum(n) = 1 + 2 + ... + n
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 0
         //   2: Lte          ; n <= 0
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Load acc
         //   5: Return
         //   6: Load n       ; n - 1
@@ -3440,7 +3440,7 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),    // 0
                 make_instruction(OpCode::Const(Value::Int(0))),     // 1
                 make_instruction(OpCode::Lte),                       // 2
-                make_instruction(OpCode::JumpIfNot(3)),              // 3
+                make_instruction(OpCode::JumpIfNot(2)),              // 3: jump to 6
                 make_instruction(OpCode::Load("acc".to_string())),  // 4
                 make_instruction(OpCode::Return),                    // 5
                 make_instruction(OpCode::Load("n".to_string())),    // 6
@@ -3590,11 +3590,11 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // max(a, b) = a > b ? a : b
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load a
         //   1: Load b
         //   2: Gt           ; a > b
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Load a
         //   5: Return
         //   6: Load b
@@ -3606,7 +3606,7 @@ mod tests {
                 make_instruction(OpCode::Load("a".to_string())),  // 0
                 make_instruction(OpCode::Load("b".to_string())),  // 1
                 make_instruction(OpCode::Gt),                      // 2
-                make_instruction(OpCode::JumpIfNot(3)),            // 3: jump to 6
+                make_instruction(OpCode::JumpIfNot(2)),            // 3: jump to 6
                 make_instruction(OpCode::Load("a".to_string())),  // 4
                 make_instruction(OpCode::Return),                  // 5
                 make_instruction(OpCode::Load("b".to_string())),  // 6
@@ -3631,11 +3631,11 @@ mod tests {
         let mut jit = JitCompiler::new().unwrap();
 
         // sum(n, acc) = n <= 0 ? acc : sum(n - 1, acc + n)
-        // IR:
+        // IR: target = ip + offset + 1
         //   0: Load n
         //   1: Const 0.0
         //   2: Lte          ; n <= 0
-        //   3: JumpIfNot 3  ; if false, jump to 6
+        //   3: JumpIfNot 2  ; if false, jump to 6 (3+2+1=6)
         //   4: Load acc
         //   5: Return
         //   6: Load n       ; n - 1
@@ -3652,7 +3652,7 @@ mod tests {
                 make_instruction(OpCode::Load("n".to_string())),       // 0
                 make_instruction(OpCode::Const(Value::Float(0.0))),    // 1
                 make_instruction(OpCode::Lte),                          // 2
-                make_instruction(OpCode::JumpIfNot(3)),                 // 3
+                make_instruction(OpCode::JumpIfNot(2)),                 // 3: jump to 6
                 make_instruction(OpCode::Load("acc".to_string())),     // 4
                 make_instruction(OpCode::Return),                       // 5
                 make_instruction(OpCode::Load("n".to_string())),       // 6

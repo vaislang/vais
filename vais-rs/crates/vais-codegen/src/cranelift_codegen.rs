@@ -137,7 +137,7 @@ mod implementation {
             // This works for simple expressions without complex control flow
 
             // Generate code for each instruction
-            for (_i, instr) in func.instructions.iter().enumerate() {
+            for instr in func.instructions.iter() {
                 match &instr.opcode {
                     OpCode::Const(value) => {
                         let val = match value {
@@ -496,6 +496,7 @@ mod implementation {
                     Instruction::new(OpCode::Add),
                     Instruction::new(OpCode::Return),
                 ],
+                local_count: 0,
             };
 
             let result = jit_execute(&[func]).unwrap();
@@ -516,6 +517,7 @@ mod implementation {
                     Instruction::new(OpCode::Sub),
                     Instruction::new(OpCode::Return),
                 ],
+                local_count: 0,
             };
 
             let result = jit_execute(&[func]).unwrap();
@@ -534,6 +536,7 @@ mod implementation {
                     Instruction::new(OpCode::Gt),
                     Instruction::new(OpCode::Return),
                 ],
+                local_count: 0,
             };
 
             let result = jit_execute(&[func]).unwrap();

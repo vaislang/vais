@@ -298,18 +298,71 @@ impl JitVm {
 
     /// 내부 Int JIT 컴파일
     fn compile_function_int_internal(&mut self, func: &CompiledFunction) -> Result<(), vais_jit::JitError> {
-        let jit = self.jit.as_mut()
-            .ok_or_else(|| vais_jit::JitError::Internal("JIT not available".to_string()))?;
+        use vais_ir::OpCode;
 
-        let ptr = jit.compile_function_int(func)?;
+        // Call opcode가 있는지 확인
+        let has_call = func.instructions.iter().any(|i| matches!(&i.opcode, OpCode::Call(_, _)));
 
-        self.jitted_functions.insert(func.name.clone(), JittedFunction {
-            ptr,
-            param_count: func.params.len(),
-            fn_type: JittedFnType::IntOnly,
-        });
+        if has_call {
+            // Call이 있으면 관련 함수들을 모두 수집하여 배치 컴파일
+            let mut funcs_to_compile = vec![func.clone()];
+            let mut visited = std::collections::HashSet::new();
+            visited.insert(func.name.clone());
+
+            // 호출되는 모든 함수를 수집 (self.functions 참조만 필요)
+            Self::collect_called_functions_static(&self.functions, func, &mut funcs_to_compile, &mut visited);
+
+            // 배치 컴파일
+            let jit = self.jit.as_mut()
+                .ok_or_else(|| vais_jit::JitError::Internal("JIT not available".to_string()))?;
+            jit.compile_functions_batch(&funcs_to_compile)?;
+
+            // 컴파일된 함수들 등록
+            for f in &funcs_to_compile {
+                if let Some(ptr) = jit.get_compiled_ptr(&f.name) {
+                    self.jitted_functions.insert(f.name.clone(), JittedFunction {
+                        ptr,
+                        param_count: f.params.len(),
+                        fn_type: JittedFnType::IntOnly,
+                    });
+                }
+            }
+        } else {
+            // Call이 없으면 단일 함수 컴파일
+            let jit = self.jit.as_mut()
+                .ok_or_else(|| vais_jit::JitError::Internal("JIT not available".to_string()))?;
+            let ptr = jit.compile_function_int(func)?;
+            self.jitted_functions.insert(func.name.clone(), JittedFunction {
+                ptr,
+                param_count: func.params.len(),
+                fn_type: JittedFnType::IntOnly,
+            });
+        }
 
         Ok(())
+    }
+
+    /// 함수에서 호출되는 다른 함수들을 재귀적으로 수집 (정적 메서드)
+    fn collect_called_functions_static(
+        functions: &HashMap<String, CompiledFunction>,
+        func: &CompiledFunction,
+        funcs: &mut Vec<CompiledFunction>,
+        visited: &mut std::collections::HashSet<String>,
+    ) {
+        use vais_ir::OpCode;
+
+        for instr in &func.instructions {
+            if let OpCode::Call(name, _) = &instr.opcode {
+                if !visited.contains(name) {
+                    visited.insert(name.clone());
+                    if let Some(called_func) = functions.get(name) {
+                        funcs.push(called_func.clone());
+                        // 재귀적으로 호출되는 함수도 수집
+                        Self::collect_called_functions_static(functions, called_func, funcs, visited);
+                    }
+                }
+            }
+        }
     }
 
     /// 내부 Float JIT 컴파일

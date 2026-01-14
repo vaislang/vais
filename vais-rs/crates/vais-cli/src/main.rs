@@ -681,14 +681,14 @@ fn json_to_value(json: serde_json::Value) -> vais_ir::Value {
         }
         serde_json::Value::String(s) => vais_ir::Value::String(s),
         serde_json::Value::Array(arr) => {
-            vais_ir::Value::Array(arr.into_iter().map(json_to_value).collect())
+            vais_ir::Value::Array(std::rc::Rc::new(arr.into_iter().map(json_to_value).collect()))
         }
         serde_json::Value::Object(obj) => {
             let mut map = HashMap::new();
             for (k, v) in obj {
                 map.insert(k, json_to_value(v));
             }
-            vais_ir::Value::Map(map)
+            vais_ir::Value::Map(std::rc::Rc::new(map))
         }
     }
 }

@@ -2,6 +2,9 @@
 //!
 //! Manages async tasks and channels for concurrent operations.
 
+// Allow Arc for future multi-thread support
+#![allow(clippy::arc_with_non_send_sync)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -13,6 +16,7 @@ type FastMap<K, V> = HashMap<K, V>;
 
 /// Async runtime state (shared between threads)
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AsyncRuntime {
     /// Task states (TaskId -> FutureState)
     tasks: FastMap<TaskId, Arc<Mutex<FutureState>>>,
@@ -24,6 +28,7 @@ pub struct AsyncRuntime {
     next_channel_id: ChannelId,
 }
 
+#[allow(dead_code)]
 impl AsyncRuntime {
     /// Create a new async runtime
     pub fn new() -> Self {

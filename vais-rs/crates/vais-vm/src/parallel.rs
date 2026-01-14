@@ -14,6 +14,7 @@ type FastMap<K, V> = HashMap<K, V>;
 
 /// Lightweight execution context for parallel operations
 /// Avoids full VM initialization overhead
+#[allow(dead_code)]
 pub struct ParallelContext {
     stack: Vec<Value>,
     /// Named local variables (public for VM integration)
@@ -22,6 +23,7 @@ pub struct ParallelContext {
     pub functions: Arc<FastMap<String, Arc<CompiledFunction>>>,
 }
 
+#[allow(dead_code)]
 impl ParallelContext {
     /// Create a new parallel context
     pub fn new(functions: Arc<FastMap<String, Arc<CompiledFunction>>>) -> Self {

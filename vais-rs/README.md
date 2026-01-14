@@ -1,8 +1,8 @@
 # Vais - Vibe AI Script Language
 
-[![Version](https://img.shields.io/badge/version-0.0.5-blue.svg)](https://github.com/vais-lang/vais)
+[![Version](https://img.shields.io/badge/version-0.0.6-blue.svg)](https://github.com/vais-lang/vais)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-522%2B%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-613%2B%20passed-brightgreen.svg)]()
 
 **Vais** (**V**ibe **AI** **S**cript) is a modern programming language designed for AI-assisted development ("vibe coding"). It combines the simplicity of Python with performance that rivals compiled languages.
 
@@ -126,6 +126,19 @@ vais-rs/
 - [Changelog](CHANGELOG.md)
 
 ## Performance
+
+### fibonacci(30) Benchmark
+
+| VM Type | Time (ms) | vs Python |
+|---------|-----------|-----------|
+| CPython 3.14 | 110 ms | baseline |
+| PyPy 7.3 (JIT) | 8.7 ms | 12.8x faster |
+| Vais Standard VM | 510 ms | 4.6x slower |
+| Vais FastVM | 198 ms | 1.8x slower |
+| Vais FastVM + SelfCall | 90 ms | **1.2x faster** |
+| **Vais JIT** | **7.1 ms** | **15.5x faster** |
+
+### Other Benchmarks
 
 | Operation | Python | Vais VM | Vais JIT |
 |-----------|--------|---------|----------|
