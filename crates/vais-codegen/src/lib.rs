@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use thiserror::Error;
-use vais_ast::*;
+use vais_ast::{*, IfElse};
 use vais_types::ResolvedType;
 
 #[derive(Debug, Error)]
@@ -30,10 +30,9 @@ pub enum CodegenError {
 
 type CodegenResult<T> = Result<T, CodegenError>;
 
-/// LLVM IR Builder placeholder
+/// LLVM IR Code Generator for Vais 2.0
 ///
-/// In a full implementation, this would use inkwell to generate LLVM IR.
-/// For now, we provide the structure and will implement with inkwell later.
+/// Generates LLVM IR text from typed AST for native code generation via clang.
 pub struct CodeGenerator {
     // Module name
     module_name: String,
@@ -49,6 +48,18 @@ pub struct CodeGenerator {
 
     // Local variables in current function
     locals: HashMap<String, LocalVar>,
+
+    // Label counter for unique basic block names
+    label_counter: usize,
+
+    // Stack of loop labels for break/continue
+    loop_stack: Vec<LoopLabels>,
+}
+
+#[derive(Debug, Clone)]
+struct LoopLabels {
+    continue_label: String,
+    break_label: String,
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +92,15 @@ impl CodeGenerator {
             structs: HashMap::new(),
             current_function: None,
             locals: HashMap::new(),
+            label_counter: 0,
+            loop_stack: Vec::new(),
         }
+    }
+
+    fn next_label(&mut self, prefix: &str) -> String {
+        let label = format!("{}{}", prefix, self.label_counter);
+        self.label_counter += 1;
+        label
     }
 
     /// Generate LLVM IR for a module
@@ -204,6 +223,8 @@ impl CodeGenerator {
     fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
         self.current_function = Some(f.name.node.clone());
         self.locals.clear();
+        self.label_counter = 0;
+        self.loop_stack.clear();
 
         let params: Vec<_> = f
             .params
@@ -338,9 +359,32 @@ impl CodeGenerator {
                     Ok(("void".to_string(), String::new()))
                 }
             }
-            Stmt::Break(_) | Stmt::Continue => {
-                // TODO: Implement loop control flow
-                Ok(("void".to_string(), String::new()))
+            Stmt::Break(value) => {
+                if let Some(labels) = self.loop_stack.last() {
+                    let break_label = labels.break_label.clone();
+                    let mut ir = String::new();
+                    if let Some(expr) = value {
+                        let (val, expr_ir) = self.generate_expr(expr, counter)?;
+                        ir.push_str(&expr_ir);
+                        // Store break value if needed (for loop expressions)
+                        ir.push_str(&format!("  br label %{}\n", break_label));
+                        Ok((val, ir))
+                    } else {
+                        ir.push_str(&format!("  br label %{}\n", break_label));
+                        Ok(("void".to_string(), ir))
+                    }
+                } else {
+                    Err(CodegenError::Unsupported("break outside of loop".to_string()))
+                }
+            }
+            Stmt::Continue => {
+                if let Some(labels) = self.loop_stack.last() {
+                    let continue_label = labels.continue_label.clone();
+                    let ir = format!("  br label %{}\n", continue_label);
+                    Ok(("void".to_string(), ir))
+                } else {
+                    Err(CodegenError::Unsupported("continue outside of loop".to_string()))
+                }
             }
         }
     }
@@ -450,20 +494,42 @@ impl CodeGenerator {
             }
 
             Expr::Ternary { cond, then, else_ } => {
-                let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
-                let (then_val, then_ir) = self.generate_expr(then, counter)?;
-                let (else_val, else_ir) = self.generate_expr(else_, counter)?;
+                // Use proper branching for lazy evaluation
+                let then_label = self.next_label("ternary.then");
+                let else_label = self.next_label("ternary.else");
+                let merge_label = self.next_label("ternary.merge");
 
-                let tmp = self.next_temp(counter);
+                // Generate condition
+                let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
-                ir.push_str(&then_ir);
-                ir.push_str(&else_ir);
+
+                // Conditional branch
                 ir.push_str(&format!(
-                    "  {} = select i1 {}, i64 {}, i64 {}\n",
-                    tmp, cond_val, then_val, else_val
+                    "  br i1 {}, label %{}, label %{}\n",
+                    cond_val, then_label, else_label
                 ));
 
-                Ok((tmp, ir))
+                // Then branch
+                ir.push_str(&format!("{}:\n", then_label));
+                let (then_val, then_ir) = self.generate_expr(then, counter)?;
+                ir.push_str(&then_ir);
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                // Else branch
+                ir.push_str(&format!("{}:\n", else_label));
+                let (else_val, else_ir) = self.generate_expr(else_, counter)?;
+                ir.push_str(&else_ir);
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                // Merge with phi
+                ir.push_str(&format!("{}:\n", merge_label));
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
+                    result, then_val, then_label, else_val, else_label
+                ));
+
+                Ok((result, ir))
             }
 
             Expr::Call { func, args } => {
@@ -495,6 +561,168 @@ impl CodeGenerator {
                 Ok((tmp, ir))
             }
 
+            // If/Else expression with basic blocks
+            Expr::If { cond, then, else_ } => {
+                let then_label = self.next_label("then");
+                let else_label = self.next_label("else");
+                let merge_label = self.next_label("merge");
+
+                // Generate condition
+                let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
+                let mut ir = cond_ir;
+
+                // Conditional branch
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n",
+                    cond_val, then_label, else_label
+                ));
+
+                // Then block
+                ir.push_str(&format!("{}:\n", then_label));
+                let (then_val, then_ir) = self.generate_block_stmts(then, counter)?;
+                ir.push_str(&then_ir);
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                // Else block
+                ir.push_str(&format!("{}:\n", else_label));
+                let (else_val, else_ir) = if let Some(else_branch) = else_ {
+                    self.generate_if_else(else_branch, counter, &merge_label)?
+                } else {
+                    ("0".to_string(), String::new())
+                };
+                ir.push_str(&else_ir);
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                // Merge block with phi node
+                ir.push_str(&format!("{}:\n", merge_label));
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
+                    result, then_val, then_label, else_val, else_label
+                ));
+
+                Ok((result, ir))
+            }
+
+            // Loop expression
+            Expr::Loop { pattern: _, iter, body } => {
+                let loop_start = self.next_label("loop.start");
+                let loop_body = self.next_label("loop.body");
+                let loop_end = self.next_label("loop.end");
+
+                // Push loop labels for break/continue
+                self.loop_stack.push(LoopLabels {
+                    continue_label: loop_start.clone(),
+                    break_label: loop_end.clone(),
+                });
+
+                let mut ir = String::new();
+
+                // Check if this is a conditional loop (L cond { body }) or infinite loop
+                if let Some(iter_expr) = iter {
+                    // Conditional loop: L condition { body }
+                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                    ir.push_str(&format!("{}:\n", loop_start));
+
+                    // Evaluate condition
+                    let (cond_val, cond_ir) = self.generate_expr(iter_expr, counter)?;
+                    ir.push_str(&cond_ir);
+                    ir.push_str(&format!(
+                        "  br i1 {}, label %{}, label %{}\n",
+                        cond_val, loop_body, loop_end
+                    ));
+
+                    // Loop body
+                    ir.push_str(&format!("{}:\n", loop_body));
+                    let (_body_val, body_ir) = self.generate_block_stmts(body, counter)?;
+                    ir.push_str(&body_ir);
+                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                } else {
+                    // Infinite loop: L { body } - must use break to exit
+                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                    ir.push_str(&format!("{}:\n", loop_start));
+                    let (_body_val, body_ir) = self.generate_block_stmts(body, counter)?;
+                    ir.push_str(&body_ir);
+                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                }
+
+                // Loop end
+                ir.push_str(&format!("{}:\n", loop_end));
+
+                self.loop_stack.pop();
+
+                // Loop returns void by default (use break with value for expression)
+                Ok(("0".to_string(), ir))
+            }
+
+            // Block expression
+            Expr::Block(stmts) => self.generate_block_stmts(stmts, counter),
+
+            // Assignment expression
+            Expr::Assign { target, value } => {
+                let (val, val_ir) = self.generate_expr(value, counter)?;
+                let mut ir = val_ir;
+
+                if let Expr::Ident(name) = &target.node {
+                    if let Some(local) = self.locals.get(name) {
+                        if !local.is_param {
+                            let llvm_ty = self.type_to_llvm(&local.ty);
+                            ir.push_str(&format!(
+                                "  store {} {}, {}* %{}\n",
+                                llvm_ty, val, llvm_ty, name
+                            ));
+                        }
+                    }
+                }
+
+                Ok((val, ir))
+            }
+
+            // Compound assignment (+=, -=, etc.)
+            Expr::AssignOp { op, target, value } => {
+                // First load current value
+                let (current_val, load_ir) = self.generate_expr(target, counter)?;
+                let (rhs_val, rhs_ir) = self.generate_expr(value, counter)?;
+
+                let mut ir = load_ir;
+                ir.push_str(&rhs_ir);
+
+                let op_str = match op {
+                    BinOp::Add => "add",
+                    BinOp::Sub => "sub",
+                    BinOp::Mul => "mul",
+                    BinOp::Div => "sdiv",
+                    BinOp::Mod => "srem",
+                    BinOp::BitAnd => "and",
+                    BinOp::BitOr => "or",
+                    BinOp::BitXor => "xor",
+                    BinOp::Shl => "shl",
+                    BinOp::Shr => "ashr",
+                    _ => return Err(CodegenError::Unsupported(format!("compound {:?}", op))),
+                };
+
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = {} i64 {}, {}\n",
+                    result, op_str, current_val, rhs_val
+                ));
+
+                // Store back
+                if let Expr::Ident(name) = &target.node {
+                    if let Some(local) = self.locals.get(name.as_str()) {
+                        if !local.is_param {
+                            let llvm_ty = self.type_to_llvm(&local.ty);
+                            ir.push_str(&format!(
+                                "  store {} {}, {}* %{}\n",
+                                llvm_ty, result, llvm_ty, name
+                            ));
+                        }
+                    }
+                }
+
+                Ok((result, ir))
+            }
+
             // TODO: Implement remaining expression types
             _ => Err(CodegenError::Unsupported(format!("{:?}", expr.node))),
         }
@@ -504,6 +732,91 @@ impl CodeGenerator {
         let tmp = format!("%{}", counter);
         *counter += 1;
         tmp
+    }
+
+    /// Generate code for a block expression (used in if/else branches)
+    #[allow(dead_code)]
+    fn generate_block_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        match &expr.node {
+            Expr::Block(stmts) => self.generate_block_stmts(stmts, counter),
+            _ => self.generate_expr(expr, counter),
+        }
+    }
+
+    /// Generate code for a block of statements
+    fn generate_block_stmts(
+        &mut self,
+        stmts: &[Spanned<Stmt>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let mut ir = String::new();
+        let mut last_value = "0".to_string();
+
+        for stmt in stmts {
+            let (value, stmt_ir) = self.generate_stmt(stmt, counter)?;
+            ir.push_str(&stmt_ir);
+            last_value = value;
+        }
+
+        Ok((last_value, ir))
+    }
+
+    /// Generate code for if-else branches
+    fn generate_if_else(
+        &mut self,
+        if_else: &IfElse,
+        counter: &mut usize,
+        _merge_label: &str,
+    ) -> CodegenResult<(String, String)> {
+        match if_else {
+            IfElse::Else(stmts) => {
+                self.generate_block_stmts(stmts, counter)
+            }
+            IfElse::ElseIf(cond, then_stmts, else_branch) => {
+                // Generate nested if-else
+                let then_label = self.next_label("elseif.then");
+                let else_label = self.next_label("elseif.else");
+                let local_merge = self.next_label("elseif.merge");
+
+                let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
+                let mut ir = cond_ir;
+
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n",
+                    cond_val, then_label, else_label
+                ));
+
+                // Then branch
+                ir.push_str(&format!("{}:\n", then_label));
+                let (then_val, then_ir) = self.generate_block_stmts(then_stmts, counter)?;
+                ir.push_str(&then_ir);
+                ir.push_str(&format!("  br label %{}\n", local_merge));
+
+                // Else branch
+                ir.push_str(&format!("{}:\n", else_label));
+                let (else_val, else_ir) = if let Some(nested) = else_branch {
+                    self.generate_if_else(nested, counter, &local_merge)?
+                } else {
+                    ("0".to_string(), String::new())
+                };
+                ir.push_str(&else_ir);
+                ir.push_str(&format!("  br label %{}\n", local_merge));
+
+                // Merge
+                ir.push_str(&format!("{}:\n", local_merge));
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
+                    result, then_val, then_label, else_val, else_label
+                ));
+
+                Ok((result, ir))
+            }
+        }
     }
 
     fn type_to_llvm(&self, ty: &ResolvedType) -> String {
@@ -598,5 +911,33 @@ mod tests {
 
         assert!(ir.contains("define i64 @fib"));
         assert!(ir.contains("call i64 @fib"));
+    }
+
+    #[test]
+    fn test_if_else() {
+        // I cond { then } E { else }
+        let source = "F max(a:i64,b:i64)->i64{I a>b{R a}E{R b}}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("define i64 @max"));
+        assert!(ir.contains("br i1"));
+        assert!(ir.contains("then"));
+        assert!(ir.contains("else"));
+    }
+
+    #[test]
+    fn test_loop_with_condition() {
+        // L pattern:iter { body } - `L _:condition{body}` for while loop
+        let source = "F countdown(n:i64)->i64{x:=n;L _:x>0{x=x-1};x}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("define i64 @countdown"));
+        assert!(ir.contains("loop.start"));
+        assert!(ir.contains("loop.body"));
+        assert!(ir.contains("loop.end"));
     }
 }

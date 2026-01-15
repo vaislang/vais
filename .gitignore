@@ -23,3 +23,4 @@ Thumbs.db
 # Compiled Vais binaries (keep .vais and .ll files)
 examples/hello
 examples/fib
+examples/control_flow

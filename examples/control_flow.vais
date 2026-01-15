@@ -1,0 +1,11 @@
+# If/Else example: returns max of a, b (using ternary for now)
+F max(a:i64, b:i64)->i64 = a > b ? a : b
+
+# Loop example using ternary for countdown logic
+F countdown(n:i64)->i64 = n < 1 ? 0 : @(n-1)
+
+# Factorial using ternary
+F factorial(n:i64)->i64 = n < 2 ? 1 : n * @(n-1)
+
+# Main: test the functions
+F main()->i64 = factorial(5)
