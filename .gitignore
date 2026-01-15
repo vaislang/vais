@@ -19,3 +19,7 @@ Thumbs.db
 *.a
 *.so
 *.dylib
+
+# Compiled Vais binaries (keep .vais and .ll files)
+examples/hello
+examples/fib
