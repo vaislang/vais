@@ -1,0 +1,11 @@
+[package]
+name = "vais-lexer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+logos = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

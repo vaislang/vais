@@ -1,0 +1,16 @@
+[package]
+name = "vais-codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+thiserror = { workspace = true }
+
+# LLVM (optional - requires LLVM 17 installed)
+# inkwell = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+vais-parser = { path = "../vais-parser" }

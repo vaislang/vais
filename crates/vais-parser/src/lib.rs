@@ -1,0 +1,1622 @@
+//! Vais 2.0 Parser
+//!
+//! Recursive descent parser for AI-optimized syntax.
+
+use thiserror::Error;
+use vais_ast::*;
+use vais_lexer::{SpannedToken, Token};
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("Unexpected token {found:?} at {span:?}, expected {expected}")]
+    UnexpectedToken {
+        found: Token,
+        span: std::ops::Range<usize>,
+        expected: String,
+    },
+    #[error("Unexpected end of file")]
+    UnexpectedEof,
+    #[error("Invalid expression")]
+    InvalidExpression,
+}
+
+type ParseResult<T> = Result<T, ParseError>;
+
+pub struct Parser {
+    tokens: Vec<SpannedToken>,
+    pos: usize,
+}
+
+impl Parser {
+    pub fn new(tokens: Vec<SpannedToken>) -> Self {
+        Self { tokens, pos: 0 }
+    }
+
+    /// Parse a complete module
+    pub fn parse_module(&mut self) -> ParseResult<Module> {
+        let mut items = Vec::new();
+
+        while !self.is_at_end() {
+            items.push(self.parse_item()?);
+        }
+
+        Ok(Module { items })
+    }
+
+    /// Parse a top-level item
+    fn parse_item(&mut self) -> ParseResult<Spanned<Item>> {
+        let is_pub = self.check(&Token::Pub);
+        if is_pub {
+            self.advance();
+        }
+
+        let start = self.current_span().start;
+
+        let item = if self.check(&Token::Function) {
+            self.advance();
+            Item::Function(self.parse_function(is_pub, false)?)
+        } else if self.check(&Token::Async) {
+            self.advance();
+            self.expect(&Token::Function)?;
+            Item::Function(self.parse_function(is_pub, true)?)
+        } else if self.check(&Token::Struct) {
+            self.advance();
+            Item::Struct(self.parse_struct(is_pub)?)
+        } else if self.check(&Token::Enum) {
+            self.advance();
+            Item::Enum(self.parse_enum(is_pub)?)
+        } else if self.check(&Token::TypeKeyword) {
+            self.advance();
+            Item::TypeAlias(self.parse_type_alias(is_pub)?)
+        } else if self.check(&Token::Use) {
+            self.advance();
+            Item::Use(self.parse_use()?)
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: "F, S, E, T, or U".into(),
+            });
+        };
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(item, Span::new(start, end)))
+    }
+
+    /// Parse function: `name(params)->ret=expr` or `name(params)->ret{...}`
+    fn parse_function(&mut self, is_pub: bool, is_async: bool) -> ParseResult<Function> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+
+        self.expect(&Token::LParen)?;
+        let params = self.parse_params()?;
+        self.expect(&Token::RParen)?;
+
+        let ret_type = if self.check(&Token::Arrow) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        let body = if self.check(&Token::Eq) {
+            self.advance();
+            FunctionBody::Expr(Box::new(self.parse_expr()?))
+        } else if self.check(&Token::LBrace) {
+            self.advance();
+            let stmts = self.parse_block_contents()?;
+            self.expect(&Token::RBrace)?;
+            FunctionBody::Block(stmts)
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: "= or {".into(),
+            });
+        };
+
+        Ok(Function {
+            name,
+            generics,
+            params,
+            ret_type,
+            body,
+            is_pub,
+            is_async,
+        })
+    }
+
+    /// Parse struct: `Name{fields}` with optional methods
+    fn parse_struct(&mut self, is_pub: bool) -> ParseResult<Struct> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+
+        self.expect(&Token::LBrace)?;
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            if self.check(&Token::Function) || self.check(&Token::Pub) {
+                let is_method_pub = self.check(&Token::Pub);
+                if is_method_pub {
+                    self.advance();
+                }
+                self.expect(&Token::Function)?;
+                let method = self.parse_function(is_method_pub, false)?;
+                let span = Span::new(0, 0); // TODO: proper span
+                methods.push(Spanned::new(method, span));
+            } else {
+                fields.push(self.parse_field()?);
+                if !self.check(&Token::RBrace) {
+                    self.expect(&Token::Comma)?;
+                }
+            }
+        }
+
+        self.expect(&Token::RBrace)?;
+
+        Ok(Struct {
+            name,
+            generics,
+            fields,
+            methods,
+            is_pub,
+        })
+    }
+
+    /// Parse enum: `Name{variants}`
+    fn parse_enum(&mut self, is_pub: bool) -> ParseResult<Enum> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+
+        self.expect(&Token::LBrace)?;
+        let mut variants = Vec::new();
+
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            variants.push(self.parse_variant()?);
+            if !self.check(&Token::RBrace) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+
+        self.expect(&Token::RBrace)?;
+
+        Ok(Enum {
+            name,
+            generics,
+            variants,
+            is_pub,
+        })
+    }
+
+    /// Parse variant: `Name` or `Name(types)` or `Name{fields}`
+    fn parse_variant(&mut self) -> ParseResult<Variant> {
+        let name = self.parse_ident()?;
+
+        let fields = if self.check(&Token::LParen) {
+            self.advance();
+            let mut types = Vec::new();
+            while !self.check(&Token::RParen) && !self.is_at_end() {
+                types.push(self.parse_type()?);
+                if !self.check(&Token::RParen) {
+                    self.expect(&Token::Comma)?;
+                }
+            }
+            self.expect(&Token::RParen)?;
+            VariantFields::Tuple(types)
+        } else if self.check(&Token::LBrace) {
+            self.advance();
+            let mut fields = Vec::new();
+            while !self.check(&Token::RBrace) && !self.is_at_end() {
+                fields.push(self.parse_field()?);
+                if !self.check(&Token::RBrace) {
+                    self.expect(&Token::Comma)?;
+                }
+            }
+            self.expect(&Token::RBrace)?;
+            VariantFields::Struct(fields)
+        } else {
+            VariantFields::Unit
+        };
+
+        Ok(Variant { name, fields })
+    }
+
+    /// Parse type alias: `Name=Type`
+    fn parse_type_alias(&mut self, is_pub: bool) -> ParseResult<TypeAlias> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+        self.expect(&Token::Eq)?;
+        let ty = self.parse_type()?;
+
+        Ok(TypeAlias {
+            name,
+            generics,
+            ty,
+            is_pub,
+        })
+    }
+
+    /// Parse use statement: `module` or `module::{items}`
+    fn parse_use(&mut self) -> ParseResult<Use> {
+        let mut path = vec![self.parse_ident()?];
+
+        while self.check(&Token::ColonColon) {
+            self.advance();
+            path.push(self.parse_ident()?);
+        }
+
+        Ok(Use { path, alias: None })
+    }
+
+    /// Parse generic parameters: `<T, U>`
+    fn parse_generics(&mut self) -> ParseResult<Vec<Spanned<String>>> {
+        if !self.check(&Token::Lt) {
+            return Ok(Vec::new());
+        }
+
+        self.advance();
+        let mut generics = Vec::new();
+
+        while !self.check(&Token::Gt) && !self.is_at_end() {
+            generics.push(self.parse_ident()?);
+            if !self.check(&Token::Gt) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+
+        self.expect(&Token::Gt)?;
+        Ok(generics)
+    }
+
+    /// Parse function parameters
+    fn parse_params(&mut self) -> ParseResult<Vec<Param>> {
+        let mut params = Vec::new();
+
+        while !self.check(&Token::RParen) && !self.is_at_end() {
+            let is_mut = self.check(&Token::Mut);
+            if is_mut {
+                self.advance();
+            }
+
+            // Handle &self and &mut self
+            if self.check(&Token::Amp) {
+                self.advance();
+                let is_self_mut = self.check(&Token::Mut);
+                if is_self_mut {
+                    self.advance();
+                }
+                if self.check(&Token::SelfLower) {
+                    self.advance();
+                    let span = self.prev_span();
+                    params.push(Param {
+                        name: Spanned::new("self".to_string(), Span::new(span.start, span.end)),
+                        ty: Spanned::new(
+                            if is_self_mut {
+                                Type::RefMut(Box::new(Spanned::new(
+                                    Type::Named {
+                                        name: "Self".to_string(),
+                                        generics: vec![],
+                                    },
+                                    Span::default(),
+                                )))
+                            } else {
+                                Type::Ref(Box::new(Spanned::new(
+                                    Type::Named {
+                                        name: "Self".to_string(),
+                                        generics: vec![],
+                                    },
+                                    Span::default(),
+                                )))
+                            },
+                            Span::default(),
+                        ),
+                        is_mut: is_self_mut,
+                    });
+                    if !self.check(&Token::RParen) {
+                        self.expect(&Token::Comma)?;
+                    }
+                    continue;
+                }
+            }
+
+            let name = self.parse_ident()?;
+            self.expect(&Token::Colon)?;
+            let ty = self.parse_type()?;
+
+            params.push(Param { name, ty, is_mut });
+
+            if !self.check(&Token::RParen) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+
+        Ok(params)
+    }
+
+    /// Parse struct field
+    fn parse_field(&mut self) -> ParseResult<Field> {
+        let is_pub = self.check(&Token::Pub);
+        if is_pub {
+            self.advance();
+        }
+
+        let name = self.parse_ident()?;
+        self.expect(&Token::Colon)?;
+        let ty = self.parse_type()?;
+
+        Ok(Field { name, ty, is_pub })
+    }
+
+    /// Parse type
+    fn parse_type(&mut self) -> ParseResult<Spanned<Type>> {
+        let start = self.current_span().start;
+
+        let base_type = self.parse_base_type()?;
+
+        // Handle postfix type modifiers: ?, !
+        let ty = if self.check(&Token::Question) {
+            self.advance();
+            Type::Optional(Box::new(base_type))
+        } else if self.check(&Token::Bang) {
+            self.advance();
+            Type::Result(Box::new(base_type))
+        } else {
+            return Ok(base_type);
+        };
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(ty, Span::new(start, end)))
+    }
+
+    /// Parse base type (without postfix modifiers)
+    fn parse_base_type(&mut self) -> ParseResult<Spanned<Type>> {
+        let start = self.current_span().start;
+
+        let ty = if self.check(&Token::LParen) {
+            self.advance();
+            if self.check(&Token::RParen) {
+                self.advance();
+                Type::Unit
+            } else {
+                let mut types = vec![self.parse_type()?];
+                while self.check(&Token::Comma) {
+                    self.advance();
+                    types.push(self.parse_type()?);
+                }
+                self.expect(&Token::RParen)?;
+
+                if self.check(&Token::Arrow) {
+                    self.advance();
+                    let ret = self.parse_type()?;
+                    Type::Fn {
+                        params: types,
+                        ret: Box::new(ret),
+                    }
+                } else if types.len() == 1 {
+                    return Ok(types.remove(0));
+                } else {
+                    Type::Tuple(types)
+                }
+            }
+        } else if self.check(&Token::LBracket) {
+            self.advance();
+            let key_or_elem = self.parse_type()?;
+
+            if self.check(&Token::Colon) {
+                self.advance();
+                let value = self.parse_type()?;
+                self.expect(&Token::RBracket)?;
+                Type::Map(Box::new(key_or_elem), Box::new(value))
+            } else {
+                self.expect(&Token::RBracket)?;
+                Type::Array(Box::new(key_or_elem))
+            }
+        } else if self.check(&Token::Star) {
+            self.advance();
+            let inner = self.parse_base_type()?;
+            Type::Pointer(Box::new(inner))
+        } else if self.check(&Token::Amp) {
+            self.advance();
+            let is_mut = self.check(&Token::Mut);
+            if is_mut {
+                self.advance();
+            }
+            let inner = self.parse_base_type()?;
+            if is_mut {
+                Type::RefMut(Box::new(inner))
+            } else {
+                Type::Ref(Box::new(inner))
+            }
+        } else {
+            let name = self.parse_type_name()?;
+            let generics = if self.check(&Token::Lt) {
+                self.advance();
+                let mut generics = Vec::new();
+                while !self.check(&Token::Gt) && !self.is_at_end() {
+                    generics.push(self.parse_type()?);
+                    if !self.check(&Token::Gt) {
+                        self.expect(&Token::Comma)?;
+                    }
+                }
+                self.expect(&Token::Gt)?;
+                generics
+            } else {
+                Vec::new()
+            };
+
+            Type::Named { name, generics }
+        };
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(ty, Span::new(start, end)))
+    }
+
+    /// Parse type name (handles primitive types)
+    fn parse_type_name(&mut self) -> ParseResult<String> {
+        let tok = self.advance().ok_or(ParseError::UnexpectedEof)?;
+
+        let name = match &tok.token {
+            Token::I8 => "i8",
+            Token::I16 => "i16",
+            Token::I32 => "i32",
+            Token::I64 => "i64",
+            Token::I128 => "i128",
+            Token::U8 => "u8",
+            Token::U16 => "u16",
+            Token::U32 => "u32",
+            Token::U64 => "u64",
+            Token::U128 => "u128",
+            Token::F32 => "f32",
+            Token::F64 => "f64",
+            Token::Bool => "bool",
+            Token::Str => "str",
+            Token::SelfUpper => "Self",
+            Token::Ident(s) => return Ok(s.clone()),
+            // Single-letter keywords can be used as type names in generics
+            Token::TypeKeyword => "T",
+            Token::Function => "F",
+            Token::Struct => "S",
+            Token::Enum => "E",
+            Token::If => "I",
+            Token::Loop => "L",
+            Token::Match => "M",
+            Token::Async => "A",
+            Token::Return => "R",
+            Token::Break => "B",
+            Token::Continue => "C",
+            Token::Use => "U",
+            Token::Pub => "P",
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token.clone(),
+                    span: tok.span.clone(),
+                    expected: "type name".into(),
+                });
+            }
+        };
+
+        Ok(name.to_string())
+    }
+
+    /// Parse block contents (statements)
+    fn parse_block_contents(&mut self) -> ParseResult<Vec<Spanned<Stmt>>> {
+        let mut stmts = Vec::new();
+
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            stmts.push(self.parse_stmt()?);
+        }
+
+        Ok(stmts)
+    }
+
+    /// Parse statement
+    fn parse_stmt(&mut self) -> ParseResult<Spanned<Stmt>> {
+        let start = self.current_span().start;
+
+        let stmt = if self.check(&Token::Return) {
+            self.advance();
+            let expr = if !self.check(&Token::RBrace) && !self.check(&Token::Semi) {
+                Some(Box::new(self.parse_expr()?))
+            } else {
+                None
+            };
+            Stmt::Return(expr)
+        } else if self.check(&Token::Break) {
+            self.advance();
+            let expr = if !self.check(&Token::RBrace) && !self.check(&Token::Semi) {
+                Some(Box::new(self.parse_expr()?))
+            } else {
+                None
+            };
+            Stmt::Break(expr)
+        } else if self.check(&Token::Continue) {
+            self.advance();
+            Stmt::Continue
+        } else if self.is_let_stmt() {
+            self.parse_let_stmt()?
+        } else {
+            Stmt::Expr(Box::new(self.parse_expr()?))
+        };
+
+        // Optional semicolon
+        if self.check(&Token::Semi) {
+            self.advance();
+        }
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(stmt, Span::new(start, end)))
+    }
+
+    /// Check if current position is a let statement
+    fn is_let_stmt(&self) -> bool {
+        if let Some(tok) = self.peek() {
+            if let Token::Ident(_) = &tok.token {
+                if let Some(next) = self.tokens.get(self.pos + 1) {
+                    matches!(next.token, Token::ColonEq | Token::Colon)
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Parse let statement: `x := expr` or `x: T = expr`
+    fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
+        let name = self.parse_ident()?;
+
+        let (ty, is_mut) = if self.check(&Token::ColonEq) {
+            self.advance();
+            // Check for mut: `x := mut expr`
+            let is_mut = self.check(&Token::Mut);
+            if is_mut {
+                self.advance();
+            }
+            (None, is_mut)
+        } else if self.check(&Token::Colon) {
+            self.advance();
+            // Check for mut: `x: mut T = expr`
+            let is_mut = self.check(&Token::Mut);
+            if is_mut {
+                self.advance();
+            }
+            let ty = self.parse_type()?;
+            self.expect(&Token::Eq)?;
+            (Some(ty), is_mut)
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: ":= or :".into(),
+            });
+        };
+
+        let value = self.parse_expr()?;
+
+        Ok(Stmt::Let {
+            name,
+            ty,
+            value: Box::new(value),
+            is_mut,
+        })
+    }
+
+    /// Parse expression
+    pub fn parse_expr(&mut self) -> ParseResult<Spanned<Expr>> {
+        self.parse_assignment()
+    }
+
+    /// Parse assignment expression
+    fn parse_assignment(&mut self) -> ParseResult<Spanned<Expr>> {
+        let expr = self.parse_ternary()?;
+
+        if self.check(&Token::Eq) {
+            self.advance();
+            let value = self.parse_assignment()?;
+            let span = expr.span.merge(value.span);
+            return Ok(Spanned::new(
+                Expr::Assign {
+                    target: Box::new(expr),
+                    value: Box::new(value),
+                },
+                span,
+            ));
+        }
+
+        // Compound assignment
+        let op = if self.check(&Token::PlusEq) {
+            Some(BinOp::Add)
+        } else if self.check(&Token::MinusEq) {
+            Some(BinOp::Sub)
+        } else if self.check(&Token::StarEq) {
+            Some(BinOp::Mul)
+        } else if self.check(&Token::SlashEq) {
+            Some(BinOp::Div)
+        } else {
+            None
+        };
+
+        if let Some(op) = op {
+            self.advance();
+            let value = self.parse_assignment()?;
+            let span = expr.span.merge(value.span);
+            return Ok(Spanned::new(
+                Expr::AssignOp {
+                    op,
+                    target: Box::new(expr),
+                    value: Box::new(value),
+                },
+                span,
+            ));
+        }
+
+        Ok(expr)
+    }
+
+    /// Parse ternary: `cond ? then : else`
+    fn parse_ternary(&mut self) -> ParseResult<Spanned<Expr>> {
+        let cond = self.parse_or()?;
+
+        if self.check(&Token::Question) {
+            self.advance();
+            let then = self.parse_ternary()?;
+            self.expect(&Token::Colon)?;
+            let else_ = self.parse_ternary()?;
+
+            let span = cond.span.merge(else_.span);
+            return Ok(Spanned::new(
+                Expr::Ternary {
+                    cond: Box::new(cond),
+                    then: Box::new(then),
+                    else_: Box::new(else_),
+                },
+                span,
+            ));
+        }
+
+        Ok(cond)
+    }
+
+    /// Parse logical OR
+    fn parse_or(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_and()?;
+
+        while self.check(&Token::Pipe) && self.peek_next().map(|t| &t.token) == Some(&Token::Pipe) {
+            self.advance();
+            self.advance();
+            let right = self.parse_and()?;
+            let span = left.span.merge(right.span);
+            left = Spanned::new(
+                Expr::Binary {
+                    op: BinOp::Or,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        Ok(left)
+    }
+
+    /// Parse logical AND
+    fn parse_and(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_bitwise_or()?;
+
+        while self.check(&Token::Amp) && self.peek_next().map(|t| &t.token) == Some(&Token::Amp) {
+            self.advance();
+            self.advance();
+            let right = self.parse_bitwise_or()?;
+            let span = left.span.merge(right.span);
+            left = Spanned::new(
+                Expr::Binary {
+                    op: BinOp::And,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        Ok(left)
+    }
+
+    /// Parse bitwise OR
+    fn parse_bitwise_or(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_bitwise_xor()?;
+
+        while self.check(&Token::Pipe) && self.peek_next().map(|t| &t.token) != Some(&Token::Pipe) {
+            self.advance();
+            let right = self.parse_bitwise_xor()?;
+            let span = left.span.merge(right.span);
+            left = Spanned::new(
+                Expr::Binary {
+                    op: BinOp::BitOr,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        Ok(left)
+    }
+
+    /// Parse bitwise XOR
+    fn parse_bitwise_xor(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_bitwise_and()?;
+
+        while self.check(&Token::Caret) {
+            self.advance();
+            let right = self.parse_bitwise_and()?;
+            let span = left.span.merge(right.span);
+            left = Spanned::new(
+                Expr::Binary {
+                    op: BinOp::BitXor,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        Ok(left)
+    }
+
+    /// Parse bitwise AND
+    fn parse_bitwise_and(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_equality()?;
+
+        while self.check(&Token::Amp) && self.peek_next().map(|t| &t.token) != Some(&Token::Amp) {
+            self.advance();
+            let right = self.parse_equality()?;
+            let span = left.span.merge(right.span);
+            left = Spanned::new(
+                Expr::Binary {
+                    op: BinOp::BitAnd,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        Ok(left)
+    }
+
+    /// Parse equality
+    fn parse_equality(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_comparison()?;
+
+        loop {
+            let op = if self.check(&Token::EqEq) {
+                Some(BinOp::Eq)
+            } else if self.check(&Token::Neq) {
+                Some(BinOp::Neq)
+            } else {
+                None
+            };
+
+            if let Some(op) = op {
+                self.advance();
+                let right = self.parse_comparison()?;
+                let span = left.span.merge(right.span);
+                left = Spanned::new(
+                    Expr::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    span,
+                );
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse comparison
+    fn parse_comparison(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_shift()?;
+
+        loop {
+            let op = if self.check(&Token::Lt) {
+                Some(BinOp::Lt)
+            } else if self.check(&Token::Lte) {
+                Some(BinOp::Lte)
+            } else if self.check(&Token::Gt) {
+                Some(BinOp::Gt)
+            } else if self.check(&Token::Gte) {
+                Some(BinOp::Gte)
+            } else {
+                None
+            };
+
+            if let Some(op) = op {
+                self.advance();
+                let right = self.parse_shift()?;
+                let span = left.span.merge(right.span);
+                left = Spanned::new(
+                    Expr::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    span,
+                );
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse shift
+    fn parse_shift(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_term()?;
+
+        loop {
+            let op = if self.check(&Token::Shl) {
+                Some(BinOp::Shl)
+            } else if self.check(&Token::Shr) {
+                Some(BinOp::Shr)
+            } else {
+                None
+            };
+
+            if let Some(op) = op {
+                self.advance();
+                let right = self.parse_term()?;
+                let span = left.span.merge(right.span);
+                left = Spanned::new(
+                    Expr::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    span,
+                );
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse term (+ -)
+    fn parse_term(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_factor()?;
+
+        loop {
+            let op = if self.check(&Token::Plus) {
+                Some(BinOp::Add)
+            } else if self.check(&Token::Minus) {
+                Some(BinOp::Sub)
+            } else {
+                None
+            };
+
+            if let Some(op) = op {
+                self.advance();
+                let right = self.parse_factor()?;
+                let span = left.span.merge(right.span);
+                left = Spanned::new(
+                    Expr::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    span,
+                );
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse factor (* / %)
+    fn parse_factor(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_unary()?;
+
+        loop {
+            let op = if self.check(&Token::Star) {
+                Some(BinOp::Mul)
+            } else if self.check(&Token::Slash) {
+                Some(BinOp::Div)
+            } else if self.check(&Token::Percent) {
+                Some(BinOp::Mod)
+            } else {
+                None
+            };
+
+            if let Some(op) = op {
+                self.advance();
+                let right = self.parse_unary()?;
+                let span = left.span.merge(right.span);
+                left = Spanned::new(
+                    Expr::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    span,
+                );
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse unary expression
+    fn parse_unary(&mut self) -> ParseResult<Spanned<Expr>> {
+        let start = self.current_span().start;
+
+        if self.check(&Token::Minus) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(
+                Expr::Unary {
+                    op: UnaryOp::Neg,
+                    expr: Box::new(expr),
+                },
+                Span::new(start, end),
+            ));
+        }
+
+        if self.check(&Token::Bang) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(
+                Expr::Unary {
+                    op: UnaryOp::Not,
+                    expr: Box::new(expr),
+                },
+                Span::new(start, end),
+            ));
+        }
+
+        if self.check(&Token::Tilde) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(
+                Expr::Unary {
+                    op: UnaryOp::BitNot,
+                    expr: Box::new(expr),
+                },
+                Span::new(start, end),
+            ));
+        }
+
+        if self.check(&Token::Amp) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(Expr::Ref(Box::new(expr)), Span::new(start, end)));
+        }
+
+        if self.check(&Token::Star) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(
+                Expr::Deref(Box::new(expr)),
+                Span::new(start, end),
+            ));
+        }
+
+        self.parse_postfix()
+    }
+
+    /// Parse postfix expressions (calls, field access, etc.)
+    fn parse_postfix(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            let start = expr.span.start;
+
+            if self.check(&Token::LParen) {
+                self.advance();
+                let args = self.parse_args()?;
+                self.expect(&Token::RParen)?;
+                let end = self.prev_span().end;
+                expr = Spanned::new(
+                    Expr::Call {
+                        func: Box::new(expr),
+                        args,
+                    },
+                    Span::new(start, end),
+                );
+            } else if self.check(&Token::Dot) {
+                self.advance();
+                if self.check(&Token::Await) {
+                    self.advance();
+                    let end = self.prev_span().end;
+                    expr = Spanned::new(
+                        Expr::Await(Box::new(expr)),
+                        Span::new(start, end),
+                    );
+                } else {
+                    let field = self.parse_ident()?;
+                    if self.check(&Token::LParen) {
+                        self.advance();
+                        let args = self.parse_args()?;
+                        self.expect(&Token::RParen)?;
+                        let end = self.prev_span().end;
+                        expr = Spanned::new(
+                            Expr::MethodCall {
+                                receiver: Box::new(expr),
+                                method: field,
+                                args,
+                            },
+                            Span::new(start, end),
+                        );
+                    } else {
+                        let end = field.span.end;
+                        expr = Spanned::new(
+                            Expr::Field {
+                                expr: Box::new(expr),
+                                field,
+                            },
+                            Span::new(start, end),
+                        );
+                    }
+                }
+            } else if self.check(&Token::LBracket) {
+                self.advance();
+                let index = self.parse_expr()?;
+                self.expect(&Token::RBracket)?;
+                let end = self.prev_span().end;
+                expr = Spanned::new(
+                    Expr::Index {
+                        expr: Box::new(expr),
+                        index: Box::new(index),
+                    },
+                    Span::new(start, end),
+                );
+            } else if self.check(&Token::Question) {
+                // Check if this is postfix try (expr?) or ternary (cond ? then : else)
+                // If there's a following expression followed by ':', it's ternary - don't consume
+                // The ternary is handled at parse_ternary level
+                // Here we only handle postfix try: expr? where ? is at end or followed by binary op
+                //
+                // Simplest heuristic: if next token is an expression start, it's likely ternary
+                // So we don't handle ? here at all - let ternary handle it
+                break;
+            } else if self.check(&Token::Bang) {
+                self.advance();
+                let end = self.prev_span().end;
+                expr = Spanned::new(
+                    Expr::Unwrap(Box::new(expr)),
+                    Span::new(start, end),
+                );
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    /// Parse primary expression
+    fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
+        let start = self.current_span().start;
+        let tok = self.advance().ok_or(ParseError::UnexpectedEof)?;
+
+        let expr = match tok.token {
+            Token::Int(n) => Expr::Int(n),
+            Token::Float(n) => Expr::Float(n),
+            Token::True => Expr::Bool(true),
+            Token::False => Expr::Bool(false),
+            Token::String(s) => Expr::String(s),
+            Token::At => Expr::SelfCall,
+            Token::SelfLower => Expr::Ident("self".to_string()),
+            Token::Ident(name) => {
+                // Check for struct literal: `Name{...}`
+                // Only treat as struct literal if name starts with uppercase (type convention)
+                let is_type_name = name.chars().next().map_or(false, |c| c.is_uppercase());
+                if is_type_name && self.check(&Token::LBrace) {
+                    self.advance();
+                    let mut fields = Vec::new();
+                    while !self.check(&Token::RBrace) && !self.is_at_end() {
+                        let field_name = self.parse_ident()?;
+                        self.expect(&Token::Colon)?;
+                        let value = self.parse_expr()?;
+                        fields.push((field_name, value));
+                        if !self.check(&Token::RBrace) {
+                            self.expect(&Token::Comma)?;
+                        }
+                    }
+                    self.expect(&Token::RBrace)?;
+                    let end = self.prev_span().end;
+                    let name_len = name.len();
+                    return Ok(Spanned::new(
+                        Expr::StructLit {
+                            name: Spanned::new(name, Span::new(start, start + name_len)),
+                            fields,
+                        },
+                        Span::new(start, end),
+                    ));
+                }
+                Expr::Ident(name)
+            }
+            Token::LParen => {
+                if self.check(&Token::RParen) {
+                    self.advance();
+                    Expr::Unit
+                } else {
+                    let expr = self.parse_expr()?;
+                    if self.check(&Token::Comma) {
+                        let mut exprs = vec![expr];
+                        while self.check(&Token::Comma) {
+                            self.advance();
+                            if self.check(&Token::RParen) {
+                                break;
+                            }
+                            exprs.push(self.parse_expr()?);
+                        }
+                        self.expect(&Token::RParen)?;
+                        let end = self.prev_span().end;
+                        return Ok(Spanned::new(Expr::Tuple(exprs), Span::new(start, end)));
+                    }
+                    self.expect(&Token::RParen)?;
+                    return Ok(expr);
+                }
+            }
+            Token::LBracket => {
+                let mut exprs = Vec::new();
+                while !self.check(&Token::RBracket) && !self.is_at_end() {
+                    exprs.push(self.parse_expr()?);
+                    if !self.check(&Token::RBracket) {
+                        self.expect(&Token::Comma)?;
+                    }
+                }
+                self.expect(&Token::RBracket)?;
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(Expr::Array(exprs), Span::new(start, end)));
+            }
+            Token::LBrace => {
+                let stmts = self.parse_block_contents()?;
+                self.expect(&Token::RBrace)?;
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(Expr::Block(stmts), Span::new(start, end)));
+            }
+            Token::If => {
+                return self.parse_if_expr(start);
+            }
+            Token::Loop => {
+                return self.parse_loop_expr(start);
+            }
+            Token::Match => {
+                return self.parse_match_expr(start);
+            }
+            Token::Spawn => {
+                self.expect(&Token::LBrace)?;
+                let body = self.parse_expr()?;
+                self.expect(&Token::RBrace)?;
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Spawn(Box::new(body)),
+                    Span::new(start, end),
+                ));
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token,
+                    span: tok.span,
+                    expected: "expression".into(),
+                });
+            }
+        };
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(expr, Span::new(start, end)))
+    }
+
+    /// Parse if expression: `I cond{...}E{...}`
+    fn parse_if_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        let cond = self.parse_expr()?;
+        self.expect(&Token::LBrace)?;
+        let then = self.parse_block_contents()?;
+        self.expect(&Token::RBrace)?;
+
+        let else_ = if self.check(&Token::Enum) {
+            // E is used for else (context-dependent)
+            self.advance();
+            Some(self.parse_else_branch()?)
+        } else {
+            None
+        };
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::If {
+                cond: Box::new(cond),
+                then,
+                else_,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse else branch
+    fn parse_else_branch(&mut self) -> ParseResult<IfElse> {
+        if self.check(&Token::If) {
+            // else if
+            self.advance();
+            let cond = self.parse_expr()?;
+            self.expect(&Token::LBrace)?;
+            let then = self.parse_block_contents()?;
+            self.expect(&Token::RBrace)?;
+
+            let else_ = if self.check(&Token::Enum) {
+                self.advance();
+                Some(Box::new(self.parse_else_branch()?))
+            } else {
+                None
+            };
+
+            Ok(IfElse::ElseIf(Box::new(cond), then, else_))
+        } else {
+            // else
+            self.expect(&Token::LBrace)?;
+            let stmts = self.parse_block_contents()?;
+            self.expect(&Token::RBrace)?;
+            Ok(IfElse::Else(stmts))
+        }
+    }
+
+    /// Parse loop expression: `L pattern:iter{...}` or `L{...}`
+    fn parse_loop_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        let (pattern, iter) = if self.check(&Token::LBrace) {
+            (None, None)
+        } else {
+            let pattern = self.parse_pattern()?;
+            self.expect(&Token::Colon)?;
+            let iter = self.parse_expr()?;
+            (Some(pattern), Some(Box::new(iter)))
+        };
+
+        self.expect(&Token::LBrace)?;
+        let body = self.parse_block_contents()?;
+        self.expect(&Token::RBrace)?;
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::Loop {
+                pattern,
+                iter,
+                body,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse match expression: `M expr{arms}`
+    fn parse_match_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        let expr = self.parse_expr()?;
+        self.expect(&Token::LBrace)?;
+
+        let mut arms = Vec::new();
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            let pattern = self.parse_pattern()?;
+            self.expect(&Token::FatArrow)?;
+            let body = self.parse_expr()?;
+            arms.push(MatchArm {
+                pattern,
+                guard: None,
+                body: Box::new(body),
+            });
+            if !self.check(&Token::RBrace) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+
+        self.expect(&Token::RBrace)?;
+        let end = self.prev_span().end;
+
+        Ok(Spanned::new(
+            Expr::Match {
+                expr: Box::new(expr),
+                arms,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse pattern
+    fn parse_pattern(&mut self) -> ParseResult<Spanned<Pattern>> {
+        let start = self.current_span().start;
+
+        if let Some(tok) = self.peek() {
+            let pattern = match &tok.token {
+                Token::Ident(s) if s == "_" => {
+                    self.advance();
+                    Pattern::Wildcard
+                }
+                Token::Ident(s) => {
+                    let name = s.clone();
+                    self.advance();
+                    // Check for variant pattern: `Some(x)`
+                    if self.check(&Token::LParen) {
+                        self.advance();
+                        let mut fields = Vec::new();
+                        while !self.check(&Token::RParen) && !self.is_at_end() {
+                            fields.push(self.parse_pattern()?);
+                            if !self.check(&Token::RParen) {
+                                self.expect(&Token::Comma)?;
+                            }
+                        }
+                        self.expect(&Token::RParen)?;
+                        Pattern::Variant {
+                            name: Spanned::new(name, Span::new(start, start)),
+                            fields,
+                        }
+                    } else {
+                        Pattern::Ident(name)
+                    }
+                }
+                Token::Int(n) => {
+                    let n = *n;
+                    self.advance();
+                    // Check for range pattern
+                    if self.check(&Token::DotDot) || self.check(&Token::DotDotEq) {
+                        let inclusive = self.check(&Token::DotDotEq);
+                        self.advance();
+                        let end_pat = self.parse_pattern()?;
+                        Pattern::Range {
+                            start: Some(Box::new(Spanned::new(
+                                Pattern::Literal(Literal::Int(n)),
+                                Span::new(start, start),
+                            ))),
+                            end: Some(Box::new(end_pat)),
+                            inclusive,
+                        }
+                    } else {
+                        Pattern::Literal(Literal::Int(n))
+                    }
+                }
+                Token::True => {
+                    self.advance();
+                    Pattern::Literal(Literal::Bool(true))
+                }
+                Token::False => {
+                    self.advance();
+                    Pattern::Literal(Literal::Bool(false))
+                }
+                Token::String(s) => {
+                    let s = s.clone();
+                    self.advance();
+                    Pattern::Literal(Literal::String(s))
+                }
+                Token::LParen => {
+                    self.advance();
+                    let mut patterns = Vec::new();
+                    while !self.check(&Token::RParen) && !self.is_at_end() {
+                        patterns.push(self.parse_pattern()?);
+                        if !self.check(&Token::RParen) {
+                            self.expect(&Token::Comma)?;
+                        }
+                    }
+                    self.expect(&Token::RParen)?;
+                    Pattern::Tuple(patterns)
+                }
+                _ => {
+                    return Err(ParseError::UnexpectedToken {
+                        found: tok.token.clone(),
+                        span: tok.span.clone(),
+                        expected: "pattern".into(),
+                    });
+                }
+            };
+
+            let end = self.prev_span().end;
+            Ok(Spanned::new(pattern, Span::new(start, end)))
+        } else {
+            Err(ParseError::UnexpectedEof)
+        }
+    }
+
+    /// Parse function call arguments
+    fn parse_args(&mut self) -> ParseResult<Vec<Spanned<Expr>>> {
+        let mut args = Vec::new();
+
+        while !self.check(&Token::RParen) && !self.is_at_end() {
+            args.push(self.parse_expr()?);
+            if !self.check(&Token::RParen) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+
+        Ok(args)
+    }
+
+    /// Parse identifier
+    /// Single-letter keywords can also be identifiers in non-keyword contexts
+    fn parse_ident(&mut self) -> ParseResult<Spanned<String>> {
+        let tok = self.advance().ok_or(ParseError::UnexpectedEof)?;
+        let name = match &tok.token {
+            Token::Ident(s) => s.clone(),
+            // Single-letter keywords can be used as identifiers
+            Token::Function => "F".to_string(),
+            Token::Struct => "S".to_string(),
+            Token::Enum => "E".to_string(),
+            Token::If => "I".to_string(),
+            Token::Loop => "L".to_string(),
+            Token::Match => "M".to_string(),
+            Token::Async => "A".to_string(),
+            Token::Return => "R".to_string(),
+            Token::Break => "B".to_string(),
+            Token::Continue => "C".to_string(),
+            Token::TypeKeyword => "T".to_string(),
+            Token::Use => "U".to_string(),
+            Token::Pub => "P".to_string(),
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    found: tok.token,
+                    span: tok.span,
+                    expected: "identifier".into(),
+                });
+            }
+        };
+        Ok(Spanned::new(name, Span::new(tok.span.start, tok.span.end)))
+    }
+
+    // === Helper methods ===
+
+    fn peek(&self) -> Option<&SpannedToken> {
+        self.tokens.get(self.pos)
+    }
+
+    fn peek_next(&self) -> Option<&SpannedToken> {
+        self.tokens.get(self.pos + 1)
+    }
+
+    fn advance(&mut self) -> Option<SpannedToken> {
+        if self.is_at_end() {
+            None
+        } else {
+            let tok = self.tokens[self.pos].clone();
+            self.pos += 1;
+            Some(tok)
+        }
+    }
+
+    fn check(&self, expected: &Token) -> bool {
+        self.peek().map(|t| &t.token == expected).unwrap_or(false)
+    }
+
+    fn expect(&mut self, expected: &Token) -> ParseResult<SpannedToken> {
+        if self.check(expected) {
+            Ok(self.advance().unwrap())
+        } else {
+            Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                span: self.current_span(),
+                expected: format!("{:?}", expected),
+            })
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.pos >= self.tokens.len()
+    }
+
+    fn current_span(&self) -> std::ops::Range<usize> {
+        self.peek()
+            .map(|t| t.span.clone())
+            .unwrap_or(self.prev_span())
+    }
+
+    fn prev_span(&self) -> std::ops::Range<usize> {
+        if self.pos > 0 {
+            self.tokens[self.pos - 1].span.clone()
+        } else {
+            0..0
+        }
+    }
+}
+
+/// Parse source code into AST
+pub fn parse(source: &str) -> Result<Module, ParseError> {
+    let tokens = vais_lexer::tokenize(source).map_err(|e| ParseError::UnexpectedToken {
+        found: Token::Ident(format!("LexError: {}", e)),
+        span: 0..0,
+        expected: "valid token".into(),
+    })?;
+
+    let mut parser = Parser::new(tokens);
+    parser.parse_module()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_function() {
+        let source = "F add(a:i64,b:i64)->i64=a+b";
+        let module = parse(source).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        if let Item::Function(f) = &module.items[0].node {
+            assert_eq!(f.name.node, "add");
+            assert_eq!(f.params.len(), 2);
+        } else {
+            panic!("Expected function");
+        }
+    }
+
+    #[test]
+    fn test_parse_fibonacci() {
+        let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
+        let module = parse(source).unwrap();
+
+        if let Item::Function(f) = &module.items[0].node {
+            assert_eq!(f.name.node, "fib");
+            if let FunctionBody::Expr(expr) = &f.body {
+                // Should be a ternary expression
+                if let Expr::Ternary { .. } = &expr.node {
+                    // Good
+                } else {
+                    panic!("Expected ternary");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_struct() {
+        let source = "S Point{x:f64,y:f64}";
+        let module = parse(source).unwrap();
+
+        if let Item::Struct(s) = &module.items[0].node {
+            assert_eq!(s.name.node, "Point");
+            assert_eq!(s.fields.len(), 2);
+        } else {
+            panic!("Expected struct");
+        }
+    }
+
+    #[test]
+    fn test_parse_enum() {
+        let source = "E Option<T>{Some(T),None}";
+        let module = parse(source).unwrap();
+
+        if let Item::Enum(e) = &module.items[0].node {
+            assert_eq!(e.name.node, "Option");
+            assert_eq!(e.generics.len(), 1);
+            assert_eq!(e.variants.len(), 2);
+        } else {
+            panic!("Expected enum");
+        }
+    }
+
+    #[test]
+    fn test_parse_block_function() {
+        let source = "F sum(arr:[i64])->i64{s:=0;L x:arr{s+=x};s}";
+        let module = parse(source).unwrap();
+
+        if let Item::Function(f) = &module.items[0].node {
+            if let FunctionBody::Block(stmts) = &f.body {
+                assert_eq!(stmts.len(), 3);
+            } else {
+                panic!("Expected block body");
+            }
+        }
+    }
+}

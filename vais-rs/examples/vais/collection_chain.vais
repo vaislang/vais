@@ -1,7 +1,0 @@
-// Chained collection operations
-// Filter > 2, then double, then sum
-// [1, 2, 3, 4, 5].?(_ > 2) = [3, 4, 5]
-// [3, 4, 5].@(_ * 2) = [6, 8, 10]
-// [6, 8, 10]./+ = 24
-// Expected output: 24
-[1, 2, 3, 4, 5].?(_ > 2).@(_ * 2)./+

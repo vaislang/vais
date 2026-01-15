@@ -1,3 +1,0 @@
-// Simple function call test - no recursion
-double(x) = x * 2
-double(21)

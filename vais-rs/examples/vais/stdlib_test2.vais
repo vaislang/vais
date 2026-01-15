@@ -1,5 +1,0 @@
-// Standard library comprehensive test
-
-// Math: pow(2, 10) = 1024
-// Expected output: 1024
-pow(2, 10)

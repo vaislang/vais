@@ -1,24 +1,7 @@
 # Rust
-target/
+/target/
+**/*.rs.bk
 Cargo.lock
-*.rs.bk
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-.env
-.venv
-venv/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-
-# OS
-.DS_Store
-Thumbs.db
 
 # IDE
 .idea/
@@ -26,3 +9,13 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
