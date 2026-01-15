@@ -759,6 +759,16 @@ impl TypeChecker {
                         self.unify(&key_type, &index_type)?;
                         Ok(*value_type)
                     }
+                    // Pointers can be indexed like arrays
+                    ResolvedType::Pointer(elem_type) => {
+                        if !index_type.is_integer() {
+                            return Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                            });
+                        }
+                        Ok(*elem_type)
+                    }
                     _ => Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
                         found: inner_type.to_string(),
@@ -769,7 +779,8 @@ impl TypeChecker {
             Expr::Array(exprs) => {
                 if exprs.is_empty() {
                     let var = self.fresh_type_var();
-                    return Ok(ResolvedType::Array(Box::new(var)));
+                    // Array literals decay to pointers in Vais
+                    return Ok(ResolvedType::Pointer(Box::new(var)));
                 }
 
                 let first_type = self.check_expr(&exprs[0])?;
@@ -778,7 +789,8 @@ impl TypeChecker {
                     self.unify(&first_type, &t)?;
                 }
 
-                Ok(ResolvedType::Array(Box::new(first_type)))
+                // Array literals produce pointers to first element
+                Ok(ResolvedType::Pointer(Box::new(first_type)))
             }
 
             Expr::Tuple(exprs) => {

@@ -533,15 +533,6 @@ impl CodeGenerator {
             }
 
             Expr::Call { func, args } => {
-                let mut ir = String::new();
-                let mut arg_vals = Vec::new();
-
-                for arg in args {
-                    let (val, arg_ir) = self.generate_expr(arg, counter)?;
-                    ir.push_str(&arg_ir);
-                    arg_vals.push(format!("i64 {}", val));
-                }
-
                 let fn_name = if let Expr::Ident(name) = &func.node {
                     name.clone()
                 } else if let Expr::SelfCall = &func.node {
@@ -550,10 +541,37 @@ impl CodeGenerator {
                     return Err(CodegenError::Unsupported("indirect call".to_string()));
                 };
 
+                // Look up function info for parameter types
+                let fn_info = self.functions.get(&fn_name).cloned();
+
+                let mut ir = String::new();
+                let mut arg_vals = Vec::new();
+
+                for (i, arg) in args.iter().enumerate() {
+                    let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                    ir.push_str(&arg_ir);
+
+                    // Get parameter type from function info if available
+                    let arg_ty = fn_info
+                        .as_ref()
+                        .and_then(|f| f.params.get(i))
+                        .map(|(_, ty)| self.type_to_llvm(ty))
+                        .unwrap_or_else(|| "i64".to_string());
+
+                    arg_vals.push(format!("{} {}", arg_ty, val));
+                }
+
+                // Get return type
+                let ret_ty = fn_info
+                    .as_ref()
+                    .map(|f| self.type_to_llvm(&f.ret_type))
+                    .unwrap_or_else(|| "i64".to_string());
+
                 let tmp = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = call i64 @{}({})\n",
+                    "  {} = call {} @{}({})\n",
                     tmp,
+                    ret_ty,
                     fn_name,
                     arg_vals.join(", ")
                 ));
@@ -723,7 +741,216 @@ impl CodeGenerator {
                 Ok((result, ir))
             }
 
-            // TODO: Implement remaining expression types
+            // Array literal: [a, b, c]
+            Expr::Array(elements) => {
+                let mut ir = String::new();
+                let len = elements.len();
+
+                // Allocate array on stack
+                let arr_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = alloca [{}  x i64]\n",
+                    arr_ptr, len
+                ));
+
+                // Store each element
+                for (i, elem) in elements.iter().enumerate() {
+                    let (val, elem_ir) = self.generate_expr(elem, counter)?;
+                    ir.push_str(&elem_ir);
+
+                    let elem_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr [{}  x i64], [{}  x i64]* {}, i64 0, i64 {}\n",
+                        elem_ptr, len, len, arr_ptr, i
+                    ));
+                    ir.push_str(&format!(
+                        "  store i64 {}, i64* {}\n",
+                        val, elem_ptr
+                    ));
+                }
+
+                // Return pointer to first element
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr [{}  x i64], [{}  x i64]* {}, i64 0, i64 0\n",
+                    result, len, len, arr_ptr
+                ));
+
+                Ok((result, ir))
+            }
+
+            // Tuple literal: (a, b, c)
+            Expr::Tuple(elements) => {
+                let mut ir = String::new();
+                let len = elements.len();
+
+                // Build tuple type string
+                let tuple_ty = format!("{{ {} }}", vec!["i64"; len].join(", "));
+
+                // Allocate tuple on stack
+                let tuple_ptr = self.next_temp(counter);
+                ir.push_str(&format!("  {} = alloca {}\n", tuple_ptr, tuple_ty));
+
+                // Store each element
+                for (i, elem) in elements.iter().enumerate() {
+                    let (val, elem_ir) = self.generate_expr(elem, counter)?;
+                    ir.push_str(&elem_ir);
+
+                    let elem_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 {}\n",
+                        elem_ptr, tuple_ty, tuple_ty, tuple_ptr, i
+                    ));
+                    ir.push_str(&format!("  store i64 {}, i64* {}\n", val, elem_ptr));
+                }
+
+                // Load and return tuple value
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    result, tuple_ty, tuple_ty, tuple_ptr
+                ));
+
+                Ok((result, ir))
+            }
+
+            // Struct literal: Point{x:1, y:2}
+            Expr::StructLit { name, fields } => {
+                let struct_name = &name.node;
+
+                // Look up struct info
+                let struct_info = self.structs.get(struct_name)
+                    .ok_or_else(|| CodegenError::TypeError(format!("Unknown struct: {}", struct_name)))?
+                    .clone();
+
+                let mut ir = String::new();
+
+                // Allocate struct on stack
+                let struct_ptr = self.next_temp(counter);
+                ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, struct_name));
+
+                // Store each field
+                for (field_name, field_expr) in fields {
+                    // Find field index
+                    let field_idx = struct_info.fields.iter()
+                        .position(|(n, _)| n == &field_name.node)
+                        .ok_or_else(|| CodegenError::TypeError(format!(
+                            "Unknown field '{}' in struct '{}'", field_name.node, struct_name
+                        )))?;
+
+                    let (val, field_ir) = self.generate_expr(field_expr, counter)?;
+                    ir.push_str(&field_ir);
+
+                    let field_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                        field_ptr, struct_name, struct_name, struct_ptr, field_idx
+                    ));
+
+                    let field_ty = &struct_info.fields[field_idx].1;
+                    let llvm_ty = self.type_to_llvm(field_ty);
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        llvm_ty, val, llvm_ty, field_ptr
+                    ));
+                }
+
+                // Return pointer to struct
+                Ok((struct_ptr, ir))
+            }
+
+            // Index: arr[idx]
+            Expr::Index { expr: array_expr, index } => {
+                let (arr_val, arr_ir) = self.generate_expr(array_expr, counter)?;
+                let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
+
+                let mut ir = arr_ir;
+                ir.push_str(&idx_ir);
+
+                // Get element pointer
+                let elem_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr i64, i64* {}, i64 {}\n",
+                    elem_ptr, arr_val, idx_val
+                ));
+
+                // Load element
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load i64, i64* {}\n",
+                    result, elem_ptr
+                ));
+
+                Ok((result, ir))
+            }
+
+            // Field access: obj.field
+            Expr::Field { expr: obj_expr, field } => {
+                let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
+                let mut ir = obj_ir;
+
+                // We need to determine the struct type from context
+                // For now, assume it's in locals or can be inferred
+                // This is a simplified implementation
+                let result = self.next_temp(counter);
+
+                // Try to find struct info based on variable name
+                if let Expr::Ident(var_name) = &obj_expr.node {
+                    if let Some(local) = self.locals.get(var_name.as_str()) {
+                        if let ResolvedType::Named { name: struct_name, .. } = &local.ty {
+                            if let Some(struct_info) = self.structs.get(struct_name) {
+                                let field_idx = struct_info.fields.iter()
+                                    .position(|(n, _)| n == &field.node)
+                                    .ok_or_else(|| CodegenError::TypeError(format!(
+                                        "Unknown field '{}' in struct '{}'", field.node, struct_name
+                                    )))?;
+
+                                let field_ty = &struct_info.fields[field_idx].1;
+                                let llvm_ty = self.type_to_llvm(field_ty);
+
+                                let field_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                                    field_ptr, struct_name, struct_name, obj_val, field_idx
+                                ));
+                                ir.push_str(&format!(
+                                    "  {} = load {}, {}* {}\n",
+                                    result, llvm_ty, llvm_ty, field_ptr
+                                ));
+
+                                return Ok((result, ir));
+                            }
+                        }
+                    }
+                }
+
+                Err(CodegenError::Unsupported("field access requires known struct type".to_string()))
+            }
+
+            // Reference: &expr
+            Expr::Ref(inner) => {
+                // For simple references, just return the address
+                if let Expr::Ident(name) = &inner.node {
+                    if self.locals.contains_key(name.as_str()) {
+                        return Ok((format!("%{}", name), String::new()));
+                    }
+                }
+                // For complex expressions, evaluate and return
+                self.generate_expr(inner, counter)
+            }
+
+            // Dereference: *expr
+            Expr::Deref(inner) => {
+                let (ptr_val, ptr_ir) = self.generate_expr(inner, counter)?;
+                let mut ir = ptr_ir;
+
+                let result = self.next_temp(counter);
+                ir.push_str(&format!("  {} = load i64, i64* {}\n", result, ptr_val));
+
+                Ok((result, ir))
+            }
+
+            // Unsupported expressions
             _ => Err(CodegenError::Unsupported(format!("{:?}", expr.node))),
         }
     }
@@ -939,5 +1166,38 @@ mod tests {
         assert!(ir.contains("loop.start"));
         assert!(ir.contains("loop.body"));
         assert!(ir.contains("loop.end"));
+    }
+
+    #[test]
+    fn test_array_literal() {
+        let source = "F get_arr()->*i64=[1,2,3]";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("alloca [3  x i64]"));
+        assert!(ir.contains("getelementptr"));
+        assert!(ir.contains("store i64"));
+    }
+
+    #[test]
+    fn test_array_index() {
+        let source = "F get_elem(arr:*i64, idx:i64)->i64=arr[idx]";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("getelementptr i64, i64*"));
+        assert!(ir.contains("load i64, i64*"));
+    }
+
+    #[test]
+    fn test_struct_codegen() {
+        let source = "S Point{x:i64,y:i64}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("%Point = type { i64, i64 }"));
     }
 }

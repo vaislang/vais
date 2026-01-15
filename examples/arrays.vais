@@ -1,0 +1,8 @@
+# Simple array access
+F get_elem(arr:*i64, idx:i64)->i64 = arr[idx]
+
+# Main: test with pointer
+F main()->i64 {
+    arr: *i64 = [10, 20, 30, 40]
+    get_elem(arr, 2)
+}
