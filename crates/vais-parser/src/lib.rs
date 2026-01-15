@@ -45,6 +45,9 @@ impl Parser {
 
     /// Parse a top-level item
     fn parse_item(&mut self) -> ParseResult<Spanned<Item>> {
+        // Parse attributes first
+        let attributes = self.parse_attributes()?;
+
         let is_pub = self.check(&Token::Pub);
         if is_pub {
             self.advance();
@@ -54,11 +57,11 @@ impl Parser {
 
         let item = if self.check(&Token::Function) {
             self.advance();
-            Item::Function(self.parse_function(is_pub, false)?)
+            Item::Function(self.parse_function(is_pub, false, attributes)?)
         } else if self.check(&Token::Async) {
             self.advance();
             self.expect(&Token::Function)?;
-            Item::Function(self.parse_function(is_pub, true)?)
+            Item::Function(self.parse_function(is_pub, true, attributes)?)
         } else if self.check(&Token::Struct) {
             self.advance();
             Item::Struct(self.parse_struct(is_pub)?)
@@ -89,8 +92,52 @@ impl Parser {
         Ok(Spanned::new(item, Span::new(start, end)))
     }
 
+    /// Parse attributes: `#[name(args)]`
+    fn parse_attributes(&mut self) -> ParseResult<Vec<Attribute>> {
+        let mut attrs = Vec::new();
+
+        while self.check(&Token::HashBracket) {
+            self.advance();
+            let attr = self.parse_attribute()?;
+            attrs.push(attr);
+            self.expect(&Token::RBracket)?;
+        }
+
+        Ok(attrs)
+    }
+
+    /// Parse single attribute: `name(args)` or just `name`
+    fn parse_attribute(&mut self) -> ParseResult<Attribute> {
+        let name = self.parse_ident()?.node;
+
+        let args = if self.check(&Token::LParen) {
+            self.advance();
+            let mut args = Vec::new();
+            while !self.check(&Token::RParen) && !self.is_at_end() {
+                if let Some(tok) = self.peek() {
+                    match &tok.token {
+                        Token::Ident(s) => {
+                            args.push(s.clone());
+                            self.advance();
+                        }
+                        _ => break,
+                    }
+                }
+                if self.check(&Token::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(&Token::RParen)?;
+            args
+        } else {
+            Vec::new()
+        };
+
+        Ok(Attribute { name, args })
+    }
+
     /// Parse function: `name(params)->ret=expr` or `name(params)->ret{...}`
-    fn parse_function(&mut self, is_pub: bool, is_async: bool) -> ParseResult<Function> {
+    fn parse_function(&mut self, is_pub: bool, is_async: bool, attributes: Vec<Attribute>) -> ParseResult<Function> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
@@ -129,6 +176,7 @@ impl Parser {
             body,
             is_pub,
             is_async,
+            attributes,
         })
     }
 
@@ -142,13 +190,15 @@ impl Parser {
         let mut methods = Vec::new();
 
         while !self.check(&Token::RBrace) && !self.is_at_end() {
-            if self.check(&Token::Function) || self.check(&Token::Pub) {
+            // Check for attributes or function/pub keywords
+            let method_attrs = self.parse_attributes()?;
+            if self.check(&Token::Function) || self.check(&Token::Pub) || !method_attrs.is_empty() {
                 let is_method_pub = self.check(&Token::Pub);
                 if is_method_pub {
                     self.advance();
                 }
                 self.expect(&Token::Function)?;
-                let method = self.parse_function(is_method_pub, false)?;
+                let method = self.parse_function(is_method_pub, false, method_attrs)?;
                 let span = Span::new(0, 0); // TODO: proper span
                 methods.push(Spanned::new(method, span));
             } else {
@@ -261,11 +311,27 @@ impl Parser {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
+        // Parse super traits: `W Iterator: Iterable + Clone`
+        let super_traits = if self.check(&Token::Colon) {
+            self.advance();
+            self.parse_trait_bounds()?
+        } else {
+            Vec::new()
+        };
+
         self.expect(&Token::LBrace)?;
 
         let mut methods = Vec::new();
+        let mut associated_types = Vec::new();
+
         while !self.check(&Token::RBrace) && !self.is_at_end() {
-            methods.push(self.parse_trait_method()?);
+            // Check for associated type: `T Item` or `T Item: Trait`
+            if self.check(&Token::TypeKeyword) {
+                self.advance();
+                associated_types.push(self.parse_associated_type()?);
+            } else {
+                methods.push(self.parse_trait_method()?);
+            }
         }
 
         self.expect(&Token::RBrace)?;
@@ -273,8 +339,37 @@ impl Parser {
         Ok(Trait {
             name,
             generics,
+            super_traits,
+            associated_types,
             methods,
             is_pub,
+        })
+    }
+
+    /// Parse associated type: `T Item` or `T Item: Trait` or `T Item = DefaultType`
+    fn parse_associated_type(&mut self) -> ParseResult<AssociatedType> {
+        let name = self.parse_ident()?;
+
+        // Optional trait bounds
+        let bounds = if self.check(&Token::Colon) {
+            self.advance();
+            self.parse_trait_bounds()?
+        } else {
+            Vec::new()
+        };
+
+        // Optional default type
+        let default = if self.check(&Token::Eq) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        Ok(AssociatedType {
+            name,
+            bounds,
+            default,
         })
     }
 
@@ -330,8 +425,9 @@ impl Parser {
         let mut methods = Vec::new();
         while !self.check(&Token::RBrace) && !self.is_at_end() {
             let start = self.current_span().start;
+            let method_attrs = self.parse_attributes()?;
             self.expect(&Token::Function)?;
-            let func = self.parse_function(false, false)?;
+            let func = self.parse_function(false, false, method_attrs)?;
             let end = self.prev_span().end;
             methods.push(Spanned::new(func, Span::new(start, end)));
         }

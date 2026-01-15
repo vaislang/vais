@@ -202,6 +202,10 @@ pub enum Token {
     Dot,
     #[token("::")]
     ColonColon,
+
+    // Attribute marker
+    #[token("#[")]
+    HashBracket,
 }
 
 impl fmt::Display for Token {
@@ -290,6 +294,7 @@ impl fmt::Display for Token {
             Token::Semi => write!(f, ";"),
             Token::Dot => write!(f, "."),
             Token::ColonColon => write!(f, "::"),
+            Token::HashBracket => write!(f, "#["),
         }
     }
 }

@@ -335,7 +335,7 @@ fn log2(n: i64) -> u32 {
 fn branch_optimization(ir: &str) -> String {
     let mut result = Vec::new();
     let mut skip_until_label = false;
-    let mut target_label = String::new();
+    let target_label = String::new();
 
     for line in ir.lines() {
         let trimmed = line.trim();
@@ -458,7 +458,7 @@ fn dead_code_elimination(ir: &str) -> String {
 
     // Second pass: emit only used definitions
     let mut result = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
+    for (_i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
 
         // Check if this is a definition of an unused variable
@@ -514,16 +514,16 @@ fn loop_invariant_motion(ir: &str) -> String {
     let lines: Vec<&str> = ir.lines().collect();
     let mut result = Vec::new();
     let mut in_loop = false;
-    let mut loop_header_idx = 0;
-    let mut invariants: Vec<String> = Vec::new();
+    let mut _loop_header_idx = 0;
+    let _invariants: Vec<String> = Vec::new();
 
-    for (i, line) in lines.iter().enumerate() {
+    for (_i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
 
         // Detect loop headers (simple heuristic: labels ending with "loop" or containing "while")
         if trimmed.ends_with(':') && (trimmed.contains("loop") || trimmed.contains("while")) {
             in_loop = true;
-            loop_header_idx = result.len();
+            _loop_header_idx = result.len();
             result.push(line.to_string());
             continue;
         }
@@ -543,7 +543,7 @@ fn loop_invariant_motion(ir: &str) -> String {
 
         // Simple invariant detection: instructions using only constants or params
         if in_loop {
-            if let Some(def_var) = extract_definition(trimmed) {
+            if let Some(_def_var) = extract_definition(trimmed) {
                 if is_loop_invariant(trimmed) {
                     // Mark as invariant but don't move yet (would need dataflow analysis)
                     result.push(format!("{}  ; loop invariant candidate", line));
@@ -583,12 +583,12 @@ fn is_loop_invariant(line: &str) -> bool {
 fn aggressive_inline(ir: &str) -> String {
     // For now, just add inline hints as comments
     // Real inlining would require parsing and rewriting function calls
-    let mut result = ir.to_string();
+    let result = ir.to_string();
 
     // Add always_inline attribute hint for small functions
     let small_threshold = 5; // lines
     let mut in_function = false;
-    let mut function_start = 0;
+    let mut _function_start = 0;
     let mut function_name = String::new();
     let mut line_count = 0;
 
@@ -597,7 +597,7 @@ fn aggressive_inline(ir: &str) -> String {
     for (i, line) in lines.iter().enumerate() {
         if line.starts_with("define ") && line.contains("@") {
             in_function = true;
-            function_start = i;
+            _function_start = i;
             line_count = 0;
             // Extract function name
             if let Some(start) = line.find('@') {

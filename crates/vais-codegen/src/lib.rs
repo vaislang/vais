@@ -6,6 +6,8 @@
 //! the inkwell crate and LLVM installation.
 
 pub mod optimize;
+mod builtins;
+mod expr;
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -91,6 +93,7 @@ pub struct CodeGenerator {
 
 /// Information about an await point in an async function
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct AsyncAwaitPoint {
     /// State index after this await
     state_index: usize,
@@ -102,6 +105,7 @@ struct AsyncAwaitPoint {
 
 /// Information about the current async function being compiled
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct AsyncFunctionInfo {
     /// Original function name
     name: String,
@@ -201,399 +205,6 @@ impl CodeGenerator {
         // Register built-in extern functions
         gen.register_builtin_functions();
         gen
-    }
-
-    fn register_builtin_functions(&mut self) {
-        // printf for printing
-        self.functions.insert(
-            "printf".to_string(),
-            FunctionInfo {
-                name: "printf".to_string(),
-                params: vec![("format".to_string(), ResolvedType::Str)],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // putchar for single character output
-        self.functions.insert(
-            "putchar".to_string(),
-            FunctionInfo {
-                name: "putchar".to_string(),
-                params: vec![("c".to_string(), ResolvedType::I32)],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // puts for simple string output
-        self.functions.insert(
-            "puts".to_string(),
-            FunctionInfo {
-                name: "puts".to_string(),
-                params: vec![("s".to_string(), ResolvedType::Str)],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // malloc: (i64) -> i64 (pointer as integer for simplicity)
-        self.functions.insert(
-            "malloc".to_string(),
-            FunctionInfo {
-                name: "malloc".to_string(),
-                params: vec![("size".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // free: (i64) -> void (pointer as integer)
-        self.functions.insert(
-            "free".to_string(),
-            FunctionInfo {
-                name: "free".to_string(),
-                params: vec![("ptr".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::Unit,
-                is_extern: true,
-            },
-        );
-
-        // exit: (i32) -> void (noreturn)
-        self.functions.insert(
-            "exit".to_string(),
-            FunctionInfo {
-                name: "exit".to_string(),
-                params: vec![("code".to_string(), ResolvedType::I32)],
-                ret_type: ResolvedType::Unit,
-                is_extern: true,
-            },
-        );
-
-        // memcpy: (dest, src, n) -> dest
-        self.functions.insert(
-            "memcpy".to_string(),
-            FunctionInfo {
-                name: "memcpy".to_string(),
-                params: vec![
-                    ("dest".to_string(), ResolvedType::I64),
-                    ("src".to_string(), ResolvedType::I64),
-                    ("n".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // strlen: (s) -> len
-        self.functions.insert(
-            "strlen".to_string(),
-            FunctionInfo {
-                name: "strlen".to_string(),
-                params: vec![("s".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // puts_ptr: print string from pointer
-        self.functions.insert(
-            "puts_ptr".to_string(),
-            FunctionInfo {
-                name: "puts".to_string(), // Maps to C puts
-                params: vec![("s".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // load_byte: load single byte from memory
-        self.functions.insert(
-            "load_byte".to_string(),
-            FunctionInfo {
-                name: "__load_byte".to_string(),
-                params: vec![("ptr".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: false, // We'll generate this
-            },
-        );
-
-        // store_byte: store single byte to memory
-        self.functions.insert(
-            "store_byte".to_string(),
-            FunctionInfo {
-                name: "__store_byte".to_string(),
-                params: vec![
-                    ("ptr".to_string(), ResolvedType::I64),
-                    ("val".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::Unit,
-                is_extern: false, // We'll generate this
-            },
-        );
-
-        // load_i64: load 64-bit integer from memory
-        self.functions.insert(
-            "load_i64".to_string(),
-            FunctionInfo {
-                name: "__load_i64".to_string(),
-                params: vec![("ptr".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: false, // We'll generate this
-            },
-        );
-
-        // store_i64: store 64-bit integer to memory
-        self.functions.insert(
-            "store_i64".to_string(),
-            FunctionInfo {
-                name: "__store_i64".to_string(),
-                params: vec![
-                    ("ptr".to_string(), ResolvedType::I64),
-                    ("val".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::Unit,
-                is_extern: false, // We'll generate this
-            },
-        );
-
-        // ===== File I/O functions =====
-
-        // fopen: (path, mode) -> FILE*
-        self.functions.insert(
-            "fopen".to_string(),
-            FunctionInfo {
-                name: "fopen".to_string(),
-                params: vec![
-                    ("path".to_string(), ResolvedType::Str),
-                    ("mode".to_string(), ResolvedType::Str),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fclose: (FILE*) -> int
-        self.functions.insert(
-            "fclose".to_string(),
-            FunctionInfo {
-                name: "fclose".to_string(),
-                params: vec![("stream".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // fread: (ptr, size, count, FILE*) -> size_t
-        self.functions.insert(
-            "fread".to_string(),
-            FunctionInfo {
-                name: "fread".to_string(),
-                params: vec![
-                    ("ptr".to_string(), ResolvedType::I64),
-                    ("size".to_string(), ResolvedType::I64),
-                    ("count".to_string(), ResolvedType::I64),
-                    ("stream".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fwrite: (ptr, size, count, FILE*) -> size_t
-        self.functions.insert(
-            "fwrite".to_string(),
-            FunctionInfo {
-                name: "fwrite".to_string(),
-                params: vec![
-                    ("ptr".to_string(), ResolvedType::I64),
-                    ("size".to_string(), ResolvedType::I64),
-                    ("count".to_string(), ResolvedType::I64),
-                    ("stream".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fgetc: (FILE*) -> int
-        self.functions.insert(
-            "fgetc".to_string(),
-            FunctionInfo {
-                name: "fgetc".to_string(),
-                params: vec![("stream".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fputc: (char, FILE*) -> int
-        self.functions.insert(
-            "fputc".to_string(),
-            FunctionInfo {
-                name: "fputc".to_string(),
-                params: vec![
-                    ("c".to_string(), ResolvedType::I64),
-                    ("stream".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fgets: (str, n, FILE*) -> char*
-        self.functions.insert(
-            "fgets".to_string(),
-            FunctionInfo {
-                name: "fgets".to_string(),
-                params: vec![
-                    ("str".to_string(), ResolvedType::I64),
-                    ("n".to_string(), ResolvedType::I64),
-                    ("stream".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fputs: (str, FILE*) -> int
-        self.functions.insert(
-            "fputs".to_string(),
-            FunctionInfo {
-                name: "fputs".to_string(),
-                params: vec![
-                    ("str".to_string(), ResolvedType::Str),
-                    ("stream".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fseek: (FILE*, offset, origin) -> int
-        self.functions.insert(
-            "fseek".to_string(),
-            FunctionInfo {
-                name: "fseek".to_string(),
-                params: vec![
-                    ("stream".to_string(), ResolvedType::I64),
-                    ("offset".to_string(), ResolvedType::I64),
-                    ("origin".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // ftell: (FILE*) -> long
-        self.functions.insert(
-            "ftell".to_string(),
-            FunctionInfo {
-                name: "ftell".to_string(),
-                params: vec![("stream".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // fflush: (FILE*) -> int
-        self.functions.insert(
-            "fflush".to_string(),
-            FunctionInfo {
-                name: "fflush".to_string(),
-                params: vec![("stream".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // feof: (FILE*) -> int
-        self.functions.insert(
-            "feof".to_string(),
-            FunctionInfo {
-                name: "feof".to_string(),
-                params: vec![("stream".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: true,
-            },
-        );
-
-        // strcmp: (s1, s2) -> int (returns 0 if equal)
-        self.functions.insert(
-            "strcmp".to_string(),
-            FunctionInfo {
-                name: "strcmp".to_string(),
-                params: vec![
-                    ("s1".to_string(), ResolvedType::Str),
-                    ("s2".to_string(), ResolvedType::Str),
-                ],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // strncmp: (s1, s2, n) -> int (compare up to n chars)
-        self.functions.insert(
-            "strncmp".to_string(),
-            FunctionInfo {
-                name: "strncmp".to_string(),
-                params: vec![
-                    ("s1".to_string(), ResolvedType::Str),
-                    ("s2".to_string(), ResolvedType::Str),
-                    ("n".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // Runtime memory helpers for async
-        // store_i64: (ptr, value) -> void (uses built-in __store_i64)
-        self.functions.insert(
-            "store_i64".to_string(),
-            FunctionInfo {
-                name: "__store_i64".to_string(),
-                params: vec![
-                    ("ptr".to_string(), ResolvedType::I64),
-                    ("value".to_string(), ResolvedType::I64),
-                ],
-                ret_type: ResolvedType::Unit,
-                is_extern: false, // Not extern - generated by helper functions
-            },
-        );
-
-        // load_i64: (ptr) -> i64 (uses built-in __load_i64)
-        self.functions.insert(
-            "load_i64".to_string(),
-            FunctionInfo {
-                name: "__load_i64".to_string(),
-                params: vec![("ptr".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I64,
-                is_extern: false, // Not extern - generated by helper functions
-            },
-        );
-
-        // usleep: microsecond sleep for cooperative scheduling
-        self.functions.insert(
-            "usleep".to_string(),
-            FunctionInfo {
-                name: "usleep".to_string(),
-                params: vec![("usec".to_string(), ResolvedType::I64)],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
-
-        // sched_yield: yield CPU to other processes
-        self.functions.insert(
-            "sched_yield".to_string(),
-            FunctionInfo {
-                name: "sched_yield".to_string(),
-                params: vec![],
-                ret_type: ResolvedType::I32,
-                is_extern: true,
-            },
-        );
     }
 
     fn next_label(&mut self, prefix: &str) -> String {
@@ -2758,7 +2369,7 @@ impl CodeGenerator {
                 let mut ir = inner_ir;
 
                 // Extract tag from result
-                let tag_tmp = self.next_temp(counter);
+                let _tag_tmp = self.next_temp(counter);
                 let result_ptr = self.next_temp(counter);
                 let tag_ptr = self.next_temp(counter);
                 let tag = self.next_temp(counter);
@@ -2840,9 +2451,6 @@ impl CodeGenerator {
 
                 Ok((value, ir))
             }
-
-            // Unsupported expressions
-            _ => Err(CodegenError::Unsupported(format!("{:?}", expr.node))),
         }
     }
 

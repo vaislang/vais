@@ -4,14 +4,18 @@ use tower_lsp::lsp_types::SemanticToken;
 use vais_lexer::{tokenize, Token};
 
 /// Token type indices (must match legend in backend.rs)
+#[allow(dead_code)]
 const TOKEN_FUNCTION: u32 = 0;
 const TOKEN_VARIABLE: u32 = 1;
+#[allow(dead_code)]
 const TOKEN_STRUCT: u32 = 2;
+#[allow(dead_code)]
 const TOKEN_ENUM: u32 = 3;
 const TOKEN_KEYWORD: u32 = 4;
 const TOKEN_TYPE: u32 = 5;
 const TOKEN_NUMBER: u32 = 6;
 const TOKEN_STRING: u32 = 7;
+#[allow(dead_code)]
 const TOKEN_COMMENT: u32 = 8;
 #[allow(dead_code)]
 const TOKEN_PARAMETER: u32 = 9;

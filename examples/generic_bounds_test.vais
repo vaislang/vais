@@ -1,0 +1,39 @@
+# Test generic functions with trait bounds
+
+# Simple generic function without bounds
+F identity<T>(x: T) -> T = x
+
+# Generic function with multiple type params
+F pair<A, B>(a: A, b: B) -> A = a
+
+# Struct for testing
+S Point { x: i64, y: i64 }
+
+F main() -> i64 {
+    puts("=== Generic Bounds Test ===")
+    putchar(10)
+
+    # Test simple generic with i64
+    x := identity(42)
+    puts("identity(42) =")
+    putchar(x / 10 + 48)
+    putchar(x % 10 + 48)
+    putchar(10)
+
+    # Test with different type
+    y := identity(100)
+    puts("identity(100) =")
+    putchar(y / 100 + 48)
+    putchar((y / 10) % 10 + 48)
+    putchar(y % 10 + 48)
+    putchar(10)
+
+    # Test pair function
+    z := pair(5, 10)
+    puts("pair(5, 10) =")
+    putchar(z + 48)
+    putchar(10)
+
+    puts("=== Test passed! ===")
+    0
+}

@@ -2,6 +2,9 @@
 //!
 //! The `vaisc` command compiles Vais source files to LLVM IR or native binaries.
 
+mod doc_gen;
+mod repl;
+
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::collections::HashSet;
@@ -87,6 +90,23 @@ enum Commands {
         input: PathBuf,
     },
 
+    /// Start interactive REPL
+    Repl,
+
+    /// Generate documentation
+    Doc {
+        /// Input source file or directory
+        input: PathBuf,
+
+        /// Output directory for documentation
+        #[arg(short, long, default_value = "docs")]
+        output: PathBuf,
+
+        /// Output format (markdown or html)
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+    },
+
     /// Show version information
     Version,
 }
@@ -103,6 +123,12 @@ fn main() {
         }
         Some(Commands::Check { input }) => {
             cmd_check(&input, cli.verbose)
+        }
+        Some(Commands::Repl) => {
+            repl::run()
+        }
+        Some(Commands::Doc { input, output, format }) => {
+            doc_gen::run(&input, &output, &format)
         }
         Some(Commands::Version) => {
             println!("{} {}", "vaisc".bold(), env!("CARGO_PKG_VERSION"));

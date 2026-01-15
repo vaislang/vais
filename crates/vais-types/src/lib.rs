@@ -2,9 +2,16 @@
 //!
 //! Static type checking with inference for AI-optimized code generation.
 
+pub mod exhaustiveness;
+mod traits;
+
 use std::collections::HashMap;
 use thiserror::Error;
 use vais_ast::*;
+
+pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
+pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
+use traits::TraitImpl;
 
 #[derive(Debug, Error)]
 pub enum TypeError {
@@ -34,6 +41,12 @@ pub enum TypeError {
 
     #[error("Cannot assign to immutable variable: {0}")]
     ImmutableAssign(String),
+
+    #[error("Non-exhaustive match: missing patterns {0}")]
+    NonExhaustiveMatch(String),
+
+    #[error("Unreachable pattern at arm {0}")]
+    UnreachablePattern(usize),
 }
 
 type TypeResult<T> = Result<T, TypeError>;
@@ -202,6 +215,7 @@ impl std::fmt::Display for ResolvedType {
 pub struct FunctionSig {
     pub name: String,
     pub generics: Vec<String>,
+    pub generic_bounds: HashMap<String, Vec<String>>, // generic name -> trait bounds
     pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut)
     pub ret: ResolvedType,
     pub is_async: bool,
@@ -222,31 +236,6 @@ pub struct EnumDef {
     pub name: String,
     pub generics: Vec<String>,
     pub variants: HashMap<String, Vec<ResolvedType>>,
-}
-
-/// Trait method signature
-#[derive(Debug, Clone)]
-pub struct TraitMethodSig {
-    pub name: String,
-    pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut) - first param is &self
-    pub ret: ResolvedType,
-    pub has_default: bool,
-}
-
-/// Trait definition
-#[derive(Debug, Clone)]
-pub struct TraitDef {
-    pub name: String,
-    pub generics: Vec<String>,
-    pub methods: HashMap<String, TraitMethodSig>,
-}
-
-/// Tracks which types implement which traits
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct TraitImpl {
-    trait_name: String,
-    type_name: String,
 }
 
 /// Variable info
@@ -285,6 +274,12 @@ pub struct TypeChecker {
 
     // Type substitutions
     substitutions: HashMap<usize, ResolvedType>,
+
+    // Exhaustiveness checker for match expressions
+    exhaustiveness_checker: ExhaustivenessChecker,
+
+    // Warnings collected during type checking
+    warnings: Vec<String>,
 }
 
 impl TypeChecker {
@@ -303,9 +298,21 @@ impl TypeChecker {
             current_generic_bounds: HashMap::new(),
             next_type_var: 0,
             substitutions: HashMap::new(),
+            exhaustiveness_checker: ExhaustivenessChecker::new(),
+            warnings: Vec::new(),
         };
         checker.register_builtins();
         checker
+    }
+
+    /// Get warnings collected during type checking
+    pub fn get_warnings(&self) -> &[String] {
+        &self.warnings
+    }
+
+    /// Clear warnings
+    pub fn clear_warnings(&mut self) {
+        self.warnings.clear();
     }
 
     /// Register built-in functions (libc wrappers)
@@ -316,6 +323,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "printf".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
@@ -328,6 +336,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "puts".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
@@ -340,6 +349,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "putchar".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
@@ -352,6 +362,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "malloc".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("size".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -364,6 +375,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "free".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::Unit,
                 is_async: false,
@@ -376,6 +388,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "exit".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("code".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::Unit,
                 is_async: false,
@@ -388,6 +401,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "memcpy".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("dest".to_string(), ResolvedType::I64, false),
                     ("src".to_string(), ResolvedType::I64, false),
@@ -404,6 +418,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "strlen".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -416,6 +431,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "puts_ptr".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
@@ -428,6 +444,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "load_byte".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -440,6 +457,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "store_byte".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("val".to_string(), ResolvedType::I64, false),
@@ -455,6 +473,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "load_i64".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -467,6 +486,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "store_i64".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("val".to_string(), ResolvedType::I64, false),
@@ -484,6 +504,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fopen".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("path".to_string(), ResolvedType::Str, false),
                     ("mode".to_string(), ResolvedType::Str, false),
@@ -499,6 +520,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fclose".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
@@ -511,6 +533,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fread".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("size".to_string(), ResolvedType::I64, false),
@@ -528,6 +551,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fwrite".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("ptr".to_string(), ResolvedType::I64, false),
                     ("size".to_string(), ResolvedType::I64, false),
@@ -545,6 +569,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fgetc".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -557,6 +582,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fputc".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("c".to_string(), ResolvedType::I64, false),
                     ("stream".to_string(), ResolvedType::I64, false),
@@ -572,6 +598,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fgets".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("str".to_string(), ResolvedType::I64, false),
                     ("n".to_string(), ResolvedType::I64, false),
@@ -588,6 +615,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fputs".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("str".to_string(), ResolvedType::Str, false),
                     ("stream".to_string(), ResolvedType::I64, false),
@@ -603,6 +631,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fseek".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![
                     ("stream".to_string(), ResolvedType::I64, false),
                     ("offset".to_string(), ResolvedType::I64, false),
@@ -619,6 +648,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "ftell".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -631,6 +661,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "fflush".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -643,6 +674,7 @@ impl TypeChecker {
             FunctionSig {
                 name: "feof".to_string(),
                 generics: vec![],
+                generic_bounds: HashMap::new(),
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
@@ -760,11 +792,17 @@ impl TypeChecker {
         // Restore previous generics
         self.restore_generics(prev_generics, prev_bounds);
 
+        let generic_bounds: HashMap<String, Vec<String>> = f.generics
+            .iter()
+            .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+            .collect();
+
         self.functions.insert(
             name.clone(),
             FunctionSig {
                 name,
                 generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
+                generic_bounds,
                 params,
                 ret,
                 is_async: f.is_async,
@@ -808,11 +846,17 @@ impl TypeChecker {
                 .map(|t| self.resolve_type(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
+            let method_bounds: HashMap<String, Vec<String>> = method.node.generics
+                .iter()
+                .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                .collect();
+
             methods.insert(
                 method.node.name.node.clone(),
                 FunctionSig {
                     name: method.node.name.node.clone(),
                     generics: method.node.generics.iter().map(|g| g.name.node.clone()).collect(),
+                    generic_bounds: method_bounds,
                     params,
                     ret,
                     is_async: method.node.is_async,
@@ -852,6 +896,12 @@ impl TypeChecker {
             };
             variants.insert(variant.name.node.clone(), types);
         }
+
+        // Register enum variants for exhaustiveness checking
+        let variant_names: Vec<String> = e.variants.iter()
+            .map(|v| v.name.node.clone())
+            .collect();
+        self.exhaustiveness_checker.register_enum(&name, variant_names);
 
         self.enums.insert(
             name.clone(),
@@ -932,11 +982,17 @@ impl TypeChecker {
                 .map(|t| self.resolve_type(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
+            let impl_method_bounds: HashMap<String, Vec<String>> = method.node.generics
+                .iter()
+                .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                .collect();
+
             method_sigs.push((
                 method.node.name.node.clone(),
                 FunctionSig {
                     name: method.node.name.node.clone(),
                     generics: method.node.generics.iter().map(|g| g.name.node.clone()).collect(),
+                    generic_bounds: impl_method_bounds,
                     params,
                     ret,
                     is_async: method.node.is_async,
@@ -961,8 +1017,34 @@ impl TypeChecker {
             return Err(TypeError::Duplicate(name));
         }
 
+        // Validate super traits exist
+        for super_trait in &t.super_traits {
+            if !self.traits.contains_key(&super_trait.node) {
+                // Allow forward references - will be validated later
+                self.warnings.push(format!(
+                    "Super trait '{}' referenced before definition",
+                    super_trait.node
+                ));
+            }
+        }
+
         // Set current generics for type resolution
         let (prev_generics, prev_bounds) = self.set_generics(&t.generics);
+
+        // Parse associated types
+        let mut associated_types = HashMap::new();
+        for assoc in &t.associated_types {
+            let bounds: Vec<String> = assoc.bounds.iter().map(|b| b.node.clone()).collect();
+            let default = assoc.default.as_ref().map(|ty| self.resolve_type(&ty.node));
+            associated_types.insert(
+                assoc.name.node.clone(),
+                AssociatedTypeDef {
+                    name: assoc.name.node.clone(),
+                    bounds,
+                    default,
+                },
+            );
+        }
 
         let mut methods = HashMap::new();
         for method in &t.methods {
@@ -999,6 +1081,8 @@ impl TypeChecker {
             TraitDef {
                 name,
                 generics: t.generics.iter().map(|g| g.name.node.clone()).collect(),
+                super_traits: t.super_traits.iter().map(|s| s.node.clone()).collect(),
+                associated_types,
                 methods,
             },
         );
@@ -1337,6 +1421,26 @@ impl TypeChecker {
                     } else {
                         result_type = Some(arm_type);
                     }
+                }
+
+                // Exhaustiveness check
+                let exhaustiveness_result = self.exhaustiveness_checker.check_match(&expr_type, arms);
+
+                // Report unreachable arms as warnings
+                for arm_idx in &exhaustiveness_result.unreachable_arms {
+                    self.warnings.push(format!(
+                        "Unreachable pattern in match arm {}",
+                        arm_idx + 1
+                    ));
+                }
+
+                // Non-exhaustive match is a warning (not error) for now
+                // to maintain backwards compatibility
+                if !exhaustiveness_result.is_exhaustive {
+                    self.warnings.push(format!(
+                        "Non-exhaustive match: missing patterns: {}",
+                        exhaustiveness_result.missing_patterns.join(", ")
+                    ));
                 }
 
                 Ok(result_type.unwrap_or(ResolvedType::Unit))

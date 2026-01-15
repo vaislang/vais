@@ -4,6 +4,7 @@ use tower_lsp::lsp_types::*;
 use vais_parser::ParseError;
 
 /// Convert parse errors to LSP diagnostics
+#[allow(dead_code)]
 pub fn parse_error_to_diagnostic(err: &ParseError, source: &str) -> Diagnostic {
     let (start, end, message) = match err {
         ParseError::UnexpectedToken { found, span, expected } => {
@@ -59,6 +60,7 @@ fn offset_to_position(source: &str, offset: usize) -> Position {
 }
 
 /// Publish diagnostics to the client
+#[allow(dead_code)]
 pub fn publish_diagnostics(errors: Vec<ParseError>, source: &str) -> Vec<Diagnostic> {
     errors
         .iter()

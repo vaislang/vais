@@ -12,6 +12,7 @@ use crate::semantic::get_semantic_tokens;
 
 /// Symbol definition information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct SymbolDef {
     name: String,
     kind: SymbolKind,
@@ -748,6 +749,7 @@ impl LanguageServer for VaisBackend {
         Ok(None)
     }
 
+    #[allow(deprecated)]
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,

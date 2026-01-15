@@ -35,6 +35,13 @@ impl<T> Spanned<T> {
     }
 }
 
+/// Attribute for conditional compilation and metadata
+#[derive(Debug, Clone, PartialEq)]
+pub struct Attribute {
+    pub name: String,
+    pub args: Vec<String>, // Arguments like cfg(test) -> ["test"]
+}
+
 /// Top-level module
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
@@ -70,6 +77,7 @@ pub struct Function {
     pub body: FunctionBody,
     pub is_pub: bool,
     pub is_async: bool,
+    pub attributes: Vec<Attribute>, // #[cfg(test)], #[inline], etc.
 }
 
 /// Function body - either expression or block
@@ -153,11 +161,21 @@ pub struct Use {
     pub alias: Option<Spanned<String>>,
 }
 
+/// Associated type in a trait
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssociatedType {
+    pub name: Spanned<String>,
+    pub bounds: Vec<Spanned<String>>, // Optional trait bounds
+    pub default: Option<Spanned<Type>>, // Optional default type
+}
+
 /// Trait definition: `W Name { methods }`
 #[derive(Debug, Clone, PartialEq)]
 pub struct Trait {
     pub name: Spanned<String>,
     pub generics: Vec<GenericParam>,
+    pub super_traits: Vec<Spanned<String>>, // Super trait bounds (e.g., W Iterator: Iterable)
+    pub associated_types: Vec<AssociatedType>, // Associated types (e.g., T Item)
     pub methods: Vec<TraitMethod>,
     pub is_pub: bool,
 }
@@ -469,4 +487,54 @@ pub enum UnaryOp {
     Neg,    // -
     Not,    // !
     BitNot, // ~
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Named { name, generics } => {
+                write!(f, "{}", name)?;
+                if !generics.is_empty() {
+                    write!(f, "<")?;
+                    for (i, g) in generics.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", g.node)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
+            }
+            Type::Array(inner) => write!(f, "[{}]", inner.node),
+            Type::Map(key, val) => write!(f, "[{}:{}]", key.node, val.node),
+            Type::Tuple(types) => {
+                write!(f, "(")?;
+                for (i, t) in types.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", t.node)?;
+                }
+                write!(f, ")")
+            }
+            Type::Optional(inner) => write!(f, "{}?", inner.node),
+            Type::Result(inner) => write!(f, "{}!", inner.node),
+            Type::Pointer(inner) => write!(f, "*{}", inner.node),
+            Type::Ref(inner) => write!(f, "&{}", inner.node),
+            Type::RefMut(inner) => write!(f, "&mut {}", inner.node),
+            Type::Fn { params, ret } => {
+                write!(f, "(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", p.node)?;
+                }
+                write!(f, ") -> {}", ret.node)
+            }
+            Type::Unit => write!(f, "()"),
+            Type::Infer => write!(f, "_"),
+        }
+    }
 }

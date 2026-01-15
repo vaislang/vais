@@ -1,0 +1,43 @@
+# Advanced trait test: Super traits and Associated types
+
+# Base trait
+W Printable {
+    F print(&self) -> i64
+}
+
+# Trait with super trait
+W Displayable: Printable {
+    F format(&self) -> i64
+}
+
+# Trait with associated type
+W Container {
+    T Item                     # Associated type declaration
+    F get(&self) -> i64
+    F size(&self) -> i64
+}
+
+# Simple struct
+S Counter { value: i64 }
+
+# Implement Printable
+X Counter: Printable {
+    F print(&self) -> i64 {
+        self.value
+    }
+}
+
+F main() -> i64 {
+    puts("=== Advanced Trait Test ===")
+    putchar(10)
+
+    c := Counter { value: 42 }
+    puts("Counter.print() =")
+    v := c.print()
+    putchar(v / 10 + 48)
+    putchar(v % 10 + 48)
+    putchar(10)
+
+    puts("=== Test passed! ===")
+    0
+}
