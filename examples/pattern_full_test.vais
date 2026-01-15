@@ -1,0 +1,164 @@
+# Comprehensive pattern matching test
+
+# Test integer literals
+F match_int(n: i64) -> i64 {
+    M n {
+        0 => 0,
+        1 => 10,
+        2 => 20,
+        3 => 30,
+        _ => 99
+    }
+}
+
+# Test boolean patterns
+F match_bool(b: i64) -> i64 {
+    # b: 0=false, 1=true
+    M b {
+        0 => 100,  # false case
+        1 => 200,  # true case
+        _ => 300
+    }
+}
+
+# Test range patterns
+F match_range(n: i64) -> i64 {
+    M n {
+        0..5 => 1,      # 0 to 4
+        5..10 => 2,     # 5 to 9
+        10..=20 => 3,   # 10 to 20 inclusive
+        _ => 0
+    }
+}
+
+# Test or patterns
+F match_or(n: i64) -> i64 {
+    M n {
+        1 | 2 | 3 => 10,
+        4 | 5 => 20,
+        _ => 0
+    }
+}
+
+# Test with guards
+F match_guard(n: i64) -> i64 {
+    M n {
+        x I x > 50 => 100,  # if x > 50
+        x I x > 20 => 50,   # else if x > 20
+        x => x              # else return x
+    }
+}
+
+# Test variable binding
+F match_bind(n: i64) -> i64 {
+    M n {
+        0 => 0,
+        x => x * 2
+    }
+}
+
+F main() -> i64 {
+    puts("=== Pattern Matching Tests ===")
+    putchar(10)
+
+    # Integer literal tests
+    puts("Integer patterns:")
+    puts("match_int(0) =")
+    putchar(match_int(0) + 48)
+    putchar(10)
+
+    puts("match_int(2) =")
+    putchar(match_int(2) / 10 + 48)
+    putchar(match_int(2) % 10 + 48)
+    putchar(10)
+
+    puts("match_int(99) =")
+    putchar(match_int(99) / 10 + 48)
+    putchar(match_int(99) % 10 + 48)
+    putchar(10)
+    putchar(10)
+
+    # Boolean tests
+    puts("Boolean patterns:")
+    puts("match_bool(0/false) =")
+    r := match_bool(0)
+    putchar(r / 100 + 48)
+    putchar((r / 10) % 10 + 48)
+    putchar(r % 10 + 48)
+    putchar(10)
+
+    puts("match_bool(1/true) =")
+    r2 := match_bool(1)
+    putchar(r2 / 100 + 48)
+    putchar((r2 / 10) % 10 + 48)
+    putchar(r2 % 10 + 48)
+    putchar(10)
+    putchar(10)
+
+    # Range tests
+    puts("Range patterns:")
+    puts("match_range(3) [0..5] =")
+    putchar(match_range(3) + 48)
+    putchar(10)
+
+    puts("match_range(7) [5..10] =")
+    putchar(match_range(7) + 48)
+    putchar(10)
+
+    puts("match_range(15) [10..=20] =")
+    putchar(match_range(15) + 48)
+    putchar(10)
+
+    puts("match_range(50) [default] =")
+    putchar(match_range(50) + 48)
+    putchar(10)
+    putchar(10)
+
+    # Or pattern tests
+    puts("Or patterns:")
+    puts("match_or(2) [1|2|3] =")
+    putchar(match_or(2) / 10 + 48)
+    putchar(match_or(2) % 10 + 48)
+    putchar(10)
+
+    puts("match_or(5) [4|5] =")
+    putchar(match_or(5) / 10 + 48)
+    putchar(match_or(5) % 10 + 48)
+    putchar(10)
+    putchar(10)
+
+    # Guard tests
+    puts("Guard patterns:")
+    puts("match_guard(60) [>50] =")
+    r3 := match_guard(60)
+    putchar(r3 / 100 + 48)
+    putchar((r3 / 10) % 10 + 48)
+    putchar(r3 % 10 + 48)
+    putchar(10)
+
+    puts("match_guard(30) [>20] =")
+    r4 := match_guard(30)
+    putchar(r4 / 10 + 48)
+    putchar(r4 % 10 + 48)
+    putchar(10)
+
+    puts("match_guard(10) [else] =")
+    putchar(match_guard(10) / 10 + 48)
+    putchar(match_guard(10) % 10 + 48)
+    putchar(10)
+    putchar(10)
+
+    # Binding tests
+    puts("Variable binding:")
+    puts("match_bind(0) =")
+    putchar(match_bind(0) + 48)
+    putchar(10)
+
+    puts("match_bind(5)*2 =")
+    putchar(match_bind(5) / 10 + 48)
+    putchar(match_bind(5) % 10 + 48)
+    putchar(10)
+
+    puts("=== All tests passed! ===")
+    0
+}

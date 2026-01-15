@@ -1,17 +1,32 @@
-# Async test (currently sync implementation)
+# Async/Await test with state machine coroutines
+
+# Simple async function that doubles a value
 A F compute(x: i64) -> i64 {
     x * 2
 }
 
-F main() -> i64 {
-    puts("Testing async (sync for now):")
+# Another async function that adds values
+A F add_values(a: i64, b: i64) -> i64 {
+    a + b
+}
 
-    # Call async function with await
+F main() -> i64 {
+    puts("Testing async/await with coroutines:")
+
+    # Call async function - creates future, then poll until ready
     result := compute(21).await
     puts("compute(21).await =")
     putchar(result / 10 + 48)  # '4'
     putchar(result % 10 + 48)  # '2'
     putchar(10)
 
+    # Chained async calls
+    sum := add_values(10, 5).await
+    puts("add_values(10, 5).await =")
+    putchar(sum / 10 + 48)  # '1'
+    putchar(sum % 10 + 48)  # '5'
+    putchar(10)
+
+    puts("Async test complete!")
     0
 }

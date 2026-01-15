@@ -1,0 +1,27 @@
+[package]
+name = "vais-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Language Server Protocol implementation for Vais"
+
+[dependencies]
+# LSP
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+
+# Vais compiler
+vais-lexer = { path = "../vais-lexer" }
+vais-parser = { path = "../vais-parser" }
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+
+# Utilities
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dashmap = "5"
+ropey = "1"
+
+[[bin]]
+name = "vais-lsp"
+path = "src/main.rs"

@@ -11,6 +11,7 @@ use std::process::{Command, exit};
 
 use vais_ast::{Item, Module};
 use vais_codegen::CodeGenerator;
+use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
 use vais_parser::parse;
 use vais_types::TypeChecker;
@@ -156,8 +157,21 @@ fn cmd_build(
         .unwrap_or("main");
 
     let mut codegen = CodeGenerator::new(module_name);
-    let ir = codegen.generate_module(&merged_ast)
+    let raw_ir = codegen.generate_module(&merged_ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
+
+    // Apply optimization passes before emitting IR
+    let opt = match opt_level {
+        0 => OptLevel::O0,
+        1 => OptLevel::O1,
+        2 => OptLevel::O2,
+        _ => OptLevel::O3,
+    };
+    let ir = optimize_ir(&raw_ir, opt);
+
+    if verbose && opt_level > 0 {
+        println!("{} Applied Vais IR optimizations (O{})", "Optimizing".cyan().bold(), opt_level);
+    }
 
     // Determine output paths
     let ir_path = if emit_ir {

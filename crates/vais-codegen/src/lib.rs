@@ -5,6 +5,8 @@
 //! Note: This is a placeholder structure. Full LLVM integration requires
 //! the inkwell crate and LLVM installation.
 
+pub mod optimize;
+
 use std::collections::HashMap;
 use thiserror::Error;
 use vais_ast::{*, IfElse};
@@ -77,6 +79,35 @@ pub struct CodeGenerator {
 
     // Last generated lambda info (for Let statement to pick up)
     last_lambda_info: Option<ClosureInfo>,
+
+    // Async function state machine info
+    async_state_counter: usize,
+    async_await_points: Vec<AsyncAwaitPoint>,
+    current_async_function: Option<AsyncFunctionInfo>,
+}
+
+/// Information about an await point in an async function
+#[derive(Debug, Clone)]
+struct AsyncAwaitPoint {
+    /// State index after this await
+    state_index: usize,
+    /// Variable to store the awaited result
+    result_var: String,
+    /// LLVM type of the result
+    result_type: String,
+}
+
+/// Information about the current async function being compiled
+#[derive(Debug, Clone)]
+struct AsyncFunctionInfo {
+    /// Original function name
+    name: String,
+    /// State struct name for this async function
+    state_struct: String,
+    /// Captured variables that need to be stored in state
+    captured_vars: Vec<(String, ResolvedType)>,
+    /// Return type of the future
+    ret_type: ResolvedType,
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +189,9 @@ impl CodeGenerator {
             lambda_functions: Vec::new(),
             closures: HashMap::new(),
             last_lambda_info: None,
+            async_state_counter: 0,
+            async_await_points: Vec::new(),
+            current_async_function: None,
         };
 
         // Register built-in extern functions
@@ -476,6 +510,35 @@ impl CodeGenerator {
                 name: "feof".to_string(),
                 params: vec![("stream".to_string(), ResolvedType::I64)],
                 ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // strcmp: (s1, s2) -> int (returns 0 if equal)
+        self.functions.insert(
+            "strcmp".to_string(),
+            FunctionInfo {
+                name: "strcmp".to_string(),
+                params: vec![
+                    ("s1".to_string(), ResolvedType::Str),
+                    ("s2".to_string(), ResolvedType::Str),
+                ],
+                ret_type: ResolvedType::I32,
+                is_extern: true,
+            },
+        );
+
+        // strncmp: (s1, s2, n) -> int (compare up to n chars)
+        self.functions.insert(
+            "strncmp".to_string(),
+            FunctionInfo {
+                name: "strncmp".to_string(),
+                params: vec![
+                    ("s1".to_string(), ResolvedType::Str),
+                    ("s2".to_string(), ResolvedType::Str),
+                    ("n".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I32,
                 is_extern: true,
             },
         );
@@ -858,6 +921,11 @@ impl CodeGenerator {
     }
 
     fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
+        // Check if this is an async function
+        if f.is_async {
+            return self.generate_async_function(f);
+        }
+
         self.current_function = Some(f.name.node.clone());
         self.locals.clear();
         self.label_counter = 0;
@@ -938,6 +1006,171 @@ impl CodeGenerator {
         ir.push_str("}\n");
 
         self.current_function = None;
+        Ok(ir)
+    }
+
+    /// Generate an async function as a state machine coroutine
+    ///
+    /// Async functions are transformed into:
+    /// 1. A state struct holding local variables and current state
+    /// 2. A poll function that implements the state machine
+    /// 3. A create function that returns a pointer to the state struct
+    fn generate_async_function(&mut self, f: &Function) -> CodegenResult<String> {
+        let func_name = &f.name.node;
+        let state_struct_name = format!("{}__AsyncState", func_name);
+
+        // Collect parameters for state struct
+        let params: Vec<_> = f.params.iter().map(|p| {
+            let ty = self.ast_type_to_resolved(&p.ty.node);
+            (p.name.node.clone(), ty)
+        }).collect();
+
+        let ret_type = f
+            .ret_type
+            .as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        let ret_llvm = self.type_to_llvm(&ret_type);
+
+        // Reset async state tracking
+        self.async_state_counter = 0;
+        self.async_await_points.clear();
+        self.current_async_function = Some(AsyncFunctionInfo {
+            name: func_name.clone(),
+            state_struct: state_struct_name.clone(),
+            captured_vars: params.clone(),
+            ret_type: ret_type.clone(),
+        });
+
+        let mut ir = String::new();
+
+        // 1. Generate state struct type
+        // Structure: { i64 state, i64 result, param1, param2, ... }
+        ir.push_str(&format!("; Async state struct for {}\n", func_name));
+        ir.push_str(&format!("%{} = type {{ i64, {}", state_struct_name, ret_llvm));
+        for (_, ty) in &params {
+            ir.push_str(&format!(", {}", self.type_to_llvm(ty)));
+        }
+        ir.push_str(" }\n\n");
+
+        // 2. Generate create function: allocates and initializes state
+        ir.push_str(&format!("; Create function for async {}\n", func_name));
+        let create_params: Vec<_> = params.iter()
+            .map(|(name, ty)| format!("{} %{}", self.type_to_llvm(ty), name))
+            .collect();
+        ir.push_str(&format!(
+            "define i64 @{}({}) {{\n",
+            func_name,
+            create_params.join(", ")
+        ));
+        ir.push_str("entry:\n");
+
+        // Calculate struct size (8 bytes per field: state + result + params)
+        let struct_size = 16 + params.len() * 8;
+        ir.push_str(&format!("  %state_ptr = call i64 @malloc(i64 {})\n", struct_size));
+        ir.push_str(&format!("  %state = inttoptr i64 %state_ptr to %{}*\n", state_struct_name));
+
+        // Initialize state to 0 (start state)
+        ir.push_str(&format!("  %state_field = getelementptr %{}, %{}* %state, i32 0, i32 0\n",
+            state_struct_name, state_struct_name));
+        ir.push_str("  store i64 0, i64* %state_field\n");
+
+        // Store parameters in state struct
+        for (i, (name, _ty)) in params.iter().enumerate() {
+            let field_idx = i + 2; // Skip state and result fields
+            ir.push_str(&format!(
+                "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}\n",
+                name, state_struct_name, state_struct_name, field_idx
+            ));
+            ir.push_str(&format!("  store i64 %{}, i64* %param_{}_ptr\n", name, name));
+        }
+
+        ir.push_str("  ret i64 %state_ptr\n");
+        ir.push_str("}\n\n");
+
+        // 3. Generate poll function: implements state machine
+        self.current_function = Some(format!("{}__poll", func_name));
+        self.locals.clear();
+        self.label_counter = 0;
+        self.loop_stack.clear();
+
+        ir.push_str(&format!("; Poll function for async {}\n", func_name));
+        ir.push_str(&format!(
+            "define {{ i64, {} }} @{}__poll(i64 %state_ptr) {{\n",
+            ret_llvm, func_name
+        ));
+        ir.push_str("entry:\n");
+        ir.push_str(&format!("  %state = inttoptr i64 %state_ptr to %{}*\n", state_struct_name));
+
+        // Load current state
+        ir.push_str(&format!("  %state_field = getelementptr %{}, %{}* %state, i32 0, i32 0\n",
+            state_struct_name, state_struct_name));
+        ir.push_str("  %current_state = load i64, i64* %state_field\n");
+
+        // Load parameters from state into locals
+        for (i, (name, ty)) in params.iter().enumerate() {
+            let field_idx = i + 2;
+            ir.push_str(&format!(
+                "  %param_{}_ptr = getelementptr %{}, %{}* %state, i32 0, i32 {}\n",
+                name, state_struct_name, state_struct_name, field_idx
+            ));
+            ir.push_str(&format!("  %{} = load i64, i64* %param_{}_ptr\n", name, name));
+
+            self.locals.insert(
+                name.clone(),
+                LocalVar {
+                    ty: ty.clone(),
+                    is_param: true,
+                    llvm_name: name.clone(),
+                },
+            );
+        }
+
+        // State machine switch
+        ir.push_str("  switch i64 %current_state, label %state_invalid [\n");
+        ir.push_str("    i64 0, label %state_0\n");
+        ir.push_str("  ]\n\n");
+
+        // Generate state_0 (initial state) - execute function body
+        ir.push_str("state_0:\n");
+
+        let mut counter = 0;
+        let body_result = match &f.body {
+            FunctionBody::Expr(expr) => {
+                self.generate_expr(expr, &mut counter)?
+            }
+            FunctionBody::Block(stmts) => {
+                self.generate_block(stmts, &mut counter)?
+            }
+        };
+
+        ir.push_str(&body_result.1);
+
+        // Store result and return Ready
+        ir.push_str(&format!("  %result_ptr = getelementptr %{}, %{}* %state, i32 0, i32 1\n",
+            state_struct_name, state_struct_name));
+        ir.push_str(&format!("  store {} {}, {}* %result_ptr\n", ret_llvm, body_result.0, ret_llvm));
+
+        // Set state to -1 (completed)
+        ir.push_str("  store i64 -1, i64* %state_field\n");
+
+        // Return {1, result} for Ready
+        ir.push_str(&format!("  %ret_val = load {}, {}* %result_ptr\n", ret_llvm, ret_llvm));
+        ir.push_str(&format!("  %ret_0 = insertvalue {{ i64, {} }} undef, i64 1, 0\n", ret_llvm));
+        ir.push_str(&format!("  %ret_1 = insertvalue {{ i64, {} }} %ret_0, {} %ret_val, 1\n", ret_llvm, ret_llvm));
+        ir.push_str(&format!("  ret {{ i64, {} }} %ret_1\n\n", ret_llvm));
+
+        // Invalid state handler
+        ir.push_str("state_invalid:\n");
+        ir.push_str(&format!("  %invalid_ret = insertvalue {{ i64, {} }} undef, i64 0, 0\n", ret_llvm));
+        ir.push_str(&format!("  ret {{ i64, {} }} %invalid_ret\n", ret_llvm));
+
+        ir.push_str("}\n");
+
+        self.current_function = None;
+        self.current_async_function = None;
+
         Ok(ir)
     }
 
@@ -2249,19 +2482,82 @@ impl CodeGenerator {
                 }
             }
 
-            // Await expression: for now, just evaluate the inner expression synchronously
-            // Future: implement proper coroutine transformation
+            // Await expression: poll the future until Ready
             Expr::Await(inner) => {
-                // Simply evaluate the expression (blocking await)
-                self.generate_expr(inner, counter)
+                let (future_ptr, future_ir) = self.generate_expr(inner, counter)?;
+                let mut ir = future_ir;
+
+                // Get the function name being awaited (for poll function lookup)
+                let poll_func = match &inner.node {
+                    Expr::Call { func, .. } => {
+                        if let Expr::Ident(name) = &func.node {
+                            format!("{}__poll", name)
+                        } else {
+                            // Generic async poll for unknown futures
+                            "__async_poll".to_string()
+                        }
+                    }
+                    Expr::MethodCall { method, .. } => {
+                        format!("{}__poll", method.node)
+                    }
+                    _ => "__async_poll".to_string(),
+                };
+
+                // Generate blocking poll loop
+                let poll_start = self.next_label("await_poll");
+                let poll_ready = self.next_label("await_ready");
+                let poll_pending = self.next_label("await_pending");
+
+                ir.push_str(&format!("  br label %{}\n\n", poll_start));
+                ir.push_str(&format!("{}:\n", poll_start));
+
+                // Call poll function: returns {i64 status, i64 result}
+                let poll_result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = call {{ i64, i64 }} @{}(i64 {})\n",
+                    poll_result, poll_func, future_ptr
+                ));
+
+                // Extract status (0 = Pending, 1 = Ready)
+                let status = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i64, i64 }} {}, 0\n",
+                    status, poll_result
+                ));
+
+                // Check if Ready
+                let is_ready = self.next_temp(counter);
+                ir.push_str(&format!("  {} = icmp eq i64 {}, 1\n", is_ready, status));
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n\n",
+                    is_ready, poll_ready, poll_pending
+                ));
+
+                // Pending: yield and retry (for now just spin)
+                ir.push_str(&format!("{}:\n", poll_pending));
+                ir.push_str(&format!("  br label %{}\n\n", poll_start));
+
+                // Ready: extract result
+                ir.push_str(&format!("{}:\n", poll_ready));
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = extractvalue {{ i64, i64 }} {}, 1\n",
+                    result, poll_result
+                ));
+
+                Ok((result, ir))
             }
 
-            // Spawn expression: for now, just evaluate inline (synchronous)
-            // Future: implement thread/task spawning with runtime
+            // Spawn expression: create a new task for the runtime
             Expr::Spawn(inner) => {
-                // TODO: Implement proper spawn with runtime
-                // For now, just evaluate inline
-                self.generate_expr(inner, counter)
+                let (future_ptr, future_ir) = self.generate_expr(inner, counter)?;
+                let mut ir = future_ir;
+
+                // Spawn returns the task/future handle for later awaiting
+                // For now, just return the future pointer directly
+                ir.push_str(&format!("; Spawned task at {}\n", future_ptr));
+
+                Ok((future_ptr, ir))
             }
 
             // Lambda expression with captures
@@ -2777,37 +3073,53 @@ impl CodeGenerator {
                     self.generate_pattern_check(&arm.pattern, &match_val, counter)?;
                 ir.push_str(&check_ir);
 
-                // Handle guard
+                // Handle guard - need to bind variables first so guard can use them
                 if let Some(guard) = &arm.guard {
+                    let guard_bind = self.next_label("match.guard.bind");
                     let guard_check = self.next_label("match.guard.check");
 
                     // First check pattern
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
-                        check_val, guard_check, next_label
+                        check_val, guard_bind, next_label
                     ));
+
+                    // Bind pattern variables for guard to use
+                    ir.push_str(&format!("{}:\n", guard_bind));
+                    let bind_ir = self.generate_pattern_bindings(&arm.pattern, &match_val, counter)?;
+                    ir.push_str(&bind_ir);
+                    ir.push_str(&format!("  br label %{}\n", guard_check));
 
                     // Then check guard
                     ir.push_str(&format!("{}:\n", guard_check));
                     let (guard_val, guard_ir) = self.generate_expr(guard, counter)?;
                     ir.push_str(&guard_ir);
+                    // Guard value is i64 (0 or 1), convert to i1 for branch
+                    let guard_bool = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = icmp ne i64 {}, 0\n",
+                        guard_bool, guard_val
+                    ));
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
-                        guard_val, arm_body_label, next_label
+                        guard_bool, arm_body_label, next_label
                     ));
+
+                    // Generate arm body (bindings already done)
+                    ir.push_str(&format!("{}:\n", arm_body_label));
                 } else {
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
                         check_val, arm_body_label, next_label
                     ));
+
+                    // Generate arm body
+                    ir.push_str(&format!("{}:\n", arm_body_label));
+
+                    // Bind pattern variables if needed
+                    let bind_ir = self.generate_pattern_bindings(&arm.pattern, &match_val, counter)?;
+                    ir.push_str(&bind_ir);
                 }
-
-                // Generate arm body
-                ir.push_str(&format!("{}:\n", arm_body_label));
-
-                // Bind pattern variables if needed
-                let bind_ir = self.generate_pattern_bindings(&arm.pattern, &match_val, counter)?;
-                ir.push_str(&bind_ir);
 
                 let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
                 ir.push_str(&body_ir);
@@ -2860,24 +3172,58 @@ impl CodeGenerator {
                 Ok(("1".to_string(), String::new()))
             }
             Pattern::Literal(lit) => {
-                let (lit_val, cmp_instr) = match lit {
-                    Literal::Int(n) => (n.to_string(), "icmp eq"),
-                    Literal::Bool(b) => (if *b { "1" } else { "0" }.to_string(), "icmp eq"),
-                    Literal::Float(f) => (format!("{:e}", f), "fcmp oeq"),
-                    Literal::String(s) => {
-                        // String comparison is more complex, for now just compare pointers
-                        let _ = s;
-                        return Ok(("1".to_string(), String::new()));
+                match lit {
+                    Literal::Int(n) => {
+                        let result = self.next_temp(counter);
+                        let ir = format!("  {} = icmp eq i64 {}, {}\n", result, match_val, n);
+                        Ok((result, ir))
                     }
-                };
+                    Literal::Bool(b) => {
+                        let lit_val = if *b { "1" } else { "0" };
+                        let result = self.next_temp(counter);
+                        let ir = format!("  {} = icmp eq i64 {}, {}\n", result, match_val, lit_val);
+                        Ok((result, ir))
+                    }
+                    Literal::Float(f) => {
+                        let result = self.next_temp(counter);
+                        let ir = format!("  {} = fcmp oeq double {}, {:e}\n", result, match_val, f);
+                        Ok((result, ir))
+                    }
+                    Literal::String(s) => {
+                        // String comparison using strcmp
+                        let mut ir = String::new();
 
-                let result = self.next_temp(counter);
-                let ty = match lit {
-                    Literal::Float(_) => "double",
-                    _ => "i64",
-                };
-                let ir = format!("  {} = {} {} {}, {}\n", result, cmp_instr, ty, match_val, lit_val);
-                Ok((result, ir))
+                        // Create string constant for the pattern
+                        let const_name = format!(".str_pat.{}", self.string_counter);
+                        self.string_counter += 1;
+                        self.string_constants.push((const_name.clone(), s.clone()));
+
+                        // Get pointer to the constant string
+                        let str_ptr = self.next_temp(counter);
+                        let str_len = s.len() + 1;
+                        ir.push_str(&format!(
+                            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i32 0, i32 0\n",
+                            str_ptr, str_len, str_len, const_name
+                        ));
+
+                        // Call strcmp: int strcmp(const char* s1, const char* s2)
+                        // Returns 0 if strings are equal
+                        let cmp_result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = call i32 @strcmp(i8* {}, i8* {})\n",
+                            cmp_result, match_val, str_ptr
+                        ));
+
+                        // Check if strcmp returned 0 (equal)
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = icmp eq i32 {}, 0\n",
+                            result, cmp_result
+                        ));
+
+                        Ok((result, ir))
+                    }
+                }
             }
             Pattern::Range { start, end, inclusive } => {
                 let mut ir = String::new();

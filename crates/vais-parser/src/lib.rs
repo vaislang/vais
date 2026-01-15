@@ -1524,12 +1524,22 @@ impl Parser {
 
         let mut arms = Vec::new();
         while !self.check(&Token::RBrace) && !self.is_at_end() {
-            let pattern = self.parse_pattern()?;
+            // Parse pattern (possibly with Or patterns using |)
+            let pattern = self.parse_or_pattern()?;
+
+            // Check for guard: `I condition`
+            let guard = if self.check(&Token::If) {
+                self.advance();
+                Some(Box::new(self.parse_expr()?))
+            } else {
+                None
+            };
+
             self.expect(&Token::FatArrow)?;
             let body = self.parse_expr()?;
             arms.push(MatchArm {
                 pattern,
-                guard: None,
+                guard,
                 body: Box::new(body),
             });
             if !self.check(&Token::RBrace) {
@@ -1547,6 +1557,25 @@ impl Parser {
             },
             Span::new(start, end),
         ))
+    }
+
+    /// Parse or-pattern: `pattern | pattern | ...`
+    fn parse_or_pattern(&mut self) -> ParseResult<Spanned<Pattern>> {
+        let start = self.current_span().start;
+        let first = self.parse_pattern()?;
+
+        // Check for | to form Or pattern
+        if self.check(&Token::Pipe) {
+            let mut patterns = vec![first];
+            while self.check(&Token::Pipe) {
+                self.advance();
+                patterns.push(self.parse_pattern()?);
+            }
+            let end = self.prev_span().end;
+            Ok(Spanned::new(Pattern::Or(patterns), Span::new(start, end)))
+        } else {
+            Ok(first)
+        }
     }
 
     /// Parse lambda expression: |params| body

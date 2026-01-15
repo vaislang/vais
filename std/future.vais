@@ -1,0 +1,72 @@
+# Future and async runtime types
+# Stackless coroutine-based async/await implementation
+
+# Poll result: Ready(value) or Pending
+E Poll {
+    Pending,
+    Ready(i64)
+}
+
+# Future state machine states
+# State 0 = initial, State N = after Nth await point
+S FutureState {
+    state: i64,      # Current state index
+    value: i64,      # Return value when Ready
+    context: i64     # Pointer to captured variables
+}
+
+# Future trait - poll the future for completion
+W Future {
+    F poll(&self, ctx: i64) -> Poll
+}
+
+# Task wrapper for the runtime scheduler
+S Task {
+    id: i64,
+    future_ptr: i64,  # Pointer to future state
+    status: i64       # 0 = pending, 1 = ready, 2 = running
+}
+
+X Task {
+    F new(id: i64, future_ptr: i64) -> Task {
+        Task { id: id, future_ptr: future_ptr, status: 0 }
+    }
+
+    F is_ready(&self) -> i64 {
+        self.status == 1
+    }
+
+    F is_pending(&self) -> i64 {
+        self.status == 0
+    }
+}
+
+# Simple single-threaded executor
+S Executor {
+    task_count: i64,
+    current_task: i64
+}
+
+X Executor {
+    F new() -> Executor {
+        Executor { task_count: 0, current_task: 0 }
+    }
+
+    # Spawn a new task (returns task id)
+    F spawn(&self, future_ptr: i64) -> i64 {
+        task_id := self.task_count
+        self.task_count = self.task_count + 1
+        task_id
+    }
+}
+
+# Runtime context passed to poll
+S Context {
+    waker: i64  # Pointer to waker function
+}
+
+X Context {
+    F new() -> Context {
+        Context { waker: 0 }
+    }
+}
