@@ -9,12 +9,12 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Vais Team"]
 license = "MIT"
-repository = "https://github.com/vais-lang/vais"
-description = "Vais 2.0 - AI-optimized systems programming language"
+repository = "https://github.com/sswoo88/vais"
+description = "Vais 2.0 - AI-optimized systems programming language with LLVM backend"
 
 [workspace.dependencies]
 # Core
