@@ -243,11 +243,12 @@ impl Parser {
         })
     }
 
-    /// Parse use statement: `module` or `module::{items}`
+    /// Parse use statement: `module` or `module/submodule` or `module::submodule`
     fn parse_use(&mut self) -> ParseResult<Use> {
         let mut path = vec![self.parse_ident()?];
 
-        while self.check(&Token::ColonColon) {
+        // Support both `::` and `/` as path separators
+        while self.check(&Token::ColonColon) || self.check(&Token::Slash) {
             self.advance();
             path.push(self.parse_ident()?);
         }

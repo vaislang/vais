@@ -449,6 +449,33 @@ impl TypeChecker {
             },
         );
 
+        // load_i64: (ptr) -> i64
+        self.functions.insert(
+            "load_i64".to_string(),
+            FunctionSig {
+                name: "load_i64".to_string(),
+                generics: vec![],
+                params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // store_i64: (ptr, val) -> ()
+        self.functions.insert(
+            "store_i64".to_string(),
+            FunctionSig {
+                name: "store_i64".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    ("val".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::Unit,
+                is_async: false,
+            },
+        );
+
         // ===== File I/O functions =====
 
         // fopen: (path, mode) -> FILE* (as i64)
@@ -650,8 +677,25 @@ impl TypeChecker {
                 Item::Function(f) => self.check_function(f)?,
                 Item::Impl(impl_block) => {
                     // Check impl method bodies
+                    // Get struct generics if the target is a struct
+                    let struct_generics = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => {
+                            // Look up the struct definition to get its generics
+                            self.structs.get(name)
+                                .map(|s| s.generics.iter().map(|g| GenericParam {
+                                    name: Spanned::new(g.clone(), Span::default()),
+                                    bounds: vec![],
+                                }).collect::<Vec<_>>())
+                                .unwrap_or_default()
+                        }
+                        _ => vec![],
+                    };
+                    // Also include impl-level generics
+                    let mut all_generics = struct_generics;
+                    all_generics.extend(impl_block.generics.iter().cloned());
+
                     for method in &impl_block.methods {
-                        self.check_impl_method(&impl_block.target_type.node, &method.node)?;
+                        self.check_impl_method(&impl_block.target_type.node, &method.node, &all_generics)?;
                     }
                 }
                 _ => {}
@@ -737,6 +781,9 @@ impl TypeChecker {
             return Err(TypeError::Duplicate(name));
         }
 
+        // Set current generics for type resolution
+        let (prev_generics, prev_bounds) = self.set_generics(&s.generics);
+
         let mut fields = HashMap::new();
         for field in &s.fields {
             fields.insert(field.name.node.clone(), self.resolve_type(&field.ty.node));
@@ -772,6 +819,9 @@ impl TypeChecker {
                 },
             );
         }
+
+        // Restore previous generics
+        self.restore_generics(prev_generics, prev_bounds);
 
         self.structs.insert(
             name.clone(),
@@ -1010,7 +1060,7 @@ impl TypeChecker {
     }
 
     /// Check an impl method body
-    fn check_impl_method(&mut self, target_type: &Type, method: &Function) -> TypeResult<()> {
+    fn check_impl_method(&mut self, target_type: &Type, method: &Function, struct_generics: &[GenericParam]) -> TypeResult<()> {
         self.push_scope();
 
         // Get the type name for self
@@ -1019,8 +1069,12 @@ impl TypeChecker {
             _ => return Ok(()), // Skip non-named types
         };
 
-        // Set current generic parameters
-        let (prev_generics, prev_bounds) = self.set_generics(&method.generics);
+        // Combine struct generics with method generics
+        let mut all_generics: Vec<GenericParam> = struct_generics.to_vec();
+        all_generics.extend(method.generics.iter().cloned());
+
+        // Set current generic parameters (including struct-level generics)
+        let (prev_generics, prev_bounds) = self.set_generics(&all_generics);
 
         // Add parameters to scope
         for param in &method.params {

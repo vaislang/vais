@@ -1,0 +1,10 @@
+# Test import
+U std/test_simple
+
+F main() -> i64 {
+    result := test_func(10, 20)
+    putchar(result / 10 + 48)
+    putchar(result % 10 + 48)
+    putchar(10)
+    0
+}

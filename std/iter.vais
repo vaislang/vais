@@ -153,7 +153,9 @@ F iter_sum(start: i64, end: i64) -> i64 {
         n := end - 1
         k := start
         # Sum of 1..n minus sum of 1..(k-1)
-        (n * (n + 1)) / 2 - (k * (k - 1)) / 2
+        n_sum := n * (n + 1) / 2
+        k_sum := k * (k - 1) / 2
+        n_sum - k_sum
     }
 }
 
@@ -162,8 +164,7 @@ F iter_product(start: i64, end: i64) -> i64 {
     I end <= start {
         1
     } E {
-        result := 1
-        i := start
+        result := mut 1
         # Note: Can't use loop with break due to codegen issue
         # This is a simplified version
         I end - start >= 1 { result = result * start }

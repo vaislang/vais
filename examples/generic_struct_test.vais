@@ -1,0 +1,22 @@
+# Test generic struct
+S Pair<T> {
+    first: T,
+    second: T
+}
+
+X Pair {
+    F sum(&self) -> i64 = self.first + self.second
+}
+
+F main() -> i64 {
+    puts("Testing generic struct:")
+
+    p := Pair { first: 10, second: 20 }
+    s := p.sum()
+    puts("Pair{10, 20}.sum() =")
+    putchar(s / 10 + 48)
+    putchar(s % 10 + 48)
+    putchar(10)
+
+    0
+}

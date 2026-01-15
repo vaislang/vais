@@ -249,15 +249,71 @@ fn load_module_with_imports(
     Ok(Module { items: all_items })
 }
 
+/// Get the standard library path
+fn get_std_path() -> Option<PathBuf> {
+    // Try multiple locations for std library:
+    // 1. Relative to current executable (for installed vaisc)
+    // 2. Current working directory (for development)
+    // 3. VAIS_STD_PATH environment variable
+
+    if let Ok(std_path) = std::env::var("VAIS_STD_PATH") {
+        let path = PathBuf::from(std_path);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    // Try relative to executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let std_path = exe_dir.join("std");
+            if std_path.exists() {
+                return Some(std_path);
+            }
+            // Also try ../std (for cargo run)
+            let std_path = exe_dir.parent().and_then(|p| Some(p.join("std")));
+            if let Some(path) = std_path {
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+
+    // Try current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        let std_path = cwd.join("std");
+        if std_path.exists() {
+            return Some(std_path);
+        }
+    }
+
+    None
+}
+
 /// Resolve import path to file path
 fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty import path".to_string());
     }
 
+    // Check if this is a std library import (starts with "std")
+    let is_std_import = path.first().map(|s| s.node.as_str()) == Some("std");
+
+    let search_base = if is_std_import {
+        // For std imports, use the standard library path
+        match get_std_path() {
+            Some(std_path) => std_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+            None => return Err("Cannot find Vais standard library. Set VAIS_STD_PATH or run from project root.".to_string()),
+        }
+    } else {
+        base_dir.to_path_buf()
+    };
+
     // Convert module path to file path
     // e.g., `U utils` -> `utils.vais` or `utils/mod.vais`
-    let mut file_path = base_dir.to_path_buf();
+    // e.g., `U std/option` -> `std/option.vais`
+    let mut file_path = search_base;
     for (i, segment) in path.iter().enumerate() {
         if i == path.len() - 1 {
             // Last segment - try as file first, then as directory with mod.vais

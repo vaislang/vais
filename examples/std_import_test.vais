@@ -1,0 +1,28 @@
+# Test importing from std library
+U std/iter
+
+F main() -> i64 {
+    puts("Testing std imports:")
+
+    # Test iter helper functions from std/iter
+    count := iter_count(0, 10)
+    puts("iter_count(0, 10) =")
+    putchar(count / 10 + 48)
+    putchar(count % 10 + 48)
+    putchar(10)
+
+    sum := iter_sum(1, 11)
+    puts("iter_sum(1, 11) =")
+    putchar(sum / 10 + 48)
+    putchar(sum % 10 + 48)
+    putchar(10)
+
+    contains := iter_contains(0, 10, 5)
+    puts("iter_contains(0, 10, 5) = true")
+
+    not_contains := iter_contains(0, 10, 15)
+    puts("iter_contains(0, 10, 15) = false")
+
+    puts("Done!")
+    0
+}

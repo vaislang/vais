@@ -294,6 +294,31 @@ impl CodeGenerator {
             },
         );
 
+        // load_i64: load 64-bit integer from memory
+        self.functions.insert(
+            "load_i64".to_string(),
+            FunctionInfo {
+                name: "__load_i64".to_string(),
+                params: vec![("ptr".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: false, // We'll generate this
+            },
+        );
+
+        // store_i64: store 64-bit integer to memory
+        self.functions.insert(
+            "store_i64".to_string(),
+            FunctionInfo {
+                name: "__store_i64".to_string(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64),
+                    ("val".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::Unit,
+                is_extern: false, // We'll generate this
+            },
+        );
+
         // ===== File I/O functions =====
 
         // fopen: (path, mode) -> FILE*
@@ -610,6 +635,24 @@ impl CodeGenerator {
         ir.push_str("  %0 = inttoptr i64 %ptr to i8*\n");
         ir.push_str("  %1 = trunc i64 %val to i8\n");
         ir.push_str("  store i8 %1, i8* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        // __load_i64: load a 64-bit integer from memory address
+        ir.push_str("\n; Helper function: load i64 from memory\n");
+        ir.push_str("define i64 @__load_i64(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i64*\n");
+        ir.push_str("  %1 = load i64, i64* %0\n");
+        ir.push_str("  ret i64 %1\n");
+        ir.push_str("}\n");
+
+        // __store_i64: store a 64-bit integer to memory address
+        ir.push_str("\n; Helper function: store i64 to memory\n");
+        ir.push_str("define void @__store_i64(i64 %ptr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i64*\n");
+        ir.push_str("  store i64 %val, i64* %0\n");
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
 
