@@ -1,0 +1,35 @@
+# Result and error handling test - minimal
+
+E MyResult {
+    MyOk(i64),
+    MyErr(i64)
+}
+
+F make_ok(v: i64) -> MyResult {
+    MyOk(v)
+}
+
+F make_err(e: i64) -> MyResult {
+    MyErr(e)
+}
+
+F main() -> i64 {
+    puts("=== Result Test ===")
+    putchar(10)
+
+    puts("Testing enum Result:")
+
+    # Create Ok result
+    ok_result := make_ok(42)
+    puts("  Created Ok(42)")
+    putchar(10)
+
+    # Create Err result
+    err_result := make_err(1)
+    puts("  Created Err(1)")
+    putchar(10)
+
+    putchar(10)
+    puts("=== Test Complete ===")
+    0
+}

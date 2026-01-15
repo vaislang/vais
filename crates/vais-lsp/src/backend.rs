@@ -5,10 +5,25 @@ use ropey::Rope;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-use vais_ast::{Module, Span};
+use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned};
 use vais_parser::parse;
 
 use crate::semantic::get_semantic_tokens;
+
+/// Symbol definition information
+#[derive(Debug, Clone)]
+struct SymbolDef {
+    name: String,
+    kind: SymbolKind,
+    span: Span,
+}
+
+/// Symbol reference information
+#[derive(Debug, Clone)]
+struct SymbolRef {
+    name: String,
+    span: Span,
+}
 
 /// Document state
 pub struct Document {
@@ -77,6 +92,344 @@ impl VaisBackend {
             end: self.offset_to_position(rope, span.end),
         }
     }
+
+    /// Collect all symbol definitions from an AST
+    fn collect_definitions(&self, ast: &Module) -> Vec<SymbolDef> {
+        let mut defs = Vec::new();
+
+        for item in &ast.items {
+            match &item.node {
+                Item::Function(f) => {
+                    defs.push(SymbolDef {
+                        name: f.name.node.clone(),
+                        kind: SymbolKind::FUNCTION,
+                        span: f.name.span,
+                    });
+                    // Also collect parameters as local definitions
+                    for param in &f.params {
+                        if param.name.node != "self" {
+                            defs.push(SymbolDef {
+                                name: param.name.node.clone(),
+                                kind: SymbolKind::VARIABLE,
+                                span: param.name.span,
+                            });
+                        }
+                    }
+                }
+                Item::Struct(s) => {
+                    defs.push(SymbolDef {
+                        name: s.name.node.clone(),
+                        kind: SymbolKind::STRUCT,
+                        span: s.name.span,
+                    });
+                    for field in &s.fields {
+                        defs.push(SymbolDef {
+                            name: field.name.node.clone(),
+                            kind: SymbolKind::FIELD,
+                            span: field.name.span,
+                        });
+                    }
+                }
+                Item::Enum(e) => {
+                    defs.push(SymbolDef {
+                        name: e.name.node.clone(),
+                        kind: SymbolKind::ENUM,
+                        span: e.name.span,
+                    });
+                    for variant in &e.variants {
+                        defs.push(SymbolDef {
+                            name: variant.name.node.clone(),
+                            kind: SymbolKind::ENUM_MEMBER,
+                            span: variant.name.span,
+                        });
+                    }
+                }
+                Item::Trait(t) => {
+                    defs.push(SymbolDef {
+                        name: t.name.node.clone(),
+                        kind: SymbolKind::INTERFACE,
+                        span: t.name.span,
+                    });
+                }
+                _ => {}
+            }
+        }
+        defs
+    }
+
+    /// Collect all symbol references from an AST
+    fn collect_references(&self, ast: &Module) -> Vec<SymbolRef> {
+        let mut refs = Vec::new();
+
+        for item in &ast.items {
+            match &item.node {
+                Item::Function(f) => {
+                    match &f.body {
+                        FunctionBody::Expr(expr) => {
+                            self.collect_expr_refs(&expr, &mut refs);
+                        }
+                        FunctionBody::Block(stmts) => {
+                            for stmt in stmts {
+                                self.collect_stmt_refs(&stmt, &mut refs);
+                            }
+                        }
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        match &method.node.body {
+                            FunctionBody::Expr(expr) => {
+                                self.collect_expr_refs(&expr, &mut refs);
+                            }
+                            FunctionBody::Block(stmts) => {
+                                for stmt in stmts {
+                                    self.collect_stmt_refs(&stmt, &mut refs);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        refs
+    }
+
+    /// Collect references from an expression
+    fn collect_expr_refs(&self, expr: &Spanned<Expr>, refs: &mut Vec<SymbolRef>) {
+        match &expr.node {
+            Expr::Ident(name) => {
+                refs.push(SymbolRef {
+                    name: name.clone(),
+                    span: expr.span,
+                });
+            }
+            Expr::Call { func, args } => {
+                self.collect_expr_refs(func, refs);
+                for arg in args {
+                    self.collect_expr_refs(arg, refs);
+                }
+            }
+            Expr::MethodCall { receiver, method, args } => {
+                self.collect_expr_refs(receiver, refs);
+                refs.push(SymbolRef {
+                    name: method.node.clone(),
+                    span: method.span,
+                });
+                for arg in args {
+                    self.collect_expr_refs(arg, refs);
+                }
+            }
+            Expr::StaticMethodCall { type_name, method, args } => {
+                refs.push(SymbolRef {
+                    name: type_name.node.clone(),
+                    span: type_name.span,
+                });
+                refs.push(SymbolRef {
+                    name: method.node.clone(),
+                    span: method.span,
+                });
+                for arg in args {
+                    self.collect_expr_refs(arg, refs);
+                }
+            }
+            Expr::Field { expr: e, field } => {
+                self.collect_expr_refs(e, refs);
+                refs.push(SymbolRef {
+                    name: field.node.clone(),
+                    span: field.span,
+                });
+            }
+            Expr::Binary { left, right, .. } => {
+                self.collect_expr_refs(left, refs);
+                self.collect_expr_refs(right, refs);
+            }
+            Expr::Unary { expr: e, .. } => {
+                self.collect_expr_refs(e, refs);
+            }
+            Expr::If { cond, then, else_ } => {
+                self.collect_expr_refs(cond, refs);
+                for stmt in then {
+                    self.collect_stmt_refs(stmt, refs);
+                }
+                if let Some(else_branch) = else_ {
+                    self.collect_if_else_refs(else_branch, refs);
+                }
+            }
+            Expr::Loop { iter, body, .. } => {
+                if let Some(iter_expr) = iter {
+                    self.collect_expr_refs(iter_expr, refs);
+                }
+                for stmt in body {
+                    self.collect_stmt_refs(stmt, refs);
+                }
+            }
+            Expr::Match { expr: e, arms } => {
+                self.collect_expr_refs(e, refs);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.collect_expr_refs(guard, refs);
+                    }
+                    self.collect_expr_refs(&arm.body, refs);
+                }
+            }
+            Expr::Array(elements) | Expr::Tuple(elements) => {
+                for elem in elements {
+                    self.collect_expr_refs(elem, refs);
+                }
+            }
+            Expr::StructLit { name, fields } => {
+                refs.push(SymbolRef {
+                    name: name.node.clone(),
+                    span: name.span,
+                });
+                for (_, value) in fields {
+                    self.collect_expr_refs(value, refs);
+                }
+            }
+            Expr::Index { expr: e, index } => {
+                self.collect_expr_refs(e, refs);
+                self.collect_expr_refs(index, refs);
+            }
+            Expr::Await(inner) | Expr::Spawn(inner) => {
+                self.collect_expr_refs(inner, refs);
+            }
+            Expr::Lambda { body, .. } => {
+                self.collect_expr_refs(body, refs);
+            }
+            Expr::Ternary { cond, then, else_ } => {
+                self.collect_expr_refs(cond, refs);
+                self.collect_expr_refs(then, refs);
+                self.collect_expr_refs(else_, refs);
+            }
+            Expr::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    self.collect_expr_refs(s, refs);
+                }
+                if let Some(e) = end {
+                    self.collect_expr_refs(e, refs);
+                }
+            }
+            Expr::Assign { target, value } => {
+                self.collect_expr_refs(target, refs);
+                self.collect_expr_refs(value, refs);
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    self.collect_stmt_refs(stmt, refs);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect references from IfElse
+    fn collect_if_else_refs(&self, if_else: &vais_ast::IfElse, refs: &mut Vec<SymbolRef>) {
+        match if_else {
+            vais_ast::IfElse::ElseIf(cond, stmts, else_opt) => {
+                self.collect_expr_refs(cond, refs);
+                for stmt in stmts {
+                    self.collect_stmt_refs(stmt, refs);
+                }
+                if let Some(else_branch) = else_opt {
+                    self.collect_if_else_refs(else_branch, refs);
+                }
+            }
+            vais_ast::IfElse::Else(stmts) => {
+                for stmt in stmts {
+                    self.collect_stmt_refs(stmt, refs);
+                }
+            }
+        }
+    }
+
+    /// Collect references from a statement
+    fn collect_stmt_refs(&self, stmt: &Spanned<Stmt>, refs: &mut Vec<SymbolRef>) {
+        match &stmt.node {
+            Stmt::Let { value, .. } => {
+                self.collect_expr_refs(value, refs);
+            }
+            Stmt::Expr(expr) => {
+                self.collect_expr_refs(expr, refs);
+            }
+            Stmt::Return(expr) => {
+                if let Some(e) = expr {
+                    self.collect_expr_refs(e, refs);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Find definition for an identifier at position
+    fn find_definition_at(&self, ast: &Module, offset: usize) -> Option<SymbolDef> {
+        let defs = self.collect_definitions(ast);
+        let refs = self.collect_references(ast);
+
+        // First check if we're on a reference
+        for r in &refs {
+            if r.span.start <= offset && offset <= r.span.end {
+                // Found a reference, now find its definition
+                for d in &defs {
+                    if d.name == r.name {
+                        return Some(d.clone());
+                    }
+                }
+            }
+        }
+
+        // Check if we're on a definition itself
+        for d in &defs {
+            if d.span.start <= offset && offset <= d.span.end {
+                return Some(d.clone());
+            }
+        }
+
+        None
+    }
+
+    /// Find all references to a symbol
+    fn find_all_references(&self, ast: &Module, symbol_name: &str) -> Vec<Span> {
+        let mut locations = Vec::new();
+        let defs = self.collect_definitions(ast);
+        let refs = self.collect_references(ast);
+
+        // Add definition location
+        for d in &defs {
+            if d.name == symbol_name {
+                locations.push(d.span);
+            }
+        }
+
+        // Add reference locations
+        for r in &refs {
+            if r.name == symbol_name {
+                locations.push(r.span);
+            }
+        }
+
+        locations
+    }
+
+    /// Get the identifier name at a position
+    fn get_identifier_at(&self, ast: &Module, offset: usize) -> Option<String> {
+        let defs = self.collect_definitions(ast);
+        let refs = self.collect_references(ast);
+
+        for d in &defs {
+            if d.span.start <= offset && offset <= d.span.end {
+                return Some(d.name.clone());
+            }
+        }
+
+        for r in &refs {
+            if r.span.start <= offset && offset <= r.span.end {
+                return Some(r.name.clone());
+            }
+        }
+
+        None
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -97,6 +450,7 @@ impl LanguageServer for VaisBackend {
                     ..Default::default()
                 }),
                 definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
@@ -344,28 +698,48 @@ impl LanguageServer for VaisBackend {
                 let line_start = doc.content.line_to_char(line);
                 let offset = line_start + col;
 
-                // Find identifier at position and look for its definition
-                for item in &ast.items {
-                    match &item.node {
-                        vais_ast::Item::Function(f) => {
-                            if f.name.span.start <= offset && offset <= f.name.span.end {
-                                let range = self.span_to_range(&doc.content, &f.name.span);
-                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                                    uri: uri.clone(),
-                                    range,
-                                })));
-                            }
-                        }
-                        vais_ast::Item::Struct(s) => {
-                            if s.name.span.start <= offset && offset <= s.name.span.end {
-                                let range = self.span_to_range(&doc.content, &s.name.span);
-                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                                    uri: uri.clone(),
-                                    range,
-                                })));
-                            }
-                        }
-                        _ => {}
+                // Use the new find_definition_at method
+                if let Some(def) = self.find_definition_at(ast, offset) {
+                    let range = self.span_to_range(&doc.content, &def.span);
+                    return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                        uri: uri.clone(),
+                        range,
+                    })));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn references(
+        &self,
+        params: ReferenceParams,
+    ) -> Result<Option<Vec<Location>>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                // Convert position to offset
+                let line = position.line as usize;
+                let col = position.character as usize;
+                let line_start = doc.content.line_to_char(line);
+                let offset = line_start + col;
+
+                // Get the symbol name at the position
+                if let Some(symbol_name) = self.get_identifier_at(ast, offset) {
+                    let spans = self.find_all_references(ast, &symbol_name);
+                    let locations: Vec<Location> = spans
+                        .iter()
+                        .map(|span| Location {
+                            uri: uri.clone(),
+                            range: self.span_to_range(&doc.content, span),
+                        })
+                        .collect();
+
+                    if !locations.is_empty() {
+                        return Ok(Some(locations));
                     }
                 }
             }

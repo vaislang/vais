@@ -1,0 +1,236 @@
+# Async Runtime - Single-threaded task executor
+# Provides spawn, block_on, and cooperative scheduling
+
+# Task status constants
+C TASK_PENDING: i64 = 0
+C TASK_RUNNING: i64 = 1
+C TASK_READY: i64 = 2
+C TASK_COMPLETED: i64 = 3
+
+# Maximum number of concurrent tasks
+C MAX_TASKS: i64 = 256
+
+# Task Node - represents a spawned async task
+S TaskNode {
+    id: i64,
+    future_ptr: i64,    # Pointer to future state struct
+    poll_fn: i64,       # Function pointer to poll function
+    status: i64,
+    result: i64,
+    next: i64           # Pointer to next task (linked list)
+}
+
+X TaskNode {
+    F new(id: i64, future_ptr: i64, poll_fn: i64) -> TaskNode {
+        TaskNode {
+            id: id,
+            future_ptr: future_ptr,
+            poll_fn: poll_fn,
+            status: TASK_PENDING,
+            result: 0,
+            next: 0
+        }
+    }
+
+    F is_completed(&self) -> i64 {
+        self.status == TASK_COMPLETED
+    }
+
+    F is_pending(&self) -> i64 {
+        self.status == TASK_PENDING
+    }
+}
+
+# JoinHandle - returned when spawning a task
+# Can be awaited to get the task's result
+S JoinHandle {
+    task_id: i64,
+    task_ptr: i64       # Pointer to TaskNode
+}
+
+X JoinHandle {
+    F new(task_id: i64, task_ptr: i64) -> JoinHandle {
+        JoinHandle { task_id: task_id, task_ptr: task_ptr }
+    }
+}
+
+# Runtime - the async task scheduler
+S Runtime {
+    task_count: i64,
+    next_task_id: i64,
+    head: i64,          # First task in queue
+    tail: i64,          # Last task in queue
+    current_task: i64   # Currently executing task
+}
+
+X Runtime {
+    F new() -> Runtime {
+        Runtime {
+            task_count: 0,
+            next_task_id: 0,
+            head: 0,
+            tail: 0,
+            current_task: 0
+        }
+    }
+
+    # Spawn a new task onto the runtime
+    # Returns a JoinHandle for the spawned task
+    F spawn(&self, future_ptr: i64, poll_fn: i64) -> JoinHandle {
+        # Allocate new TaskNode
+        task_ptr := malloc(48)  # Size of TaskNode
+
+        task_id := self.next_task_id
+        self.next_task_id = self.next_task_id + 1
+
+        # Initialize task
+        # Store fields directly to memory
+        task_node_ptr := task_ptr
+
+        # id
+        store_i64(task_node_ptr, task_id)
+        # future_ptr
+        store_i64(task_node_ptr + 8, future_ptr)
+        # poll_fn
+        store_i64(task_node_ptr + 16, poll_fn)
+        # status = TASK_PENDING
+        store_i64(task_node_ptr + 24, TASK_PENDING)
+        # result = 0
+        store_i64(task_node_ptr + 32, 0)
+        # next = 0
+        store_i64(task_node_ptr + 40, 0)
+
+        # Add to task queue
+        L self.tail == 0 {
+            # First task
+            self.head = task_ptr
+            self.tail = task_ptr
+        } ! {
+            # Append to tail
+            store_i64(self.tail + 40, task_ptr)
+            self.tail = task_ptr
+        }
+
+        self.task_count = self.task_count + 1
+
+        JoinHandle::new(task_id, task_ptr)
+    }
+
+    # Run the scheduler until all tasks complete
+    F run(&self) -> i64 {
+        # Keep polling until no pending tasks
+        L self.task_count > 0 {
+            made_progress := 0
+
+            # Iterate through task list
+            current := self.head
+            L current != 0 {
+                status := load_i64(current + 24)
+
+                L status == TASK_PENDING {
+                    # Mark as running
+                    store_i64(current + 24, TASK_RUNNING)
+
+                    # Get future_ptr and poll_fn
+                    future_ptr := load_i64(current + 8)
+                    poll_fn := load_i64(current + 16)
+
+                    # Call poll function - returns {status, result}
+                    poll_result := call_poll(poll_fn, future_ptr)
+                    poll_status := extract_poll_status(poll_result)
+                    poll_value := extract_poll_value(poll_result)
+
+                    L poll_status == 1 {
+                        # Ready - task completed
+                        store_i64(current + 24, TASK_COMPLETED)
+                        store_i64(current + 32, poll_value)
+                        self.task_count = self.task_count - 1
+                        made_progress = 1
+                    } ! {
+                        # Still pending
+                        store_i64(current + 24, TASK_PENDING)
+                    }
+                }
+
+                # Move to next task
+                current = load_i64(current + 40)
+            }
+
+            # If no progress made and tasks remain, we might be deadlocked
+            # For now just continue (cooperative multitasking)
+        }
+
+        0
+    }
+
+    # Block on a single future until completion
+    F block_on(&self, future_ptr: i64, poll_fn: i64) -> i64 {
+        # Simple busy-poll loop
+        L 1 {
+            poll_result := call_poll(poll_fn, future_ptr)
+            poll_status := extract_poll_status(poll_result)
+            poll_value := extract_poll_value(poll_result)
+
+            L poll_status == 1 {
+                R poll_value
+            }
+            # Pending - continue polling
+        }
+        0
+    }
+}
+
+# Global runtime instance
+V __GLOBAL_RUNTIME: i64 = 0
+
+# Initialize global runtime
+F runtime_init() -> i64 {
+    L __GLOBAL_RUNTIME == 0 {
+        __GLOBAL_RUNTIME = malloc(40)  # Size of Runtime struct
+        # Initialize all fields to 0
+        store_i64(__GLOBAL_RUNTIME, 0)       # task_count
+        store_i64(__GLOBAL_RUNTIME + 8, 0)   # next_task_id
+        store_i64(__GLOBAL_RUNTIME + 16, 0)  # head
+        store_i64(__GLOBAL_RUNTIME + 24, 0)  # tail
+        store_i64(__GLOBAL_RUNTIME + 32, 0)  # current_task
+    }
+    __GLOBAL_RUNTIME
+}
+
+# Get global runtime
+F get_runtime() -> i64 {
+    L __GLOBAL_RUNTIME == 0 {
+        runtime_init()
+    }
+    __GLOBAL_RUNTIME
+}
+
+# Spawn a task on the global runtime
+F spawn(future_ptr: i64, poll_fn: i64) -> JoinHandle {
+    rt := get_runtime()
+    rt_ptr := rt as *Runtime
+    rt_ptr.spawn(future_ptr, poll_fn)
+}
+
+# Block on a future using global runtime
+F block_on(future_ptr: i64, poll_fn: i64) -> i64 {
+    rt := get_runtime()
+    rt_ptr := rt as *Runtime
+    rt_ptr.block_on(future_ptr, poll_fn)
+}
+
+# Run all spawned tasks to completion
+F run_all() -> i64 {
+    rt := get_runtime()
+    rt_ptr := rt as *Runtime
+    rt_ptr.run()
+}
+
+# Memory helper functions (extern declarations)
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F call_poll(poll_fn: i64, future_ptr: i64) -> i64
+X F extract_poll_status(poll_result: i64) -> i64
+X F extract_poll_value(poll_result: i64) -> i64

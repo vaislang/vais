@@ -1,0 +1,91 @@
+# Reference Counting test
+
+F main() -> i64 {
+    puts("=== RC Memory Management Test ===")
+    putchar(10)
+
+    # Test 1: Basic Rc creation
+    puts("Test 1: Create Rc with value 42")
+
+    # Allocate Rc manually: {ref_count: 1, value: 42}
+    # Total size: 16 bytes (8 for ref_count + 8 for value)
+    rc_ptr := malloc(16)
+    store_i64(rc_ptr, 1)          # ref_count = 1
+    store_i64(rc_ptr + 8, 42)     # value = 42
+
+    puts("  ref_count: ")
+    count1 := load_i64(rc_ptr)
+    print_num(count1)
+    putchar(10)
+
+    puts("  value: ")
+    val := load_i64(rc_ptr + 8)
+    print_num(val)
+    putchar(10)
+
+    # Test 2: Clone (increment ref count)
+    puts("Test 2: Clone Rc (increment ref_count)")
+    count2 := load_i64(rc_ptr)
+    store_i64(rc_ptr, count2 + 1)  # ref_count = 2
+
+    puts("  ref_count after clone: ")
+    count3 := load_i64(rc_ptr)
+    print_num(count3)
+    putchar(10)
+
+    # Test 3: Release one reference
+    puts("Test 3: Release one reference")
+    count4 := load_i64(rc_ptr)
+    store_i64(rc_ptr, count4 - 1)  # ref_count = 1
+
+    puts("  ref_count after release: ")
+    count5 := load_i64(rc_ptr)
+    print_num(count5)
+    putchar(10)
+
+    # Test 4: Release last reference (should free)
+    puts("Test 4: Release last reference")
+    count6 := load_i64(rc_ptr)
+    I count6 <= 1 {
+        puts("  Freeing memory (last reference)")
+        free(rc_ptr)
+        0
+    } E {
+        store_i64(rc_ptr, count6 - 1)
+        0
+    }
+
+    putchar(10)
+
+    # Test 5: Box test (single ownership)
+    puts("Test 5: Box single ownership")
+    box_ptr := malloc(8)
+    store_i64(box_ptr, 100)
+
+    puts("  Box value: ")
+    box_val := load_i64(box_ptr)
+    print_num(box_val)
+    putchar(10)
+
+    puts("  Freeing Box")
+    free(box_ptr)
+
+    putchar(10)
+    puts("=== Test Complete ===")
+    0
+}
+
+# Helper: print a number (up to 3 digits)
+F print_num(n: i64) -> i64 {
+    I n >= 100 {
+        d1 := n / 100
+        putchar(d1 + 48)
+    }
+    I n >= 10 {
+        d2 := (n / 10) % 10
+        putchar(d2 + 48)
+    }
+    d3 := n % 10
+    putchar(d3 + 48)
+    0
+}

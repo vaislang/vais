@@ -1,0 +1,74 @@
+# Box - Heap allocated single-ownership pointer
+# Similar to Rust's Box<T>, owns the value and frees on drop
+# Layout: just a pointer to heap-allocated value
+
+S Box {
+    ptr: i64    # Pointer to heap-allocated value
+}
+
+X Box {
+    # Create new Box with value (assumes i64, 8 bytes)
+    F new(value: i64) -> Box {
+        ptr := malloc(8)
+        store_i64(ptr, value)
+        Box { ptr: ptr }
+    }
+
+    # Create Box with custom size
+    F with_size(value: i64, size: i64) -> Box {
+        ptr := malloc(size)
+        store_i64(ptr, value)
+        Box { ptr: ptr }
+    }
+
+    # Get the inner value
+    F get(&self) -> i64 {
+        load_i64(self.ptr)
+    }
+
+    # Set the inner value
+    F set(&self, value: i64) -> i64 {
+        store_i64(self.ptr, value)
+        value
+    }
+
+    # Get raw pointer
+    F as_ptr(&self) -> i64 {
+        self.ptr
+    }
+
+    # Take ownership and return raw pointer (caller must free)
+    F into_raw(&self) -> i64 {
+        ptr := self.ptr
+        # Note: Don't free - ownership transferred
+        ptr
+    }
+
+    # Create Box from raw pointer (takes ownership)
+    F from_raw(ptr: i64) -> Box {
+        Box { ptr: ptr }
+    }
+
+    # Free the box and its contents
+    F drop(&self) -> i64 {
+        free(self.ptr)
+        0
+    }
+}
+
+# Convenience functions
+F box_new(value: i64) -> Box {
+    Box.new(value)
+}
+
+F box_get(b: Box) -> i64 {
+    b.get()
+}
+
+F box_set(b: Box, value: i64) -> i64 {
+    b.set(value)
+}
+
+F box_drop(b: Box) -> i64 {
+    b.drop()
+}

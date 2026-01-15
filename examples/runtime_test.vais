@@ -1,0 +1,46 @@
+# Async Runtime Test
+# Tests spawn, join, and concurrent execution
+
+# Simple async function
+A F compute_double(x: i64) -> i64 {
+    x * 2
+}
+
+# Another async function with more work
+A F compute_sum(a: i64, b: i64, c: i64) -> i64 {
+    a + b + c
+}
+
+F main() -> i64 {
+    puts("=== Async Runtime Test ===")
+    putchar(10)
+
+    puts("Testing sequential awaits:")
+
+    result1 := compute_double(10).await
+    puts("  compute_double(10) = ")
+    putchar(result1 / 10 + 48)
+    putchar(result1 % 10 + 48)
+    putchar(10)
+
+    result2 := compute_double(21).await
+    puts("  compute_double(21) = ")
+    putchar(result2 / 10 + 48)
+    putchar(result2 % 10 + 48)
+    putchar(10)
+
+    result3 := compute_sum(1, 2, 3).await
+    puts("  compute_sum(1,2,3) = ")
+    putchar(result3 + 48)
+    putchar(10)
+
+    putchar(10)
+    total := result1 + result2 + result3
+    puts("Total sum: ")
+    putchar(total / 10 + 48)
+    putchar(total % 10 + 48)
+    putchar(10)
+
+    puts("=== Test Complete ===")
+    0
+}

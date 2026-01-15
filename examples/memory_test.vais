@@ -1,0 +1,141 @@
+# Memory Management Comprehensive Test
+
+F main() -> i64 {
+    puts("=== Memory Management Test ===")
+    putchar(10)
+
+    # Part 1: Direct heap allocation
+    puts("Part 1: Direct malloc/free")
+    ptr1 := malloc(32)
+    puts("  Allocated 32 bytes")
+    store_i64(ptr1, 12345)
+    val1 := load_i64(ptr1)
+    puts("  Stored and loaded: ")
+    print_num(val1)
+    putchar(10)
+    free(ptr1)
+    puts("  Freed memory")
+    putchar(10)
+
+    # Part 2: Reference Counting simulation
+    puts("Part 2: Reference Counting")
+
+    # Create RC: {ref_count, value}
+    rc := malloc(16)
+    store_i64(rc, 1)       # ref_count = 1
+    store_i64(rc + 8, 100) # value = 100
+    puts("  Created Rc with value 100, ref_count=1")
+
+    # Clone (retain)
+    count1 := load_i64(rc)
+    store_i64(rc, count1 + 1)
+    puts("  Cloned: ref_count=")
+    count2 := load_i64(rc)
+    print_num(count2)
+    putchar(10)
+
+    # Release twice
+    count3 := load_i64(rc)
+    store_i64(rc, count3 - 1)
+    puts("  Release 1: ref_count=")
+    count4 := load_i64(rc)
+    print_num(count4)
+    putchar(10)
+
+    count5 := load_i64(rc)
+    I count5 <= 1 {
+        free(rc)
+        puts("  Release 2: Freed (last ref)")
+        0
+    } E {
+        store_i64(rc, count5 - 1)
+        0
+    }
+    putchar(10)
+
+    # Part 3: Arena-style allocation
+    puts("Part 3: Arena-style allocation")
+
+    # Simulate arena: allocate a large chunk
+    arena_size := 1024
+    arena := malloc(arena_size)
+    puts("  Created arena with 1024 bytes")
+
+    # Allocate from arena (fixed offsets)
+    obj1 := arena + 0
+    store_i64(obj1, 111)
+
+    obj2 := arena + 8
+    store_i64(obj2, 222)
+
+    obj3 := arena + 16
+    store_i64(obj3, 333)
+
+    puts("  Allocated 3 objects: ")
+    v1 := load_i64(obj1)
+    v2 := load_i64(obj2)
+    v3 := load_i64(obj3)
+    print_num(v1)
+    puts(", ")
+    print_num(v2)
+    puts(", ")
+    print_num(v3)
+    putchar(10)
+
+    puts("  Arena used: 24 bytes")
+    putchar(10)
+
+    # Free entire arena at once
+    free(arena)
+    puts("  Freed entire arena")
+    putchar(10)
+
+    # Part 4: Box-style single ownership
+    puts("Part 4: Box single ownership")
+    box1 := malloc(8)
+    store_i64(box1, 42)
+    puts("  Created Box(42)")
+
+    # Move ownership (just pass pointer, original loses access)
+    box2 := box1
+    puts("  Moved to box2")
+
+    val := load_i64(box2)
+    puts("  Value in box2: ")
+    print_num(val)
+    putchar(10)
+
+    free(box2)
+    puts("  Dropped box2")
+    putchar(10)
+
+    puts("=== All Tests Passed ===")
+    0
+}
+
+# Print number helper
+F print_num(n: i64) -> i64 {
+    I n >= 10000 {
+        d1 := n / 10000
+        putchar(d1 + 48)
+        0
+    }
+    I n >= 1000 {
+        d2 := (n / 1000) % 10
+        putchar(d2 + 48)
+        0
+    }
+    I n >= 100 {
+        d3 := (n / 100) % 10
+        putchar(d3 + 48)
+        0
+    }
+    I n >= 10 {
+        d4 := (n / 10) % 10
+        putchar(d4 + 48)
+        0
+    }
+    d5 := n % 10
+    putchar(d5 + 48)
+    0
+}

@@ -38,17 +38,20 @@ pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
     if level >= OptLevel::O1 {
         result = constant_folding(&result);
         result = dead_store_elimination(&result);
+        result = branch_optimization(&result);
     }
 
     // O2+: More aggressive optimizations
     if level >= OptLevel::O2 {
         result = common_subexpression_elimination(&result);
         result = strength_reduction(&result);
+        result = dead_code_elimination(&result);
     }
 
     // O3: Most aggressive optimizations
     if level >= OptLevel::O3 {
         result = aggressive_inline(&result);
+        result = loop_invariant_motion(&result);
     }
 
     result
@@ -326,6 +329,254 @@ fn is_power_of_2(n: i64) -> bool {
 
 fn log2(n: i64) -> u32 {
     (63 - n.leading_zeros()) as u32
+}
+
+/// Branch optimization - simplify branches with constant conditions
+fn branch_optimization(ir: &str) -> String {
+    let mut result = Vec::new();
+    let mut skip_until_label = false;
+    let mut target_label = String::new();
+
+    for line in ir.lines() {
+        let trimmed = line.trim();
+
+        // If we're skipping dead code, wait for the target label
+        if skip_until_label {
+            if trimmed.ends_with(':') {
+                let label = trimmed.trim_end_matches(':');
+                if label == target_label {
+                    skip_until_label = false;
+                    result.push(line.to_string());
+                } else {
+                    result.push(format!("  ; dead block skipped: {}", trimmed));
+                }
+            } else {
+                result.push(format!("  ; dead code: {}", trimmed));
+            }
+            continue;
+        }
+
+        // Pattern: br i1 true/false, label %then, label %else
+        if trimmed.starts_with("br i1 ") {
+            if trimmed.contains("br i1 true,") || trimmed.contains("br i1 1,") {
+                // Always branch to 'then'
+                if let Some(then_label) = extract_branch_label(trimmed, true) {
+                    result.push(format!("  br label %{}  ; simplified from conditional", then_label));
+                    continue;
+                }
+            } else if trimmed.contains("br i1 false,") || trimmed.contains("br i1 0,") {
+                // Always branch to 'else'
+                if let Some(else_label) = extract_branch_label(trimmed, false) {
+                    result.push(format!("  br label %{}  ; simplified from conditional", else_label));
+                    continue;
+                }
+            }
+        }
+
+        // Pattern: icmp eq X, X (always true)
+        if trimmed.contains(" = icmp eq ") {
+            let parts: Vec<&str> = trimmed.split(" = icmp eq ").collect();
+            if parts.len() == 2 {
+                let operands_str = parts[1].trim();
+                // Extract operands after type
+                if let Some(type_end) = operands_str.find(' ') {
+                    let operands_part = &operands_str[type_end + 1..];
+                    let operands: Vec<&str> = operands_part.split(',').map(|s| s.trim()).collect();
+                    if operands.len() == 2 && operands[0] == operands[1] {
+                        result.push(format!("  {} = add i1 0, true  ; simplified: X == X", parts[0].trim()));
+                        continue;
+                    }
+                }
+            }
+        }
+
+        result.push(line.to_string());
+    }
+
+    result.join("\n")
+}
+
+/// Extract branch target label
+fn extract_branch_label(line: &str, take_then: bool) -> Option<String> {
+    // Pattern: br i1 COND, label %THEN, label %ELSE
+    let parts: Vec<&str> = line.split("label %").collect();
+    if parts.len() >= 3 {
+        let then_label = parts[1].split(',').next()?.trim();
+        let else_label = parts[2].trim();
+        if take_then {
+            return Some(then_label.to_string());
+        } else {
+            return Some(else_label.to_string());
+        }
+    }
+    None
+}
+
+/// Dead code elimination - remove unused definitions
+fn dead_code_elimination(ir: &str) -> String {
+    let lines: Vec<&str> = ir.lines().collect();
+    let mut used_vars: HashSet<String> = HashSet::new();
+    let mut var_definitions: HashMap<String, usize> = HashMap::new();
+
+    // First pass: collect all variable uses and definitions
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Skip comments and labels
+        if trimmed.starts_with(';') || trimmed.ends_with(':') {
+            continue;
+        }
+
+        // Track definitions
+        if let Some(def_var) = extract_definition(trimmed) {
+            var_definitions.insert(def_var, i);
+        }
+
+        // Track uses (excluding the definition itself)
+        for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '_' && c != '.') {
+            if word.starts_with('%') && !word.is_empty() {
+                // Check if this is a use, not just the definition
+                if !trimmed.starts_with(&format!("{} =", word)) && !trimmed.starts_with(&format!("  {} =", word)) {
+                    used_vars.insert(word.to_string());
+                }
+            }
+        }
+    }
+
+    // Also mark return values, call arguments, and branch conditions as used
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with("ret ") || trimmed.starts_with("br ") ||
+           trimmed.starts_with("store ") || trimmed.contains("call ") {
+            for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '_' && c != '.') {
+                if word.starts_with('%') {
+                    used_vars.insert(word.to_string());
+                }
+            }
+        }
+    }
+
+    // Second pass: emit only used definitions
+    let mut result = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Check if this is a definition of an unused variable
+        if let Some(def_var) = extract_definition(trimmed) {
+            if !used_vars.contains(&def_var) {
+                // Check if this is a side-effect free instruction
+                if is_side_effect_free(trimmed) {
+                    result.push(format!("  ; DCE removed: {}", trimmed));
+                    continue;
+                }
+            }
+        }
+
+        result.push(line.to_string());
+    }
+
+    result.join("\n")
+}
+
+/// Extract the variable being defined, if any
+fn extract_definition(line: &str) -> Option<String> {
+    // Pattern: %VAR = ...
+    let trimmed = line.trim();
+    if let Some(eq_pos) = trimmed.find(" = ") {
+        let var = trimmed[..eq_pos].trim();
+        if var.starts_with('%') {
+            return Some(var.to_string());
+        }
+    }
+    None
+}
+
+/// Check if an instruction has no side effects
+fn is_side_effect_free(line: &str) -> bool {
+    let trimmed = line.trim();
+    // Pure operations that can be eliminated if unused
+    let pure_ops = ["add ", "sub ", "mul ", "sdiv ", "udiv ", "and ", "or ", "xor ",
+                    "shl ", "ashr ", "lshr ", "icmp ", "fcmp ", "select ",
+                    "zext ", "sext ", "trunc ", "bitcast ", "getelementptr ",
+                    "extractvalue ", "insertvalue ", "load "];
+
+    for op in &pure_ops {
+        if trimmed.contains(op) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Loop invariant code motion - move invariant computations out of loops
+fn loop_invariant_motion(ir: &str) -> String {
+    // This is a simplified version - real LICM requires proper loop detection
+    let lines: Vec<&str> = ir.lines().collect();
+    let mut result = Vec::new();
+    let mut in_loop = false;
+    let mut loop_header_idx = 0;
+    let mut invariants: Vec<String> = Vec::new();
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Detect loop headers (simple heuristic: labels ending with "loop" or containing "while")
+        if trimmed.ends_with(':') && (trimmed.contains("loop") || trimmed.contains("while")) {
+            in_loop = true;
+            loop_header_idx = result.len();
+            result.push(line.to_string());
+            continue;
+        }
+
+        // Detect loop back-edges (br to loop header)
+        if in_loop && trimmed.starts_with("br label %") {
+            // Check if this branches back to a loop-like label
+            if trimmed.contains("loop") || trimmed.contains("while") {
+                in_loop = false;
+            }
+        }
+
+        // Detect loop exit
+        if in_loop && trimmed.starts_with("br i1") {
+            // Conditional branch might be loop exit
+        }
+
+        // Simple invariant detection: instructions using only constants or params
+        if in_loop {
+            if let Some(def_var) = extract_definition(trimmed) {
+                if is_loop_invariant(trimmed) {
+                    // Mark as invariant but don't move yet (would need dataflow analysis)
+                    result.push(format!("{}  ; loop invariant candidate", line));
+                    continue;
+                }
+            }
+        }
+
+        result.push(line.to_string());
+    }
+
+    result.join("\n")
+}
+
+/// Simple check if an instruction might be loop invariant
+fn is_loop_invariant(line: &str) -> bool {
+    let trimmed = line.trim();
+    // Check if all operands are constants or function parameters
+    // This is a very conservative check
+
+    // Instructions that might be invariant
+    if trimmed.contains(" = add i64 ") || trimmed.contains(" = mul i64 ") {
+        // Count variable operands
+        let mut var_count = 0;
+        for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '%') {
+            if word.starts_with('%') {
+                var_count += 1;
+            }
+        }
+        // Only constant operations (result var is the only %)
+        return var_count <= 1;
+    }
+    false
 }
 
 /// Aggressive inlining for small functions

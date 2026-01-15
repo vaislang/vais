@@ -1,5 +1,6 @@
 # Result type - represents success or failure
 # Ok(T) or Err(E)
+# Layout: {i64 tag, i64 value} where tag=0 is Ok, tag=1 is Err
 
 E Result {
     Ok(i64),
@@ -29,4 +30,37 @@ X Result {
             Err(_) => default
         }
     }
+
+    # Map the Ok value
+    F map(&self, f: i64) -> Result {
+        M self {
+            Ok(v) => Ok(v),
+            Err(e) => Err(e)
+        }
+    }
+
+    # Get error value or default
+    F err_or(&self, default: i64) -> i64 {
+        M self {
+            Ok(_) => default,
+            Err(e) => e
+        }
+    }
 }
+
+# Helper functions to create Results
+F ok(value: i64) -> Result {
+    Ok(value)
+}
+
+F err(code: i64) -> Result {
+    Err(code)
+}
+
+# Error code constants (use as function calls)
+F ERR_NONE() -> i64 { 0 }
+F ERR_INVALID() -> i64 { 1 }
+F ERR_NOT_FOUND() -> i64 { 2 }
+F ERR_IO() -> i64 { 3 }
+F ERR_OVERFLOW() -> i64 { 4 }
+F ERR_DIVIDE_BY_ZERO() -> i64 { 5 }

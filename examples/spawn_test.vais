@@ -1,17 +1,54 @@
-# Spawn test (currently sync implementation)
-F work(x: i64) -> i64 {
-    x * x
+# Spawn Test - Concurrent task execution
+# Tests spawn and joining multiple async futures
+
+# Async computation that simulates work
+A F slow_compute(x: i64) -> i64 {
+    x * 2
+}
+
+A F fast_compute(x: i64) -> i64 {
+    x + 1
+}
+
+# Chain of async operations
+A F chain_compute(x: i64) -> i64 {
+    a := slow_compute(x).await
+    b := fast_compute(a).await
+    a + b
 }
 
 F main() -> i64 {
-    puts("Testing spawn (sync for now):")
-
-    # Spawn a task
-    result := spawn { work(5) }
-    puts("spawn { work(5) } =")
-    putchar(result / 10 + 48)  # '2'
-    putchar(result % 10 + 48)  # '5'
+    puts("=== Spawn Test ===")
     putchar(10)
 
+    # Test 1: Simple spawn with immediate await
+    puts("Test 1: Spawn and immediate await")
+    result1 := (spawn slow_compute(10)).await
+    puts("  slow_compute(10) = ")
+    putchar(result1 / 10 + 48)
+    putchar(result1 % 10 + 48)
+    putchar(10)
+
+    # Test 2: Direct async calls (no spawn)
+    puts("Test 2: Direct async calls")
+    result_a := slow_compute(5).await
+    result_b := fast_compute(5).await
+    puts("  slow_compute(5) = ")
+    putchar(result_a / 10 + 48)
+    putchar(result_a % 10 + 48)
+    putchar(10)
+    puts("  fast_compute(5) = ")
+    putchar(result_b + 48)
+    putchar(10)
+
+    # Test 3: Chained async operations
+    puts("Test 3: Chained async")
+    result3 := chain_compute(5).await
+    puts("  chain_compute(5) = ")
+    putchar(result3 / 10 + 48)
+    putchar(result3 % 10 + 48)
+    putchar(10)
+
+    puts("=== Spawn Test Complete ===")
     0
 }

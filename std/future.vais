@@ -7,12 +7,27 @@ E Poll {
     Ready(i64)
 }
 
-# Future state machine states
-# State 0 = initial, State N = after Nth await point
-S FutureState {
-    state: i64,      # Current state index
-    value: i64,      # Return value when Ready
-    context: i64     # Pointer to captured variables
+X Poll {
+    F is_ready(&self) -> i64 {
+        M self {
+            Ready(_) => 1,
+            Pending => 0
+        }
+    }
+
+    F is_pending(&self) -> i64 {
+        M self {
+            Ready(_) => 0,
+            Pending => 1
+        }
+    }
+
+    F unwrap(&self) -> i64 {
+        M self {
+            Ready(v) => v,
+            Pending => 0  # Should panic in real impl
+        }
+    }
 }
 
 # Future trait - poll the future for completion
@@ -20,53 +35,232 @@ W Future {
     F poll(&self, ctx: i64) -> Poll
 }
 
-# Task wrapper for the runtime scheduler
-S Task {
-    id: i64,
-    future_ptr: i64,  # Pointer to future state
-    status: i64       # 0 = pending, 1 = ready, 2 = running
-}
-
-X Task {
-    F new(id: i64, future_ptr: i64) -> Task {
-        Task { id: id, future_ptr: future_ptr, status: 0 }
-    }
-
-    F is_ready(&self) -> i64 {
-        self.status == 1
-    }
-
-    F is_pending(&self) -> i64 {
-        self.status == 0
-    }
-}
-
-# Simple single-threaded executor
-S Executor {
-    task_count: i64,
-    current_task: i64
-}
-
-X Executor {
-    F new() -> Executor {
-        Executor { task_count: 0, current_task: 0 }
-    }
-
-    # Spawn a new task (returns task id)
-    F spawn(&self, future_ptr: i64) -> i64 {
-        task_id := self.task_count
-        self.task_count = self.task_count + 1
-        task_id
-    }
-}
-
-# Runtime context passed to poll
+# Context passed to poll - contains waker
 S Context {
-    waker: i64  # Pointer to waker function
+    waker_ptr: i64,
+    runtime_ptr: i64
 }
 
 X Context {
     F new() -> Context {
-        Context { waker: 0 }
+        Context { waker_ptr: 0, runtime_ptr: 0 }
     }
+
+    F with_runtime(runtime_ptr: i64) -> Context {
+        Context { waker_ptr: 0, runtime_ptr: runtime_ptr }
+    }
+
+    F wake(&self) -> i64 {
+        # Wake up the task associated with this context
+        L self.waker_ptr != 0 {
+            # Call waker function
+            1
+        } ! {
+            0
+        }
+    }
+}
+
+# Waker - mechanism to wake up a suspended task
+S Waker {
+    task_ptr: i64,
+    wake_fn: i64
+}
+
+X Waker {
+    F new(task_ptr: i64, wake_fn: i64) -> Waker {
+        Waker { task_ptr: task_ptr, wake_fn: wake_fn }
+    }
+
+    F wake(&self) -> i64 {
+        # Signal the runtime that this task is ready to make progress
+        L self.wake_fn != 0 {
+            # call_indirect(self.wake_fn, self.task_ptr)
+            1
+        } ! {
+            0
+        }
+    }
+}
+
+# ============================================
+# Future Combinators
+# ============================================
+
+# Map combinator - transforms the output of a future
+S MapFuture {
+    inner_ptr: i64,     # Pointer to inner future
+    inner_poll: i64,    # Poll function of inner future
+    map_fn: i64,        # Mapping function pointer
+    state: i64          # 0 = not polled, 1 = complete
+}
+
+X MapFuture {
+    F new(inner_ptr: i64, inner_poll: i64, map_fn: i64) -> MapFuture {
+        MapFuture {
+            inner_ptr: inner_ptr,
+            inner_poll: inner_poll,
+            map_fn: map_fn,
+            state: 0
+        }
+    }
+}
+
+# AndThen combinator - chains futures sequentially
+S AndThenFuture {
+    first_ptr: i64,     # First future
+    first_poll: i64,
+    second_fn: i64,     # Function that creates second future from first result
+    state: i64,         # 0 = running first, 1 = running second
+    second_ptr: i64,    # Created second future (when state = 1)
+    second_poll: i64
+}
+
+X AndThenFuture {
+    F new(first_ptr: i64, first_poll: i64, second_fn: i64) -> AndThenFuture {
+        AndThenFuture {
+            first_ptr: first_ptr,
+            first_poll: first_poll,
+            second_fn: second_fn,
+            state: 0,
+            second_ptr: 0,
+            second_poll: 0
+        }
+    }
+}
+
+# Join combinator - runs two futures concurrently
+S JoinFuture {
+    first_ptr: i64,
+    first_poll: i64,
+    second_ptr: i64,
+    second_poll: i64,
+    first_done: i64,
+    second_done: i64,
+    first_result: i64,
+    second_result: i64
+}
+
+X JoinFuture {
+    F new(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> JoinFuture {
+        JoinFuture {
+            first_ptr: first_ptr,
+            first_poll: first_poll,
+            second_ptr: second_ptr,
+            second_poll: second_poll,
+            first_done: 0,
+            second_done: 0,
+            first_result: 0,
+            second_result: 0
+        }
+    }
+}
+
+# Select combinator - returns when either future completes
+S SelectFuture {
+    first_ptr: i64,
+    first_poll: i64,
+    second_ptr: i64,
+    second_poll: i64
+}
+
+X SelectFuture {
+    F new(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> SelectFuture {
+        SelectFuture {
+            first_ptr: first_ptr,
+            first_poll: first_poll,
+            second_ptr: second_ptr,
+            second_poll: second_poll
+        }
+    }
+}
+
+# Ready future - immediately resolves to a value
+S ReadyFuture {
+    value: i64
+}
+
+X ReadyFuture {
+    F new(value: i64) -> ReadyFuture {
+        ReadyFuture { value: value }
+    }
+}
+
+# Pending future - never resolves
+S PendingFuture {
+    _dummy: i64
+}
+
+X PendingFuture {
+    F new() -> PendingFuture {
+        PendingFuture { _dummy: 0 }
+    }
+}
+
+# ============================================
+# Helper functions for creating futures
+# ============================================
+
+# Create a future that is immediately ready
+F ready(value: i64) -> ReadyFuture {
+    ReadyFuture::new(value)
+}
+
+# Create a future that is always pending
+F pending() -> PendingFuture {
+    PendingFuture::new()
+}
+
+# Join two futures - both must complete
+F join(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> JoinFuture {
+    JoinFuture::new(first_ptr, first_poll, second_ptr, second_poll)
+}
+
+# Select first completing future
+F select(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> SelectFuture {
+    SelectFuture::new(first_ptr, first_poll, second_ptr, second_poll)
+}
+
+# ============================================
+# Yield point - cooperative scheduling
+# ============================================
+
+# Yield control back to the runtime
+# Returns Pending on first poll, Ready on second
+S YieldNow {
+    yielded: i64
+}
+
+X YieldNow {
+    F new() -> YieldNow {
+        YieldNow { yielded: 0 }
+    }
+}
+
+# Create a yield point
+F yield_now() -> YieldNow {
+    YieldNow::new()
+}
+
+# ============================================
+# Timer future (basic implementation)
+# ============================================
+
+S TimerFuture {
+    deadline: i64,      # Target tick count
+    started: i64
+}
+
+X TimerFuture {
+    F new(ticks: i64) -> TimerFuture {
+        TimerFuture {
+            deadline: ticks,
+            started: 0
+        }
+    }
+}
+
+# Create a timer that completes after n iterations
+F delay(ticks: i64) -> TimerFuture {
+    TimerFuture::new(ticks)
 }

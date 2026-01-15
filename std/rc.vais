@@ -1,0 +1,149 @@
+# Reference Counted Smart Pointer - Rc<T>
+# Single-threaded reference counting for automatic memory management
+# Layout: {ref_count: i64, value: T}
+# Header is 8 bytes (ref_count), value follows
+
+# Rc - Reference counted pointer
+# Stores: pointer to RcInner (header + value)
+S Rc {
+    ptr: i64    # Pointer to RcInner {ref_count: i64, value: ...}
+}
+
+# Weak reference (non-owning)
+S Weak {
+    ptr: i64    # Same pointer, but doesn't count toward ref_count
+}
+
+# Internal: RcInner header offset
+F RC_HEADER_SIZE() -> i64 { 8 }
+
+# Internal: Get ref count from Rc pointer
+F rc_get_count(ptr: i64) -> i64 {
+    load_i64(ptr)
+}
+
+# Internal: Set ref count
+F rc_set_count(ptr: i64, count: i64) -> i64 {
+    store_i64(ptr, count)
+    count
+}
+
+# Internal: Get value pointer from Rc pointer
+F rc_get_value_ptr(ptr: i64) -> i64 {
+    ptr + RC_HEADER_SIZE()
+}
+
+X Rc {
+    # Create new Rc with initial value
+    # value_size: size of the value in bytes
+    F new(value: i64, value_size: i64) -> Rc {
+        # Allocate header + value
+        total_size := RC_HEADER_SIZE() + value_size
+        ptr := malloc(total_size)
+
+        # Initialize ref count to 1
+        store_i64(ptr, 1)
+
+        # Store value (assuming i64 for now)
+        store_i64(ptr + RC_HEADER_SIZE(), value)
+
+        Rc { ptr: ptr }
+    }
+
+    # Create Rc for i64 value (convenience)
+    F from_i64(value: i64) -> Rc {
+        Rc.new(value, 8)
+    }
+
+    # Get the reference count
+    F ref_count(&self) -> i64 {
+        rc_get_count(self.ptr)
+    }
+
+    # Get the inner value (for i64)
+    F get(&self) -> i64 {
+        load_i64(rc_get_value_ptr(self.ptr))
+    }
+
+    # Set the inner value (for i64)
+    F set(&self, value: i64) -> i64 {
+        store_i64(rc_get_value_ptr(self.ptr), value)
+        value
+    }
+
+    # Clone - increment ref count and return new Rc
+    F clone(&self) -> Rc {
+        count := rc_get_count(self.ptr)
+        rc_set_count(self.ptr, count + 1)
+        Rc { ptr: self.ptr }
+    }
+
+    # Increment ref count (called when value is copied)
+    F retain(&self) -> i64 {
+        count := rc_get_count(self.ptr)
+        rc_set_count(self.ptr, count + 1)
+        count + 1
+    }
+
+    # Decrement ref count and free if zero
+    F release(&self) -> i64 {
+        count := rc_get_count(self.ptr)
+        I count <= 1 {
+            # Last reference, free memory
+            free(self.ptr)
+            0
+        } E {
+            rc_set_count(self.ptr, count - 1)
+            count - 1
+        }
+    }
+
+    # Check if this is the only reference
+    F is_unique(&self) -> i64 {
+        I rc_get_count(self.ptr) == 1 { 1 } E { 0 }
+    }
+
+    # Create a weak reference
+    F downgrade(&self) -> Weak {
+        Weak { ptr: self.ptr }
+    }
+
+    # Manually drop (decrement and potentially free)
+    F drop(&self) -> i64 {
+        @.release()
+    }
+}
+
+X Weak {
+    # Try to upgrade to Rc (returns 0 if already freed)
+    # Note: This is unsafe without weak count tracking
+    F upgrade(&self) -> i64 {
+        count := rc_get_count(self.ptr)
+        I count > 0 {
+            rc_set_count(self.ptr, count + 1)
+            1  # Success - caller should construct Rc
+        } E {
+            0  # Failed - value already freed
+        }
+    }
+
+    # Check if the referenced value still exists
+    F is_alive(&self) -> i64 {
+        I rc_get_count(self.ptr) > 0 { 1 } E { 0 }
+    }
+}
+
+# Helper function to create Rc<i64>
+F rc_new(value: i64) -> Rc {
+    Rc.from_i64(value)
+}
+
+# Helper function to clone Rc
+F rc_clone(rc: Rc) -> Rc {
+    rc.clone()
+}
+
+# Helper function to drop Rc
+F rc_drop(rc: Rc) -> i64 {
+    rc.drop()
+}

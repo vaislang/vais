@@ -1412,9 +1412,17 @@ impl Parser {
                 return self.parse_match_expr(start);
             }
             Token::Spawn => {
-                self.expect(&Token::LBrace)?;
-                let body = self.parse_expr()?;
-                self.expect(&Token::RBrace)?;
+                // Spawn can be: spawn { expr } or spawn expr
+                let body = if self.check(&Token::LBrace) {
+                    // spawn { expr }
+                    self.expect(&Token::LBrace)?;
+                    let body = self.parse_expr()?;
+                    self.expect(&Token::RBrace)?;
+                    body
+                } else {
+                    // spawn expr (e.g., spawn async_func(args))
+                    self.parse_unary()?
+                };
                 let end = self.prev_span().end;
                 return Ok(Spanned::new(
                     Expr::Spawn(Box::new(body)),
