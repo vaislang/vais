@@ -1,0 +1,7 @@
+# Test putchar with variable (i64 to i32 conversion)
+F main() -> i64 {
+    ch := 65  # ASCII 'A'
+    putchar(ch)
+    putchar(10)  # newline
+    0
+}

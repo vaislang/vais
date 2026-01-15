@@ -1,0 +1,31 @@
+# Lambda expression test
+
+F main() -> i64 {
+    puts("Testing lambda expressions:")
+
+    # Create a simple lambda that adds 1
+    add_one := |x: i64| x + 1
+
+    # Call the lambda
+    result1 := add_one(5)
+    puts("add_one(5) =")
+    putchar(result1 + 48)
+    putchar(10)
+
+    # Lambda that doubles
+    double := |x: i64| x * 2
+    result2 := double(7)
+    puts("double(7) =")
+    putchar(result2 / 10 + 48)
+    putchar(result2 % 10 + 48)
+    putchar(10)
+
+    # Lambda with two parameters
+    add := |a: i64, b: i64| a + b
+    result3 := add(3, 4)
+    puts("add(3, 4) =")
+    putchar(result3 + 48)
+    putchar(10)
+
+    0
+}

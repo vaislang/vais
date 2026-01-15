@@ -1,4 +1,4 @@
-//! Vais 2.0 Parser
+//! Vais 0.0.1 Parser
 //!
 //! Recursive descent parser for AI-optimized syntax.
 
@@ -71,11 +71,17 @@ impl Parser {
         } else if self.check(&Token::Use) {
             self.advance();
             Item::Use(self.parse_use()?)
+        } else if self.check(&Token::Trait) {
+            self.advance();
+            Item::Trait(self.parse_trait(is_pub)?)
+        } else if self.check(&Token::Impl) {
+            self.advance();
+            Item::Impl(self.parse_impl()?)
         } else {
             return Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
-                expected: "F, S, E, T, or U".into(),
+                expected: "F, S, E, T, U, W, or X".into(),
             });
         };
 
@@ -249,8 +255,98 @@ impl Parser {
         Ok(Use { path, alias: None })
     }
 
-    /// Parse generic parameters: `<T, U>`
-    fn parse_generics(&mut self) -> ParseResult<Vec<Spanned<String>>> {
+    /// Parse trait definition: `W Name { methods }`
+    fn parse_trait(&mut self, is_pub: bool) -> ParseResult<Trait> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+
+        self.expect(&Token::LBrace)?;
+
+        let mut methods = Vec::new();
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            methods.push(self.parse_trait_method()?);
+        }
+
+        self.expect(&Token::RBrace)?;
+
+        Ok(Trait {
+            name,
+            generics,
+            methods,
+            is_pub,
+        })
+    }
+
+    /// Parse trait method signature
+    fn parse_trait_method(&mut self) -> ParseResult<TraitMethod> {
+        self.expect(&Token::Function)?;
+        let name = self.parse_ident()?;
+
+        self.expect(&Token::LParen)?;
+        let params = self.parse_params()?;
+        self.expect(&Token::RParen)?;
+
+        let ret_type = if self.check(&Token::Arrow) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        // Optional default implementation
+        let default_body = if self.check(&Token::Eq) {
+            self.advance();
+            Some(FunctionBody::Expr(Box::new(self.parse_expr()?)))
+        } else if self.check(&Token::LBrace) {
+            Some(FunctionBody::Block(self.parse_block_contents()?))
+        } else {
+            None
+        };
+
+        Ok(TraitMethod {
+            name,
+            params,
+            ret_type,
+            default_body,
+        })
+    }
+
+    /// Parse impl block: `X Type: Trait { methods }`
+    fn parse_impl(&mut self) -> ParseResult<Impl> {
+        let generics = self.parse_generics()?;
+        let target_type = self.parse_type()?;
+
+        // Optional trait name
+        let trait_name = if self.check(&Token::Colon) {
+            self.advance();
+            Some(self.parse_ident()?)
+        } else {
+            None
+        };
+
+        self.expect(&Token::LBrace)?;
+
+        let mut methods = Vec::new();
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            let start = self.current_span().start;
+            self.expect(&Token::Function)?;
+            let func = self.parse_function(false, false)?;
+            let end = self.prev_span().end;
+            methods.push(Spanned::new(func, Span::new(start, end)));
+        }
+
+        self.expect(&Token::RBrace)?;
+
+        Ok(Impl {
+            target_type,
+            trait_name,
+            generics,
+            methods,
+        })
+    }
+
+    /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>`
+    fn parse_generics(&mut self) -> ParseResult<Vec<GenericParam>> {
         if !self.check(&Token::Lt) {
             return Ok(Vec::new());
         }
@@ -259,7 +355,18 @@ impl Parser {
         let mut generics = Vec::new();
 
         while !self.check(&Token::Gt) && !self.is_at_end() {
-            generics.push(self.parse_ident()?);
+            let name = self.parse_ident()?;
+
+            // Parse optional trait bounds: `: Trait1 + Trait2`
+            let bounds = if self.check(&Token::Colon) {
+                self.advance();
+                self.parse_trait_bounds()?
+            } else {
+                Vec::new()
+            };
+
+            generics.push(GenericParam { name, bounds });
+
             if !self.check(&Token::Gt) {
                 self.expect(&Token::Comma)?;
             }
@@ -267,6 +374,22 @@ impl Parser {
 
         self.expect(&Token::Gt)?;
         Ok(generics)
+    }
+
+    /// Parse trait bounds: `Trait1 + Trait2 + Trait3`
+    fn parse_trait_bounds(&mut self) -> ParseResult<Vec<Spanned<String>>> {
+        let mut bounds = Vec::new();
+
+        // Parse first bound
+        bounds.push(self.parse_ident()?);
+
+        // Parse additional bounds separated by `+`
+        while self.check(&Token::Plus) {
+            self.advance();
+            bounds.push(self.parse_ident()?);
+        }
+
+        Ok(bounds)
     }
 
     /// Parse function parameters
@@ -790,7 +913,7 @@ impl Parser {
 
     /// Parse equality
     fn parse_equality(&mut self) -> ParseResult<Spanned<Expr>> {
-        let mut left = self.parse_comparison()?;
+        let mut left = self.parse_range()?;
 
         loop {
             let op = if self.check(&Token::EqEq) {
@@ -803,7 +926,7 @@ impl Parser {
 
             if let Some(op) = op {
                 self.advance();
-                let right = self.parse_comparison()?;
+                let right = self.parse_range()?;
                 let span = left.span.merge(right.span);
                 left = Spanned::new(
                     Expr::Binary {
@@ -815,6 +938,67 @@ impl Parser {
                 );
             } else {
                 break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse range expression: `start..end` or `start..=end`
+    fn parse_range(&mut self) -> ParseResult<Spanned<Expr>> {
+        let start_span = self.current_span().start;
+
+        // Check for prefix range (..end or ..=end)
+        if self.check(&Token::DotDot) || self.check(&Token::DotDotEq) {
+            let inclusive = self.check(&Token::DotDotEq);
+            self.advance();
+            let end = self.parse_comparison()?;
+            let end_span = self.prev_span().end;
+            return Ok(Spanned::new(
+                Expr::Range {
+                    start: None,
+                    end: Some(Box::new(end)),
+                    inclusive,
+                },
+                Span::new(start_span, end_span),
+            ));
+        }
+
+        let left = self.parse_comparison()?;
+
+        // Check for range operator
+        if self.check(&Token::DotDot) || self.check(&Token::DotDotEq) {
+            let inclusive = self.check(&Token::DotDotEq);
+            self.advance();
+
+            // Check if there's an end expression (not at end of context like ] or ))
+            if !self.is_at_end()
+                && !self.check(&Token::RBracket)
+                && !self.check(&Token::RParen)
+                && !self.check(&Token::Comma)
+                && !self.check(&Token::RBrace)
+            {
+                let end = self.parse_comparison()?;
+                let end_span = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Range {
+                        start: Some(Box::new(left)),
+                        end: Some(Box::new(end)),
+                        inclusive,
+                    },
+                    Span::new(start_span, end_span),
+                ));
+            } else {
+                // start.. (no end)
+                let end_span = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Range {
+                        start: Some(Box::new(left)),
+                        end: None,
+                        inclusive,
+                    },
+                    Span::new(start_span, end_span),
+                ));
             }
         }
 
@@ -1057,14 +1241,36 @@ impl Parser {
                         let args = self.parse_args()?;
                         self.expect(&Token::RParen)?;
                         let end = self.prev_span().end;
-                        expr = Spanned::new(
-                            Expr::MethodCall {
-                                receiver: Box::new(expr),
-                                method: field,
-                                args,
-                            },
-                            Span::new(start, end),
-                        );
+
+                        // Check if receiver is a type name (starts with uppercase)
+                        // If so, this is a static method call
+                        let is_static = if let Expr::Ident(name) = &expr.node {
+                            name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                        } else {
+                            false
+                        };
+
+                        if is_static {
+                            if let Expr::Ident(type_name) = expr.node.clone() {
+                                expr = Spanned::new(
+                                    Expr::StaticMethodCall {
+                                        type_name: Spanned::new(type_name, expr.span),
+                                        method: field,
+                                        args,
+                                    },
+                                    Span::new(start, end),
+                                );
+                            }
+                        } else {
+                            expr = Spanned::new(
+                                Expr::MethodCall {
+                                    receiver: Box::new(expr),
+                                    method: field,
+                                    args,
+                                },
+                                Span::new(start, end),
+                            );
+                        }
                     } else {
                         let end = field.span.end;
                         expr = Spanned::new(
@@ -1128,7 +1334,7 @@ impl Parser {
             Token::Ident(name) => {
                 // Check for struct literal: `Name{...}`
                 // Only treat as struct literal if name starts with uppercase (type convention)
-                let is_type_name = name.chars().next().map_or(false, |c| c.is_uppercase());
+                let is_type_name = name.chars().next().is_some_and(|c| c.is_uppercase());
                 if is_type_name && self.check(&Token::LBrace) {
                     self.advance();
                     let mut fields = Vec::new();
@@ -1213,6 +1419,10 @@ impl Parser {
                     Expr::Spawn(Box::new(body)),
                     Span::new(start, end),
                 ));
+            }
+            Token::Pipe => {
+                // Lambda expression: |params| body
+                return self.parse_lambda(start);
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -1333,6 +1543,42 @@ impl Parser {
             Expr::Match {
                 expr: Box::new(expr),
                 arms,
+            },
+            Span::new(start, end),
+        ))
+    }
+
+    /// Parse lambda expression: |params| body
+    /// Syntax: |x: i64, y: i64| x + y
+    fn parse_lambda(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        // We've already consumed the opening |
+        let mut params = Vec::new();
+
+        // Parse parameters until closing |
+        while !self.check(&Token::Pipe) && !self.is_at_end() {
+            let name = self.parse_ident()?;
+            self.expect(&Token::Colon)?;
+            let ty = self.parse_type()?;
+            params.push(Param {
+                name,
+                ty,
+                is_mut: false,
+            });
+            if !self.check(&Token::Pipe) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+        self.expect(&Token::Pipe)?;
+
+        // Parse lambda body (single expression)
+        let body = self.parse_expr()?;
+        let end = self.prev_span().end;
+
+        Ok(Spanned::new(
+            Expr::Lambda {
+                params,
+                body: Box::new(body),
+                captures: vec![], // Filled during type checking
             },
             Span::new(start, end),
         ))
@@ -1617,6 +1863,65 @@ mod tests {
             } else {
                 panic!("Expected block body");
             }
+        }
+    }
+
+    #[test]
+    fn test_parse_generic_constraints() {
+        // Test single trait bound
+        let source = "F print_value<T: Display>(x: T) -> () = println(x)";
+        let module = parse(source).unwrap();
+
+        if let Item::Function(f) = &module.items[0].node {
+            assert_eq!(f.name.node, "print_value");
+            assert_eq!(f.generics.len(), 1);
+            assert_eq!(f.generics[0].name.node, "T");
+            assert_eq!(f.generics[0].bounds.len(), 1);
+            assert_eq!(f.generics[0].bounds[0].node, "Display");
+        } else {
+            panic!("Expected function");
+        }
+
+        // Test multiple trait bounds
+        let source2 = "F compare<T: Ord + Clone>(a: T, b: T) -> bool = a < b";
+        let module2 = parse(source2).unwrap();
+
+        if let Item::Function(f) = &module2.items[0].node {
+            assert_eq!(f.generics.len(), 1);
+            assert_eq!(f.generics[0].name.node, "T");
+            assert_eq!(f.generics[0].bounds.len(), 2);
+            assert_eq!(f.generics[0].bounds[0].node, "Ord");
+            assert_eq!(f.generics[0].bounds[1].node, "Clone");
+        } else {
+            panic!("Expected function");
+        }
+
+        // Test multiple generic params with bounds
+        let source3 = "F transform<A: Clone, B: Default>(x: A) -> B = x";
+        let module3 = parse(source3).unwrap();
+
+        if let Item::Function(f) = &module3.items[0].node {
+            assert_eq!(f.generics.len(), 2);
+            assert_eq!(f.generics[0].name.node, "A");
+            assert_eq!(f.generics[0].bounds.len(), 1);
+            assert_eq!(f.generics[0].bounds[0].node, "Clone");
+            assert_eq!(f.generics[1].name.node, "B");
+            assert_eq!(f.generics[1].bounds.len(), 1);
+            assert_eq!(f.generics[1].bounds[0].node, "Default");
+        } else {
+            panic!("Expected function");
+        }
+
+        // Test generic without bounds (should still work)
+        let source4 = "F identity<T>(x: T) -> T = x";
+        let module4 = parse(source4).unwrap();
+
+        if let Item::Function(f) = &module4.items[0].node {
+            assert_eq!(f.generics.len(), 1);
+            assert_eq!(f.generics[0].name.node, "T");
+            assert_eq!(f.generics[0].bounds.len(), 0);
+        } else {
+            panic!("Expected function");
         }
     }
 }

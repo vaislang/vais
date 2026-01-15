@@ -1,0 +1,56 @@
+# Closure test - lambda with captured variables
+
+F print_num(n: i64) -> i64 {
+    # Print hundreds digit
+    d2 := n / 100
+    I d2 > 0 {
+        putchar(d2 + 48)
+        R 0
+    } E {}
+
+    # Print tens digit
+    d1 := (n / 10) % 10
+    I n >= 10 {
+        putchar(d1 + 48)
+        R 0
+    } E {}
+
+    # Print ones digit
+    putchar(n % 10 + 48)
+    0
+}
+
+F main() -> i64 {
+    puts("=== Closure Test ===")
+
+    # Test 1: Simple capture
+    puts("Test 1: Simple capture")
+    multiplier := 10
+    scale := |x: i64| x * multiplier
+    result1 := scale(5)
+    puts("scale(5) with multiplier=10:")
+    print_num(result1)
+    putchar(10)
+
+    # Test 2: Multiple captures
+    puts("Test 2: Multiple captures")
+    base := 100
+    offset := 7
+    compute := |x: i64| base + x * offset
+    result2 := compute(3)
+    puts("compute(3) with base=100, offset=7:")
+    print_num(result2)
+    putchar(10)
+
+    # Test 3: Capture and local param with same name logic
+    puts("Test 3: Nested value usage")
+    factor := 5
+    triple := |n: i64| n + n + n + factor
+    result3 := triple(2)
+    puts("triple(2) with factor=5:")
+    print_num(result3)
+    putchar(10)
+
+    puts("=== Done ===")
+    0
+}

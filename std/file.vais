@@ -1,0 +1,257 @@
+# File I/O - basic file operations
+# Uses C standard library functions via extern
+
+# File handle wrapper
+S File {
+    handle: i64,    # FILE* pointer (0 if closed/invalid)
+    mode: i64       # 0=closed, 1=read, 2=write, 3=append
+}
+
+# File open modes (constants)
+# MODE_READ = 1
+# MODE_WRITE = 2
+# MODE_APPEND = 3
+
+X File {
+    # Open file for reading
+    # Returns File with handle=0 if failed
+    F open_read(path: i64) -> File {
+        handle := fopen(path, "r")
+        I handle == 0 {
+            File { handle: 0, mode: 0 }
+        } E {
+            File { handle: handle, mode: 1 }
+        }
+    }
+
+    # Open file for writing (creates/truncates)
+    F open_write(path: i64) -> File {
+        handle := fopen(path, "w")
+        I handle == 0 {
+            File { handle: 0, mode: 0 }
+        } E {
+            File { handle: handle, mode: 2 }
+        }
+    }
+
+    # Open file for appending
+    F open_append(path: i64) -> File {
+        handle := fopen(path, "a")
+        I handle == 0 {
+            File { handle: 0, mode: 0 }
+        } E {
+            File { handle: handle, mode: 3 }
+        }
+    }
+
+    # Check if file is open and valid
+    F is_open(&self) -> i64 {
+        I self.handle != 0 { 1 } E { 0 }
+    }
+
+    # Get file mode (0=closed, 1=read, 2=write, 3=append)
+    F get_mode(&self) -> i64 {
+        self.mode
+    }
+
+    # Read a single byte, returns -1 on EOF or error
+    F read_byte(&self) -> i64 {
+        I self.handle == 0 {
+            0 - 1
+        } E {
+            fgetc(self.handle)
+        }
+    }
+
+    # Read up to count bytes into buffer
+    # Returns number of bytes actually read
+    F read(&self, buffer: i64, count: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            fread(buffer, 1, count, self.handle)
+        }
+    }
+
+    # Read a line into buffer (max_len includes null terminator)
+    # Returns 1 on success, 0 on EOF/error
+    F read_line(&self, buffer: i64, max_len: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            result := fgets(buffer, max_len, self.handle)
+            I result == 0 {
+                0
+            } E {
+                1
+            }
+        }
+    }
+
+    # Write a single byte
+    # Returns 1 on success, 0 on error
+    F write_byte(&self, byte: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            result := fputc(byte, self.handle)
+            I result < 0 {
+                0
+            } E {
+                1
+            }
+        }
+    }
+
+    # Write bytes from buffer
+    # Returns number of bytes written
+    F write(&self, buffer: i64, count: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            fwrite(buffer, 1, count, self.handle)
+        }
+    }
+
+    # Write null-terminated string
+    # Returns 1 on success, 0 on error
+    F write_str(&self, str: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            result := fputs(str, self.handle)
+            I result < 0 {
+                0
+            } E {
+                1
+            }
+        }
+    }
+
+    # Flush file buffer
+    F flush(&self) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            fflush(self.handle)
+            1
+        }
+    }
+
+    # Seek to position (origin: 0=start, 1=current, 2=end)
+    # Returns 0 on success, -1 on error
+    F seek(&self, offset: i64, origin: i64) -> i64 {
+        I self.handle == 0 {
+            0 - 1
+        } E {
+            fseek(self.handle, offset, origin)
+        }
+    }
+
+    # Get current position in file
+    # Returns -1 on error
+    F tell(&self) -> i64 {
+        I self.handle == 0 {
+            0 - 1
+        } E {
+            ftell(self.handle)
+        }
+    }
+
+    # Check if at end of file
+    F eof(&self) -> i64 {
+        I self.handle == 0 {
+            1
+        } E {
+            feof(self.handle)
+        }
+    }
+
+    # Close the file
+    F close(&self) -> i64 {
+        I self.handle != 0 {
+            fclose(self.handle)
+            self.handle = 0
+            self.mode = 0
+        }
+        0
+    }
+
+    # Alias for close (RAII pattern)
+    F drop(&self) -> i64 {
+        @.close()
+    }
+}
+
+# Read entire file into buffer (allocates memory)
+# Returns pointer to buffer (caller must free) or 0 on error
+# Sets size_out to number of bytes read
+F file_read_all(path: i64, size_out: i64) -> i64 {
+    f := File.open_read(path)
+    I f.handle == 0 {
+        store_i64(size_out, 0)
+        0
+    } E {
+        # Get file size
+        f.seek(0, 2)  # Seek to end
+        size := f.tell()
+        f.seek(0, 0)  # Seek back to start
+
+        I size <= 0 {
+            f.close()
+            store_i64(size_out, 0)
+            0
+        } E {
+            # Allocate buffer (+1 for null terminator)
+            buffer := malloc(size + 1)
+            I buffer == 0 {
+                f.close()
+                store_i64(size_out, 0)
+                0
+            } E {
+                bytes_read := f.read(buffer, size)
+                store_byte(buffer + bytes_read, 0)  # Null terminate
+                f.close()
+                store_i64(size_out, bytes_read)
+                buffer
+            }
+        }
+    }
+}
+
+# Write buffer to file (overwrites existing)
+# Returns number of bytes written
+F file_write_all(path: i64, buffer: i64, size: i64) -> i64 {
+    f := File.open_write(path)
+    I f.handle == 0 {
+        0
+    } E {
+        written := f.write(buffer, size)
+        f.close()
+        written
+    }
+}
+
+# Append buffer to file
+# Returns number of bytes written
+F file_append(path: i64, buffer: i64, size: i64) -> i64 {
+    f := File.open_append(path)
+    I f.handle == 0 {
+        0
+    } E {
+        written := f.write(buffer, size)
+        f.close()
+        written
+    }
+}
+
+# Check if file exists (try to open for reading)
+F file_exists(path: i64) -> i64 {
+    f := File.open_read(path)
+    I f.handle == 0 {
+        0
+    } E {
+        f.close()
+        1
+    }
+}

@@ -1,0 +1,59 @@
+# String type test
+
+S String {
+    data: i64,
+    len: i64,
+    cap: i64
+}
+
+X String {
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    F push_char(&self, c: i64) -> i64 {
+        ptr := self.data + self.len
+        store_byte(ptr, c)
+        self.len = self.len + 1
+        store_byte(self.data + self.len, 0)
+        self.len
+    }
+
+    F print(&self) -> i64 {
+        puts_ptr(self.data)
+        0
+    }
+}
+
+F main() -> i64 {
+    puts("Testing String type:")
+
+    # Allocate and create string
+    data := malloc(64)
+    # Initialize the buffer with null
+    store_byte(data, 0)
+
+    s := String { data: data, len: 0, cap: 64 }
+
+    puts("Created string, pushing chars...")
+
+    # Push characters
+    s.push_char(72)   # H
+    s.push_char(101)  # e
+    s.push_char(108)  # l
+    s.push_char(108)  # l
+    s.push_char(111)  # o
+
+    puts("String content:")
+    s.print()
+
+    puts("String length:")
+    len := s.len()
+    putchar(len + 48)
+    putchar(10)
+
+    free(data)
+    puts("Done!")
+
+    0
+}

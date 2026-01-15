@@ -1,0 +1,16 @@
+# Enum test
+E Color {
+    Red,
+    Green,
+    Blue
+}
+
+E Option {
+    None,
+    Some(i64)
+}
+
+F main() -> i64 {
+    puts("Enum types defined!")
+    0
+}

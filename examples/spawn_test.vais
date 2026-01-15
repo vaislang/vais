@@ -1,0 +1,17 @@
+# Spawn test (currently sync implementation)
+F work(x: i64) -> i64 {
+    x * x
+}
+
+F main() -> i64 {
+    puts("Testing spawn (sync for now):")
+
+    # Spawn a task
+    result := spawn { work(5) }
+    puts("spawn { work(5) } =")
+    putchar(result / 10 + 48)  # '2'
+    putchar(result % 10 + 48)  # '5'
+    putchar(10)
+
+    0
+}

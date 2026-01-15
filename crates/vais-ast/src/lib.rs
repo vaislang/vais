@@ -1,4 +1,4 @@
-//! Vais 2.0 Abstract Syntax Tree
+//! Vais 0.0.1 Abstract Syntax Tree
 //!
 //! AI-optimized AST with minimal node types for efficient parsing and code generation.
 
@@ -50,17 +50,21 @@ pub enum Item {
     Struct(Struct),
     /// `E Name{variants}`
     Enum(Enum),
-    /// `T Name=Type`
+    /// `T Name=Type` (Type alias)
     TypeAlias(TypeAlias),
     /// `U module` or `U module::{items}`
     Use(Use),
+    /// `W Name { methods }` (trait definition - "What" interface)
+    Trait(Trait),
+    /// `X Type: Trait { methods }` (impl - "eXtend" implementation)
+    Impl(Impl),
 }
 
 /// Function definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Spanned<String>,
-    pub generics: Vec<Spanned<String>>,
+    pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub ret_type: Option<Spanned<Type>>,
     pub body: FunctionBody,
@@ -85,11 +89,18 @@ pub struct Param {
     pub is_mut: bool,
 }
 
+/// Generic parameter with optional trait bounds
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenericParam {
+    pub name: Spanned<String>,
+    pub bounds: Vec<Spanned<String>>, // Trait constraints (e.g., T: Display + Clone)
+}
+
 /// Struct definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub name: Spanned<String>,
-    pub generics: Vec<Spanned<String>>,
+    pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
     pub methods: Vec<Spanned<Function>>,
     pub is_pub: bool,
@@ -107,7 +118,7 @@ pub struct Field {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
     pub name: Spanned<String>,
-    pub generics: Vec<Spanned<String>>,
+    pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
     pub is_pub: bool,
 }
@@ -130,7 +141,7 @@ pub enum VariantFields {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAlias {
     pub name: Spanned<String>,
-    pub generics: Vec<Spanned<String>>,
+    pub generics: Vec<GenericParam>,
     pub ty: Spanned<Type>,
     pub is_pub: bool,
 }
@@ -140,6 +151,33 @@ pub struct TypeAlias {
 pub struct Use {
     pub path: Vec<Spanned<String>>,
     pub alias: Option<Spanned<String>>,
+}
+
+/// Trait definition: `W Name { methods }`
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trait {
+    pub name: Spanned<String>,
+    pub generics: Vec<GenericParam>,
+    pub methods: Vec<TraitMethod>,
+    pub is_pub: bool,
+}
+
+/// Trait method signature (may have default impl)
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitMethod {
+    pub name: Spanned<String>,
+    pub params: Vec<Param>,
+    pub ret_type: Option<Spanned<Type>>,
+    pub default_body: Option<FunctionBody>,
+}
+
+/// Impl block: `X Type: Trait { methods }`
+#[derive(Debug, Clone, PartialEq)]
+pub struct Impl {
+    pub target_type: Spanned<Type>,
+    pub trait_name: Option<Spanned<String>>,
+    pub generics: Vec<GenericParam>,
+    pub methods: Vec<Spanned<Function>>,
 }
 
 /// Type expressions
@@ -259,6 +297,12 @@ pub enum Expr {
         method: Spanned<String>,
         args: Vec<Spanned<Expr>>,
     },
+    /// Static method call: `Type.method(args)`
+    StaticMethodCall {
+        type_name: Spanned<String>,
+        method: Spanned<String>,
+        args: Vec<Spanned<Expr>>,
+    },
     /// Field access: `obj.field`
     Field {
         expr: Box<Spanned<Expr>>,
@@ -311,6 +355,8 @@ pub enum Expr {
     Lambda {
         params: Vec<Param>,
         body: Box<Spanned<Expr>>,
+        /// Captured variables from enclosing scope (filled during type checking)
+        captures: Vec<String>,
     },
     /// Spawn: `spawn{expr}`
     Spawn(Box<Spanned<Expr>>),

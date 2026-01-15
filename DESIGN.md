@@ -1,4 +1,4 @@
-# Vais 2.0 Language Design
+# Vais 0.0.1 Language Design
 
 ## 목표
 

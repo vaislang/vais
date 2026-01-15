@@ -1,0 +1,18 @@
+# Test loop with break in if-else
+
+F main() -> i64 {
+    puts("=== Loop Break Test ===")
+
+    # Test 1: Simple loop with break
+    puts("Test 1: Break from loop")
+    i := mut 0
+    L {
+        I i >= 5 { B 0 }
+        putchar(i + 48)
+        i = i + 1
+    }
+    putchar(10)
+
+    puts("=== Done ===")
+    0
+}

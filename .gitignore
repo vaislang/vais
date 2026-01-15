@@ -22,6 +22,25 @@ Thumbs.db
 
 # Compiled Vais binaries (keep .vais and .ll files)
 examples/hello
+examples/hello_world
 examples/fib
 examples/control_flow
 examples/arrays
+examples/enum_test
+examples/file_test
+examples/generic_test
+examples/iter_test
+examples/loop_break_test
+examples/malloc_test
+examples/method_test
+examples/option_test
+examples/pattern_match_test
+examples/printf_test
+examples/putchar_var
+examples/string_test
+examples/trait_test
+examples/*_out
+
+# Temp files from testing
+test.txt
+string_test

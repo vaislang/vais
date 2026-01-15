@@ -1,0 +1,14 @@
+# Generic function test (simple identity)
+F identity<T>(x: T) -> T = x
+
+F main() -> i64 {
+    puts("Testing generics:")
+
+    a := identity(42)
+    puts("identity(42) =")
+    putchar(a / 10 + 48)
+    putchar(a % 10 + 48)
+    putchar(10)
+
+    0
+}

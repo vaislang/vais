@@ -4,10 +4,12 @@
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
+use vais_ast::{Item, Module};
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;
@@ -103,7 +105,7 @@ fn main() {
         }
         Some(Commands::Version) => {
             println!("{} {}", "vaisc".bold(), env!("CARGO_PKG_VERSION"));
-            println!("Vais 2.0 - AI-optimized systems programming language");
+            println!("Vais 0.0.1 - AI-optimized systems programming language");
             Ok(())
         }
         None => {
@@ -131,33 +133,17 @@ fn cmd_build(
     opt_level: u8,
     verbose: bool,
 ) -> Result<(), String> {
-    // Read source file
-    let source = fs::read_to_string(input)
-        .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
+    // Parse main file and resolve imports
+    let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
+    let merged_ast = load_module_with_imports(input, &mut loaded_modules, verbose)?;
 
     if verbose {
-        println!("{} {}", "Compiling".green().bold(), input.display());
-    }
-
-    // Tokenize
-    let tokens = tokenize(&source)
-        .map_err(|e| format!("Lexer error: {}", e))?;
-
-    if verbose {
-        println!("  {} tokens", tokens.len());
-    }
-
-    // Parse
-    let ast = parse(&source)
-        .map_err(|e| format!("Parser error: {}", e))?;
-
-    if verbose {
-        println!("  {} items", ast.items.len());
+        println!("  {} total items (including imports)", merged_ast.items.len());
     }
 
     // Type check
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast)
+    checker.check_module(&merged_ast)
         .map_err(|e| format!("Type error: {}", e))?;
 
     if verbose {
@@ -170,13 +156,17 @@ fn cmd_build(
         .unwrap_or("main");
 
     let mut codegen = CodeGenerator::new(module_name);
-    let ir = codegen.generate_module(&ast)
+    let ir = codegen.generate_module(&merged_ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
 
-    // Determine output path
-    let ir_path = output.clone().unwrap_or_else(|| {
+    // Determine output paths
+    let ir_path = if emit_ir {
+        // If emitting IR, use the specified output or default to .ll
+        output.clone().unwrap_or_else(|| input.with_extension("ll"))
+    } else {
+        // For binary compilation, always use .ll extension for intermediate IR
         input.with_extension("ll")
-    });
+    };
 
     // Write IR
     fs::write(&ir_path, &ir)
@@ -198,9 +188,105 @@ fn cmd_build(
     Ok(())
 }
 
+/// Load a module and recursively resolve its imports
+fn load_module_with_imports(
+    path: &PathBuf,
+    loaded: &mut HashSet<PathBuf>,
+    verbose: bool,
+) -> Result<Module, String> {
+    // Canonicalize path to avoid duplicate loading
+    let canonical = path.canonicalize()
+        .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
+
+    // Skip if already loaded
+    if loaded.contains(&canonical) {
+        return Ok(Module { items: vec![] });
+    }
+    loaded.insert(canonical.clone());
+
+    // Read and parse the file
+    let source = fs::read_to_string(path)
+        .map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
+
+    if verbose {
+        println!("{} {}", "Compiling".green().bold(), path.display());
+    }
+
+    let _tokens = tokenize(&source)
+        .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
+
+    let ast = parse(&source)
+        .map_err(|e| format!("Parser error in '{}': {}", path.display(), e))?;
+
+    if verbose {
+        println!("  {} items", ast.items.len());
+    }
+
+    // Collect items, processing imports
+    let mut all_items = Vec::new();
+    let base_dir = path.parent().unwrap_or(Path::new("."));
+
+    for item in ast.items {
+        match &item.node {
+            Item::Use(use_stmt) => {
+                // Resolve import path
+                let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
+
+                if verbose {
+                    println!("  {} {}", "Importing".cyan(), module_path.display());
+                }
+
+                // Recursively load the imported module
+                let imported = load_module_with_imports(&module_path, loaded, verbose)?;
+                all_items.extend(imported.items);
+            }
+            _ => {
+                all_items.push(item);
+            }
+        }
+    }
+
+    Ok(Module { items: all_items })
+}
+
+/// Resolve import path to file path
+fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> Result<PathBuf, String> {
+    if path.is_empty() {
+        return Err("Empty import path".to_string());
+    }
+
+    // Convert module path to file path
+    // e.g., `U utils` -> `utils.vais` or `utils/mod.vais`
+    let mut file_path = base_dir.to_path_buf();
+    for (i, segment) in path.iter().enumerate() {
+        if i == path.len() - 1 {
+            // Last segment - try as file first, then as directory with mod.vais
+            let as_file = file_path.join(format!("{}.vais", segment.node));
+            let as_dir = file_path.join(&segment.node).join("mod.vais");
+
+            if as_file.exists() {
+                return Ok(as_file);
+            } else if as_dir.exists() {
+                return Ok(as_dir);
+            } else {
+                return Err(format!(
+                    "Cannot find module '{}': tried '{}' and '{}'",
+                    segment.node,
+                    as_file.display(),
+                    as_dir.display()
+                ));
+            }
+        } else {
+            file_path = file_path.join(&segment.node);
+        }
+    }
+
+    Err(format!("Invalid import path"))
+}
+
 fn compile_ir_to_binary(
-    ir_path: &PathBuf,
-    bin_path: &PathBuf,
+    ir_path: &Path,
+    bin_path: &Path,
     opt_level: u8,
     verbose: bool,
 ) -> Result<(), String> {

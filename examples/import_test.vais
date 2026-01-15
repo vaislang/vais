@@ -1,0 +1,17 @@
+# Import test - uses math module
+U math
+
+F main() -> i64 {
+    puts("Testing imports:")
+
+    result := add(10, 20)
+    puts("add(10, 20) = 30")
+
+    result2 := mul(5, 6)
+    puts("mul(5, 6) = 30")
+
+    result3 := square(7)
+    puts("square(7) = 49")
+
+    0
+}

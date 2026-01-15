@@ -1,4 +1,4 @@
-//! Vais 2.0 LLVM Code Generator
+//! Vais 0.0.1 LLVM Code Generator
 //!
 //! Generates LLVM IR from typed AST for native code generation.
 //!
@@ -30,7 +30,12 @@ pub enum CodegenError {
 
 type CodegenResult<T> = Result<T, CodegenError>;
 
-/// LLVM IR Code Generator for Vais 2.0
+/// Result of generating a block of statements
+/// (value, ir_code, is_terminated)
+/// is_terminated is true if the block ends with break, continue, or return
+type BlockResult = (String, String, bool);
+
+/// LLVM IR Code Generator for Vais 0.0.1
 ///
 /// Generates LLVM IR text from typed AST for native code generation via clang.
 pub struct CodeGenerator {
@@ -43,6 +48,9 @@ pub struct CodeGenerator {
     // Struct definitions
     structs: HashMap<String, StructInfo>,
 
+    // Enum definitions
+    enums: HashMap<String, EnumInfo>,
+
     // Current function being compiled
     current_function: Option<String>,
 
@@ -54,6 +62,21 @@ pub struct CodeGenerator {
 
     // Stack of loop labels for break/continue
     loop_stack: Vec<LoopLabels>,
+
+    // String constants for global storage
+    string_constants: Vec<(String, String)>, // (name, value)
+
+    // Counter for string constant names
+    string_counter: usize,
+
+    // Lambda functions generated during compilation
+    lambda_functions: Vec<String>,
+
+    // Closure information for each lambda variable (maps var_name -> closure_info)
+    closures: HashMap<String, ClosureInfo>,
+
+    // Last generated lambda info (for Let statement to pick up)
+    last_lambda_info: Option<ClosureInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,23 +101,359 @@ struct StructInfo {
 }
 
 #[derive(Debug, Clone)]
+struct EnumInfo {
+    #[allow(dead_code)]
+    name: String,
+    variants: Vec<EnumVariantInfo>,
+}
+
+#[derive(Debug, Clone)]
+struct EnumVariantInfo {
+    #[allow(dead_code)]
+    name: String,
+    #[allow(dead_code)]
+    tag: u32,
+    fields: EnumVariantFields,
+}
+
+#[derive(Debug, Clone)]
+enum EnumVariantFields {
+    Unit,
+    Tuple(Vec<ResolvedType>),
+    Struct(Vec<(String, ResolvedType)>),
+}
+
+#[derive(Debug, Clone)]
 struct LocalVar {
     ty: ResolvedType,
     /// True if this is a function parameter (SSA value), false if alloca'd
     is_param: bool,
+    /// The actual LLVM IR name for this variable (may differ from source name in loops)
+    llvm_name: String,
+}
+
+/// Information about a closure (lambda with captures)
+#[derive(Debug, Clone)]
+struct ClosureInfo {
+    /// The generated LLVM function name for this lambda
+    #[allow(dead_code)]
+    func_name: String,
+    /// Captured variable names and their loaded values (var_name, llvm_value)
+    captures: Vec<(String, String)>,
 }
 
 impl CodeGenerator {
     pub fn new(module_name: &str) -> Self {
-        Self {
+        let mut gen = Self {
             module_name: module_name.to_string(),
             functions: HashMap::new(),
             structs: HashMap::new(),
+            enums: HashMap::new(),
             current_function: None,
             locals: HashMap::new(),
             label_counter: 0,
             loop_stack: Vec::new(),
-        }
+            string_constants: Vec::new(),
+            string_counter: 0,
+            lambda_functions: Vec::new(),
+            closures: HashMap::new(),
+            last_lambda_info: None,
+        };
+
+        // Register built-in extern functions
+        gen.register_builtin_functions();
+        gen
+    }
+
+    fn register_builtin_functions(&mut self) {
+        // printf for printing
+        self.functions.insert(
+            "printf".to_string(),
+            FunctionInfo {
+                name: "printf".to_string(),
+                params: vec![("format".to_string(), ResolvedType::Str)],
+                ret_type: ResolvedType::I32,
+                is_extern: true,
+            },
+        );
+
+        // putchar for single character output
+        self.functions.insert(
+            "putchar".to_string(),
+            FunctionInfo {
+                name: "putchar".to_string(),
+                params: vec![("c".to_string(), ResolvedType::I32)],
+                ret_type: ResolvedType::I32,
+                is_extern: true,
+            },
+        );
+
+        // puts for simple string output
+        self.functions.insert(
+            "puts".to_string(),
+            FunctionInfo {
+                name: "puts".to_string(),
+                params: vec![("s".to_string(), ResolvedType::Str)],
+                ret_type: ResolvedType::I32,
+                is_extern: true,
+            },
+        );
+
+        // malloc: (i64) -> i64 (pointer as integer for simplicity)
+        self.functions.insert(
+            "malloc".to_string(),
+            FunctionInfo {
+                name: "malloc".to_string(),
+                params: vec![("size".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // free: (i64) -> void (pointer as integer)
+        self.functions.insert(
+            "free".to_string(),
+            FunctionInfo {
+                name: "free".to_string(),
+                params: vec![("ptr".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::Unit,
+                is_extern: true,
+            },
+        );
+
+        // exit: (i32) -> void (noreturn)
+        self.functions.insert(
+            "exit".to_string(),
+            FunctionInfo {
+                name: "exit".to_string(),
+                params: vec![("code".to_string(), ResolvedType::I32)],
+                ret_type: ResolvedType::Unit,
+                is_extern: true,
+            },
+        );
+
+        // memcpy: (dest, src, n) -> dest
+        self.functions.insert(
+            "memcpy".to_string(),
+            FunctionInfo {
+                name: "memcpy".to_string(),
+                params: vec![
+                    ("dest".to_string(), ResolvedType::I64),
+                    ("src".to_string(), ResolvedType::I64),
+                    ("n".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // strlen: (s) -> len
+        self.functions.insert(
+            "strlen".to_string(),
+            FunctionInfo {
+                name: "strlen".to_string(),
+                params: vec![("s".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // puts_ptr: print string from pointer
+        self.functions.insert(
+            "puts_ptr".to_string(),
+            FunctionInfo {
+                name: "puts".to_string(), // Maps to C puts
+                params: vec![("s".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I32,
+                is_extern: true,
+            },
+        );
+
+        // load_byte: load single byte from memory
+        self.functions.insert(
+            "load_byte".to_string(),
+            FunctionInfo {
+                name: "__load_byte".to_string(),
+                params: vec![("ptr".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: false, // We'll generate this
+            },
+        );
+
+        // store_byte: store single byte to memory
+        self.functions.insert(
+            "store_byte".to_string(),
+            FunctionInfo {
+                name: "__store_byte".to_string(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64),
+                    ("val".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::Unit,
+                is_extern: false, // We'll generate this
+            },
+        );
+
+        // ===== File I/O functions =====
+
+        // fopen: (path, mode) -> FILE*
+        self.functions.insert(
+            "fopen".to_string(),
+            FunctionInfo {
+                name: "fopen".to_string(),
+                params: vec![
+                    ("path".to_string(), ResolvedType::Str),
+                    ("mode".to_string(), ResolvedType::Str),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fclose: (FILE*) -> int
+        self.functions.insert(
+            "fclose".to_string(),
+            FunctionInfo {
+                name: "fclose".to_string(),
+                params: vec![("stream".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I32,
+                is_extern: true,
+            },
+        );
+
+        // fread: (ptr, size, count, FILE*) -> size_t
+        self.functions.insert(
+            "fread".to_string(),
+            FunctionInfo {
+                name: "fread".to_string(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64),
+                    ("size".to_string(), ResolvedType::I64),
+                    ("count".to_string(), ResolvedType::I64),
+                    ("stream".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fwrite: (ptr, size, count, FILE*) -> size_t
+        self.functions.insert(
+            "fwrite".to_string(),
+            FunctionInfo {
+                name: "fwrite".to_string(),
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64),
+                    ("size".to_string(), ResolvedType::I64),
+                    ("count".to_string(), ResolvedType::I64),
+                    ("stream".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fgetc: (FILE*) -> int
+        self.functions.insert(
+            "fgetc".to_string(),
+            FunctionInfo {
+                name: "fgetc".to_string(),
+                params: vec![("stream".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fputc: (char, FILE*) -> int
+        self.functions.insert(
+            "fputc".to_string(),
+            FunctionInfo {
+                name: "fputc".to_string(),
+                params: vec![
+                    ("c".to_string(), ResolvedType::I64),
+                    ("stream".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fgets: (str, n, FILE*) -> char*
+        self.functions.insert(
+            "fgets".to_string(),
+            FunctionInfo {
+                name: "fgets".to_string(),
+                params: vec![
+                    ("str".to_string(), ResolvedType::I64),
+                    ("n".to_string(), ResolvedType::I64),
+                    ("stream".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fputs: (str, FILE*) -> int
+        self.functions.insert(
+            "fputs".to_string(),
+            FunctionInfo {
+                name: "fputs".to_string(),
+                params: vec![
+                    ("str".to_string(), ResolvedType::Str),
+                    ("stream".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fseek: (FILE*, offset, origin) -> int
+        self.functions.insert(
+            "fseek".to_string(),
+            FunctionInfo {
+                name: "fseek".to_string(),
+                params: vec![
+                    ("stream".to_string(), ResolvedType::I64),
+                    ("offset".to_string(), ResolvedType::I64),
+                    ("origin".to_string(), ResolvedType::I64),
+                ],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // ftell: (FILE*) -> long
+        self.functions.insert(
+            "ftell".to_string(),
+            FunctionInfo {
+                name: "ftell".to_string(),
+                params: vec![("stream".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // fflush: (FILE*) -> int
+        self.functions.insert(
+            "fflush".to_string(),
+            FunctionInfo {
+                name: "fflush".to_string(),
+                params: vec![("stream".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
+
+        // feof: (FILE*) -> int
+        self.functions.insert(
+            "feof".to_string(),
+            FunctionInfo {
+                name: "feof".to_string(),
+                params: vec![("stream".to_string(), ResolvedType::I64)],
+                ret_type: ResolvedType::I64,
+                is_extern: true,
+            },
+        );
     }
 
     fn next_label(&mut self, prefix: &str) -> String {
@@ -118,8 +477,31 @@ impl CodeGenerator {
         for item in &module.items {
             match &item.node {
                 Item::Function(f) => self.register_function(f)?,
-                Item::Struct(s) => self.register_struct(s)?,
-                _ => {}
+                Item::Struct(s) => {
+                    self.register_struct(s)?;
+                    // Register struct methods
+                    for method in &s.methods {
+                        self.register_method(&s.name.node, &method.node)?;
+                    }
+                }
+                Item::Enum(e) => self.register_enum(e)?,
+                Item::Impl(impl_block) => {
+                    // Register impl methods
+                    let type_name = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => name.clone(),
+                        _ => continue,
+                    };
+                    for method in &impl_block.methods {
+                        self.register_method(&type_name, &method.node)?;
+                    }
+                }
+                Item::Use(_) => {
+                    // Use statements are handled at the compiler level (AST merging)
+                    // No code generation needed for imports
+                }
+                Item::Trait(_) | Item::TypeAlias(_) => {
+                    // Traits and type aliases don't generate code
+                }
             }
         }
 
@@ -129,23 +511,109 @@ impl CodeGenerator {
             ir.push('\n');
         }
 
-        // Generate function declarations
-        for (_name, info) in &self.functions {
-            if info.is_extern {
+        // Generate enum types
+        for (name, info) in &self.enums.clone() {
+            ir.push_str(&self.generate_enum_type(&name, &info));
+            ir.push('\n');
+        }
+
+        // Generate function declarations (deduplicate by actual function name)
+        let mut declared_fns = std::collections::HashSet::new();
+        for info in self.functions.values() {
+            if info.is_extern && !declared_fns.contains(&info.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
+                declared_fns.insert(info.name.clone());
             }
         }
+
+        // Generate string constants (after processing functions to collect all strings)
+        let mut body_ir = String::new();
 
         // Second pass: generate function bodies
         for item in &module.items {
-            if let Item::Function(f) = &item.node {
-                ir.push_str(&self.generate_function(f)?);
-                ir.push('\n');
+            match &item.node {
+                Item::Function(f) => {
+                    body_ir.push_str(&self.generate_function(f)?);
+                    body_ir.push('\n');
+                }
+                Item::Struct(s) => {
+                    // Generate methods for this struct
+                    for method in &s.methods {
+                        body_ir.push_str(&self.generate_method(&s.name.node, &method.node)?);
+                        body_ir.push('\n');
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    // Generate methods from impl block
+                    // Get the type name from target_type
+                    let type_name = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => name.clone(),
+                        _ => continue,
+                    };
+                    for method in &impl_block.methods {
+                        body_ir.push_str(&self.generate_method(&type_name, &method.node)?);
+                        body_ir.push('\n');
+                    }
+                }
+                Item::Enum(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {
+                    // Already handled in first pass or no code generation needed
+                }
             }
         }
 
+        // Add string constants at the top of the module
+        for (name, value) in &self.string_constants {
+            let escaped = value.replace('\\', "\\\\").replace('"', "\\22").replace('\n', "\\0A");
+            let len = value.len() + 1; // +1 for null terminator
+            ir.push_str(&format!(
+                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
+                name, len, escaped
+            ));
+        }
+        if !self.string_constants.is_empty() {
+            ir.push('\n');
+        }
+
+        ir.push_str(&body_ir);
+
+        // Add lambda functions at the end
+        for lambda_ir in &self.lambda_functions {
+            ir.push('\n');
+            ir.push_str(lambda_ir);
+        }
+
+        // Add helper functions for memory operations
+        ir.push_str(&self.generate_helper_functions());
+
         Ok(ir)
+    }
+
+    /// Generate helper functions for low-level memory operations
+    fn generate_helper_functions(&self) -> String {
+        let mut ir = String::new();
+
+        // __load_byte: load a byte from memory address
+        ir.push_str("\n; Helper function: load byte from memory\n");
+        ir.push_str("define i64 @__load_byte(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i8*\n");
+        ir.push_str("  %1 = load i8, i8* %0\n");
+        ir.push_str("  %2 = zext i8 %1 to i64\n");
+        ir.push_str("  ret i64 %2\n");
+        ir.push_str("}\n");
+
+        // __store_byte: store a byte to memory address
+        ir.push_str("\n; Helper function: store byte to memory\n");
+        ir.push_str("define void @__store_byte(i64 %ptr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to i8*\n");
+        ir.push_str("  %1 = trunc i64 %val to i8\n");
+        ir.push_str("  store i8 %1, i8* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
+        ir
     }
 
     fn register_function(&mut self, f: &Function) -> CodegenResult<()> {
@@ -168,6 +636,54 @@ impl CodeGenerator {
             f.name.node.clone(),
             FunctionInfo {
                 name: f.name.node.clone(),
+                params,
+                ret_type,
+                is_extern: false,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Register a method as a function with Type_methodName naming convention
+    fn register_method(&mut self, type_name: &str, f: &Function) -> CodegenResult<()> {
+        let method_name = format!("{}_{}", type_name, f.name.node);
+
+        // Check if this is a static method (no &self or self parameter)
+        let has_self = f.params.first().map(|p| p.name.node == "self").unwrap_or(false);
+
+        // Build parameter list
+        let mut params = Vec::new();
+
+        if has_self {
+            // Instance method: add self parameter (pointer to struct type)
+            params.push((
+                "self".to_string(),
+                ResolvedType::Named {
+                    name: type_name.to_string(),
+                    generics: vec![],
+                },
+            ));
+        }
+
+        // Add remaining parameters (skip self if it exists)
+        for p in &f.params {
+            if p.name.node != "self" {
+                let ty = self.ast_type_to_resolved(&p.ty.node);
+                params.push((p.name.node.clone(), ty));
+            }
+        }
+
+        let ret_type = f
+            .ret_type
+            .as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        self.functions.insert(
+            method_name.clone(),
+            FunctionInfo {
+                name: method_name,
                 params,
                 ret_type,
                 is_extern: false,
@@ -208,6 +724,84 @@ impl CodeGenerator {
         format!("%{} = type {{ {} }}", name, fields.join(", "))
     }
 
+    fn register_enum(&mut self, e: &vais_ast::Enum) -> CodegenResult<()> {
+        let mut variants = Vec::new();
+
+        for (tag, variant) in e.variants.iter().enumerate() {
+            let fields = match &variant.fields {
+                VariantFields::Unit => EnumVariantFields::Unit,
+                VariantFields::Tuple(types) => {
+                    let resolved: Vec<_> = types
+                        .iter()
+                        .map(|t| self.ast_type_to_resolved(&t.node))
+                        .collect();
+                    EnumVariantFields::Tuple(resolved)
+                }
+                VariantFields::Struct(fields) => {
+                    let resolved: Vec<_> = fields
+                        .iter()
+                        .map(|f| (f.name.node.clone(), self.ast_type_to_resolved(&f.ty.node)))
+                        .collect();
+                    EnumVariantFields::Struct(resolved)
+                }
+            };
+
+            variants.push(EnumVariantInfo {
+                name: variant.name.node.clone(),
+                tag: tag as u32,
+                fields,
+            });
+        }
+
+        self.enums.insert(
+            e.name.node.clone(),
+            EnumInfo {
+                name: e.name.node.clone(),
+                variants,
+            },
+        );
+
+        Ok(())
+    }
+
+    fn generate_enum_type(&self, name: &str, info: &EnumInfo) -> String {
+        // Enum is represented as { i32 tag, union payload }
+        // For simplicity, we use the largest variant size for the payload
+        let mut max_payload_size = 0usize;
+        let mut payload_types: Vec<String> = Vec::new();
+
+        for variant in &info.variants {
+            let variant_types = match &variant.fields {
+                EnumVariantFields::Unit => vec![],
+                EnumVariantFields::Tuple(types) => {
+                    types.iter().map(|t| self.type_to_llvm(t)).collect()
+                }
+                EnumVariantFields::Struct(fields) => {
+                    fields.iter().map(|(_, t)| self.type_to_llvm(t)).collect()
+                }
+            };
+
+            // Estimate size (rough: each i64 = 8 bytes)
+            let size = variant_types.len() * 8;
+            if size > max_payload_size {
+                max_payload_size = size;
+                payload_types = variant_types;
+            }
+        }
+
+        if payload_types.is_empty() {
+            // Simple enum with no payload - just use i32 for tag
+            format!("%{} = type {{ i32 }}", name)
+        } else {
+            // Enum with payload - tag + payload struct
+            format!(
+                "%{} = type {{ i32, {{ {} }} }}",
+                name,
+                payload_types.join(", ")
+            )
+        }
+    }
+
     fn generate_extern_decl(&self, info: &FunctionInfo) -> String {
         let params: Vec<_> = info
             .params
@@ -234,11 +828,13 @@ impl CodeGenerator {
                 let llvm_ty = self.type_to_llvm(&ty);
 
                 // Register parameter as local (SSA value, not alloca)
+                // For params, llvm_name matches the source name
                 self.locals.insert(
                     p.name.node.clone(),
                     LocalVar {
                         ty: ty.clone(),
                         is_param: true,
+                        llvm_name: p.name.node.clone(),
                     },
                 );
 
@@ -264,21 +860,146 @@ impl CodeGenerator {
         ir.push_str("entry:\n");
 
         // Generate body
+        let mut counter = 0;
         match &f.body {
             FunctionBody::Expr(expr) => {
-                let (value, expr_ir) = self.generate_expr(expr, &mut 0)?;
+                let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
                 if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
+                } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                    // For struct returns, load the value from pointer
+                    let loaded = format!("%ret.{}", counter);
+                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
                 } else {
                     ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir) = self.generate_block(stmts, &mut 0)?;
+                let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
                 if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
+                } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                    // For struct returns, load the value from pointer
+                    let loaded = format!("%ret.{}", counter);
+                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
+                } else {
+                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
+                }
+            }
+        }
+
+        ir.push_str("}\n");
+
+        self.current_function = None;
+        Ok(ir)
+    }
+
+    /// Generate a method for a struct
+    /// Methods are compiled as functions with the struct pointer as implicit first argument
+    /// Static methods (without &self) don't have the implicit self parameter
+    fn generate_method(&mut self, struct_name: &str, f: &Function) -> CodegenResult<String> {
+        // Method name: StructName_methodName
+        let method_name = format!("{}_{}", struct_name, f.name.node);
+
+        self.current_function = Some(method_name.clone());
+        self.locals.clear();
+        self.label_counter = 0;
+        self.loop_stack.clear();
+
+        // Check if this is a static method (no &self or self parameter)
+        let has_self = f.params.first().map(|p| p.name.node == "self").unwrap_or(false);
+
+        let mut params = Vec::new();
+
+        if has_self {
+            // Instance method: first parameter is `self` (pointer to struct)
+            let struct_ty = format!("%{}*", struct_name);
+            params.push(format!("{} %self", struct_ty));
+
+            // Register self
+            self.locals.insert(
+                "self".to_string(),
+                LocalVar {
+                    ty: ResolvedType::Named {
+                        name: struct_name.to_string(),
+                        generics: vec![],
+                    },
+                    is_param: true,
+                    llvm_name: "self".to_string(),
+                },
+            );
+        }
+
+        // Add remaining parameters
+        for p in &f.params {
+            // Skip `self` parameter if it exists in the AST
+            if p.name.node == "self" {
+                continue;
+            }
+
+            let ty = self.ast_type_to_resolved(&p.ty.node);
+            let llvm_ty = self.type_to_llvm(&ty);
+
+            self.locals.insert(
+                p.name.node.clone(),
+                LocalVar {
+                    ty: ty.clone(),
+                    is_param: true,
+                    llvm_name: p.name.node.clone(),
+                },
+            );
+
+            params.push(format!("{} %{}", llvm_ty, p.name.node));
+        }
+
+        let ret_type = f
+            .ret_type
+            .as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        let ret_llvm = self.type_to_llvm(&ret_type);
+
+        let mut ir = format!(
+            "define {} @{}({}) {{\n",
+            ret_llvm,
+            method_name,
+            params.join(", ")
+        );
+
+        ir.push_str("entry:\n");
+
+        // Generate body
+        let mut counter = 0;
+        match &f.body {
+            FunctionBody::Expr(expr) => {
+                let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
+                ir.push_str(&expr_ir);
+                if ret_type == ResolvedType::Unit {
+                    ir.push_str("  ret void\n");
+                } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                    // For struct returns, load the value from pointer
+                    let loaded = format!("%ret.{}", counter);
+                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
+                } else {
+                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
+                }
+            }
+            FunctionBody::Block(stmts) => {
+                let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
+                ir.push_str(&block_ir);
+                if ret_type == ResolvedType::Unit {
+                    ir.push_str("  ret void\n");
+                } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                    // For struct returns, load the value from pointer
+                    let loaded = format!("%ret.{}", counter);
+                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
                 } else {
                     ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
                 }
@@ -320,33 +1041,85 @@ impl CodeGenerator {
                 value,
                 is_mut: _,
             } => {
+                // Infer type BEFORE generating code, so we can use function return types
+                let inferred_ty = self.infer_expr_type(value);
+
+                // Check if this is a struct literal - handle specially
+                let is_struct_lit = matches!(&value.node, Expr::StructLit { .. });
+
                 let (val, val_ir) = self.generate_expr(value, counter)?;
 
                 let resolved_ty = ty
                     .as_ref()
                     .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(ResolvedType::I64); // Default to i64
+                    .unwrap_or(inferred_ty); // Use inferred type if not specified
+
+                // Generate unique LLVM name for this variable (to handle loops)
+                let llvm_name = format!("{}.{}", name.node, counter);
+                *counter += 1;
 
                 self.locals.insert(
                     name.node.clone(),
                     LocalVar {
                         ty: resolved_ty.clone(),
                         is_param: false, // alloca'd variable
+                        llvm_name: llvm_name.clone(),
                     },
                 );
 
-                let llvm_ty = self.type_to_llvm(&resolved_ty);
                 let mut ir = val_ir;
+                let llvm_ty = self.type_to_llvm(&resolved_ty);
 
-                // Allocate and store
-                ir.push_str(&format!(
-                    "  %{} = alloca {}\n",
-                    name.node, llvm_ty
-                ));
-                ir.push_str(&format!(
-                    "  store {} {}, {}* %{}\n",
-                    llvm_ty, val, llvm_ty, name.node
-                ));
+                // For struct literals, the value is already an alloca'd pointer
+                // We store the pointer to the struct (i.e., %Point*)
+                if is_struct_lit {
+                    // The val is already a pointer to the struct (%1, %2, etc)
+                    // Allocate space for a pointer and store the struct pointer
+                    ir.push_str(&format!(
+                        "  %{} = alloca {}*\n",
+                        llvm_name, llvm_ty
+                    ));
+                    ir.push_str(&format!(
+                        "  store {}* {}, {}** %{}\n",
+                        llvm_ty, val, llvm_ty, llvm_name
+                    ));
+                } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
+                    // For struct values (e.g., from function returns),
+                    // alloca struct, store value, then store pointer to it
+                    // This keeps all struct variables as pointers for consistency
+                    let tmp_ptr = format!("%{}.struct", llvm_name);
+                    ir.push_str(&format!(
+                        "  {} = alloca {}\n",
+                        tmp_ptr, llvm_ty
+                    ));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        llvm_ty, val, llvm_ty, tmp_ptr
+                    ));
+                    ir.push_str(&format!(
+                        "  %{} = alloca {}*\n",
+                        llvm_name, llvm_ty
+                    ));
+                    ir.push_str(&format!(
+                        "  store {}* {}, {}** %{}\n",
+                        llvm_ty, tmp_ptr, llvm_ty, llvm_name
+                    ));
+                } else {
+                    // Allocate and store
+                    ir.push_str(&format!(
+                        "  %{} = alloca {}\n",
+                        llvm_name, llvm_ty
+                    ));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* %{}\n",
+                        llvm_ty, val, llvm_ty, llvm_name
+                    ));
+                }
+
+                // If this was a lambda with captures, register the closure info
+                if let Some(closure_info) = self.last_lambda_info.take() {
+                    self.closures.insert(name.node.clone(), closure_info);
+                }
 
                 Ok(("void".to_string(), ir))
             }
@@ -399,23 +1172,42 @@ impl CodeGenerator {
             Expr::Float(n) => Ok((format!("{:e}", n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
-                // TODO: Proper string handling
-                Ok((format!("\"{}\"", s), String::new()))
+                // Create a global string constant
+                let name = format!(".str.{}", self.string_counter);
+                self.string_counter += 1;
+                self.string_constants.push((name.clone(), s.clone()));
+
+                // Return a getelementptr to the string constant
+                let len = s.len() + 1;
+                Ok((
+                    format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+                    String::new(),
+                ))
             }
             Expr::Unit => Ok(("void".to_string(), String::new())),
 
             Expr::Ident(name) => {
-                if let Some(local) = self.locals.get(name) {
+                if let Some(local) = self.locals.get(name.as_str()).cloned() {
                     if local.is_param {
                         // Parameters are SSA values, use directly
-                        Ok((format!("%{}", name), String::new()))
+                        Ok((format!("%{}", local.llvm_name), String::new()))
+                    } else if matches!(local.ty, ResolvedType::Named { .. }) {
+                        // Struct variables store a pointer to the struct
+                        // Load the pointer (the struct address)
+                        let tmp = self.next_temp(counter);
+                        let llvm_ty = self.type_to_llvm(&local.ty);
+                        let ir = format!(
+                            "  {} = load {}*, {}** %{}\n",
+                            tmp, llvm_ty, llvm_ty, local.llvm_name
+                        );
+                        Ok((tmp, ir))
                     } else {
                         // Local variables need to be loaded from alloca
                         let tmp = self.next_temp(counter);
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         let ir = format!(
                             "  {} = load {}, {}* %{}\n",
-                            tmp, llvm_ty, llvm_ty, name
+                            tmp, llvm_ty, llvm_ty, local.llvm_name
                         );
                         Ok((tmp, ir))
                     }
@@ -441,36 +1233,96 @@ impl CodeGenerator {
                 let (left_val, left_ir) = self.generate_expr(left, counter)?;
                 let (right_val, right_ir) = self.generate_expr(right, counter)?;
 
-                let tmp = self.next_temp(counter);
-                let op_str = match op {
-                    BinOp::Add => "add",
-                    BinOp::Sub => "sub",
-                    BinOp::Mul => "mul",
-                    BinOp::Div => "sdiv",
-                    BinOp::Mod => "srem",
-                    BinOp::Lt => "icmp slt",
-                    BinOp::Lte => "icmp sle",
-                    BinOp::Gt => "icmp sgt",
-                    BinOp::Gte => "icmp sge",
-                    BinOp::Eq => "icmp eq",
-                    BinOp::Neq => "icmp ne",
-                    BinOp::And => "and",
-                    BinOp::Or => "or",
-                    BinOp::BitAnd => "and",
-                    BinOp::BitOr => "or",
-                    BinOp::BitXor => "xor",
-                    BinOp::Shl => "shl",
-                    BinOp::Shr => "ashr",
-                };
-
                 let mut ir = left_ir;
                 ir.push_str(&right_ir);
-                ir.push_str(&format!(
-                    "  {} = {} i64 {}, {}\n",
-                    tmp, op_str, left_val, right_val
-                ));
 
-                Ok((tmp, ir))
+                // Handle comparison and logical operations (result is i1)
+                let is_comparison = matches!(
+                    op,
+                    BinOp::Lt | BinOp::Lte | BinOp::Gt | BinOp::Gte | BinOp::Eq | BinOp::Neq
+                );
+                let is_logical = matches!(op, BinOp::And | BinOp::Or);
+
+                if is_logical {
+                    // For logical And/Or, convert operands to i1 first, then perform operation
+                    let left_bool = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = icmp ne i64 {}, 0\n",
+                        left_bool, left_val
+                    ));
+                    let right_bool = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = icmp ne i64 {}, 0\n",
+                        right_bool, right_val
+                    ));
+
+                    let op_str = match op {
+                        BinOp::And => "and",
+                        BinOp::Or => "or",
+                        _ => unreachable!(),
+                    };
+
+                    let result_bool = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = {} i1 {}, {}\n",
+                        result_bool, op_str, left_bool, right_bool
+                    ));
+
+                    // Extend back to i64 for consistency
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = zext i1 {} to i64\n",
+                        result, result_bool
+                    ));
+                    Ok((result, ir))
+                } else if is_comparison {
+                    // Comparison returns i1, extend to i64
+                    let op_str = match op {
+                        BinOp::Lt => "icmp slt",
+                        BinOp::Lte => "icmp sle",
+                        BinOp::Gt => "icmp sgt",
+                        BinOp::Gte => "icmp sge",
+                        BinOp::Eq => "icmp eq",
+                        BinOp::Neq => "icmp ne",
+                        _ => unreachable!(),
+                    };
+
+                    let cmp_tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = {} i64 {}, {}\n",
+                        cmp_tmp, op_str, left_val, right_val
+                    ));
+
+                    // Extend i1 to i64
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = zext i1 {} to i64\n",
+                        result, cmp_tmp
+                    ));
+                    Ok((result, ir))
+                } else {
+                    // Arithmetic and bitwise operations
+                    let tmp = self.next_temp(counter);
+                    let op_str = match op {
+                        BinOp::Add => "add",
+                        BinOp::Sub => "sub",
+                        BinOp::Mul => "mul",
+                        BinOp::Div => "sdiv",
+                        BinOp::Mod => "srem",
+                        BinOp::BitAnd => "and",
+                        BinOp::BitOr => "or",
+                        BinOp::BitXor => "xor",
+                        BinOp::Shl => "shl",
+                        BinOp::Shr => "ashr",
+                        _ => unreachable!(),
+                    };
+
+                    ir.push_str(&format!(
+                        "  {} = {} i64 {}, {}\n",
+                        tmp, op_str, left_val, right_val
+                    ));
+                    Ok((tmp, ir))
+                }
             }
 
             Expr::Unary { op, expr: inner } => {
@@ -503,10 +1355,17 @@ impl CodeGenerator {
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
 
+                // Convert i64 to i1 for branch
+                let cond_bool = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = icmp ne i64 {}, 0\n",
+                    cond_bool, cond_val
+                ));
+
                 // Conditional branch
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n",
-                    cond_val, then_label, else_label
+                    cond_bool, then_label, else_label
                 ));
 
                 // Then branch
@@ -533,50 +1392,250 @@ impl CodeGenerator {
             }
 
             Expr::Call { func, args } => {
-                let fn_name = if let Expr::Ident(name) = &func.node {
-                    name.clone()
+                // Check if this is a direct function call or indirect (lambda) call
+                let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
+                    // Check if this is a known function or a local variable (lambda)
+                    if self.functions.contains_key(name) {
+                        (name.clone(), false)
+                    } else if self.locals.contains_key(name) {
+                        (name.clone(), true) // Lambda call
+                    } else {
+                        (name.clone(), false) // Assume it's a function
+                    }
                 } else if let Expr::SelfCall = &func.node {
-                    self.current_function.clone().unwrap_or_default()
+                    (self.current_function.clone().unwrap_or_default(), false)
                 } else {
-                    return Err(CodegenError::Unsupported("indirect call".to_string()));
+                    return Err(CodegenError::Unsupported("complex indirect call".to_string()));
                 };
 
-                // Look up function info for parameter types
-                let fn_info = self.functions.get(&fn_name).cloned();
+                // Look up function info for parameter types (only for direct calls)
+                let fn_info = if !is_indirect {
+                    self.functions.get(&fn_name).cloned()
+                } else {
+                    None
+                };
 
                 let mut ir = String::new();
                 let mut arg_vals = Vec::new();
 
                 for (i, arg) in args.iter().enumerate() {
-                    let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                    let (mut val, arg_ir) = self.generate_expr(arg, counter)?;
                     ir.push_str(&arg_ir);
 
                     // Get parameter type from function info if available
-                    let arg_ty = fn_info
+                    let param_ty = fn_info
                         .as_ref()
                         .and_then(|f| f.params.get(i))
-                        .map(|(_, ty)| self.type_to_llvm(ty))
+                        .map(|(_, ty)| ty.clone());
+
+                    let arg_ty = param_ty
+                        .as_ref()
+                        .map(|ty| self.type_to_llvm(ty))
                         .unwrap_or_else(|| "i64".to_string());
+
+                    // Insert integer conversion if needed (trunc for narrowing, sext for widening)
+                    if let Some(param_type) = &param_ty {
+                        let src_bits = self.get_integer_bits_from_val(&val);
+                        let dst_bits = self.get_integer_bits(param_type);
+
+                        if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
+                            let conv_tmp = self.next_temp(counter);
+                            let src_ty = format!("i{}", src_bits);
+                            let dst_ty = format!("i{}", dst_bits);
+
+                            if src_bits > dst_bits {
+                                // Truncate
+                                ir.push_str(&format!(
+                                    "  {} = trunc {} {} to {}\n",
+                                    conv_tmp, src_ty, val, dst_ty
+                                ));
+                            } else {
+                                // Sign extend
+                                ir.push_str(&format!(
+                                    "  {} = sext {} {} to {}\n",
+                                    conv_tmp, src_ty, val, dst_ty
+                                ));
+                            }
+                            val = conv_tmp;
+                        }
+                    }
 
                     arg_vals.push(format!("{} {}", arg_ty, val));
                 }
 
-                // Get return type
+                // Get return type and actual function name (may differ for builtins)
                 let ret_ty = fn_info
                     .as_ref()
                     .map(|f| self.type_to_llvm(&f.ret_type))
                     .unwrap_or_else(|| "i64".to_string());
 
-                let tmp = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = call {} @{}({})\n",
-                    tmp,
-                    ret_ty,
-                    fn_name,
-                    arg_vals.join(", ")
-                ));
+                let actual_fn_name = fn_info
+                    .as_ref()
+                    .map(|f| f.name.clone())
+                    .unwrap_or_else(|| fn_name.clone());
 
-                Ok((tmp, ir))
+                if is_indirect {
+                    // Check if this is a closure with captured variables
+                    let closure_info = self.closures.get(&fn_name).cloned();
+
+                    // Get the actual LLVM name for this variable
+                    let llvm_var_name = self.locals.get(&fn_name)
+                        .map(|l| l.llvm_name.clone())
+                        .unwrap_or_else(|| fn_name.clone());
+
+                    // Indirect call (lambda): load function pointer and call
+                    let ptr_tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load i64, i64* %{}\n",
+                        ptr_tmp, llvm_var_name
+                    ));
+
+                    // Prepend captured values to arguments if this is a closure
+                    let mut all_args = Vec::new();
+                    if let Some(ref info) = closure_info {
+                        for (_, capture_val) in &info.captures {
+                            all_args.push(format!("i64 {}", capture_val));
+                        }
+                    }
+                    all_args.extend(arg_vals);
+
+                    // Build function type signature for indirect call (including captures)
+                    let arg_types: Vec<String> = all_args
+                        .iter()
+                        .map(|a| a.split_whitespace().next().unwrap_or("i64").to_string())
+                        .collect();
+                    let fn_type = format!("i64 ({})*", arg_types.join(", "));
+
+                    // Cast i64 to function pointer
+                    let fn_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = inttoptr i64 {} to {}\n",
+                        fn_ptr, ptr_tmp, fn_type
+                    ));
+
+                    // Make indirect call with all arguments
+                    let tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i64 {}({})\n",
+                        tmp, fn_ptr, all_args.join(", ")
+                    ));
+                    Ok((tmp, ir))
+                } else if fn_name == "malloc" {
+                    // Special handling for malloc: call returns i8*, convert to i64
+                    let ptr_tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i8* @malloc({})\n",
+                        ptr_tmp,
+                        arg_vals.join(", ")
+                    ));
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = ptrtoint i8* {} to i64\n",
+                        result, ptr_tmp
+                    ));
+                    Ok((result, ir))
+                } else if fn_name == "free" {
+                    // Special handling for free: convert i64 to i8*
+                    let ptr_tmp = self.next_temp(counter);
+                    // Extract the i64 value from arg_vals
+                    let arg_val = arg_vals.first()
+                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
+                        .unwrap_or("0");
+                    ir.push_str(&format!(
+                        "  {} = inttoptr i64 {} to i8*\n",
+                        ptr_tmp, arg_val
+                    ));
+                    ir.push_str(&format!(
+                        "  call void @free(i8* {})\n",
+                        ptr_tmp
+                    ));
+                    Ok(("void".to_string(), ir))
+                } else if fn_name == "memcpy" {
+                    // Special handling for memcpy: convert i64 pointers to i8*
+                    let dest_val = arg_vals.get(0)
+                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
+                        .unwrap_or("0");
+                    let src_val = arg_vals.get(1)
+                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
+                        .unwrap_or("0");
+                    let n_val = arg_vals.get(2)
+                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
+                        .unwrap_or("0");
+
+                    let dest_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = inttoptr i64 {} to i8*\n",
+                        dest_ptr, dest_val
+                    ));
+                    let src_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = inttoptr i64 {} to i8*\n",
+                        src_ptr, src_val
+                    ));
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {})\n",
+                        result, dest_ptr, src_ptr, n_val
+                    ));
+                    // Convert result back to i64
+                    let result_i64 = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = ptrtoint i8* {} to i64\n",
+                        result_i64, result
+                    ));
+                    Ok((result_i64, ir))
+                } else if fn_name == "strlen" {
+                    // Special handling for strlen: convert i64 to i8*
+                    let arg_val = arg_vals.first()
+                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
+                        .unwrap_or("0");
+                    let ptr_tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = inttoptr i64 {} to i8*\n",
+                        ptr_tmp, arg_val
+                    ));
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i64 @strlen(i8* {})\n",
+                        result, ptr_tmp
+                    ));
+                    Ok((result, ir))
+                } else if fn_name == "puts_ptr" {
+                    // Special handling for puts_ptr: convert i64 to i8*
+                    let arg_val = arg_vals.first()
+                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
+                        .unwrap_or("0");
+                    let ptr_tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = inttoptr i64 {} to i8*\n",
+                        ptr_tmp, arg_val
+                    ));
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i32 @puts(i8* {})\n",
+                        result, ptr_tmp
+                    ));
+                    Ok((result, ir))
+                } else if ret_ty == "void" {
+                    // Direct void function call
+                    ir.push_str(&format!(
+                        "  call void @{}({})\n",
+                        actual_fn_name,
+                        arg_vals.join(", ")
+                    ));
+                    Ok(("void".to_string(), ir))
+                } else {
+                    // Direct function call with return value
+                    let tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call {} @{}({})\n",
+                        tmp,
+                        ret_ty,
+                        actual_fn_name,
+                        arg_vals.join(", ")
+                    ));
+                    Ok((tmp, ir))
+                }
             }
 
             // If/Else expression with basic blocks
@@ -589,35 +1648,75 @@ impl CodeGenerator {
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
 
+                // Convert i64 to i1 for branch condition
+                let cond_bool = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = icmp ne i64 {}, 0\n",
+                    cond_bool, cond_val
+                ));
+
                 // Conditional branch
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n",
-                    cond_val, then_label, else_label
+                    cond_bool, then_label, else_label
                 ));
 
                 // Then block
                 ir.push_str(&format!("{}:\n", then_label));
-                let (then_val, then_ir) = self.generate_block_stmts(then, counter)?;
+                let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
                 ir.push_str(&then_ir);
-                ir.push_str(&format!("  br label %{}\n", merge_label));
+                // Only emit branch to merge if block is not terminated
+                let then_from_label = if !then_terminated {
+                    ir.push_str(&format!("  br label %{}\n", merge_label));
+                    then_label.clone()
+                } else {
+                    String::new() // Block is terminated, won't contribute to phi
+                };
 
                 // Else block
                 ir.push_str(&format!("{}:\n", else_label));
-                let (else_val, else_ir) = if let Some(else_branch) = else_ {
-                    self.generate_if_else(else_branch, counter, &merge_label)?
+                let (else_val, else_ir, else_terminated) = if let Some(else_branch) = else_ {
+                    self.generate_if_else_with_term(else_branch, counter, &merge_label)?
                 } else {
-                    ("0".to_string(), String::new())
+                    ("0".to_string(), String::new(), false)
                 };
                 ir.push_str(&else_ir);
-                ir.push_str(&format!("  br label %{}\n", merge_label));
+                // Only emit branch to merge if block is not terminated
+                let else_from_label = if !else_terminated {
+                    ir.push_str(&format!("  br label %{}\n", merge_label));
+                    else_label.clone()
+                } else {
+                    String::new()
+                };
 
                 // Merge block with phi node
                 ir.push_str(&format!("{}:\n", merge_label));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-                    result, then_val, then_label, else_val, else_label
-                ));
+
+                // Build phi node only from non-terminated predecessors
+                if !then_from_label.is_empty() && !else_from_label.is_empty() {
+                    // Both branches reach merge
+                    ir.push_str(&format!(
+                        "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
+                        result, then_val, then_from_label, else_val, else_from_label
+                    ));
+                } else if !then_from_label.is_empty() {
+                    // Only then branch reaches merge
+                    ir.push_str(&format!(
+                        "  {} = phi i64 [ {}, %{} ]\n",
+                        result, then_val, then_from_label
+                    ));
+                } else if !else_from_label.is_empty() {
+                    // Only else branch reaches merge
+                    ir.push_str(&format!(
+                        "  {} = phi i64 [ {}, %{} ]\n",
+                        result, else_val, else_from_label
+                    ));
+                } else {
+                    // Neither branch reaches merge (both break/continue)
+                    // This merge block is actually unreachable, but we still need a value
+                    ir.push_str(&format!("  {} = add i64 0, 0\n", result));
+                }
 
                 Ok((result, ir))
             }
@@ -645,23 +1744,36 @@ impl CodeGenerator {
                     // Evaluate condition
                     let (cond_val, cond_ir) = self.generate_expr(iter_expr, counter)?;
                     ir.push_str(&cond_ir);
+
+                    // Convert i64 to i1 for branch
+                    let cond_bool = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = icmp ne i64 {}, 0\n",
+                        cond_bool, cond_val
+                    ));
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
-                        cond_val, loop_body, loop_end
+                        cond_bool, loop_body, loop_end
                     ));
 
                     // Loop body
                     ir.push_str(&format!("{}:\n", loop_body));
-                    let (_body_val, body_ir) = self.generate_block_stmts(body, counter)?;
+                    let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
                     ir.push_str(&body_ir);
-                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                    // Only emit loop back if body doesn't terminate
+                    if !body_terminated {
+                        ir.push_str(&format!("  br label %{}\n", loop_start));
+                    }
                 } else {
                     // Infinite loop: L { body } - must use break to exit
                     ir.push_str(&format!("  br label %{}\n", loop_start));
                     ir.push_str(&format!("{}:\n", loop_start));
-                    let (_body_val, body_ir) = self.generate_block_stmts(body, counter)?;
+                    let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
                     ir.push_str(&body_ir);
-                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                    // Only emit loop back if body doesn't terminate
+                    if !body_terminated {
+                        ir.push_str(&format!("  br label %{}\n", loop_start));
+                    }
                 }
 
                 // Loop end
@@ -674,7 +1786,10 @@ impl CodeGenerator {
             }
 
             // Block expression
-            Expr::Block(stmts) => self.generate_block_stmts(stmts, counter),
+            Expr::Block(stmts) => {
+                let (val, ir, _terminated) = self.generate_block_stmts(stmts, counter)?;
+                Ok((val, ir))
+            }
 
             // Assignment expression
             Expr::Assign { target, value } => {
@@ -682,13 +1797,43 @@ impl CodeGenerator {
                 let mut ir = val_ir;
 
                 if let Expr::Ident(name) = &target.node {
-                    if let Some(local) = self.locals.get(name) {
+                    if let Some(local) = self.locals.get(name).cloned() {
                         if !local.is_param {
                             let llvm_ty = self.type_to_llvm(&local.ty);
                             ir.push_str(&format!(
                                 "  store {} {}, {}* %{}\n",
-                                llvm_ty, val, llvm_ty, name
+                                llvm_ty, val, llvm_ty, local.llvm_name
                             ));
+                        }
+                    }
+                } else if let Expr::Field { expr: obj_expr, field } = &target.node {
+                    // Field assignment: obj.field = value
+                    let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
+                    ir.push_str(&obj_ir);
+
+                    // Get struct info
+                    if let Expr::Ident(var_name) = &obj_expr.node {
+                        if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
+                            if let ResolvedType::Named { name: struct_name, .. } = &local.ty {
+                                if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                                    if let Some(field_idx) = struct_info.fields.iter()
+                                        .position(|(n, _)| n == &field.node)
+                                    {
+                                        let field_ty = &struct_info.fields[field_idx].1;
+                                        let llvm_ty = self.type_to_llvm(field_ty);
+
+                                        let field_ptr = self.next_temp(counter);
+                                        ir.push_str(&format!(
+                                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                                            field_ptr, struct_name, struct_name, obj_val, field_idx
+                                        ));
+                                        ir.push_str(&format!(
+                                            "  store {} {}, {}* {}\n",
+                                            llvm_ty, val, llvm_ty, field_ptr
+                                        ));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -727,12 +1872,12 @@ impl CodeGenerator {
 
                 // Store back
                 if let Expr::Ident(name) = &target.node {
-                    if let Some(local) = self.locals.get(name.as_str()) {
+                    if let Some(local) = self.locals.get(name.as_str()).cloned() {
                         if !local.is_param {
                             let llvm_ty = self.type_to_llvm(&local.ty);
                             ir.push_str(&format!(
                                 "  store {} {}, {}* %{}\n",
-                                llvm_ty, result, llvm_ty, name
+                                llvm_ty, result, llvm_ty, local.llvm_name
                             ));
                         }
                     }
@@ -859,8 +2004,13 @@ impl CodeGenerator {
                 Ok((struct_ptr, ir))
             }
 
-            // Index: arr[idx]
+            // Index: arr[idx] or slice: arr[start..end]
             Expr::Index { expr: array_expr, index } => {
+                // Check if this is a slice operation (index is a Range expression)
+                if let Expr::Range { start, end, inclusive } = &index.node {
+                    return self.generate_slice(array_expr, start.as_deref(), end.as_deref(), *inclusive, counter);
+                }
+
                 let (arr_val, arr_ir) = self.generate_expr(array_expr, counter)?;
                 let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
 
@@ -889,16 +2039,11 @@ impl CodeGenerator {
                 let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
                 let mut ir = obj_ir;
 
-                // We need to determine the struct type from context
-                // For now, assume it's in locals or can be inferred
-                // This is a simplified implementation
-                let result = self.next_temp(counter);
-
                 // Try to find struct info based on variable name
                 if let Expr::Ident(var_name) = &obj_expr.node {
-                    if let Some(local) = self.locals.get(var_name.as_str()) {
+                    if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
                         if let ResolvedType::Named { name: struct_name, .. } = &local.ty {
-                            if let Some(struct_info) = self.structs.get(struct_name) {
+                            if let Some(struct_info) = self.structs.get(struct_name).cloned() {
                                 let field_idx = struct_info.fields.iter()
                                     .position(|(n, _)| n == &field.node)
                                     .ok_or_else(|| CodegenError::TypeError(format!(
@@ -908,11 +2053,14 @@ impl CodeGenerator {
                                 let field_ty = &struct_info.fields[field_idx].1;
                                 let llvm_ty = self.type_to_llvm(field_ty);
 
+                                // Generate temps in correct order: field_ptr first, then result
                                 let field_ptr = self.next_temp(counter);
                                 ir.push_str(&format!(
                                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
                                     field_ptr, struct_name, struct_name, obj_val, field_idx
                                 ));
+
+                                let result = self.next_temp(counter);
                                 ir.push_str(&format!(
                                     "  {} = load {}, {}* {}\n",
                                     result, llvm_ty, llvm_ty, field_ptr
@@ -925,6 +2073,100 @@ impl CodeGenerator {
                 }
 
                 Err(CodegenError::Unsupported("field access requires known struct type".to_string()))
+            }
+
+            // Method call: obj.method(args)
+            Expr::MethodCall { receiver, method, args } => {
+                let (recv_val, recv_ir) = self.generate_expr(receiver, counter)?;
+                let mut ir = recv_ir;
+
+                // Determine receiver type to find the struct and method
+                let recv_type = self.infer_expr_type(receiver);
+                let method_name = &method.node;
+
+                // Build full method name: StructName_methodName
+                let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
+                    format!("{}_{}", name, method_name)
+                } else {
+                    method_name.clone()
+                };
+
+                // Get struct type for receiver (add * for pointer)
+                let recv_llvm_ty = if matches!(&recv_type, ResolvedType::Named { .. }) {
+                    format!("{}*", self.type_to_llvm(&recv_type))
+                } else {
+                    self.type_to_llvm(&recv_type)
+                };
+
+                // Generate arguments (receiver is implicit first arg)
+                let mut arg_vals = vec![format!("{} {}", recv_llvm_ty, recv_val)];
+
+                for arg in args {
+                    let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                    ir.push_str(&arg_ir);
+                    let arg_type = self.infer_expr_type(arg);
+                    let arg_llvm_ty = self.type_to_llvm(&arg_type);
+                    arg_vals.push(format!("{} {}", arg_llvm_ty, val));
+                }
+
+                // Determine return type from struct methods
+                let ret_type = if let ResolvedType::Named { name, .. } = &recv_type {
+                    if let Some(struct_info) = self.structs.get(name) {
+                        // For now, assume i64 return
+                        let _ = struct_info;
+                        "i64"
+                    } else {
+                        "i64"
+                    }
+                } else {
+                    "i64"
+                };
+
+                let tmp = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = call {} @{}({})\n",
+                    tmp,
+                    ret_type,
+                    full_method_name,
+                    arg_vals.join(", ")
+                ));
+
+                Ok((tmp, ir))
+            }
+
+            // Static method call: Type.method(args)
+            Expr::StaticMethodCall { type_name, method, args } => {
+                let mut ir = String::new();
+
+                // Build full method name: TypeName_methodName
+                let full_method_name = format!("{}_{}", type_name.node, method.node);
+
+                // Generate arguments (no receiver for static methods)
+                let mut arg_vals = Vec::new();
+
+                for arg in args {
+                    let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                    ir.push_str(&arg_ir);
+                    let arg_type = self.infer_expr_type(arg);
+                    let arg_llvm_ty = self.type_to_llvm(&arg_type);
+                    arg_vals.push(format!("{} {}", arg_llvm_ty, val));
+                }
+
+                // Get return type from method signature
+                let ret_type = self.functions.get(&full_method_name)
+                    .map(|info| self.type_to_llvm(&info.ret_type))
+                    .unwrap_or_else(|| "i64".to_string());
+
+                let tmp = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = call {} @{}({})\n",
+                    tmp,
+                    ret_type,
+                    full_method_name,
+                    arg_vals.join(", ")
+                ));
+
+                Ok((tmp, ir))
             }
 
             // Reference: &expr
@@ -950,6 +2192,156 @@ impl CodeGenerator {
                 Ok((result, ir))
             }
 
+            // Match expression: M expr { pattern => body, ... }
+            Expr::Match { expr: match_expr, arms } => {
+                self.generate_match(match_expr, arms, counter)
+            }
+
+            // Range expression (for now just return start value)
+            Expr::Range { start, .. } => {
+                if let Some(start_expr) = start {
+                    self.generate_expr(start_expr, counter)
+                } else {
+                    Ok(("0".to_string(), String::new()))
+                }
+            }
+
+            // Await expression: for now, just evaluate the inner expression synchronously
+            // Future: implement proper coroutine transformation
+            Expr::Await(inner) => {
+                // Simply evaluate the expression (blocking await)
+                self.generate_expr(inner, counter)
+            }
+
+            // Spawn expression: for now, just evaluate inline (synchronous)
+            // Future: implement thread/task spawning with runtime
+            Expr::Spawn(inner) => {
+                // TODO: Implement proper spawn with runtime
+                // For now, just evaluate inline
+                self.generate_expr(inner, counter)
+            }
+
+            // Lambda expression with captures
+            Expr::Lambda { params, body, captures: _ } => {
+                // Generate a unique function name for this lambda
+                let lambda_name = format!("__lambda_{}", self.label_counter);
+                self.label_counter += 1;
+
+                // Find captured variables by analyzing free variables in lambda body
+                let capture_names = self.find_lambda_captures(params, body);
+
+                // Collect captured variable info from current scope
+                let mut captured_vars: Vec<(String, ResolvedType, String)> = Vec::new();
+                let mut capture_ir = String::new();
+
+                for cap_name in &capture_names {
+                    if let Some(local) = self.locals.get(cap_name) {
+                        let ty = local.ty.clone();
+                        // Load captured value if it's a local variable
+                        if local.is_param {
+                            // Parameters are already values, use directly
+                            captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
+                        } else {
+                            // Load from alloca
+                            let tmp = self.next_temp(counter);
+                            let llvm_ty = self.type_to_llvm(&ty);
+                            capture_ir.push_str(&format!(
+                                "  {} = load {}, {}* %{}\n",
+                                tmp, llvm_ty, llvm_ty, local.llvm_name
+                            ));
+                            captured_vars.push((cap_name.clone(), ty, tmp));
+                        }
+                    }
+                }
+
+                // Build parameter list (original params + captured vars)
+                let mut param_strs = Vec::new();
+                let mut param_types = Vec::new();
+
+                // First add captured variables as parameters (they come first)
+                for (cap_name, cap_ty, _) in &captured_vars {
+                    let llvm_ty = self.type_to_llvm(cap_ty);
+                    param_strs.push(format!("{} %__cap_{}", llvm_ty, cap_name));
+                    param_types.push(llvm_ty);
+                }
+
+                // Then add original lambda parameters
+                for p in params {
+                    let ty = self.ast_type_to_resolved(&p.ty.node);
+                    let llvm_ty = self.type_to_llvm(&ty);
+                    param_strs.push(format!("{} %{}", llvm_ty, p.name.node));
+                    param_types.push(llvm_ty);
+                }
+
+                // Store current function state
+                let saved_function = self.current_function.clone();
+                let saved_locals = self.locals.clone();
+
+                // Set up lambda context
+                self.current_function = Some(lambda_name.clone());
+                self.locals.clear();
+
+                // Register captured variables as locals (using capture parameter names)
+                for (cap_name, cap_ty, _) in &captured_vars {
+                    self.locals.insert(
+                        cap_name.clone(),
+                        LocalVar {
+                            ty: cap_ty.clone(),
+                            is_param: true,
+                            llvm_name: format!("__cap_{}", cap_name),
+                        },
+                    );
+                }
+
+                // Register original parameters as locals
+                for p in params {
+                    let ty = self.ast_type_to_resolved(&p.ty.node);
+                    self.locals.insert(
+                        p.name.node.clone(),
+                        LocalVar {
+                            ty,
+                            is_param: true,
+                            llvm_name: p.name.node.clone(),
+                        },
+                    );
+                }
+
+                // Generate lambda body
+                let mut lambda_counter = 0;
+                let (body_val, body_ir) = self.generate_expr(body, &mut lambda_counter)?;
+
+                // Build lambda function IR
+                let mut lambda_ir = format!(
+                    "define i64 @{}({}) {{\nentry:\n",
+                    lambda_name,
+                    param_strs.join(", ")
+                );
+                lambda_ir.push_str(&body_ir);
+                lambda_ir.push_str(&format!("  ret i64 {}\n}}\n", body_val));
+
+                // Store lambda function for later emission
+                self.lambda_functions.push(lambda_ir);
+
+                // Restore function context
+                self.current_function = saved_function;
+                self.locals = saved_locals;
+
+                // Store lambda info for Let statement to pick up
+                if captured_vars.is_empty() {
+                    self.last_lambda_info = None;
+                    Ok((format!("ptrtoint (i64 ({})* @{} to i64)", param_types.join(", "), lambda_name), capture_ir))
+                } else {
+                    // Store closure info with captured variable values
+                    self.last_lambda_info = Some(ClosureInfo {
+                        func_name: lambda_name.clone(),
+                        captures: captured_vars.iter()
+                            .map(|(name, _, val)| (name.clone(), val.clone()))
+                            .collect(),
+                    });
+                    Ok((format!("ptrtoint (i64 ({})* @{} to i64)", param_types.join(", "), lambda_name), capture_ir))
+                }
+            }
+
             // Unsupported expressions
             _ => Err(CodegenError::Unsupported(format!("{:?}", expr.node))),
         }
@@ -969,36 +2361,68 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         match &expr.node {
-            Expr::Block(stmts) => self.generate_block_stmts(stmts, counter),
+            Expr::Block(stmts) => {
+                let (val, ir, _terminated) = self.generate_block_stmts(stmts, counter)?;
+                Ok((val, ir))
+            }
             _ => self.generate_expr(expr, counter),
         }
     }
 
     /// Generate code for a block of statements
+    /// Returns (value, ir_code, is_terminated)
     fn generate_block_stmts(
         &mut self,
         stmts: &[Spanned<Stmt>],
         counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
+    ) -> CodegenResult<BlockResult> {
         let mut ir = String::new();
         let mut last_value = "0".to_string();
+        let mut terminated = false;
 
         for stmt in stmts {
+            // Skip generating code after a terminator
+            if terminated {
+                break;
+            }
+
             let (value, stmt_ir) = self.generate_stmt(stmt, counter)?;
             ir.push_str(&stmt_ir);
             last_value = value;
+
+            // Check if this statement is a terminator
+            match &stmt.node {
+                Stmt::Break(_) | Stmt::Continue | Stmt::Return(_) => {
+                    terminated = true;
+                }
+                _ => {}
+            }
         }
 
-        Ok((last_value, ir))
+        Ok((last_value, ir, terminated))
     }
 
-    /// Generate code for if-else branches
+    /// Helper to convert BlockResult to simple (String, String) for backward compatibility
+
+    /// Generate code for if-else branches (legacy, for backward compat)
+    #[allow(dead_code)]
     fn generate_if_else(
         &mut self,
         if_else: &IfElse,
         counter: &mut usize,
-        _merge_label: &str,
+        merge_label: &str,
     ) -> CodegenResult<(String, String)> {
+        let (val, ir, _terminated) = self.generate_if_else_with_term(if_else, counter, merge_label)?;
+        Ok((val, ir))
+    }
+
+    /// Generate code for if-else branches with termination tracking
+    fn generate_if_else_with_term(
+        &mut self,
+        if_else: &IfElse,
+        counter: &mut usize,
+        _merge_label: &str,
+    ) -> CodegenResult<BlockResult> {
         match if_else {
             IfElse::Else(stmts) => {
                 self.generate_block_stmts(stmts, counter)
@@ -1012,36 +2436,73 @@ impl CodeGenerator {
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
 
+                // Convert i64 to i1 for branch
+                let cond_bool = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = icmp ne i64 {}, 0\n",
+                    cond_bool, cond_val
+                ));
+
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n",
-                    cond_val, then_label, else_label
+                    cond_bool, then_label, else_label
                 ));
 
                 // Then branch
                 ir.push_str(&format!("{}:\n", then_label));
-                let (then_val, then_ir) = self.generate_block_stmts(then_stmts, counter)?;
+                let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then_stmts, counter)?;
                 ir.push_str(&then_ir);
-                ir.push_str(&format!("  br label %{}\n", local_merge));
+                let then_from_label = if !then_terminated {
+                    ir.push_str(&format!("  br label %{}\n", local_merge));
+                    then_label.clone()
+                } else {
+                    String::new()
+                };
 
                 // Else branch
                 ir.push_str(&format!("{}:\n", else_label));
-                let (else_val, else_ir) = if let Some(nested) = else_branch {
-                    self.generate_if_else(nested, counter, &local_merge)?
+                let (else_val, else_ir, else_terminated) = if let Some(nested) = else_branch {
+                    self.generate_if_else_with_term(nested, counter, &local_merge)?
                 } else {
-                    ("0".to_string(), String::new())
+                    ("0".to_string(), String::new(), false)
                 };
                 ir.push_str(&else_ir);
-                ir.push_str(&format!("  br label %{}\n", local_merge));
+                let else_from_label = if !else_terminated {
+                    ir.push_str(&format!("  br label %{}\n", local_merge));
+                    else_label.clone()
+                } else {
+                    String::new()
+                };
+
+                // Both branches terminated = this whole if-else is terminated
+                let all_terminated = then_terminated && else_terminated;
 
                 // Merge
                 ir.push_str(&format!("{}:\n", local_merge));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-                    result, then_val, then_label, else_val, else_label
-                ));
 
-                Ok((result, ir))
+                // Build phi node only from non-terminated predecessors
+                if !then_from_label.is_empty() && !else_from_label.is_empty() {
+                    ir.push_str(&format!(
+                        "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
+                        result, then_val, then_from_label, else_val, else_from_label
+                    ));
+                } else if !then_from_label.is_empty() {
+                    ir.push_str(&format!(
+                        "  {} = phi i64 [ {}, %{} ]\n",
+                        result, then_val, then_from_label
+                    ));
+                } else if !else_from_label.is_empty() {
+                    ir.push_str(&format!(
+                        "  {} = phi i64 [ {}, %{} ]\n",
+                        result, else_val, else_from_label
+                    ));
+                } else {
+                    // Unreachable merge block
+                    ir.push_str(&format!("  {} = add i64 0, 0\n", result));
+                }
+
+                Ok((result, ir, all_terminated))
             }
         }
     }
@@ -1067,8 +2528,40 @@ impl CodeGenerator {
             ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm(inner)),
             ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm(inner)),
             ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::Named { name, .. } => format!("%{}*", name),
+            ResolvedType::Named { name, .. } => {
+                // Single uppercase letter is likely a generic type parameter
+                if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
+                    "i64".to_string()
+                } else {
+                    // Return struct type without pointer - caller adds * when needed
+                    format!("%{}", name)
+                }
+            }
+            ResolvedType::Generic(_) => "i64".to_string(), // Generic erased to i64 at runtime
             _ => "i64".to_string(), // Default fallback
+        }
+    }
+
+    /// Get bit width for integer types
+    fn get_integer_bits(&self, ty: &ResolvedType) -> u32 {
+        match ty {
+            ResolvedType::I8 | ResolvedType::U8 => 8,
+            ResolvedType::I16 | ResolvedType::U16 => 16,
+            ResolvedType::I32 | ResolvedType::U32 => 32,
+            ResolvedType::I64 | ResolvedType::U64 => 64,
+            ResolvedType::I128 | ResolvedType::U128 => 128,
+            _ => 0, // Not an integer type
+        }
+    }
+
+    /// Try to determine bit width from a value (heuristic based on SSA variable naming)
+    fn get_integer_bits_from_val(&self, val: &str) -> u32 {
+        // If it's a temp variable, we assume i64 (default Vais integer)
+        // If it's a literal number, we assume i64
+        if val.starts_with('%') || val.parse::<i64>().is_ok() {
+            64
+        } else {
+            0
         }
     }
 
@@ -1089,13 +2582,20 @@ impl CodeGenerator {
                 "f64" => ResolvedType::F64,
                 "bool" => ResolvedType::Bool,
                 "str" => ResolvedType::Str,
-                _ => ResolvedType::Named {
-                    name: name.clone(),
-                    generics: generics
-                        .iter()
-                        .map(|g| self.ast_type_to_resolved(&g.node))
-                        .collect(),
-                },
+                _ => {
+                    // Single uppercase letter is likely a generic type parameter
+                    if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
+                        ResolvedType::Generic(name.clone())
+                    } else {
+                        ResolvedType::Named {
+                            name: name.clone(),
+                            generics: generics
+                                .iter()
+                                .map(|g| self.ast_type_to_resolved(&g.node))
+                                .collect(),
+                        }
+                    }
+                }
             },
             Type::Array(inner) => {
                 ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
@@ -1109,6 +2609,995 @@ impl CodeGenerator {
             }
             Type::Unit => ResolvedType::Unit,
             _ => ResolvedType::Unknown,
+        }
+    }
+
+    /// Generate code for match expression
+    fn generate_match(
+        &mut self,
+        match_expr: &Spanned<Expr>,
+        arms: &[MatchArm],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        // Generate the expression to match against
+        let (match_val, mut ir) = self.generate_expr(match_expr, counter)?;
+
+        let merge_label = self.next_label("match.merge");
+        let mut arm_labels: Vec<String> = Vec::new();
+        let mut arm_values: Vec<(String, String)> = Vec::new(); // (value, label)
+
+        // Check if all arms are simple integer literals (can use switch)
+        let all_int_literals = arms.iter().all(|arm| {
+            matches!(&arm.pattern.node, Pattern::Literal(Literal::Int(_)) | Pattern::Wildcard)
+        });
+
+        if all_int_literals && !arms.is_empty() {
+            // Use LLVM switch instruction for integer pattern matching
+            let default_label = self.next_label("match.default");
+            let mut switch_cases: Vec<(i64, String)> = Vec::new();
+            let mut default_arm: Option<&MatchArm> = None;
+
+            // First pass: collect labels and find default
+            for arm in arms {
+                match &arm.pattern.node {
+                    Pattern::Literal(Literal::Int(n)) => {
+                        let label = self.next_label("match.arm");
+                        switch_cases.push((*n, label.clone()));
+                        arm_labels.push(label);
+                    }
+                    Pattern::Wildcard => {
+                        default_arm = Some(arm);
+                    }
+                    _ => {}
+                }
+            }
+
+            // Generate switch instruction
+            ir.push_str(&format!(
+                "  switch i64 {}, label %{} [\n",
+                match_val, default_label
+            ));
+            for (val, label) in &switch_cases {
+                ir.push_str(&format!("    i64 {}, label %{}\n", val, label));
+            }
+            ir.push_str("  ]\n");
+
+            // Generate arm bodies for integer cases
+            let mut case_idx = 0;
+            for arm in arms {
+                if let Pattern::Literal(Literal::Int(_)) = &arm.pattern.node {
+                    let label = &arm_labels[case_idx];
+                    ir.push_str(&format!("{}:\n", label));
+
+                    // Check guard if present
+                    if let Some(guard) = &arm.guard {
+                        let guard_pass = self.next_label("match.guard.pass");
+                        let guard_fail = self.next_label("match.guard.fail");
+
+                        let (guard_val, guard_ir) = self.generate_expr(guard, counter)?;
+                        ir.push_str(&guard_ir);
+                        ir.push_str(&format!(
+                            "  br i1 {}, label %{}, label %{}\n",
+                            guard_val, guard_pass, guard_fail
+                        ));
+
+                        // Guard passed - execute body
+                        ir.push_str(&format!("{}:\n", guard_pass));
+                        let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                        ir.push_str(&body_ir);
+                        arm_values.push((body_val, guard_pass.clone()));
+                        ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                        // Guard failed - go to default
+                        ir.push_str(&format!("{}:\n", guard_fail));
+                        ir.push_str(&format!("  br label %{}\n", default_label));
+                    } else {
+                        let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                        ir.push_str(&body_ir);
+                        arm_values.push((body_val, label.clone()));
+                        ir.push_str(&format!("  br label %{}\n", merge_label));
+                    }
+
+                    case_idx += 1;
+                }
+            }
+
+            // Generate default arm
+            ir.push_str(&format!("{}:\n", default_label));
+            if let Some(arm) = default_arm {
+                let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                ir.push_str(&body_ir);
+                arm_values.push((body_val, default_label.clone()));
+            } else {
+                // No default arm - unreachable or return 0
+                arm_values.push(("0".to_string(), default_label.clone()));
+            }
+            ir.push_str(&format!("  br label %{}\n", merge_label));
+        } else {
+            // Fall back to chained conditional branches for complex patterns
+            let mut current_label = self.next_label("match.check");
+            ir.push_str(&format!("  br label %{}\n", current_label));
+
+            for (i, arm) in arms.iter().enumerate() {
+                let is_last = i == arms.len() - 1;
+                let next_label = if is_last {
+                    merge_label.clone()
+                } else {
+                    self.next_label("match.check")
+                };
+                let arm_body_label = self.next_label("match.arm");
+
+                ir.push_str(&format!("{}:\n", current_label));
+
+                // Generate pattern check
+                let (check_val, check_ir) =
+                    self.generate_pattern_check(&arm.pattern, &match_val, counter)?;
+                ir.push_str(&check_ir);
+
+                // Handle guard
+                if let Some(guard) = &arm.guard {
+                    let guard_check = self.next_label("match.guard.check");
+
+                    // First check pattern
+                    ir.push_str(&format!(
+                        "  br i1 {}, label %{}, label %{}\n",
+                        check_val, guard_check, next_label
+                    ));
+
+                    // Then check guard
+                    ir.push_str(&format!("{}:\n", guard_check));
+                    let (guard_val, guard_ir) = self.generate_expr(guard, counter)?;
+                    ir.push_str(&guard_ir);
+                    ir.push_str(&format!(
+                        "  br i1 {}, label %{}, label %{}\n",
+                        guard_val, arm_body_label, next_label
+                    ));
+                } else {
+                    ir.push_str(&format!(
+                        "  br i1 {}, label %{}, label %{}\n",
+                        check_val, arm_body_label, next_label
+                    ));
+                }
+
+                // Generate arm body
+                ir.push_str(&format!("{}:\n", arm_body_label));
+
+                // Bind pattern variables if needed
+                let bind_ir = self.generate_pattern_bindings(&arm.pattern, &match_val, counter)?;
+                ir.push_str(&bind_ir);
+
+                let (body_val, body_ir) = self.generate_expr(&arm.body, counter)?;
+                ir.push_str(&body_ir);
+                arm_values.push((body_val, arm_body_label.clone()));
+                ir.push_str(&format!("  br label %{}\n", merge_label));
+
+                current_label = next_label;
+            }
+
+            // If no arm matched (for non-exhaustive patterns)
+            if !arms.is_empty() {
+                // The last next_label becomes merge_label, so we don't need extra handling
+            }
+        }
+
+        // Merge block with phi node
+        ir.push_str(&format!("{}:\n", merge_label));
+
+        if arm_values.is_empty() {
+            Ok(("0".to_string(), ir))
+        } else {
+            let result = self.next_temp(counter);
+            let phi_args: Vec<String> = arm_values
+                .iter()
+                .map(|(val, label)| format!("[ {}, %{} ]", val, label))
+                .collect();
+            ir.push_str(&format!(
+                "  {} = phi i64 {}\n",
+                result,
+                phi_args.join(", ")
+            ));
+            Ok((result, ir))
+        }
+    }
+
+    /// Generate code to check if a pattern matches
+    fn generate_pattern_check(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        match_val: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        match &pattern.node {
+            Pattern::Wildcard => {
+                // Wildcard always matches
+                Ok(("1".to_string(), String::new()))
+            }
+            Pattern::Ident(_) => {
+                // Identifier pattern always matches (binding)
+                Ok(("1".to_string(), String::new()))
+            }
+            Pattern::Literal(lit) => {
+                let (lit_val, cmp_instr) = match lit {
+                    Literal::Int(n) => (n.to_string(), "icmp eq"),
+                    Literal::Bool(b) => (if *b { "1" } else { "0" }.to_string(), "icmp eq"),
+                    Literal::Float(f) => (format!("{:e}", f), "fcmp oeq"),
+                    Literal::String(s) => {
+                        // String comparison is more complex, for now just compare pointers
+                        let _ = s;
+                        return Ok(("1".to_string(), String::new()));
+                    }
+                };
+
+                let result = self.next_temp(counter);
+                let ty = match lit {
+                    Literal::Float(_) => "double",
+                    _ => "i64",
+                };
+                let ir = format!("  {} = {} {} {}, {}\n", result, cmp_instr, ty, match_val, lit_val);
+                Ok((result, ir))
+            }
+            Pattern::Range { start, end, inclusive } => {
+                let mut ir = String::new();
+
+                // Check lower bound
+                let lower_check = if let Some(start_pat) = start {
+                    if let Pattern::Literal(Literal::Int(n)) = &start_pat.node {
+                        let tmp = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = icmp sge i64 {}, {}\n",
+                            tmp, match_val, n
+                        ));
+                        tmp
+                    } else {
+                        "1".to_string()
+                    }
+                } else {
+                    "1".to_string()
+                };
+
+                // Check upper bound
+                let upper_check = if let Some(end_pat) = end {
+                    if let Pattern::Literal(Literal::Int(n)) = &end_pat.node {
+                        let tmp = self.next_temp(counter);
+                        let cmp = if *inclusive { "icmp sle" } else { "icmp slt" };
+                        ir.push_str(&format!(
+                            "  {} = {} i64 {}, {}\n",
+                            tmp, cmp, match_val, n
+                        ));
+                        tmp
+                    } else {
+                        "1".to_string()
+                    }
+                } else {
+                    "1".to_string()
+                };
+
+                // Combine checks
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = and i1 {}, {}\n",
+                    result, lower_check, upper_check
+                ));
+
+                Ok((result, ir))
+            }
+            Pattern::Or(patterns) => {
+                let mut ir = String::new();
+                let mut checks: Vec<String> = Vec::new();
+
+                for pat in patterns {
+                    let (check, check_ir) = self.generate_pattern_check(pat, match_val, counter)?;
+                    ir.push_str(&check_ir);
+                    checks.push(check);
+                }
+
+                // OR all checks together
+                let mut result = checks[0].clone();
+                for check in checks.iter().skip(1) {
+                    let tmp = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = or i1 {}, {}\n", tmp, result, check));
+                    result = tmp;
+                }
+
+                Ok((result, ir))
+            }
+            Pattern::Tuple(patterns) => {
+                // For tuple patterns, we need to extract and check each element
+                let mut ir = String::new();
+                let mut checks: Vec<String> = Vec::new();
+
+                for (i, pat) in patterns.iter().enumerate() {
+                    // Extract tuple element
+                    let elem = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {{ {} }} {}, {}\n",
+                        elem,
+                        vec!["i64"; patterns.len()].join(", "),
+                        match_val,
+                        i
+                    ));
+
+                    let (check, check_ir) = self.generate_pattern_check(pat, &elem, counter)?;
+                    ir.push_str(&check_ir);
+                    checks.push(check);
+                }
+
+                // AND all checks together
+                if checks.is_empty() {
+                    Ok(("1".to_string(), ir))
+                } else {
+                    let mut result = checks[0].clone();
+                    for check in checks.iter().skip(1) {
+                        let tmp = self.next_temp(counter);
+                        ir.push_str(&format!("  {} = and i1 {}, {}\n", tmp, result, check));
+                        result = tmp;
+                    }
+                    Ok((result, ir))
+                }
+            }
+            Pattern::Variant { name, fields: _ } => {
+                // Enum variant pattern: check the tag matches
+                // Enum value is a struct { i32 tag, ... payload }
+                // Extract the tag and compare
+                let mut ir = String::new();
+
+                // Get the tag from the enum value (first field at index 0)
+                let tag_ptr = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = getelementptr {{ i32 }}, {{ i32 }}* {}, i32 0, i32 0\n",
+                    tag_ptr, match_val
+                ));
+
+                let tag_val = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load i32, i32* {}\n",
+                    tag_val, tag_ptr
+                ));
+
+                // Find the expected tag value for this variant
+                let variant_name = &name.node;
+                let expected_tag = self.get_enum_variant_tag(variant_name);
+
+                // Compare tag
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = icmp eq i32 {}, {}\n",
+                    result, tag_val, expected_tag
+                ));
+
+                Ok((result, ir))
+            }
+            Pattern::Struct { name, fields } => {
+                // Struct pattern: always matches if type is correct, but we check field patterns
+                let struct_name = &name.node;
+                let mut ir = String::new();
+                let mut checks: Vec<String> = Vec::new();
+
+                if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                    for (field_name, field_pat) in fields {
+                        // Find field index
+                        if let Some(field_idx) = struct_info.fields.iter()
+                            .position(|(n, _)| n == &field_name.node)
+                        {
+                            if let Some(pat) = field_pat {
+                                // Extract field value and check pattern
+                                let field_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                                    field_ptr, struct_name, struct_name, match_val, field_idx
+                                ));
+
+                                let field_val = self.next_temp(counter);
+                                let field_ty = &struct_info.fields[field_idx].1;
+                                let llvm_ty = self.type_to_llvm(field_ty);
+                                ir.push_str(&format!(
+                                    "  {} = load {}, {}* {}\n",
+                                    field_val, llvm_ty, llvm_ty, field_ptr
+                                ));
+
+                                let (check, check_ir) = self.generate_pattern_check(pat, &field_val, counter)?;
+                                ir.push_str(&check_ir);
+                                checks.push(check);
+                            }
+                        }
+                    }
+                }
+
+                // AND all checks together
+                if checks.is_empty() {
+                    Ok(("1".to_string(), ir))
+                } else {
+                    let mut result = checks[0].clone();
+                    for check in checks.iter().skip(1) {
+                        let tmp = self.next_temp(counter);
+                        ir.push_str(&format!("  {} = and i1 {}, {}\n", tmp, result, check));
+                        result = tmp;
+                    }
+                    Ok((result, ir))
+                }
+            }
+        }
+    }
+
+    /// Get the tag value for an enum variant
+    fn get_enum_variant_tag(&self, variant_name: &str) -> i32 {
+        for enum_info in self.enums.values() {
+            for (i, variant) in enum_info.variants.iter().enumerate() {
+                if variant.name == variant_name {
+                    return i as i32;
+                }
+            }
+        }
+        0 // Default to 0 if not found
+    }
+
+    /// Generate pattern bindings (assign matched values to pattern variables)
+    fn generate_pattern_bindings(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        match_val: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        match &pattern.node {
+            Pattern::Ident(name) => {
+                // Bind the matched value to the identifier
+                let mut ir = String::new();
+                let ty = ResolvedType::I64; // Default type for now
+
+                // Generate unique LLVM name for pattern binding
+                let llvm_name = format!("{}.{}", name, counter);
+                *counter += 1;
+
+                self.locals.insert(
+                    name.clone(),
+                    LocalVar {
+                        ty: ty.clone(),
+                        is_param: false,
+                        llvm_name: llvm_name.clone(),
+                    },
+                );
+
+                let llvm_ty = self.type_to_llvm(&ty);
+                ir.push_str(&format!("  %{} = alloca {}\n", llvm_name, llvm_ty));
+                ir.push_str(&format!(
+                    "  store {} {}, {}* %{}\n",
+                    llvm_ty, match_val, llvm_ty, llvm_name
+                ));
+
+                Ok(ir)
+            }
+            Pattern::Tuple(patterns) => {
+                let mut ir = String::new();
+
+                for (i, pat) in patterns.iter().enumerate() {
+                    // Extract tuple element
+                    let elem = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {{ {} }} {}, {}\n",
+                        elem,
+                        vec!["i64"; patterns.len()].join(", "),
+                        match_val,
+                        i
+                    ));
+
+                    let bind_ir = self.generate_pattern_bindings(pat, &elem, counter)?;
+                    ir.push_str(&bind_ir);
+                }
+
+                Ok(ir)
+            }
+            Pattern::Variant { name: _, fields } => {
+                // Bind fields from enum variant payload
+                let mut ir = String::new();
+
+                for (i, field_pat) in fields.iter().enumerate() {
+                    // Extract payload field (starting at offset 1, after the tag)
+                    // For tuple variants: { i32 tag, i64 field0, i64 field1, ... }
+                    let field_val = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {{ i32, i64 }} {}, {}\n",
+                        field_val, match_val, i + 1
+                    ));
+
+                    let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
+                    ir.push_str(&bind_ir);
+                }
+
+                Ok(ir)
+            }
+            Pattern::Struct { name, fields } => {
+                // Bind fields from struct
+                let struct_name = &name.node;
+                let mut ir = String::new();
+
+                if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                    for (field_name, field_pat) in fields {
+                        // If field_pat is None, bind the field to its own name
+                        if let Some(field_idx) = struct_info.fields.iter()
+                            .position(|(n, _)| n == &field_name.node)
+                        {
+                            // Extract field value
+                            let field_ptr = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                                field_ptr, struct_name, struct_name, match_val, field_idx
+                            ));
+
+                            let field_val = self.next_temp(counter);
+                            let field_ty = &struct_info.fields[field_idx].1;
+                            let llvm_ty = self.type_to_llvm(field_ty);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* {}\n",
+                                field_val, llvm_ty, llvm_ty, field_ptr
+                            ));
+
+                            if let Some(pat) = field_pat {
+                                // Bind to pattern
+                                let bind_ir = self.generate_pattern_bindings(pat, &field_val, counter)?;
+                                ir.push_str(&bind_ir);
+                            } else {
+                                // Bind to field name directly with unique LLVM name
+                                let llvm_field_name = format!("{}.{}", field_name.node, counter);
+                                *counter += 1;
+
+                                self.locals.insert(
+                                    field_name.node.clone(),
+                                    LocalVar {
+                                        ty: field_ty.clone(),
+                                        is_param: false,
+                                        llvm_name: llvm_field_name.clone(),
+                                    },
+                                );
+                                ir.push_str(&format!("  %{} = alloca {}\n", llvm_field_name, llvm_ty));
+                                ir.push_str(&format!(
+                                    "  store {} {}, {}* %{}\n",
+                                    llvm_ty, field_val, llvm_ty, llvm_field_name
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                Ok(ir)
+            }
+            _ => Ok(String::new()),
+        }
+    }
+
+    /// Infer type of expression (simple version for let statement)
+    fn infer_expr_type(&self, expr: &Spanned<Expr>) -> ResolvedType {
+        match &expr.node {
+            Expr::Int(_) => ResolvedType::I64,
+            Expr::Float(_) => ResolvedType::F64,
+            Expr::Bool(_) => ResolvedType::Bool,
+            Expr::String(_) => ResolvedType::Str,
+            Expr::Ident(name) => {
+                // Look up local variable type
+                if let Some(local) = self.locals.get(name) {
+                    local.ty.clone()
+                } else {
+                    ResolvedType::I64 // Default
+                }
+            }
+            Expr::Call { func, .. } => {
+                // Get return type from function info
+                if let Expr::Ident(fn_name) = &func.node {
+                    if let Some(fn_info) = self.functions.get(fn_name) {
+                        return fn_info.ret_type.clone();
+                    }
+                }
+                ResolvedType::I64 // Default
+            }
+            Expr::Array(elements) => {
+                if let Some(first) = elements.first() {
+                    ResolvedType::Pointer(Box::new(self.infer_expr_type(first)))
+                } else {
+                    ResolvedType::Pointer(Box::new(ResolvedType::I64))
+                }
+            }
+            Expr::Tuple(elements) => {
+                ResolvedType::Tuple(elements.iter().map(|e| self.infer_expr_type(e)).collect())
+            }
+            Expr::Ref(inner) => ResolvedType::Ref(Box::new(self.infer_expr_type(inner))),
+            Expr::Deref(inner) => {
+                match self.infer_expr_type(inner) {
+                    ResolvedType::Pointer(inner) => *inner,
+                    ResolvedType::Ref(inner) => *inner,
+                    ResolvedType::RefMut(inner) => *inner,
+                    _ => ResolvedType::I64,
+                }
+            }
+            Expr::StructLit { name, .. } => {
+                // Return Named type for struct literals
+                ResolvedType::Named {
+                    name: name.node.clone(),
+                    generics: vec![],
+                }
+            }
+            Expr::Index { expr: inner, index } => {
+                // Check if this is a slice operation
+                if matches!(index.node, Expr::Range { .. }) {
+                    // Slice returns a pointer
+                    let inner_ty = self.infer_expr_type(inner);
+                    match inner_ty {
+                        ResolvedType::Pointer(elem) => ResolvedType::Pointer(elem),
+                        ResolvedType::Array(elem) => ResolvedType::Pointer(elem),
+                        _ => ResolvedType::Pointer(Box::new(ResolvedType::I64)),
+                    }
+                } else {
+                    // Regular indexing returns element type
+                    let inner_ty = self.infer_expr_type(inner);
+                    match inner_ty {
+                        ResolvedType::Pointer(elem) => *elem,
+                        ResolvedType::Array(elem) => *elem,
+                        _ => ResolvedType::I64,
+                    }
+                }
+            }
+            Expr::Lambda { .. } => {
+                // Lambda returns a function pointer (represented as i64)
+                ResolvedType::I64
+            }
+            Expr::MethodCall { receiver, method, .. } => {
+                // Get method return type from struct definition
+                let recv_type = self.infer_expr_type(receiver);
+                if let ResolvedType::Named { name, .. } = &recv_type {
+                    let method_name = format!("{}_{}", name, method.node);
+                    if let Some(fn_info) = self.functions.get(&method_name) {
+                        return fn_info.ret_type.clone();
+                    }
+                }
+                ResolvedType::I64
+            }
+            Expr::StaticMethodCall { type_name, method, .. } => {
+                // Get static method return type from function info
+                let method_name = format!("{}_{}", type_name.node, method.node);
+                if let Some(fn_info) = self.functions.get(&method_name) {
+                    return fn_info.ret_type.clone();
+                }
+                ResolvedType::I64
+            }
+            _ => ResolvedType::I64, // Default fallback
+        }
+    }
+
+    /// Generate code for array slicing: arr[start..end]
+    /// Returns a new array (allocated on heap) containing the slice
+    fn generate_slice(
+        &mut self,
+        array_expr: &Spanned<Expr>,
+        start: Option<&Spanned<Expr>>,
+        end: Option<&Spanned<Expr>>,
+        inclusive: bool,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (arr_val, arr_ir) = self.generate_expr(array_expr, counter)?;
+        let mut ir = arr_ir;
+
+        // Get start index (default 0)
+        let start_val = if let Some(start_expr) = start {
+            let (val, start_ir) = self.generate_expr(start_expr, counter)?;
+            ir.push_str(&start_ir);
+            val
+        } else {
+            "0".to_string()
+        };
+
+        // Get end index
+        // For simplicity, we require end to be specified for now
+        // A proper implementation would need array length tracking
+        let end_val = if let Some(end_expr) = end {
+            let (val, end_ir) = self.generate_expr(end_expr, counter)?;
+            ir.push_str(&end_ir);
+
+            // If inclusive (..=), add 1 to end
+            if inclusive {
+                let adj_end = self.next_temp(counter);
+                ir.push_str(&format!("  {} = add i64 {}, 1\n", adj_end, val));
+                adj_end
+            } else {
+                val
+            }
+        } else {
+            return Err(CodegenError::Unsupported(
+                "Slice without end index requires array length".to_string(),
+            ));
+        };
+
+        // Calculate slice length: end - start
+        let length = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = sub i64 {}, {}\n",
+            length, end_val, start_val
+        ));
+
+        // Allocate new array for slice
+        let byte_size = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = mul i64 {}, 8\n", // 8 bytes per i64 element
+            byte_size, length
+        ));
+
+        let raw_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = call i8* @malloc(i64 {})\n",
+            raw_ptr, byte_size
+        ));
+
+        let slice_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = bitcast i8* {} to i64*\n",
+            slice_ptr, raw_ptr
+        ));
+
+        // Copy elements using a loop
+        let loop_idx_ptr = self.next_temp(counter);
+        ir.push_str(&format!("  {} = alloca i64\n", loop_idx_ptr));
+        ir.push_str(&format!("  store i64 0, i64* {}\n", loop_idx_ptr));
+
+        let loop_start = self.next_label("slice_loop");
+        let loop_body = self.next_label("slice_body");
+        let loop_end = self.next_label("slice_end");
+
+        ir.push_str(&format!("  br label %{}\n", loop_start));
+        ir.push_str(&format!("{}:\n", loop_start));
+
+        let loop_idx = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = load i64, i64* {}\n",
+            loop_idx, loop_idx_ptr
+        ));
+
+        let cmp = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = icmp slt i64 {}, {}\n",
+            cmp, loop_idx, length
+        ));
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cmp, loop_body, loop_end
+        ));
+
+        ir.push_str(&format!("{}:\n", loop_body));
+
+        // Calculate source index: start + loop_idx
+        let src_idx = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = add i64 {}, {}\n",
+            src_idx, start_val, loop_idx
+        ));
+
+        // Get source element pointer
+        let src_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr i64, i64* {}, i64 {}\n",
+            src_ptr, arr_val, src_idx
+        ));
+
+        // Load source element
+        let elem = self.next_temp(counter);
+        ir.push_str(&format!("  {} = load i64, i64* {}\n", elem, src_ptr));
+
+        // Get destination element pointer
+        let dst_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr i64, i64* {}, i64 {}\n",
+            dst_ptr, slice_ptr, loop_idx
+        ));
+
+        // Store element
+        ir.push_str(&format!("  store i64 {}, i64* {}\n", elem, dst_ptr));
+
+        // Increment loop index
+        let next_idx = self.next_temp(counter);
+        ir.push_str(&format!("  {} = add i64 {}, 1\n", next_idx, loop_idx));
+        ir.push_str(&format!("  store i64 {}, i64* {}\n", next_idx, loop_idx_ptr));
+        ir.push_str(&format!("  br label %{}\n", loop_start));
+
+        ir.push_str(&format!("{}:\n", loop_end));
+
+        Ok((slice_ptr, ir))
+    }
+
+    /// Find free variables in a lambda expression
+    /// Returns variables that are used in the body but not bound by parameters
+    fn find_lambda_captures(&self, params: &[Param], body: &Spanned<Expr>) -> Vec<String> {
+        let param_names: std::collections::HashSet<_> = params.iter()
+            .map(|p| p.name.node.clone())
+            .collect();
+        let mut free_vars = Vec::new();
+        self.collect_free_vars_in_expr(&body.node, &param_names, &mut free_vars);
+        // Deduplicate while preserving order
+        let mut seen = std::collections::HashSet::new();
+        free_vars.retain(|v| seen.insert(v.clone()));
+        free_vars
+    }
+
+    fn collect_free_vars_in_expr(&self, expr: &Expr, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+        match expr {
+            Expr::Ident(name) => {
+                // Only capture if it's in our locals (exists in outer scope)
+                if !bound.contains(name) && self.locals.contains_key(name) {
+                    free.push(name.clone());
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.collect_free_vars_in_expr(&left.node, bound, free);
+                self.collect_free_vars_in_expr(&right.node, bound, free);
+            }
+            Expr::Unary { expr, .. } => {
+                self.collect_free_vars_in_expr(&expr.node, bound, free);
+            }
+            Expr::Call { func, args } => {
+                self.collect_free_vars_in_expr(&func.node, bound, free);
+                for arg in args {
+                    self.collect_free_vars_in_expr(&arg.node, bound, free);
+                }
+            }
+            Expr::If { cond, then, else_ } => {
+                self.collect_free_vars_in_expr(&cond.node, bound, free);
+                let mut local_bound = bound.clone();
+                for stmt in then {
+                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                }
+                if let Some(else_br) = else_ {
+                    self.collect_free_vars_in_if_else(else_br, bound, free);
+                }
+            }
+            Expr::Block(stmts) => {
+                let mut local_bound = bound.clone();
+                for stmt in stmts {
+                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                self.collect_free_vars_in_expr(&receiver.node, bound, free);
+                for arg in args {
+                    self.collect_free_vars_in_expr(&arg.node, bound, free);
+                }
+            }
+            Expr::Field { expr, .. } => {
+                self.collect_free_vars_in_expr(&expr.node, bound, free);
+            }
+            Expr::Index { expr, index } => {
+                self.collect_free_vars_in_expr(&expr.node, bound, free);
+                self.collect_free_vars_in_expr(&index.node, bound, free);
+            }
+            Expr::Array(elems) => {
+                for e in elems {
+                    self.collect_free_vars_in_expr(&e.node, bound, free);
+                }
+            }
+            Expr::Tuple(elems) => {
+                for e in elems {
+                    self.collect_free_vars_in_expr(&e.node, bound, free);
+                }
+            }
+            Expr::StructLit { fields, .. } => {
+                for (_, e) in fields {
+                    self.collect_free_vars_in_expr(&e.node, bound, free);
+                }
+            }
+            Expr::Assign { target, value } | Expr::AssignOp { target, value, .. } => {
+                self.collect_free_vars_in_expr(&target.node, bound, free);
+                self.collect_free_vars_in_expr(&value.node, bound, free);
+            }
+            Expr::Lambda { params, body, .. } => {
+                let mut inner_bound = bound.clone();
+                for p in params {
+                    inner_bound.insert(p.name.node.clone());
+                }
+                self.collect_free_vars_in_expr(&body.node, &inner_bound, free);
+            }
+            Expr::Ref(inner) | Expr::Deref(inner) |
+            Expr::Try(inner) | Expr::Unwrap(inner) | Expr::Await(inner) |
+            Expr::Spawn(inner) => {
+                self.collect_free_vars_in_expr(&inner.node, bound, free);
+            }
+            Expr::Ternary { cond, then, else_ } => {
+                self.collect_free_vars_in_expr(&cond.node, bound, free);
+                self.collect_free_vars_in_expr(&then.node, bound, free);
+                self.collect_free_vars_in_expr(&else_.node, bound, free);
+            }
+            Expr::Loop { body, pattern, iter } => {
+                if let Some(it) = iter {
+                    self.collect_free_vars_in_expr(&it.node, bound, free);
+                }
+                let mut local_bound = bound.clone();
+                if let Some(pat) = pattern {
+                    self.collect_pattern_bindings(&pat.node, &mut local_bound);
+                }
+                for stmt in body {
+                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                }
+            }
+            Expr::Match { expr, arms } => {
+                self.collect_free_vars_in_expr(&expr.node, bound, free);
+                for arm in arms {
+                    let mut arm_bound = bound.clone();
+                    self.collect_pattern_bindings(&arm.pattern.node, &mut arm_bound);
+                    if let Some(guard) = &arm.guard {
+                        self.collect_free_vars_in_expr(&guard.node, &arm_bound, free);
+                    }
+                    self.collect_free_vars_in_expr(&arm.body.node, &arm_bound, free);
+                }
+            }
+            Expr::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    self.collect_free_vars_in_expr(&s.node, bound, free);
+                }
+                if let Some(e) = end {
+                    self.collect_free_vars_in_expr(&e.node, bound, free);
+                }
+            }
+            // Literals and other expressions don't contain free variables
+            _ => {}
+        }
+    }
+
+    fn collect_free_vars_in_stmt(&self, stmt: &Stmt, bound: &mut std::collections::HashSet<String>, free: &mut Vec<String>) {
+        match stmt {
+            Stmt::Let { name, value, .. } => {
+                self.collect_free_vars_in_expr(&value.node, bound, free);
+                bound.insert(name.node.clone());
+            }
+            Stmt::Expr(e) => self.collect_free_vars_in_expr(&e.node, bound, free),
+            Stmt::Return(Some(e)) => self.collect_free_vars_in_expr(&e.node, bound, free),
+            Stmt::Break(Some(e)) => self.collect_free_vars_in_expr(&e.node, bound, free),
+            _ => {}
+        }
+    }
+
+    fn collect_free_vars_in_if_else(&self, if_else: &IfElse, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+        match if_else {
+            IfElse::ElseIf(cond, then_stmts, else_) => {
+                self.collect_free_vars_in_expr(&cond.node, bound, free);
+                let mut local_bound = bound.clone();
+                for stmt in then_stmts {
+                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                }
+                if let Some(else_br) = else_ {
+                    self.collect_free_vars_in_if_else(else_br, bound, free);
+                }
+            }
+            IfElse::Else(stmts) => {
+                let mut local_bound = bound.clone();
+                for stmt in stmts {
+                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                }
+            }
+        }
+    }
+
+    fn collect_pattern_bindings(&self, pattern: &Pattern, bound: &mut std::collections::HashSet<String>) {
+        match pattern {
+            Pattern::Ident(name) => { bound.insert(name.clone()); }
+            Pattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.collect_pattern_bindings(&p.node, bound);
+                }
+            }
+            Pattern::Struct { fields, .. } => {
+                for (name, pat) in fields {
+                    if let Some(p) = pat {
+                        self.collect_pattern_bindings(&p.node, bound);
+                    } else {
+                        // Field shorthand: {x} binds x
+                        bound.insert(name.node.clone());
+                    }
+                }
+            }
+            Pattern::Variant { fields, .. } => {
+                for p in fields {
+                    self.collect_pattern_bindings(&p.node, bound);
+                }
+            }
+            Pattern::Or(patterns) => {
+                for p in patterns {
+                    self.collect_pattern_bindings(&p.node, bound);
+                }
+            }
+            _ => {}
         }
     }
 }

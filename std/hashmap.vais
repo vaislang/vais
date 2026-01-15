@@ -1,0 +1,230 @@
+# HashMap - hash table with i64 keys and i64 values
+# Uses separate chaining for collision resolution
+
+# Entry node for linked list in each bucket
+S Entry {
+    key: i64,       # Key
+    value: i64,     # Value
+    next: i64       # Pointer to next Entry (0 if none)
+}
+
+# HashMap structure
+S HashMap {
+    buckets: i64,   # Pointer to array of bucket heads (Entry pointers)
+    size: i64,      # Number of key-value pairs
+    cap: i64        # Number of buckets
+}
+
+X HashMap {
+    # Create a new HashMap with given capacity
+    F with_capacity(capacity: i64) -> HashMap {
+        cap := capacity
+        I cap < 8 {
+            cap = 8
+        }
+        # Allocate bucket array (array of pointers, each 8 bytes)
+        buckets := malloc(cap * 8)
+        # Initialize all buckets to null (0)
+        i := 0
+        L {
+            I i >= cap { B 0 }
+            store_i64(buckets + i * 8, 0)
+            i = i + 1
+        }
+        HashMap { buckets: buckets, size: 0, cap: cap }
+    }
+
+    # Get number of entries
+    F len(&self) -> i64 {
+        self.size
+    }
+
+    # Get capacity (number of buckets)
+    F capacity(&self) -> i64 {
+        self.cap
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } E { 0 }
+    }
+
+    # Hash function for i64 key
+    F hash(&self, key: i64) -> i64 {
+        # Simple hash: multiply by golden ratio prime and take modulo
+        h := key * 2654435769
+        I h < 0 {
+            h = 0 - h
+        }
+        h % self.cap
+    }
+
+    # Get value for key, returns 0 if not found
+    # Use contains() to check if key exists
+    F get(&self, key: i64) -> i64 {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+
+        L {
+            I entry_ptr == 0 { B 0 }
+            entry_key := load_i64(entry_ptr)  # Entry.key at offset 0
+            I entry_key == key {
+                B load_i64(entry_ptr + 8)  # Entry.value at offset 8
+            }
+            entry_ptr = load_i64(entry_ptr + 16)  # Entry.next at offset 16
+        }
+    }
+
+    # Check if key exists
+    F contains(&self, key: i64) -> i64 {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+
+        L {
+            I entry_ptr == 0 { B 0 }
+            entry_key := load_i64(entry_ptr)
+            I entry_key == key { B 1 }
+            entry_ptr = load_i64(entry_ptr + 16)
+        }
+    }
+
+    # Set key-value pair, returns previous value or 0 if new
+    F set(&self, key: i64, value: i64) -> i64 {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+
+        # Search for existing key
+        current := entry_ptr
+        L {
+            I current == 0 { B 0 }
+            entry_key := load_i64(current)
+            I entry_key == key {
+                # Key exists, update value
+                old_value := load_i64(current + 8)
+                store_i64(current + 8, value)
+                B old_value
+            }
+            current = load_i64(current + 16)
+        }
+
+        # Key not found, insert new entry at head
+        new_entry := malloc(24)  # 3 * 8 bytes for Entry
+        store_i64(new_entry, key)        # key
+        store_i64(new_entry + 8, value)  # value
+        store_i64(new_entry + 16, entry_ptr)  # next = old head
+        store_i64(self.buckets + idx * 8, new_entry)  # update bucket head
+        self.size = self.size + 1
+
+        # Check if rehash needed (load factor > 0.75)
+        I self.size * 4 > self.cap * 3 {
+            @.rehash()
+        }
+
+        0
+    }
+
+    # Remove key-value pair, returns removed value or 0 if not found
+    F remove(&self, key: i64) -> i64 {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        prev_ptr := 0
+
+        L {
+            I entry_ptr == 0 { B 0 }
+            entry_key := load_i64(entry_ptr)
+            I entry_key == key {
+                value := load_i64(entry_ptr + 8)
+                next := load_i64(entry_ptr + 16)
+
+                I prev_ptr == 0 {
+                    # Removing head of list
+                    store_i64(self.buckets + idx * 8, next)
+                } E {
+                    # Removing from middle/end
+                    store_i64(prev_ptr + 16, next)
+                }
+
+                free(entry_ptr)
+                self.size = self.size - 1
+                B value
+            }
+            prev_ptr = entry_ptr
+            entry_ptr = load_i64(entry_ptr + 16)
+        }
+    }
+
+    # Rehash to double capacity
+    F rehash(&self) -> i64 {
+        old_buckets := self.buckets
+        old_cap := self.cap
+        new_cap := old_cap * 2
+
+        # Allocate new bucket array
+        new_buckets := malloc(new_cap * 8)
+        i := 0
+        L {
+            I i >= new_cap { B 0 }
+            store_i64(new_buckets + i * 8, 0)
+            i = i + 1
+        }
+
+        self.buckets = new_buckets
+        self.cap = new_cap
+        self.size = 0
+
+        # Reinsert all entries
+        i = 0
+        L {
+            I i >= old_cap { B 0 }
+            entry_ptr := load_i64(old_buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                key := load_i64(entry_ptr)
+                value := load_i64(entry_ptr + 8)
+                next := load_i64(entry_ptr + 16)
+
+                @.set(key, value)
+                free(entry_ptr)
+
+                entry_ptr = next
+            }
+            i = i + 1
+        }
+
+        free(old_buckets)
+        1
+    }
+
+    # Clear all entries
+    F clear(&self) -> i64 {
+        i := 0
+        L {
+            I i >= self.cap { B 0 }
+            entry_ptr := load_i64(self.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                next := load_i64(entry_ptr + 16)
+                free(entry_ptr)
+                entry_ptr = next
+            }
+            store_i64(self.buckets + i * 8, 0)
+            i = i + 1
+        }
+        self.size = 0
+        0
+    }
+
+    # Free all memory
+    F drop(&self) -> i64 {
+        @.clear()
+        free(self.buckets)
+        self.buckets = 0
+        self.cap = 0
+        0
+    }
+}
+
+# Create new HashMap with default capacity
+F hashmap_new() -> HashMap {
+    HashMap.with_capacity(16)
+}

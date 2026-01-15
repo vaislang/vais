@@ -1,11 +1,11 @@
-//! Vais 2.0 Lexer
+//! Vais 0.0.1 Lexer
 //!
 //! Token-efficient lexer using single-letter keywords for AI optimization.
 
 use logos::Logos;
 use std::fmt;
 
-/// Token types for Vais 2.0
+/// Token types for Vais 0.0.1
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n]+")]  // Skip whitespace
 #[logos(skip r"#[^\n]*")]     // Skip comments
@@ -38,6 +38,10 @@ pub enum Token {
     Use,
     #[token("P", priority = 3)]
     Pub,
+    #[token("W", priority = 3)]
+    Trait,
+    #[token("X", priority = 3)]
+    Impl,
 
     // === Type Keywords ===
     #[token("mut")]
@@ -216,6 +220,8 @@ impl fmt::Display for Token {
             Token::TypeKeyword => write!(f, "T"),
             Token::Use => write!(f, "U"),
             Token::Pub => write!(f, "P"),
+            Token::Trait => write!(f, "W"),
+            Token::Impl => write!(f, "X"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
             Token::SelfUpper => write!(f, "Self"),

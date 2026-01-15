@@ -1,4 +1,4 @@
-//! Vais 2.0 Type System
+//! Vais 0.0.1 Type System
 //!
 //! Static type checking with inference for AI-optimized code generation.
 
@@ -83,6 +83,9 @@ pub enum ResolvedType {
     // Type variable for inference
     Var(usize),
 
+    // Generic type parameter (e.g., T in F foo<T>)
+    Generic(String),
+
     // Unknown/Error type
     Unknown,
 }
@@ -103,6 +106,7 @@ impl ResolvedType {
                 | ResolvedType::U128
                 | ResolvedType::F32
                 | ResolvedType::F64
+                | ResolvedType::Generic(_) // Generics are assumed to support numeric ops
         )
     }
 
@@ -187,6 +191,7 @@ impl std::fmt::Display for ResolvedType {
                 Ok(())
             }
             ResolvedType::Var(id) => write!(f, "?{}", id),
+            ResolvedType::Generic(name) => write!(f, "{}", name),
             ResolvedType::Unknown => write!(f, "?"),
         }
     }
@@ -219,6 +224,31 @@ pub struct EnumDef {
     pub variants: HashMap<String, Vec<ResolvedType>>,
 }
 
+/// Trait method signature
+#[derive(Debug, Clone)]
+pub struct TraitMethodSig {
+    pub name: String,
+    pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut) - first param is &self
+    pub ret: ResolvedType,
+    pub has_default: bool,
+}
+
+/// Trait definition
+#[derive(Debug, Clone)]
+pub struct TraitDef {
+    pub name: String,
+    pub generics: Vec<String>,
+    pub methods: HashMap<String, TraitMethodSig>,
+}
+
+/// Tracks which types implement which traits
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct TraitImpl {
+    trait_name: String,
+    type_name: String,
+}
+
 /// Variable info
 #[derive(Debug, Clone)]
 struct VarInfo {
@@ -233,6 +263,8 @@ pub struct TypeChecker {
     enums: HashMap<String, EnumDef>,
     functions: HashMap<String, FunctionSig>,
     type_aliases: HashMap<String, ResolvedType>,
+    traits: HashMap<String, TraitDef>,
+    trait_impls: Vec<TraitImpl>, // (type_name, trait_name) pairs
 
     // Scope stack
     scopes: Vec<HashMap<String, VarInfo>>,
@@ -240,6 +272,12 @@ pub struct TypeChecker {
     // Current function context
     current_fn_ret: Option<ResolvedType>,
     current_fn_name: Option<String>,
+
+    // Current generic parameters (for type resolution)
+    current_generics: Vec<String>,
+
+    // Current generic bounds (maps generic param name to trait bounds)
+    current_generic_bounds: HashMap<String, Vec<String>>,
 
     // Type variable counter for inference
     #[allow(dead_code)]
@@ -251,17 +289,338 @@ pub struct TypeChecker {
 
 impl TypeChecker {
     pub fn new() -> Self {
-        Self {
+        let mut checker = Self {
             structs: HashMap::new(),
             enums: HashMap::new(),
             functions: HashMap::new(),
             type_aliases: HashMap::new(),
+            traits: HashMap::new(),
+            trait_impls: Vec::new(),
             scopes: vec![HashMap::new()],
             current_fn_ret: None,
             current_fn_name: None,
+            current_generics: Vec::new(),
+            current_generic_bounds: HashMap::new(),
             next_type_var: 0,
             substitutions: HashMap::new(),
-        }
+        };
+        checker.register_builtins();
+        checker
+    }
+
+    /// Register built-in functions (libc wrappers)
+    fn register_builtins(&mut self) {
+        // printf: (str, ...) -> i32
+        self.functions.insert(
+            "printf".to_string(),
+            FunctionSig {
+                name: "printf".to_string(),
+                generics: vec![],
+                params: vec![("format".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+            },
+        );
+
+        // puts: (str) -> i32
+        self.functions.insert(
+            "puts".to_string(),
+            FunctionSig {
+                name: "puts".to_string(),
+                generics: vec![],
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+            },
+        );
+
+        // putchar: (i32) -> i32
+        self.functions.insert(
+            "putchar".to_string(),
+            FunctionSig {
+                name: "putchar".to_string(),
+                generics: vec![],
+                params: vec![("c".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+            },
+        );
+
+        // malloc: (size: i64) -> i64 (pointer as integer for simplicity)
+        self.functions.insert(
+            "malloc".to_string(),
+            FunctionSig {
+                name: "malloc".to_string(),
+                generics: vec![],
+                params: vec![("size".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // free: (ptr: i64) -> ()
+        self.functions.insert(
+            "free".to_string(),
+            FunctionSig {
+                name: "free".to_string(),
+                generics: vec![],
+                params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::Unit,
+                is_async: false,
+            },
+        );
+
+        // exit: (code: i32) -> void (noreturn, but typed as Unit)
+        self.functions.insert(
+            "exit".to_string(),
+            FunctionSig {
+                name: "exit".to_string(),
+                generics: vec![],
+                params: vec![("code".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::Unit,
+                is_async: false,
+            },
+        );
+
+        // memcpy: (dest, src, n) -> i64
+        self.functions.insert(
+            "memcpy".to_string(),
+            FunctionSig {
+                name: "memcpy".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("dest".to_string(), ResolvedType::I64, false),
+                    ("src".to_string(), ResolvedType::I64, false),
+                    ("n".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // strlen: (s) -> i64
+        self.functions.insert(
+            "strlen".to_string(),
+            FunctionSig {
+                name: "strlen".to_string(),
+                generics: vec![],
+                params: vec![("s".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // puts_ptr: (s) -> i32
+        self.functions.insert(
+            "puts_ptr".to_string(),
+            FunctionSig {
+                name: "puts_ptr".to_string(),
+                generics: vec![],
+                params: vec![("s".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+            },
+        );
+
+        // load_byte: (ptr) -> i64
+        self.functions.insert(
+            "load_byte".to_string(),
+            FunctionSig {
+                name: "load_byte".to_string(),
+                generics: vec![],
+                params: vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // store_byte: (ptr, val) -> ()
+        self.functions.insert(
+            "store_byte".to_string(),
+            FunctionSig {
+                name: "store_byte".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    ("val".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::Unit,
+                is_async: false,
+            },
+        );
+
+        // ===== File I/O functions =====
+
+        // fopen: (path, mode) -> FILE* (as i64)
+        self.functions.insert(
+            "fopen".to_string(),
+            FunctionSig {
+                name: "fopen".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("path".to_string(), ResolvedType::Str, false),
+                    ("mode".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fclose: (stream) -> i32
+        self.functions.insert(
+            "fclose".to_string(),
+            FunctionSig {
+                name: "fclose".to_string(),
+                generics: vec![],
+                params: vec![("stream".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+            },
+        );
+
+        // fread: (ptr, size, count, stream) -> i64
+        self.functions.insert(
+            "fread".to_string(),
+            FunctionSig {
+                name: "fread".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    ("size".to_string(), ResolvedType::I64, false),
+                    ("count".to_string(), ResolvedType::I64, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fwrite: (ptr, size, count, stream) -> i64
+        self.functions.insert(
+            "fwrite".to_string(),
+            FunctionSig {
+                name: "fwrite".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("ptr".to_string(), ResolvedType::I64, false),
+                    ("size".to_string(), ResolvedType::I64, false),
+                    ("count".to_string(), ResolvedType::I64, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fgetc: (stream) -> i64 (returns -1 on EOF)
+        self.functions.insert(
+            "fgetc".to_string(),
+            FunctionSig {
+                name: "fgetc".to_string(),
+                generics: vec![],
+                params: vec![("stream".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fputc: (c, stream) -> i64
+        self.functions.insert(
+            "fputc".to_string(),
+            FunctionSig {
+                name: "fputc".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("c".to_string(), ResolvedType::I64, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fgets: (str, n, stream) -> i64 (char*)
+        self.functions.insert(
+            "fgets".to_string(),
+            FunctionSig {
+                name: "fgets".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("str".to_string(), ResolvedType::I64, false),
+                    ("n".to_string(), ResolvedType::I64, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fputs: (str, stream) -> i64
+        self.functions.insert(
+            "fputs".to_string(),
+            FunctionSig {
+                name: "fputs".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("str".to_string(), ResolvedType::Str, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fseek: (stream, offset, origin) -> i64
+        self.functions.insert(
+            "fseek".to_string(),
+            FunctionSig {
+                name: "fseek".to_string(),
+                generics: vec![],
+                params: vec![
+                    ("stream".to_string(), ResolvedType::I64, false),
+                    ("offset".to_string(), ResolvedType::I64, false),
+                    ("origin".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // ftell: (stream) -> i64
+        self.functions.insert(
+            "ftell".to_string(),
+            FunctionSig {
+                name: "ftell".to_string(),
+                generics: vec![],
+                params: vec![("stream".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // fflush: (stream) -> i64
+        self.functions.insert(
+            "fflush".to_string(),
+            FunctionSig {
+                name: "fflush".to_string(),
+                generics: vec![],
+                params: vec![("stream".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // feof: (stream) -> i64
+        self.functions.insert(
+            "feof".to_string(),
+            FunctionSig {
+                name: "feof".to_string(),
+                generics: vec![],
+                params: vec![("stream".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
     }
 
     /// Type check a module
@@ -273,18 +632,60 @@ impl TypeChecker {
                 Item::Struct(s) => self.register_struct(s)?,
                 Item::Enum(e) => self.register_enum(e)?,
                 Item::TypeAlias(t) => self.register_type_alias(t)?,
-                Item::Use(_) => {} // TODO: Handle imports
+                Item::Use(_use_stmt) => {
+                    // Use statements are handled at the compiler level (AST merging)
+                    // by the time we reach type checking, all imports are already resolved
+                }
+                Item::Trait(t) => self.register_trait(t)?,
+                Item::Impl(impl_block) => {
+                    // Register impl methods to the target type
+                    self.register_impl(impl_block)?;
+                }
             }
         }
 
         // Second pass: check function bodies
         for item in &module.items {
-            if let Item::Function(f) = &item.node {
-                self.check_function(f)?;
+            match &item.node {
+                Item::Function(f) => self.check_function(f)?,
+                Item::Impl(impl_block) => {
+                    // Check impl method bodies
+                    for method in &impl_block.methods {
+                        self.check_impl_method(&impl_block.target_type.node, &method.node)?;
+                    }
+                }
+                _ => {}
             }
         }
 
         Ok(())
+    }
+
+    /// Set current generics with their bounds for type resolution
+    fn set_generics(&mut self, generics: &[GenericParam]) -> (Vec<String>, HashMap<String, Vec<String>>) {
+        let prev_generics = std::mem::replace(
+            &mut self.current_generics,
+            generics.iter().map(|g| g.name.node.clone()).collect(),
+        );
+        let prev_bounds = std::mem::replace(
+            &mut self.current_generic_bounds,
+            generics
+                .iter()
+                .map(|g| {
+                    (
+                        g.name.node.clone(),
+                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                    )
+                })
+                .collect(),
+        );
+        (prev_generics, prev_bounds)
+    }
+
+    /// Restore previous generics
+    fn restore_generics(&mut self, prev_generics: Vec<String>, prev_bounds: HashMap<String, Vec<String>>) {
+        self.current_generics = prev_generics;
+        self.current_generic_bounds = prev_bounds;
     }
 
     /// Register a function signature
@@ -293,6 +694,9 @@ impl TypeChecker {
         if self.functions.contains_key(&name) {
             return Err(TypeError::Duplicate(name));
         }
+
+        // Set current generics for type resolution
+        let (prev_generics, prev_bounds) = self.set_generics(&f.generics);
 
         let params: Vec<_> = f
             .params
@@ -309,11 +713,14 @@ impl TypeChecker {
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
 
+        // Restore previous generics
+        self.restore_generics(prev_generics, prev_bounds);
+
         self.functions.insert(
             name.clone(),
             FunctionSig {
                 name,
-                generics: f.generics.iter().map(|g| g.node.clone()).collect(),
+                generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
                 params,
                 ret,
                 is_async: f.is_async,
@@ -358,7 +765,7 @@ impl TypeChecker {
                 method.node.name.node.clone(),
                 FunctionSig {
                     name: method.node.name.node.clone(),
-                    generics: method.node.generics.iter().map(|g| g.node.clone()).collect(),
+                    generics: method.node.generics.iter().map(|g| g.name.node.clone()).collect(),
                     params,
                     ret,
                     is_async: method.node.is_async,
@@ -370,7 +777,7 @@ impl TypeChecker {
             name.clone(),
             StructDef {
                 name,
-                generics: s.generics.iter().map(|g| g.node.clone()).collect(),
+                generics: s.generics.iter().map(|g| g.name.node.clone()).collect(),
                 fields,
                 methods,
             },
@@ -400,8 +807,149 @@ impl TypeChecker {
             name.clone(),
             EnumDef {
                 name,
-                generics: e.generics.iter().map(|g| g.node.clone()).collect(),
+                generics: e.generics.iter().map(|g| g.name.node.clone()).collect(),
                 variants,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Register impl block methods to the target type
+    fn register_impl(&mut self, impl_block: &Impl) -> TypeResult<()> {
+        // Get the type name
+        let type_name = match &impl_block.target_type.node {
+            Type::Named { name, .. } => name.clone(),
+            _ => return Ok(()), // Skip non-named types for now
+        };
+
+        // Check if struct exists
+        if !self.structs.contains_key(&type_name) {
+            return Ok(()); // Struct not registered yet, skip
+        }
+
+        // If implementing a trait, validate the impl
+        if let Some(trait_name) = &impl_block.trait_name {
+            let trait_name_str = trait_name.node.clone();
+
+            // Check trait exists
+            if !self.traits.contains_key(&trait_name_str) {
+                return Err(TypeError::UndefinedType(format!("trait {}", trait_name_str)));
+            }
+
+            // Record that this type implements this trait
+            self.trait_impls.push(TraitImpl {
+                trait_name: trait_name_str.clone(),
+                type_name: type_name.clone(),
+            });
+
+            // Validate that all required trait methods are implemented
+            if let Some(trait_def) = self.traits.get(&trait_name_str).cloned() {
+                let impl_method_names: std::collections::HashSet<_> = impl_block
+                    .methods
+                    .iter()
+                    .map(|m| m.node.name.node.clone())
+                    .collect();
+
+                for (method_name, trait_method) in &trait_def.methods {
+                    if !trait_method.has_default && !impl_method_names.contains(method_name) {
+                        return Err(TypeError::Mismatch {
+                            expected: format!("implementation of method '{}' from trait '{}'", method_name, trait_name_str),
+                            found: "missing".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Collect method signatures first (to avoid borrow issues)
+        let mut method_sigs = Vec::new();
+        for method in &impl_block.methods {
+            let params: Vec<_> = method
+                .node
+                .params
+                .iter()
+                .map(|p| {
+                    let ty = self.resolve_type(&p.ty.node);
+                    (p.name.node.clone(), ty, p.is_mut)
+                })
+                .collect();
+
+            let ret = method
+                .node
+                .ret_type
+                .as_ref()
+                .map(|t| self.resolve_type(&t.node))
+                .unwrap_or(ResolvedType::Unit);
+
+            method_sigs.push((
+                method.node.name.node.clone(),
+                FunctionSig {
+                    name: method.node.name.node.clone(),
+                    generics: method.node.generics.iter().map(|g| g.name.node.clone()).collect(),
+                    params,
+                    ret,
+                    is_async: method.node.is_async,
+                },
+            ));
+        }
+
+        // Now insert methods into the struct
+        if let Some(struct_def) = self.structs.get_mut(&type_name) {
+            for (name, sig) in method_sigs {
+                struct_def.methods.insert(name, sig);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Register a trait definition
+    fn register_trait(&mut self, t: &vais_ast::Trait) -> TypeResult<()> {
+        let name = t.name.node.clone();
+        if self.traits.contains_key(&name) {
+            return Err(TypeError::Duplicate(name));
+        }
+
+        // Set current generics for type resolution
+        let (prev_generics, prev_bounds) = self.set_generics(&t.generics);
+
+        let mut methods = HashMap::new();
+        for method in &t.methods {
+            let params: Vec<_> = method
+                .params
+                .iter()
+                .map(|p| {
+                    let ty = self.resolve_type(&p.ty.node);
+                    (p.name.node.clone(), ty, p.is_mut)
+                })
+                .collect();
+
+            let ret = method
+                .ret_type
+                .as_ref()
+                .map(|rt| self.resolve_type(&rt.node))
+                .unwrap_or(ResolvedType::Unit);
+
+            methods.insert(
+                method.name.node.clone(),
+                TraitMethodSig {
+                    name: method.name.node.clone(),
+                    params,
+                    ret,
+                    has_default: method.default_body.is_some(),
+                },
+            );
+        }
+
+        self.restore_generics(prev_generics, prev_bounds);
+
+        self.traits.insert(
+            name.clone(),
+            TraitDef {
+                name,
+                generics: t.generics.iter().map(|g| g.name.node.clone()).collect(),
+                methods,
             },
         );
 
@@ -424,6 +972,9 @@ impl TypeChecker {
     /// Check a function body
     fn check_function(&mut self, f: &Function) -> TypeResult<()> {
         self.push_scope();
+
+        // Set current generic parameters
+        let (prev_generics, prev_bounds) = self.set_generics(&f.generics);
 
         // Add parameters to scope
         for param in &f.params {
@@ -452,6 +1003,64 @@ impl TypeChecker {
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
+        self.restore_generics(prev_generics, prev_bounds);
+        self.pop_scope();
+
+        Ok(())
+    }
+
+    /// Check an impl method body
+    fn check_impl_method(&mut self, target_type: &Type, method: &Function) -> TypeResult<()> {
+        self.push_scope();
+
+        // Get the type name for self
+        let self_type_name = match target_type {
+            Type::Named { name, .. } => name.clone(),
+            _ => return Ok(()), // Skip non-named types
+        };
+
+        // Set current generic parameters
+        let (prev_generics, prev_bounds) = self.set_generics(&method.generics);
+
+        // Add parameters to scope
+        for param in &method.params {
+            // Handle &self parameter specially
+            if param.name.node == "self" {
+                // self is a reference to the target type
+                let self_ty = ResolvedType::Ref(Box::new(ResolvedType::Named {
+                    name: self_type_name.clone(),
+                    generics: vec![],
+                }));
+                self.define_var("self", self_ty, param.is_mut);
+            } else {
+                let ty = self.resolve_type(&param.ty.node);
+                self.define_var(&param.name.node, ty, param.is_mut);
+            }
+        }
+
+        // Set current function context
+        self.current_fn_ret = Some(
+            method
+                .ret_type
+                .as_ref()
+                .map(|t| self.resolve_type(&t.node))
+                .unwrap_or(ResolvedType::Unit),
+        );
+        self.current_fn_name = Some(format!("{}::{}", self_type_name, method.name.node));
+
+        // Check body
+        let body_type = match &method.body {
+            FunctionBody::Expr(expr) => self.check_expr(expr)?,
+            FunctionBody::Block(stmts) => self.check_block(stmts)?,
+        };
+
+        // Check return type
+        let expected_ret = self.current_fn_ret.clone().unwrap();
+        self.unify(&expected_ret, &body_type)?;
+
+        self.current_fn_ret = None;
+        self.current_fn_name = None;
+        self.restore_generics(prev_generics, prev_bounds);
         self.pop_scope();
 
         Ok(())
@@ -513,7 +1122,7 @@ impl TypeChecker {
             Expr::String(_) => Ok(ResolvedType::Str),
             Expr::Unit => Ok(ResolvedType::Unit),
 
-            Expr::Ident(name) => self.lookup_var(name),
+            Expr::Ident(name) => self.lookup_var_or_err(name),
 
             Expr::SelfCall => {
                 // @ refers to current function
@@ -651,12 +1260,21 @@ impl TypeChecker {
             }
 
             Expr::Match { expr, arms } => {
-                let _expr_type = self.check_expr(expr)?;
+                let expr_type = self.check_expr(expr)?;
                 let mut result_type: Option<ResolvedType> = None;
 
                 for arm in arms {
-                    // TODO: Proper pattern type checking
                     self.push_scope();
+
+                    // Register pattern bindings in scope
+                    self.register_pattern_bindings(&arm.pattern, &expr_type)?;
+
+                    // Check guard if present
+                    if let Some(guard) = &arm.guard {
+                        let guard_type = self.check_expr(guard)?;
+                        self.unify(&ResolvedType::Bool, &guard_type)?;
+                    }
+
                     let arm_type = self.check_expr(&arm.body)?;
                     self.pop_scope();
 
@@ -716,7 +1334,7 @@ impl TypeChecker {
 
                             for (param_type, arg) in param_types.iter().zip(args) {
                                 let arg_type = self.check_expr(arg)?;
-                                self.unify(&param_type, &arg_type)?;
+                                self.unify(param_type, &arg_type)?;
                             }
 
                             return Ok(method_sig.ret.clone());
@@ -727,11 +1345,59 @@ impl TypeChecker {
                 Err(TypeError::UndefinedFunction(method.node.clone()))
             }
 
+            Expr::StaticMethodCall {
+                type_name,
+                method,
+                args,
+            } => {
+                // Static method call: Type.method(args)
+                if let Some(struct_def) = self.structs.get(&type_name.node).cloned() {
+                    if let Some(method_sig) = struct_def.methods.get(&method.node).cloned() {
+                        // For static methods, don't skip first param (no self)
+                        // But if the first param is self, skip it for backwards compat
+                        let param_types: Vec<_> = if method_sig.params.first().map(|(n, _, _)| n == "self").unwrap_or(false) {
+                            method_sig.params.iter().skip(1).map(|(_, t, _)| t.clone()).collect()
+                        } else {
+                            method_sig.params.iter().map(|(_, t, _)| t.clone()).collect()
+                        };
+
+                        if param_types.len() != args.len() {
+                            return Err(TypeError::ArgCount {
+                                expected: param_types.len(),
+                                got: args.len(),
+                            });
+                        }
+
+                        for (param_type, arg) in param_types.iter().zip(args) {
+                            let arg_type = self.check_expr(arg)?;
+                            self.unify(param_type, &arg_type)?;
+                        }
+
+                        return Ok(method_sig.ret.clone());
+                    }
+                }
+
+                Err(TypeError::UndefinedFunction(format!("{}::{}", type_name.node, method.node)))
+            }
+
             Expr::Field { expr: inner, field } => {
                 let inner_type = self.check_expr(inner)?;
 
-                if let ResolvedType::Named { name, .. } = &inner_type {
-                    if let Some(struct_def) = self.structs.get(name) {
+                // Handle both direct Named types and references to Named types
+                let type_name = match &inner_type {
+                    ResolvedType::Named { name, .. } => Some(name.clone()),
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        if let ResolvedType::Named { name, .. } = inner.as_ref() {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+
+                if let Some(name) = type_name {
+                    if let Some(struct_def) = self.structs.get(&name) {
                         if let Some(field_type) = struct_def.fields.get(&field.node) {
                             return Ok(field_type.clone());
                         }
@@ -745,15 +1411,22 @@ impl TypeChecker {
                 let inner_type = self.check_expr(inner)?;
                 let index_type = self.check_expr(index)?;
 
+                // Check if this is a slice operation (index is a Range)
+                let is_slice = matches!(index.node, Expr::Range { .. });
+
                 match inner_type {
                     ResolvedType::Array(elem_type) => {
-                        if !index_type.is_integer() {
+                        if is_slice {
+                            // Slice returns a pointer to array elements
+                            Ok(ResolvedType::Pointer(elem_type))
+                        } else if !index_type.is_integer() {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
                             });
+                        } else {
+                            Ok(*elem_type)
                         }
-                        Ok(*elem_type)
                     }
                     ResolvedType::Map(key_type, value_type) => {
                         self.unify(&key_type, &index_type)?;
@@ -761,13 +1434,17 @@ impl TypeChecker {
                     }
                     // Pointers can be indexed like arrays
                     ResolvedType::Pointer(elem_type) => {
-                        if !index_type.is_integer() {
+                        if is_slice {
+                            // Slice of pointer returns a pointer
+                            Ok(ResolvedType::Pointer(elem_type))
+                        } else if !index_type.is_integer() {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
                             });
+                        } else {
+                            Ok(*elem_type)
                         }
-                        Ok(*elem_type)
                     }
                     _ => Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
@@ -908,8 +1585,28 @@ impl TypeChecker {
                 Ok(ResolvedType::Unit)
             }
 
-            Expr::Lambda { params, body } => {
+            Expr::Lambda { params, body, captures: _ } => {
+                // Find free variables (captures) before entering lambda scope
+                let param_names: std::collections::HashSet<_> = params.iter()
+                    .map(|p| p.name.node.clone())
+                    .collect();
+                let free_vars = self.find_free_vars_in_expr(body, &param_names);
+
+                // Verify all captured variables exist in current scope
+                for var in &free_vars {
+                    if self.lookup_var(var).is_none() {
+                        return Err(TypeError::UndefinedVar(var.clone()));
+                    }
+                }
+
                 self.push_scope();
+
+                // Define captured variables in lambda scope
+                for var in &free_vars {
+                    if let Some((ty, is_mut)) = self.lookup_var_with_mut(var) {
+                        self.define_var(var, ty, is_mut);
+                    }
+                }
 
                 let param_types: Vec<_> = params
                     .iter()
@@ -931,11 +1628,9 @@ impl TypeChecker {
 
             Expr::Spawn(inner) => {
                 let inner_type = self.check_expr(inner)?;
-                // Return a future/task type
-                Ok(ResolvedType::Named {
-                    name: "Task".to_string(),
-                    generics: vec![inner_type],
-                })
+                // For now, spawn is synchronous and returns the inner value directly
+                // Future: Return Task<T> type for proper async handling
+                Ok(inner_type)
             }
         }
     }
@@ -990,7 +1685,10 @@ impl TypeChecker {
                     "bool" => ResolvedType::Bool,
                     "str" => ResolvedType::Str,
                     _ => {
-                        if let Some(alias) = self.type_aliases.get(name) {
+                        // Check if it's a generic type parameter
+                        if self.current_generics.contains(name) {
+                            ResolvedType::Generic(name.clone())
+                        } else if let Some(alias) = self.type_aliases.get(name) {
                             alias.clone()
                         } else {
                             ResolvedType::Named {
@@ -1035,10 +1733,13 @@ impl TypeChecker {
         }
 
         match (&expected, &found) {
+            // Type variables can unify with anything
             (ResolvedType::Var(id), t) | (t, ResolvedType::Var(id)) => {
                 self.substitutions.insert(*id, t.clone());
                 Ok(())
             }
+            // Generic type parameters match with any type (type erasure)
+            (ResolvedType::Generic(_), _) | (_, ResolvedType::Generic(_)) => Ok(()),
             (ResolvedType::Array(a), ResolvedType::Array(b)) => self.unify(a, b),
             (ResolvedType::Optional(a), ResolvedType::Optional(b)) => self.unify(a, b),
             (ResolvedType::Result(a), ResolvedType::Result(b)) => self.unify(a, b),
@@ -1066,11 +1767,28 @@ impl TypeChecker {
                 }
                 self.unify(ra, rb)
             }
+            // Allow implicit integer type conversions (widening and narrowing)
+            (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),
             }),
         }
+    }
+
+    /// Check if type is an integer type
+    fn is_integer_type(ty: &ResolvedType) -> bool {
+        matches!(
+            ty,
+            ResolvedType::I8
+                | ResolvedType::I16
+                | ResolvedType::I32
+                | ResolvedType::I64
+                | ResolvedType::U8
+                | ResolvedType::U16
+                | ResolvedType::U32
+                | ResolvedType::U64
+        )
     }
 
     /// Apply substitutions to a type
@@ -1134,7 +1852,72 @@ impl TypeChecker {
         }
     }
 
-    fn lookup_var(&self, name: &str) -> TypeResult<ResolvedType> {
+    /// Register pattern bindings in the current scope
+    fn register_pattern_bindings(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        expr_type: &ResolvedType,
+    ) -> TypeResult<()> {
+        match &pattern.node {
+            Pattern::Wildcard => Ok(()),
+            Pattern::Ident(name) => {
+                // Bind the identifier to the matched expression's type
+                self.define_var(name, expr_type.clone(), false);
+                Ok(())
+            }
+            Pattern::Literal(_) => Ok(()), // Literals don't bind variables
+            Pattern::Tuple(patterns) => {
+                if let ResolvedType::Tuple(types) = expr_type {
+                    for (pat, ty) in patterns.iter().zip(types.iter()) {
+                        self.register_pattern_bindings(pat, ty)?;
+                    }
+                } else {
+                    // If type doesn't match, still try to bind with unknown types
+                    for pat in patterns {
+                        self.register_pattern_bindings(pat, &ResolvedType::Unknown)?;
+                    }
+                }
+                Ok(())
+            }
+            Pattern::Struct { fields, .. } => {
+                // For struct patterns, each field name becomes a binding
+                for (field_name, sub_pattern) in fields {
+                    if let Some(sub_pat) = sub_pattern {
+                        self.register_pattern_bindings(sub_pat, &ResolvedType::Unknown)?;
+                    } else {
+                        // Shorthand: `Point { x, y }` binds x and y
+                        self.define_var(&field_name.node, ResolvedType::Unknown, false);
+                    }
+                }
+                Ok(())
+            }
+            Pattern::Variant { fields, .. } => {
+                for field in fields {
+                    self.register_pattern_bindings(field, &ResolvedType::Unknown)?;
+                }
+                Ok(())
+            }
+            Pattern::Range { .. } => Ok(()), // Ranges don't bind variables
+            Pattern::Or(patterns) => {
+                // For or patterns, all patterns must bind the same variables
+                // For now, just process the first one
+                if let Some(first) = patterns.first() {
+                    self.register_pattern_bindings(first, expr_type)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn lookup_var(&self, name: &str) -> Option<ResolvedType> {
+        self.lookup_var_info(name).ok().map(|v| v.ty)
+    }
+
+    fn lookup_var_with_mut(&self, name: &str) -> Option<(ResolvedType, bool)> {
+        self.lookup_var_info(name).ok().map(|v| (v.ty, v.is_mut))
+    }
+
+    fn lookup_var_or_err(&self, name: &str) -> TypeResult<ResolvedType> {
         self.lookup_var_info(name).map(|v| v.ty)
     }
 
@@ -1157,6 +1940,227 @@ impl TypeChecker {
         }
 
         Err(TypeError::UndefinedVar(name.to_string()))
+    }
+
+    /// Find free variables in an expression that are not in bound_vars
+    fn find_free_vars_in_expr(&self, expr: &Spanned<Expr>, bound_vars: &std::collections::HashSet<String>) -> Vec<String> {
+        let mut free_vars = Vec::new();
+        self.collect_free_vars(&expr.node, bound_vars, &mut free_vars);
+        // Remove duplicates while preserving order
+        let mut seen = std::collections::HashSet::new();
+        free_vars.retain(|v| seen.insert(v.clone()));
+        free_vars
+    }
+
+    fn collect_free_vars(&self, expr: &Expr, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+        match expr {
+            Expr::Ident(name) => {
+                if !bound.contains(name) && self.lookup_var(name).is_some() {
+                    free.push(name.clone());
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.collect_free_vars(&left.node, bound, free);
+                self.collect_free_vars(&right.node, bound, free);
+            }
+            Expr::Unary { expr, .. } => {
+                self.collect_free_vars(&expr.node, bound, free);
+            }
+            Expr::Call { func, args } => {
+                self.collect_free_vars(&func.node, bound, free);
+                for arg in args {
+                    self.collect_free_vars(&arg.node, bound, free);
+                }
+            }
+            Expr::If { cond, then, else_ } => {
+                self.collect_free_vars(&cond.node, bound, free);
+                // then is Vec<Spanned<Stmt>>
+                let mut local_bound = bound.clone();
+                for stmt in then {
+                    match &stmt.node {
+                        Stmt::Let { name, value, .. } => {
+                            self.collect_free_vars(&value.node, &local_bound, free);
+                            local_bound.insert(name.node.clone());
+                        }
+                        Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        _ => {}
+                    }
+                }
+                if let Some(else_br) = else_ {
+                    self.collect_if_else_free_vars(else_br, bound, free);
+                }
+            }
+            Expr::Block(stmts) => {
+                let mut local_bound = bound.clone();
+                for stmt in stmts {
+                    match &stmt.node {
+                        Stmt::Let { name, value, .. } => {
+                            self.collect_free_vars(&value.node, &local_bound, free);
+                            local_bound.insert(name.node.clone());
+                        }
+                        Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        _ => {}
+                    }
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                self.collect_free_vars(&receiver.node, bound, free);
+                for arg in args {
+                    self.collect_free_vars(&arg.node, bound, free);
+                }
+            }
+            Expr::Field { expr, .. } => {
+                self.collect_free_vars(&expr.node, bound, free);
+            }
+            Expr::Index { expr, index } => {
+                self.collect_free_vars(&expr.node, bound, free);
+                self.collect_free_vars(&index.node, bound, free);
+            }
+            Expr::Array(elems) => {
+                for e in elems {
+                    self.collect_free_vars(&e.node, bound, free);
+                }
+            }
+            Expr::Tuple(elems) => {
+                for e in elems {
+                    self.collect_free_vars(&e.node, bound, free);
+                }
+            }
+            Expr::StructLit { fields, .. } => {
+                for (_, e) in fields {
+                    self.collect_free_vars(&e.node, bound, free);
+                }
+            }
+            Expr::Assign { target, value } => {
+                self.collect_free_vars(&target.node, bound, free);
+                self.collect_free_vars(&value.node, bound, free);
+            }
+            Expr::AssignOp { target, value, .. } => {
+                self.collect_free_vars(&target.node, bound, free);
+                self.collect_free_vars(&value.node, bound, free);
+            }
+            Expr::Lambda { params, body, .. } => {
+                let mut inner_bound = bound.clone();
+                for p in params {
+                    inner_bound.insert(p.name.node.clone());
+                }
+                self.collect_free_vars(&body.node, &inner_bound, free);
+            }
+            Expr::Ref(inner) | Expr::Deref(inner) |
+            Expr::Try(inner) | Expr::Unwrap(inner) | Expr::Await(inner) |
+            Expr::Spawn(inner) => {
+                self.collect_free_vars(&inner.node, bound, free);
+            }
+            Expr::Loop { body, pattern, iter } => {
+                // iter expression runs in current scope
+                if let Some(it) = iter {
+                    self.collect_free_vars(&it.node, bound, free);
+                }
+                // body is Vec<Spanned<Stmt>>, pattern may introduce bindings
+                let mut local_bound = bound.clone();
+                if let Some(pat) = pattern {
+                    self.collect_pattern_bindings(&pat.node, &mut local_bound);
+                }
+                for stmt in body {
+                    match &stmt.node {
+                        Stmt::Let { name, value, .. } => {
+                            self.collect_free_vars(&value.node, &local_bound, free);
+                            local_bound.insert(name.node.clone());
+                        }
+                        Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        _ => {}
+                    }
+                }
+            }
+            Expr::Match { expr, arms } => {
+                self.collect_free_vars(&expr.node, bound, free);
+                for arm in arms {
+                    // Pattern bindings create new scope
+                    let mut arm_bound = bound.clone();
+                    self.collect_pattern_bindings(&arm.pattern.node, &mut arm_bound);
+                    if let Some(guard) = &arm.guard {
+                        self.collect_free_vars(&guard.node, &arm_bound, free);
+                    }
+                    self.collect_free_vars(&arm.body.node, &arm_bound, free);
+                }
+            }
+            // Literals and other expressions don't contain free variables
+            _ => {}
+        }
+    }
+
+    fn collect_pattern_bindings(&self, pattern: &Pattern, bound: &mut std::collections::HashSet<String>) {
+        match pattern {
+            Pattern::Ident(name) => { bound.insert(name.clone()); }
+            Pattern::Tuple(patterns) => {
+                for p in patterns {
+                    self.collect_pattern_bindings(&p.node, bound);
+                }
+            }
+            Pattern::Struct { fields, .. } => {
+                for (_, pat) in fields {
+                    if let Some(p) = pat {
+                        self.collect_pattern_bindings(&p.node, bound);
+                    }
+                }
+            }
+            Pattern::Variant { fields, .. } => {
+                for p in fields {
+                    self.collect_pattern_bindings(&p.node, bound);
+                }
+            }
+            Pattern::Or(patterns) => {
+                for p in patterns {
+                    self.collect_pattern_bindings(&p.node, bound);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_if_else_free_vars(&self, if_else: &IfElse, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+        match if_else {
+            IfElse::ElseIf(cond, then_stmts, else_) => {
+                self.collect_free_vars(&cond.node, bound, free);
+                let mut local_bound = bound.clone();
+                for stmt in then_stmts {
+                    match &stmt.node {
+                        Stmt::Let { name, value, .. } => {
+                            self.collect_free_vars(&value.node, &local_bound, free);
+                            local_bound.insert(name.node.clone());
+                        }
+                        Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        _ => {}
+                    }
+                }
+                if let Some(else_br) = else_ {
+                    self.collect_if_else_free_vars(else_br, bound, free);
+                }
+            }
+            IfElse::Else(stmts) => {
+                let mut local_bound = bound.clone();
+                for stmt in stmts {
+                    match &stmt.node {
+                        Stmt::Let { name, value, .. } => {
+                            self.collect_free_vars(&value.node, &local_bound, free);
+                            local_bound.insert(name.node.clone());
+                        }
+                        Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        _ => {}
+                    }
+                }
+            }
+        }
     }
 }
 

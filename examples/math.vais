@@ -1,0 +1,6 @@
+# Math utility module
+F add(a: i64, b: i64) -> i64 = a + b
+
+F mul(a: i64, b: i64) -> i64 = a * b
+
+F square(x: i64) -> i64 = x * x

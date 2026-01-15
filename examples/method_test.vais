@@ -1,0 +1,29 @@
+# Struct method test
+S Point {
+    x: i64,
+    y: i64,
+
+    F sum(&self) -> i64 = self.x + self.y
+
+    F scale(&self, factor: i64) -> i64 = (self.x + self.y) * factor
+}
+
+F main() -> i64 {
+    puts("Testing struct methods:")
+
+    p := Point { x: 10, y: 20 }
+
+    s := p.sum()
+    puts("p.sum() =")
+    putchar(s / 10 + 48)  # '3'
+    putchar(s % 10 + 48)  # '0'
+    putchar(10)
+
+    scaled := p.scale(2)
+    puts("p.scale(2) =")
+    putchar(scaled / 10 + 48)  # '6'
+    putchar(scaled % 10 + 48)  # '0'
+    putchar(10)
+
+    0
+}

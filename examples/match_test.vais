@@ -1,0 +1,28 @@
+# Match expression test
+F describe(n: i64) -> i64 {
+    M n {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        _ => n
+    }
+}
+
+F main() -> i64 {
+    r := mut describe(0)
+    puts("Testing match with 0:")
+    putchar(r + 48)  # print '0'
+    putchar(10)
+
+    r = describe(1)
+    puts("Testing match with 1:")
+    putchar(r + 48)  # print '1'
+    putchar(10)
+
+    r = describe(5)
+    puts("Testing match with 5:")
+    putchar(r + 48)  # print '5'
+    putchar(10)
+
+    0
+}

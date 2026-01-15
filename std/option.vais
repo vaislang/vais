@@ -1,0 +1,32 @@
+# Option type - represents an optional value
+# Some(T) or None
+
+E Option {
+    None,
+    Some(i64)
+}
+
+# Check if option contains a value
+X Option {
+    F is_some(&self) -> i64 {
+        M self {
+            Some(_) => 1,
+            None => 0
+        }
+    }
+
+    F is_none(&self) -> i64 {
+        M self {
+            Some(_) => 0,
+            None => 1
+        }
+    }
+
+    # Unwrap the value (returns 0 if None)
+    F unwrap_or(&self, default: i64) -> i64 {
+        M self {
+            Some(v) => v,
+            None => default
+        }
+    }
+}

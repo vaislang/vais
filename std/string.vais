@@ -1,0 +1,165 @@
+# String type - dynamic, heap-allocated string
+# Stores: data pointer, length, capacity
+
+S String {
+    data: i64,      # Pointer to char array (i8*)
+    len: i64,       # Current length (excluding null terminator)
+    cap: i64        # Allocated capacity
+}
+
+X String {
+    # Create a new empty string with given capacity
+    F with_capacity(capacity: i64) -> String {
+        data := malloc(capacity)
+        String { data: data, len: 0, cap: capacity }
+    }
+
+    # Get the length of the string
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    # Get the capacity of the string
+    F capacity(&self) -> i64 {
+        self.cap
+    }
+
+    # Check if string is empty
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    # Get character at index (returns ASCII value)
+    F char_at(&self, index: i64) -> i64 {
+        I index < 0 || index >= self.len {
+            0  # Return 0 for out of bounds
+        } E {
+            # Load byte at index
+            ptr := self.data + index
+            load_byte(ptr)
+        }
+    }
+
+    # Push a character to the end
+    F push_char(&self, c: i64) -> i64 {
+        # Check if we need to grow
+        I self.len >= self.cap - 1 {
+            @ .grow()
+        }
+        # Store character
+        ptr := self.data + self.len
+        store_byte(ptr, c)
+        self.len = self.len + 1
+        # Null terminate
+        store_byte(self.data + self.len, 0)
+        self.len
+    }
+
+    # Grow the string capacity (double it)
+    F grow(&self) -> i64 {
+        new_cap := self.cap * 2
+        I new_cap < 16 {
+            new_cap = 16
+        }
+        new_data := malloc(new_cap)
+        # Copy old data
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    # Clear the string
+    F clear(&self) -> i64 {
+        self.len = 0
+        store_byte(self.data, 0)
+        0
+    }
+
+    # Print the string
+    F print(&self) -> i64 {
+        puts_ptr(self.data)
+    }
+
+    # Free the string memory
+    F drop(&self) -> i64 {
+        free(self.data)
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        0
+    }
+}
+
+# Helper: Create string from literal
+F str_from(s: i64) -> String {
+    # s is pointer to null-terminated string
+    len := strlen(s)
+    cap := len + 16
+    data := malloc(cap)
+    memcpy(data, s, len + 1)  # Copy including null terminator
+    String { data: data, len: len, cap: cap }
+}
+
+# Helper: Concatenate two strings
+F str_concat(a: String, b: String) -> String {
+    new_len := a.len + b.len
+    new_cap := new_len + 16
+    data := malloc(new_cap)
+    memcpy(data, a.data, a.len)
+    memcpy(data + a.len, b.data, b.len + 1)
+    String { data: data, len: new_len, cap: new_cap }
+}
+
+# Helper: Get substring
+F str_substring(s: String, start: i64, end: i64) -> String {
+    I start < 0 {
+        start = 0
+    }
+    I end > s.len {
+        end = s.len
+    }
+    I start >= end {
+        String.with_capacity(16)
+    } E {
+        new_len := end - start
+        new_cap := new_len + 16
+        data := malloc(new_cap)
+        memcpy(data, s.data + start, new_len)
+        store_byte(data + new_len, 0)
+        String { data: data, len: new_len, cap: new_cap }
+    }
+}
+
+# Helper: Check if string contains character
+F str_contains_char(s: String, c: i64) -> i64 {
+    i := 0
+    L {
+        I i >= s.len {
+            B 0
+        }
+        I s.char_at(i) == c {
+            B 1
+        }
+        i = i + 1
+    }
+}
+
+# Helper: Compare two strings
+F str_eq(a: String, b: String) -> i64 {
+    I a.len != b.len {
+        0
+    } E {
+        i := 0
+        L {
+            I i >= a.len {
+                B 1
+            }
+            I a.char_at(i) != b.char_at(i) {
+                B 0
+            }
+            i = i + 1
+        }
+    }
+}

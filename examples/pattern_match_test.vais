@@ -1,0 +1,43 @@
+# Pattern matching test
+
+F color_code(c: i64) -> i64 {
+    M c {
+        0 => 255,
+        1 => 65280,
+        _ => 0
+    }
+}
+
+# Test binding pattern - single expression
+F describe(n: i64) -> i64 {
+    M n {
+        0 => 100,
+        x => x + 1
+    }
+}
+
+F main() -> i64 {
+    puts("Testing pattern matching:")
+
+    c := color_code(0)
+    puts("color_code(0):")
+    putchar(c / 100 + 48)
+    putchar((c / 10) % 10 + 48)
+    putchar(c % 10 + 48)
+    putchar(10)
+
+    d := describe(0)
+    puts("describe(0):")
+    putchar(d / 100 + 48)
+    putchar((d / 10) % 10 + 48)
+    putchar(d % 10 + 48)
+    putchar(10)
+
+    e := describe(41)
+    puts("describe(41):")
+    putchar(e / 10 + 48)
+    putchar(e % 10 + 48)
+    putchar(10)
+
+    0
+}

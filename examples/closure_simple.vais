@@ -1,0 +1,29 @@
+# Simple closure test - lambda with captured variables
+
+F main() -> i64 {
+    puts("=== Closure Test ===")
+
+    # Test 1: Simple capture
+    puts("Test 1: Simple capture")
+    multiplier := 10
+    scale := |x: i64| x * multiplier
+    result1 := scale(5)
+    # Expected: 50
+    putchar((result1 / 10) + 48)
+    putchar((result1 % 10) + 48)
+    putchar(10)
+
+    # Test 2: Multiple captures
+    puts("Test 2: Multiple captures")
+    base := 20
+    offset := 3
+    compute := |x: i64| base + x + offset
+    result2 := compute(7)
+    # Expected: 30 (20 + 7 + 3)
+    putchar((result2 / 10) + 48)
+    putchar((result2 % 10) + 48)
+    putchar(10)
+
+    puts("=== Done ===")
+    0
+}

@@ -1,0 +1,42 @@
+# File I/O test - simple write and read
+
+F main() -> i64 {
+    puts("=== File I/O Test ===")
+
+    # Write test
+    puts("Writing to test.txt...")
+    h := fopen("test.txt", "w")
+    I h != 0 {
+        fputs("Hello from VAIS!", h)
+        fclose(h)
+        puts("Write OK!")
+        0
+    } E {
+        puts("Write FAILED!")
+        0
+    }
+
+    # Read test - read single char
+    puts("Reading from test.txt...")
+    h2 := fopen("test.txt", "r")
+    I h2 != 0 {
+        c := fgetc(h2)
+        I c >= 0 {
+            puts("First char:")
+            putchar(c)
+            putchar(10)
+            0
+        } E {
+            0
+        }
+        fclose(h2)
+        puts("Read OK!")
+        0
+    } E {
+        puts("Read FAILED!")
+        0
+    }
+
+    puts("=== Done ===")
+    0
+}

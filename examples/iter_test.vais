@@ -1,0 +1,78 @@
+# Iterator test - with loop break
+
+# Range struct for iteration
+S Range {
+    current: i64,
+    end: i64,
+    step: i64
+}
+
+X Range {
+    F has_next(&self) -> i64 {
+        I self.current < self.end { 1 } E { 0 }
+    }
+
+    F next(&self) -> i64 {
+        I self.current < self.end {
+            value := self.current
+            self.current = self.current + self.step
+            value
+        } E {
+            0 - 1
+        }
+    }
+}
+
+# Print a number (works for 0-99)
+F print_num(n: i64) -> i64 {
+    I n >= 10 {
+        putchar(n / 10 + 48)
+        0
+    } E {
+        0
+    }
+    putchar(n % 10 + 48)
+    0
+}
+
+F main() -> i64 {
+    puts("=== Iterator Test ===")
+
+    # Test Range iterator using loop with break
+    puts("Range 0 to 5:")
+    r := Range { current: 0, end: 5, step: 1 }
+    L {
+        v := r.next()
+        I v < 0 { B 0 }
+        print_num(v)
+        putchar(32)
+    }
+    putchar(10)
+
+    # Sum using iterator
+    puts("Sum of 1 to 10:")
+    r2 := Range { current: 1, end: 11, step: 1 }
+    sum := mut 0
+    L {
+        v := r2.next()
+        I v < 0 { B 0 }
+        sum = sum + v
+    }
+    print_num(sum)
+    putchar(10)
+
+    # Count elements
+    puts("Count elements in range 5 to 15:")
+    r3 := Range { current: 5, end: 15, step: 1 }
+    count := mut 0
+    L {
+        v := r3.next()
+        I v < 0 { B 0 }
+        count = count + 1
+    }
+    print_num(count)
+    putchar(10)
+
+    puts("=== Done ===")
+    0
+}

@@ -1,0 +1,110 @@
+# Vec - dynamic array (growable)
+# Stores i64 elements
+
+S Vec {
+    data: i64,      # Pointer to element array
+    len: i64,       # Current number of elements
+    cap: i64        # Allocated capacity
+}
+
+X Vec {
+    # Create a new empty Vec with given capacity
+    F with_capacity(capacity: i64) -> Vec {
+        data := malloc(capacity * 8)  # 8 bytes per i64
+        Vec { data: data, len: 0, cap: capacity }
+    }
+
+    # Get the number of elements
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    # Get the capacity
+    F capacity(&self) -> i64 {
+        self.cap
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    # Get element at index
+    F get(&self, index: i64) -> i64 {
+        I index < 0 {
+            0
+        } E I index >= self.len {
+            0
+        } E {
+            ptr := self.data + index * 8
+            load_i64(ptr)
+        }
+    }
+
+    # Set element at index
+    F set(&self, index: i64, value: i64) -> i64 {
+        I index >= 0 && index < self.len {
+            ptr := self.data + index * 8
+            store_i64(ptr, value)
+            1
+        } E {
+            0
+        }
+    }
+
+    # Push element to end
+    F push(&self, value: i64) -> i64 {
+        I self.len >= self.cap {
+            @.grow()
+        }
+        ptr := self.data + self.len * 8
+        store_i64(ptr, value)
+        self.len = self.len + 1
+        self.len
+    }
+
+    # Pop element from end
+    F pop(&self) -> i64 {
+        I self.len > 0 {
+            self.len = self.len - 1
+            ptr := self.data + self.len * 8
+            load_i64(ptr)
+        } E {
+            0
+        }
+    }
+
+    # Grow capacity (double it)
+    F grow(&self) -> i64 {
+        new_cap := self.cap * 2
+        I new_cap < 8 {
+            new_cap = 8
+        }
+        new_data := malloc(new_cap * 8)
+        memcpy(new_data, self.data, self.len * 8)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    # Clear all elements
+    F clear(&self) -> i64 {
+        self.len = 0
+        0
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        free(self.data)
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        0
+    }
+}
+
+# Create new Vec with initial capacity of 8
+F vec_new() -> Vec {
+    Vec.with_capacity(8)
+}

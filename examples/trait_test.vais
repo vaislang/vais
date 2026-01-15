@@ -1,0 +1,53 @@
+# Trait and Impl test
+
+# Define a trait (interface)
+W Printable {
+    F print(&self) -> i64
+}
+
+# Define a struct
+S Counter {
+    value: i64
+}
+
+# Implement the trait for Counter
+X Counter: Printable {
+    F print(&self) -> i64 {
+        puts("Counter value:")
+        putchar(self.value / 10 + 48)
+        putchar(self.value % 10 + 48)
+        putchar(10)
+        0
+    }
+}
+
+# Also add a method directly via impl without trait
+X Counter {
+    F increment(&self) -> i64 = self.value + 1
+
+    F double(&self) -> i64 = self.value * 2
+}
+
+F main() -> i64 {
+    puts("Testing traits and impl:")
+
+    c := Counter { value: 42 }
+
+    # Call trait method
+    c.print()
+
+    # Call impl methods
+    inc := c.increment()
+    puts("increment() =")
+    putchar(inc / 10 + 48)
+    putchar(inc % 10 + 48)
+    putchar(10)
+
+    dbl := c.double()
+    puts("double() =")
+    putchar(dbl / 10 + 48)
+    putchar(dbl % 10 + 48)
+    putchar(10)
+
+    0
+}

@@ -1,0 +1,32 @@
+# Result type - represents success or failure
+# Ok(T) or Err(E)
+
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+# Result methods
+X Result {
+    F is_ok(&self) -> i64 {
+        M self {
+            Ok(_) => 1,
+            Err(_) => 0
+        }
+    }
+
+    F is_err(&self) -> i64 {
+        M self {
+            Ok(_) => 0,
+            Err(_) => 1
+        }
+    }
+
+    # Unwrap or return default
+    F unwrap_or(&self, default: i64) -> i64 {
+        M self {
+            Ok(v) => v,
+            Err(_) => default
+        }
+    }
+}

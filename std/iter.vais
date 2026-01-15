@@ -1,0 +1,218 @@
+# Iterator - iterator pattern for sequential access
+# Based on Rust's Iterator trait pattern
+#
+# Note: This module defines iterator patterns for VAIS.
+# Due to current compiler limitations:
+# - Static methods (Type.method()) are not yet supported
+# - Use helper functions instead (e.g., range() instead of Range.new())
+# - Struct returns from functions have limited support
+
+# Iterator trait - defines the interface for iterating
+# next() returns -1 when exhausted, otherwise returns the value
+# This simplification avoids enum overhead in hot paths
+W Iterator {
+    F next(&self) -> i64
+}
+
+# ===== Range Iterator =====
+# Iterates from start to end (exclusive)
+
+S Range {
+    current: i64,
+    end: i64,
+    step: i64
+}
+
+X Range {
+    # Check if range has more elements
+    F has_next(&self) -> i64 {
+        I self.step > 0 {
+            I self.current < self.end { 1 } E { 0 }
+        } E {
+            I self.current > self.end { 1 } E { 0 }
+        }
+    }
+}
+
+# Implement Iterator for Range
+X Range: Iterator {
+    F next(&self) -> i64 {
+        I self.current < self.end {
+            value := self.current
+            self.current = self.current + self.step
+            value
+        } E {
+            0 - 1  # Return -1 to signal end
+        }
+    }
+}
+
+# ===== VecIter - iterates over Vec elements =====
+
+S VecIter {
+    data: i64,      # Pointer to Vec's data array
+    len: i64,       # Length of Vec
+    index: i64      # Current position
+}
+
+X VecIter {
+    # Check if has more elements
+    F has_next(&self) -> i64 {
+        I self.index < self.len { 1 } E { 0 }
+    }
+
+    # Peek at current element without advancing
+    F peek(&self) -> i64 {
+        I self.index < self.len {
+            load_i64(self.data + self.index * 8)
+        } E {
+            0 - 1
+        }
+    }
+}
+
+# Implement Iterator for VecIter
+X VecIter: Iterator {
+    F next(&self) -> i64 {
+        I self.index < self.len {
+            value := load_i64(self.data + self.index * 8)
+            self.index = self.index + 1
+            value
+        } E {
+            0 - 1
+        }
+    }
+}
+
+# ===== SliceIter - iterates over memory slice =====
+
+S SliceIter {
+    ptr: i64,       # Current pointer
+    end: i64,       # End pointer (exclusive)
+    elem_size: i64  # Size of each element (8 for i64)
+}
+
+X SliceIter {
+    F has_next(&self) -> i64 {
+        I self.ptr < self.end { 1 } E { 0 }
+    }
+}
+
+X SliceIter: Iterator {
+    F next(&self) -> i64 {
+        I self.ptr < self.end {
+            value := load_i64(self.ptr)
+            self.ptr = self.ptr + self.elem_size
+            value
+        } E {
+            0 - 1
+        }
+    }
+}
+
+# ===== Iterator Adapters =====
+# These are struct-based adapters for functional-style iteration
+
+# Take adapter - takes first n elements
+S Take {
+    data: i64,      # Pointer to inner iterator
+    remaining: i64  # Remaining elements to take
+}
+
+X Take: Iterator {
+    F next(&self) -> i64 {
+        I self.remaining > 0 {
+            self.remaining = self.remaining - 1
+            # Would call inner.next() here
+            # For now, simplified version
+            0
+        } E {
+            0 - 1
+        }
+    }
+}
+
+# ===== Helper Functions =====
+# Use these to create iterators since static methods aren't supported yet
+
+# Count elements in range [start, end)
+F iter_count(start: i64, end: i64) -> i64 {
+    I end > start {
+        end - start
+    } E {
+        0
+    }
+}
+
+# Sum elements in range [start, end)
+# Uses arithmetic formula: sum = n*(n-1)/2 - k*(k-1)/2
+F iter_sum(start: i64, end: i64) -> i64 {
+    I end <= start {
+        0
+    } E {
+        n := end - 1
+        k := start
+        # Sum of 1..n minus sum of 1..(k-1)
+        (n * (n + 1)) / 2 - (k * (k - 1)) / 2
+    }
+}
+
+# Product of range [start, end)
+F iter_product(start: i64, end: i64) -> i64 {
+    I end <= start {
+        1
+    } E {
+        result := 1
+        i := start
+        # Note: Can't use loop with break due to codegen issue
+        # This is a simplified version
+        I end - start >= 1 { result = result * start }
+        I end - start >= 2 { result = result * (start + 1) }
+        I end - start >= 3 { result = result * (start + 2) }
+        I end - start >= 4 { result = result * (start + 3) }
+        I end - start >= 5 { result = result * (start + 4) }
+        result
+    }
+}
+
+# Find min in range
+F iter_min(start: i64, end: i64) -> i64 {
+    I end <= start {
+        0
+    } E {
+        start
+    }
+}
+
+# Find max in range
+F iter_max(start: i64, end: i64) -> i64 {
+    I end <= start {
+        0
+    } E {
+        end - 1
+    }
+}
+
+# Check if value is in range [start, end)
+F iter_contains(start: i64, end: i64, value: i64) -> i64 {
+    I value >= start && value < end { 1 } E { 0 }
+}
+
+# ===== Usage Examples =====
+#
+# Creating a Range iterator:
+#   r := Range { current: 0, end: 10, step: 1 }
+#
+# Iterating (manual unrolling due to codegen limitations):
+#   v := r.next()
+#   I v >= 0 { ... }
+#
+# Creating VecIter:
+#   iter := VecIter { data: vec.data, len: vec.len, index: 0 }
+#
+# For-loop style (when codegen supports break):
+#   L {
+#       v := r.next()
+#       I v < 0 { B 0 }
+#       # process v
+#   }

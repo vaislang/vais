@@ -1,0 +1,28 @@
+# Match with variable binding test
+F check(n: i64) -> i64 {
+    M n {
+        0 => 100,
+        1 => 200,
+        x => x * 10   # bind value to x and use it
+    }
+}
+
+F main() -> i64 {
+    puts("check(0):")
+    r := check(0)
+    putchar(r / 100 + 48)  # print first digit
+    putchar(10)
+
+    puts("check(1):")
+    r2 := check(1)
+    putchar(r2 / 100 + 48)  # print 2
+    putchar(10)
+
+    puts("check(5) - should be 50:")
+    r3 := check(5)
+    putchar(r3 / 10 + 48)  # print 5
+    putchar(r3 % 10 + 48)  # print 0
+    putchar(10)
+
+    0
+}
