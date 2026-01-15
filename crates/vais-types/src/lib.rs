@@ -242,6 +242,7 @@ pub struct TypeChecker {
     current_fn_name: Option<String>,
 
     // Type variable counter for inference
+    #[allow(dead_code)]
     next_type_var: usize,
 
     // Type substitutions
@@ -650,7 +651,7 @@ impl TypeChecker {
             }
 
             Expr::Match { expr, arms } => {
-                let expr_type = self.check_expr(expr)?;
+                let _expr_type = self.check_expr(expr)?;
                 let mut result_type: Option<ResolvedType> = None;
 
                 for arm in arms {
@@ -880,7 +881,7 @@ impl TypeChecker {
                 Ok(ResolvedType::Unit)
             }
 
-            Expr::AssignOp { op, target, value } => {
+            Expr::AssignOp { op: _, target, value } => {
                 // Similar to assign
                 if let Expr::Ident(name) = &target.node {
                     let var_info = self.lookup_var_info(name)?;

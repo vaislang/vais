@@ -61,15 +61,16 @@ struct FunctionInfo {
 
 #[derive(Debug, Clone)]
 struct StructInfo {
+    #[allow(dead_code)]
     name: String,
     fields: Vec<(String, ResolvedType)>,
 }
 
 #[derive(Debug, Clone)]
 struct LocalVar {
-    name: String,
     ty: ResolvedType,
-    is_mut: bool,
+    /// True if this is a function parameter (SSA value), false if alloca'd
+    is_param: bool,
 }
 
 impl CodeGenerator {
@@ -108,7 +109,7 @@ impl CodeGenerator {
         }
 
         // Generate function declarations
-        for (name, info) in &self.functions {
+        for (_name, info) in &self.functions {
             if info.is_extern {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
@@ -209,13 +210,12 @@ impl CodeGenerator {
                 let ty = self.ast_type_to_resolved(&p.ty.node);
                 let llvm_ty = self.type_to_llvm(&ty);
 
-                // Register local
+                // Register parameter as local (SSA value, not alloca)
                 self.locals.insert(
                     p.name.node.clone(),
                     LocalVar {
-                        name: p.name.node.clone(),
                         ty: ty.clone(),
-                        is_mut: p.is_mut,
+                        is_param: true,
                     },
                 );
 
@@ -243,7 +243,8 @@ impl CodeGenerator {
         // Generate body
         match &f.body {
             FunctionBody::Expr(expr) => {
-                let (value, _) = self.generate_expr(expr, &mut 0)?;
+                let (value, expr_ir) = self.generate_expr(expr, &mut 0)?;
+                ir.push_str(&expr_ir);
                 if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
                 } else {
@@ -251,7 +252,8 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, _) = self.generate_block(stmts, &mut 0)?;
+                let (value, block_ir) = self.generate_block(stmts, &mut 0)?;
+                ir.push_str(&block_ir);
                 if ret_type == ResolvedType::Unit {
                     ir.push_str("  ret void\n");
                 } else {
@@ -293,7 +295,7 @@ impl CodeGenerator {
                 name,
                 ty,
                 value,
-                is_mut,
+                is_mut: _,
             } => {
                 let (val, val_ir) = self.generate_expr(value, counter)?;
 
@@ -305,9 +307,8 @@ impl CodeGenerator {
                 self.locals.insert(
                     name.node.clone(),
                     LocalVar {
-                        name: name.node.clone(),
                         ty: resolved_ty.clone(),
-                        is_mut: *is_mut,
+                        is_param: false, // alloca'd variable
                     },
                 );
 
@@ -359,13 +360,19 @@ impl CodeGenerator {
 
             Expr::Ident(name) => {
                 if let Some(local) = self.locals.get(name) {
-                    let tmp = self.next_temp(counter);
-                    let llvm_ty = self.type_to_llvm(&local.ty);
-                    let ir = format!(
-                        "  {} = load {}, {}* %{}\n",
-                        tmp, llvm_ty, llvm_ty, name
-                    );
-                    Ok((tmp, ir))
+                    if local.is_param {
+                        // Parameters are SSA values, use directly
+                        Ok((format!("%{}", name), String::new()))
+                    } else {
+                        // Local variables need to be loaded from alloca
+                        let tmp = self.next_temp(counter);
+                        let llvm_ty = self.type_to_llvm(&local.ty);
+                        let ir = format!(
+                            "  {} = load {}, {}* %{}\n",
+                            tmp, llvm_ty, llvm_ty, name
+                        );
+                        Ok((tmp, ir))
+                    }
                 } else if name == "self" {
                     // Handle self reference
                     Ok(("%self".to_string(), String::new()))
@@ -570,7 +577,6 @@ mod tests {
     use vais_parser::parse;
 
     #[test]
-    #[ignore = "CodeGenerator not yet complete"]
     fn test_simple_function() {
         let source = "F add(a:i64,b:i64)->i64=a+b";
         let module = parse(source).unwrap();
@@ -582,7 +588,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CodeGenerator not yet complete"]
     fn test_fibonacci() {
         let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
         let module = parse(source).unwrap();
