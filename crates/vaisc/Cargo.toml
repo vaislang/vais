@@ -1,0 +1,22 @@
+[package]
+name = "vaisc"
+version.workspace = true
+edition.workspace = true
+description = "Vais compiler CLI"
+license.workspace = true
+
+[[bin]]
+name = "vaisc"
+path = "src/main.rs"
+
+[dependencies]
+vais-lexer = { path = "../vais-lexer" }
+vais-parser = { path = "../vais-parser" }
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+vais-codegen = { path = "../vais-codegen" }
+
+clap = { version = "4.4", features = ["derive"] }
+miette = { workspace = true }
+thiserror = { workspace = true }
+colored = "2.1"

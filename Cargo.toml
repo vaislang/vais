@@ -6,6 +6,7 @@ members = [
     "crates/vais-ast",
     "crates/vais-types",
     "crates/vais-codegen",
+    "crates/vaisc",
 ]
 
 [workspace.package]

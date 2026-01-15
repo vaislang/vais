@@ -1,0 +1,5 @@
+# Fibonacci function with self-recursion
+F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+
+# Simple addition
+F add(a:i64, b:i64)->i64 = a + b

@@ -91,7 +91,9 @@ impl CodeGenerator {
         // Header
         ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
         ir.push_str("source_filename = \"<vais>\"\n");
-        ir.push_str("target datalayout = \"e-m:o-i64:64-i128:128-n32:64-S128\"\n\n");
+
+        // Note: target triple and data layout are omitted to let clang auto-detect
+        ir.push('\n');
 
         // First pass: collect declarations
         for item in &module.items {
