@@ -2,7 +2,7 @@
   "name": "vais",
   "displayName": "Vais Language Support",
   "description": "Syntax highlighting and language support for the Vais programming language",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "vais-lang",
   "engines": {
     "vscode": "^1.75.0"
@@ -20,12 +20,24 @@
     "url": "https://github.com/sswoo88/vais"
   },
   "license": "MIT",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:vais"
+  ],
   "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "publish": "vsce publish"
   },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
   "devDependencies": {
-    "@types/vscode": "^1.75.0"
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
   },
   "contributes": {
     "languages": [
@@ -51,6 +63,27 @@
         "scopeName": "source.vais",
         "path": "./syntaxes/vais.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Vais Language Server",
+      "properties": {
+        "vais.languageServer.path": {
+          "type": "string",
+          "default": "vais-lsp",
+          "description": "Path to the vais-lsp executable. If not specified, will search in PATH."
+        },
+        "vais.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
   }
 }

@@ -11,6 +11,15 @@ Syntax highlighting and language support for the **Vais** programming language -
   - Async/await syntax
   - Comments, strings, and literals
 
+- **Language Server Protocol (LSP) Support**:
+  - Real-time diagnostics and error reporting
+  - Code completion (IntelliSense)
+  - Hover information for symbols
+  - Go to definition
+  - Find all references
+  - Document symbols
+  - Workspace symbols
+
 - **Language Features**:
   - Bracket matching and auto-closing pairs
   - Comment toggling with `#`
@@ -100,6 +109,19 @@ F main() -> i64 {
 
 ## Installation
 
+### Prerequisites
+
+For full LSP support, you need to build the Vais language server:
+
+```bash
+# In the vais project root directory
+cargo build --release
+
+# The vais-lsp binary will be at target/release/vais-lsp
+# Optionally, add it to your PATH:
+export PATH="$PATH:/path/to/vais/target/release"
+```
+
 ### From Source
 
 1. Clone the repository:
@@ -113,13 +135,18 @@ F main() -> i64 {
    npm install
    ```
 
-3. Package the extension:
+3. Compile TypeScript:
+   ```bash
+   npm run compile
+   ```
+
+4. Package the extension:
    ```bash
    npm install -g vsce
    vsce package
    ```
 
-4. Install the generated `.vsix` file in VSCode:
+5. Install the generated `.vsix` file in VSCode:
    - Open VSCode
    - Go to Extensions (Ctrl+Shift+X / Cmd+Shift+X)
    - Click the "..." menu at the top
@@ -178,17 +205,57 @@ To contribute to this extension:
 4. Test your changes
 5. Submit a pull request
 
+## Configuration
+
+The extension can be configured through VSCode settings:
+
+### Language Server Path
+
+By default, the extension looks for `vais-lsp` in your PATH. You can specify a custom path:
+
+```json
+{
+  "vais.languageServer.path": "/path/to/vais-lsp"
+}
+```
+
+If you're working in a Vais workspace, the extension will automatically try to use `target/release/vais-lsp` from your workspace root.
+
+### Trace Server Communication
+
+For debugging LSP issues, you can enable communication tracing:
+
+```json
+{
+  "vais.trace.server": "verbose"
+}
+```
+
+Options: `off`, `messages`, `verbose`
+
 ## Requirements
 
 - Visual Studio Code 1.75.0 or higher
+- Vais LSP server (`vais-lsp`) for full language support
 
 ## Known Issues
 
-- No LSP (Language Server Protocol) support yet
 - No debugging support yet
-- Limited IntelliSense features
+- LSP server must be manually built from source
 
 ## Release Notes
+
+### 0.2.0
+
+- Added Language Server Protocol (LSP) support
+- Real-time diagnostics and error checking
+- Code completion (IntelliSense)
+- Hover information
+- Go to definition
+- Find all references
+- Document and workspace symbols
+- Configurable LSP server path
+- Status bar indicator for LSP server state
 
 ### 0.1.0
 

@@ -121,7 +121,7 @@
 - [x] **VSCode Extension** (`vscode-vais/`)
   - [x] TextMate 문법 파일 (syntax highlighting)
   - [x] 언어 설정 (brackets, comments, indentation)
-  - [ ] 자동 완성 연동
+  - [x] LSP 클라이언트 연동 (자동 완성, hover, go-to-definition)
 
 - [x] **Documentation** (docs/)
   - [x] LANGUAGE_SPEC.md - 언어 스펙
@@ -184,9 +184,9 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | LSP | ✅ 완료 | 90% |
 | REPL | ✅ 완료 | 100% |
 | Optimization | ✅ 완료 | 100% |
-| VSCode Extension | ✅ 완료 | 80% |
+| VSCode Extension | ✅ 완료 | 95% |
 
-**전체 진행률: ~93%**
+**전체 진행률: ~95%**
 
 ---
 
@@ -213,10 +213,9 @@ e33bfa5 Add standard library and comprehensive examples
 
 ## 🎯 다음 목표
 
-1. **VSCode Extension**: LSP 연동 및 자동 완성
-2. **추가 컬렉션**: Set, Deque 등
-3. **코드 포맷터**: 자동 포맷팅
-4. **디버거**: 디버깅 지원
+1. **추가 컬렉션**: Set, Deque 등
+2. **코드 포맷터**: 자동 포맷팅
+3. **디버거**: 디버깅 지원
 
 ---
 
