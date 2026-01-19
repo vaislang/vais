@@ -1,0 +1,520 @@
+# PriorityQueue Test - Min-heap based priority queue
+# Tests heap operations and priority ordering
+
+# Helper: print a number (up to 4 digits)
+F print_num(n: i64) -> i64 {
+    I n >= 1000 {
+        d1 := n / 1000
+        putchar(d1 + 48)
+    }
+    I n >= 100 {
+        d2 := (n / 100) % 10
+        putchar(d2 + 48)
+    }
+    I n >= 10 {
+        d3 := (n / 10) % 10
+        putchar(d3 + 48)
+    }
+    d4 := n % 10
+    putchar(d4 + 48)
+    0
+}
+
+# PriorityQueue structure: {data, size, capacity}
+# data: pointer to element array
+# size: number of elements
+# capacity: allocated capacity
+
+# Create a new priority queue with given capacity
+F pq_create(capacity: i64) -> i64 {
+    # Allocate PQ struct: 3 fields * 8 bytes = 24 bytes
+    pq := malloc(24)
+    data := malloc(capacity * 8)
+
+    store_i64(pq, data)           # data pointer
+    store_i64(pq + 8, 0)          # size = 0
+    store_i64(pq + 16, capacity)  # capacity
+
+    pq
+}
+
+# Get PQ size
+F pq_size(pq: i64) -> i64 {
+    load_i64(pq + 8)
+}
+
+# Get PQ capacity
+F pq_capacity(pq: i64) -> i64 {
+    load_i64(pq + 16)
+}
+
+# Check if PQ is empty
+F pq_is_empty(pq: i64) -> i64 {
+    I pq_size(pq) == 0 { 1 } E { 0 }
+}
+
+# Peek at minimum element (returns 0 if empty)
+F pq_peek(pq: i64) -> i64 {
+    size := pq_size(pq)
+    I size == 0 {
+        0
+    } E {
+        data := load_i64(pq)
+        load_i64(data)  # Root element at index 0
+    }
+}
+
+# Internal: Sift up element at index
+F pq_sift_up(pq: i64, idx: i64) -> i64 {
+    I idx == 0 {
+        0  # At root, done
+    } E {
+        data := load_i64(pq)
+        parent_idx := (idx - 1) / 2
+
+        child_val := load_i64(data + idx * 8)
+        parent_val := load_i64(data + parent_idx * 8)
+
+        # Min-heap: parent should be smaller
+        I child_val < parent_val {
+            # Swap with parent
+            store_i64(data + idx * 8, parent_val)
+            store_i64(data + parent_idx * 8, child_val)
+
+            # Continue sifting up
+            pq_sift_up(pq, parent_idx)
+        } E {
+            0  # Heap property satisfied
+        }
+    }
+}
+
+# Internal: Sift down element at index
+F pq_sift_down(pq: i64, idx: i64) -> i64 {
+    size := pq_size(pq)
+    left_idx := 2 * idx + 1
+    right_idx := 2 * idx + 2
+
+    # Check if leaf node
+    I left_idx >= size {
+        0  # No children, done
+    } E {
+        data := load_i64(pq)
+        current_val := load_i64(data + idx * 8)
+
+        # Get left child value
+        left_val := load_i64(data + left_idx * 8)
+
+        # Determine if we should check right child
+        I right_idx >= size {
+            # Only left child exists
+            I left_val < current_val {
+                # Swap with left child
+                store_i64(data + idx * 8, left_val)
+                store_i64(data + left_idx * 8, current_val)
+                pq_sift_down(pq, left_idx)
+            } E {
+                0
+            }
+        } E {
+            # Both children exist
+            right_val := load_i64(data + right_idx * 8)
+
+            # Find smaller child
+            I left_val <= right_val {
+                # Left child is smaller or equal
+                I left_val < current_val {
+                    # Swap with left child
+                    store_i64(data + idx * 8, left_val)
+                    store_i64(data + left_idx * 8, current_val)
+                    pq_sift_down(pq, left_idx)
+                } E {
+                    0
+                }
+            } E {
+                # Right child is smaller
+                I right_val < current_val {
+                    # Swap with right child
+                    store_i64(data + idx * 8, right_val)
+                    store_i64(data + right_idx * 8, current_val)
+                    pq_sift_down(pq, right_idx)
+                } E {
+                    0
+                }
+            }
+        }
+    }
+}
+
+# Push element into priority queue
+F pq_push(pq: i64, value: i64) -> i64 {
+    data := load_i64(pq)
+    size := pq_size(pq)
+
+    # Add element at the end
+    store_i64(data + size * 8, value)
+
+    # Sift up to maintain heap property
+    pq_sift_up(pq, size)
+
+    # Update size
+    store_i64(pq + 8, size + 1)
+
+    size + 1
+}
+
+# Pop minimum element (highest priority)
+F pq_pop(pq: i64) -> i64 {
+    size := pq_size(pq)
+
+    I size == 0 {
+        0
+    } E I size == 1 {
+        # Special case: last element
+        data := load_i64(pq)
+        min_val := load_i64(data)
+        store_i64(pq + 8, 0)
+        min_val
+    } E {
+        data := load_i64(pq)
+
+        # Get minimum element (root)
+        min_val := load_i64(data)
+
+        # Move last element to root
+        last_idx := size - 1
+        last_val := load_i64(data + last_idx * 8)
+        store_i64(data, last_val)
+
+        # Decrease size
+        store_i64(pq + 8, size - 1)
+
+        # Sift down to maintain heap property
+        pq_sift_down(pq, 0)
+
+        min_val
+    }
+}
+
+F test_basic_operations() -> i64 {
+    puts("Test 1: Basic Push and Pop")
+
+    pq := pq_create(8)
+
+    # Push elements in random order
+    pq_push(pq, 50)
+    pq_push(pq, 30)
+    pq_push(pq, 70)
+    pq_push(pq, 10)
+    pq_push(pq, 40)
+
+    size := pq_size(pq)
+    puts("  Pushed 50, 30, 70, 10, 40")
+    puts("  Size: ")
+    print_num(size)
+    putchar(10)
+
+    # Pop should return elements in ascending order (min-heap)
+    v1 := pq_pop(pq)
+    v2 := pq_pop(pq)
+    v3 := pq_pop(pq)
+    v4 := pq_pop(pq)
+    v5 := pq_pop(pq)
+
+    puts("  Popped values: ")
+    print_num(v1)
+    putchar(32)  # space
+    print_num(v2)
+    putchar(32)
+    print_num(v3)
+    putchar(32)
+    print_num(v4)
+    putchar(32)
+    print_num(v5)
+    putchar(10)
+
+    I v1 == 10 { I v2 == 30 { I v3 == 40 { I v4 == 50 { I v5 == 70 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_peek() -> i64 {
+    puts("Test 2: Peek Operation")
+
+    pq := pq_create(8)
+
+    pq_push(pq, 100)
+    pq_push(pq, 50)
+    pq_push(pq, 75)
+
+    min1 := pq_peek(pq)
+    size1 := pq_size(pq)
+
+    puts("  Pushed 100, 50, 75")
+    puts("  Peek (should be 50): ")
+    print_num(min1)
+    putchar(10)
+
+    puts("  Size after peek (should be 3): ")
+    print_num(size1)
+    putchar(10)
+
+    # Pop one and peek again
+    pq_pop(pq)
+    min2 := pq_peek(pq)
+
+    puts("  After pop, peek (should be 75): ")
+    print_num(min2)
+    putchar(10)
+
+    I min1 == 50 { I size1 == 3 { I min2 == 75 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_empty() -> i64 {
+    puts("Test 3: Empty Queue Operations")
+
+    pq := pq_create(4)
+
+    empty1 := pq_is_empty(pq)
+    puts("  New queue is empty: ")
+    print_num(empty1)
+    putchar(10)
+
+    pq_push(pq, 42)
+    empty2 := pq_is_empty(pq)
+
+    puts("  After push, is empty: ")
+    print_num(empty2)
+    putchar(10)
+
+    pq_pop(pq)
+    empty3 := pq_is_empty(pq)
+
+    puts("  After pop, is empty: ")
+    print_num(empty3)
+    putchar(10)
+
+    I empty1 == 1 { I empty2 == 0 { I empty3 == 1 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_duplicates() -> i64 {
+    puts("Test 4: Duplicate Values")
+
+    pq := pq_create(8)
+
+    # Push duplicate values
+    pq_push(pq, 20)
+    pq_push(pq, 10)
+    pq_push(pq, 20)
+    pq_push(pq, 10)
+    pq_push(pq, 15)
+
+    puts("  Pushed 20, 10, 20, 10, 15")
+
+    # Pop all - should be sorted with duplicates
+    v1 := pq_pop(pq)
+    v2 := pq_pop(pq)
+    v3 := pq_pop(pq)
+    v4 := pq_pop(pq)
+    v5 := pq_pop(pq)
+
+    puts("  Popped: ")
+    print_num(v1)
+    putchar(32)
+    print_num(v2)
+    putchar(32)
+    print_num(v3)
+    putchar(32)
+    print_num(v4)
+    putchar(32)
+    print_num(v5)
+    putchar(10)
+
+    I v1 == 10 { I v2 == 10 { I v3 == 15 { I v4 == 20 { I v5 == 20 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_single_element() -> i64 {
+    puts("Test 5: Single Element")
+
+    pq := pq_create(4)
+
+    pq_push(pq, 99)
+
+    peek_val := pq_peek(pq)
+    pop_val := pq_pop(pq)
+    is_empty := pq_is_empty(pq)
+
+    puts("  Pushed 99")
+    puts("  Peek: ")
+    print_num(peek_val)
+    putchar(10)
+
+    puts("  Pop: ")
+    print_num(pop_val)
+    putchar(10)
+
+    puts("  Is empty: ")
+    print_num(is_empty)
+    putchar(10)
+
+    I peek_val == 99 { I pop_val == 99 { I is_empty == 1 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_descending_order() -> i64 {
+    puts("Test 6: Descending Order Insertion")
+
+    pq := pq_create(8)
+
+    # Insert in descending order
+    pq_push(pq, 100)
+    pq_push(pq, 90)
+    pq_push(pq, 80)
+    pq_push(pq, 70)
+    pq_push(pq, 60)
+
+    puts("  Pushed 100, 90, 80, 70, 60 (descending)")
+
+    # Should still pop in ascending order
+    v1 := pq_pop(pq)
+    v2 := pq_pop(pq)
+
+    puts("  First two pops: ")
+    print_num(v1)
+    putchar(32)
+    print_num(v2)
+    putchar(10)
+
+    I v1 == 60 { I v2 == 70 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 }
+}
+
+F test_ascending_order() -> i64 {
+    puts("Test 7: Ascending Order Insertion")
+
+    pq := pq_create(8)
+
+    # Insert in ascending order
+    pq_push(pq, 10)
+    pq_push(pq, 20)
+    pq_push(pq, 30)
+    pq_push(pq, 40)
+    pq_push(pq, 50)
+
+    puts("  Pushed 10, 20, 30, 40, 50 (ascending)")
+
+    # Should pop in same order
+    v1 := pq_pop(pq)
+    v2 := pq_pop(pq)
+    v3 := pq_pop(pq)
+
+    puts("  First three pops: ")
+    print_num(v1)
+    putchar(32)
+    print_num(v2)
+    putchar(32)
+    print_num(v3)
+    putchar(10)
+
+    I v1 == 10 { I v2 == 20 { I v3 == 30 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_interleaved() -> i64 {
+    puts("Test 8: Interleaved Push and Pop")
+
+    pq := pq_create(8)
+
+    pq_push(pq, 50)
+    pq_push(pq, 30)
+    v1 := pq_pop(pq)  # Should get 30
+
+    pq_push(pq, 40)
+    pq_push(pq, 20)
+    v2 := pq_pop(pq)  # Should get 20
+
+    pq_push(pq, 60)
+    v3 := pq_pop(pq)  # Should get 40
+
+    puts("  Interleaved operations")
+    puts("  Pop values: ")
+    print_num(v1)
+    putchar(32)
+    print_num(v2)
+    putchar(32)
+    print_num(v3)
+    putchar(10)
+
+    I v1 == 30 { I v2 == 20 { I v3 == 40 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F main() -> i64 {
+    puts("=== PriorityQueue Test ===")
+    putchar(10)
+
+    r1 := test_basic_operations()
+    r2 := test_peek()
+    r3 := test_empty()
+    r4 := test_duplicates()
+    r5 := test_single_element()
+    r6 := test_descending_order()
+    r7 := test_ascending_order()
+    r8 := test_interleaved()
+
+    putchar(10)
+    I r1 == 1 { I r2 == 1 { I r3 == 1 { I r4 == 1 { I r5 == 1 { I r6 == 1 { I r7 == 1 { I r8 == 1 {
+        puts("=== All PriorityQueue Tests PASSED ===")
+        0
+    } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    }
+}

@@ -1,0 +1,235 @@
+# PriorityQueue - Min-heap based priority queue
+# Stores i64 elements (smaller values have higher priority)
+
+S PriorityQueue {
+    data: i64,      # Pointer to element array
+    size: i64,      # Current number of elements
+    capacity: i64   # Allocated capacity
+}
+
+X PriorityQueue {
+    # Create a new PriorityQueue with given capacity
+    F with_capacity(capacity: i64) -> PriorityQueue {
+        data := malloc(capacity * 8)  # 8 bytes per i64
+        PriorityQueue { data: data, size: 0, capacity: capacity }
+    }
+
+    # Get the number of elements
+    F len(&self) -> i64 {
+        self.size
+    }
+
+    # Get the capacity
+    F capacity(&self) -> i64 {
+        self.capacity
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } E { 0 }
+    }
+
+    # Peek at the minimum element (highest priority)
+    # Returns 0 if empty (limitation: cannot distinguish from actual 0 value)
+    F peek(&self) -> i64 {
+        I self.size == 0 {
+            0
+        } E {
+            load_i64(self.data)  # Root element at index 0
+        }
+    }
+
+    # Push element into the priority queue
+    F push(&self, value: i64) -> i64 {
+        # Grow if necessary
+        I self.size >= self.capacity {
+            @.grow()
+        }
+
+        # Add element at the end
+        ptr := self.data + self.size * 8
+        store_i64(ptr, value)
+
+        # Sift up to maintain heap property
+        @.sift_up(self.size)
+
+        self.size = self.size + 1
+        self.size
+    }
+
+    # Pop the minimum element (highest priority)
+    # Returns 0 if empty
+    F pop(&self) -> i64 {
+        I self.size == 0 {
+            0
+        } E I self.size == 1 {
+            # Special case: last element
+            self.size = 0
+            load_i64(self.data)
+        } E {
+            # Get minimum element (root)
+            min_val := load_i64(self.data)
+
+            # Move last element to root
+            last_idx := self.size - 1
+            last_val := load_i64(self.data + last_idx * 8)
+            store_i64(self.data, last_val)
+
+            # Decrease size
+            self.size = self.size - 1
+
+            # Sift down to maintain heap property
+            @.sift_down(0)
+
+            min_val
+        }
+    }
+
+    # Clear all elements
+    F clear(&self) -> i64 {
+        self.size = 0
+        0
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        free(self.data)
+        self.data = 0
+        self.size = 0
+        self.capacity = 0
+        0
+    }
+
+    # Internal: Sift up element at index to maintain heap property
+    F sift_up(&self, idx: i64) -> i64 {
+        I idx == 0 {
+            0  # At root, done
+        } E {
+            parent_idx := (idx - 1) / 2
+
+            child_val := load_i64(self.data + idx * 8)
+            parent_val := load_i64(self.data + parent_idx * 8)
+
+            # Min-heap: parent should be smaller
+            I child_val < parent_val {
+                # Swap with parent
+                store_i64(self.data + idx * 8, parent_val)
+                store_i64(self.data + parent_idx * 8, child_val)
+
+                # Continue sifting up
+                @.sift_up(parent_idx)
+            } E {
+                0  # Heap property satisfied
+            }
+        }
+    }
+
+    # Internal: Sift down element at index to maintain heap property
+    F sift_down(&self, idx: i64) -> i64 {
+        left_idx := 2 * idx + 1
+        right_idx := 2 * idx + 2
+
+        # Check if leaf node
+        I left_idx >= self.size {
+            0  # No children, done
+        } E {
+            current_val := load_i64(self.data + idx * 8)
+
+            # Get left child value
+            left_val := load_i64(self.data + left_idx * 8)
+
+            # Determine if we should check right child
+            I right_idx >= self.size {
+                # Only left child exists
+                I left_val < current_val {
+                    # Swap with left child
+                    store_i64(self.data + idx * 8, left_val)
+                    store_i64(self.data + left_idx * 8, current_val)
+                    @.sift_down(left_idx)
+                } E {
+                    0
+                }
+            } E {
+                # Both children exist
+                right_val := load_i64(self.data + right_idx * 8)
+
+                # Find smaller child
+                I left_val <= right_val {
+                    # Left child is smaller or equal
+                    I left_val < current_val {
+                        # Swap with left child
+                        store_i64(self.data + idx * 8, left_val)
+                        store_i64(self.data + left_idx * 8, current_val)
+                        @.sift_down(left_idx)
+                    } E {
+                        0
+                    }
+                } E {
+                    # Right child is smaller
+                    I right_val < current_val {
+                        # Swap with right child
+                        store_i64(self.data + idx * 8, right_val)
+                        store_i64(self.data + right_idx * 8, current_val)
+                        @.sift_down(right_idx)
+                    } E {
+                        0
+                    }
+                }
+            }
+        }
+    }
+
+    # Internal: Grow capacity (double it)
+    F grow(&self) -> i64 {
+        new_cap := self.capacity * 2
+        I new_cap < 8 {
+            new_cap = 8
+        }
+        new_data := malloc(new_cap * 8)
+        memcpy(new_data, self.data, self.size * 8)
+        free(self.data)
+        self.data = new_data
+        self.capacity = new_cap
+        new_cap
+    }
+}
+
+# Create new PriorityQueue with initial capacity of 8
+F pq_new() -> PriorityQueue {
+    PriorityQueue.with_capacity(8)
+}
+
+# Push element into priority queue
+F pq_push(pq: PriorityQueue, value: i64) -> i64 {
+    pq.push(value)
+}
+
+# Pop minimum element (highest priority)
+F pq_pop(pq: PriorityQueue) -> i64 {
+    pq.pop()
+}
+
+# Peek at minimum element without removing
+F pq_peek(pq: PriorityQueue) -> i64 {
+    pq.peek()
+}
+
+# Get size of priority queue
+F pq_size(pq: PriorityQueue) -> i64 {
+    pq.len()
+}
+
+# Check if priority queue is empty
+F pq_is_empty(pq: PriorityQueue) -> i64 {
+    pq.is_empty()
+}
+
+# Clear all elements
+F pq_clear(pq: PriorityQueue) -> i64 {
+    pq.clear()
+}
+
+# Free priority queue memory
+F pq_free(pq: PriorityQueue) -> i64 {
+    pq.drop()
+}

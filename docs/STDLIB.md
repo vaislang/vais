@@ -12,6 +12,9 @@ Version: 0.0.1
    - [Vec](#vec)
    - [HashMap](#hashmap)
    - [String](#string)
+   - [Set](#set)
+   - [Deque](#deque)
+   - [PriorityQueue](#priorityqueue)
 4. [Smart Pointers](#smart-pointers)
    - [Box](#box)
    - [Rc](#rc)
@@ -419,6 +422,236 @@ F main() -> i64 {
     0
 }
 ```
+
+---
+
+### Set
+
+**Module:** `std/set.vais`
+
+Hash-based set collection for storing unique `i64` values.
+
+#### Definition
+
+```vais
+S Set {
+    map: HashMap    # Internally uses HashMap
+}
+```
+
+#### Functions
+
+```vais
+# Create new set with capacity
+F set_new(capacity: i64) -> Set
+
+# Insert value into set
+F set_insert(s: Set, value: i64) -> i64
+
+# Check if value exists
+F set_contains(s: Set, value: i64) -> i64
+
+# Remove value from set
+F set_remove(s: Set, value: i64) -> i64
+
+# Get size of set
+F set_size(s: Set) -> i64
+
+# Check if set is empty
+F set_is_empty(s: Set) -> i64
+
+# Clear all values
+F set_clear(s: Set) -> i64
+
+# Free set memory
+F set_free(s: Set) -> i64
+```
+
+---
+
+### Deque
+
+**Module:** `std/deque.vais`
+
+Double-ended queue (deque) with efficient insertion and removal at both ends. Implemented using a circular buffer.
+
+#### Definition
+
+```vais
+S Deque {
+    data: i64,      # Pointer to element array
+    head: i64,      # Index of first element
+    tail: i64,      # Index after last element
+    len: i64,       # Number of elements
+    cap: i64        # Capacity
+}
+```
+
+#### Functions
+
+```vais
+# Create new deque with capacity
+F deque_new(capacity: i64) -> Deque
+
+# Push element to front
+F deque_push_front(dq: Deque, value: i64) -> i64
+
+# Push element to back
+F deque_push_back(dq: Deque, value: i64) -> i64
+
+# Pop element from front
+F deque_pop_front(dq: Deque) -> i64
+
+# Pop element from back
+F deque_pop_back(dq: Deque) -> i64
+
+# Get element at index
+F deque_get(dq: Deque, index: i64) -> i64
+
+# Get size of deque
+F deque_size(dq: Deque) -> i64
+
+# Check if deque is empty
+F deque_is_empty(dq: Deque) -> i64
+
+# Free deque memory
+F deque_free(dq: Deque) -> i64
+```
+
+---
+
+### PriorityQueue
+
+**Module:** `std/priority_queue.vais`
+
+Min-heap based priority queue where smaller values have higher priority. Provides efficient access to the minimum element.
+
+#### Definition
+
+```vais
+S PriorityQueue {
+    data: i64,      # Pointer to element array
+    size: i64,      # Current number of elements
+    capacity: i64   # Allocated capacity
+}
+```
+
+#### Methods
+
+```vais
+# Create new PriorityQueue with capacity
+F with_capacity(capacity: i64) -> PriorityQueue
+
+# Get number of elements
+F len(&self) -> i64
+
+# Get capacity
+F capacity(&self) -> i64
+
+# Check if empty
+F is_empty(&self) -> i64
+
+# Peek at minimum element (highest priority)
+# Returns 0 if empty
+F peek(&self) -> i64
+
+# Push element into priority queue
+F push(&self, value: i64) -> i64
+
+# Pop minimum element (highest priority)
+# Returns 0 if empty
+F pop(&self) -> i64
+
+# Clear all elements
+F clear(&self) -> i64
+
+# Free memory
+F drop(&self) -> i64
+```
+
+#### Helper Functions
+
+```vais
+# Create new PriorityQueue with default capacity (8)
+F pq_new() -> PriorityQueue
+
+# Push element
+F pq_push(pq: PriorityQueue, value: i64) -> i64
+
+# Pop minimum element
+F pq_pop(pq: PriorityQueue) -> i64
+
+# Peek at minimum element
+F pq_peek(pq: PriorityQueue) -> i64
+
+# Get size
+F pq_size(pq: PriorityQueue) -> i64
+
+# Check if empty
+F pq_is_empty(pq: PriorityQueue) -> i64
+
+# Clear all elements
+F pq_clear(pq: PriorityQueue) -> i64
+
+# Free memory
+F pq_free(pq: PriorityQueue) -> i64
+```
+
+#### Example
+
+```vais
+U std/priority_queue
+
+F main() -> i64 {
+    # Create priority queue
+    pq := PriorityQueue.with_capacity(10)
+
+    # Push elements in random order
+    pq.push(50)
+    pq.push(30)
+    pq.push(70)
+    pq.push(10)
+    pq.push(40)
+
+    # Peek at minimum (highest priority)
+    min := pq.peek()    # Returns 10
+    print_i64(min)
+
+    # Pop elements in ascending order
+    v1 := pq.pop()      # 10
+    v2 := pq.pop()      # 30
+    v3 := pq.pop()      # 40
+
+    print_i64(v1)
+    print_i64(v2)
+    print_i64(v3)
+
+    # Check size
+    size := pq.len()    # 2 (50 and 70 remain)
+    print_i64(size)
+
+    # Free memory
+    pq.drop()
+
+    0
+}
+```
+
+#### Use Cases
+
+- **Task Scheduling**: Process tasks by priority
+- **Dijkstra's Algorithm**: Find shortest paths in graphs
+- **Event Simulation**: Process events in time order
+- **Huffman Coding**: Build optimal prefix codes
+- **Median Maintenance**: Efficiently track median of stream
+
+#### Implementation Notes
+
+- Min-heap implementation (smaller values = higher priority)
+- For max-heap behavior, insert negated values
+- O(log n) push and pop operations
+- O(1) peek operation
+- Dynamically grows capacity when full
 
 ---
 
@@ -1129,6 +1362,9 @@ F strlen(s: i64) -> i64
 | `std/vec` | Dynamic arrays | `Vec<T>` |
 | `std/hashmap` | Hash tables | `HashMap<K, V>` |
 | `std/string` | String handling | `String` |
+| `std/set` | Hash sets | `Set<T>` |
+| `std/deque` | Double-ended queue | `Deque<T>` |
+| `std/priority_queue` | Priority queue (min-heap) | `PriorityQueue<T>` |
 | `std/box` | Unique ownership | `Box<T>` |
 | `std/rc` | Reference counting | `Rc<T>`, `Weak<T>` |
 | `std/arena` | Batch allocation | `Arena` |
@@ -1139,8 +1375,6 @@ F strlen(s: i64) -> i64
 | `std/runtime` | Task execution | Runtime functions |
 | `std/iter` | Iteration | `Iterator` trait |
 | `std/net` | Networking | `TcpListener`, `TcpStream`, `UdpSocket` |
-| `std/set` | Hash sets | `Set<T>` |
-| `std/deque` | Double-ended queue | `Deque<T>` |
 
 ---
 
@@ -1514,12 +1748,13 @@ F main() -> i64 {
 
 The following modules are planned for future versions:
 
-- `std/collections` - BTreeMap, PriorityQueue
+- `std/collections` - BTreeMap, additional collection types
 - `std/thread` - Threading support
 - `std/sync` - Synchronization primitives (Mutex, RwLock)
 - `std/path` - Path manipulation
 - `std/env` - Environment variables
 - `std/time` - Time and duration
+- `std/regex` - Regular expressions
 
 ---
 

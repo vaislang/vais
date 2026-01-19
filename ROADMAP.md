@@ -349,7 +349,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🔮 Phase 4: 향후 개선 사항
 
-> **상태**: 🔄 진행 중 (10%)
+> **상태**: 🔄 진행 중 (15%)
 
 ### 디버거 개선
 - [x] **표현식 레벨 위치 정보** - 함수 호출에 `!dbg` 위치 메타데이터 추가 (완료일: 2026-01-20)
@@ -368,9 +368,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - AF_INET6, IPPROTO_IPV6, IPV6_V6ONLY 상수 추가
 
 ### 추가 표준 라이브러리
-- [ ] **PriorityQueue<T>** - 우선순위 큐 (`std/priority_queue.vais`)
-  - 힙 기반 구현
-  - min-heap / max-heap 지원
+- [x] **PriorityQueue<T>** - 우선순위 큐 (`std/priority_queue.vais`) (완료일: 2026-01-20)
+  - 힙 기반 구현 (min-heap)
+  - push, pop, peek 연산 지원
+  - 동적 크기 조정 (grow)
 - [ ] **BTreeMap<K, V>** - B-트리 맵 (`std/btreemap.vais`)
   - 정렬된 키 순회 지원
   - 범위 쿼리 지원
@@ -397,7 +398,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 1: 핵심 컴파일러 | ✅ 완료 | 100% |
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
-| Phase 4: 향후 개선 | 🔄 진행 중 | 10% |
+| Phase 4: 향후 개선 | 🔄 진행 중 | 15% |
 
 ---
 
