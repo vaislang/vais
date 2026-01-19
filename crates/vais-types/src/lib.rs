@@ -2,6 +2,7 @@
 //!
 //! Static type checking with inference for AI-optimized code generation.
 
+pub mod error_report;
 pub mod exhaustiveness;
 mod traits;
 
@@ -16,37 +17,106 @@ use traits::TraitImpl;
 #[derive(Debug, Error)]
 pub enum TypeError {
     #[error("Type mismatch: expected {expected}, found {found}")]
-    Mismatch { expected: String, found: String },
+    Mismatch {
+        expected: String,
+        found: String,
+        span: Option<Span>,
+    },
 
     #[error("Undefined variable: {0}")]
-    UndefinedVar(String),
+    UndefinedVar(String, Option<Span>),
 
     #[error("Undefined type: {0}")]
-    UndefinedType(String),
+    UndefinedType(String, Option<Span>),
 
     #[error("Undefined function: {0}")]
-    UndefinedFunction(String),
+    UndefinedFunction(String, Option<Span>),
 
     #[error("Cannot call non-function type: {0}")]
-    NotCallable(String),
+    NotCallable(String, Option<Span>),
 
     #[error("Wrong number of arguments: expected {expected}, got {got}")]
-    ArgCount { expected: usize, got: usize },
+    ArgCount {
+        expected: usize,
+        got: usize,
+        span: Option<Span>,
+    },
 
     #[error("Cannot infer type")]
     CannotInfer,
 
     #[error("Duplicate definition: {0}")]
-    Duplicate(String),
+    Duplicate(String, Option<Span>),
 
     #[error("Cannot assign to immutable variable: {0}")]
-    ImmutableAssign(String),
+    ImmutableAssign(String, Option<Span>),
 
     #[error("Non-exhaustive match: missing patterns {0}")]
-    NonExhaustiveMatch(String),
+    NonExhaustiveMatch(String, Option<Span>),
 
     #[error("Unreachable pattern at arm {0}")]
-    UnreachablePattern(usize),
+    UnreachablePattern(usize, Option<Span>),
+}
+
+impl TypeError {
+    /// Get the span associated with this error, if available
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            TypeError::Mismatch { span, .. } => *span,
+            TypeError::UndefinedVar(_, span) => *span,
+            TypeError::UndefinedType(_, span) => *span,
+            TypeError::UndefinedFunction(_, span) => *span,
+            TypeError::NotCallable(_, span) => *span,
+            TypeError::ArgCount { span, .. } => *span,
+            TypeError::CannotInfer => None,
+            TypeError::Duplicate(_, span) => *span,
+            TypeError::ImmutableAssign(_, span) => *span,
+            TypeError::NonExhaustiveMatch(_, span) => *span,
+            TypeError::UnreachablePattern(_, span) => *span,
+        }
+    }
+
+    /// Get the error code for this error
+    pub fn error_code(&self) -> &str {
+        match self {
+            TypeError::Mismatch { .. } => "E001",
+            TypeError::UndefinedVar(..) => "E002",
+            TypeError::UndefinedType(..) => "E003",
+            TypeError::UndefinedFunction(..) => "E004",
+            TypeError::NotCallable(..) => "E005",
+            TypeError::ArgCount { .. } => "E006",
+            TypeError::CannotInfer => "E007",
+            TypeError::Duplicate(..) => "E008",
+            TypeError::ImmutableAssign(..) => "E009",
+            TypeError::NonExhaustiveMatch(..) => "E010",
+            TypeError::UnreachablePattern(..) => "E011",
+        }
+    }
+
+    /// Get a helpful message for this error
+    pub fn help(&self) -> Option<String> {
+        match self {
+            TypeError::Mismatch { expected, found, .. } => {
+                if expected == "i64" && found == "Str" {
+                    Some("consider converting the string to a number".to_string())
+                } else if expected.starts_with('i') || expected.starts_with('u') || expected.starts_with('f') {
+                    Some(format!("try using a type cast or conversion function"))
+                } else {
+                    None
+                }
+            }
+            TypeError::UndefinedVar(name, _) => {
+                Some(format!("variable '{}' not found in this scope", name))
+            }
+            TypeError::UndefinedFunction(name, _) => {
+                Some(format!("function '{}' not found in this scope", name))
+            }
+            TypeError::ImmutableAssign(name, _) => {
+                Some(format!("consider declaring '{}' as mutable: '{}: mut Type'", name, name))
+            }
+            _ => None,
+        }
+    }
 }
 
 type TypeResult<T> = Result<T, TypeError>;
@@ -783,7 +853,7 @@ impl TypeChecker {
     fn register_function(&mut self, f: &Function) -> TypeResult<()> {
         let name = f.name.node.clone();
         if self.functions.contains_key(&name) {
-            return Err(TypeError::Duplicate(name));
+            return Err(TypeError::Duplicate(name, None));
         }
 
         // Set current generics for type resolution
@@ -831,7 +901,7 @@ impl TypeChecker {
     fn register_struct(&mut self, s: &Struct) -> TypeResult<()> {
         let name = s.name.node.clone();
         if self.structs.contains_key(&name) {
-            return Err(TypeError::Duplicate(name));
+            return Err(TypeError::Duplicate(name, None));
         }
 
         // Set current generics for type resolution
@@ -899,7 +969,7 @@ impl TypeChecker {
     fn register_enum(&mut self, e: &Enum) -> TypeResult<()> {
         let name = e.name.node.clone();
         if self.enums.contains_key(&name) {
-            return Err(TypeError::Duplicate(name));
+            return Err(TypeError::Duplicate(name, None));
         }
 
         let mut variants = HashMap::new();
@@ -962,7 +1032,7 @@ impl TypeChecker {
 
             // Check trait exists
             if !self.traits.contains_key(&trait_name_str) {
-                return Err(TypeError::UndefinedType(format!("trait {}", trait_name_str)));
+                return Err(TypeError::UndefinedType(format!("trait {}", trait_name_str), None));
             }
 
             // Record that this type implements this trait
@@ -984,6 +1054,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: format!("implementation of method '{}' from trait '{}'", method_name, trait_name_str),
                             found: "missing".to_string(),
+                            span: None,
                         });
                     }
                 }
@@ -1042,7 +1113,7 @@ impl TypeChecker {
     fn register_trait(&mut self, t: &vais_ast::Trait) -> TypeResult<()> {
         let name = t.name.node.clone();
         if self.traits.contains_key(&name) {
-            return Err(TypeError::Duplicate(name));
+            return Err(TypeError::Duplicate(name, None));
         }
 
         // Validate super traits exist
@@ -1123,7 +1194,7 @@ impl TypeChecker {
     fn register_type_alias(&mut self, t: &TypeAlias) -> TypeResult<()> {
         let name = t.name.node.clone();
         if self.type_aliases.contains_key(&name) {
-            return Err(TypeError::Duplicate(name));
+            return Err(TypeError::Duplicate(name, None));
         }
 
         let resolved = self.resolve_type(&t.ty.node);
@@ -1308,7 +1379,7 @@ impl TypeChecker {
                         });
                     }
                 }
-                Err(TypeError::UndefinedFunction("@".to_string()))
+                Err(TypeError::UndefinedFunction("@".to_string(), None))
             }
 
             Expr::Binary { op, left, right } => {
@@ -1321,6 +1392,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
                                 found: left_type.to_string(),
+                                span: None,
                             });
                         }
                         self.unify(&left_type, &right_type)?;
@@ -1331,6 +1403,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
                                 found: left_type.to_string(),
+                                span: None,
                             });
                         }
                         self.unify(&left_type, &right_type)?;
@@ -1350,6 +1423,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: left_type.to_string(),
+                                span: None,
                             });
                         }
                         self.unify(&left_type, &right_type)?;
@@ -1366,6 +1440,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
                                 found: inner_type.to_string(),
+                                span: None,
                             });
                         }
                         Ok(inner_type)
@@ -1379,6 +1454,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: inner_type.to_string(),
+                                span: None,
                             });
                         }
                         Ok(inner_type)
@@ -1502,6 +1578,7 @@ impl TypeChecker {
                             return Err(TypeError::ArgCount {
                                 expected: params.len(),
                                 got: args.len(),
+                                span: None,
                             });
                         }
 
@@ -1512,7 +1589,7 @@ impl TypeChecker {
 
                         Ok(*ret)
                     }
-                    _ => Err(TypeError::NotCallable(func_type.to_string())),
+                    _ => Err(TypeError::NotCallable(func_type.to_string(), None)),
                 }
             }
 
@@ -1535,6 +1612,7 @@ impl TypeChecker {
                                 return Err(TypeError::ArgCount {
                                     expected: param_types.len(),
                                     got: args.len(),
+                                    span: None,
                                 });
                             }
 
@@ -1564,6 +1642,7 @@ impl TypeChecker {
                         return Err(TypeError::ArgCount {
                             expected: param_types.len(),
                             got: args.len(),
+                            span: None,
                         });
                     }
 
@@ -1582,7 +1661,7 @@ impl TypeChecker {
                     return Ok(ret_type);
                 }
 
-                Err(TypeError::UndefinedFunction(method.node.clone()))
+                Err(TypeError::UndefinedFunction(method.node.clone(), None))
             }
 
             Expr::StaticMethodCall {
@@ -1605,6 +1684,7 @@ impl TypeChecker {
                             return Err(TypeError::ArgCount {
                                 expected: param_types.len(),
                                 got: args.len(),
+                                span: None,
                             });
                         }
 
@@ -1617,7 +1697,7 @@ impl TypeChecker {
                     }
                 }
 
-                Err(TypeError::UndefinedFunction(format!("{}::{}", type_name.node, method.node)))
+                Err(TypeError::UndefinedFunction(format!("{}::{}", type_name.node, method.node), None))
             }
 
             Expr::Field { expr: inner, field } => {
@@ -1644,7 +1724,7 @@ impl TypeChecker {
                     }
                 }
 
-                Err(TypeError::UndefinedVar(field.node.clone()))
+                Err(TypeError::UndefinedVar(field.node.clone(), None))
             }
 
             Expr::Index { expr: inner, index } => {
@@ -1663,6 +1743,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
+                                span: None,
                             });
                         } else {
                             Ok(*elem_type)
@@ -1681,6 +1762,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
+                                span: None,
                             });
                         } else {
                             Ok(*elem_type)
@@ -1689,6 +1771,7 @@ impl TypeChecker {
                     _ => Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
                         found: inner_type.to_string(),
+                        span: None,
                     }),
                 }
             }
@@ -1722,7 +1805,7 @@ impl TypeChecker {
                         if let Some(expected_type) = struct_def.fields.get(&field_name.node).cloned() {
                             self.unify(&expected_type, &value_type)?;
                         } else {
-                            return Err(TypeError::UndefinedVar(field_name.node.clone()));
+                            return Err(TypeError::UndefinedVar(field_name.node.clone(), None));
                         }
                     }
                     Ok(ResolvedType::Named {
@@ -1730,7 +1813,7 @@ impl TypeChecker {
                         generics: vec![],
                     })
                 } else {
-                    Err(TypeError::UndefinedType(name.node.clone()))
+                    Err(TypeError::UndefinedType(name.node.clone(), None))
                 }
             }
 
@@ -1743,6 +1826,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: "integer type".to_string(),
                             found: start_type.to_string(),
+                            span: None,
                         });
                     }
 
@@ -1753,6 +1837,7 @@ impl TypeChecker {
                             return Err(TypeError::Mismatch {
                                 expected: "integer type".to_string(),
                                 found: end_type.to_string(),
+                                span: None,
                             });
                         }
                         self.unify(&start_type, &end_type)?;
@@ -1766,6 +1851,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: "integer type".to_string(),
                             found: end_type.to_string(),
+                            span: None,
                         });
                     }
                     end_type
@@ -1795,6 +1881,7 @@ impl TypeChecker {
                     Err(TypeError::Mismatch {
                         expected: "Future<T>".to_string(),
                         found: inner_type.to_string(),
+                        span: None,
                     })
                 }
             }
@@ -1807,6 +1894,7 @@ impl TypeChecker {
                     Err(TypeError::Mismatch {
                         expected: "Result type".to_string(),
                         found: inner_type.to_string(),
+                        span: None,
                     })
                 }
             }
@@ -1818,6 +1906,7 @@ impl TypeChecker {
                     _ => Err(TypeError::Mismatch {
                         expected: "Optional or Result".to_string(),
                         found: inner_type.to_string(),
+                        span: None,
                     }),
                 }
             }
@@ -1836,6 +1925,7 @@ impl TypeChecker {
                     _ => Err(TypeError::Mismatch {
                         expected: "reference or pointer".to_string(),
                         found: inner_type.to_string(),
+                        span: None,
                     }),
                 }
             }
@@ -1845,7 +1935,7 @@ impl TypeChecker {
                 if let Expr::Ident(name) = &target.node {
                     let var_info = self.lookup_var_info(name)?;
                     if !var_info.is_mut {
-                        return Err(TypeError::ImmutableAssign(name.clone()));
+                        return Err(TypeError::ImmutableAssign(name.clone(), None));
                     }
                 }
 
@@ -1860,7 +1950,7 @@ impl TypeChecker {
                 if let Expr::Ident(name) = &target.node {
                     let var_info = self.lookup_var_info(name)?;
                     if !var_info.is_mut {
-                        return Err(TypeError::ImmutableAssign(name.clone()));
+                        return Err(TypeError::ImmutableAssign(name.clone(), None));
                     }
                 }
 
@@ -1880,7 +1970,7 @@ impl TypeChecker {
                 // Verify all captured variables exist in current scope
                 for var in &free_vars {
                     if self.lookup_var(var).is_none() {
-                        return Err(TypeError::UndefinedVar(var.clone()));
+                        return Err(TypeError::UndefinedVar(var.clone(), None));
                     }
                 }
 
@@ -2059,6 +2149,7 @@ impl TypeChecker {
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),
+                span: None,
             }),
         }
     }
@@ -2294,7 +2385,7 @@ impl TypeChecker {
             });
         }
 
-        Err(TypeError::UndefinedVar(name.to_string()))
+        Err(TypeError::UndefinedVar(name.to_string(), None))
     }
 
     /// Find a method from trait implementations for a given type

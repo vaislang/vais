@@ -3,7 +3,7 @@
 
 > **버전**: 0.0.1
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-01-19
+> **최종 업데이트**: 2026-01-20
 
 ---
 
@@ -53,7 +53,10 @@
 - [x] **Module System** - 모듈 import/export
 
 ### 남은 작업
-- [ ] 에러 메시지 개선
+- [x] 에러 메시지 개선 (완료일: 2026-01-20)
+  - ErrorReporter 모듈 추가 (줄 번호, 컬럼, 소스 코드 표시)
+  - TypeError/ParseError에 Span 정보 및 에러 코드 추가
+  - help 메시지 시스템 구현
 - [ ] 더 많은 타입 추론 케이스
 
 ---
@@ -188,7 +191,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Lexer | ✅ 완료 | 100% |
 | Parser | ✅ 완료 | 100% |
 | Type Checker | ✅ 완료 | 100% |
-| Code Generator | ✅ 완료 | 95% |
+| Code Generator | ✅ 완료 | 98% |
 | Standard Library | ✅ 완료 | 90% |
 | LSP | ✅ 완료 | 90% |
 | REPL | ✅ 완료 | 100% |
@@ -218,14 +221,27 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 5c2d61c Add VSCode extension and Math/IO standard library modules
 ```
 
-## 최근 변경사항 (2026-01-19)
+## 최근 변경사항 (2026-01-20)
 
-### 버그 수정
+### 에러 메시지 개선
+- **ErrorReporter 모듈** 추가 (`vais-types/src/error_report.rs`)
+  - 줄 번호, 컬럼, 소스 코드 스니펫 표시
+  - 에러 위치에 캐럿(^) 지시자 표시
+  - 컬러 출력 지원 (colored 크레이트)
+- **TypeError 개선**
+  - 모든 variant에 `Option<Span>` 필드 추가
+  - 에러 코드 시스템 (E001-E011)
+  - help 메시지 시스템 (수정 제안)
+- **ParseError 개선**
+  - 모든 variant에 span 정보 추가
+  - 에러 코드 시스템 (P001-P003)
+
+### 버그 수정 (2026-01-19)
 - **Codegen**: Nested if-else phi node predecessor 버그 수정
   - 문제: else 블록에 중첩된 if-else가 있을 때 phi 노드의 predecessor가 잘못 설정됨
-  - 해결: `current_block` 필드로 현재 basic block 추적, 중첩된 if-else의 merge 블록을 올바르게 참조
+  - 해결: `current_block` 필드로 현재 basic block 추적
 
-### 신규 기능
+### 신규 기능 (2026-01-19)
 - **Set<T>**: 해시 기반 집합 자료구조 추가 (`std/set.vais`)
 - **Deque<T>**: 원형 버퍼 기반 양방향 큐 추가 (`std/deque.vais`)
 

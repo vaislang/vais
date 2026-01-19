@@ -7,6 +7,7 @@ edition.workspace = true
 vais-ast = { path = "../vais-ast" }
 thiserror = { workspace = true }
 miette = { workspace = true }
+colored = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

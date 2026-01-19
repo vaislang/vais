@@ -15,9 +15,29 @@ pub enum ParseError {
         expected: String,
     },
     #[error("Unexpected end of file")]
-    UnexpectedEof,
+    UnexpectedEof { span: std::ops::Range<usize> },
     #[error("Invalid expression")]
     InvalidExpression,
+}
+
+impl ParseError {
+    /// Get the span associated with this error, if available
+    pub fn span(&self) -> Option<std::ops::Range<usize>> {
+        match self {
+            ParseError::UnexpectedToken { span, .. } => Some(span.clone()),
+            ParseError::UnexpectedEof { span } => Some(span.clone()),
+            ParseError::InvalidExpression => None,
+        }
+    }
+
+    /// Get the error code for this error
+    pub fn error_code(&self) -> &str {
+        match self {
+            ParseError::UnexpectedToken { .. } => "P001",
+            ParseError::UnexpectedEof { .. } => "P002",
+            ParseError::InvalidExpression => "P003",
+        }
+    }
 }
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -675,7 +695,8 @@ impl Parser {
 
     /// Parse type name (handles primitive types)
     fn parse_type_name(&mut self) -> ParseResult<String> {
-        let tok = self.advance().ok_or(ParseError::UnexpectedEof)?;
+        let span = self.current_span();
+        let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
 
         let name = match &tok.token {
             Token::I8 => "i8",
@@ -1419,7 +1440,8 @@ impl Parser {
     /// Parse primary expression
     fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
         let start = self.current_span().start;
-        let tok = self.advance().ok_or(ParseError::UnexpectedEof)?;
+        let span = self.current_span();
+        let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
 
         let expr = match tok.token {
             Token::Int(n) => Expr::Int(n),
@@ -1808,7 +1830,7 @@ impl Parser {
             let end = self.prev_span().end;
             Ok(Spanned::new(pattern, Span::new(start, end)))
         } else {
-            Err(ParseError::UnexpectedEof)
+            Err(ParseError::UnexpectedEof { span: self.current_span() })
         }
     }
 
@@ -1829,7 +1851,8 @@ impl Parser {
     /// Parse identifier
     /// Single-letter keywords can also be identifiers in non-keyword contexts
     fn parse_ident(&mut self) -> ParseResult<Spanned<String>> {
-        let tok = self.advance().ok_or(ParseError::UnexpectedEof)?;
+        let span = self.current_span();
+        let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
         let name = match &tok.token {
             Token::Ident(s) => s.clone(),
             // Single-letter keywords can be used as identifiers

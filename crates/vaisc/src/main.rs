@@ -12,12 +12,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
-use vais_ast::{Item, Module};
+use vais_ast::{Item, Module, Span};
 use vais_codegen::CodeGenerator;
 use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
-use vais_parser::parse;
-use vais_types::TypeChecker;
+use vais_parser::{parse, ParseError};
+use vais_types::{TypeChecker, TypeError, error_report::ErrorReporter};
 
 #[derive(Parser)]
 #[command(name = "vaisc")]
@@ -160,9 +160,13 @@ fn cmd_build(
     opt_level: u8,
     verbose: bool,
 ) -> Result<(), String> {
+    // Read source for error reporting
+    let main_source = fs::read_to_string(input)
+        .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
+
     // Parse main file and resolve imports
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
-    let merged_ast = load_module_with_imports(input, &mut loaded_modules, verbose)?;
+    let merged_ast = load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source)?;
 
     if verbose {
         println!("  {} total items (including imports)", merged_ast.items.len());
@@ -170,8 +174,10 @@ fn cmd_build(
 
     // Type check
     let mut checker = TypeChecker::new();
-    checker.check_module(&merged_ast)
-        .map_err(|e| format!("Type error: {}", e))?;
+    if let Err(e) = checker.check_module(&merged_ast) {
+        // Format error with source context
+        return Err(format_type_error(&e, &main_source, input));
+    }
 
     if verbose {
         println!("  {}", "Type check passed".green());
@@ -228,11 +234,58 @@ fn cmd_build(
     Ok(())
 }
 
+/// Format a type error with source context
+fn format_type_error(error: &TypeError, source: &str, path: &PathBuf) -> String {
+    let reporter = ErrorReporter::new(source)
+        .with_filename(path.to_str().unwrap_or("unknown"));
+
+    let span = error.span();
+    let title = error.to_string();
+    let help = error.help();
+
+    reporter.format_error(
+        error.error_code(),
+        &title,
+        span,
+        &title,
+        help.as_deref(),
+    )
+}
+
+/// Format a parse error with source context
+fn format_parse_error(error: &ParseError, source: &str, path: &PathBuf) -> String {
+    let reporter = ErrorReporter::new(source)
+        .with_filename(path.to_str().unwrap_or("unknown"));
+
+    let span = error.span().map(|s| Span::new(s.start, s.end));
+    let title = error.to_string();
+
+    reporter.format_error(
+        error.error_code(),
+        &title,
+        span,
+        &title,
+        None,
+    )
+}
+
 /// Load a module and recursively resolve its imports
 fn load_module_with_imports(
     path: &PathBuf,
     loaded: &mut HashSet<PathBuf>,
     verbose: bool,
+) -> Result<Module, String> {
+    let source = fs::read_to_string(path)
+        .map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
+    load_module_with_imports_internal(path, loaded, verbose, &source)
+}
+
+/// Internal function to load a module with source already read
+fn load_module_with_imports_internal(
+    path: &PathBuf,
+    loaded: &mut HashSet<PathBuf>,
+    verbose: bool,
+    source: &str,
 ) -> Result<Module, String> {
     // Canonicalize path to avoid duplicate loading
     let canonical = path.canonicalize()
@@ -244,10 +297,6 @@ fn load_module_with_imports(
     }
     loaded.insert(canonical.clone());
 
-    // Read and parse the file
-    let source = fs::read_to_string(path)
-        .map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-
     if verbose {
         println!("{} {}", "Compiling".green().bold(), path.display());
     }
@@ -256,7 +305,7 @@ fn load_module_with_imports(
         .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
 
     let ast = parse(&source)
-        .map_err(|e| format!("Parser error in '{}': {}", path.display(), e))?;
+        .map_err(|e| format_parse_error(&e, source, path))?;
 
     if verbose {
         println!("  {} items", ast.items.len());
@@ -452,12 +501,13 @@ fn cmd_check(input: &PathBuf, verbose: bool) -> Result<(), String> {
 
     // Parse
     let ast = parse(&source)
-        .map_err(|e| format!("Parser error: {}", e))?;
+        .map_err(|e| format_parse_error(&e, &source, input))?;
 
     // Type check
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast)
-        .map_err(|e| format!("Type error: {}", e))?;
+    if let Err(e) = checker.check_module(&ast) {
+        return Err(format_type_error(&e, &source, input));
+    }
 
     println!("{} No errors found", "OK".green().bold());
     Ok(())

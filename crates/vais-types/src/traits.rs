@@ -117,6 +117,7 @@ impl TypeChecker {
                         return Err(TypeError::Mismatch {
                             expected: format!("type implementing trait '{}'", trait_name),
                             found: format!("type '{}' which does not implement '{}'", concrete_type, trait_name),
+                            span: None,
                         });
                     }
                 }

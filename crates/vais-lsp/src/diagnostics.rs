@@ -16,7 +16,7 @@ pub fn parse_error_to_diagnostic(err: &ParseError, source: &str) -> Diagnostic {
                 format!("Unexpected token {:?}, expected {}", found, expected),
             )
         }
-        ParseError::UnexpectedEof => {
+        ParseError::UnexpectedEof { .. } => {
             let pos = offset_to_position(source, source.len());
             (pos, pos, "Unexpected end of file".to_string())
         }
