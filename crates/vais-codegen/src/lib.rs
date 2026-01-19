@@ -5,6 +5,7 @@
 //! Note: This is a placeholder structure. Full LLVM integration requires
 //! the inkwell crate and LLVM installation.
 
+pub mod formatter;
 pub mod optimize;
 mod builtins;
 mod expr;

@@ -109,6 +109,20 @@ enum Commands {
 
     /// Show version information
     Version,
+
+    /// Format Vais source files
+    Fmt {
+        /// Input source file(s) or directory
+        input: PathBuf,
+
+        /// Write formatted output to stdout instead of modifying files
+        #[arg(long)]
+        check: bool,
+
+        /// Indentation size (default: 4)
+        #[arg(long, default_value = "4")]
+        indent: usize,
+    },
 }
 
 fn main() {
@@ -134,6 +148,9 @@ fn main() {
             println!("{} {}", "vaisc".bold(), env!("CARGO_PKG_VERSION"));
             println!("Vais 0.0.1 - AI-optimized systems programming language");
             Ok(())
+        }
+        Some(Commands::Fmt { input, check, indent }) => {
+            cmd_fmt(&input, check, indent)
         }
         None => {
             // Direct file compilation
@@ -511,4 +528,77 @@ fn cmd_check(input: &PathBuf, verbose: bool) -> Result<(), String> {
 
     println!("{} No errors found", "OK".green().bold());
     Ok(())
+}
+
+fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(), String> {
+    use vais_codegen::formatter::{Formatter, FormatConfig};
+
+    // Handle directory or single file
+    let files: Vec<PathBuf> = if input.is_dir() {
+        walkdir(input, "vais")
+    } else {
+        vec![input.clone()]
+    };
+
+    if files.is_empty() {
+        return Err("No .vais files found".to_string());
+    }
+
+    let config = FormatConfig {
+        indent_size: indent,
+        max_line_length: 100,
+        use_tabs: false,
+    };
+
+    let mut needs_formatting = false;
+
+    for file in &files {
+        let source = fs::read_to_string(file)
+            .map_err(|e| format!("Cannot read '{}': {}", file.display(), e))?;
+
+        let module = vais_parser::parse(&source)
+            .map_err(|e| format!("Parse error in '{}': {}", file.display(), e))?;
+
+        let mut formatter = Formatter::new(config.clone());
+        let formatted = formatter.format_module(&module);
+
+        if check {
+            // Check mode: just report if file needs formatting
+            if source != formatted {
+                println!("{} needs formatting: {}", "Would reformat".yellow(), file.display());
+                needs_formatting = true;
+            }
+        } else {
+            // Format mode: write back to file
+            if source != formatted {
+                fs::write(file, &formatted)
+                    .map_err(|e| format!("Cannot write '{}': {}", file.display(), e))?;
+                println!("{} {}", "Formatted".green().bold(), file.display());
+            } else {
+                println!("{} {} (no changes)", "OK".green(), file.display());
+            }
+        }
+    }
+
+    if check && needs_formatting {
+        return Err("Some files need formatting. Run 'vaisc fmt' to fix.".to_string());
+    }
+
+    Ok(())
+}
+
+/// Walk directory recursively to find files with given extension
+fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                result.extend(walkdir(&path, ext));
+            } else if path.extension().map_or(false, |e| e == ext) {
+                result.push(path);
+            }
+        }
+    }
+    result
 }

@@ -142,8 +142,12 @@
   - [x] TUTORIAL.md - 튜토리얼
   - [x] STDLIB.md - 표준 라이브러리 레퍼런스
 
+- [x] **Formatter** (`vais fmt`) - 코드 포맷터 **NEW**
+  - AST 기반 pretty-print
+  - 들여쓰기 설정 (--indent)
+  - 체크 모드 (--check)
+
 ### 남은 작업
-- [ ] **Formatter** - 코드 포맷터
 - [ ] **Debugger** - 디버깅 지원
 
 ---
@@ -201,15 +205,16 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | REPL | ✅ 완료 | 100% |
 | Optimization | ✅ 완료 | 100% |
 | VSCode Extension | ✅ 완료 | 95% |
+| Formatter | ✅ 완료 | 100% |
 
-**전체 진행률: ~95%**
+**전체 진행률: ~96%**
 
 ---
 
 ## 🧪 테스트 현황
 
 ```
-✅ 34 tests passed, 0 failed
+✅ 36 tests passed, 0 failed
 ✅ 40+ example files compiled and running
 ```
 
@@ -226,6 +231,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ```
 
 ## 최근 변경사항 (2026-01-20)
+
+### 코드 포맷터 추가
+- **Formatter 모듈** (`vais-codegen/src/formatter.rs`)
+  - AST 기반 pretty-print 구현
+  - 모든 언어 구성요소 지원 (함수, 구조체, 열거형, 트레이트, impl 등)
+  - 중첩된 if-else, loop, match 적절한 들여쓰기
+- **`vaisc fmt` 서브커맨드** 추가
+  - `--check` 모드: 포맷팅 필요 여부 확인
+  - `--indent` 옵션: 들여쓰기 크기 설정
+  - 디렉토리 재귀 처리 지원
 
 ### 타입 추론 개선
 - **fresh_type_var() 버그 수정**
@@ -264,8 +279,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ## 🎯 다음 목표
 
 1. **네트워크 지원**: Net 모듈 (TCP/UDP 소켓)
-2. **코드 포맷터**: 자동 포맷팅
-3. **디버거**: 디버깅 지원
+2. **디버거**: 디버깅 지원
 
 ---
 
