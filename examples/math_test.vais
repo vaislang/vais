@@ -1,0 +1,201 @@
+# Math module test - comprehensive testing of std/math functions
+U std/math
+
+F main() -> i64 {
+    puts("=== Math Module Test ===")
+    putchar(10)
+
+    # Test mathematical constants
+    puts("--- Constants ---")
+    puts("PI = ")
+    print_f64(PI)
+    putchar(10)
+
+    puts("E = ")
+    print_f64(E)
+    putchar(10)
+
+    puts("TAU = ")
+    print_f64(TAU)
+    putchar(10)
+    putchar(10)
+
+    # Test absolute value functions
+    puts("--- Absolute Value ---")
+    puts("abs_i64(-42) = ")
+    print_i64(abs_i64(0 - 42))
+    putchar(10)
+
+    puts("abs(-3.14) = ")
+    print_f64(abs(0.0 - 3.14))
+    putchar(10)
+    putchar(10)
+
+    # Test min/max functions
+    puts("--- Min/Max Functions ---")
+    puts("min_i64(10, 20) = ")
+    print_i64(min_i64(10, 20))
+    putchar(10)
+
+    puts("max_i64(10, 20) = ")
+    print_i64(max_i64(10, 20))
+    putchar(10)
+
+    puts("min(3.5, 2.1) = ")
+    print_f64(min(3.5, 2.1))
+    putchar(10)
+
+    puts("max(3.5, 2.1) = ")
+    print_f64(max(3.5, 2.1))
+    putchar(10)
+    putchar(10)
+
+    # Test clamp functions
+    puts("--- Clamp Functions ---")
+    puts("clamp_i64(15, 10, 20) = ")
+    print_i64(clamp_i64(15, 10, 20))
+    putchar(10)
+
+    puts("clamp_i64(5, 10, 20) = ")
+    print_i64(clamp_i64(5, 10, 20))
+    putchar(10)
+
+    puts("clamp_i64(25, 10, 20) = ")
+    print_i64(clamp_i64(25, 10, 20))
+    putchar(10)
+
+    puts("clamp(15.5, 10.0, 20.0) = ")
+    print_f64(clamp(15.5, 10.0, 20.0))
+    putchar(10)
+    putchar(10)
+
+    # Test basic math functions
+    puts("--- Basic Math Functions ---")
+    puts("sqrt(16.0) = ")
+    print_f64(sqrt(16.0))
+    putchar(10)
+
+    puts("sqrt(2.0) = ")
+    print_f64(sqrt(2.0))
+    putchar(10)
+
+    puts("pow(2.0, 8.0) = ")
+    print_f64(pow(2.0, 8.0))
+    putchar(10)
+
+    puts("pow(3.0, 3.0) = ")
+    print_f64(pow(3.0, 3.0))
+    putchar(10)
+    putchar(10)
+
+    # Test rounding functions
+    puts("--- Rounding Functions ---")
+    puts("floor(3.7) = ")
+    print_f64(floor(3.7))
+    putchar(10)
+
+    puts("ceil(3.2) = ")
+    print_f64(ceil(3.2))
+    putchar(10)
+
+    puts("round(3.5) = ")
+    print_f64(round(3.5))
+    putchar(10)
+
+    puts("round(3.4) = ")
+    print_f64(round(3.4))
+    putchar(10)
+    putchar(10)
+
+    # Test trigonometric functions
+    puts("--- Trigonometric Functions ---")
+    puts("sin(0.0) = ")
+    print_f64(sin(0.0))
+    putchar(10)
+
+    puts("cos(0.0) = ")
+    print_f64(cos(0.0))
+    putchar(10)
+
+    puts("tan(0.0) = ")
+    print_f64(tan(0.0))
+    putchar(10)
+
+    # Test with PI/2 (90 degrees)
+    half_pi := PI / 2.0
+    puts("sin(PI/2) = ")
+    print_f64(sin(half_pi))
+    putchar(10)
+
+    puts("cos(PI/2) = ")
+    print_f64(cos(half_pi))
+    putchar(10)
+    putchar(10)
+
+    # Test inverse trigonometric functions
+    puts("--- Inverse Trigonometric Functions ---")
+    puts("asin(0.5) = ")
+    print_f64(asin(0.5))
+    putchar(10)
+
+    puts("acos(0.5) = ")
+    print_f64(acos(0.5))
+    putchar(10)
+
+    puts("atan(1.0) = ")
+    print_f64(atan(1.0))
+    putchar(10)
+
+    puts("atan2(1.0, 1.0) = ")
+    print_f64(atan2(1.0, 1.0))
+    putchar(10)
+    putchar(10)
+
+    # Test logarithmic and exponential functions
+    puts("--- Logarithmic and Exponential ---")
+    puts("log(E) = ")
+    print_f64(log(E))
+    putchar(10)
+
+    puts("log10(100.0) = ")
+    print_f64(log10(100.0))
+    putchar(10)
+
+    puts("log2(8.0) = ")
+    print_f64(log2(8.0))
+    putchar(10)
+
+    puts("exp(1.0) = ")
+    print_f64(exp(1.0))
+    putchar(10)
+
+    puts("exp(2.0) = ")
+    print_f64(exp(2.0))
+    putchar(10)
+    putchar(10)
+
+    # Test helper functions
+    puts("--- Helper Functions ---")
+    puts("deg_to_rad(180.0) = ")
+    print_f64(deg_to_rad(180.0))
+    putchar(10)
+
+    puts("rad_to_deg(PI) = ")
+    print_f64(rad_to_deg(PI))
+    putchar(10)
+
+    # Test approx_eq
+    puts("approx_eq(3.14159, PI, 0.001) = ")
+    result := approx_eq(3.14159, PI, 0.001)
+    print_i64(result)
+    putchar(10)
+
+    puts("approx_eq(3.0, PI, 0.001) = ")
+    result2 := approx_eq(3.0, PI, 0.001)
+    print_i64(result2)
+    putchar(10)
+    putchar(10)
+
+    puts("=== All tests complete! ===")
+    0
+}

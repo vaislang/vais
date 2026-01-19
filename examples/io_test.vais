@@ -1,0 +1,171 @@
+# IO module test - interactive testing of std/io input functions
+U std/io
+U std/math
+
+F main() -> i64 {
+    puts("=== IO Module Test ===")
+    putchar(10)
+
+    # Test 1: Read an integer
+    puts("--- Test 1: Reading Integers ---")
+    puts("Enter an integer: ")
+    num := read_i64()
+    puts("You entered: ")
+    print_i64(num)
+    putchar(10)
+    putchar(10)
+
+    # Test 2: Read a float
+    puts("--- Test 2: Reading Floats ---")
+    puts("Enter a decimal number: ")
+    decimal := read_f64()
+    puts("You entered: ")
+    print_f64(decimal)
+    putchar(10)
+    putchar(10)
+
+    # Test 3: Simple calculator
+    puts("=== Simple Calculator ===")
+    putchar(10)
+
+    puts("Enter first number: ")
+    a := read_f64()
+
+    puts("Enter second number: ")
+    b := read_f64()
+
+    putchar(10)
+    puts("Results:")
+
+    puts("Addition: ")
+    print_f64(a)
+    puts(" + ")
+    print_f64(b)
+    puts(" = ")
+    print_f64(a + b)
+    putchar(10)
+
+    puts("Subtraction: ")
+    print_f64(a)
+    puts(" - ")
+    print_f64(b)
+    puts(" = ")
+    print_f64(a - b)
+    putchar(10)
+
+    puts("Multiplication: ")
+    print_f64(a)
+    puts(" * ")
+    print_f64(b)
+    puts(" = ")
+    print_f64(a * b)
+    putchar(10)
+
+    puts("Division: ")
+    print_f64(a)
+    puts(" / ")
+    print_f64(b)
+    puts(" = ")
+    I b == 0.0 {
+        puts("Error: Division by zero!")
+        putchar(10)
+    } E {
+        print_f64(a / b)
+        putchar(10)
+    }
+
+    puts("Power: ")
+    print_f64(a)
+    puts(" ^ ")
+    print_f64(b)
+    puts(" = ")
+    print_f64(pow(a, b))
+    putchar(10)
+    putchar(10)
+
+    # Test 4: Number guessing game
+    puts("=== Number Guessing Game ===")
+    puts("I'm thinking of a number between 1 and 10")
+    putchar(10)
+
+    # Simple "random" number using some calculation
+    secret := 7
+
+    puts("Enter your guess: ")
+    guess := read_i64()
+
+    I guess == secret {
+        puts("Correct! You guessed it!")
+        putchar(10)
+    } E I guess < secret {
+        puts("Too low! The number was: ")
+        print_i64(secret)
+        putchar(10)
+    } E {
+        puts("Too high! The number was: ")
+        print_i64(secret)
+        putchar(10)
+    }
+    putchar(10)
+
+    # Test 5: Using prompt functions
+    puts("=== Testing Prompt Functions ===")
+    value1 := prompt_i64("Enter an integer with prompt: ")
+    puts("Received: ")
+    print_i64(value1)
+    putchar(10)
+    putchar(10)
+
+    value2 := prompt_f64("Enter a float with prompt: ")
+    puts("Received: ")
+    print_f64(value2)
+    putchar(10)
+    putchar(10)
+
+    # Test 6: Math with user input
+    puts("=== Math Function Test ===")
+    puts("Enter a number to compute sqrt, sin, and cos: ")
+    x := read_f64()
+
+    putchar(10)
+    puts("sqrt(")
+    print_f64(x)
+    puts(") = ")
+    I x >= 0.0 {
+        print_f64(sqrt(x))
+        putchar(10)
+    } E {
+        puts("Error: Cannot compute sqrt of negative number")
+        putchar(10)
+    }
+
+    puts("sin(")
+    print_f64(x)
+    puts(") = ")
+    print_f64(sin(x))
+    putchar(10)
+
+    puts("cos(")
+    print_f64(x)
+    puts(") = ")
+    print_f64(cos(x))
+    putchar(10)
+
+    puts("exp(")
+    print_f64(x)
+    puts(") = ")
+    print_f64(exp(x))
+    putchar(10)
+
+    I x > 0.0 {
+        puts("log(")
+        print_f64(x)
+        puts(") = ")
+        print_f64(log(x))
+        putchar(10)
+    }
+    putchar(10)
+
+    puts("=== All IO tests complete! ===")
+    0
+}
