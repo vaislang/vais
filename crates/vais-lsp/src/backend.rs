@@ -10,6 +10,67 @@ use vais_parser::parse;
 
 use crate::semantic::get_semantic_tokens;
 
+/// Check if a position is within a range
+fn position_in_range(position: &Position, range: &Range) -> bool {
+    if position.line < range.start.line || position.line > range.end.line {
+        return false;
+    }
+    if position.line == range.start.line && position.character < range.start.character {
+        return false;
+    }
+    if position.line == range.end.line && position.character > range.end.character {
+        return false;
+    }
+    true
+}
+
+/// Get hover information for builtin functions
+fn get_builtin_hover(name: &str) -> Option<Hover> {
+    let info = match name {
+        "puts" => Some(("fn(str) -> i64", "Print a string to stdout with newline")),
+        "putchar" => Some(("fn(i64) -> i64", "Print a single character (ASCII value)")),
+        "print_i64" => Some(("fn(i64) -> i64", "Print a 64-bit signed integer")),
+        "print_f64" => Some(("fn(f64) -> i64", "Print a 64-bit floating point number")),
+        "malloc" => Some(("fn(i64) -> i64", "Allocate `size` bytes of heap memory, returns pointer")),
+        "free" => Some(("fn(i64) -> i64", "Free heap memory at pointer")),
+        "memcpy" => Some(("fn(i64, i64, i64) -> i64", "Copy `n` bytes from `src` to `dst`")),
+        "strlen" => Some(("fn(i64) -> i64", "Get length of null-terminated string")),
+        "load_i64" => Some(("fn(i64) -> i64", "Load a 64-bit integer from memory address")),
+        "store_i64" => Some(("fn(i64, i64) -> i64", "Store a 64-bit integer to memory address")),
+        "load_byte" => Some(("fn(i64) -> i64", "Load a single byte from memory address")),
+        "store_byte" => Some(("fn(i64, i64) -> i64", "Store a single byte to memory address")),
+        "sqrt" => Some(("fn(f64) -> f64", "Square root (from std/math)")),
+        "sin" => Some(("fn(f64) -> f64", "Sine function (from std/math)")),
+        "cos" => Some(("fn(f64) -> f64", "Cosine function (from std/math)")),
+        "tan" => Some(("fn(f64) -> f64", "Tangent function (from std/math)")),
+        "pow" => Some(("fn(f64, f64) -> f64", "Power function x^y (from std/math)")),
+        "log" => Some(("fn(f64) -> f64", "Natural logarithm (from std/math)")),
+        "exp" => Some(("fn(f64) -> f64", "Exponential e^x (from std/math)")),
+        "floor" => Some(("fn(f64) -> f64", "Round down to integer (from std/math)")),
+        "ceil" => Some(("fn(f64) -> f64", "Round up to integer (from std/math)")),
+        "round" => Some(("fn(f64) -> f64", "Round to nearest integer (from std/math)")),
+        "abs" => Some(("fn(f64) -> f64", "Absolute value for f64 (from std/math)")),
+        "abs_i64" => Some(("fn(i64) -> i64", "Absolute value for i64 (from std/math)")),
+        "min" => Some(("fn(f64, f64) -> f64", "Minimum of two f64 values (from std/math)")),
+        "max" => Some(("fn(f64, f64) -> f64", "Maximum of two f64 values (from std/math)")),
+        "PI" => Some(("const f64 = 3.14159...", "Mathematical constant π (from std/math)")),
+        "TAU" => Some(("const f64 = 6.28318...", "Mathematical constant τ = 2π (from std/math)")),
+        "read_i64" => Some(("fn() -> i64", "Read integer from stdin (from std/io)")),
+        "read_f64" => Some(("fn() -> f64", "Read float from stdin (from std/io)")),
+        "read_line" => Some(("fn(i64, i64) -> i64", "Read line into buffer (from std/io)")),
+        "read_char" => Some(("fn() -> i64", "Read single character (from std/io)")),
+        _ => None,
+    };
+
+    info.map(|(sig, doc)| Hover {
+        contents: HoverContents::Markup(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: format!("```vais\n{}\n```\n\n{}\n\n*Built-in function*", sig, doc),
+        }),
+        range: None,
+    })
+}
+
 /// Symbol definition information
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -533,15 +594,30 @@ impl LanguageServer for VaisBackend {
         let position = params.text_document_position_params.position;
 
         if let Some(doc) = self.documents.get(uri) {
+            // Convert position to offset
+            let line = position.line as usize;
+            let col = position.character as usize;
+            let line_start = doc.content.line_to_char(line);
+            let offset = line_start + col;
+
+            // Get identifier at position
             if let Some(ast) = &doc.ast {
+                let ident = self.get_identifier_at(ast, offset);
+
+                // Check for builtin functions first
+                if let Some(ref name) = ident {
+                    if let Some(hover) = get_builtin_hover(name) {
+                        return Ok(Some(hover));
+                    }
+                }
+
                 // Find the item at the cursor position
                 for item in &ast.items {
                     match &item.node {
                         vais_ast::Item::Function(f) => {
                             let range = self.span_to_range(&doc.content, &f.name.span);
-                            if position.line >= range.start.line
-                                && position.line <= range.end.line
-                            {
+                            if position_in_range(&position, &range) ||
+                               ident.as_ref() == Some(&f.name.node) {
                                 let params_str: Vec<String> = f
                                     .params
                                     .iter()
@@ -554,8 +630,10 @@ impl LanguageServer for VaisBackend {
                                     .map(|t| format!(" -> {:?}", t.node))
                                     .unwrap_or_default();
 
+                                let is_async = if f.is_async { "A " } else { "" };
                                 let signature = format!(
-                                    "F {}({}){}",
+                                    "{}F {}({}){}",
+                                    is_async,
                                     f.name.node,
                                     params_str.join(", "),
                                     ret_str
@@ -564,7 +642,7 @@ impl LanguageServer for VaisBackend {
                                 return Ok(Some(Hover {
                                     contents: HoverContents::Markup(MarkupContent {
                                         kind: MarkupKind::Markdown,
-                                        value: format!("```vais\n{}\n```", signature),
+                                        value: format!("```vais\n{}\n```\n\nFunction defined in current file", signature),
                                     }),
                                     range: Some(range),
                                 }));
@@ -572,28 +650,148 @@ impl LanguageServer for VaisBackend {
                         }
                         vais_ast::Item::Struct(s) => {
                             let range = self.span_to_range(&doc.content, &s.name.span);
-                            if position.line >= range.start.line
-                                && position.line <= range.end.line
-                            {
+                            if position_in_range(&position, &range) ||
+                               ident.as_ref() == Some(&s.name.node) {
                                 let fields_str: Vec<String> = s
                                     .fields
                                     .iter()
-                                    .map(|f| format!("  {}: {:?}", f.name.node, f.ty.node))
+                                    .map(|f| format!("    {}: {:?}", f.name.node, f.ty.node))
                                     .collect();
 
+                                let generics = if s.generics.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("<{}>", s.generics.iter().map(|g| g.name.node.clone()).collect::<Vec<_>>().join(", "))
+                                };
+
                                 let signature = format!(
-                                    "S {} {{\n{}\n}}",
+                                    "S {}{} {{\n{}\n}}",
                                     s.name.node,
+                                    generics,
                                     fields_str.join(",\n")
                                 );
 
                                 return Ok(Some(Hover {
                                     contents: HoverContents::Markup(MarkupContent {
                                         kind: MarkupKind::Markdown,
-                                        value: format!("```vais\n{}\n```", signature),
+                                        value: format!("```vais\n{}\n```\n\nStruct with {} field(s)", signature, s.fields.len()),
                                     }),
                                     range: Some(range),
                                 }));
+                            }
+                        }
+                        vais_ast::Item::Enum(e) => {
+                            let range = self.span_to_range(&doc.content, &e.name.span);
+                            if position_in_range(&position, &range) ||
+                               ident.as_ref() == Some(&e.name.node) {
+                                let variants_str: Vec<String> = e
+                                    .variants
+                                    .iter()
+                                    .map(|v| format!("    {}", v.name.node))
+                                    .collect();
+
+                                let generics = if e.generics.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("<{}>", e.generics.iter().map(|g| g.name.node.clone()).collect::<Vec<_>>().join(", "))
+                                };
+
+                                let signature = format!(
+                                    "E {}{} {{\n{}\n}}",
+                                    e.name.node,
+                                    generics,
+                                    variants_str.join(",\n")
+                                );
+
+                                return Ok(Some(Hover {
+                                    contents: HoverContents::Markup(MarkupContent {
+                                        kind: MarkupKind::Markdown,
+                                        value: format!("```vais\n{}\n```\n\nEnum with {} variant(s)", signature, e.variants.len()),
+                                    }),
+                                    range: Some(range),
+                                }));
+                            }
+
+                            // Check if hovering over a variant
+                            for variant in &e.variants {
+                                if ident.as_ref() == Some(&variant.name.node) {
+                                    return Ok(Some(Hover {
+                                        contents: HoverContents::Markup(MarkupContent {
+                                            kind: MarkupKind::Markdown,
+                                            value: format!("```vais\n{}::{}\n```\n\nVariant of enum `{}`", e.name.node, variant.name.node, e.name.node),
+                                        }),
+                                        range: None,
+                                    }));
+                                }
+                            }
+                        }
+                        vais_ast::Item::Trait(t) => {
+                            let range = self.span_to_range(&doc.content, &t.name.span);
+                            if position_in_range(&position, &range) ||
+                               ident.as_ref() == Some(&t.name.node) {
+                                let methods_str: Vec<String> = t
+                                    .methods
+                                    .iter()
+                                    .map(|m| {
+                                        let params: Vec<String> = m.params.iter()
+                                            .map(|p| format!("{}: {:?}", p.name.node, p.ty.node))
+                                            .collect();
+                                        let ret = m.ret_type.as_ref()
+                                            .map(|r| format!(" -> {:?}", r.node))
+                                            .unwrap_or_default();
+                                        format!("    F {}({}){}", m.name.node, params.join(", "), ret)
+                                    })
+                                    .collect();
+
+                                let signature = format!(
+                                    "W {} {{\n{}\n}}",
+                                    t.name.node,
+                                    methods_str.join("\n")
+                                );
+
+                                return Ok(Some(Hover {
+                                    contents: HoverContents::Markup(MarkupContent {
+                                        kind: MarkupKind::Markdown,
+                                        value: format!("```vais\n{}\n```\n\nTrait with {} method(s)", signature, t.methods.len()),
+                                    }),
+                                    range: Some(range),
+                                }));
+                            }
+                        }
+                        vais_ast::Item::Impl(impl_block) => {
+                            // Check if hovering over a method in impl block
+                            for method in &impl_block.methods {
+                                if ident.as_ref() == Some(&method.node.name.node) {
+                                    let params_str: Vec<String> = method.node.params
+                                        .iter()
+                                        .map(|p| format!("{}: {:?}", p.name.node, p.ty.node))
+                                        .collect();
+
+                                    let ret_str = method.node.ret_type.as_ref()
+                                        .map(|t| format!(" -> {:?}", t.node))
+                                        .unwrap_or_default();
+
+                                    let trait_info = impl_block.trait_name.as_ref()
+                                        .map(|t| format!(" (impl {})", t.node))
+                                        .unwrap_or_default();
+
+                                    let signature = format!(
+                                        "F {}({}){}",
+                                        method.node.name.node,
+                                        params_str.join(", "),
+                                        ret_str
+                                    );
+
+                                    let target_type = format!("{:?}", impl_block.target_type.node);
+
+                                    return Ok(Some(Hover {
+                                        contents: HoverContents::Markup(MarkupContent {
+                                            kind: MarkupKind::Markdown,
+                                            value: format!("```vais\n{}\n```\n\nMethod of `{}`{}", signature, target_type, trait_info),
+                                        }),
+                                        range: None,
+                                    }));
+                                }
                             }
                         }
                         _ => {}
@@ -607,8 +805,83 @@ impl LanguageServer for VaisBackend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
 
         let mut items = vec![];
+
+        // Check if we're completing after a dot (method completion)
+        let is_method_completion = if let Some(doc) = self.documents.get(uri) {
+            let line_idx = position.line as usize;
+            if let Some(line) = doc.content.get_line(line_idx) {
+                let line_str: String = line.chars().collect();
+                let col = position.character as usize;
+                col > 0 && line_str.chars().nth(col - 1) == Some('.')
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if is_method_completion {
+            // Add common method completions
+            let methods = [
+                ("len", "Get length", "len()"),
+                ("is_empty", "Check if empty", "is_empty()"),
+                ("push", "Push element", "push(${1:value})"),
+                ("pop", "Pop element", "pop()"),
+                ("get", "Get element", "get(${1:index})"),
+                ("clone", "Clone value", "clone()"),
+                ("drop", "Drop/free", "drop()"),
+                ("print", "Print value", "print()"),
+                ("unwrap_or", "Unwrap with default", "unwrap_or(${1:default})"),
+                ("is_some", "Check if Some", "is_some()"),
+                ("is_none", "Check if None", "is_none()"),
+                ("is_ok", "Check if Ok", "is_ok()"),
+                ("is_err", "Check if Err", "is_err()"),
+                ("await", "Await async result", "await"),
+            ];
+
+            for (name, detail, snippet) in methods {
+                items.push(CompletionItem {
+                    label: name.to_string(),
+                    kind: Some(CompletionItemKind::METHOD),
+                    detail: Some(detail.to_string()),
+                    insert_text: Some(snippet.to_string()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                });
+            }
+
+            // Add methods from impl blocks in current document
+            if let Some(doc) = self.documents.get(uri) {
+                if let Some(ast) = &doc.ast {
+                    for item in &ast.items {
+                        if let vais_ast::Item::Impl(impl_block) = &item.node {
+                            for method in &impl_block.methods {
+                                let params_str: Vec<String> = method.node.params
+                                    .iter()
+                                    .filter(|p| p.name.node != "self")
+                                    .enumerate()
+                                    .map(|(i, p)| format!("${{{}:{}}}", i + 1, p.name.node))
+                                    .collect();
+
+                                items.push(CompletionItem {
+                                    label: method.node.name.node.clone(),
+                                    kind: Some(CompletionItemKind::METHOD),
+                                    detail: Some(format!("Method of {:?}", impl_block.target_type.node)),
+                                    insert_text: Some(format!("{}({})", method.node.name.node, params_str.join(", "))),
+                                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
 
         // Add keyword completions
         let keywords = [
@@ -619,10 +892,16 @@ impl LanguageServer for VaisBackend {
             ("L", "Loop expression", "L ${1:item}: ${2:iter} {\n\t$0\n}"),
             ("M", "Match expression", "M ${1:expr} {\n\t${2:pattern} => $0\n}"),
             ("R", "Return", "R $0"),
+            ("B", "Break", "B"),
+            ("C", "Continue", "C"),
             ("W", "Trait definition", "W ${1:Name} {\n\t$0\n}"),
-            ("X", "Impl block", "X ${1:Type}: ${2:Trait} {\n\t$0\n}"),
-            ("U", "Use/Import", "U ${1:module}"),
+            ("X", "Impl block", "X ${1:Type} {\n\t$0\n}"),
+            ("U", "Use/Import", "U ${1:std/module}"),
             ("A", "Async function", "A F ${1:name}($2) -> ${3:type} {\n\t$0\n}"),
+            ("spawn", "Spawn async task", "spawn ${1:expr}"),
+            ("await", "Await async result", "await"),
+            ("true", "Boolean true", "true"),
+            ("false", "Boolean false", "false"),
         ];
 
         for (kw, detail, snippet) in keywords {
@@ -637,33 +916,205 @@ impl LanguageServer for VaisBackend {
         }
 
         // Add type completions
-        let types = ["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64", "bool", "str"];
-        for ty in types {
+        let types = [
+            ("i8", "8-bit signed integer"),
+            ("i16", "16-bit signed integer"),
+            ("i32", "32-bit signed integer"),
+            ("i64", "64-bit signed integer"),
+            ("i128", "128-bit signed integer"),
+            ("u8", "8-bit unsigned integer"),
+            ("u16", "16-bit unsigned integer"),
+            ("u32", "32-bit unsigned integer"),
+            ("u64", "64-bit unsigned integer"),
+            ("u128", "128-bit unsigned integer"),
+            ("f32", "32-bit floating point"),
+            ("f64", "64-bit floating point"),
+            ("bool", "Boolean type"),
+            ("str", "String type"),
+        ];
+        for (ty, doc) in types {
             items.push(CompletionItem {
                 label: ty.to_string(),
                 kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                detail: Some(doc.to_string()),
                 ..Default::default()
             });
         }
 
-        // Add functions/structs from current document
+        // Add builtin function completions
+        let builtins = [
+            ("puts", "Print string with newline", "puts(${1:s})", "fn(str) -> i64"),
+            ("putchar", "Print single character", "putchar(${1:c})", "fn(i64) -> i64"),
+            ("print_i64", "Print 64-bit integer", "print_i64(${1:n})", "fn(i64) -> i64"),
+            ("print_f64", "Print 64-bit float", "print_f64(${1:n})", "fn(f64) -> i64"),
+            ("malloc", "Allocate heap memory", "malloc(${1:size})", "fn(i64) -> i64"),
+            ("free", "Free heap memory", "free(${1:ptr})", "fn(i64) -> i64"),
+            ("memcpy", "Copy memory", "memcpy(${1:dst}, ${2:src}, ${3:n})", "fn(i64, i64, i64) -> i64"),
+            ("strlen", "Get string length", "strlen(${1:s})", "fn(i64) -> i64"),
+            ("load_i64", "Load i64 from memory", "load_i64(${1:ptr})", "fn(i64) -> i64"),
+            ("store_i64", "Store i64 to memory", "store_i64(${1:ptr}, ${2:val})", "fn(i64, i64) -> i64"),
+            ("load_byte", "Load byte from memory", "load_byte(${1:ptr})", "fn(i64) -> i64"),
+            ("store_byte", "Store byte to memory", "store_byte(${1:ptr}, ${2:val})", "fn(i64, i64) -> i64"),
+        ];
+
+        for (name, doc, snippet, sig) in builtins {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some(sig.to_string()),
+                documentation: Some(Documentation::String(doc.to_string())),
+                insert_text: Some(snippet.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            });
+        }
+
+        // Add standard library module completions (for U statements)
+        let std_modules = [
+            ("std/math", "Math functions (sin, cos, sqrt, etc.)"),
+            ("std/io", "Input/output functions"),
+            ("std/option", "Option type (Some, None)"),
+            ("std/result", "Result type (Ok, Err)"),
+            ("std/vec", "Dynamic array (Vec)"),
+            ("std/string", "String type and operations"),
+            ("std/hashmap", "Hash map collection"),
+            ("std/file", "File I/O operations"),
+            ("std/iter", "Iterator trait"),
+            ("std/future", "Async Future type"),
+            ("std/rc", "Reference counting (Rc)"),
+            ("std/box", "Heap allocation (Box)"),
+            ("std/arena", "Arena allocator"),
+            ("std/runtime", "Async runtime"),
+        ];
+
+        for (module, doc) in std_modules {
+            items.push(CompletionItem {
+                label: module.to_string(),
+                kind: Some(CompletionItemKind::MODULE),
+                detail: Some(doc.to_string()),
+                ..Default::default()
+            });
+        }
+
+        // Add math constants and functions if std/math might be imported
+        let math_items = [
+            ("PI", "π = 3.14159...", CompletionItemKind::CONSTANT),
+            ("E", "e = 2.71828...", CompletionItemKind::CONSTANT),
+            ("TAU", "τ = 2π", CompletionItemKind::CONSTANT),
+            ("sqrt", "Square root", CompletionItemKind::FUNCTION),
+            ("pow", "Power function", CompletionItemKind::FUNCTION),
+            ("sin", "Sine", CompletionItemKind::FUNCTION),
+            ("cos", "Cosine", CompletionItemKind::FUNCTION),
+            ("tan", "Tangent", CompletionItemKind::FUNCTION),
+            ("log", "Natural logarithm", CompletionItemKind::FUNCTION),
+            ("exp", "Exponential", CompletionItemKind::FUNCTION),
+            ("floor", "Floor function", CompletionItemKind::FUNCTION),
+            ("ceil", "Ceiling function", CompletionItemKind::FUNCTION),
+            ("abs", "Absolute value (f64)", CompletionItemKind::FUNCTION),
+            ("abs_i64", "Absolute value (i64)", CompletionItemKind::FUNCTION),
+            ("min", "Minimum (f64)", CompletionItemKind::FUNCTION),
+            ("max", "Maximum (f64)", CompletionItemKind::FUNCTION),
+        ];
+
+        for (name, doc, kind) in math_items {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(kind),
+                detail: Some(doc.to_string()),
+                ..Default::default()
+            });
+        }
+
+        // Add IO functions
+        let io_items = [
+            ("read_i64", "Read integer from stdin", "read_i64()"),
+            ("read_f64", "Read float from stdin", "read_f64()"),
+            ("read_line", "Read line from stdin", "read_line(${1:buffer}, ${2:max_len})"),
+            ("read_char", "Read character from stdin", "read_char()"),
+            ("prompt_i64", "Prompt and read integer", "prompt_i64(${1:prompt})"),
+            ("prompt_f64", "Prompt and read float", "prompt_f64(${1:prompt})"),
+        ];
+
+        for (name, doc, snippet) in io_items {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some(doc.to_string()),
+                insert_text: Some(snippet.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            });
+        }
+
+        // Add common type constructors
+        let constructors = [
+            ("Some", "Option::Some variant", "Some(${1:value})"),
+            ("None", "Option::None variant", "None"),
+            ("Ok", "Result::Ok variant", "Ok(${1:value})"),
+            ("Err", "Result::Err variant", "Err(${1:error})"),
+        ];
+
+        for (name, doc, snippet) in constructors {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::CONSTRUCTOR),
+                detail: Some(doc.to_string()),
+                insert_text: Some(snippet.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            });
+        }
+
+        // Add functions/structs/enums from current document
         if let Some(doc) = self.documents.get(uri) {
             if let Some(ast) = &doc.ast {
                 for item in &ast.items {
                     match &item.node {
                         vais_ast::Item::Function(f) => {
+                            let params_str: Vec<String> = f.params
+                                .iter()
+                                .enumerate()
+                                .map(|(i, p)| format!("${{{}:{}}}", i + 1, p.name.node))
+                                .collect();
+
+                            let ret_str = f.ret_type.as_ref()
+                                .map(|t| format!(" -> {:?}", t.node))
+                                .unwrap_or_default();
+
                             items.push(CompletionItem {
                                 label: f.name.node.clone(),
                                 kind: Some(CompletionItemKind::FUNCTION),
-                                detail: Some("Function".to_string()),
+                                detail: Some(format!("fn({}){}",
+                                    f.params.iter().map(|p| format!("{}: {:?}", p.name.node, p.ty.node)).collect::<Vec<_>>().join(", "),
+                                    ret_str
+                                )),
+                                insert_text: Some(format!("{}({})", f.name.node, params_str.join(", "))),
+                                insert_text_format: Some(InsertTextFormat::SNIPPET),
                                 ..Default::default()
                             });
                         }
                         vais_ast::Item::Struct(s) => {
+                            // Add struct name
                             items.push(CompletionItem {
                                 label: s.name.node.clone(),
                                 kind: Some(CompletionItemKind::STRUCT),
                                 detail: Some("Struct".to_string()),
+                                ..Default::default()
+                            });
+
+                            // Add struct literal completion
+                            let fields_str: Vec<String> = s.fields
+                                .iter()
+                                .enumerate()
+                                .map(|(i, f)| format!("{}: ${{{}:{}}}", f.name.node, i + 1, f.name.node))
+                                .collect();
+
+                            items.push(CompletionItem {
+                                label: format!("{} {{ }}", s.name.node),
+                                kind: Some(CompletionItemKind::CONSTRUCTOR),
+                                detail: Some("Struct literal".to_string()),
+                                insert_text: Some(format!("{} {{ {} }}", s.name.node, fields_str.join(", "))),
+                                insert_text_format: Some(InsertTextFormat::SNIPPET),
                                 ..Default::default()
                             });
                         }
@@ -672,6 +1123,46 @@ impl LanguageServer for VaisBackend {
                                 label: e.name.node.clone(),
                                 kind: Some(CompletionItemKind::ENUM),
                                 detail: Some("Enum".to_string()),
+                                ..Default::default()
+                            });
+
+                            // Add enum variants
+                            for variant in &e.variants {
+                                let variant_text = match &variant.fields {
+                                    vais_ast::VariantFields::Unit => variant.name.node.clone(),
+                                    vais_ast::VariantFields::Tuple(types) => {
+                                        let fields_str: Vec<String> = types
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, _)| format!("${{{}}}", i + 1))
+                                            .collect();
+                                        format!("{}({})", variant.name.node, fields_str.join(", "))
+                                    }
+                                    vais_ast::VariantFields::Struct(fields) => {
+                                        let fields_str: Vec<String> = fields
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, f)| format!("{}: ${{{}:{}}}", f.name.node, i + 1, f.name.node))
+                                            .collect();
+                                        format!("{} {{ {} }}", variant.name.node, fields_str.join(", "))
+                                    }
+                                };
+
+                                items.push(CompletionItem {
+                                    label: variant.name.node.clone(),
+                                    kind: Some(CompletionItemKind::ENUM_MEMBER),
+                                    detail: Some(format!("{}::{}", e.name.node, variant.name.node)),
+                                    insert_text: Some(variant_text),
+                                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                        vais_ast::Item::Trait(t) => {
+                            items.push(CompletionItem {
+                                label: t.name.node.clone(),
+                                kind: Some(CompletionItemKind::INTERFACE),
+                                detail: Some("Trait".to_string()),
                                 ..Default::default()
                             });
                         }

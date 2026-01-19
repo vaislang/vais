@@ -95,14 +95,16 @@
 
 ## ⚡ Phase 3: 개발자 도구
 
-> **상태**: 🔄 진행 중 (70%)
+> **상태**: ✅ 완료 (85%)
 
 ### 완료된 작업
 - [x] **LSP Server** (vais-lsp)
   - [x] 기본 진단 (diagnostics)
   - [x] 시맨틱 토큰 하이라이팅
-  - [ ] 자동 완성 (부분 구현)
-  - [ ] Go to definition
+  - [x] 자동 완성 (키워드, 타입, 빌트인 함수, std 모듈, 메서드)
+  - [x] Go to definition
+  - [x] Hover 정보 (함수, 구조체, 열거형, 트레이트, 빌트인)
+  - [x] Find references
 - [x] **REPL** - 대화형 환경
   - [x] 표현식 평가
   - [x] 함수/타입 정의 지원
@@ -121,10 +123,14 @@
   - [x] 언어 설정 (brackets, comments, indentation)
   - [ ] 자동 완성 연동
 
+- [x] **Documentation** (docs/)
+  - [x] LANGUAGE_SPEC.md - 언어 스펙
+  - [x] TUTORIAL.md - 튜토리얼
+  - [x] STDLIB.md - 표준 라이브러리 레퍼런스
+
 ### 남은 작업
 - [ ] **Formatter** - 코드 포맷터
 - [ ] **Debugger** - 디버깅 지원
-- [ ] **Documentation** - 언어 스펙 문서
 
 ---
 
@@ -175,12 +181,12 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Type Checker | ✅ 완료 | 100% |
 | Code Generator | ✅ 완료 | 95% |
 | Standard Library | ✅ 완료 | 85% |
-| LSP | 🔄 진행 중 | 50% |
+| LSP | ✅ 완료 | 90% |
 | REPL | ✅ 완료 | 100% |
 | Optimization | ✅ 완료 | 100% |
 | VSCode Extension | ✅ 완료 | 80% |
 
-**전체 진행률: ~90%**
+**전체 진행률: ~93%**
 
 ---
 
@@ -207,10 +213,10 @@ e33bfa5 Add standard library and comprehensive examples
 
 ## 🎯 다음 목표
 
-1. **LSP 개선**: 자동 완성, Go to definition 구현
-2. **VSCode Extension**: LSP 연동 및 자동 완성
-3. **문서화**: 언어 스펙 및 튜토리얼
-4. **추가 컬렉션**: Set, Deque 등
+1. **VSCode Extension**: LSP 연동 및 자동 완성
+2. **추가 컬렉션**: Set, Deque 등
+3. **코드 포맷터**: 자동 포맷팅
+4. **디버거**: 디버깅 지원
 
 ---
 
