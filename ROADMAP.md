@@ -245,6 +245,31 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 최근 변경사항 (2026-01-20)
 
+### IPv6 소켓 지원 추가
+- **Net 모듈 IPv6 확장** (`std/net.vais`)
+  - sockaddr_in6 구조체 헬퍼 함수 추가 (28 bytes)
+    - make_sockaddr_in6(host, port): IPv6 주소 구조체 생성
+    - make_sockaddr_any6(port): 와일드카드 주소 (::) 구조체 생성
+  - TcpListener IPv6 지원
+    - bind6(port): IPv6 TCP 리스너 생성
+    - tcp_listen6(port): C-style API
+  - TcpStream IPv6 지원
+    - connect6(host, port): IPv6 TCP 연결
+    - tcp_connect6(host, port): C-style API
+  - UdpSocket IPv6 지원
+    - new6(): 언바운드 IPv6 UDP 소켓
+    - bind6(port): IPv6 UDP 소켓 바인드
+    - send_to6(data, len, host, port): IPv6 주소로 전송
+    - recv_from6(buffer, len, src_addr_out, src_port_out): IPv6 주소에서 수신
+    - udp_bind6(port), udp_send_to6(...): C-style API
+  - IPv6 상수 추가
+    - AF_INET6 = 30 (macOS)
+    - IPPROTO_IPV6 = 41
+    - IPV6_V6ONLY = 27 (macOS)
+    - SOCKADDR_IN6_SIZE = 28
+  - 유틸리티 함수
+    - is_valid_ip6(host): IPv6 주소 유효성 검사
+
 ### 디버거 표현식 레벨 위치 정보 추가
 - **표현식 디버그 메타데이터** (`vais-codegen/src/debug.rs`, `lib.rs`)
   - `dbg_ref_from_span()` 헬퍼 메서드: Span에서 DILocation 생성
@@ -335,10 +360,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - lldb/gdb에서 표현식 레벨 디버깅 가능
 
 ### 네트워크 확장
-- [ ] **IPv6 지원** - Net 모듈 IPv6 소켓 지원
-  - sockaddr_in6 구조체 추가
-  - TCP/UDP IPv6 버전 함수 추가
-  - 듀얼 스택 (IPv4/IPv6) 지원
+- [x] **IPv6 지원** - Net 모듈 IPv6 소켓 지원 (완료일: 2026-01-20)
+  - sockaddr_in6 구조체 추가 (28 bytes)
+  - TCP/UDP IPv6 버전 함수 추가 (bind6, connect6, send_to6, recv_from6)
+  - C-style API: tcp_listen6, tcp_connect6, udp_bind6, udp_send_to6
+  - IPv6 헬퍼 함수: make_sockaddr_in6, make_sockaddr_any6, is_valid_ip6
+  - AF_INET6, IPPROTO_IPV6, IPV6_V6ONLY 상수 추가
 
 ### 추가 표준 라이브러리
 - [ ] **PriorityQueue<T>** - 우선순위 큐 (`std/priority_queue.vais`)

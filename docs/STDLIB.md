@@ -1138,6 +1138,9 @@ F strlen(s: i64) -> i64
 | `std/future` | Async runtime | `Future`, `Poll` |
 | `std/runtime` | Task execution | Runtime functions |
 | `std/iter` | Iteration | `Iterator` trait |
+| `std/net` | Networking | `TcpListener`, `TcpStream`, `UdpSocket` |
+| `std/set` | Hash sets | `Set<T>` |
+| `std/deque` | Double-ended queue | `Deque<T>` |
 
 ---
 
@@ -1226,12 +1229,292 @@ F read_config(path: i64) -> i64 {
 
 ---
 
+## Networking
+
+**Module**: `std/net`
+
+Network operations using BSD socket API. Supports both IPv4 and IPv6 protocols for TCP and UDP communication.
+
+### Constants
+
+#### Address Families
+```vais
+C AF_INET: i64 = 2           # IPv4
+C AF_INET6: i64 = 30         # IPv6 (macOS: 30, Linux: 10)
+```
+
+#### Socket Types
+```vais
+C SOCK_STREAM: i64 = 1       # TCP
+C SOCK_DGRAM: i64 = 2        # UDP
+```
+
+#### Socket Options
+```vais
+C IPPROTO_IPV6: i64 = 41     # IPv6 protocol
+C IPV6_V6ONLY: i64 = 27      # IPv6-only socket option
+```
+
+### TcpListener - TCP Server Socket
+
+#### Methods
+
+**`TcpListener.bind(port: i64) -> TcpListener`**
+Creates and binds an IPv4 TCP listener on the specified port.
+
+```vais
+listener := TcpListener.bind(8080)
+I listener.is_valid() {
+    println("Listening on port 8080")
+}
+```
+
+**`TcpListener.bind6(port: i64) -> TcpListener`**
+Creates and binds an IPv6 TCP listener on the specified port.
+
+```vais
+listener := TcpListener.bind6(8080)
+I listener.is_valid() {
+    println("Listening on IPv6 port 8080")
+}
+```
+
+**`listener.accept() -> TcpStream`**
+Accepts an incoming connection and returns a TcpStream.
+
+**`listener.is_valid() -> i64`**
+Returns 1 if listener is valid, 0 otherwise.
+
+**`listener.close() -> i64`**
+Closes the listener socket.
+
+### TcpStream - TCP Connection
+
+#### Methods
+
+**`TcpStream.connect(host: *i8, port: i64) -> TcpStream`**
+Connects to a remote IPv4 host.
+
+```vais
+stream := TcpStream.connect("127.0.0.1", 8080)
+I stream.is_valid() {
+    stream.write("Hello", 5)
+}
+```
+
+**`TcpStream.connect6(host: *i8, port: i64) -> TcpStream`**
+Connects to a remote IPv6 host.
+
+```vais
+stream := TcpStream.connect6("::1", 8080)
+I stream.is_valid() {
+    stream.write("Hello", 5)
+}
+```
+
+**`stream.read(buffer: *i8, len: i64) -> i64`**
+Reads data into buffer. Returns bytes read, 0 on connection close, -1 on error.
+
+**`stream.write(data: *i8, len: i64) -> i64`**
+Writes data to stream. Returns bytes written, -1 on error.
+
+**`stream.write_all(data: *i8, len: i64) -> i64`**
+Writes all data, looping until complete. Returns total bytes written.
+
+**`stream.is_valid() -> i64`**
+Returns 1 if stream is valid, 0 otherwise.
+
+**`stream.close() -> i64`**
+Closes the stream.
+
+### UdpSocket - UDP Socket
+
+#### Methods
+
+**`UdpSocket.new() -> UdpSocket`**
+Creates an unbound IPv4 UDP socket.
+
+**`UdpSocket.new6() -> UdpSocket`**
+Creates an unbound IPv6 UDP socket.
+
+**`UdpSocket.bind(port: i64) -> UdpSocket`**
+Creates and binds an IPv4 UDP socket to a port.
+
+```vais
+socket := UdpSocket.bind(9000)
+I socket.is_valid() {
+    println("UDP socket bound to port 9000")
+}
+```
+
+**`UdpSocket.bind6(port: i64) -> UdpSocket`**
+Creates and binds an IPv6 UDP socket to a port.
+
+**`socket.send_to(data: *i8, len: i64, host: *i8, port: i64) -> i64`**
+Sends data to an IPv4 address. Returns bytes sent, -1 on error.
+
+**`socket.send_to6(data: *i8, len: i64, host: *i8, port: i64) -> i64`**
+Sends data to an IPv6 address. Returns bytes sent, -1 on error.
+
+**`socket.recv(buffer: *i8, len: i64) -> i64`**
+Receives data without source address info.
+
+**`socket.recv_from(buffer: *i8, len: i64, src_addr_out: *i8, src_port_out: *i64) -> i64`**
+Receives data with IPv4 source address info. Buffer for src_addr_out should be at least 16 bytes.
+
+**`socket.recv_from6(buffer: *i8, len: i64, src_addr_out: *i8, src_port_out: *i64) -> i64`**
+Receives data with IPv6 source address info. Buffer for src_addr_out should be at least 46 bytes.
+
+**`socket.is_valid() -> i64`**
+Returns 1 if socket is valid, 0 otherwise.
+
+**`socket.close() -> i64`**
+Closes the socket.
+
+### C-Style API Functions
+
+#### TCP Functions
+
+**`tcp_listen(port: i64) -> i64`**
+Creates IPv4 TCP listener. Returns file descriptor, -1 on error.
+
+**`tcp_listen6(port: i64) -> i64`**
+Creates IPv6 TCP listener. Returns file descriptor, -1 on error.
+
+**`tcp_connect(host: *i8, port: i64) -> i64`**
+Connects to IPv4 TCP server. Returns file descriptor, -1 on error.
+
+**`tcp_connect6(host: *i8, port: i64) -> i64`**
+Connects to IPv6 TCP server. Returns file descriptor, -1 on error.
+
+**`tcp_accept(listener_fd: i64) -> i64`**
+Accepts connection. Returns client socket fd, -1 on error.
+
+**`tcp_read(stream_fd: i64, buffer: *i8, len: i64) -> i64`**
+Reads from TCP socket.
+
+**`tcp_write(stream_fd: i64, data: *i8, len: i64) -> i64`**
+Writes to TCP socket.
+
+**`tcp_close(stream_fd: i64) -> i64`**
+Closes TCP socket.
+
+#### UDP Functions
+
+**`udp_bind(port: i64) -> i64`**
+Creates and binds IPv4 UDP socket. Returns file descriptor, -1 on error.
+
+**`udp_bind6(port: i64) -> i64`**
+Creates and binds IPv6 UDP socket. Returns file descriptor, -1 on error.
+
+**`udp_send_to(socket_fd: i64, data: *i8, len: i64, host: *i8, port: i64) -> i64`**
+Sends data via IPv4 UDP.
+
+**`udp_send_to6(socket_fd: i64, data: *i8, len: i64, host: *i8, port: i64) -> i64`**
+Sends data via IPv6 UDP.
+
+**`udp_recv_from(socket_fd: i64, buffer: *i8, len: i64) -> i64`**
+Receives data via UDP.
+
+**`udp_close(socket_fd: i64) -> i64`**
+Closes UDP socket.
+
+### Helper Functions
+
+**`make_sockaddr_in(host: *i8, port: i64) -> *sockaddr_in`**
+Creates IPv4 sockaddr_in structure. Caller must free.
+
+**`make_sockaddr_in6(host: *i8, port: i64) -> *sockaddr_in6`**
+Creates IPv6 sockaddr_in6 structure. Caller must free.
+
+**`make_sockaddr_any(port: i64) -> *sockaddr_in`**
+Creates IPv4 sockaddr for any address (0.0.0.0).
+
+**`make_sockaddr_any6(port: i64) -> *sockaddr_in6`**
+Creates IPv6 sockaddr for any address (::).
+
+**`is_valid_ip(host: *i8) -> i64`**
+Checks if IPv4 address string is valid. Returns 1 if valid, 0 otherwise.
+
+**`is_valid_ip6(host: *i8) -> i64`**
+Checks if IPv6 address string is valid. Returns 1 if valid, 0 otherwise.
+
+**`net_error_string(err: i64) -> *i8`**
+Converts error code to string description.
+
+### Examples
+
+#### TCP Echo Server (IPv6)
+
+```vais
+F main() -> i64 {
+    # Create IPv6 TCP listener
+    listener := TcpListener.bind6(8080)
+
+    I !listener.is_valid() {
+        println("Failed to create listener")
+        1
+    } E {
+        println("Listening on [::]:8080")
+
+        # Accept connection
+        client := listener.accept()
+        I client.is_valid() {
+            # Read message
+            buffer := malloc(1024)
+            bytes_read := client.read(buffer, 1024)
+
+            I bytes_read > 0 {
+                # Echo back
+                client.write_all(buffer, bytes_read)
+            }
+
+            free(buffer)
+            client.close()
+        }
+
+        listener.close()
+        0
+    }
+}
+```
+
+#### UDP Client (IPv6)
+
+```vais
+F main() -> i64 {
+    socket := UdpSocket.new6()
+
+    I socket.is_valid() {
+        msg := "Hello UDP!"
+        socket.send_to6(msg, 10, "::1", 9000)
+        socket.close()
+    }
+
+    0
+}
+```
+
+#### Dual-Stack Server
+
+```vais
+# IPv6 sockets can accept both IPv4 and IPv6 connections by default
+# IPv4 clients appear as IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+F main() -> i64 {
+    listener := TcpListener.bind6(8080)  # Accepts both IPv4 and IPv6
+    println("Dual-stack server listening on port 8080")
+    listener.close()
+    0
+}
+```
+
+---
+
 ## Future Additions
 
 The following modules are planned for future versions:
 
-- `std/collections` - Set, Deque, BTreeMap
-- `std/net` - Network operations
+- `std/collections` - BTreeMap, PriorityQueue
 - `std/thread` - Threading support
 - `std/sync` - Synchronization primitives (Mutex, RwLock)
 - `std/path` - Path manipulation

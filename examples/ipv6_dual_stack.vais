@@ -1,0 +1,168 @@
+# IPv6 Dual-Stack Example
+# Demonstrates IPv6 sockets that can handle both IPv4 and IPv6 connections
+#
+# Note: On most modern systems, IPv6 sockets can accept IPv4 connections
+# using IPv4-mapped IPv6 addresses (::ffff:192.0.2.1)
+#
+# By default, many systems allow dual-stack operation.
+# To force IPv6-only, set IPV6_V6ONLY socket option to 1.
+
+# Example: Create dual-stack TCP listener
+# This listener can accept both IPv4 and IPv6 connections
+F create_dual_stack_listener(port: i64) -> TcpListener {
+    println("Creating dual-stack IPv6 TCP listener...")
+
+    # Create IPv6 socket
+    listener := TcpListener.bind6(port)
+
+    I listener.is_valid() {
+        print("Dual-stack listener created on port ")
+        print_i64(port)
+        println(" (accepts both IPv4 and IPv6)")
+        println("Note: IPv4 clients will be mapped to ::ffff:x.x.x.x addresses")
+    } E {
+        println("Failed to create dual-stack listener")
+    }
+
+    listener
+}
+
+# Example: Create IPv6-only TCP listener
+# This listener accepts ONLY IPv6 connections (requires setting IPV6_V6ONLY)
+F create_ipv6_only_listener(port: i64) -> i64 {
+    println("Creating IPv6-only TCP listener...")
+
+    # Create socket manually to set IPV6_V6ONLY option
+    fd := socket(AF_INET6, SOCK_STREAM, 0)
+
+    I fd < 0 {
+        println("Failed to create socket")
+        -1
+    } E {
+        # Set SO_REUSEADDR option
+        optval := malloc(4)
+        store_i32(optval, 1)
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, optval, 4)
+        free(optval)
+
+        # Set IPV6_V6ONLY option to 1 (IPv6-only)
+        v6only := malloc(4)
+        store_i32(v6only, 1)
+        result := setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, v6only, 4)
+        free(v6only)
+
+        I result < 0 {
+            println("Failed to set IPV6_V6ONLY option")
+            close(fd)
+            -1
+        } E {
+            # Create address structure and bind
+            addr := make_sockaddr_any6(port)
+            I addr == 0 {
+                close(fd)
+                -1
+            } E {
+                result2 := bind(fd, addr, SOCKADDR_IN6_SIZE)
+                free(addr)
+
+                I result2 < 0 {
+                    println("Failed to bind socket")
+                    close(fd)
+                    -1
+                } E {
+                    # Listen for connections
+                    result3 := listen(fd, NET_DEFAULT_BACKLOG)
+                    I result3 < 0 {
+                        println("Failed to listen on socket")
+                        close(fd)
+                        -1
+                    } E {
+                        print("IPv6-only listener created on port ")
+                        print_i64(port)
+                        println(" (rejects IPv4 connections)")
+                        fd
+                    }
+                }
+            }
+        }
+    }
+}
+
+# Test dual-stack UDP socket
+F test_dual_stack_udp() -> i64 {
+    println("")
+    println("=== Testing Dual-Stack UDP ===")
+
+    # Create IPv6 UDP socket
+    socket := UdpSocket.bind6(9094)
+
+    I socket.is_valid() {
+        print("Created dual-stack UDP socket on port ")
+        println_i64(socket.get_port())
+        println("This socket can receive from both IPv4 and IPv6 clients")
+
+        # Demonstrate that we can send to both IPv4-mapped and native IPv6 addresses
+        # Note: IPv4 address 127.0.0.1 would be mapped to ::ffff:127.0.0.1
+
+        msg := "Test message"
+
+        # Send to IPv6 localhost
+        bytes_sent := socket.send_to6(msg, 12, "::1", 9094)
+        I bytes_sent > 0 {
+            print("Sent to IPv6 localhost: ")
+            print_i64(bytes_sent)
+            println(" bytes")
+        }
+
+        socket.close()
+    } E {
+        println("Failed to create dual-stack UDP socket")
+    }
+
+    0
+}
+
+# Main function
+F main() -> i64 {
+    println("========================================")
+    println("IPv6 Dual-Stack Networking Example")
+    println("========================================")
+    println("")
+
+    println("=== IPv6 Socket Modes ===")
+    println("1. Dual-stack (default): Accepts both IPv4 and IPv6")
+    println("   - IPv4 clients appear as ::ffff:x.x.x.x")
+    println("2. IPv6-only: Accepts only IPv6 connections")
+    println("   - Requires IPV6_V6ONLY socket option")
+    println("")
+
+    # Test dual-stack TCP listener
+    println("=== Testing Dual-Stack TCP Listener ===")
+    listener := create_dual_stack_listener(9095)
+    I listener.is_valid() {
+        println("Success! Both IPv4 and IPv6 clients can connect")
+        listener.close()
+        println("Listener closed")
+    }
+
+    println("")
+
+    # Test IPv6-only TCP listener
+    println("=== Testing IPv6-Only TCP Listener ===")
+    ipv6_only_fd := create_ipv6_only_listener(9096)
+    I ipv6_only_fd >= 0 {
+        println("Success! Only IPv6 clients can connect")
+        close(ipv6_only_fd)
+        println("Listener closed")
+    }
+
+    # Test dual-stack UDP
+    test_dual_stack_udp()
+
+    println("")
+    println("========================================")
+    println("Dual-Stack Test Complete")
+    println("========================================")
+
+    0
+}
