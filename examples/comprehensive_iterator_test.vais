@@ -1,0 +1,143 @@
+# Comprehensive Iterator Type Inference Test
+# Demonstrates all the improvements made to iterator type inference
+
+# Define Iterator trait
+W Iterator {
+    F next(&self) -> i64
+    F has_more(&self) -> i64
+}
+
+# Define Printable trait
+W Printable {
+    F print(&self) -> i64
+}
+
+# Custom Range Iterator
+S RangeIter {
+    current: i64,
+    end: i64
+}
+
+# Implement multiple traits
+X RangeIter: Iterator {
+    F next(&self) -> i64 {
+        I self.current < self.end {
+            val := self.current
+            self.current = self.current + 1
+            val
+        } E {
+            0 - 1
+        }
+    }
+
+    F has_more(&self) -> i64 {
+        I self.current < self.end { 1 } E { 0 }
+    }
+}
+
+X RangeIter: Printable {
+    F print(&self) -> i64 {
+        puts("RangeIter:")
+        putchar(self.current + 48)
+        puts(" to ")
+        putchar(self.end + 48)
+        putchar(10)
+        0
+    }
+}
+
+# Regular method (not from trait)
+X RangeIter {
+    F new(start: i64, end: i64) -> RangeIter {
+        RangeIter { current: start, end: end }
+    }
+}
+
+# Fibonacci Iterator
+S FibIter {
+    a: i64,
+    b: i64,
+    count: i64,
+    max_count: i64
+}
+
+X FibIter: Iterator {
+    F next(&self) -> i64 {
+        I self.count >= self.max_count {
+            0 - 1
+        } E {
+            current := self.a
+            self.a = self.b
+            self.b = current + self.b
+            self.count = self.count + 1
+            current
+        }
+    }
+
+    F has_more(&self) -> i64 {
+        I self.count < self.max_count { 1 } E { 0 }
+    }
+}
+
+X FibIter {
+    F new(max: i64) -> FibIter {
+        FibIter { a: 0, b: 1, count: 0, max_count: max }
+    }
+}
+
+F main() -> i64 {
+    puts("=== Comprehensive Iterator Test ===")
+    putchar(10)
+
+    # Test 1: Struct method resolution
+    puts("Test 1: Struct methods")
+    r := RangeIter.new(0, 5)
+    r.print()
+    putchar(10)
+
+    # Test 2: Trait method resolution (Iterator)
+    puts("Test 2: Iterator trait methods")
+    puts("Has more:")
+    status := r.has_more()
+    putchar(status + 48)
+    putchar(10)
+
+    puts("Next values:")
+    L {
+        val := r.next()
+        I val < 0 { B 0 }
+        putchar(val + 48)
+        putchar(32)
+    }
+    putchar(10)
+    putchar(10)
+
+    # Test 3: Multiple trait implementations
+    puts("Test 3: Fibonacci Iterator")
+    fib := FibIter.new(8)
+    L {
+        I fib.has_more() == 0 { B 0 }
+        val := fib.next()
+        putchar(val + 48)
+        putchar(32)
+    }
+    putchar(10)
+    putchar(10)
+
+    # Test 4: Method chaining with trait methods
+    puts("Test 4: New iterator from scratch")
+    r2 := RangeIter.new(5, 8)
+    sum := mut 0
+    L {
+        I r2.has_more() == 0 { B 0 }
+        val := r2.next()
+        sum = sum + val
+    }
+    puts("Sum: ")
+    putchar(sum + 48)
+    putchar(10)
+    putchar(10)
+
+    puts("=== All Tests Passed ===")
+    0
+}

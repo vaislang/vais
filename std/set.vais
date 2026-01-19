@@ -1,0 +1,394 @@
+# Set - hash-based set collection for i64 values
+# Uses HashMap internally for O(1) operations
+# Each value is stored as both key and value in the underlying HashMap
+
+# Helper function to initialize buckets recursively
+F set_init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
+    I i >= cap { 0 } E {
+        store_i64(buckets + i * 8, 0)
+        set_init_buckets(buckets, cap, i + 1)
+    }
+}
+
+# Set structure
+S Set {
+    buckets: i64,   # Pointer to array of bucket heads (Entry pointers)
+    size: i64,      # Number of elements
+    cap: i64        # Number of buckets
+}
+
+# Entry node for linked list in each bucket
+S SetEntry {
+    value: i64,     # The value stored in the set
+    next: i64       # Pointer to next SetEntry (0 if none)
+}
+
+X Set {
+    # Create a new Set with given capacity
+    F with_capacity(capacity: i64) -> Set {
+        cap := I capacity < 8 { 8 } E { capacity }
+        # Allocate bucket array (array of pointers, each 8 bytes)
+        buckets := malloc(cap * 8)
+        # Initialize all buckets to null (0)
+        set_init_buckets(buckets, cap, 0)
+        Set { buckets: buckets, size: 0, cap: cap }
+    }
+
+    # Get number of elements
+    F len(&self) -> i64 {
+        self.size
+    }
+
+    # Get capacity (number of buckets)
+    F capacity(&self) -> i64 {
+        self.cap
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } E { 0 }
+    }
+
+    # Hash function for i64 value
+    F hash(&self, value: i64) -> i64 {
+        # Simple hash: multiply by golden ratio prime and take modulo
+        h := value * 2654435769
+        abs_h := I h < 0 { 0 - h } E { h }
+        abs_h % self.cap
+    }
+
+    # Check if value exists in set
+    F contains(&self, value: i64) -> i64 {
+        idx := @.hash(value)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+
+        L {
+            I entry_ptr == 0 { B 0 }
+            entry_value := load_i64(entry_ptr)  # SetEntry.value at offset 0
+            I entry_value == value { B 1 }
+            entry_ptr = load_i64(entry_ptr + 8)  # SetEntry.next at offset 8
+        }
+    }
+
+    # Insert value into set
+    # Returns 1 if value was newly inserted, 0 if already existed
+    F insert(&self, value: i64) -> i64 {
+        # Check if value already exists
+        I @.contains(value) == 1 { B 0 }
+
+        idx := @.hash(value)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+
+        # Insert new entry at head
+        new_entry := malloc(16)  # 2 * 8 bytes for SetEntry
+        store_i64(new_entry, value)        # value
+        store_i64(new_entry + 8, entry_ptr)  # next = old head
+        store_i64(self.buckets + idx * 8, new_entry)  # update bucket head
+        self.size = self.size + 1
+
+        # Check if rehash needed (load factor > 0.75)
+        I self.size * 4 > self.cap * 3 {
+            @.rehash()
+        }
+
+        1
+    }
+
+    # Remove value from set
+    # Returns 1 if value was removed, 0 if not found
+    F remove(&self, value: i64) -> i64 {
+        idx := @.hash(value)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        prev_ptr := 0
+
+        L {
+            I entry_ptr == 0 { B 0 }
+            entry_value := load_i64(entry_ptr)
+            I entry_value == value {
+                next := load_i64(entry_ptr + 8)
+
+                I prev_ptr == 0 {
+                    # Removing head of list
+                    store_i64(self.buckets + idx * 8, next)
+                } E {
+                    # Removing from middle/end
+                    store_i64(prev_ptr + 8, next)
+                }
+
+                free(entry_ptr)
+                self.size = self.size - 1
+                B 1
+            }
+            prev_ptr = entry_ptr
+            entry_ptr = load_i64(entry_ptr + 8)
+        }
+    }
+
+    # Rehash to double capacity
+    F rehash(&self) -> i64 {
+        old_buckets := self.buckets
+        old_cap := self.cap
+        new_cap := old_cap * 2
+
+        # Allocate new bucket array
+        new_buckets := malloc(new_cap * 8)
+        i := 0
+        L {
+            I i >= new_cap { B 0 }
+            store_i64(new_buckets + i * 8, 0)
+            i = i + 1
+        }
+
+        self.buckets = new_buckets
+        self.cap = new_cap
+        self.size = 0
+
+        # Reinsert all entries
+        i = 0
+        L {
+            I i >= old_cap { B 0 }
+            entry_ptr := load_i64(old_buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                next := load_i64(entry_ptr + 8)
+
+                @.insert(value)
+                free(entry_ptr)
+
+                entry_ptr = next
+            }
+            i = i + 1
+        }
+
+        free(old_buckets)
+        1
+    }
+
+    # Clear all elements
+    F clear(&self) -> i64 {
+        i := 0
+        L {
+            I i >= self.cap { B 0 }
+            entry_ptr := load_i64(self.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                next := load_i64(entry_ptr + 8)
+                free(entry_ptr)
+                entry_ptr = next
+            }
+            store_i64(self.buckets + i * 8, 0)
+            i = i + 1
+        }
+        self.size = 0
+        0
+    }
+
+    # Create a new set containing the union of this set and another
+    # Returns a new Set containing all elements from both sets
+    F union(&self, other: Set) -> Set {
+        result := Set.with_capacity(self.size + other.size)
+
+        # Add all elements from self
+        i := 0
+        L {
+            I i >= self.cap { B 0 }
+            entry_ptr := load_i64(self.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                result.insert(value)
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        # Add all elements from other
+        i = 0
+        L {
+            I i >= other.cap { B 0 }
+            entry_ptr := load_i64(other.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                result.insert(value)
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        result
+    }
+
+    # Create a new set containing the intersection of this set and another
+    # Returns a new Set containing only elements present in both sets
+    F intersection(&self, other: Set) -> Set {
+        result := Set.with_capacity(8)
+
+        # Iterate through smaller set and check if elements exist in larger set
+        smaller := self
+        larger := other
+        I self.size > other.size {
+            smaller = other
+            larger = self
+        }
+
+        i := 0
+        L {
+            I i >= smaller.cap { B 0 }
+            entry_ptr := load_i64(smaller.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                I larger.contains(value) == 1 {
+                    result.insert(value)
+                }
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        result
+    }
+
+    # Create a new set containing the difference (self - other)
+    # Returns a new Set containing elements in self but not in other
+    F difference(&self, other: Set) -> Set {
+        result := Set.with_capacity(self.size)
+
+        # Add elements from self that are not in other
+        i := 0
+        L {
+            I i >= self.cap { B 0 }
+            entry_ptr := load_i64(self.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                I other.contains(value) == 0 {
+                    result.insert(value)
+                }
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        result
+    }
+
+    # Create a new set containing the symmetric difference
+    # Returns a new Set containing elements in either set but not both
+    F symmetric_difference(&self, other: Set) -> Set {
+        result := Set.with_capacity(self.size + other.size)
+
+        # Add elements from self that are not in other
+        i := 0
+        L {
+            I i >= self.cap { B 0 }
+            entry_ptr := load_i64(self.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                I other.contains(value) == 0 {
+                    result.insert(value)
+                }
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        # Add elements from other that are not in self
+        i = 0
+        L {
+            I i >= other.cap { B 0 }
+            entry_ptr := load_i64(other.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                I @.contains(value) == 0 {
+                    result.insert(value)
+                }
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        result
+    }
+
+    # Check if this set is a subset of another
+    # Returns 1 if all elements in self are in other, 0 otherwise
+    F is_subset(&self, other: Set) -> i64 {
+        # Empty set is subset of any set
+        I self.size == 0 { B 1 }
+
+        # If self is larger, it cannot be a subset
+        I self.size > other.size { B 0 }
+
+        # Check if all elements in self exist in other
+        i := 0
+        L {
+            I i >= self.cap { B 0 }
+            entry_ptr := load_i64(self.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                I other.contains(value) == 0 {
+                    B 0  # Found element not in other
+                }
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        1  # All elements found
+    }
+
+    # Check if this set is a superset of another
+    # Returns 1 if all elements in other are in self, 0 otherwise
+    F is_superset(&self, other: Set) -> i64 {
+        other.is_subset(self)
+    }
+
+    # Check if this set is disjoint from another (no common elements)
+    # Returns 1 if sets have no elements in common, 0 otherwise
+    F is_disjoint(&self, other: Set) -> i64 {
+        # Iterate through smaller set for efficiency
+        smaller := self
+        larger := other
+        I self.size > other.size {
+            smaller = other
+            larger = self
+        }
+
+        i := 0
+        L {
+            I i >= smaller.cap { B 0 }
+            entry_ptr := load_i64(smaller.buckets + i * 8)
+            L {
+                I entry_ptr == 0 { B 0 }
+                value := load_i64(entry_ptr)
+                I larger.contains(value) == 1 {
+                    B 0  # Found common element
+                }
+                entry_ptr = load_i64(entry_ptr + 8)
+            }
+            i = i + 1
+        }
+
+        1  # No common elements found
+    }
+
+    # Free all memory
+    F drop(&self) -> i64 {
+        @.clear()
+        free(self.buckets)
+        self.buckets = 0
+        self.cap = 0
+        0
+    }
+}
+
+# Create new Set with default capacity
+F set_new() -> Set {
+    Set.with_capacity(16)
+}

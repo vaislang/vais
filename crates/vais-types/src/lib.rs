@@ -80,6 +80,8 @@ pub enum ResolvedType {
     Pointer(Box<ResolvedType>),
     Ref(Box<ResolvedType>),
     RefMut(Box<ResolvedType>),
+    Range(Box<ResolvedType>),
+    Future(Box<ResolvedType>),
 
     // Function type
     Fn {
@@ -179,6 +181,8 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Pointer(t) => write!(f, "*{}", t),
             ResolvedType::Ref(t) => write!(f, "&{}", t),
             ResolvedType::RefMut(t) => write!(f, "&mut {}", t),
+            ResolvedType::Range(t) => write!(f, "Range<{}>", t),
+            ResolvedType::Future(t) => write!(f, "Future<{}>", t),
             ResolvedType::Fn { params, ret } => {
                 write!(f, "(")?;
                 for (i, p) in params.iter().enumerate() {
@@ -230,12 +234,23 @@ pub struct StructDef {
     pub methods: HashMap<String, FunctionSig>,
 }
 
+/// Enum variant field types
+#[derive(Debug, Clone)]
+pub enum VariantFieldTypes {
+    /// Unit variant (no fields)
+    Unit,
+    /// Tuple variant with positional fields
+    Tuple(Vec<ResolvedType>),
+    /// Struct variant with named fields
+    Struct(HashMap<String, ResolvedType>),
+}
+
 /// Enum definition
 #[derive(Debug, Clone)]
 pub struct EnumDef {
     pub name: String,
     pub generics: Vec<String>,
-    pub variants: HashMap<String, Vec<ResolvedType>>,
+    pub variants: HashMap<String, VariantFieldTypes>,
 }
 
 /// Variable info
@@ -889,12 +904,25 @@ impl TypeChecker {
 
         let mut variants = HashMap::new();
         for variant in &e.variants {
-            let types = match &variant.fields {
-                VariantFields::Unit => vec![],
-                VariantFields::Tuple(ts) => ts.iter().map(|t| self.resolve_type(&t.node)).collect(),
-                VariantFields::Struct(_) => vec![], // TODO: Handle struct variants
+            let field_types = match &variant.fields {
+                VariantFields::Unit => VariantFieldTypes::Unit,
+                VariantFields::Tuple(ts) => {
+                    let types: Vec<ResolvedType> = ts.iter()
+                        .map(|t| self.resolve_type(&t.node))
+                        .collect();
+                    VariantFieldTypes::Tuple(types)
+                }
+                VariantFields::Struct(fields) => {
+                    let mut field_map = HashMap::new();
+                    for field in fields {
+                        let field_name = field.name.node.clone();
+                        let field_type = self.resolve_type(&field.ty.node);
+                        field_map.insert(field_name, field_type);
+                    }
+                    VariantFieldTypes::Struct(field_map)
+                }
             };
-            variants.insert(variant.name.node.clone(), types);
+            variants.insert(variant.name.node.clone(), field_types);
         }
 
         // Register enum variants for exhaustiveness checking
@@ -1070,6 +1098,7 @@ impl TypeChecker {
                     params,
                     ret,
                     has_default: method.default_body.is_some(),
+                    is_async: false, // TODO: Add async support for trait methods when AST supports it
                 },
             );
         }
@@ -1266,9 +1295,16 @@ impl TypeChecker {
                 // @ refers to current function
                 if let Some(name) = &self.current_fn_name {
                     if let Some(sig) = self.functions.get(name) {
+                        // For async functions, wrap the return type in Future
+                        let ret_type = if sig.is_async {
+                            ResolvedType::Future(Box::new(sig.ret.clone()))
+                        } else {
+                            sig.ret.clone()
+                        };
+
                         return Ok(ResolvedType::Fn {
                             params: sig.params.iter().map(|(_, t, _)| t.clone()).collect(),
-                            ret: Box::new(sig.ret.clone()),
+                            ret: Box::new(ret_type),
                         });
                     }
                 }
@@ -1383,10 +1419,21 @@ impl TypeChecker {
 
                 if let (Some(pattern), Some(iter)) = (pattern, iter) {
                     let iter_type = self.check_expr(iter)?;
-                    // TODO: Proper iterator type inference
-                    if let ResolvedType::Array(elem_type) = iter_type {
+
+                    // Try to infer the element type from the iterator
+                    if let Some(elem_type) = self.get_iterator_item_type(&iter_type) {
+                        // Bind the pattern variable with the inferred element type
                         if let Pattern::Ident(name) = &pattern.node {
-                            self.define_var(name, *elem_type, false);
+                            self.define_var(name, elem_type, false);
+                        }
+                    } else {
+                        // Couldn't infer iterator item type - this is a warning but not an error
+                        // The loop will still work, just without type information for the pattern
+                        if let Pattern::Ident(name) = &pattern.node {
+                            self.warnings.push(format!(
+                                "Cannot infer iterator item type for variable '{}' in loop",
+                                name
+                            ));
                         }
                     }
                 }
@@ -1476,6 +1523,7 @@ impl TypeChecker {
             } => {
                 let receiver_type = self.check_expr(receiver)?;
 
+                // First, try to find the method on the struct itself
                 if let ResolvedType::Named { name, .. } = &receiver_type {
                     if let Some(struct_def) = self.structs.get(name).cloned() {
                         if let Some(method_sig) = struct_def.methods.get(&method.node).cloned() {
@@ -1495,9 +1543,43 @@ impl TypeChecker {
                                 self.unify(param_type, &arg_type)?;
                             }
 
-                            return Ok(method_sig.ret.clone());
+                            // For async methods, wrap the return type in Future
+                            let ret_type = if method_sig.is_async {
+                                ResolvedType::Future(Box::new(method_sig.ret.clone()))
+                            } else {
+                                method_sig.ret.clone()
+                            };
+
+                            return Ok(ret_type);
                         }
                     }
+                }
+
+                // If not found on struct, try to find it in trait implementations
+                if let Some(trait_method) = self.find_trait_method(&receiver_type, &method.node) {
+                    // Skip self parameter (first parameter)
+                    let param_types: Vec<_> = trait_method.params.iter().skip(1).map(|(_, t, _)| t.clone()).collect();
+
+                    if param_types.len() != args.len() {
+                        return Err(TypeError::ArgCount {
+                            expected: param_types.len(),
+                            got: args.len(),
+                        });
+                    }
+
+                    for (param_type, arg) in param_types.iter().zip(args) {
+                        let arg_type = self.check_expr(arg)?;
+                        self.unify(param_type, &arg_type)?;
+                    }
+
+                    // For async trait methods, wrap the return type in Future
+                    let ret_type = if trait_method.is_async {
+                        ResolvedType::Future(Box::new(trait_method.ret.clone()))
+                    } else {
+                        trait_method.ret.clone()
+                    };
+
+                    return Ok(ret_type);
                 }
 
                 Err(TypeError::UndefinedFunction(method.node.clone()))
@@ -1652,12 +1734,47 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Range { .. } => {
-                // TODO: Implement range type
-                Ok(ResolvedType::Named {
-                    name: "Range".to_string(),
-                    generics: vec![ResolvedType::I64],
-                })
+            Expr::Range { start, end, inclusive: _ } => {
+                // Infer the element type from start or end expressions
+                let elem_type = if let Some(start_expr) = start {
+                    let start_type = self.check_expr(start_expr)?;
+                    // Ensure start is a numeric type (integer)
+                    if !start_type.is_integer() {
+                        return Err(TypeError::Mismatch {
+                            expected: "integer type".to_string(),
+                            found: start_type.to_string(),
+                        });
+                    }
+
+                    // If end is present, unify the types
+                    if let Some(end_expr) = end {
+                        let end_type = self.check_expr(end_expr)?;
+                        if !end_type.is_integer() {
+                            return Err(TypeError::Mismatch {
+                                expected: "integer type".to_string(),
+                                found: end_type.to_string(),
+                            });
+                        }
+                        self.unify(&start_type, &end_type)?;
+                    }
+
+                    start_type
+                } else if let Some(end_expr) = end {
+                    // Only end is present (e.g., ..10)
+                    let end_type = self.check_expr(end_expr)?;
+                    if !end_type.is_integer() {
+                        return Err(TypeError::Mismatch {
+                            expected: "integer type".to_string(),
+                            found: end_type.to_string(),
+                        });
+                    }
+                    end_type
+                } else {
+                    // Neither start nor end (e.g., ..) - default to i64
+                    ResolvedType::I64
+                };
+
+                Ok(ResolvedType::Range(Box::new(elem_type)))
             }
 
             Expr::Block(stmts) => {
@@ -1668,8 +1785,18 @@ impl TypeChecker {
             }
 
             Expr::Await(inner) => {
-                // TODO: Proper async type checking
-                self.check_expr(inner)
+                let inner_type = self.check_expr(inner)?;
+
+                // Verify that the inner expression is a Future type
+                if let ResolvedType::Future(output_type) = inner_type {
+                    // Extract and return the inner type from Future<T>
+                    Ok(*output_type)
+                } else {
+                    Err(TypeError::Mismatch {
+                        expected: "Future<T>".to_string(),
+                        found: inner_type.to_string(),
+                    })
+                }
             }
 
             Expr::Try(inner) => {
@@ -1904,6 +2031,8 @@ impl TypeChecker {
             (ResolvedType::Ref(a), ResolvedType::Ref(b)) => self.unify(a, b),
             (ResolvedType::RefMut(a), ResolvedType::RefMut(b)) => self.unify(a, b),
             (ResolvedType::Pointer(a), ResolvedType::Pointer(b)) => self.unify(a, b),
+            (ResolvedType::Range(a), ResolvedType::Range(b)) => self.unify(a, b),
+            (ResolvedType::Future(a), ResolvedType::Future(b)) => self.unify(a, b),
             (ResolvedType::Tuple(a), ResolvedType::Tuple(b)) if a.len() == b.len() => {
                 for (ta, tb) in a.iter().zip(b.iter()) {
                     self.unify(ta, tb)?;
@@ -1977,6 +2106,9 @@ impl TypeChecker {
             ResolvedType::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(self.apply_substitutions(inner)))
             }
+            ResolvedType::Range(inner) => {
+                ResolvedType::Range(Box::new(self.apply_substitutions(inner)))
+            }
             ResolvedType::Tuple(types) => {
                 ResolvedType::Tuple(types.iter().map(|t| self.apply_substitutions(t)).collect())
             }
@@ -2010,6 +2142,50 @@ impl TypeChecker {
         }
     }
 
+    /// Get field types for a struct or enum struct variant.
+    /// Used in pattern matching to properly type-check struct patterns.
+    /// Returns a map of field names to their types.
+    fn get_struct_or_variant_fields(&self, pattern_name: &str, expr_type: &ResolvedType) -> HashMap<String, ResolvedType> {
+        // First, check if pattern_name refers to a struct
+        if let Some(struct_def) = self.structs.get(pattern_name) {
+            return struct_def.fields.clone();
+        }
+
+        // Otherwise, try to find it as an enum variant
+        // Extract enum name from expr_type
+        if let ResolvedType::Named { name: enum_name, .. } = expr_type {
+            if let Some(enum_def) = self.enums.get(enum_name) {
+                if let Some(VariantFieldTypes::Struct(fields)) = enum_def.variants.get(pattern_name) {
+                    return fields.clone();
+                }
+            }
+        }
+
+        // If not found, return empty map
+        HashMap::new()
+    }
+
+    /// Get tuple field types for an enum tuple variant.
+    /// Used in pattern matching to properly type-check variant tuple patterns.
+    /// Returns a vector of field types in order.
+    fn get_tuple_variant_fields(&self, pattern_name: &str, expr_type: &ResolvedType) -> Vec<ResolvedType> {
+        // Extract enum name from expr_type
+        if let ResolvedType::Named { name: enum_name, .. } = expr_type {
+            if let Some(enum_def) = self.enums.get(enum_name) {
+                if let Some(variant_fields) = enum_def.variants.get(pattern_name) {
+                    match variant_fields {
+                        VariantFieldTypes::Tuple(types) => return types.clone(),
+                        VariantFieldTypes::Unit => return vec![],
+                        VariantFieldTypes::Struct(_) => return vec![], // Wrong pattern type
+                    }
+                }
+            }
+        }
+
+        // If not found, return empty vec
+        vec![]
+    }
+
     /// Register pattern bindings in the current scope
     fn register_pattern_bindings(
         &mut self,
@@ -2037,20 +2213,34 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            Pattern::Struct { fields, .. } => {
-                // For struct patterns, each field name becomes a binding
+            Pattern::Struct { name, fields } => {
+                // For struct patterns, look up field types from the struct or enum variant
+                let field_types = self.get_struct_or_variant_fields(&name.node, expr_type);
+
                 for (field_name, sub_pattern) in fields {
+                    let field_type = field_types.get(&field_name.node)
+                        .cloned()
+                        .unwrap_or(ResolvedType::Unknown);
+
                     if let Some(sub_pat) = sub_pattern {
-                        self.register_pattern_bindings(sub_pat, &ResolvedType::Unknown)?;
+                        self.register_pattern_bindings(sub_pat, &field_type)?;
                     } else {
                         // Shorthand: `Point { x, y }` binds x and y
-                        self.define_var(&field_name.node, ResolvedType::Unknown, false);
+                        self.define_var(&field_name.node, field_type, false);
                     }
                 }
                 Ok(())
             }
-            Pattern::Variant { fields, .. } => {
-                for field in fields {
+            Pattern::Variant { name, fields } => {
+                // For tuple-style enum variants, look up field types
+                let variant_field_types = self.get_tuple_variant_fields(&name.node, expr_type);
+
+                for (field, field_type) in fields.iter().zip(variant_field_types.iter()) {
+                    self.register_pattern_bindings(field, field_type)?;
+                }
+
+                // If more fields in pattern than in variant, use Unknown
+                for field in fields.iter().skip(variant_field_types.len()) {
                     self.register_pattern_bindings(field, &ResolvedType::Unknown)?;
                 }
                 Ok(())
@@ -2088,16 +2278,112 @@ impl TypeChecker {
 
         // Check if it's a function
         if let Some(sig) = self.functions.get(name) {
+            // For async functions, wrap the return type in Future
+            let ret_type = if sig.is_async {
+                ResolvedType::Future(Box::new(sig.ret.clone()))
+            } else {
+                sig.ret.clone()
+            };
+
             return Ok(VarInfo {
                 ty: ResolvedType::Fn {
                     params: sig.params.iter().map(|(_, t, _)| t.clone()).collect(),
-                    ret: Box::new(sig.ret.clone()),
+                    ret: Box::new(ret_type),
                 },
                 is_mut: false,
             });
         }
 
         Err(TypeError::UndefinedVar(name.to_string()))
+    }
+
+    /// Find a method from trait implementations for a given type
+    fn find_trait_method(&self, receiver_type: &ResolvedType, method_name: &str) -> Option<TraitMethodSig> {
+        // Get the type name from the receiver type
+        let type_name = match receiver_type {
+            ResolvedType::Named { name, .. } => name.clone(),
+            _ => return None,
+        };
+
+        // Look through trait implementations to find methods for this type
+        for trait_impl in &self.trait_impls {
+            if trait_impl.type_name == type_name {
+                // Found an implementation of a trait for this type
+                if let Some(trait_def) = self.traits.get(&trait_impl.trait_name) {
+                    if let Some(method_sig) = trait_def.methods.get(method_name) {
+                        return Some(method_sig.clone());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Get the Item type from an Iterator trait implementation
+    /// Returns the element type that the iterator yields
+    fn get_iterator_item_type(&self, iter_type: &ResolvedType) -> Option<ResolvedType> {
+        // Handle built-in iterable types
+        match iter_type {
+            ResolvedType::Array(elem_type) => return Some((**elem_type).clone()),
+            ResolvedType::Range(elem_type) => return Some((**elem_type).clone()),
+            _ => {}
+        }
+
+        // Check if the type implements Iterator trait
+        let type_name = match iter_type {
+            ResolvedType::Named { name, .. } => name,
+            _ => return None,
+        };
+
+        // Look for Iterator trait implementation
+        for trait_impl in &self.trait_impls {
+            if trait_impl.type_name == *type_name && trait_impl.trait_name == "Iterator" {
+                // Found Iterator implementation, try to get item type from next() method
+                if let Some(struct_def) = self.structs.get(type_name) {
+                    if let Some(next_method) = struct_def.methods.get("next") {
+                        return Some(next_method.ret.clone());
+                    }
+                }
+
+                // Fallback: check trait definition
+                if let Some(trait_def) = self.traits.get("Iterator") {
+                    if let Some(next_method) = trait_def.methods.get("next") {
+                        return Some(next_method.ret.clone());
+                    }
+                }
+
+                // If trait has associated Item type, that would be ideal
+                // but for now we use next() return type as a proxy
+            }
+        }
+
+        // Check for IntoIterator trait - types that can be converted to iterators
+        for trait_impl in &self.trait_impls {
+            if trait_impl.type_name == *type_name && trait_impl.trait_name == "IntoIterator" {
+                // IntoIterator has an associated IntoIter type and Item type
+                // Try to find the into_iter() method and get its return type
+                if let Some(struct_def) = self.structs.get(type_name) {
+                    if let Some(into_iter_method) = struct_def.methods.get("into_iter") {
+                        let iterator_type = &into_iter_method.ret;
+                        // Recursively get the item type from the iterator
+                        return self.get_iterator_item_type(iterator_type);
+                    }
+                }
+
+                // Fallback to trait definition
+                if let Some(trait_def) = self.traits.get("IntoIterator") {
+                    // Check for associated Item type
+                    if let Some(item_def) = trait_def.associated_types.get("Item") {
+                        if let Some(default_type) = &item_def.default {
+                            return Some(default_type.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Find free variables in an expression that are not in bound_vars

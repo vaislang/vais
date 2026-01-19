@@ -2,26 +2,30 @@
 source_filename = "<vais>"
 
 %Range = type { i64, i64, i64 }
-declare i32 @puts(i64)
-declare i64 @fgets(i64, i64, i64)
-declare void @free(i64)
-declare i64 @fputc(i64, i64)
-declare i64 @feof(i64)
-declare i32 @printf(i8*)
-declare i64 @fseek(i64, i64, i64)
-declare i32 @putchar(i32)
-declare i64 @fflush(i64)
-declare i32 @fclose(i64)
-declare void @exit(i32)
-declare i64 @fputs(i8*, i64)
-declare i64 @strlen(i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i64 @fgetc(i64)
+declare i32 @usleep(i64)
+declare i32 @strncmp(i8*, i8*, i64)
 declare i64 @ftell(i64)
-declare i64 @malloc(i64)
-declare i64 @fopen(i8*, i8*)
+declare i32 @puts(i64)
+declare i64 @fputs(i8*, i64)
 declare i64 @memcpy(i64, i64, i64)
+declare void @exit(i32)
+declare i64 @strlen(i64)
+declare i64 @fputc(i64, i64)
+declare i32 @putchar(i32)
+declare i64 @malloc(i64)
+declare i32 @printf(i8*)
+declare i64 @fgets(i64, i64, i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i64 @fflush(i64)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @fgetc(i64)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @feof(i64)
+declare void @free(i64)
+declare i64 @fopen(i8*, i8*)
+declare i32 @fclose(i64)
+declare i32 @sched_yield()
+declare i32 @strcmp(i8*, i8*)
 @.str.0 = private unnamed_addr constant [22 x i8] c"=== Iterator Test ===\00"
 @.str.1 = private unnamed_addr constant [14 x i8] c"Range 0 to 5:\00"
 @.str.2 = private unnamed_addr constant [16 x i8] c"Sum of 1 to 10:\00"
@@ -131,7 +135,7 @@ then3:
 else4:
   br label %merge5
 merge5:
-  %14 = phi i64 [ 0, %else4 ]
+  %14 = add i64 0, 0
   %15 = load i64, i64* %v.9
   %16 = call i64 @print_num(i64 %15)
   %17 = trunc i64 32 to i32
@@ -168,7 +172,7 @@ then9:
 else10:
   br label %merge11
 merge11:
-  %35 = phi i64 [ 0, %else10 ]
+  %35 = add i64 0, 0
   %36 = load i64, i64* %sum.27
   %37 = load i64, i64* %v.30
   %38 = add i64 %36, %37
@@ -207,7 +211,7 @@ then15:
 else16:
   br label %merge17
 merge17:
-  %57 = phi i64 [ 0, %else16 ]
+  %57 = add i64 0, 0
   %58 = load i64, i64* %count.49
   %59 = add i64 %58, 1
   store i64 %59, i64* %count.49
@@ -237,5 +241,21 @@ entry:
   %0 = inttoptr i64 %ptr to i8*
   %1 = trunc i64 %val to i8
   store i8 %1, i8* %0
+  ret void
+}
+
+; Helper function: load i64 from memory
+define i64 @__load_i64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to i64*
+  %1 = load i64, i64* %0
+  ret i64 %1
+}
+
+; Helper function: store i64 to memory
+define void @__store_i64(i64 %ptr, i64 %val) {
+entry:
+  %0 = inttoptr i64 %ptr to i64*
+  store i64 %val, i64* %0
   ret void
 }

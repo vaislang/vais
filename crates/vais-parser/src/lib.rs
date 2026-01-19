@@ -191,6 +191,7 @@ impl Parser {
 
         while !self.check(&Token::RBrace) && !self.is_at_end() {
             // Check for attributes or function/pub keywords
+            let start = self.current_span().start;
             let method_attrs = self.parse_attributes()?;
             if self.check(&Token::Function) || self.check(&Token::Pub) || !method_attrs.is_empty() {
                 let is_method_pub = self.check(&Token::Pub);
@@ -199,8 +200,8 @@ impl Parser {
                 }
                 self.expect(&Token::Function)?;
                 let method = self.parse_function(is_method_pub, false, method_attrs)?;
-                let span = Span::new(0, 0); // TODO: proper span
-                methods.push(Spanned::new(method, span));
+                let end = self.prev_span().end;
+                methods.push(Spanned::new(method, Span::new(start, end)));
             } else {
                 fields.push(self.parse_field()?);
                 if !self.check(&Token::RBrace) {

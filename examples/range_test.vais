@@ -1,0 +1,37 @@
+# Range type test
+
+# Test basic range iteration
+F test_range() -> i64 {
+    puts("Testing range iteration:")
+
+    # Simple range loop: L i:0..5 { }
+    sum := mut 0
+    L i:0..5 {
+        sum = sum + i
+        putchar(i + 48)
+        putchar(32)
+    }
+    putchar(10)
+
+    puts("Sum 0..5:")
+    print_num(sum)
+    putchar(10)
+
+    sum
+}
+
+# Print a number (works for 0-99)
+F print_num(n: i64) -> i64 {
+    I n >= 10 {
+        putchar(n / 10 + 48)
+        0
+    } E {
+        0
+    }
+    putchar(n % 10 + 48)
+    0
+}
+
+F main() -> i64 {
+    test_range()
+}

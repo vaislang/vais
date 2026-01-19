@@ -60,7 +60,7 @@
 
 ## 🚀 Phase 2: 표준 라이브러리
 
-> **상태**: ✅ 완료 (85%)
+> **상태**: ✅ 완료 (90%)
 
 ### 완료된 작업
 - [x] **Option<T>** - 옵셔널 타입 (`std/option.vais`)
@@ -87,8 +87,15 @@
   - read_char, read_word
   - prompt_line, prompt_i64, prompt_f64
 
+- [x] **Set<T>** - 해시 기반 집합 (`std/set.vais`) **NEW**
+  - set_new, set_insert, set_contains, set_remove
+  - set_size, set_is_empty, set_clear, set_free
+- [x] **Deque<T>** - 양방향 큐 (`std/deque.vais`) **NEW**
+  - deque_new, deque_push_front, deque_push_back
+  - deque_pop_front, deque_pop_back, deque_get
+  - deque_size, deque_is_empty, deque_free
+
 ### 남은 작업
-- [ ] **Collections** - Set, Deque 등 추가 컬렉션
 - [ ] **Net** - 네트워크 기본 지원
 
 ---
@@ -159,8 +166,10 @@ std/               # 표준 라이브러리 ✅
 ├── box.vais
 ├── arena.vais
 ├── runtime.vais
-├── math.vais      # NEW
-└── io.vais        # NEW
+├── math.vais
+├── io.vais
+├── set.vais       # NEW
+└── deque.vais     # NEW
 
 vscode-vais/       # VSCode Extension ✅ NEW
 ├── package.json
@@ -180,7 +189,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Parser | ✅ 완료 | 100% |
 | Type Checker | ✅ 완료 | 100% |
 | Code Generator | ✅ 완료 | 95% |
-| Standard Library | ✅ 완료 | 85% |
+| Standard Library | ✅ 완료 | 90% |
 | LSP | ✅ 완료 | 90% |
 | REPL | ✅ 완료 | 100% |
 | Optimization | ✅ 완료 | 100% |
@@ -193,7 +202,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ## 🧪 테스트 현황
 
 ```
-✅ 8 tests passed, 0 failed
+✅ 34 tests passed, 0 failed
 ✅ 40+ example files compiled and running
 ```
 
@@ -202,18 +211,29 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ## 최근 커밋
 
 ```
-570e6bd Refactor codegen into modules, add exhaustiveness checking and REPL
-5a2b713 Phase 3 completion: Memory management, LSP enhancement, optimization passes
-f5cd20c Add async/await support, LSP server, and optimization passes
-cd266a6 Add module system, fix generics, improve std library
-e33bfa5 Add standard library and comprehensive examples
+ecdc5ca Add LSP client to VSCode extension
+ae528ef Enhance LSP with comprehensive auto-completion and hover support
+90b925e Add comprehensive language documentation
+8df5e53 Add test examples for Math and IO standard library modules
+5c2d61c Add VSCode extension and Math/IO standard library modules
 ```
+
+## 최근 변경사항 (2026-01-19)
+
+### 버그 수정
+- **Codegen**: Nested if-else phi node predecessor 버그 수정
+  - 문제: else 블록에 중첩된 if-else가 있을 때 phi 노드의 predecessor가 잘못 설정됨
+  - 해결: `current_block` 필드로 현재 basic block 추적, 중첩된 if-else의 merge 블록을 올바르게 참조
+
+### 신규 기능
+- **Set<T>**: 해시 기반 집합 자료구조 추가 (`std/set.vais`)
+- **Deque<T>**: 원형 버퍼 기반 양방향 큐 추가 (`std/deque.vais`)
 
 ---
 
 ## 🎯 다음 목표
 
-1. **추가 컬렉션**: Set, Deque 등
+1. **네트워크 지원**: Net 모듈 (TCP/UDP 소켓)
 2. **코드 포맷터**: 자동 포맷팅
 3. **디버거**: 디버깅 지원
 

@@ -1,0 +1,20 @@
+# Minimal deque test
+U std/deque
+
+F main() -> i64 {
+    puts("Creating deque...")
+    dq := Deque.with_capacity(8)
+
+    puts("Pushing back 10")
+    dq.push_back(10)
+
+    len := dq.len()
+    puts("Length should be 1")
+
+    front := dq.front()
+    puts("Front should be 10")
+
+    dq.drop()
+    puts("Done!")
+    0
+}

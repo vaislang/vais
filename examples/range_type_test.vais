@@ -1,0 +1,19 @@
+# Test Range type in type system
+
+# Test that range expressions have proper types
+F test_range_types() -> i64 {
+    # Basic ranges
+    r1 := 0..10        # Range<i64>
+    r2 := 1..=5        # Range<i64> (inclusive)
+    r3 := 0..100       # Range<i64>
+
+    # Range with different integer types should work (with implicit conversion)
+    r4 := 0..10
+    r5 := 5..15
+
+    0
+}
+
+F main() -> i64 {
+    test_range_types()
+}

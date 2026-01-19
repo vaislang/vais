@@ -1,0 +1,242 @@
+# Deque - Double-ended queue (circular buffer implementation)
+# Stores i64 elements
+# Supports O(1) push/pop operations at both ends
+
+# Helper function to copy one element from circular buffer to linear buffer
+# This is a recursive helper to work around loop variable mutability limitations
+F deque_copy_element(src_data: i64, dst_data: i64, head: i64, cap: i64, src_idx: i64, dst_idx: i64, remaining: i64) -> i64 {
+    I remaining <= 0 {
+        0
+    } E {
+        # Calculate actual source index in circular buffer
+        actual_src_temp := head + src_idx
+        actual_src := I actual_src_temp >= cap { actual_src_temp - cap } E { actual_src_temp }
+
+        # Copy the element
+        src_ptr := src_data + actual_src * 8
+        dst_ptr := dst_data + dst_idx * 8
+        value := load_i64(src_ptr)
+        store_i64(dst_ptr, value)
+
+        # Recursively copy the next element
+        deque_copy_element(src_data, dst_data, head, cap, src_idx + 1, dst_idx + 1, remaining - 1)
+    }
+}
+
+S Deque {
+    data: i64,      # Pointer to element array
+    head: i64,      # Index of first element
+    tail: i64,      # Index of next insertion position at back
+    len: i64,       # Current number of elements
+    cap: i64        # Allocated capacity
+}
+
+X Deque {
+    # Create a new empty Deque with given capacity
+    F with_capacity(capacity: i64) -> Deque {
+        data := malloc(capacity * 8)  # 8 bytes per i64
+        Deque { data: data, head: 0, tail: 0, len: 0, cap: capacity }
+    }
+
+    # Get the number of elements
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    # Get the capacity
+    F capacity(&self) -> i64 {
+        self.cap
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    # Push element to front
+    F push_front(&self, value: i64) -> i64 {
+        I self.len >= self.cap {
+            # Grow capacity (inline)
+            doubled := self.cap * 2
+            new_cap := I doubled < 8 { 8 } E { doubled }
+            new_data := malloc(new_cap * 8)
+
+            # Copy elements to new buffer in contiguous order
+            deque_copy_element(self.data, new_data, self.head, self.cap, 0, 0, self.len)
+
+            free(self.data)
+            self.data = new_data
+            self.cap = new_cap
+            self.head = 0
+            self.tail = self.len
+        }
+
+        # Move head back (wrapping around if needed)
+        I self.head == 0 {
+            self.head = self.cap - 1
+        } E {
+            self.head = self.head - 1
+        }
+
+        ptr := self.data + self.head * 8
+        store_i64(ptr, value)
+        self.len = self.len + 1
+        self.len
+    }
+
+    # Push element to back
+    F push_back(&self, value: i64) -> i64 {
+        I self.len >= self.cap {
+            # Grow capacity (inline)
+            doubled := self.cap * 2
+            new_cap := I doubled < 8 { 8 } E { doubled }
+            new_data := malloc(new_cap * 8)
+
+            # Copy elements to new buffer in contiguous order
+            deque_copy_element(self.data, new_data, self.head, self.cap, 0, 0, self.len)
+
+            free(self.data)
+            self.data = new_data
+            self.cap = new_cap
+            self.head = 0
+            self.tail = self.len
+        }
+
+        ptr := self.data + self.tail * 8
+        store_i64(ptr, value)
+
+        # Move tail forward (wrapping around if needed)
+        self.tail = self.tail + 1
+        I self.tail >= self.cap {
+            self.tail = 0
+        }
+
+        self.len = self.len + 1
+        self.len
+    }
+
+    # Pop element from front
+    # Returns 0 if deque is empty
+    F pop_front(&self) -> i64 {
+        I self.len == 0 {
+            0
+        } E {
+            ptr := self.data + self.head * 8
+            value := load_i64(ptr)
+
+            # Move head forward (wrapping around if needed)
+            self.head = self.head + 1
+            I self.head >= self.cap {
+                self.head = 0
+            }
+
+            self.len = self.len - 1
+            value
+        }
+    }
+
+    # Pop element from back
+    # Returns 0 if deque is empty
+    F pop_back(&self) -> i64 {
+        I self.len == 0 {
+            0
+        } E {
+            # Move tail back (wrapping around if needed)
+            I self.tail == 0 {
+                self.tail = self.cap - 1
+            } E {
+                self.tail = self.tail - 1
+            }
+
+            ptr := self.data + self.tail * 8
+            value := load_i64(ptr)
+            self.len = self.len - 1
+            value
+        }
+    }
+
+    # Get element at front without removing
+    # Returns 0 if deque is empty
+    F front(&self) -> i64 {
+        I self.len == 0 {
+            0
+        } E {
+            ptr := self.data + self.head * 8
+            load_i64(ptr)
+        }
+    }
+
+    # Get element at back without removing
+    # Returns 0 if deque is empty
+    F back(&self) -> i64 {
+        I self.len == 0 {
+            0
+        } E {
+            # Calculate index of last element
+            back_idx_temp := self.tail - 1
+            back_idx := I back_idx_temp < 0 { self.cap - 1 } E { back_idx_temp }
+
+            ptr := self.data + back_idx * 8
+            load_i64(ptr)
+        }
+    }
+
+    # Get element at index (0-indexed from front)
+    # Returns 0 if index is out of bounds
+    F get(&self, index: i64) -> i64 {
+        I index < 0 {
+            0
+        } E I index >= self.len {
+            0
+        } E {
+            # Calculate actual position in circular buffer
+            actual_idx_temp := self.head + index
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } E { actual_idx_temp }
+
+            ptr := self.data + actual_idx * 8
+            load_i64(ptr)
+        }
+    }
+
+    # Set element at index (0-indexed from front)
+    # Returns 1 on success, 0 if index is out of bounds
+    F set(&self, index: i64, value: i64) -> i64 {
+        I index < 0 {
+            0
+        } E I index >= self.len {
+            0
+        } E {
+            # Calculate actual position in circular buffer
+            actual_idx_temp := self.head + index
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } E { actual_idx_temp }
+
+            ptr := self.data + actual_idx * 8
+            store_i64(ptr, value)
+            1
+        }
+    }
+
+    # Clear all elements
+    F clear(&self) -> i64 {
+        self.len = 0
+        self.head = 0
+        self.tail = 0
+        0
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        free(self.data)
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        self.head = 0
+        self.tail = 0
+        0
+    }
+}
+
+# Create new Deque with initial capacity of 8
+F deque_new() -> Deque {
+    Deque.with_capacity(8)
+}

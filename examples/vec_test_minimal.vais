@@ -1,0 +1,10 @@
+# Minimal vec test
+U std/vec
+
+F main() -> i64 {
+    puts("Creating vec...")
+    v := vec_new()
+
+    puts("Done!")
+    0
+}

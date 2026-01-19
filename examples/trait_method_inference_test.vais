@@ -1,0 +1,61 @@
+# Test trait method type inference
+# This demonstrates that methods from trait implementations are properly resolved
+
+# Define Iterator trait
+W Iterator {
+    F next(&self) -> i64
+    F has_next(&self) -> i64
+}
+
+# Custom iterator
+S SimpleCounter {
+    value: i64
+}
+
+# Regular impl (not trait)
+X SimpleCounter {
+    F new(v: i64) -> SimpleCounter {
+        SimpleCounter { value: v }
+    }
+}
+
+# Trait impl
+X SimpleCounter: Iterator {
+    F next(&self) -> i64 {
+        current := self.value
+        self.value = self.value + 1
+        current
+    }
+
+    F has_next(&self) -> i64 {
+        I self.value < 10 { 1 } E { 0 }
+    }
+}
+
+F main() -> i64 {
+    puts("Testing trait method resolution:")
+
+    # Create counter using struct method
+    counter := SimpleCounter.new(0)
+
+    # Call trait methods - these should be properly resolved now
+    puts("Calling trait methods:")
+
+    # Call has_next from Iterator trait
+    status := counter.has_next()
+    putchar(status + 48)
+    putchar(10)
+
+    # Call next from Iterator trait
+    val := counter.next()
+    putchar(val + 48)
+    putchar(10)
+
+    # Call again
+    val2 := counter.next()
+    putchar(val2 + 48)
+    putchar(10)
+
+    puts("Trait method inference successful!")
+    0
+}

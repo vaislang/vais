@@ -12,6 +12,7 @@ pub struct TraitMethodSig {
     pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut) - first param is &self
     pub ret: ResolvedType,
     pub has_default: bool,
+    pub is_async: bool,
 }
 
 /// Associated type definition

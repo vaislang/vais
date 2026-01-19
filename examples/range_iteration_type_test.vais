@@ -1,0 +1,16 @@
+# Test Range iteration type inference
+
+F test_range_iteration_types() -> i64 {
+    # Loop variable should be inferred as i64
+    L i:0..10 {
+        # i should be i64 type here
+        x := i + 5
+        0
+    }
+
+    0
+}
+
+F main() -> i64 {
+    test_range_iteration_types()
+}

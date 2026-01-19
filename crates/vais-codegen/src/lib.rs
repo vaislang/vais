@@ -89,6 +89,9 @@ pub struct CodeGenerator {
 
     // Flag to emit unwrap panic message and abort declaration
     needs_unwrap_panic: bool,
+
+    // Current basic block name (for phi node predecessor tracking)
+    current_block: String,
 }
 
 /// Information about an await point in an async function
@@ -200,6 +203,7 @@ impl CodeGenerator {
             async_await_points: Vec::new(),
             current_async_function: None,
             needs_unwrap_panic: false,
+            current_block: "entry".to_string(),
         };
 
         // Register built-in extern functions
@@ -1608,35 +1612,44 @@ impl CodeGenerator {
 
                 // Then block
                 ir.push_str(&format!("{}:\n", then_label));
+                self.current_block = then_label.clone();
                 let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
                 ir.push_str(&then_ir);
+                let then_actual_block = self.current_block.clone();
                 // Only emit branch to merge if block is not terminated
                 let then_from_label = if !then_terminated {
                     ir.push_str(&format!("  br label %{}\n", merge_label));
-                    then_label.clone()
+                    then_actual_block
                 } else {
                     String::new() // Block is terminated, won't contribute to phi
                 };
 
                 // Else block
                 ir.push_str(&format!("{}:\n", else_label));
-                let (else_val, else_ir, else_terminated, has_else) = if let Some(else_branch) = else_ {
-                    let (v, i, t) = self.generate_if_else_with_term(else_branch, counter, &merge_label)?;
-                    (v, i, t, true)
+                self.current_block = else_label.clone();
+                let (else_val, else_ir, else_terminated, nested_last_block, has_else) = if let Some(else_branch) = else_ {
+                    let (v, i, t, last) = self.generate_if_else_with_term(else_branch, counter, &merge_label)?;
+                    (v, i, t, last, true)
                 } else {
-                    ("0".to_string(), String::new(), false, false)
+                    ("0".to_string(), String::new(), false, String::new(), false)
                 };
                 ir.push_str(&else_ir);
                 // Only emit branch to merge if block is not terminated
                 let else_from_label = if !else_terminated {
                     ir.push_str(&format!("  br label %{}\n", merge_label));
-                    else_label.clone()
+                    // If there was a nested if-else, use its merge block as the predecessor
+                    if !nested_last_block.is_empty() {
+                        nested_last_block
+                    } else {
+                        self.current_block.clone()
+                    }
                 } else {
                     String::new()
                 };
 
                 // Merge block with phi node
                 ir.push_str(&format!("{}:\n", merge_label));
+                self.current_block = merge_label.clone();
                 let result = self.next_temp(counter);
 
                 // If there's no else branch, don't use phi - the value is not meaningful
@@ -2482,7 +2495,7 @@ impl CodeGenerator {
         &mut self,
         stmts: &[Spanned<Stmt>],
         counter: &mut usize,
-    ) -> CodegenResult<BlockResult> {
+    ) -> CodegenResult<(String, String, bool)> {
         let mut ir = String::new();
         let mut last_value = "0".to_string();
         let mut terminated = false;
@@ -2519,20 +2532,24 @@ impl CodeGenerator {
         counter: &mut usize,
         merge_label: &str,
     ) -> CodegenResult<(String, String)> {
-        let (val, ir, _terminated) = self.generate_if_else_with_term(if_else, counter, merge_label)?;
+        let (val, ir, _terminated, _last_block) = self.generate_if_else_with_term(if_else, counter, merge_label)?;
         Ok((val, ir))
     }
 
     /// Generate code for if-else branches with termination tracking
+    /// Returns (value, ir, is_terminated, last_block_name)
+    /// last_block_name is the block that actually branches to the outer merge
     fn generate_if_else_with_term(
         &mut self,
         if_else: &IfElse,
         counter: &mut usize,
         _merge_label: &str,
-    ) -> CodegenResult<BlockResult> {
+    ) -> CodegenResult<(String, String, bool, String)> {
         match if_else {
             IfElse::Else(stmts) => {
-                self.generate_block_stmts(stmts, counter)
+                let (val, ir, terminated) = self.generate_block_stmts(stmts, counter)?;
+                // For plain else block, the "last block" is empty (caller handles it)
+                Ok((val, ir, terminated, String::new()))
             }
             IfElse::ElseIf(cond, then_stmts, else_branch) => {
                 // Generate nested if-else
@@ -2557,26 +2574,34 @@ impl CodeGenerator {
 
                 // Then branch
                 ir.push_str(&format!("{}:\n", then_label));
+                self.current_block = then_label.clone();
                 let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then_stmts, counter)?;
                 ir.push_str(&then_ir);
+                let then_actual_block = self.current_block.clone();
                 let then_from_label = if !then_terminated {
                     ir.push_str(&format!("  br label %{}\n", local_merge));
-                    then_label.clone()
+                    then_actual_block
                 } else {
                     String::new()
                 };
 
                 // Else branch
                 ir.push_str(&format!("{}:\n", else_label));
-                let (else_val, else_ir, else_terminated) = if let Some(nested) = else_branch {
+                self.current_block = else_label.clone();
+                let (else_val, else_ir, else_terminated, nested_last_block) = if let Some(nested) = else_branch {
                     self.generate_if_else_with_term(nested, counter, &local_merge)?
                 } else {
-                    ("0".to_string(), String::new(), false)
+                    ("0".to_string(), String::new(), false, String::new())
                 };
                 ir.push_str(&else_ir);
                 let else_from_label = if !else_terminated {
                     ir.push_str(&format!("  br label %{}\n", local_merge));
-                    else_label.clone()
+                    // If there was a nested if-else, use its merge block as the predecessor
+                    if !nested_last_block.is_empty() {
+                        nested_last_block
+                    } else {
+                        self.current_block.clone()
+                    }
                 } else {
                     String::new()
                 };
@@ -2586,6 +2611,7 @@ impl CodeGenerator {
 
                 // Merge
                 ir.push_str(&format!("{}:\n", local_merge));
+                self.current_block = local_merge.clone();
                 let result = self.next_temp(counter);
 
                 // Build phi node only from non-terminated predecessors
@@ -2609,7 +2635,8 @@ impl CodeGenerator {
                     ir.push_str(&format!("  {} = add i64 0, 0\n", result));
                 }
 
-                Ok((result, ir, all_terminated))
+                // Return local_merge as the last block for this nested if-else
+                Ok((result, ir, all_terminated, local_merge))
             }
         }
     }
@@ -2635,6 +2662,11 @@ impl CodeGenerator {
             ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm(inner)),
             ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm(inner)),
             ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm(inner)),
+            ResolvedType::Range(_inner) => {
+                // Range is represented as a struct with start and end fields
+                // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
+                "%Range".to_string()
+            }
             ResolvedType::Named { name, .. } => {
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {

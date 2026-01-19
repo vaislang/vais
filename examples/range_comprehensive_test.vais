@@ -1,0 +1,55 @@
+# Comprehensive Range Type Test
+# This file tests the Range type implementation in the VAIS type system
+
+# Test 1: Basic range expressions
+F test_basic_ranges() -> i64 {
+    # Various range forms
+    r1 := 0..10        # Range<i64> - exclusive
+    r2 := 1..=5        # Range<i64> - inclusive
+
+    # Ranges with different integer types
+    r3 := 0..100
+    r4 := 50..200
+
+    0
+}
+
+# Test 2: Range type inference in different contexts
+F test_type_inference() -> i64 {
+    # Type inference from literals
+    r1 := 0..10        # i64
+
+    # Type inference from variables
+    start := 5
+    end := 15
+    r2 := start..end   # Range<i64>
+
+    0
+}
+
+# Test 3: Ranges in function parameters (when codegen supports it)
+# For now, just test that the types are accepted
+F accept_range_param() -> i64 {
+    r := 0..10
+    0
+}
+
+# Test 4: Range in variable declarations
+F test_range_vars() -> i64 {
+    # Explicit range creation
+    range1 := 0..10
+    range2 := 5..=15
+
+    0
+}
+
+# Main function
+F main() -> i64 {
+    test_basic_ranges()
+    test_type_inference()
+    accept_range_param()
+    test_range_vars()
+
+    puts("All range type tests passed!")
+    0
+}

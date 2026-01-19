@@ -1,0 +1,65 @@
+# Test improved iterator type inference
+# This test demonstrates that the type checker now properly infers
+# iterator item types from trait implementations
+
+# Define Iterator trait
+W Iterator {
+    F next(&self) -> i64
+}
+
+# Custom iterator type
+S Counter {
+    count: i64,
+    max: i64
+}
+
+# Implement Iterator trait for Counter
+X Counter: Iterator {
+    F next(&self) -> i64 {
+        I self.count < self.max {
+            val := self.count
+            self.count = self.count + 1
+            val
+        } E {
+            0 - 1  # Return -1 to signal end
+        }
+    }
+}
+
+# Helper function to test type inference
+F test_iteration() -> i64 {
+    puts("Testing iterator type inference:")
+
+    # Test 1: Range iteration (built-in)
+    puts("Range iteration:")
+    r := 0..5
+    sum1 := mut 0
+    L i:r {
+        putchar(i + 48)
+        putchar(32)
+        sum1 = sum1 + i
+    }
+    putchar(10)
+
+    # Test 2: Custom iterator with trait
+    puts("Custom iterator:")
+    counter := Counter { count: 0, max: 5 }
+    sum2 := mut 0
+
+    # Manual iteration (not using for loop since Counter isn't directly iterable)
+    L {
+        val := counter.next()
+        I val < 0 { B 0 }
+        sum2 = sum2 + val
+        putchar(val + 48)
+        putchar(32)
+    }
+    putchar(10)
+
+    puts("Type inference successful!")
+    0
+}
+
+F main() -> i64 {
+    test_iteration()
+}

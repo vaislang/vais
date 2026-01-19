@@ -1,0 +1,339 @@
+# Deque Collection Test - Direct memory manipulation
+# Tests circular buffer operations using low-level primitives
+
+# Helper: print a number (up to 3 digits)
+F print_num(n: i64) -> i64 {
+    I n >= 100 {
+        d1 := n / 100
+        putchar(d1 + 48)
+    }
+    I n >= 10 {
+        d2 := (n / 10) % 10
+        putchar(d2 + 48)
+    }
+    d3 := n % 10
+    putchar(d3 + 48)
+    0
+}
+
+# Deque structure: {data, head, tail, len, cap}
+# data: pointer to element array
+# head: index of first element
+# tail: index after last element
+# len: number of elements
+# cap: capacity
+
+# Create a new deque with given capacity
+F deque_create(capacity: i64) -> i64 {
+    # Allocate deque struct: 5 fields * 8 bytes = 40 bytes
+    dq := malloc(40)
+    data := malloc(capacity * 8)
+
+    store_i64(dq, data)        # data pointer
+    store_i64(dq + 8, 0)       # head = 0
+    store_i64(dq + 16, 0)      # tail = 0
+    store_i64(dq + 24, 0)      # len = 0
+    store_i64(dq + 32, capacity) # cap
+
+    dq
+}
+
+# Get deque length
+F deque_len(dq: i64) -> i64 {
+    load_i64(dq + 24)
+}
+
+# Get deque capacity
+F deque_cap(dq: i64) -> i64 {
+    load_i64(dq + 32)
+}
+
+# Check if deque is empty
+F deque_is_empty(dq: i64) -> i64 {
+    I deque_len(dq) == 0 { 1 } E { 0 }
+}
+
+# Push element to back
+F deque_push_back(dq: i64, value: i64) -> i64 {
+    data := load_i64(dq)
+    tail := load_i64(dq + 16)
+    len := load_i64(dq + 24)
+    cap := load_i64(dq + 32)
+
+    # Store value at tail position
+    store_i64(data + tail * 8, value)
+
+    # Update tail (wrap around)
+    new_tail := tail + 1
+    wrapped_tail := I new_tail >= cap { 0 } E { new_tail }
+    store_i64(dq + 16, wrapped_tail)
+
+    # Update length
+    store_i64(dq + 24, len + 1)
+
+    len + 1
+}
+
+# Push element to front
+F deque_push_front(dq: i64, value: i64) -> i64 {
+    data := load_i64(dq)
+    head := load_i64(dq + 8)
+    len := load_i64(dq + 24)
+    cap := load_i64(dq + 32)
+
+    # Move head back (wrap around)
+    new_head := I head == 0 { cap - 1 } E { head - 1 }
+    store_i64(dq + 8, new_head)
+
+    # Store value at new head position
+    store_i64(data + new_head * 8, value)
+
+    # Update length
+    store_i64(dq + 24, len + 1)
+
+    len + 1
+}
+
+# Pop element from back
+F deque_pop_back(dq: i64) -> i64 {
+    len := load_i64(dq + 24)
+    I len == 0 {
+        0  # Return 0 if empty
+    } E {
+        data := load_i64(dq)
+        tail := load_i64(dq + 16)
+        cap := load_i64(dq + 32)
+
+        # Move tail back (wrap around)
+        new_tail := I tail == 0 { cap - 1 } E { tail - 1 }
+        store_i64(dq + 16, new_tail)
+
+        # Get value at new tail
+        value := load_i64(data + new_tail * 8)
+
+        # Update length
+        store_i64(dq + 24, len - 1)
+
+        value
+    }
+}
+
+# Pop element from front
+F deque_pop_front(dq: i64) -> i64 {
+    len := load_i64(dq + 24)
+    I len == 0 {
+        0  # Return 0 if empty
+    } E {
+        data := load_i64(dq)
+        head := load_i64(dq + 8)
+        cap := load_i64(dq + 32)
+
+        # Get value at head
+        value := load_i64(data + head * 8)
+
+        # Move head forward (wrap around)
+        new_head := head + 1
+        wrapped_head := I new_head >= cap { 0 } E { new_head }
+        store_i64(dq + 8, wrapped_head)
+
+        # Update length
+        store_i64(dq + 24, len - 1)
+
+        value
+    }
+}
+
+# Get front element without removing
+F deque_front(dq: i64) -> i64 {
+    len := load_i64(dq + 24)
+    I len == 0 {
+        0
+    } E {
+        data := load_i64(dq)
+        head := load_i64(dq + 8)
+        load_i64(data + head * 8)
+    }
+}
+
+# Get back element without removing
+F deque_back(dq: i64) -> i64 {
+    len := load_i64(dq + 24)
+    I len == 0 {
+        0
+    } E {
+        data := load_i64(dq)
+        tail := load_i64(dq + 16)
+        cap := load_i64(dq + 32)
+        back_idx := I tail == 0 { cap - 1 } E { tail - 1 }
+        load_i64(data + back_idx * 8)
+    }
+}
+
+F test_push_back() -> i64 {
+    puts("Test 1: Push Back Operations")
+
+    dq := deque_create(8)
+
+    deque_push_back(dq, 10)
+    deque_push_back(dq, 20)
+    deque_push_back(dq, 30)
+
+    len := deque_len(dq)
+    front := deque_front(dq)
+    back := deque_back(dq)
+
+    puts("  Pushed 10, 20, 30")
+    puts("  Length: ")
+    print_num(len)
+    putchar(10)
+
+    puts("  Front: ")
+    print_num(front)
+    putchar(10)
+
+    puts("  Back: ")
+    print_num(back)
+    putchar(10)
+
+    I len == 3 { I front == 10 { I back == 30 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_push_front() -> i64 {
+    puts("Test 2: Push Front Operations")
+
+    dq := deque_create(8)
+
+    deque_push_front(dq, 10)
+    deque_push_front(dq, 20)
+    deque_push_front(dq, 30)
+
+    len := deque_len(dq)
+    front := deque_front(dq)
+    back := deque_back(dq)
+
+    puts("  Push front 10, 20, 30")
+    puts("  Length: ")
+    print_num(len)
+    putchar(10)
+
+    puts("  Front (should be 30): ")
+    print_num(front)
+    putchar(10)
+
+    puts("  Back (should be 10): ")
+    print_num(back)
+    putchar(10)
+
+    I len == 3 { I front == 30 { I back == 10 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_pop_operations() -> i64 {
+    puts("Test 3: Pop Operations")
+
+    dq := deque_create(8)
+
+    deque_push_back(dq, 1)
+    deque_push_back(dq, 2)
+    deque_push_back(dq, 3)
+    deque_push_back(dq, 4)
+
+    pop_front := deque_pop_front(dq)
+    pop_back := deque_pop_back(dq)
+
+    puts("  Pushed 1,2,3,4")
+    puts("  Pop front: ")
+    print_num(pop_front)
+    putchar(10)
+
+    puts("  Pop back: ")
+    print_num(pop_back)
+    putchar(10)
+
+    len := deque_len(dq)
+    puts("  Remaining length: ")
+    print_num(len)
+    putchar(10)
+
+    I pop_front == 1 { I pop_back == 4 { I len == 2 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_wrap_around() -> i64 {
+    puts("Test 4: Circular Wrap-around")
+
+    dq := deque_create(4)  # Small capacity to test wrap
+
+    # Fill and partially empty to move head/tail
+    deque_push_back(dq, 1)
+    deque_push_back(dq, 2)
+    deque_pop_front(dq)
+    deque_pop_front(dq)
+
+    # Now head and tail should be at index 2
+    # Push more to cause wrap-around
+    deque_push_back(dq, 10)
+    deque_push_back(dq, 20)
+    deque_push_back(dq, 30)
+
+    front := deque_front(dq)
+    back := deque_back(dq)
+    len := deque_len(dq)
+
+    puts("  After wrap-around operations")
+    puts("  Length: ")
+    print_num(len)
+    putchar(10)
+
+    puts("  Front: ")
+    print_num(front)
+    putchar(10)
+
+    puts("  Back: ")
+    print_num(back)
+    putchar(10)
+
+    I len == 3 { I front == 10 { I back == 30 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 }
+}
+
+F main() -> i64 {
+    puts("=== Deque Collection Test ===")
+    putchar(10)
+
+    r1 := test_push_back()
+    r2 := test_push_front()
+    r3 := test_pop_operations()
+    r4 := test_wrap_around()
+
+    putchar(10)
+    I r1 == 1 { I r2 == 1 { I r3 == 1 { I r4 == 1 {
+        puts("=== All Deque Tests PASSED ===")
+        0
+    } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    }
+}

@@ -1,0 +1,44 @@
+# Test enum with struct variants
+# This tests the type checking of struct variants in enums
+# Note: Parser support for struct patterns in match expressions is not yet implemented
+# This test focuses on verifying that struct variants are properly registered
+
+# Define an enum with mixed variant types
+E Color {
+    Red,
+    Green,
+    Blue,
+    Custom { r: i64, g: i64, b: i64 }
+}
+
+# More complex example: Message enum
+E Message {
+    Quit,
+    Move { x: i64, y: i64 },
+    Write(i64),
+    ChangeColor { r: i64, g: i64, b: i64 }
+}
+
+# Simple function to test enum type checking
+F get_red() -> i64 {
+    0
+}
+
+F main() -> i64 {
+    puts("=== Enum Struct Variant Type Check Test ===")
+    putchar(10)
+
+    puts("Test 1: Enum with struct variants defined")
+    puts("Color enum has: Red, Green, Blue, Custom{r,g,b}")
+    puts("Message enum has: Quit, Move{x,y}, Write(i64), ChangeColor{r,g,b}")
+    putchar(10)
+
+    puts("Test 2: Type checking successful")
+    result := get_red()
+    puts("Result:")
+    putchar(result + 48)
+    putchar(10)
+
+    puts("=== Struct variant registration test passed! ===")
+    0
+}

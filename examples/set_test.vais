@@ -1,0 +1,202 @@
+# Set Collection Test - Direct memory manipulation
+# Tests hash-based set operations using low-level primitives
+
+# Helper: print a number (up to 3 digits)
+F print_num(n: i64) -> i64 {
+    I n >= 100 {
+        d1 := n / 100
+        putchar(d1 + 48)
+    }
+    I n >= 10 {
+        d2 := (n / 10) % 10
+        putchar(d2 + 48)
+    }
+    d3 := n % 10
+    putchar(d3 + 48)
+    0
+}
+
+# Helper: Initialize buckets to 0 recursively
+F init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
+    I i >= cap { 0 } E {
+        store_i64(buckets + i * 8, 0)
+        init_buckets(buckets, cap, i + 1)
+    }
+}
+
+# Helper: Hash function for i64 value
+F set_hash(value: i64, cap: i64) -> i64 {
+    # Simple modulo hash
+    abs_v := I value < 0 { 0 - value } E { value }
+    abs_v % cap
+}
+
+# Helper: Search linked list for value
+F set_search_chain(entry_ptr: i64, value: i64) -> i64 {
+    I entry_ptr == 0 { 0 } E {
+        entry_value := load_i64(entry_ptr)
+        I entry_value == value { 1 } E {
+            next := load_i64(entry_ptr + 8)
+            set_search_chain(next, value)
+        }
+    }
+}
+
+# Helper: Check if value exists in set
+F set_contains(buckets: i64, cap: i64, value: i64) -> i64 {
+    idx := set_hash(value, cap)
+    entry_ptr := load_i64(buckets + idx * 8)
+    set_search_chain(entry_ptr, value)
+}
+
+# Helper: Insert value into set (modifies buckets, returns 1 if new, 0 if dup)
+F set_insert(buckets: i64, cap: i64, value: i64) -> i64 {
+    I set_contains(buckets, cap, value) == 1 {
+        0  # Duplicate
+    } E {
+        idx := set_hash(value, cap)
+        old_head := load_i64(buckets + idx * 8)
+        new_entry := malloc(16)
+        store_i64(new_entry, value)
+        store_i64(new_entry + 8, old_head)
+        store_i64(buckets + idx * 8, new_entry)
+        1  # New insert
+    }
+}
+
+# Helper: Count elements in chain
+F count_chain(entry_ptr: i64) -> i64 {
+    I entry_ptr == 0 { 0 } E {
+        next := load_i64(entry_ptr + 8)
+        1 + count_chain(next)
+    }
+}
+
+# Helper: Count total elements
+F set_count(buckets: i64, cap: i64, i: i64) -> i64 {
+    I i >= cap { 0 } E {
+        entry_ptr := load_i64(buckets + i * 8)
+        count_chain(entry_ptr) + set_count(buckets, cap, i + 1)
+    }
+}
+
+F test_basic() -> i64 {
+    puts("Test 1: Basic Set Operations")
+
+    cap := 8
+    buckets := malloc(cap * 8)
+    init_buckets(buckets, cap, 0)
+
+    # Insert values
+    r1 := set_insert(buckets, cap, 10)
+    r2 := set_insert(buckets, cap, 20)
+    r3 := set_insert(buckets, cap, 30)
+    size := r1 + r2 + r3
+
+    puts("  Inserted 10, 20, 30. Count: ")
+    print_num(size)
+    putchar(10)
+
+    # Check contains
+    has10 := set_contains(buckets, cap, 10)
+    has20 := set_contains(buckets, cap, 20)
+    has99 := set_contains(buckets, cap, 99)
+
+    puts("  Contains 10: ")
+    print_num(has10)
+    putchar(10)
+
+    puts("  Contains 99: ")
+    print_num(has99)
+    putchar(10)
+
+    # Test duplicate
+    dup := set_insert(buckets, cap, 10)
+    puts("  Duplicate insert(10) returned: ")
+    print_num(dup)
+    putchar(10)
+
+    I has10 == 1 { I has20 == 1 { I has99 == 0 { I dup == 0 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 } } E { 0 } } E { 0 }
+}
+
+F test_count() -> i64 {
+    puts("Test 2: Element Count")
+
+    cap := 16
+    buckets := malloc(cap * 8)
+    init_buckets(buckets, cap, 0)
+
+    set_insert(buckets, cap, 1)
+    set_insert(buckets, cap, 2)
+    set_insert(buckets, cap, 3)
+    set_insert(buckets, cap, 4)
+    set_insert(buckets, cap, 5)
+
+    total := set_count(buckets, cap, 0)
+    puts("  Inserted 5 values, counted: ")
+    print_num(total)
+    putchar(10)
+
+    I total == 5 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 }
+}
+
+F test_negative() -> i64 {
+    puts("Test 3: Negative Values")
+
+    cap := 8
+    buckets := malloc(cap * 8)
+    init_buckets(buckets, cap, 0)
+
+    set_insert(buckets, cap, 0 - 10)
+    set_insert(buckets, cap, 0 - 20)
+    set_insert(buckets, cap, 5)
+
+    has_neg10 := set_contains(buckets, cap, 0 - 10)
+    has_5 := set_contains(buckets, cap, 5)
+
+    puts("  Contains -10: ")
+    print_num(has_neg10)
+    putchar(10)
+
+    puts("  Contains 5: ")
+    print_num(has_5)
+    putchar(10)
+
+    I has_neg10 == 1 { I has_5 == 1 {
+        puts("  PASSED")
+        putchar(10)
+        1
+    } E { 0 } } E { 0 }
+}
+
+F main() -> i64 {
+    puts("=== Set Collection Test ===")
+    putchar(10)
+
+    r1 := test_basic()
+    r2 := test_count()
+    r3 := test_negative()
+
+    putchar(10)
+    I r1 == 1 { I r2 == 1 { I r3 == 1 {
+        puts("=== All Set Tests PASSED ===")
+        0
+    } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    } } E {
+        puts("=== Some Tests FAILED ===")
+        1
+    }
+}

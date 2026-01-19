@@ -1,30 +1,34 @@
 ; ModuleID = 'std_import_test'
 source_filename = "<vais>"
 
+%SliceIter = type { i64, i64, i64 }
+%Range = type { i64, i64, i64 }
 %VecIter = type { i64, i64, i64 }
 %Take = type { i64, i64 }
-%Range = type { i64, i64, i64 }
-%SliceIter = type { i64, i64, i64 }
-declare i32 @puts(i64)
+declare i64 @feof(i64)
+declare i64 @ftell(i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i32 @sched_yield()
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i32 @usleep(i64)
+declare i64 @memcpy(i64, i64, i64)
+declare void @exit(i32)
+declare i64 @fputc(i64, i64)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @fopen(i8*, i8*)
+declare i64 @strlen(i64)
+declare i64 @fgetc(i64)
+declare i32 @puts(i8*)
 declare i64 @malloc(i64)
 declare i32 @putchar(i32)
-declare i64 @fputs(i8*, i64)
-declare i64 @fputc(i64, i64)
-declare i64 @strlen(i64)
+declare i32 @printf(i8*)
+declare i64 @fflush(i64)
+declare i32 @strcmp(i8*, i8*)
+declare i32 @strncmp(i8*, i8*, i64)
 declare i32 @fclose(i64)
 declare void @free(i64)
-declare i32 @printf(i8*)
-declare i64 @fseek(i64, i64, i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @fgetc(i64)
-declare i64 @fopen(i8*, i8*)
 declare i64 @fgets(i64, i64, i64)
-declare void @exit(i32)
-declare i64 @ftell(i64)
-declare i64 @fflush(i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @feof(i64)
+declare i64 @fputs(i8*, i64)
 @.str.0 = private unnamed_addr constant [21 x i8] c"Testing std imports:\00"
 @.str.1 = private unnamed_addr constant [20 x i8] c"iter_count(0, 10) =\00"
 @.str.2 = private unnamed_addr constant [18 x i8] c"iter_sum(1, 11) =\00"
@@ -342,7 +346,7 @@ then3:
 else4:
   br label %merge5
 merge5:
-  %10 = phi i64 [ %9, %then3 ], [ 0, %else4 ]
+  %10 = add i64 0, 0
   %11 = sub i64 %end, %start
   %12 = icmp sge i64 %11, 2
   %13 = zext i1 %12 to i64
@@ -357,7 +361,7 @@ then6:
 else7:
   br label %merge8
 merge8:
-  %18 = phi i64 [ %17, %then6 ], [ 0, %else7 ]
+  %18 = add i64 0, 0
   %19 = sub i64 %end, %start
   %20 = icmp sge i64 %19, 3
   %21 = zext i1 %20 to i64
@@ -372,7 +376,7 @@ then9:
 else10:
   br label %merge11
 merge11:
-  %26 = phi i64 [ %25, %then9 ], [ 0, %else10 ]
+  %26 = add i64 0, 0
   %27 = sub i64 %end, %start
   %28 = icmp sge i64 %27, 4
   %29 = zext i1 %28 to i64
@@ -387,7 +391,7 @@ then12:
 else13:
   br label %merge14
 merge14:
-  %34 = phi i64 [ %33, %then12 ], [ 0, %else13 ]
+  %34 = add i64 0, 0
   %35 = sub i64 %end, %start
   %36 = icmp sge i64 %35, 5
   %37 = zext i1 %36 to i64
@@ -402,7 +406,7 @@ then15:
 else16:
   br label %merge17
 merge17:
-  %42 = phi i64 [ %41, %then15 ], [ 0, %else16 ]
+  %42 = add i64 0, 0
   %43 = load i64, i64* %result.3
   br label %merge2
 merge2:
