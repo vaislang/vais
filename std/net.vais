@@ -1,0 +1,686 @@
+# Net library - network operations (TCP/UDP sockets)
+# Uses BSD socket API via extern C functions
+#
+# Note: This module provides low-level socket operations.
+# Host addresses are passed as null-terminated strings (e.g., "127.0.0.1")
+# Ports are i64 integers.
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+# Address families
+C AF_INET: i64 = 2          # IPv4
+
+# Socket types
+C SOCK_STREAM: i64 = 1      # TCP
+C SOCK_DGRAM: i64 = 2       # UDP
+
+# Protocol
+C IPPROTO_TCP: i64 = 6
+C IPPROTO_UDP: i64 = 17
+
+# Socket options
+C SOL_SOCKET: i64 = 65535   # macOS: 0xffff
+C SO_REUSEADDR: i64 = 4     # macOS: SO_REUSEADDR
+
+# Error codes
+C NET_ERR_NONE: i64 = 0
+C NET_ERR_SOCKET: i64 = -1
+C NET_ERR_BIND: i64 = -2
+C NET_ERR_LISTEN: i64 = -3
+C NET_ERR_ACCEPT: i64 = -4
+C NET_ERR_CONNECT: i64 = -5
+C NET_ERR_SEND: i64 = -6
+C NET_ERR_RECV: i64 = -7
+C NET_ERR_CLOSE: i64 = -8
+C NET_ERR_INVALID: i64 = -9
+C NET_ERR_RESOLVE: i64 = -10
+
+# Buffer sizes
+C NET_DEFAULT_BACKLOG: i64 = 128
+
+# ============================================================================
+# Extern C functions - BSD Socket API
+# ============================================================================
+
+# Create a socket
+# domain: address family (AF_INET)
+# type: socket type (SOCK_STREAM, SOCK_DGRAM)
+# protocol: protocol (0 for default)
+# Returns: socket file descriptor, or -1 on error
+X F socket(domain: i64, type: i64, protocol: i64) -> i64
+
+# Bind socket to address
+# sockfd: socket file descriptor
+# addr: pointer to sockaddr structure
+# addrlen: size of sockaddr structure
+# Returns: 0 on success, -1 on error
+X F bind(sockfd: i64, addr: i64, addrlen: i64) -> i64
+
+# Listen for connections
+# sockfd: socket file descriptor
+# backlog: maximum pending connections
+# Returns: 0 on success, -1 on error
+X F listen(sockfd: i64, backlog: i64) -> i64
+
+# Accept a connection
+# sockfd: socket file descriptor
+# addr: pointer to sockaddr for client address (can be 0)
+# addrlen: pointer to addrlen (can be 0)
+# Returns: new socket fd, or -1 on error
+X F accept(sockfd: i64, addr: i64, addrlen: i64) -> i64
+
+# Connect to remote host
+# sockfd: socket file descriptor
+# addr: pointer to sockaddr structure
+# addrlen: size of sockaddr structure
+# Returns: 0 on success, -1 on error
+X F connect(sockfd: i64, addr: i64, addrlen: i64) -> i64
+
+# Send data
+# sockfd: socket file descriptor
+# buf: pointer to data buffer
+# len: length of data
+# flags: send flags (usually 0)
+# Returns: bytes sent, or -1 on error
+X F send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+
+# Receive data
+# sockfd: socket file descriptor
+# buf: pointer to receive buffer
+# len: buffer length
+# flags: recv flags (usually 0)
+# Returns: bytes received, 0 on connection closed, -1 on error
+X F recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+
+# Send data to specific address (UDP)
+# sockfd: socket file descriptor
+# buf: pointer to data buffer
+# len: length of data
+# flags: send flags (usually 0)
+# dest_addr: pointer to destination sockaddr
+# addrlen: size of sockaddr
+# Returns: bytes sent, or -1 on error
+X F sendto(sockfd: i64, buf: i64, len: i64, flags: i64, dest_addr: i64, addrlen: i64) -> i64
+
+# Receive data with source address (UDP)
+# sockfd: socket file descriptor
+# buf: pointer to receive buffer
+# len: buffer length
+# flags: recv flags (usually 0)
+# src_addr: pointer to sockaddr for source address
+# addrlen: pointer to addrlen
+# Returns: bytes received, or -1 on error
+X F recvfrom(sockfd: i64, buf: i64, len: i64, flags: i64, src_addr: i64, addrlen: i64) -> i64
+
+# Close socket
+# fd: socket file descriptor
+# Returns: 0 on success, -1 on error
+X F close(fd: i64) -> i64
+
+# Set socket options
+# sockfd: socket file descriptor
+# level: option level (SOL_SOCKET)
+# optname: option name
+# optval: pointer to option value
+# optlen: length of option value
+# Returns: 0 on success, -1 on error
+X F setsockopt(sockfd: i64, level: i64, optname: i64, optval: i64, optlen: i64) -> i64
+
+# Convert host string to network address
+# af: address family
+# src: source string (e.g., "127.0.0.1")
+# dst: destination buffer for binary address
+# Returns: 1 on success, 0 on invalid, -1 on error
+X F inet_pton(af: i64, src: i64, dst: i64) -> i64
+
+# Convert network address to string
+# af: address family
+# src: source binary address
+# dst: destination string buffer
+# size: buffer size
+# Returns: pointer to dst on success, 0 on error
+X F inet_ntop(af: i64, src: i64, dst: i64, size: i64) -> i64
+
+# Convert port to network byte order
+X F htons(hostshort: i64) -> i64
+
+# Convert port from network byte order
+X F ntohs(netshort: i64) -> i64
+
+# Convert address to network byte order
+X F htonl(hostlong: i64) -> i64
+
+# Convert address from network byte order
+X F ntohl(netlong: i64) -> i64
+
+# Memory functions
+X F memset(ptr: i64, value: i64, size: i64) -> i64
+
+# ============================================================================
+# Sockaddr_in structure helper
+# ============================================================================
+# struct sockaddr_in {
+#     sa_family_t sin_family;  // 2 bytes (offset 0-1)
+#     in_port_t sin_port;      // 2 bytes (offset 2-3)
+#     struct in_addr sin_addr; // 4 bytes (offset 4-7)
+#     char sin_zero[8];        // 8 bytes (offset 8-15)
+# }
+# Total: 16 bytes
+
+C SOCKADDR_IN_SIZE: i64 = 16
+
+# Create sockaddr_in structure for IPv4 address
+# Returns pointer to allocated sockaddr_in (caller must free)
+F make_sockaddr_in(host: i64, port: i64) -> i64 {
+    addr := malloc(SOCKADDR_IN_SIZE)
+    I addr == 0 {
+        0
+    } E {
+        memset(addr, 0, SOCKADDR_IN_SIZE)
+
+        # sin_family (2 bytes at offset 0) - use store_i16
+        store_i16(addr, AF_INET)
+
+        # sin_port (2 bytes at offset 2) - network byte order
+        net_port := htons(port)
+        store_i16(addr + 2, net_port)
+
+        # sin_addr (4 bytes at offset 4)
+        I host != 0 {
+            result := inet_pton(AF_INET, host, addr + 4)
+            I result <= 0 {
+                free(addr)
+                0
+            } E {
+                addr
+            }
+        } E {
+            # INADDR_ANY (0.0.0.0)
+            store_i32(addr + 4, 0)
+            addr
+        }
+    }
+}
+
+# Create sockaddr_in for any address (0.0.0.0)
+F make_sockaddr_any(port: i64) -> i64 {
+    make_sockaddr_in(0, port)
+}
+
+# ============================================================================
+# TcpListener - TCP server socket
+# ============================================================================
+
+S TcpListener {
+    fd: i64,        # Socket file descriptor (-1 if invalid)
+    port: i64       # Listening port
+}
+
+X TcpListener {
+    # Create and bind a TCP listener on the specified port
+    # Returns TcpListener with fd=-1 on error
+    F bind(port: i64) -> TcpListener {
+        # Create socket
+        fd := socket(AF_INET, SOCK_STREAM, 0)
+        I fd < 0 {
+            TcpListener { fd: -1, port: 0 }
+        } E {
+            # Set SO_REUSEADDR option
+            optval := malloc(4)
+            store_i32(optval, 1)
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, optval, 4)
+            free(optval)
+
+            # Create address structure
+            addr := make_sockaddr_any(port)
+            I addr == 0 {
+                close(fd)
+                TcpListener { fd: -1, port: 0 }
+            } E {
+                # Bind socket
+                result := bind(fd, addr, SOCKADDR_IN_SIZE)
+                free(addr)
+
+                I result < 0 {
+                    close(fd)
+                    TcpListener { fd: -1, port: 0 }
+                } E {
+                    # Listen for connections
+                    result2 := listen(fd, NET_DEFAULT_BACKLOG)
+                    I result2 < 0 {
+                        close(fd)
+                        TcpListener { fd: -1, port: 0 }
+                    } E {
+                        TcpListener { fd: fd, port: port }
+                    }
+                }
+            }
+        }
+    }
+
+    # Check if listener is valid
+    F is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } E { 0 }
+    }
+
+    # Accept incoming connection
+    # Returns TcpStream with fd=-1 on error
+    F accept(&self) -> TcpStream {
+        I self.fd < 0 {
+            TcpStream { fd: -1 }
+        } E {
+            client_fd := accept(self.fd, 0, 0)
+            I client_fd < 0 {
+                TcpStream { fd: -1 }
+            } E {
+                TcpStream { fd: client_fd }
+            }
+        }
+    }
+
+    # Get the listening port
+    F get_port(&self) -> i64 {
+        self.port
+    }
+
+    # Close the listener
+    F close(&self) -> i64 {
+        I self.fd >= 0 {
+            close(self.fd)
+            self.fd = -1
+        }
+        0
+    }
+
+    # Alias for close (RAII pattern)
+    F drop(&self) -> i64 {
+        @.close()
+    }
+}
+
+# ============================================================================
+# TcpStream - TCP connection (client or accepted)
+# ============================================================================
+
+S TcpStream {
+    fd: i64         # Socket file descriptor (-1 if invalid)
+}
+
+X TcpStream {
+    # Connect to a remote host
+    # host: IP address string (e.g., "127.0.0.1")
+    # port: port number
+    # Returns TcpStream with fd=-1 on error
+    F connect(host: i64, port: i64) -> TcpStream {
+        # Create socket
+        fd := socket(AF_INET, SOCK_STREAM, 0)
+        I fd < 0 {
+            TcpStream { fd: -1 }
+        } E {
+            # Create address structure
+            addr := make_sockaddr_in(host, port)
+            I addr == 0 {
+                close(fd)
+                TcpStream { fd: -1 }
+            } E {
+                # Connect to server
+                result := connect(fd, addr, SOCKADDR_IN_SIZE)
+                free(addr)
+
+                I result < 0 {
+                    close(fd)
+                    TcpStream { fd: -1 }
+                } E {
+                    TcpStream { fd: fd }
+                }
+            }
+        }
+    }
+
+    # Check if stream is valid
+    F is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } E { 0 }
+    }
+
+    # Read data into buffer
+    # Returns number of bytes read, 0 on connection closed, -1 on error
+    F read(&self, buffer: i64, len: i64) -> i64 {
+        I self.fd < 0 {
+            -1
+        } E {
+            recv(self.fd, buffer, len, 0)
+        }
+    }
+
+    # Write data from buffer
+    # Returns number of bytes written, -1 on error
+    F write(&self, data: i64, len: i64) -> i64 {
+        I self.fd < 0 {
+            -1
+        } E {
+            send(self.fd, data, len, 0)
+        }
+    }
+
+    # Write all data (loops until complete)
+    # Returns total bytes written, -1 on error
+    F write_all(&self, data: i64, len: i64) -> i64 {
+        I self.fd < 0 {
+            -1
+        } E {
+            total := 0
+            L total < len {
+                sent := send(self.fd, data + total, len - total, 0)
+                I sent <= 0 {
+                    B -1
+                }
+                total = total + sent
+            }
+            total
+        }
+    }
+
+    # Get the file descriptor
+    F get_fd(&self) -> i64 {
+        self.fd
+    }
+
+    # Close the stream
+    F close(&self) -> i64 {
+        I self.fd >= 0 {
+            close(self.fd)
+            self.fd = -1
+        }
+        0
+    }
+
+    # Alias for close (RAII pattern)
+    F drop(&self) -> i64 {
+        @.close()
+    }
+}
+
+# ============================================================================
+# UdpSocket - UDP socket
+# ============================================================================
+
+S UdpSocket {
+    fd: i64,        # Socket file descriptor (-1 if invalid)
+    port: i64       # Bound port (0 if not bound)
+}
+
+X UdpSocket {
+    # Create an unbound UDP socket
+    F new() -> UdpSocket {
+        fd := socket(AF_INET, SOCK_DGRAM, 0)
+        I fd < 0 {
+            UdpSocket { fd: -1, port: 0 }
+        } E {
+            UdpSocket { fd: fd, port: 0 }
+        }
+    }
+
+    # Create and bind a UDP socket to a port
+    F bind(port: i64) -> UdpSocket {
+        fd := socket(AF_INET, SOCK_DGRAM, 0)
+        I fd < 0 {
+            UdpSocket { fd: -1, port: 0 }
+        } E {
+            # Set SO_REUSEADDR option
+            optval := malloc(4)
+            store_i32(optval, 1)
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, optval, 4)
+            free(optval)
+
+            # Create address structure
+            addr := make_sockaddr_any(port)
+            I addr == 0 {
+                close(fd)
+                UdpSocket { fd: -1, port: 0 }
+            } E {
+                # Bind socket
+                result := bind(fd, addr, SOCKADDR_IN_SIZE)
+                free(addr)
+
+                I result < 0 {
+                    close(fd)
+                    UdpSocket { fd: -1, port: 0 }
+                } E {
+                    UdpSocket { fd: fd, port: port }
+                }
+            }
+        }
+    }
+
+    # Check if socket is valid
+    F is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } E { 0 }
+    }
+
+    # Send data to specific address
+    # Returns number of bytes sent, -1 on error
+    F send_to(&self, data: i64, len: i64, host: i64, port: i64) -> i64 {
+        I self.fd < 0 {
+            -1
+        } E {
+            addr := make_sockaddr_in(host, port)
+            I addr == 0 {
+                -1
+            } E {
+                result := sendto(self.fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
+                free(addr)
+                result
+            }
+        }
+    }
+
+    # Receive data (simple version without source address)
+    # Returns number of bytes received, -1 on error
+    F recv(&self, buffer: i64, len: i64) -> i64 {
+        I self.fd < 0 {
+            -1
+        } E {
+            recvfrom(self.fd, buffer, len, 0, 0, 0)
+        }
+    }
+
+    # Receive data with source address info
+    # src_addr_out: pointer to buffer for source IP string (at least 16 bytes)
+    # src_port_out: pointer to i64 for source port
+    # Returns number of bytes received, -1 on error
+    F recv_from(&self, buffer: i64, len: i64, src_addr_out: i64, src_port_out: i64) -> i64 {
+        I self.fd < 0 {
+            -1
+        } E {
+            # Allocate sockaddr_in for source address
+            src_addr := malloc(SOCKADDR_IN_SIZE)
+            addrlen := malloc(8)
+            store_i64(addrlen, SOCKADDR_IN_SIZE)
+
+            result := recvfrom(self.fd, buffer, len, 0, src_addr, addrlen)
+
+            I result >= 0 {
+                # Extract source address if requested
+                I src_addr_out != 0 {
+                    inet_ntop(AF_INET, src_addr + 4, src_addr_out, 16)
+                }
+                I src_port_out != 0 {
+                    net_port := load_i16(src_addr + 2)
+                    host_port := ntohs(net_port)
+                    store_i64(src_port_out, host_port)
+                }
+            }
+
+            free(src_addr)
+            free(addrlen)
+            result
+        }
+    }
+
+    # Get the bound port
+    F get_port(&self) -> i64 {
+        self.port
+    }
+
+    # Get the file descriptor
+    F get_fd(&self) -> i64 {
+        self.fd
+    }
+
+    # Close the socket
+    F close(&self) -> i64 {
+        I self.fd >= 0 {
+            close(self.fd)
+            self.fd = -1
+        }
+        0
+    }
+
+    # Alias for close (RAII pattern)
+    F drop(&self) -> i64 {
+        @.close()
+    }
+}
+
+# ============================================================================
+# Convenience functions (C-style API)
+# ============================================================================
+
+# TCP Server functions
+
+# Create a TCP listener on the specified port
+# Returns socket fd on success, -1 on error
+F tcp_listen(port: i64) -> i64 {
+    listener := TcpListener.bind(port)
+    listener.fd
+}
+
+# Accept a connection on a listener socket
+# Returns client socket fd on success, -1 on error
+F tcp_accept(listener_fd: i64) -> i64 {
+    I listener_fd < 0 {
+        -1
+    } E {
+        accept(listener_fd, 0, 0)
+    }
+}
+
+# Close a TCP listener
+F tcp_close_listener(listener_fd: i64) -> i64 {
+    I listener_fd >= 0 {
+        close(listener_fd)
+    }
+    0
+}
+
+# TCP Client/Stream functions
+
+# Connect to a remote TCP server
+# Returns socket fd on success, -1 on error
+F tcp_connect(host: i64, port: i64) -> i64 {
+    stream := TcpStream.connect(host, port)
+    stream.fd
+}
+
+# Read from a TCP socket
+# Returns bytes read, 0 on connection closed, -1 on error
+F tcp_read(stream_fd: i64, buffer: i64, len: i64) -> i64 {
+    I stream_fd < 0 {
+        -1
+    } E {
+        recv(stream_fd, buffer, len, 0)
+    }
+}
+
+# Write to a TCP socket
+# Returns bytes written, -1 on error
+F tcp_write(stream_fd: i64, data: i64, len: i64) -> i64 {
+    I stream_fd < 0 {
+        -1
+    } E {
+        send(stream_fd, data, len, 0)
+    }
+}
+
+# Close a TCP stream
+F tcp_close(stream_fd: i64) -> i64 {
+    I stream_fd >= 0 {
+        close(stream_fd)
+    }
+    0
+}
+
+# UDP functions
+
+# Create and bind a UDP socket
+# Returns socket fd on success, -1 on error
+F udp_bind(port: i64) -> i64 {
+    sock := UdpSocket.bind(port)
+    sock.fd
+}
+
+# Send data via UDP to specific address
+# Returns bytes sent, -1 on error
+F udp_send_to(socket_fd: i64, data: i64, len: i64, host: i64, port: i64) -> i64 {
+    I socket_fd < 0 {
+        -1
+    } E {
+        addr := make_sockaddr_in(host, port)
+        I addr == 0 {
+            -1
+        } E {
+            result := sendto(socket_fd, data, len, 0, addr, SOCKADDR_IN_SIZE)
+            free(addr)
+            result
+        }
+    }
+}
+
+# Receive data via UDP
+# Returns bytes received, -1 on error
+F udp_recv_from(socket_fd: i64, buffer: i64, len: i64) -> i64 {
+    I socket_fd < 0 {
+        -1
+    } E {
+        recvfrom(socket_fd, buffer, len, 0, 0, 0)
+    }
+}
+
+# Close a UDP socket
+F udp_close(socket_fd: i64) -> i64 {
+    I socket_fd >= 0 {
+        close(socket_fd)
+    }
+    0
+}
+
+# ============================================================================
+# Utility functions
+# ============================================================================
+
+# Check if an IP address string is valid
+# Returns 1 if valid, 0 otherwise
+F is_valid_ip(host: i64) -> i64 {
+    tmp := malloc(4)
+    result := inet_pton(AF_INET, host, tmp)
+    free(tmp)
+    I result == 1 { 1 } E { 0 }
+}
+
+# Convert error code to string (returns static string pointer)
+F net_error_string(err: i64) -> i64 {
+    I err == NET_ERR_NONE { "Success" }
+    EI err == NET_ERR_SOCKET { "Socket creation failed" }
+    EI err == NET_ERR_BIND { "Bind failed" }
+    EI err == NET_ERR_LISTEN { "Listen failed" }
+    EI err == NET_ERR_ACCEPT { "Accept failed" }
+    EI err == NET_ERR_CONNECT { "Connect failed" }
+    EI err == NET_ERR_SEND { "Send failed" }
+    EI err == NET_ERR_RECV { "Receive failed" }
+    EI err == NET_ERR_CLOSE { "Close failed" }
+    EI err == NET_ERR_INVALID { "Invalid argument" }
+    EI err == NET_ERR_RESOLVE { "Address resolution failed" }
+    E { "Unknown error" }
+}

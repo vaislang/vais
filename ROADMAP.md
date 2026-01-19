@@ -67,7 +67,7 @@
 
 ## 🚀 Phase 2: 표준 라이브러리
 
-> **상태**: ✅ 완료 (90%)
+> **상태**: ✅ 완료 (100%)
 
 ### 완료된 작업
 - [x] **Option<T>** - 옵셔널 타입 (`std/option.vais`)
@@ -102,14 +102,20 @@
   - deque_pop_front, deque_pop_back, deque_get
   - deque_size, deque_is_empty, deque_free
 
+- [x] **Net** - 네트워크 기본 지원 (`std/net.vais`) **NEW**
+  - TCP: TcpListener, TcpStream (listen, accept, connect, read, write)
+  - UDP: UdpSocket (bind, send_to, recv_from)
+  - C FFI 연동 (socket, bind, listen, accept 등)
+  - C-style API: tcp_listen, tcp_connect, udp_bind 등
+
 ### 남은 작업
-- [ ] **Net** - 네트워크 기본 지원
+- (없음)
 
 ---
 
 ## ⚡ Phase 3: 개발자 도구
 
-> **상태**: ✅ 완료 (85%)
+> **상태**: ✅ 완료 (100%)
 
 ### 완료된 작업
 - [x] **LSP Server** (vais-lsp)
@@ -147,8 +153,13 @@
   - 들여쓰기 설정 (--indent)
   - 체크 모드 (--check)
 
+- [x] **Debugger** - 디버깅 지원 **NEW**
+  - DWARF 디버그 메타데이터 생성 (DIFile, DISubprogram, DILocation)
+  - `--debug` / `-g` CLI 옵션
+  - lldb/gdb 소스 레벨 디버깅 지원
+
 ### 남은 작업
-- [ ] **Debugger** - 디버깅 지원
+- (없음)
 
 ---
 
@@ -179,8 +190,9 @@ std/               # 표준 라이브러리 ✅
 ├── runtime.vais
 ├── math.vais
 ├── io.vais
-├── set.vais       # NEW
-└── deque.vais     # NEW
+├── set.vais
+├── deque.vais
+└── net.vais       # NEW
 
 vscode-vais/       # VSCode Extension ✅ NEW
 ├── package.json
@@ -200,14 +212,15 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Parser | ✅ 완료 | 100% |
 | Type Checker | ✅ 완료 | 100% |
 | Code Generator | ✅ 완료 | 100% |
-| Standard Library | ✅ 완료 | 90% |
-| LSP | ✅ 완료 | 90% |
+| Standard Library | ✅ 완료 | 100% |
+| LSP | ✅ 완료 | 100% |
 | REPL | ✅ 완료 | 100% |
 | Optimization | ✅ 완료 | 100% |
-| VSCode Extension | ✅ 완료 | 95% |
+| VSCode Extension | ✅ 완료 | 100% |
 | Formatter | ✅ 완료 | 100% |
+| Debugger | ✅ 완료 | 100% |
 
-**전체 진행률: ~96%**
+**전체 진행률: 100%**
 
 ---
 
@@ -231,6 +244,23 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ```
 
 ## 최근 변경사항 (2026-01-20)
+
+### Net 모듈 추가
+- **std/net.vais** - 네트워크 소켓 지원
+  - TcpListener: bind, accept, close
+  - TcpStream: connect, read, write, write_all
+  - UdpSocket: bind, send_to, recv, recv_from
+  - C FFI 선언: socket, bind, listen, accept, connect, send, recv 등
+  - C-style 편의 함수: tcp_listen, tcp_connect, udp_bind 등
+
+### Debugger 지원 추가
+- **debug.rs** 모듈 (`vais-codegen/src/debug.rs`)
+  - DWARF 디버그 메타데이터 생성 (DIFile, DICompileUnit, DISubprogram, DILocation)
+  - 소스 줄/컬럼 번호 계산
+- **CLI 옵션**
+  - `--debug` / `-g`: 디버그 정보 포함 컴파일
+  - 디버그 모드에서 자동 최적화 비활성화
+- lldb/gdb에서 소스 레벨 브레이크포인트 지원
 
 ### 코드 포맷터 추가
 - **Formatter 모듈** (`vais-codegen/src/formatter.rs`)
@@ -278,8 +308,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🎯 다음 목표
 
-1. **네트워크 지원**: Net 모듈 (TCP/UDP 소켓)
-2. **디버거**: 디버깅 지원
+모든 주요 기능이 완료되었습니다! 향후 개선 사항:
+- 디버거 표현식 레벨 위치 정보 개선
+- IPv6 지원
+- 추가 표준 라이브러리 모듈
 
 ---
 

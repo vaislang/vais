@@ -72,6 +72,10 @@ enum Commands {
         /// Optimization level (0-3)
         #[arg(short = 'O', long, default_value = "0")]
         opt_level: u8,
+
+        /// Include debug information (DWARF) for source-level debugging
+        #[arg(short = 'g', long)]
+        debug: bool,
     },
 
     /// Run a Vais source file
@@ -129,8 +133,8 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level }) => {
-            cmd_build(&input, output, emit_ir, opt_level, cli.verbose)
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug }) => {
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose)
         }
         Some(Commands::Run { input, args }) => {
             cmd_run(&input, &args, cli.verbose)
@@ -155,7 +159,7 @@ fn main() {
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, cli.verbose)
+                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose)
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -175,6 +179,7 @@ fn cmd_build(
     output: Option<PathBuf>,
     emit_ir: bool,
     opt_level: u8,
+    debug: bool,
     verbose: bool,
 ) -> Result<(), String> {
     // Read source for error reporting
@@ -206,11 +211,29 @@ fn cmd_build(
         .unwrap_or("main");
 
     let mut codegen = CodeGenerator::new(module_name);
+
+    // Enable debug info if requested
+    if debug {
+        let source_file = input.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown.vais");
+        let source_dir = input.parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or(".");
+        codegen.enable_debug(source_file, source_dir, &main_source);
+
+        if verbose {
+            println!("  {}", "Debug info enabled".cyan());
+        }
+    }
+
     let raw_ir = codegen.generate_module(&merged_ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
 
     // Apply optimization passes before emitting IR
-    let opt = match opt_level {
+    // When debug is enabled, disable optimizations to preserve debuggability
+    let effective_opt_level = if debug { 0 } else { opt_level };
+    let opt = match effective_opt_level {
         0 => OptLevel::O0,
         1 => OptLevel::O1,
         2 => OptLevel::O2,
@@ -218,8 +241,10 @@ fn cmd_build(
     };
     let ir = optimize_ir(&raw_ir, opt);
 
-    if verbose && opt_level > 0 {
+    if verbose && opt_level > 0 && !debug {
         println!("{} Applied Vais IR optimizations (O{})", "Optimizing".cyan().bold(), opt_level);
+    } else if verbose && debug && opt_level > 0 {
+        println!("{} Optimizations disabled for debug build", "Note".yellow().bold());
     }
 
     // Determine output paths
@@ -245,7 +270,7 @@ fn cmd_build(
             input.with_extension("")
         });
 
-        compile_ir_to_binary(&ir_path, &bin_path, opt_level, verbose)?;
+        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose)?;
     }
 
     Ok(())
@@ -450,24 +475,38 @@ fn compile_ir_to_binary(
     ir_path: &Path,
     bin_path: &Path,
     opt_level: u8,
+    debug: bool,
     verbose: bool,
 ) -> Result<(), String> {
     // Try clang first, then llc + ld
     let opt_flag = format!("-O{}", opt_level.min(3));
 
+    let mut args = vec![
+        opt_flag,
+        "-Wno-override-module".to_string(), // Suppress warning when clang sets target triple
+    ];
+
+    // Add debug flag if requested
+    if debug {
+        args.push("-g".to_string());  // Generate debug symbols
+    }
+
+    args.push("-o".to_string());
+    args.push(bin_path.to_str().unwrap().to_string());
+    args.push(ir_path.to_str().unwrap().to_string());
+
     let status = Command::new("clang")
-        .args([
-            &opt_flag,
-            "-Wno-override-module", // Suppress warning when clang sets target triple
-            "-o", bin_path.to_str().unwrap(),
-            ir_path.to_str().unwrap(),
-        ])
+        .args(&args)
         .status();
 
     match status {
         Ok(s) if s.success() => {
             if verbose {
-                println!("{} {}", "Compiled".green().bold(), bin_path.display());
+                if debug {
+                    println!("{} {} (with debug symbols)", "Compiled".green().bold(), bin_path.display());
+                } else {
+                    println!("{} {}", "Compiled".green().bold(), bin_path.display());
+                }
             } else {
                 println!("{}", bin_path.display());
             }
@@ -483,9 +522,9 @@ fn compile_ir_to_binary(
 }
 
 fn cmd_run(input: &PathBuf, args: &[String], verbose: bool) -> Result<(), String> {
-    // Build first
+    // Build first (no debug for run command by default)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, verbose)?;
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose)?;
 
     // Run the binary
     if verbose {

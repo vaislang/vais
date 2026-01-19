@@ -5,10 +5,13 @@
 //! Note: This is a placeholder structure. Full LLVM integration requires
 //! the inkwell crate and LLVM installation.
 
+pub mod debug;
 pub mod formatter;
 pub mod optimize;
 mod builtins;
 mod expr;
+
+pub use debug::{DebugConfig, DebugInfoBuilder};
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -38,6 +41,7 @@ type CodegenResult<T> = Result<T, CodegenError>;
 /// Result of generating a block of statements
 /// (value, ir_code, is_terminated)
 /// is_terminated is true if the block ends with break, continue, or return
+#[allow(dead_code)]
 type BlockResult = (String, String, bool);
 
 /// LLVM IR Code Generator for Vais 0.0.1
@@ -93,6 +97,9 @@ pub struct CodeGenerator {
 
     // Current basic block name (for phi node predecessor tracking)
     current_block: String,
+
+    // Debug info builder for DWARF metadata generation
+    debug_info: DebugInfoBuilder,
 }
 
 /// Information about an await point in an async function
@@ -205,11 +212,32 @@ impl CodeGenerator {
             current_async_function: None,
             needs_unwrap_panic: false,
             current_block: "entry".to_string(),
+            debug_info: DebugInfoBuilder::new(DebugConfig::default()),
         };
 
         // Register built-in extern functions
         gen.register_builtin_functions();
         gen
+    }
+
+    /// Enable debug info generation with source file information
+    ///
+    /// This should be called before `generate_module` to enable DWARF debug
+    /// metadata generation. The source code is used for line/column mapping.
+    ///
+    /// # Arguments
+    /// * `source_file` - Name of the source file
+    /// * `source_dir` - Directory containing the source file
+    /// * `source_code` - The source code content for line number calculation
+    pub fn enable_debug(&mut self, source_file: &str, source_dir: &str, source_code: &str) {
+        let config = DebugConfig::new(source_file, source_dir);
+        self.debug_info = DebugInfoBuilder::new(config);
+        self.debug_info.set_source_code(source_code);
+    }
+
+    /// Check if debug info generation is enabled
+    pub fn is_debug_enabled(&self) -> bool {
+        self.debug_info.is_enabled()
     }
 
     fn next_label(&mut self, prefix: &str) -> String {
@@ -228,6 +256,11 @@ impl CodeGenerator {
 
         // Note: target triple and data layout are omitted to let clang auto-detect
         ir.push('\n');
+
+        // Initialize debug info if enabled
+        if self.debug_info.is_enabled() {
+            self.debug_info.initialize();
+        }
 
         // First pass: collect declarations
         for item in &module.items {
@@ -290,13 +323,13 @@ impl CodeGenerator {
         for item in &module.items {
             match &item.node {
                 Item::Function(f) => {
-                    body_ir.push_str(&self.generate_function(f)?);
+                    body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
                     body_ir.push('\n');
                 }
                 Item::Struct(s) => {
                     // Generate methods for this struct
                     for method in &s.methods {
-                        body_ir.push_str(&self.generate_method(&s.name.node, &method.node)?);
+                        body_ir.push_str(&self.generate_method_with_span(&s.name.node, &method.node, method.span)?);
                         body_ir.push('\n');
                     }
                 }
@@ -308,7 +341,7 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
-                        body_ir.push_str(&self.generate_method(&type_name, &method.node)?);
+                        body_ir.push_str(&self.generate_method_with_span(&type_name, &method.node, method.span)?);
                         body_ir.push('\n');
                     }
                 }
@@ -347,6 +380,16 @@ impl CodeGenerator {
 
         // Add helper functions for memory operations
         ir.push_str(&self.generate_helper_functions());
+
+        // Add debug intrinsic declaration if debug info is enabled
+        if self.debug_info.is_enabled() {
+            ir.push_str("\n; Debug intrinsics\n");
+            ir.push_str("declare void @llvm.dbg.declare(metadata, metadata, metadata)\n");
+            ir.push_str("declare void @llvm.dbg.value(metadata, metadata, metadata)\n");
+        }
+
+        // Add debug metadata at the end
+        ir.push_str(&self.debug_info.finalize());
 
         Ok(ir)
     }
@@ -594,7 +637,12 @@ impl CodeGenerator {
         format!("declare {} @{}({})", ret, info.name, params.join(", "))
     }
 
+    #[allow(dead_code)]
     fn generate_function(&mut self, f: &Function) -> CodegenResult<String> {
+        self.generate_function_with_span(f, Span::default())
+    }
+
+    fn generate_function_with_span(&mut self, f: &Function, span: Span) -> CodegenResult<String> {
         // Check if this is an async function
         if f.is_async {
             return self.generate_async_function(f);
@@ -604,6 +652,10 @@ impl CodeGenerator {
         self.locals.clear();
         self.label_counter = 0;
         self.loop_stack.clear();
+
+        // Create debug info for this function
+        let func_line = self.debug_info.offset_to_line(span.start);
+        let di_subprogram = self.debug_info.create_function_debug_info(&f.name.node, func_line, true);
 
         let params: Vec<_> = f
             .params
@@ -635,11 +687,19 @@ impl CodeGenerator {
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
+        // Build function definition with optional debug info reference
+        let dbg_ref = if let Some(sp_id) = di_subprogram {
+            format!(" !dbg !{}", sp_id)
+        } else {
+            String::new()
+        };
+
         let mut ir = format!(
-            "define {} @{}({}) {{\n",
+            "define {} @{}({}){} {{\n",
             ret_llvm,
             f.name.node,
-            params.join(", ")
+            params.join(", "),
+            dbg_ref
         );
 
         ir.push_str("entry:\n");
@@ -650,29 +710,33 @@ impl CodeGenerator {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
+                let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
-                    ir.push_str("  ret void\n");
+                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
+                    ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
                 } else {
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                 }
             }
             FunctionBody::Block(stmts) => {
                 let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
+                // Get debug location from last statement or function end
+                let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
+                let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
                 if ret_type == ResolvedType::Unit {
-                    ir.push_str("  ret void\n");
+                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
+                    ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
                 } else {
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                 }
             }
         }
@@ -851,7 +915,12 @@ impl CodeGenerator {
     /// Generate a method for a struct
     /// Methods are compiled as functions with the struct pointer as implicit first argument
     /// Static methods (without &self) don't have the implicit self parameter
+    #[allow(dead_code)]
     fn generate_method(&mut self, struct_name: &str, f: &Function) -> CodegenResult<String> {
+        self.generate_method_with_span(struct_name, f, Span::default())
+    }
+
+    fn generate_method_with_span(&mut self, struct_name: &str, f: &Function, span: Span) -> CodegenResult<String> {
         // Method name: StructName_methodName
         let method_name = format!("{}_{}", struct_name, f.name.node);
 
@@ -859,6 +928,10 @@ impl CodeGenerator {
         self.locals.clear();
         self.label_counter = 0;
         self.loop_stack.clear();
+
+        // Create debug info for this method
+        let func_line = self.debug_info.offset_to_line(span.start);
+        let di_subprogram = self.debug_info.create_function_debug_info(&method_name, func_line, true);
 
         // Check if this is a static method (no &self or self parameter)
         let has_self = f.params.first().map(|p| p.name.node == "self").unwrap_or(false);
@@ -914,11 +987,19 @@ impl CodeGenerator {
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
+        // Build method definition with optional debug info reference
+        let dbg_ref = if let Some(sp_id) = di_subprogram {
+            format!(" !dbg !{}", sp_id)
+        } else {
+            String::new()
+        };
+
         let mut ir = format!(
-            "define {} @{}({}) {{\n",
+            "define {} @{}({}){} {{\n",
             ret_llvm,
             method_name,
-            params.join(", ")
+            params.join(", "),
+            dbg_ref
         );
 
         ir.push_str("entry:\n");
@@ -929,29 +1010,32 @@ impl CodeGenerator {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
+                let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
-                    ir.push_str("  ret void\n");
+                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
+                    ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
                 } else {
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                 }
             }
             FunctionBody::Block(stmts) => {
                 let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
+                let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
+                let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
                 if ret_type == ResolvedType::Unit {
-                    ir.push_str("  ret void\n");
+                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
                     // For struct returns, load the value from pointer
                     let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, ret_llvm, ret_llvm, value));
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, loaded));
+                    ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
                 } else {
-                    ir.push_str(&format!("  ret {} {}\n", ret_llvm, value));
+                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
                 }
             }
         }
