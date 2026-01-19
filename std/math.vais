@@ -1,0 +1,137 @@
+# Math library - mathematical functions and constants
+# Provides basic math operations, trigonometry, and logarithms
+
+# Mathematical constants
+C PI: f64 = 3.141592653589793
+C E: f64 = 2.718281828459045
+C TAU: f64 = 6.283185307179586
+
+# Absolute value of i64
+F abs_i64(x: i64) -> i64 {
+    I x < 0 {
+        0 - x
+    } E {
+        x
+    }
+}
+
+# Absolute value of f64
+F abs(x: f64) -> f64 {
+    I x < 0.0 {
+        0.0 - x
+    } E {
+        x
+    }
+}
+
+# Minimum of two i64 values
+F min_i64(a: i64, b: i64) -> i64 {
+    I a < b { a } E { b }
+}
+
+# Minimum of two f64 values
+F min(a: f64, b: f64) -> f64 {
+    I a < b { a } E { b }
+}
+
+# Maximum of two i64 values
+F max_i64(a: i64, b: i64) -> i64 {
+    I a > b { a } E { b }
+}
+
+# Maximum of two f64 values
+F max(a: f64, b: f64) -> f64 {
+    I a > b { a } E { b }
+}
+
+# Clamp value between min and max (i64)
+F clamp_i64(x: i64, min_val: i64, max_val: i64) -> i64 {
+    I x < min_val {
+        min_val
+    } E I x > max_val {
+        max_val
+    } E {
+        x
+    }
+}
+
+# Clamp value between min and max (f64)
+F clamp(x: f64, min_val: f64, max_val: f64) -> f64 {
+    I x < min_val {
+        min_val
+    } E I x > max_val {
+        max_val
+    } E {
+        x
+    }
+}
+
+# Extern C math functions - basic operations
+
+# Square root
+X F sqrt(x: f64) -> f64
+
+# Power (x raised to y)
+X F pow(x: f64, y: f64) -> f64
+
+# Floor (round down to nearest integer)
+X F floor(x: f64) -> f64
+
+# Ceiling (round up to nearest integer)
+X F ceil(x: f64) -> f64
+
+# Round to nearest integer
+X F round(x: f64) -> f64
+
+# Extern C math functions - trigonometric
+
+# Sine
+X F sin(x: f64) -> f64
+
+# Cosine
+X F cos(x: f64) -> f64
+
+# Tangent
+X F tan(x: f64) -> f64
+
+# Arc sine (inverse sine)
+X F asin(x: f64) -> f64
+
+# Arc cosine (inverse cosine)
+X F acos(x: f64) -> f64
+
+# Arc tangent (inverse tangent)
+X F atan(x: f64) -> f64
+
+# Arc tangent of y/x (two-argument form, handles quadrants)
+X F atan2(y: f64, x: f64) -> f64
+
+# Extern C math functions - logarithmic and exponential
+
+# Natural logarithm (base e)
+X F log(x: f64) -> f64
+
+# Base-10 logarithm
+X F log10(x: f64) -> f64
+
+# Base-2 logarithm
+X F log2(x: f64) -> f64
+
+# Exponential function (e raised to x)
+X F exp(x: f64) -> f64
+
+# Helper: Convert degrees to radians
+F deg_to_rad(degrees: f64) -> f64 {
+    degrees * PI / 180.0
+}
+
+# Helper: Convert radians to degrees
+F rad_to_deg(radians: f64) -> f64 {
+    radians * 180.0 / PI
+}
+
+# Helper: Check if number is approximately equal (within epsilon)
+F approx_eq(a: f64, b: f64, epsilon: f64) -> i64 {
+    diff := abs(a - b)
+    I diff < epsilon { 1 } E { 0 }
+}

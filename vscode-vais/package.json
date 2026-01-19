@@ -1,0 +1,56 @@
+{
+  "name": "vais",
+  "displayName": "Vais Language Support",
+  "description": "Syntax highlighting and language support for the Vais programming language",
+  "version": "0.1.0",
+  "publisher": "vais-lang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "vais",
+    "ai-optimized",
+    "programming language"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sswoo88/vais"
+  },
+  "license": "MIT",
+  "scripts": {
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "vais",
+        "aliases": [
+          "Vais",
+          "vais"
+        ],
+        "extensions": [
+          ".vais"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icon.png",
+          "dark": "./icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "vais",
+        "scopeName": "source.vais",
+        "path": "./syntaxes/vais.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,415 @@
+# Vais Language Example - Showcasing all syntax features
+
+# ============================================
+# 1. CONSTANTS AND VARIABLES
+# ============================================
+
+# Constant declaration
+C MAX_SIZE: i64 = 1000
+
+# ============================================
+# 2. BASIC FUNCTIONS
+# ============================================
+
+# Simple function with explicit return
+F add(a: i64, b: i64) -> i64 {
+    R a + b
+}
+
+# Expression-oriented function (no explicit return)
+F multiply(x: i64, y: i64) -> i64 = x * y
+
+# ============================================
+# 3. SELF-RECURSION WITH @ OPERATOR
+# ============================================
+
+# Fibonacci using self-recursion operator
+F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+
+# Factorial with self-recursion
+F factorial(n: i64) -> i64 {
+    I n <= 1 {
+        1
+    } E {
+        n * @(n - 1)
+    }
+}
+
+# ============================================
+# 4. STRUCTS
+# ============================================
+
+# Basic struct
+S Point {
+    x: i64,
+    y: i64
+}
+
+# Generic struct
+S Box<T> {
+    value: T
+}
+
+# Nested struct
+S Rectangle {
+    top_left: Point,
+    bottom_right: Point
+}
+
+# ============================================
+# 5. ENUMS
+# ============================================
+
+# Simple enum
+E Color {
+    Red,
+    Green,
+    Blue
+}
+
+# Enum with associated data
+E Option<T> {
+    Some(T),
+    None
+}
+
+# Result type enum
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+# ============================================
+# 6. TRAITS (INTERFACES)
+# ============================================
+
+# Trait definition
+W Printable {
+    F print(&self) -> i64
+}
+
+W Comparable {
+    F compare(&self, other: &Self) -> i64
+}
+
+# ============================================
+# 7. IMPLEMENTATIONS
+# ============================================
+
+# Implement trait for struct
+X Point: Printable {
+    F print(&self) -> i64 {
+        puts("Point(")
+        print_i64(self.x)
+        puts(", ")
+        print_i64(self.y)
+        puts(")")
+        0
+    }
+}
+
+# Inherent implementation (methods without trait)
+X Point {
+    F new(x: i64, y: i64) -> Point {
+        Point { x: x, y: y }
+    }
+
+    F distance(&self) -> f64 {
+        # Calculate distance from origin
+        V x2 := self.x * self.x
+        V y2 := self.y * self.y
+        sqrt(x2 + y2)
+    }
+}
+
+# ============================================
+# 8. CONTROL FLOW
+# ============================================
+
+F control_flow_demo(n: i64) -> i64 {
+    # If-Else statement
+    I n < 0 {
+        puts("Negative")
+        R -1
+    } E I n == 0 {
+        puts("Zero")
+        R 0
+    } E {
+        puts("Positive")
+        R 1
+    }
+}
+
+# ============================================
+# 9. LOOPS
+# ============================================
+
+# While loop
+F countdown(n: i64) -> i64 {
+    V mut i := n
+    W i > 0 {
+        print_i64(i)
+        i = i - 1
+    }
+    0
+}
+
+# Loop with break and continue
+F loop_demo() -> i64 {
+    V mut count := 0
+    L {
+        count = count + 1
+
+        I count == 5 {
+            N  # Continue
+        }
+
+        I count > 10 {
+            B  # Break
+        }
+
+        print_i64(count)
+    }
+    count
+}
+
+# ============================================
+# 10. PATTERN MATCHING
+# ============================================
+
+F match_demo(n: i64) -> i64 {
+    M n {
+        0 => 100,
+        1 => 101,
+        2 => 102,
+        _ => 999
+    }
+}
+
+F match_option(opt: Option<i64>) -> i64 {
+    M opt {
+        Some(value) => value,
+        None => -1
+    }
+}
+
+# ============================================
+# 11. ASYNC/AWAIT
+# ============================================
+
+# Async function
+A F fetch_data(id: i64) -> i64 {
+    # Simulate async operation
+    id * 2
+}
+
+# Another async function
+A F process_async(x: i64, y: i64) -> i64 {
+    V result1 := fetch_data(x).await
+    V result2 := fetch_data(y).await
+    result1 + result2
+}
+
+# ============================================
+# 12. TYPE SYSTEM
+# ============================================
+
+F type_demo() -> i64 {
+    # Integer types
+    V a: i8 = 127
+    V b: i16 = 32767
+    V c: i32 = 2147483647
+    V d: i64 = 9223372036854775807
+
+    # Unsigned integer types
+    V e: u8 = 255
+    V f: u16 = 65535
+    V g: u32 = 4294967295
+    V h: u64 = 18446744073709551615
+
+    # Floating point types
+    V pi: f32 = 3.14159
+    V e_num: f64 = 2.71828
+
+    # Boolean type
+    V is_true: bool = true
+    V is_false: bool = false
+
+    # String type
+    V message: str = "Hello, Vais!"
+
+    0
+}
+
+# ============================================
+# 13. OPERATORS
+# ============================================
+
+F operator_demo(a: i64, b: i64) -> i64 {
+    # Arithmetic operators
+    V sum := a + b
+    V diff := a - b
+    V prod := a * b
+    V quot := a / b
+    V rem := a % b
+
+    # Comparison operators
+    V eq := a == b
+    V ne := a != b
+    V lt := a < b
+    V gt := a > b
+    V le := a <= b
+    V ge := a >= b
+
+    # Logical operators
+    V and_result := eq && ne
+    V or_result := lt || gt
+    V not_result := !eq
+
+    # Bitwise operators
+    V bit_and := a & b
+    V bit_or := a | b
+    V bit_xor := a ^ b
+    V left_shift := a << 2
+    V right_shift := a >> 2
+
+    0
+}
+
+# ============================================
+# 14. VARIABLE DECLARATIONS
+# ============================================
+
+F variable_demo() -> i64 {
+    # Immutable variable with type annotation
+    V x: i64 = 42
+
+    # Immutable variable with type inference
+    V y := 100
+
+    # Mutable variable
+    V mut z := 50
+    z = z + 10
+
+    # Multiple assignment
+    V result := x + y + z
+    result
+}
+
+# ============================================
+# 15. BUILT-IN FUNCTIONS
+# ============================================
+
+F builtin_demo() -> i64 {
+    # Print functions
+    puts("Hello from Vais!")
+    putchar(65)  # Print 'A'
+    print_i64(42)
+
+    # Memory functions
+    V ptr := malloc(100)
+    free(ptr)
+
+    # String functions
+    V len := strlen("test")
+
+    0
+}
+
+# ============================================
+# 16. GENERICS
+# ============================================
+
+F identity<T>(value: T) -> T {
+    value
+}
+
+F wrap<T>(value: T) -> Box<T> {
+    Box { value: value }
+}
+
+# ============================================
+# 17. REFERENCES
+# ============================================
+
+F reference_demo() -> i64 {
+    V point := Point { x: 10, y: 20 }
+
+    # Pass by reference
+    print_point(&point)
+
+    0
+}
+
+F print_point(p: &Point) -> i64 {
+    p.print()
+}
+
+# ============================================
+# 18. TERNARY OPERATOR
+# ============================================
+
+F max(a: i64, b: i64) -> i64 = a > b ? a : b
+
+F min(a: i64, b: i64) -> i64 = a < b ? a : b
+
+F abs(x: i64) -> i64 = x < 0 ? -x : x
+
+# ============================================
+# 19. NUMERIC LITERALS
+# ============================================
+
+F literals_demo() -> i64 {
+    # Decimal
+    V decimal := 42
+
+    # Hexadecimal
+    V hex := 0xFF
+
+    # Binary
+    V binary := 0b1010
+
+    # Octal
+    V octal := 0o77
+
+    # Float
+    V float_val := 3.14159
+
+    # Scientific notation
+    V sci := 1.5e10
+
+    0
+}
+
+# ============================================
+# 20. MAIN FUNCTION
+# ============================================
+
+F main() -> i64 {
+    puts("=== Vais Language Demo ===")
+
+    # Test fibonacci
+    V fib_result := fib(10)
+    puts("Fibonacci(10):")
+    print_i64(fib_result)
+
+    # Test factorial
+    V fact_result := factorial(5)
+    puts("Factorial(5):")
+    print_i64(fact_result)
+
+    # Test point
+    V p := Point::new(3, 4)
+    p.print()
+
+    # Test match
+    V match_result := match_demo(2)
+    print_i64(match_result)
+
+    # Test async
+    V async_result := process_async(5, 10).await
+    print_i64(async_result)
+
+    puts("=== Demo Complete ===")
+    0
+}

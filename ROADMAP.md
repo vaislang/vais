@@ -60,7 +60,7 @@
 
 ## 🚀 Phase 2: 표준 라이브러리
 
-> **상태**: 🔄 진행 중 (70%)
+> **상태**: ✅ 완료 (85%)
 
 ### 완료된 작업
 - [x] **Option<T>** - 옵셔널 타입 (`std/option.vais`)
@@ -76,9 +76,18 @@
 - [x] **Arena** - 아레나 할당자 (`std/arena.vais`)
 - [x] **Runtime** - 런타임 지원 (`std/runtime.vais`)
 
+- [x] **Math** - 수학 함수 (`std/math.vais`)
+  - 상수: PI, E, TAU
+  - 기본: abs, min, max, clamp
+  - 수학: sqrt, pow, floor, ceil, round
+  - 삼각함수: sin, cos, tan, asin, acos, atan, atan2
+  - 로그: log, log10, log2, exp
+- [x] **IO** - 표준 입력 처리 (`std/io.vais`)
+  - read_line, read_i64, read_f64
+  - read_char, read_word
+  - prompt_line, prompt_i64, prompt_f64
+
 ### 남은 작업
-- [ ] **Math** - 수학 함수 (sin, cos, sqrt 등)
-- [ ] **IO** - 표준 입력 처리
 - [ ] **Collections** - Set, Deque 등 추가 컬렉션
 - [ ] **Net** - 네트워크 기본 지원
 
@@ -86,7 +95,7 @@
 
 ## ⚡ Phase 3: 개발자 도구
 
-> **상태**: 🔄 진행 중 (60%)
+> **상태**: 🔄 진행 중 (70%)
 
 ### 완료된 작업
 - [x] **LSP Server** (vais-lsp)
@@ -107,8 +116,12 @@
   - [x] Dead code elimination
 - [x] **Doc Generator** - 문서 생성
 
+- [x] **VSCode Extension** (`vscode-vais/`)
+  - [x] TextMate 문법 파일 (syntax highlighting)
+  - [x] 언어 설정 (brackets, comments, indentation)
+  - [ ] 자동 완성 연동
+
 ### 남은 작업
-- [ ] **VSCode Extension** - 문법 강조, 자동 완성
 - [ ] **Formatter** - 코드 포맷터
 - [ ] **Debugger** - 디버깅 지원
 - [ ] **Documentation** - 언어 스펙 문서
@@ -139,7 +152,14 @@ std/               # 표준 라이브러리 ✅
 ├── rc.vais
 ├── box.vais
 ├── arena.vais
-└── runtime.vais
+├── runtime.vais
+├── math.vais      # NEW
+└── io.vais        # NEW
+
+vscode-vais/       # VSCode Extension ✅ NEW
+├── package.json
+├── language-configuration.json
+└── syntaxes/vais.tmLanguage.json
 
 examples/          # 예제 코드 (40+ 파일) ✅
 ```
@@ -154,12 +174,13 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Parser | ✅ 완료 | 100% |
 | Type Checker | ✅ 완료 | 100% |
 | Code Generator | ✅ 완료 | 95% |
-| Standard Library | 🔄 진행 중 | 70% |
+| Standard Library | ✅ 완료 | 85% |
 | LSP | 🔄 진행 중 | 50% |
 | REPL | ✅ 완료 | 100% |
 | Optimization | ✅ 완료 | 100% |
+| VSCode Extension | ✅ 완료 | 80% |
 
-**전체 진행률: ~85%**
+**전체 진행률: ~90%**
 
 ---
 
@@ -186,10 +207,10 @@ e33bfa5 Add standard library and comprehensive examples
 
 ## 🎯 다음 목표
 
-1. **Phase 2 완료**: Math, IO 모듈 추가
-2. **LSP 개선**: 자동 완성, Go to definition 구현
-3. **VSCode Extension**: 기본 문법 강조
-4. **문서화**: 언어 스펙 및 튜토리얼
+1. **LSP 개선**: 자동 완성, Go to definition 구현
+2. **VSCode Extension**: LSP 연동 및 자동 완성
+3. **문서화**: 언어 스펙 및 튜토리얼
+4. **추가 컬렉션**: Set, Deque 등
 
 ---
 
