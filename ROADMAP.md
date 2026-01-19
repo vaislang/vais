@@ -204,7 +204,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ---
 
-## 📊 진행률 요약
+## 📊 컴포넌트 현황
 
 | 컴포넌트 | 상태 | 진행률 |
 |----------|------|--------|
@@ -220,7 +220,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Formatter | ✅ 완료 | 100% |
 | Debugger | ✅ 완료 | 100% |
 
-**전체 진행률: 100%**
+**핵심 기능 진행률: 100%** (Phase 1-3 완료)
 
 ---
 
@@ -244,6 +244,22 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ```
 
 ## 최근 변경사항 (2026-01-20)
+
+### 디버거 표현식 레벨 위치 정보 추가
+- **표현식 디버그 메타데이터** (`vais-codegen/src/debug.rs`, `lib.rs`)
+  - `dbg_ref_from_span()` 헬퍼 메서드: Span에서 DILocation 생성
+  - 모든 함수 호출 명령어에 `!dbg` 메타데이터 추가
+    - 직접 함수 호출 (void/non-void)
+    - 간접 함수 호출 (람다/클로저)
+    - 특수 함수 (malloc, free, memcpy, strlen, puts_ptr)
+  - 산술/비교/논리 연산자에 `!dbg` 메타데이터 추가
+    - Binary 연산: add, sub, mul, div, mod, and, or, xor, shl, shr
+    - Comparison 연산: eq, ne, lt, le, gt, ge
+    - Unary 연산: neg, not, bitnot
+- **디버깅 개선**
+  - lldb/gdb에서 표현식 단위 스텝 실행 가능
+  - 함수 호출 위치 정확히 추적 가능
+  - LLVM 경고 메시지 제거 (missing !dbg)
 
 ### Net 모듈 추가
 - **std/net.vais** - 네트워크 소켓 지원
@@ -306,12 +322,55 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ---
 
-## 🎯 다음 목표
+## 🔮 Phase 4: 향후 개선 사항
 
-모든 주요 기능이 완료되었습니다! 향후 개선 사항:
-- 디버거 표현식 레벨 위치 정보 개선
-- IPv6 지원
-- 추가 표준 라이브러리 모듈
+> **상태**: 🔄 진행 중 (10%)
+
+### 디버거 개선
+- [x] **표현식 레벨 위치 정보** - 함수 호출에 `!dbg` 위치 메타데이터 추가 (완료일: 2026-01-20)
+  - 모든 함수 호출 명령어에 `!dbg` 메타데이터 추가
+  - 산술 연산자, 비교 연산자, 논리 연산자에 위치 정보 추가
+  - 단항 연산자에 위치 정보 추가
+  - `dbg_ref_from_span()` 헬퍼 메서드 추가
+  - lldb/gdb에서 표현식 레벨 디버깅 가능
+
+### 네트워크 확장
+- [ ] **IPv6 지원** - Net 모듈 IPv6 소켓 지원
+  - sockaddr_in6 구조체 추가
+  - TCP/UDP IPv6 버전 함수 추가
+  - 듀얼 스택 (IPv4/IPv6) 지원
+
+### 추가 표준 라이브러리
+- [ ] **PriorityQueue<T>** - 우선순위 큐 (`std/priority_queue.vais`)
+  - 힙 기반 구현
+  - min-heap / max-heap 지원
+- [ ] **BTreeMap<K, V>** - B-트리 맵 (`std/btreemap.vais`)
+  - 정렬된 키 순회 지원
+  - 범위 쿼리 지원
+- [ ] **Regex** - 정규표현식 (`std/regex.vais`)
+  - 기본 패턴 매칭
+  - 캡처 그룹 지원
+- [ ] **JSON** - JSON 파서/생성기 (`std/json.vais`)
+  - parse/stringify 함수
+  - JsonValue 타입
+
+### 컴파일러 최적화
+- [ ] **인라이닝 최적화** - 작은 함수 자동 인라인
+- [ ] **루프 최적화** - Loop unrolling, Loop invariant code motion
+
+### 남은 작업
+- (위 항목들 중 선택하여 진행)
+
+---
+
+## 📊 진행률 요약 (Phase 4 포함)
+
+| Phase | 상태 | 진행률 |
+|-------|------|--------|
+| Phase 1: 핵심 컴파일러 | ✅ 완료 | 100% |
+| Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
+| Phase 3: 개발자 도구 | ✅ 완료 | 100% |
+| Phase 4: 향후 개선 | 🔄 진행 중 | 10% |
 
 ---
 

@@ -75,6 +75,7 @@ impl CodeGenerator {
         left: &Spanned<Expr>,
         right: &Spanned<Expr>,
         counter: &mut usize,
+        span: vais_ast::Span,
     ) -> CodegenResult<(String, String)> {
         let (left_val, left_ir) = self.generate_expr(left, counter)?;
         let (right_val, right_ir) = self.generate_expr(right, counter)?;
@@ -94,9 +95,10 @@ impl CodeGenerator {
             format!("i{}", bits)
         };
 
+        let dbg_info = self.debug_info.dbg_ref_from_span(span);
         let ir = format!(
-            "{}{}  {} = {} {} {}, {}\n",
-            left_ir, right_ir, tmp, op_str, result_type, left_val, right_val
+            "{}{}  {} = {} {} {}, {}{}\n",
+            left_ir, right_ir, tmp, op_str, result_type, left_val, right_val, dbg_info
         );
         Ok((tmp, ir))
     }
@@ -135,6 +137,7 @@ impl CodeGenerator {
         op: &UnaryOp,
         expr: &Spanned<Expr>,
         counter: &mut usize,
+        span: vais_ast::Span,
     ) -> CodegenResult<(String, String)> {
         let (val, ir) = self.generate_expr(expr, counter)?;
         let tmp = self.next_temp(counter);
@@ -143,20 +146,21 @@ impl CodeGenerator {
         let is_float = matches!(expr_type, ResolvedType::F32 | ResolvedType::F64);
         let bits = self.get_integer_bits(&expr_type);
 
+        let dbg_info = self.debug_info.dbg_ref_from_span(span);
         let result_ir = match op {
             UnaryOp::Neg => {
                 if is_float {
                     let float_ty = if matches!(expr_type, ResolvedType::F32) { "float" } else { "double" };
-                    format!("{}  {} = fneg {} {}\n", ir, tmp, float_ty, val)
+                    format!("{}  {} = fneg {} {}{}\n", ir, tmp, float_ty, val, dbg_info)
                 } else {
-                    format!("{}  {} = sub i{} 0, {}\n", ir, tmp, bits, val)
+                    format!("{}  {} = sub i{} 0, {}{}\n", ir, tmp, bits, val, dbg_info)
                 }
             }
             UnaryOp::Not => {
-                format!("{}  {} = xor i{} {}, -1\n", ir, tmp, bits, val)
+                format!("{}  {} = xor i{} {}, -1{}\n", ir, tmp, bits, val, dbg_info)
             }
             UnaryOp::BitNot => {
-                format!("{}  {} = xor i{} {}, -1\n", ir, tmp, bits, val)
+                format!("{}  {} = xor i{} {}, -1{}\n", ir, tmp, bits, val, dbg_info)
             }
         };
 

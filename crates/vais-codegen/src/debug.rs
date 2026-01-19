@@ -274,6 +274,14 @@ impl DebugInfoBuilder {
         }
     }
 
+    /// Generate !dbg metadata reference from a span (start offset)
+    ///
+    /// This is a convenience method that extracts the start offset from a span
+    /// and generates the debug location metadata.
+    pub fn dbg_ref_from_span(&mut self, span: vais_ast::Span) -> String {
+        self.dbg_ref_from_offset(span.start)
+    }
+
     /// Set the current debug scope (e.g., when entering a function)
     pub fn set_current_scope(&mut self, func_name: &str) {
         if let Some(id) = self.function_di.get(func_name) {

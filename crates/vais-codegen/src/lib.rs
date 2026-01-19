@@ -1297,9 +1297,10 @@ impl CodeGenerator {
                     };
 
                     let result_bool = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = {} i1 {}, {}\n",
-                        result_bool, op_str, left_bool, right_bool
+                        "  {} = {} i1 {}, {}{}\n",
+                        result_bool, op_str, left_bool, right_bool, dbg_info
                     ));
 
                     // Extend back to i64 for consistency
@@ -1322,9 +1323,10 @@ impl CodeGenerator {
                     };
 
                     let cmp_tmp = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = {} i64 {}, {}\n",
-                        cmp_tmp, op_str, left_val, right_val
+                        "  {} = {} i64 {}, {}{}\n",
+                        cmp_tmp, op_str, left_val, right_val, dbg_info
                     ));
 
                     // Extend i1 to i64
@@ -1351,9 +1353,10 @@ impl CodeGenerator {
                         _ => unreachable!(),
                     };
 
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = {} i64 {}, {}\n",
-                        tmp, op_str, left_val, right_val
+                        "  {} = {} i64 {}, {}{}\n",
+                        tmp, op_str, left_val, right_val, dbg_info
                     ));
                     Ok((tmp, ir))
                 }
@@ -1364,15 +1367,16 @@ impl CodeGenerator {
                 let tmp = self.next_temp(counter);
 
                 let mut ir = val_ir;
+                let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                 match op {
                     UnaryOp::Neg => {
-                        ir.push_str(&format!("  {} = sub i64 0, {}\n", tmp, val));
+                        ir.push_str(&format!("  {} = sub i64 0, {}{}\n", tmp, val, dbg_info));
                     }
                     UnaryOp::Not => {
-                        ir.push_str(&format!("  {} = xor i1 {}, 1\n", tmp, val));
+                        ir.push_str(&format!("  {} = xor i1 {}, 1{}\n", tmp, val, dbg_info));
                     }
                     UnaryOp::BitNot => {
-                        ir.push_str(&format!("  {} = xor i64 {}, -1\n", tmp, val));
+                        ir.push_str(&format!("  {} = xor i64 {}, -1{}\n", tmp, val, dbg_info));
                     }
                 }
 
@@ -1549,18 +1553,21 @@ impl CodeGenerator {
 
                     // Make indirect call with all arguments
                     let tmp = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = call i64 {}({})\n",
-                        tmp, fn_ptr, all_args.join(", ")
+                        "  {} = call i64 {}({}){}\n",
+                        tmp, fn_ptr, all_args.join(", "), dbg_info
                     ));
                     Ok((tmp, ir))
                 } else if fn_name == "malloc" {
                     // Special handling for malloc: call returns i8*, convert to i64
                     let ptr_tmp = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = call i8* @malloc({})\n",
+                        "  {} = call i8* @malloc({}){}\n",
                         ptr_tmp,
-                        arg_vals.join(", ")
+                        arg_vals.join(", "),
+                        dbg_info
                     ));
                     let result = self.next_temp(counter);
                     ir.push_str(&format!(
@@ -1579,9 +1586,10 @@ impl CodeGenerator {
                         "  {} = inttoptr i64 {} to i8*\n",
                         ptr_tmp, arg_val
                     ));
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  call void @free(i8* {})\n",
-                        ptr_tmp
+                        "  call void @free(i8* {}){}\n",
+                        ptr_tmp, dbg_info
                     ));
                     Ok(("void".to_string(), ir))
                 } else if fn_name == "memcpy" {
@@ -1607,9 +1615,10 @@ impl CodeGenerator {
                         src_ptr, src_val
                     ));
                     let result = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {})\n",
-                        result, dest_ptr, src_ptr, n_val
+                        "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {}){}\n",
+                        result, dest_ptr, src_ptr, n_val, dbg_info
                     ));
                     // Convert result back to i64
                     let result_i64 = self.next_temp(counter);
@@ -1629,9 +1638,10 @@ impl CodeGenerator {
                         ptr_tmp, arg_val
                     ));
                     let result = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = call i64 @strlen(i8* {})\n",
-                        result, ptr_tmp
+                        "  {} = call i64 @strlen(i8* {}){}\n",
+                        result, ptr_tmp, dbg_info
                     ));
                     Ok((result, ir))
                 } else if fn_name == "puts_ptr" {
@@ -1645,28 +1655,33 @@ impl CodeGenerator {
                         ptr_tmp, arg_val
                     ));
                     let result = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = call i32 @puts(i8* {})\n",
-                        result, ptr_tmp
+                        "  {} = call i32 @puts(i8* {}){}\n",
+                        result, ptr_tmp, dbg_info
                     ));
                     Ok((result, ir))
                 } else if ret_ty == "void" {
                     // Direct void function call
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  call void @{}({})\n",
+                        "  call void @{}({}){}\n",
                         actual_fn_name,
-                        arg_vals.join(", ")
+                        arg_vals.join(", "),
+                        dbg_info
                     ));
                     Ok(("void".to_string(), ir))
                 } else {
                     // Direct function call with return value
                     let tmp = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
-                        "  {} = call {} @{}({})\n",
+                        "  {} = call {} @{}({}){}\n",
                         tmp,
                         ret_ty,
                         actual_fn_name,
-                        arg_vals.join(", ")
+                        arg_vals.join(", "),
+                        dbg_info
                     ));
                     Ok((tmp, ir))
                 }
