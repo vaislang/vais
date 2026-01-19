@@ -7,6 +7,7 @@ pub mod exhaustiveness;
 mod traits;
 
 use std::collections::HashMap;
+use std::cell::Cell;
 use thiserror::Error;
 use vais_ast::*;
 
@@ -354,8 +355,7 @@ pub struct TypeChecker {
     current_generic_bounds: HashMap<String, Vec<String>>,
 
     // Type variable counter for inference
-    #[allow(dead_code)]
-    next_type_var: usize,
+    next_type_var: Cell<usize>,
 
     // Type substitutions
     substitutions: HashMap<usize, ResolvedType>,
@@ -381,7 +381,7 @@ impl TypeChecker {
             current_fn_name: None,
             current_generics: Vec::new(),
             current_generic_bounds: HashMap::new(),
-            next_type_var: 0,
+            next_type_var: Cell::new(0),
             substitutions: HashMap::new(),
             exhaustiveness_checker: ExhaustivenessChecker::new(),
             warnings: Vec::new(),
@@ -1800,17 +1800,38 @@ impl TypeChecker {
 
             Expr::StructLit { name, fields } => {
                 if let Some(struct_def) = self.structs.get(&name.node).cloned() {
+                    // Create fresh type variables for generic parameters
+                    let generic_substitutions: HashMap<String, ResolvedType> = struct_def
+                        .generics
+                        .iter()
+                        .map(|param| (param.clone(), self.fresh_type_var()))
+                        .collect();
+
+                    // Check each field and unify with expected type
                     for (field_name, value) in fields {
                         let value_type = self.check_expr(value)?;
                         if let Some(expected_type) = struct_def.fields.get(&field_name.node).cloned() {
+                            // Substitute generic parameters with type variables
+                            let expected_type = self.substitute_generics(&expected_type, &generic_substitutions);
                             self.unify(&expected_type, &value_type)?;
                         } else {
                             return Err(TypeError::UndefinedVar(field_name.node.clone(), None));
                         }
                     }
+
+                    // Apply substitutions to infer concrete generic types
+                    let inferred_generics: Vec<_> = struct_def
+                        .generics
+                        .iter()
+                        .map(|param| {
+                            let ty = generic_substitutions.get(param).unwrap();
+                            self.apply_substitutions(ty)
+                        })
+                        .collect();
+
                     Ok(ResolvedType::Named {
                         name: name.node.clone(),
-                        generics: vec![],
+                        generics: inferred_generics,
                     })
                 } else {
                     Err(TypeError::UndefinedType(name.node.clone(), None))
@@ -1983,7 +2004,8 @@ impl TypeChecker {
                     }
                 }
 
-                let param_types: Vec<_> = params
+                // Resolve parameter types (Type::Infer will create fresh type variables)
+                let mut param_types: Vec<_> = params
                     .iter()
                     .map(|p| {
                         let ty = self.resolve_type(&p.ty.node);
@@ -1994,6 +2016,12 @@ impl TypeChecker {
 
                 let ret_type = self.check_expr(body)?;
                 self.pop_scope();
+
+                // Apply substitutions to inferred parameter types
+                param_types = param_types
+                    .into_iter()
+                    .map(|ty| self.apply_substitutions(&ty))
+                    .collect();
 
                 Ok(ResolvedType::Fn {
                     params: param_types,
@@ -2213,8 +2241,55 @@ impl TypeChecker {
 
     /// Create a fresh type variable
     fn fresh_type_var(&self) -> ResolvedType {
-        // Note: This should be mutable, but for simplicity we'll use a workaround
-        ResolvedType::Var(0)
+        let id = self.next_type_var.get();
+        self.next_type_var.set(id + 1);
+        ResolvedType::Var(id)
+    }
+
+    /// Substitute generic type parameters with concrete types
+    fn substitute_generics(&self, ty: &ResolvedType, substitutions: &HashMap<String, ResolvedType>) -> ResolvedType {
+        match ty {
+            ResolvedType::Generic(name) => {
+                substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
+            }
+            ResolvedType::Array(inner) => {
+                ResolvedType::Array(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Map(key, value) => ResolvedType::Map(
+                Box::new(self.substitute_generics(key, substitutions)),
+                Box::new(self.substitute_generics(value, substitutions)),
+            ),
+            ResolvedType::Optional(inner) => {
+                ResolvedType::Optional(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Result(inner) => {
+                ResolvedType::Result(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Ref(inner) => {
+                ResolvedType::Ref(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::RefMut(inner) => {
+                ResolvedType::RefMut(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Pointer(inner) => {
+                ResolvedType::Pointer(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Range(inner) => {
+                ResolvedType::Range(Box::new(self.substitute_generics(inner, substitutions)))
+            }
+            ResolvedType::Tuple(types) => {
+                ResolvedType::Tuple(types.iter().map(|t| self.substitute_generics(t, substitutions)).collect())
+            }
+            ResolvedType::Fn { params, ret } => ResolvedType::Fn {
+                params: params.iter().map(|p| self.substitute_generics(p, substitutions)).collect(),
+                ret: Box::new(self.substitute_generics(ret, substitutions)),
+            },
+            ResolvedType::Named { name, generics } => ResolvedType::Named {
+                name: name.clone(),
+                generics: generics.iter().map(|g| self.substitute_generics(g, substitutions)).collect(),
+            },
+            _ => ty.clone(),
+        }
     }
 
     // === Scope management ===
