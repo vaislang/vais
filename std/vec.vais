@@ -1,17 +1,19 @@
 # Vec - dynamic array (growable)
-# Stores i64 elements
+# Stores elements of type T
 # Updated to use Option<T> for error handling
 
-S Vec {
-    data: i64,      # Pointer to element array
+U std/option
+
+S Vec<T> {
+    data: i64,      # Pointer to element array (all pointers are i64)
     len: i64,       # Current number of elements
     cap: i64        # Allocated capacity
 }
 
-X Vec {
+X Vec<T> {
     # Create a new empty Vec with given capacity
-    F with_capacity(capacity: i64) -> Vec {
-        data := malloc(capacity * 8)  # 8 bytes per i64
+    F with_capacity(capacity: i64) -> Vec<T> {
+        data := malloc(capacity * 8)  # 8 bytes per element
         Vec { data: data, len: 0, cap: capacity }
     }
 
@@ -31,7 +33,7 @@ X Vec {
     }
 
     # Get element at index
-    F get(&self, index: i64) -> i64 {
+    F get(&self, index: i64) -> T {
         I index < 0 {
             0
         } E I index >= self.len {
@@ -44,19 +46,20 @@ X Vec {
 
     # Get element at index using Option type
     # Returns Some(value) if index is valid, None otherwise
-    F get_opt(&self, index: i64) -> Option {
-        I index < 0 {
-            None
-        } E I index >= self.len {
-            None
-        } E {
-            ptr := self.data + index * 8
-            Some(load_i64(ptr))
-        }
-    }
+    # NOTE: Temporarily disabled due to code generation issue with Option in if-expressions
+    # F get_opt(&self, index: i64) -> Option<T> {
+    #     I index < 0 {
+    #         None
+    #     } E I index >= self.len {
+    #         None
+    #     } E {
+    #         ptr := self.data + index * 8
+    #         Some(load_i64(ptr))
+    #     }
+    # }
 
     # Set element at index
-    F set(&self, index: i64, value: i64) -> i64 {
+    F set(&self, index: i64, value: T) -> i64 {
         I index >= 0 && index < self.len {
             ptr := self.data + index * 8
             store_i64(ptr, value)
@@ -67,7 +70,7 @@ X Vec {
     }
 
     # Push element to end
-    F push(&self, value: i64) -> i64 {
+    F push(&self, value: T) -> i64 {
         I self.len >= self.cap {
             @.grow()
         }
@@ -78,7 +81,7 @@ X Vec {
     }
 
     # Pop element from end
-    F pop(&self) -> i64 {
+    F pop(&self) -> T {
         I self.len > 0 {
             self.len = self.len - 1
             ptr := self.data + self.len * 8
@@ -90,22 +93,21 @@ X Vec {
 
     # Pop element from end using Option type
     # Returns Some(value) if vec is not empty, None otherwise
-    F pop_opt(&self) -> Option {
-        I self.len > 0 {
-            self.len = self.len - 1
-            ptr := self.data + self.len * 8
-            Some(load_i64(ptr))
-        } E {
-            None
-        }
-    }
+    # NOTE: Temporarily disabled due to code generation issue with Option in if-expressions
+    # F pop_opt(&self) -> Option<T> {
+    #     I self.len > 0 {
+    #         self.len = self.len - 1
+    #         ptr := self.data + self.len * 8
+    #         Some(load_i64(ptr))
+    #     } E {
+    #         None
+    #     }
+    # }
 
     # Grow capacity (double it)
     F grow(&self) -> i64 {
-        new_cap := self.cap * 2
-        I new_cap < 8 {
-            new_cap = 8
-        }
+        doubled := self.cap * 2
+        new_cap := I doubled < 8 { 8 } E { doubled }
         new_data := malloc(new_cap * 8)
         memcpy(new_data, self.data, self.len * 8)
         free(self.data)
@@ -130,7 +132,8 @@ X Vec {
     }
 }
 
-# Create new Vec with initial capacity of 8
-F vec_new() -> Vec {
-    Vec.with_capacity(8)
-}
+# Create new Vec<i64> with initial capacity of 8 (backward compatibility)
+# NOTE: Temporarily disabled due to code generation issues with generic return types
+# F vec_new() -> Vec<i64> {
+#     Vec.with_capacity(8)
+# }

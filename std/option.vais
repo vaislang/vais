@@ -1,13 +1,13 @@
 # Option type - represents an optional value
 # Some(T) or None
 
-E Option {
+E Option<T> {
     None,
-    Some(i64)
+    Some(T)
 }
 
 # Check if option contains a value
-X Option {
+X Option<T> {
     F is_some(&self) -> i64 {
         M self {
             Some(_) => 1,
@@ -22,8 +22,8 @@ X Option {
         }
     }
 
-    # Unwrap the value (returns 0 if None)
-    F unwrap_or(&self, default: i64) -> i64 {
+    # Unwrap the value (returns default if None)
+    F unwrap_or(&self, default: T) -> T {
         M self {
             Some(v) => v,
             None => default

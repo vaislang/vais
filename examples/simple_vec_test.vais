@@ -1,0 +1,18 @@
+# Minimal test for generic Vec<T>
+
+U std/vec
+
+F main() -> i64 {
+    # Create a Vec<i64> - type inferred from push arguments
+    v := Vec.with_capacity(10)
+    v.push(42)
+    v.push(100)
+
+    # Test get
+    result := v.get(0) + v.get(1)  # 42 + 100 = 142
+
+    # Clean up
+    v.drop()
+
+    result
+}

@@ -24,6 +24,8 @@ impl TypeChecker {
                 self.substitutions.insert(*id, t.clone());
                 Ok(())
             }
+            // Unknown type unifies with anything (used as placeholder)
+            (ResolvedType::Unknown, _) | (_, ResolvedType::Unknown) => Ok(()),
             // Generic type parameters match with any type (type erasure)
             (ResolvedType::Generic(_), _) | (_, ResolvedType::Generic(_)) => Ok(()),
             (ResolvedType::Array(a), ResolvedType::Array(b)) => self.unify(a, b),
@@ -54,6 +56,16 @@ impl TypeChecker {
                     self.unify(ta, tb)?;
                 }
                 self.unify(ra, rb)
+            }
+            // Named types with generics
+            (
+                ResolvedType::Named { name: na, generics: ga },
+                ResolvedType::Named { name: nb, generics: gb },
+            ) if na == nb && ga.len() == gb.len() => {
+                for (ta, tb) in ga.iter().zip(gb.iter()) {
+                    self.unify(ta, tb)?;
+                }
+                Ok(())
             }
             // Allow implicit integer type conversions (widening and narrowing)
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),

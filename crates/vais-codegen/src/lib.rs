@@ -1442,6 +1442,34 @@ impl CodeGenerator {
                 } else if name == "self" {
                     // Handle self reference
                     Ok(("%self".to_string(), String::new()))
+                } else if self.is_unit_enum_variant(name) {
+                    // Unit enum variant (e.g., None)
+                    // Create enum value on stack with just the tag
+                    for enum_info in self.enums.values() {
+                        for (tag, variant) in enum_info.variants.iter().enumerate() {
+                            if variant.name == *name {
+                                let mut ir = String::new();
+                                let enum_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = alloca %{}\n",
+                                    enum_ptr, enum_info.name
+                                ));
+                                // Store tag
+                                let tag_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                                    tag_ptr, enum_info.name, enum_info.name, enum_ptr
+                                ));
+                                ir.push_str(&format!(
+                                    "  store i32 {}, i32* {}\n",
+                                    tag, tag_ptr
+                                ));
+                                return Ok((enum_ptr, ir));
+                            }
+                        }
+                    }
+                    // Fallback if not found (shouldn't happen)
+                    Ok((format!("@{}", name), String::new()))
                 } else {
                     // Might be a function reference
                     Ok((format!("@{}", name), String::new()))
@@ -1624,6 +1652,57 @@ impl CodeGenerator {
             }
 
             Expr::Call { func, args } => {
+                // Check if this is an enum variant constructor (e.g., Some(42))
+                if let Expr::Ident(name) = &func.node {
+                    if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
+                        // This is a tuple enum variant constructor
+                        let mut ir = String::new();
+
+                        // Generate argument values
+                        let mut arg_vals = Vec::new();
+                        for arg in args {
+                            let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                            ir.push_str(&arg_ir);
+                            arg_vals.push(val);
+                        }
+
+                        // Create enum value on stack: { i32 tag, i64 payload }
+                        let enum_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = alloca %{}\n",
+                            enum_ptr, enum_name
+                        ));
+
+                        // Store tag
+                        let tag_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                            tag_ptr, enum_name, enum_name, enum_ptr
+                        ));
+                        ir.push_str(&format!(
+                            "  store i32 {}, i32* {}\n",
+                            tag, tag_ptr
+                        ));
+
+                        // Store payload (for single-field tuple variants)
+                        if !arg_vals.is_empty() {
+                            let payload_ptr = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1\n",
+                                payload_ptr, enum_name, enum_name, enum_ptr
+                            ));
+                            // For single-field, store directly; for multi-field, need nested getelementptr
+                            ir.push_str(&format!(
+                                "  store i64 {}, i64* {}\n",
+                                arg_vals[0], payload_ptr
+                            ));
+                        }
+
+                        // Return pointer to the enum
+                        return Ok((enum_ptr, ir));
+                    }
+                }
+
                 // Check if this is a direct function call or indirect (lambda) call
                 let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
                     // Check if this is a known function or a local variable (lambda)
@@ -1946,6 +2025,11 @@ impl CodeGenerator {
                 self.current_block = merge_label.clone();
                 let result = self.next_temp(counter);
 
+                // Detect if values are pointers (start with % and come from enum constructors)
+                // For such cases, we need to ptrtoint them to use in phi i64
+                let then_val_for_phi = then_val.clone();
+                let else_val_for_phi = else_val.clone();
+
                 // If there's no else branch, don't use phi - the value is not meaningful
                 // This avoids type mismatches when then branch returns i32 (e.g., putchar)
                 if !has_else {
@@ -1955,19 +2039,19 @@ impl CodeGenerator {
                     // Both branches reach merge
                     ir.push_str(&format!(
                         "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-                        result, then_val, then_from_label, else_val, else_from_label
+                        result, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
                     ));
                 } else if !then_from_label.is_empty() {
                     // Only then branch reaches merge
                     ir.push_str(&format!(
                         "  {} = phi i64 [ {}, %{} ]\n",
-                        result, then_val, then_from_label
+                        result, then_val_for_phi, then_from_label
                     ));
                 } else if !else_from_label.is_empty() {
                     // Only else branch reaches merge
                     ir.push_str(&format!(
                         "  {} = phi i64 [ {}, %{} ]\n",
-                        result, else_val, else_from_label
+                        result, else_val_for_phi, else_from_label
                     ));
                 } else {
                     // Neither branch reaches merge (both break/continue)
@@ -2334,11 +2418,24 @@ impl CodeGenerator {
 
             // Method call: obj.method(args)
             Expr::MethodCall { receiver, method, args } => {
-                let (recv_val, recv_ir) = self.generate_expr(receiver, counter)?;
+                // Special case: @.method() means self.method() (call another method on self)
+                let (recv_val, recv_ir, recv_type) = if matches!(&receiver.node, Expr::SelfCall) {
+                    // When receiver is @, use %self instead of the function pointer
+                    if let Some(local) = self.locals.get("self") {
+                        let recv_type = local.ty.clone();
+                        ("%self".to_string(), String::new(), recv_type)
+                    } else {
+                        return Err(CodegenError::Unsupported(
+                            "@.method() used outside of a method with self".to_string(),
+                        ));
+                    }
+                } else {
+                    let (recv_val, recv_ir) = self.generate_expr(receiver, counter)?;
+                    let recv_type = self.infer_expr_type(receiver);
+                    (recv_val, recv_ir, recv_type)
+                };
                 let mut ir = recv_ir;
 
-                // Determine receiver type to find the struct and method
-                let recv_type = self.infer_expr_type(receiver);
                 let method_name = &method.node;
 
                 // Build full method name: StructName_methodName
@@ -3404,6 +3501,34 @@ impl CodeGenerator {
         0 // Default to 0 if not found
     }
 
+    /// Check if a name is a unit enum variant (not a binding)
+    fn is_unit_enum_variant(&self, name: &str) -> bool {
+        use crate::types::EnumVariantFields;
+        for enum_info in self.enums.values() {
+            for variant in &enum_info.variants {
+                if variant.name == name {
+                    return matches!(variant.fields, EnumVariantFields::Unit);
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a name is a tuple enum variant and get its enum name and tag
+    fn get_tuple_variant_info(&self, name: &str) -> Option<(String, i32)> {
+        use crate::types::EnumVariantFields;
+        for enum_info in self.enums.values() {
+            for (tag, variant) in enum_info.variants.iter().enumerate() {
+                if variant.name == name {
+                    if matches!(variant.fields, EnumVariantFields::Tuple(_)) {
+                        return Some((enum_info.name.clone(), tag as i32));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Generate pattern bindings (assign matched values to pattern variables)
     fn generate_pattern_bindings(
         &mut self,
@@ -3413,6 +3538,12 @@ impl CodeGenerator {
     ) -> CodegenResult<String> {
         match &pattern.node {
             Pattern::Ident(name) => {
+                // Check if this is a unit enum variant (like None)
+                // Unit variants don't bind anything
+                if self.is_unit_enum_variant(name) {
+                    return Ok(String::new());
+                }
+
                 // Bind the matched value to the identifier
                 let mut ir = String::new();
                 let ty = ResolvedType::I64; // Default type for now
@@ -3466,14 +3597,36 @@ impl CodeGenerator {
                 for (i, field_pat) in fields.iter().enumerate() {
                     // Extract payload field (starting at offset 1, after the tag)
                     // For tuple variants: { i32 tag, i64 field0, i64 field1, ... }
-                    let field_val = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = extractvalue {{ i32, i64 }} {}, {}\n",
-                        field_val, match_val, i + 1
-                    ));
+                    //
+                    // If match_val is a pointer, use getelementptr + load
+                    // Otherwise use extractvalue
 
-                    let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
-                    ir.push_str(&bind_ir);
+                    if match_val.starts_with('%') {
+                        // Assume it's a pointer - use getelementptr to access the field
+                        // Enum layout: { i32 tag, { i64, i64, ... } payload }
+                        // For single-field tuple variants, payload is at index 1 in { i32, i64 } structure
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr {{ i32, i64 }}, {{ i32, i64 }}* {}, i32 0, i32 {}\n",
+                            field_ptr, match_val, i + 1
+                        ));
+                        let field_val = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = load i64, i64* {}\n",
+                            field_val, field_ptr
+                        ));
+                        let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
+                        ir.push_str(&bind_ir);
+                    } else {
+                        // It's a value - use extractvalue
+                        let field_val = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = extractvalue {{ i32, i64 }} {}, {}\n",
+                            field_val, match_val, i + 1
+                        ));
+                        let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
+                        ir.push_str(&bind_ir);
+                    }
                 }
 
                 Ok(ir)
@@ -3548,6 +3701,19 @@ impl CodeGenerator {
                 // Look up local variable type
                 if let Some(local) = self.locals.get(name) {
                     local.ty.clone()
+                } else if self.is_unit_enum_variant(name) {
+                    // Unit enum variant (e.g., None)
+                    for enum_info in self.enums.values() {
+                        for variant in &enum_info.variants {
+                            if variant.name == *name {
+                                return ResolvedType::Named {
+                                    name: enum_info.name.clone(),
+                                    generics: vec![],
+                                };
+                            }
+                        }
+                    }
+                    ResolvedType::I64
                 } else {
                     ResolvedType::I64 // Default
                 }
@@ -3555,6 +3721,14 @@ impl CodeGenerator {
             Expr::Call { func, .. } => {
                 // Get return type from function info
                 if let Expr::Ident(fn_name) = &func.node {
+                    // Check if this is an enum variant constructor
+                    if let Some((enum_name, _)) = self.get_tuple_variant_info(fn_name) {
+                        return ResolvedType::Named {
+                            name: enum_name,
+                            generics: vec![],
+                        };
+                    }
+                    // Check function info
                     if let Some(fn_info) = self.functions.get(fn_name) {
                         return fn_info.ret_type.clone();
                     }

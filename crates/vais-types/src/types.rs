@@ -257,6 +257,8 @@ impl ResolvedType {
                 | ResolvedType::F32
                 | ResolvedType::F64
                 | ResolvedType::Generic(_) // Generics are assumed to support numeric ops
+                | ResolvedType::Var(_) // Type variables might resolve to numeric
+                | ResolvedType::Unknown // Unknown might be numeric
         )
     }
 

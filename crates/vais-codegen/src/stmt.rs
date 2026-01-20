@@ -45,6 +45,24 @@ impl CodeGenerator {
                 // Check if this is a struct literal - handle specially
                 let is_struct_lit = matches!(&value.node, Expr::StructLit { .. });
 
+                // Check if this is an enum variant constructor call (e.g., Some(42))
+                let is_enum_variant_call = if let Expr::Call { func, .. } = &value.node {
+                    if let Expr::Ident(fn_name) = &func.node {
+                        self.get_tuple_variant_info(fn_name).is_some()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                // Check if this is a unit enum variant (e.g., None)
+                let is_unit_variant = if let Expr::Ident(name) = &value.node {
+                    self.is_unit_enum_variant(name)
+                } else {
+                    false
+                };
+
                 let (val, val_ir) = self.generate_expr(value, counter)?;
 
                 let resolved_ty = ty
@@ -68,11 +86,11 @@ impl CodeGenerator {
                 let mut ir = val_ir;
                 let llvm_ty = self.type_to_llvm(&resolved_ty);
 
-                // For struct literals, the value is already an alloca'd pointer
-                // We store the pointer to the struct (i.e., %Point*)
-                if is_struct_lit {
-                    // The val is already a pointer to the struct (%1, %2, etc)
-                    // Allocate space for a pointer and store the struct pointer
+                // For struct literals and enum variant constructors, the value is already an alloca'd pointer
+                // We store the pointer to the struct/enum (i.e., %Point*, %Option*)
+                if is_struct_lit || is_enum_variant_call || is_unit_variant {
+                    // The val is already a pointer to the struct/enum (%1, %2, etc)
+                    // Allocate space for a pointer and store it
                     ir.push_str(&format!(
                         "  %{} = alloca {}*\n",
                         llvm_name, llvm_ty

@@ -1,0 +1,18 @@
+# Minimal test for generic HashMap<K, V>
+
+U std/hashmap
+
+F main() -> i64 {
+    # Create a HashMap<i64, i64> - type inferred from set arguments
+    m := HashMap.with_capacity(16)
+    m.set(1, 42)
+    m.set(2, 58)
+
+    # Test get
+    result := m.get(1) + m.get(2)  # 42 + 58 = 100
+
+    # Clean up
+    m.drop()
+
+    result
+}

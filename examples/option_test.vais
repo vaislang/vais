@@ -1,33 +1,11 @@
-# Option type test
+# Test for generic Option<T>
 
-# Simple Option enum
-E Option {
-    None,
-    Some(i64)
-}
-
-# Function that may return None
-F divide(a: i64, b: i64) -> i64 {
-    I b == 0 {
-        0  # Return None tag
-    } E {
-        a / b  # Should return Some(result) but simplified for now
-    }
-}
+U std/option
 
 F main() -> i64 {
-    puts("Testing Option type:")
-
-    # Test division
-    r1 := divide(10, 2)
-    puts("10 / 2 =")
-    putchar(r1 + 48)
-    putchar(10)
-
-    r2 := divide(10, 0)
-    puts("10 / 0 =")
-    putchar(r2 + 48)
-    putchar(10)
-
-    0
+    x := Some(42)
+    M x {
+        Some(v) => v,
+        None => 0
+    }
 }
