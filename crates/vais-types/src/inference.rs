@@ -4,7 +4,8 @@
 //! substitution, and fresh type variable generation.
 
 use std::collections::HashMap;
-use crate::types::{ResolvedType, TypeError, TypeResult};
+use vais_ast::{Expr, Spanned};
+use crate::types::{ResolvedType, TypeError, TypeResult, FunctionSig, GenericInstantiation};
 use crate::TypeChecker;
 
 impl TypeChecker {
@@ -171,6 +172,143 @@ impl TypeChecker {
                 generics: generics.iter().map(|g| self.substitute_generics(g, substitutions)).collect(),
             },
             _ => ty.clone(),
+        }
+    }
+
+    /// Check a generic function call, inferring type arguments from actual arguments
+    pub(crate) fn check_generic_function_call(
+        &mut self,
+        sig: &FunctionSig,
+        args: &[Spanned<Expr>],
+    ) -> TypeResult<ResolvedType> {
+        // Check argument count
+        if sig.params.len() != args.len() {
+            return Err(TypeError::ArgCount {
+                expected: sig.params.len(),
+                got: args.len(),
+                span: None,
+            });
+        }
+
+        // Create fresh type variables for each generic parameter
+        let generic_substitutions: HashMap<String, ResolvedType> = sig
+            .generics
+            .iter()
+            .map(|param| (param.clone(), self.fresh_type_var()))
+            .collect();
+
+        // Check each argument and unify with parameter type
+        for ((_, param_type, _), arg) in sig.params.iter().zip(args) {
+            let arg_type = self.check_expr(arg)?;
+            // Substitute generic parameters with type variables in the parameter type
+            let expected_type = self.substitute_generics(param_type, &generic_substitutions);
+            self.unify(&expected_type, &arg_type)?;
+        }
+
+        // Apply substitutions to infer concrete generic types
+        let inferred_type_args: Vec<_> = sig
+            .generics
+            .iter()
+            .map(|param| {
+                let ty = generic_substitutions.get(param)
+                    .expect("Internal compiler error: generic parameter should exist in substitutions map");
+                self.apply_substitutions(ty)
+            })
+            .collect();
+
+        // Record the generic instantiation if all type arguments are concrete
+        let all_concrete = inferred_type_args.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+        if all_concrete {
+            let inst = GenericInstantiation::function(&sig.name, inferred_type_args.clone());
+            self.add_instantiation(inst);
+        }
+
+        // Substitute generics in the return type
+        let return_type = self.substitute_generics(&sig.ret, &generic_substitutions);
+        let resolved_return = self.apply_substitutions(&return_type);
+
+        // For async functions, wrap the return type in Future
+        if sig.is_async {
+            Ok(ResolvedType::Future(Box::new(resolved_return)))
+        } else {
+            Ok(resolved_return)
+        }
+    }
+
+    /// Infer generic type arguments from a parameter type and an argument type.
+    /// This is used to match a generic parameter with an actual argument.
+    #[allow(dead_code)]
+    pub(crate) fn infer_type_arg(
+        &mut self,
+        param_type: &ResolvedType,
+        arg_type: &ResolvedType,
+        type_args: &mut HashMap<String, ResolvedType>,
+    ) -> TypeResult<()> {
+        match (param_type, arg_type) {
+            (ResolvedType::Generic(name), concrete) => {
+                if let Some(existing) = type_args.get(name) {
+                    // Check that the inferred type is consistent
+                    if existing != concrete {
+                        return Err(TypeError::Mismatch {
+                            expected: existing.to_string(),
+                            found: concrete.to_string(),
+                            span: None,
+                        });
+                    }
+                } else {
+                    type_args.insert(name.clone(), concrete.clone());
+                }
+                Ok(())
+            }
+            (ResolvedType::Array(inner_param), ResolvedType::Array(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::Pointer(inner_param), ResolvedType::Pointer(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::Ref(inner_param), ResolvedType::Ref(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::RefMut(inner_param), ResolvedType::RefMut(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::Optional(inner_param), ResolvedType::Optional(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::Result(inner_param), ResolvedType::Result(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (ResolvedType::Future(inner_param), ResolvedType::Future(inner_arg)) => {
+                self.infer_type_arg(inner_param, inner_arg, type_args)
+            }
+            (
+                ResolvedType::Named { name: name_p, generics: generics_p },
+                ResolvedType::Named { name: name_a, generics: generics_a },
+            ) if name_p == name_a && generics_p.len() == generics_a.len() => {
+                for (gp, ga) in generics_p.iter().zip(generics_a.iter()) {
+                    self.infer_type_arg(gp, ga, type_args)?;
+                }
+                Ok(())
+            }
+            (ResolvedType::Tuple(types_p), ResolvedType::Tuple(types_a))
+                if types_p.len() == types_a.len() =>
+            {
+                for (tp, ta) in types_p.iter().zip(types_a.iter()) {
+                    self.infer_type_arg(tp, ta, type_args)?;
+                }
+                Ok(())
+            }
+            (
+                ResolvedType::Fn { params: params_p, ret: ret_p },
+                ResolvedType::Fn { params: params_a, ret: ret_a },
+            ) if params_p.len() == params_a.len() => {
+                for (pp, pa) in params_p.iter().zip(params_a.iter()) {
+                    self.infer_type_arg(pp, pa, type_args)?;
+                }
+                self.infer_type_arg(ret_p, ret_a, type_args)
+            }
+            // Non-generic types don't contribute to type argument inference
+            _ => Ok(()),
         }
     }
 }

@@ -1352,6 +1352,16 @@ impl TypeChecker {
             }
 
             Expr::Call { func, args } => {
+                // Check if this is a direct call to a generic function
+                if let Expr::Ident(func_name) = &func.node {
+                    if let Some(sig) = self.functions.get(func_name).cloned() {
+                        if !sig.generics.is_empty() {
+                            // Generic function call - infer type arguments
+                            return self.check_generic_function_call(&sig, args);
+                        }
+                    }
+                }
+
                 let func_type = self.check_expr(func)?;
 
                 match func_type {
@@ -1611,6 +1621,16 @@ impl TypeChecker {
                             self.apply_substitutions(ty)
                         })
                         .collect();
+
+                    // Record generic struct instantiation if the struct has generic parameters
+                    if !struct_def.generics.is_empty() {
+                        // Only record if all type arguments are concrete (not type variables)
+                        let all_concrete = inferred_generics.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+                        if all_concrete {
+                            let inst = GenericInstantiation::struct_type(&name.node, inferred_generics.clone());
+                            self.add_instantiation(inst);
+                        }
+                    }
 
                     Ok(ResolvedType::Named {
                         name: name.node.clone(),
@@ -2841,5 +2861,182 @@ mod tests {
         let module = parse(source).unwrap();
         let mut checker = TypeChecker::new();
         assert!(checker.check_module(&module).is_ok());
+    }
+
+    // ==================== Generic Instantiation Tests ====================
+
+    #[test]
+    fn test_generic_function_instantiation() {
+        // Test that calling a generic function records an instantiation
+        let source = r#"
+            F identity<T>(x:T)->T=x
+            F main()->i64=identity(42)
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        // Check that an instantiation was recorded
+        let instantiations = checker.get_generic_instantiations();
+        assert!(!instantiations.is_empty(), "Expected generic instantiation to be recorded");
+
+        // Find the identity instantiation
+        let identity_inst = instantiations.iter()
+            .find(|i| i.base_name == "identity")
+            .expect("Expected identity<i64> instantiation");
+
+        assert_eq!(identity_inst.type_args.len(), 1);
+        assert_eq!(identity_inst.type_args[0], ResolvedType::I64);
+        assert_eq!(identity_inst.mangled_name, "identity$i64");
+    }
+
+    #[test]
+    fn test_generic_function_multiple_instantiations() {
+        // Test that calling a generic function with different types records multiple instantiations
+        let source = r#"
+            F identity<T>(x:T)->T=x
+            F main()->f64{
+                a:=identity(42);
+                b:=identity(3.14);
+                b
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        // Check that both instantiations were recorded
+        let instantiations = checker.get_generic_instantiations();
+        assert!(instantiations.len() >= 2, "Expected at least 2 instantiations");
+
+        // Check for i64 instantiation
+        let i64_inst = instantiations.iter()
+            .find(|i| i.base_name == "identity" && i.type_args == vec![ResolvedType::I64]);
+        assert!(i64_inst.is_some(), "Expected identity<i64> instantiation");
+
+        // Check for f64 instantiation
+        let f64_inst = instantiations.iter()
+            .find(|i| i.base_name == "identity" && i.type_args == vec![ResolvedType::F64]);
+        assert!(f64_inst.is_some(), "Expected identity<f64> instantiation");
+    }
+
+    #[test]
+    fn test_generic_struct_instantiation() {
+        // Test that creating a generic struct records an instantiation
+        let source = r#"
+            S Pair<T>{first:T,second:T}
+            F main()->i64{
+                p:=Pair{first:1,second:2};
+                p.first
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        // Check that a struct instantiation was recorded
+        let instantiations = checker.get_generic_instantiations();
+        let pair_inst = instantiations.iter()
+            .find(|i| i.base_name == "Pair")
+            .expect("Expected Pair<i64> instantiation");
+
+        assert_eq!(pair_inst.type_args.len(), 1);
+        assert_eq!(pair_inst.type_args[0], ResolvedType::I64);
+        assert!(matches!(pair_inst.kind, InstantiationKind::Struct));
+    }
+
+    #[test]
+    fn test_generic_no_instantiation_without_call() {
+        // Test that just defining a generic function doesn't record instantiation
+        let source = r#"
+            F identity<T>(x:T)->T=x
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        // No instantiations should be recorded
+        let instantiations = checker.get_generic_instantiations();
+        assert!(instantiations.is_empty(), "Expected no instantiations for unused generic function");
+    }
+
+    #[test]
+    fn test_clear_generic_instantiations() {
+        let source = r#"
+            F identity<T>(x:T)->T=x
+            F main()->i64=identity(42)
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        assert!(!checker.get_generic_instantiations().is_empty());
+        checker.clear_generic_instantiations();
+        assert!(checker.get_generic_instantiations().is_empty());
+    }
+
+    #[test]
+    fn test_generic_function_with_struct_return() {
+        // Test generic function returning a generic struct
+        // Note: Using T directly as return type due to parser limitations with ->Generic<T>
+        let source = r#"
+            S Container<T>{value:T}
+            F make_container<T>(x:T)->T{
+                c:=Container{value:x};
+                c.value
+            }
+            F main()->i64{
+                v:=make_container(42);
+                v
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        let instantiations = checker.get_generic_instantiations();
+
+        // Should have both function and struct instantiations
+        let fn_inst = instantiations.iter()
+            .find(|i| i.base_name == "make_container");
+        assert!(fn_inst.is_some(), "Expected make_container<i64> instantiation");
+
+        let struct_inst = instantiations.iter()
+            .find(|i| i.base_name == "Container");
+        assert!(struct_inst.is_some(), "Expected Container<i64> instantiation");
+    }
+
+    #[test]
+    fn test_generic_instantiation_kind() {
+        use crate::InstantiationKind;
+
+        let source = r#"
+            S Holder<T>{data:T}
+            F hold<T>(x:T)->T{
+                h:=Holder{data:x};
+                h.data
+            }
+            F main()->i64{
+                r:=hold(42);
+                r
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        assert!(checker.check_module(&module).is_ok());
+
+        let instantiations = checker.get_generic_instantiations();
+
+        // Check that function instantiation has correct kind
+        let fn_inst = instantiations.iter()
+            .find(|i| i.base_name == "hold")
+            .expect("Expected hold instantiation");
+        assert!(matches!(fn_inst.kind, InstantiationKind::Function));
+
+        // Check that struct instantiation has correct kind
+        let struct_inst = instantiations.iter()
+            .find(|i| i.base_name == "Holder")
+            .expect("Expected Holder instantiation");
+        assert!(matches!(struct_inst.kind, InstantiationKind::Struct));
     }
 }

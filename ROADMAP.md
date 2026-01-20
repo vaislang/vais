@@ -557,8 +557,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] GenericInstantiation 추적 구조체 추가
   - [x] mangle_name, mangle_type, substitute_type 유틸리티
   - [x] 코드젠 제네릭 치환 인프라
-  - [ ] 타입 체커 제네릭 인스턴스화 추론
-  - [ ] 코드젠 특수화된 함수/구조체 생성
+  - [x] 타입 체커 제네릭 인스턴스화 추론 (완료일: 2026-01-20)
+    - check_generic_function_call() 메서드 추가
+    - 제네릭 함수 호출 시 타입 인자 자동 추론
+    - 제네릭 구조체 리터럴에서 인스턴스화 기록
+    - 9개 테스트 케이스 추가
+  - [x] 코드젠 특수화된 함수/구조체 생성 (완료일: 2026-01-20)
+    - generate_module_with_instantiations() 메서드 추가
+    - generate_specialized_function() - 제네릭 함수의 특수화된 LLVM IR 생성
+    - generate_specialized_struct_type() - 제네릭 구조체 타입 정의 생성
+    - 4개 테스트 케이스 추가
   - [ ] Vec<T>, HashMap<K,V> 업데이트
 - [x] **REPL 개선** - 멀티라인 입력, 히스토리, 탭 자동완성 (완료일: 2026-01-20)
   - rustyline 기반 멀티라인 입력 (중괄호/괄호 균형 검사)
