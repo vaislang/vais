@@ -245,6 +245,23 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 최근 변경사항 (2026-01-20)
 
+### 루프 최적화 추가
+- **Loop Unrolling** (`vais-codegen/src/optimize.rs`)
+  - 고정 횟수 루프 자동 펼치기 (UNROLL_FACTOR=4)
+  - 작은 루프 바디(MAX_BODY_SIZE=20) 자동 감지
+  - SSA 변수 이름 자동 리네이밍
+  - 인덕션 변수 및 바운드 분석
+- **Loop Invariant Code Motion (LICM) 개선**
+  - 루프 불변 계산식 자동 감지
+  - 프리헤더 생성을 통한 호이스팅
+  - 루프 변수 추적 및 의존성 분석
+  - phi/load 명령어 제외 처리
+- **테스트 케이스 5개 추가**
+  - test_loop_unrolling
+  - test_loop_invariant_motion
+  - test_rename_for_unroll
+  - test_full_loop_optimization
+
 ### IPv6 소켓 지원 추가
 - **Net 모듈 IPv6 확장** (`std/net.vais`)
   - sockaddr_in6 구조체 헬퍼 함수 추가 (28 bytes)
@@ -349,7 +366,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🔮 Phase 4: 향후 개선 사항
 
-> **상태**: 🔄 진행 중 (15%)
+> **상태**: ✅ 완료 (100%)
 
 ### 디버거 개선
 - [x] **표현식 레벨 위치 정보** - 함수 호출에 `!dbg` 위치 메타데이터 추가 (완료일: 2026-01-20)
@@ -372,22 +389,35 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 힙 기반 구현 (min-heap)
   - push, pop, peek 연산 지원
   - 동적 크기 조정 (grow)
-- [ ] **BTreeMap<K, V>** - B-트리 맵 (`std/btreemap.vais`)
+- [x] **BTreeMap<K, V>** - B-트리 맵 (`std/btreemap.vais`) (완료일: 2026-01-20)
   - 정렬된 키 순회 지원
   - 범위 쿼리 지원
-- [ ] **Regex** - 정규표현식 (`std/regex.vais`)
-  - 기본 패턴 매칭
+  - insert, get, remove, contains 연산
+  - min, max, range 쿼리 지원
+- [x] **Regex** - 정규표현식 (`std/regex.vais`) (완료일: 2026-01-20)
+  - 기본 패턴 매칭 (., *, +, ?, [], ^, $)
   - 캡처 그룹 지원
-- [ ] **JSON** - JSON 파서/생성기 (`std/json.vais`)
+  - match, find, find_all, replace 함수
+- [x] **JSON** - JSON 파서/생성기 (`std/json.vais`) (완료일: 2026-01-20)
   - parse/stringify 함수
-  - JsonValue 타입
+  - JsonValue 타입 (Object, Array, String, Number, Bool, Null)
+  - 중첩 객체/배열 지원
 
 ### 컴파일러 최적화
-- [ ] **인라이닝 최적화** - 작은 함수 자동 인라인
-- [ ] **루프 최적화** - Loop unrolling, Loop invariant code motion
+- [x] **인라이닝 최적화** - 작은 함수 자동 인라인 (완료일: 2026-01-20)
+  - `alwaysinline` 속성으로 작은 함수 자동 인라인
+  - 상수 전파(constant propagation) 지원
+  - 공통 부분식 제거(CSE) 지원
+  - 강도 감소(strength reduction) 지원
+  - LLVM `-O2` 최적화 레벨 통합
+- [x] **루프 최적화** - Loop unrolling, Loop invariant code motion (완료일: 2026-01-20)
+  - Loop unrolling (고정 횟수 루프 펼치기, UNROLL_FACTOR=4)
+  - Loop Invariant Code Motion (LICM) - 루프 불변식 외부 이동
+  - 프리헤더 생성을 통한 호이스팅 최적화
+  - 테스트 케이스 5개 추가
 
 ### 남은 작업
-- (위 항목들 중 선택하여 진행)
+- (없음)
 
 ---
 
@@ -398,7 +428,47 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 1: 핵심 컴파일러 | ✅ 완료 | 100% |
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
-| Phase 4: 향후 개선 | 🔄 진행 중 | 15% |
+| Phase 4: 향후 개선 | ✅ 완료 | 100% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 12% |
+
+---
+
+## 🔧 Phase 5: 품질 개선 및 안정화
+
+> **상태**: 🔄 진행 중 (12%)
+
+### P0 - 긴급 (즉시 수행)
+- [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
+- [x] **README.md 업데이트** - ROADMAP과 일치하도록 완료된 기능 체크박스 업데이트 (완료일: 2026-01-20)
+
+### P1 - 높은 우선순위 (1주일 내)
+- [ ] **TODO 주석 해결** - trait 메서드의 async 지원 구현 또는 이슈 등록
+- [ ] **파서 테스트 개선** - panic! 대신 assert 매크로 사용으로 변경
+- [ ] **vais-codegen 모듈 분리** - 45K+ 토큰의 lib.rs를 논리적 모듈로 분리
+- [ ] **vais-types 모듈 분리** - 타입 체커를 논리적 모듈로 분리
+
+### P2 - 중간 우선순위 (1개월 내)
+- [ ] **엣지 케이스 테스트 추가** - 빈 파일, 잘못된 문법, 경계값 테스트
+- [ ] **통합 테스트 스위트 구축** - 전체 컴파일 파이프라인 테스트
+- [ ] **표준 라이브러리 에러 처리 개선** - 0 반환 대신 Option/Result 타입 일관적 사용
+- [ ] **입력 검증 강화** - 네트워크/파일 API에 입력 범위 검사 추가
+- [ ] **unwrap/expect 감소** - 126개 사용처 검토 및 적절한 에러 핸들링 추가
+
+### P3 - 낮은 우선순위 (3개월 내)
+- [ ] **CONTRIBUTING.md 작성** - 기여 가이드라인 문서화
+- [ ] **rustdoc 문서 생성** - Rust API에 doc 주석 추가 및 문서 생성
+- [ ] **CI/CD 파이프라인 구축** - GitHub Actions로 자동 테스트/빌드
+
+### P4 - 미래 (6개월+)
+- [ ] **i18n 에러 메시지** - 에러 메시지 다국어 지원 인프라 구축
+- [ ] **플러그인 시스템** - 컴파일러 확장 API 설계 및 구현
+- [ ] **제네릭 표준 라이브러리** - Vec<T>, HashMap<K,V>의 실제 제네릭 지원
+- [ ] **REPL 개선** - 멀티라인 입력, 히스토리, 탭 자동완성
+- [ ] **LSP Rename 기능** - 심볼 이름 변경 기능 추가
+- [ ] **벤치마크 스위트** - 성능 측정 및 회귀 테스트
+
+### 남은 작업
+- (위 항목들 중 선택하여 진행)
 
 ---
 

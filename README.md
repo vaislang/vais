@@ -50,28 +50,62 @@ crates/
 ├── vais-lexer/    # Tokenizer (logos-based)
 ├── vais-parser/   # Recursive descent parser
 ├── vais-types/    # Type checker
-└── vais-codegen/  # LLVM IR generator
+├── vais-codegen/  # LLVM IR generator
+├── vais-lsp/      # Language Server Protocol
+└── vaisc/         # CLI compiler & REPL
+
+std/               # Standard library (24 modules)
+vscode-vais/       # VSCode extension
+docs/              # Documentation
+examples/          # Example programs (40+ files)
 ```
 
 ## Building
 
 ```bash
-cargo build
+cargo build --release
 cargo test
+```
+
+## Usage
+
+```bash
+# Compile a Vais file
+./target/release/vaisc build hello.vais -o hello
+
+# Run directly
+./target/release/vaisc run hello.vais
+
+# Start REPL
+./target/release/vaisc repl
+
+# Format code
+./target/release/vaisc fmt src/
+
+# Check for errors
+./target/release/vaisc check hello.vais
 ```
 
 ## Status
 
-- [x] Lexer
-- [x] Parser
-- [x] Type checker (basic)
-- [ ] Code generator (in progress)
-- [ ] Standard library
-- [ ] LSP support
+- [x] Lexer (logos-based tokenizer)
+- [x] Parser (recursive descent)
+- [x] Type checker (generics, traits, type inference)
+- [x] Code generator (LLVM IR)
+- [x] Standard library (24 modules: Vec, HashMap, String, File, Net, etc.)
+- [x] LSP support (diagnostics, completion, hover, go-to-definition)
+- [x] REPL (interactive environment)
+- [x] VSCode extension (syntax highlighting, LSP integration)
+- [x] Optimizer (constant folding, DCE, CSE, loop unrolling, LICM)
+- [x] Formatter (`vaisc fmt`)
+- [x] Debugger (DWARF metadata, lldb/gdb support)
 
-## Design Philosophy
+## Documentation
 
-See [DESIGN.md](DESIGN.md) for the complete language specification.
+- [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Complete language specification
+- [STDLIB.md](docs/STDLIB.md) - Standard library reference
+- [TUTORIAL.md](docs/TUTORIAL.md) - Getting started tutorial
+- [ROADMAP.md](ROADMAP.md) - Project roadmap and progress
 
 ## Legacy
 
