@@ -187,7 +187,7 @@ impl TypeError {
 pub type TypeResult<T> = Result<T, TypeError>;
 
 /// Resolved type in the type system
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedType {
     // Primitives
     I8,
@@ -393,4 +393,199 @@ pub struct EnumDef {
 pub(crate) struct VarInfo {
     pub(crate) ty: ResolvedType,
     pub(crate) is_mut: bool,
+}
+
+/// Generic instantiation tracking for monomorphization
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericInstantiation {
+    /// Base name of the generic item (function or struct)
+    pub base_name: String,
+    /// Concrete type arguments
+    pub type_args: Vec<ResolvedType>,
+    /// Mangled name for code generation
+    pub mangled_name: String,
+    /// Kind of instantiation
+    pub kind: InstantiationKind,
+}
+
+/// Kind of generic instantiation
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InstantiationKind {
+    Function,
+    Struct,
+    Method { struct_name: String },
+}
+
+impl GenericInstantiation {
+    /// Create a new function instantiation
+    pub fn function(base_name: &str, type_args: Vec<ResolvedType>) -> Self {
+        let mangled = mangle_name(base_name, &type_args);
+        Self {
+            base_name: base_name.to_string(),
+            type_args,
+            mangled_name: mangled,
+            kind: InstantiationKind::Function,
+        }
+    }
+
+    /// Create a new struct instantiation
+    pub fn struct_type(base_name: &str, type_args: Vec<ResolvedType>) -> Self {
+        let mangled = mangle_name(base_name, &type_args);
+        Self {
+            base_name: base_name.to_string(),
+            type_args,
+            mangled_name: mangled,
+            kind: InstantiationKind::Struct,
+        }
+    }
+
+    /// Create a new method instantiation
+    pub fn method(struct_name: &str, method_name: &str, type_args: Vec<ResolvedType>) -> Self {
+        let base = format!("{}_{}", struct_name, method_name);
+        let mangled = mangle_name(&base, &type_args);
+        Self {
+            base_name: method_name.to_string(),
+            type_args,
+            mangled_name: mangled,
+            kind: InstantiationKind::Method {
+                struct_name: struct_name.to_string(),
+            },
+        }
+    }
+}
+
+/// Mangle a generic name with type arguments
+pub fn mangle_name(base: &str, type_args: &[ResolvedType]) -> String {
+    if type_args.is_empty() {
+        base.to_string()
+    } else {
+        let args_str = type_args
+            .iter()
+            .map(|t| mangle_type(t))
+            .collect::<Vec<_>>()
+            .join("_");
+        format!("{}${}", base, args_str)
+    }
+}
+
+/// Mangle a single type for use in mangled names
+pub fn mangle_type(ty: &ResolvedType) -> String {
+    match ty {
+        ResolvedType::I8 => "i8".to_string(),
+        ResolvedType::I16 => "i16".to_string(),
+        ResolvedType::I32 => "i32".to_string(),
+        ResolvedType::I64 => "i64".to_string(),
+        ResolvedType::I128 => "i128".to_string(),
+        ResolvedType::U8 => "u8".to_string(),
+        ResolvedType::U16 => "u16".to_string(),
+        ResolvedType::U32 => "u32".to_string(),
+        ResolvedType::U64 => "u64".to_string(),
+        ResolvedType::U128 => "u128".to_string(),
+        ResolvedType::F32 => "f32".to_string(),
+        ResolvedType::F64 => "f64".to_string(),
+        ResolvedType::Bool => "bool".to_string(),
+        ResolvedType::Str => "str".to_string(),
+        ResolvedType::Unit => "unit".to_string(),
+        ResolvedType::Named { name, generics } => {
+            if generics.is_empty() {
+                name.clone()
+            } else {
+                let args = generics
+                    .iter()
+                    .map(|g| mangle_type(g))
+                    .collect::<Vec<_>>()
+                    .join("_");
+                format!("{}_{}", name, args)
+            }
+        }
+        ResolvedType::Array(inner) => format!("arr_{}", mangle_type(inner)),
+        ResolvedType::Pointer(inner) => format!("ptr_{}", mangle_type(inner)),
+        ResolvedType::Ref(inner) => format!("ref_{}", mangle_type(inner)),
+        ResolvedType::RefMut(inner) => format!("refmut_{}", mangle_type(inner)),
+        ResolvedType::Optional(inner) => format!("opt_{}", mangle_type(inner)),
+        ResolvedType::Result(inner) => format!("res_{}", mangle_type(inner)),
+        ResolvedType::Future(inner) => format!("fut_{}", mangle_type(inner)),
+        ResolvedType::Tuple(types) => {
+            let args = types
+                .iter()
+                .map(|t| mangle_type(t))
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("tup_{}", args)
+        }
+        ResolvedType::Fn { params, ret } => {
+            let params_str = params
+                .iter()
+                .map(|p| mangle_type(p))
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("fn_{}_{}", params_str, mangle_type(ret))
+        }
+        ResolvedType::Generic(name) => name.clone(),
+        ResolvedType::Var(id) => format!("v{}", id),
+        _ => "unknown".to_string(),
+    }
+}
+
+/// Substitute generic type parameters with concrete types
+pub fn substitute_type(
+    ty: &ResolvedType,
+    substitutions: &HashMap<String, ResolvedType>,
+) -> ResolvedType {
+    match ty {
+        ResolvedType::Generic(name) => {
+            substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
+        }
+        ResolvedType::Named { name, generics } => {
+            let new_generics = generics
+                .iter()
+                .map(|g| substitute_type(g, substitutions))
+                .collect();
+            ResolvedType::Named {
+                name: name.clone(),
+                generics: new_generics,
+            }
+        }
+        ResolvedType::Array(inner) => {
+            ResolvedType::Array(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::Pointer(inner) => {
+            ResolvedType::Pointer(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::Ref(inner) => {
+            ResolvedType::Ref(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::RefMut(inner) => {
+            ResolvedType::RefMut(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::Optional(inner) => {
+            ResolvedType::Optional(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::Result(inner) => {
+            ResolvedType::Result(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::Future(inner) => {
+            ResolvedType::Future(Box::new(substitute_type(inner, substitutions)))
+        }
+        ResolvedType::Tuple(types) => {
+            let new_types = types
+                .iter()
+                .map(|t| substitute_type(t, substitutions))
+                .collect();
+            ResolvedType::Tuple(new_types)
+        }
+        ResolvedType::Fn { params, ret } => {
+            let new_params = params
+                .iter()
+                .map(|p| substitute_type(p, substitutions))
+                .collect();
+            let new_ret = Box::new(substitute_type(ret, substitutions));
+            ResolvedType::Fn {
+                params: new_params,
+                ret: new_ret,
+            }
+        }
+        // Primitives and other types pass through unchanged
+        _ => ty.clone(),
+    }
 }

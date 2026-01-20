@@ -1,7 +1,8 @@
 //! Type definitions and type conversion utilities for Vais code generator
 
+use std::collections::HashMap;
 use vais_ast::Type;
-use vais_types::ResolvedType;
+use vais_types::{ResolvedType, mangle_type};
 
 #[derive(Debug, Clone)]
 pub(crate) struct LoopLabels {
@@ -122,16 +123,28 @@ impl CodeGenerator {
                 // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
                 "%Range".to_string()
             }
-            ResolvedType::Named { name, .. } => {
+            ResolvedType::Named { name, generics } => {
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                     "i64".to_string()
+                } else if !generics.is_empty() {
+                    // Generic struct with type arguments - use mangled name
+                    let mangled = self.mangle_struct_name(name, generics);
+                    format!("%{}", mangled)
                 } else {
-                    // Return struct type without pointer - caller adds * when needed
+                    // Non-generic struct - return struct type without pointer
                     format!("%{}", name)
                 }
             }
-            ResolvedType::Generic(_) => "i64".to_string(), // Generic erased to i64 at runtime
+            ResolvedType::Generic(param) => {
+                // Check if we have a substitution for this generic parameter
+                if let Some(concrete) = self.get_generic_substitution(param) {
+                    self.type_to_llvm(&concrete)
+                } else {
+                    // Fallback to i64 for unresolved generics
+                    "i64".to_string()
+                }
+            }
             _ => "i64".to_string(), // Default fallback
         }
     }

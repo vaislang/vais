@@ -552,7 +552,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - CLI 옵션: `--plugin <PATH>`, `--no-plugins`
   - vais-plugins.toml 설정 파일 지원
   - 예제 플러그인: naming-convention lint 플러그인
-- [ ] **제네릭 표준 라이브러리** - Vec<T>, HashMap<K,V>의 실제 제네릭 지원
+- [ ] **제네릭 표준 라이브러리** - Vec<T>, HashMap<K,V>의 실제 제네릭 지원 (진행 중)
+  - [x] Monomorphization 설계 문서 작성 (docs/design/monomorphization-design.md)
+  - [x] GenericInstantiation 추적 구조체 추가
+  - [x] mangle_name, mangle_type, substitute_type 유틸리티
+  - [x] 코드젠 제네릭 치환 인프라
+  - [ ] 타입 체커 제네릭 인스턴스화 추론
+  - [ ] 코드젠 특수화된 함수/구조체 생성
+  - [ ] Vec<T>, HashMap<K,V> 업데이트
 - [x] **REPL 개선** - 멀티라인 입력, 히스토리, 탭 자동완성 (완료일: 2026-01-20)
   - rustyline 기반 멀티라인 입력 (중괄호/괄호 균형 검사)
   - 화살표 키 히스토리 탐색 (최대 100개, 파일 저장)

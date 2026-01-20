@@ -114,6 +114,16 @@ pub struct CodeGenerator {
 
     // Debug info builder for DWARF metadata generation
     debug_info: DebugInfoBuilder,
+
+    // Generic substitutions for current function/method
+    // Maps generic param name (e.g., "T") to concrete type (e.g., ResolvedType::I64)
+    generic_substitutions: HashMap<String, ResolvedType>,
+
+    // Generated struct instantiations (mangled_name -> already_generated)
+    generated_structs: HashMap<String, bool>,
+
+    // Generated function instantiations (mangled_name -> already_generated)
+    generated_functions: HashMap<String, bool>,
 }
 
 impl CodeGenerator {
@@ -145,6 +155,9 @@ impl CodeGenerator {
             needs_unwrap_panic: false,
             current_block: "entry".to_string(),
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
+            generic_substitutions: HashMap::new(),
+            generated_structs: HashMap::new(),
+            generated_functions: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -170,6 +183,61 @@ impl CodeGenerator {
     /// Check if debug info generation is enabled
     pub fn is_debug_enabled(&self) -> bool {
         self.debug_info.is_enabled()
+    }
+
+    /// Get current generic substitution for a type parameter
+    pub(crate) fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
+        self.generic_substitutions.get(param).cloned()
+    }
+
+    /// Set generic substitutions for the current context
+    pub(crate) fn set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
+        self.generic_substitutions = subst;
+    }
+
+    /// Clear generic substitutions
+    pub(crate) fn clear_generic_substitutions(&mut self) {
+        self.generic_substitutions.clear();
+    }
+
+    /// Generate mangled name for a generic struct
+    pub(crate) fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+        vais_types::mangle_name(name, generics)
+    }
+
+    /// Generate mangled name for a generic function
+    pub(crate) fn mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+        vais_types::mangle_name(name, generics)
+    }
+
+    /// Get the size of a type in bytes (for generic operations)
+    pub(crate) fn type_size(&self, ty: &ResolvedType) -> usize {
+        match ty {
+            ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
+            ResolvedType::I16 | ResolvedType::U16 => 2,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
+            ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
+            ResolvedType::I128 | ResolvedType::U128 => 16,
+            ResolvedType::Str => 8, // Pointer size
+            ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Named { name, .. } => {
+                // Calculate struct size
+                if let Some(info) = self.structs.get(name) {
+                    info.fields.iter().map(|(_, t)| self.type_size(t)).sum()
+                } else {
+                    8 // Default to pointer size
+                }
+            }
+            ResolvedType::Generic(param) => {
+                // Try to get concrete type from substitutions
+                if let Some(concrete) = self.generic_substitutions.get(param) {
+                    self.type_size(concrete)
+                } else {
+                    8 // Default to i64 size
+                }
+            }
+            _ => 8, // Default
+        }
     }
 
     fn next_label(&mut self, prefix: &str) -> String {

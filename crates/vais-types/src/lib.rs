@@ -18,7 +18,10 @@ use vais_ast::*;
 // Re-export core types
 pub use types::{
     TypeError, TypeResult, ResolvedType, FunctionSig,
-    StructDef, EnumDef, VariantFieldTypes
+    StructDef, EnumDef, VariantFieldTypes,
+    // Monomorphization support
+    GenericInstantiation, InstantiationKind,
+    mangle_name, mangle_type, substitute_type,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
@@ -77,6 +80,9 @@ pub struct TypeChecker {
 
     // Warnings collected during type checking
     warnings: Vec<String>,
+
+    // Generic instantiations required for monomorphization
+    generic_instantiations: Vec<GenericInstantiation>,
 }
 
 impl TypeChecker {
@@ -98,6 +104,7 @@ impl TypeChecker {
             substitutions: HashMap::new(),
             exhaustiveness_checker: ExhaustivenessChecker::new(),
             warnings: Vec::new(),
+            generic_instantiations: Vec::new(),
         };
         checker.register_builtins();
         checker
@@ -111,6 +118,54 @@ impl TypeChecker {
     /// Clear warnings
     pub fn clear_warnings(&mut self) {
         self.warnings.clear();
+    }
+
+    /// Get generic instantiations required for monomorphization
+    pub fn get_generic_instantiations(&self) -> &[GenericInstantiation] {
+        &self.generic_instantiations
+    }
+
+    /// Clear generic instantiations
+    pub fn clear_generic_instantiations(&mut self) {
+        self.generic_instantiations.clear();
+    }
+
+    /// Add a generic instantiation if not already present
+    fn add_instantiation(&mut self, inst: GenericInstantiation) {
+        if !self.generic_instantiations.contains(&inst) {
+            self.generic_instantiations.push(inst);
+        }
+    }
+
+    /// Check if a function has generic parameters
+    pub fn is_generic_function(&self, name: &str) -> bool {
+        self.functions
+            .get(name)
+            .map(|f| !f.generics.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Check if a struct has generic parameters
+    pub fn is_generic_struct(&self, name: &str) -> bool {
+        self.structs
+            .get(name)
+            .map(|s| !s.generics.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Get the function signature (for codegen)
+    pub fn get_function(&self, name: &str) -> Option<&FunctionSig> {
+        self.functions.get(name)
+    }
+
+    /// Get the struct definition (for codegen)
+    pub fn get_struct(&self, name: &str) -> Option<&StructDef> {
+        self.structs.get(name)
+    }
+
+    /// Get the enum definition (for codegen)
+    pub fn get_enum(&self, name: &str) -> Option<&EnumDef> {
+        self.enums.get(name)
     }
 
     /// Register built-in functions (libc wrappers)
