@@ -1966,12 +1966,11 @@ mod tests {
         let module = parse(source).unwrap();
 
         assert_eq!(module.items.len(), 1);
-        if let Item::Function(f) = &module.items[0].node {
-            assert_eq!(f.name.node, "add");
-            assert_eq!(f.params.len(), 2);
-        } else {
-            panic!("Expected function");
-        }
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function, got {:?}", module.items[0].node);
+        };
+        assert_eq!(f.name.node, "add");
+        assert_eq!(f.params.len(), 2);
     }
 
     #[test]
@@ -1979,17 +1978,14 @@ mod tests {
         let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
         let module = parse(source).unwrap();
 
-        if let Item::Function(f) = &module.items[0].node {
-            assert_eq!(f.name.node, "fib");
-            if let FunctionBody::Expr(expr) = &f.body {
-                // Should be a ternary expression
-                if let Expr::Ternary { .. } = &expr.node {
-                    // Good
-                } else {
-                    panic!("Expected ternary");
-                }
-            }
-        }
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "fib");
+        let FunctionBody::Expr(expr) = &f.body else {
+            unreachable!("Expected expression body");
+        };
+        assert!(matches!(expr.node, Expr::Ternary { .. }), "Expected ternary expression");
     }
 
     #[test]
@@ -1997,12 +1993,11 @@ mod tests {
         let source = "S Point{x:f64,y:f64}";
         let module = parse(source).unwrap();
 
-        if let Item::Struct(s) = &module.items[0].node {
-            assert_eq!(s.name.node, "Point");
-            assert_eq!(s.fields.len(), 2);
-        } else {
-            panic!("Expected struct");
-        }
+        let Item::Struct(s) = &module.items[0].node else {
+            unreachable!("Expected struct, got {:?}", module.items[0].node);
+        };
+        assert_eq!(s.name.node, "Point");
+        assert_eq!(s.fields.len(), 2);
     }
 
     #[test]
@@ -2010,13 +2005,12 @@ mod tests {
         let source = "E Option<T>{Some(T),None}";
         let module = parse(source).unwrap();
 
-        if let Item::Enum(e) = &module.items[0].node {
-            assert_eq!(e.name.node, "Option");
-            assert_eq!(e.generics.len(), 1);
-            assert_eq!(e.variants.len(), 2);
-        } else {
-            panic!("Expected enum");
-        }
+        let Item::Enum(e) = &module.items[0].node else {
+            unreachable!("Expected enum, got {:?}", module.items[0].node);
+        };
+        assert_eq!(e.name.node, "Option");
+        assert_eq!(e.generics.len(), 1);
+        assert_eq!(e.variants.len(), 2);
     }
 
     #[test]
@@ -2024,13 +2018,13 @@ mod tests {
         let source = "F sum(arr:[i64])->i64{s:=0;L x:arr{s+=x};s}";
         let module = parse(source).unwrap();
 
-        if let Item::Function(f) = &module.items[0].node {
-            if let FunctionBody::Block(stmts) = &f.body {
-                assert_eq!(stmts.len(), 3);
-            } else {
-                panic!("Expected block body");
-            }
-        }
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        let FunctionBody::Block(stmts) = &f.body else {
+            unreachable!("Expected block body, got {:?}", f.body);
+        };
+        assert_eq!(stmts.len(), 3);
     }
 
     #[test]
@@ -2039,56 +2033,52 @@ mod tests {
         let source = "F print_value<T: Display>(x: T) -> () = println(x)";
         let module = parse(source).unwrap();
 
-        if let Item::Function(f) = &module.items[0].node {
-            assert_eq!(f.name.node, "print_value");
-            assert_eq!(f.generics.len(), 1);
-            assert_eq!(f.generics[0].name.node, "T");
-            assert_eq!(f.generics[0].bounds.len(), 1);
-            assert_eq!(f.generics[0].bounds[0].node, "Display");
-        } else {
-            panic!("Expected function");
-        }
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "print_value");
+        assert_eq!(f.generics.len(), 1);
+        assert_eq!(f.generics[0].name.node, "T");
+        assert_eq!(f.generics[0].bounds.len(), 1);
+        assert_eq!(f.generics[0].bounds[0].node, "Display");
 
         // Test multiple trait bounds
         let source2 = "F compare<T: Ord + Clone>(a: T, b: T) -> bool = a < b";
         let module2 = parse(source2).unwrap();
 
-        if let Item::Function(f) = &module2.items[0].node {
-            assert_eq!(f.generics.len(), 1);
-            assert_eq!(f.generics[0].name.node, "T");
-            assert_eq!(f.generics[0].bounds.len(), 2);
-            assert_eq!(f.generics[0].bounds[0].node, "Ord");
-            assert_eq!(f.generics[0].bounds[1].node, "Clone");
-        } else {
-            panic!("Expected function");
-        }
+        let Item::Function(f2) = &module2.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f2.generics.len(), 1);
+        assert_eq!(f2.generics[0].name.node, "T");
+        assert_eq!(f2.generics[0].bounds.len(), 2);
+        assert_eq!(f2.generics[0].bounds[0].node, "Ord");
+        assert_eq!(f2.generics[0].bounds[1].node, "Clone");
 
         // Test multiple generic params with bounds
         let source3 = "F transform<A: Clone, B: Default>(x: A) -> B = x";
         let module3 = parse(source3).unwrap();
 
-        if let Item::Function(f) = &module3.items[0].node {
-            assert_eq!(f.generics.len(), 2);
-            assert_eq!(f.generics[0].name.node, "A");
-            assert_eq!(f.generics[0].bounds.len(), 1);
-            assert_eq!(f.generics[0].bounds[0].node, "Clone");
-            assert_eq!(f.generics[1].name.node, "B");
-            assert_eq!(f.generics[1].bounds.len(), 1);
-            assert_eq!(f.generics[1].bounds[0].node, "Default");
-        } else {
-            panic!("Expected function");
-        }
+        let Item::Function(f3) = &module3.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f3.generics.len(), 2);
+        assert_eq!(f3.generics[0].name.node, "A");
+        assert_eq!(f3.generics[0].bounds.len(), 1);
+        assert_eq!(f3.generics[0].bounds[0].node, "Clone");
+        assert_eq!(f3.generics[1].name.node, "B");
+        assert_eq!(f3.generics[1].bounds.len(), 1);
+        assert_eq!(f3.generics[1].bounds[0].node, "Default");
 
         // Test generic without bounds (should still work)
         let source4 = "F identity<T>(x: T) -> T = x";
         let module4 = parse(source4).unwrap();
 
-        if let Item::Function(f) = &module4.items[0].node {
-            assert_eq!(f.generics.len(), 1);
-            assert_eq!(f.generics[0].name.node, "T");
-            assert_eq!(f.generics[0].bounds.len(), 0);
-        } else {
-            panic!("Expected function");
-        }
+        let Item::Function(f4) = &module4.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f4.generics.len(), 1);
+        assert_eq!(f4.generics[0].name.node, "T");
+        assert_eq!(f4.generics[0].bounds.len(), 0);
     }
 }
