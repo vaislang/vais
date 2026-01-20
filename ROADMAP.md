@@ -430,13 +430,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 71% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 93% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (71%)
+> **상태**: 🔄 진행 중 (93%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
@@ -485,9 +485,15 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 컴파일러 내부 불변조건은 명시적 expect()로 변환
 
 ### P3 - 낮은 우선순위 (3개월 내)
-- [ ] **CONTRIBUTING.md 작성** - 기여 가이드라인 문서화
-- [ ] **rustdoc 문서 생성** - Rust API에 doc 주석 추가 및 문서 생성
-- [ ] **CI/CD 파이프라인 구축** - GitHub Actions로 자동 테스트/빌드
+- [x] **CONTRIBUTING.md 작성** - 기여 가이드라인 문서화 (완료일: 2026-01-20)
+  - 개발 환경 설정, 코드 스타일, PR 가이드, 이슈 보고 양식
+- [x] **rustdoc 문서 생성** - Rust API에 doc 주석 추가 및 문서 생성 (완료일: 2026-01-20)
+  - 5개 크레이트에 크레이트 레벨 및 주요 API 문서 추가
+  - Doc 테스트 5개 포함
+- [x] **CI/CD 파이프라인 구축** - GitHub Actions로 자동 테스트/빌드 (완료일: 2026-01-20)
+  - .github/workflows/ci.yml 생성
+  - Linux/macOS 매트릭스 빌드
+  - 포맷팅, 린팅, 테스트, 빌드, 문서 생성 단계
 
 ### P4 - 미래 (6개월+)
 - [ ] **i18n 에러 메시지** - 에러 메시지 다국어 지원 인프라 구축

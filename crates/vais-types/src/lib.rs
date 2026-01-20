@@ -27,7 +27,23 @@ use types::VarInfo;
 
 // Type definitions have been moved to the types module
 
-/// Type checker
+/// Static type checker with Hindley-Milner type inference.
+///
+/// Performs type checking, inference, and validation on the AST.
+/// Supports generics, traits, and exhaustiveness checking for pattern matching.
+///
+/// # Examples
+///
+/// ```
+/// use vais_types::TypeChecker;
+/// use vais_parser::parse;
+///
+/// let source = "F id<T>(x:T)->T=x";
+/// let module = parse(source).unwrap();
+///
+/// let mut checker = TypeChecker::new();
+/// checker.check_module(&module).unwrap();
+/// ```
 pub struct TypeChecker {
     // Type environment
     structs: HashMap<String, StructDef>,
@@ -64,6 +80,7 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
+    /// Creates a new type checker with built-in types and functions registered.
     pub fn new() -> Self {
         let mut checker = Self {
             structs: HashMap::new(),
@@ -463,7 +480,19 @@ impl TypeChecker {
         );
     }
 
-    /// Type check a module
+    /// Type checks a complete module.
+    ///
+    /// Performs two-pass type checking:
+    /// 1. First pass: Collect all type definitions (functions, structs, enums, traits)
+    /// 2. Second pass: Type check all function bodies and implementations
+    ///
+    /// # Arguments
+    ///
+    /// * `module` - The parsed AST module to type check
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if type checking succeeds, or a TypeError on failure.
     pub fn check_module(&mut self, module: &Module) -> TypeResult<()> {
         // First pass: collect all type definitions
         for item in &module.items {

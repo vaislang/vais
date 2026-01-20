@@ -6,16 +6,29 @@ use thiserror::Error;
 use vais_ast::*;
 use vais_lexer::{SpannedToken, Token};
 
+/// Error type for parsing failures.
+///
+/// Represents various kinds of syntax errors that can occur during parsing,
+/// including unexpected tokens, premature EOF, and malformed expressions.
 #[derive(Debug, Error)]
 pub enum ParseError {
+    /// Unexpected token encountered during parsing
     #[error("Unexpected token {found:?} at {span:?}, expected {expected}")]
     UnexpectedToken {
+        /// The token that was found
         found: Token,
+        /// Source location of the unexpected token
         span: std::ops::Range<usize>,
+        /// Description of what was expected
         expected: String,
     },
+    /// Unexpected end of file while parsing
     #[error("Unexpected end of file")]
-    UnexpectedEof { span: std::ops::Range<usize> },
+    UnexpectedEof {
+        /// Location where EOF was encountered
+        span: std::ops::Range<usize>
+    },
+    /// Invalid or malformed expression
     #[error("Invalid expression")]
     InvalidExpression,
 }
@@ -42,17 +55,27 @@ impl ParseError {
 
 type ParseResult<T> = Result<T, ParseError>;
 
+/// Recursive descent parser for Vais source code.
+///
+/// Converts a token stream into an Abstract Syntax Tree (AST).
+/// Uses predictive parsing with single-token lookahead.
 pub struct Parser {
+    /// Token stream to parse
     tokens: Vec<SpannedToken>,
+    /// Current position in the token stream
     pos: usize,
 }
 
 impl Parser {
+    /// Creates a new parser from a token stream.
     pub fn new(tokens: Vec<SpannedToken>) -> Self {
         Self { tokens, pos: 0 }
     }
 
-    /// Parse a complete module
+    /// Parses a complete module (top-level items).
+    ///
+    /// This is the main entry point for parsing. It consumes all tokens
+    /// and produces a Module containing all top-level definitions.
     pub fn parse_module(&mut self) -> ParseResult<Module> {
         let mut items = Vec::new();
 
@@ -1948,7 +1971,28 @@ impl Parser {
     }
 }
 
-/// Parse source code into AST
+/// Parses Vais source code into an Abstract Syntax Tree.
+///
+/// This is the main convenience function that performs both lexing and parsing
+/// in a single step.
+///
+/// # Arguments
+///
+/// * `source` - The Vais source code to parse
+///
+/// # Returns
+///
+/// A Module containing all parsed items on success, or a ParseError on failure.
+///
+/// # Examples
+///
+/// ```
+/// use vais_parser::parse;
+///
+/// let source = "F add(x:i64,y:i64)->i64=x+y";
+/// let module = parse(source).unwrap();
+/// assert_eq!(module.items.len(), 1);
+/// ```
 pub fn parse(source: &str) -> Result<Module, ParseError> {
     let tokens = vais_lexer::tokenize(source).map_err(|e| ParseError::UnexpectedToken {
         found: Token::Ident(format!("LexError: {}", e)),

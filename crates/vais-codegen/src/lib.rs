@@ -23,20 +23,29 @@ use vais_types::ResolvedType;
 // Re-export type structs from types module
 pub(crate) use types::*;
 
+/// Error type for code generation failures.
+///
+/// Represents various kinds of errors that can occur during LLVM IR generation,
+/// including undefined references, type mismatches, and unsupported features.
 #[derive(Debug, Error)]
 pub enum CodegenError {
+    /// Reference to an undefined variable
     #[error("Undefined variable: {0}")]
     UndefinedVar(String),
 
+    /// Call to an undefined function
     #[error("Undefined function: {0}")]
     UndefinedFunction(String),
 
+    /// Type-related error during code generation
     #[error("Type error: {0}")]
     TypeError(String),
 
+    /// LLVM-specific error
     #[error("LLVM error: {0}")]
     LlvmError(String),
 
+    /// Feature not yet implemented in code generation
     #[error("Unsupported feature: {0}")]
     Unsupported(String),
 }
@@ -108,6 +117,13 @@ pub struct CodeGenerator {
 }
 
 impl CodeGenerator {
+    /// Creates a new code generator for the given module.
+    ///
+    /// Initializes the code generator with built-in functions registered.
+    ///
+    /// # Arguments
+    ///
+    /// * `module_name` - Name of the module being compiled
     pub fn new(module_name: &str) -> Self {
         let mut gen = Self {
             module_name: module_name.to_string(),
@@ -162,7 +178,34 @@ impl CodeGenerator {
         label
     }
 
-    /// Generate LLVM IR for a module
+    /// Generates LLVM IR code for a complete module.
+    ///
+    /// Performs two-pass code generation:
+    /// 1. First pass: Collect all type and function declarations
+    /// 2. Second pass: Generate code for all function bodies
+    ///
+    /// # Arguments
+    ///
+    /// * `module` - The typed AST module to compile
+    ///
+    /// # Returns
+    ///
+    /// A string containing the complete LLVM IR code on success,
+    /// or a CodegenError on failure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vais_codegen::CodeGenerator;
+    /// use vais_parser::parse;
+    ///
+    /// let source = "F add(x:i64,y:i64)->i64=x+y";
+    /// let module = parse(source).unwrap();
+    ///
+    /// let mut gen = CodeGenerator::new("test");
+    /// let ir = gen.generate_module(&module).unwrap();
+    /// assert!(ir.contains("define"));
+    /// ```
     pub fn generate_module(&mut self, module: &Module) -> CodegenResult<String> {
         let mut ir = String::new();
 

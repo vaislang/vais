@@ -5,7 +5,20 @@
 use logos::Logos;
 use std::fmt;
 
-/// Token types for Vais 0.0.1
+/// Token types for Vais 0.0.1 language.
+///
+/// Uses single-letter keywords (F, S, E, I, L, M, etc.) for token efficiency,
+/// optimizing for AI model processing and reducing token count in LLM contexts.
+///
+/// # Examples
+///
+/// ```
+/// use vais_lexer::{tokenize, Token};
+///
+/// let source = "F add(a:i64,b:i64)->i64=a+b";
+/// let tokens = tokenize(source).unwrap();
+/// assert_eq!(tokens[0].token, Token::Function);
+/// ```
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n]+")]  // Skip whitespace
 #[logos(skip r"#[^\n]*")]     // Skip comments
@@ -299,21 +312,51 @@ impl fmt::Display for Token {
     }
 }
 
-/// Spanned token with source location
+/// Token with source location information.
+///
+/// Associates each token with its byte range in the source code,
+/// enabling precise error reporting and IDE features.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpannedToken {
+    /// The token type and value
     pub token: Token,
+    /// Byte range of this token in the source file
     pub span: std::ops::Range<usize>,
 }
 
-/// Lexer error
+/// Error type for lexical analysis failures.
+///
+/// Represents errors encountered during tokenization,
+/// such as invalid characters or malformed tokens.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum LexError {
+    /// Invalid or unrecognized token at the given position
     #[error("Invalid token at position {0}")]
     InvalidToken(usize),
 }
 
-/// Tokenize source code
+/// Tokenizes Vais source code into a stream of tokens.
+///
+/// This function performs lexical analysis, converting the input string
+/// into a sequence of tokens with source location information.
+///
+/// # Arguments
+///
+/// * `source` - The Vais source code to tokenize
+///
+/// # Returns
+///
+/// A vector of spanned tokens on success, or a lexer error if invalid tokens are encountered.
+///
+/// # Examples
+///
+/// ```
+/// use vais_lexer::{tokenize, Token};
+///
+/// let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
+/// let tokens = tokenize(source).unwrap();
+/// assert!(tokens.len() > 0);
+/// ```
 pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
     let mut tokens = Vec::new();
     let mut lexer = Token::lexer(source);

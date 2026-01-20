@@ -2,18 +2,28 @@
 //!
 //! AI-optimized AST with minimal node types for efficient parsing and code generation.
 
-/// Source location for error reporting
+/// Source location information for error reporting and diagnostics.
+///
+/// Spans track the start and end positions of AST nodes in the source code,
+/// enabling precise error messages and IDE features like go-to-definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
+    /// Byte offset of the start of this span in the source file
     pub start: usize,
+    /// Byte offset of the end of this span in the source file
     pub end: usize,
 }
 
 impl Span {
+    /// Creates a new span from start and end positions.
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
 
+    /// Merges two spans into a single span covering both ranges.
+    ///
+    /// The resulting span starts at the minimum start position and
+    /// ends at the maximum end position of the two input spans.
     pub fn merge(self, other: Span) -> Span {
         Span {
             start: self.start.min(other.start),
@@ -22,62 +32,91 @@ impl Span {
     }
 }
 
-/// AST node with span information
+/// AST node wrapper that includes source location information.
+///
+/// This generic wrapper associates any AST node type with its source span,
+/// enabling error reporting and tooling features throughout the compiler pipeline.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spanned<T> {
+    /// The actual AST node
     pub node: T,
+    /// Source location of this node
     pub span: Span,
 }
 
 impl<T> Spanned<T> {
+    /// Creates a new spanned node with the given value and location.
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
     }
 }
 
-/// Attribute for conditional compilation and metadata
+/// Attribute for conditional compilation and metadata annotations.
+///
+/// Attributes like `#[cfg(test)]`, `#\[inline\]`, etc. provide metadata
+/// and control compilation behavior.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
+    /// Attribute name (e.g., "cfg", "inline")
     pub name: String,
-    pub args: Vec<String>, // Arguments like cfg(test) -> ["test"]
+    /// Attribute arguments (e.g., cfg(test) -> ["test"])
+    pub args: Vec<String>,
 }
 
-/// Top-level module
+/// Top-level module containing all program items.
+///
+/// A module represents a complete Vais source file and contains
+/// all top-level definitions (functions, structs, enums, etc.).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
+    /// List of top-level items in this module
     pub items: Vec<Spanned<Item>>,
 }
 
-/// Top-level items
+/// Top-level item definitions in a module.
+///
+/// Represents the various kinds of declarations that can appear at module level.
+/// Vais uses single-letter keywords for token efficiency.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
-    /// `F name(params)->ret=expr` or `F name(params)->ret{...}`
+    /// Function definition: `F name(params)->ret=expr` or `F name(params)->ret{...}`
     Function(Function),
-    /// `S Name{fields}`
+    /// Struct definition: `S Name{fields}`
     Struct(Struct),
-    /// `E Name{variants}`
+    /// Enum definition: `E Name{variants}`
     Enum(Enum),
-    /// `T Name=Type` (Type alias)
+    /// Type alias: `T Name=Type`
     TypeAlias(TypeAlias),
-    /// `U module` or `U module::{items}`
+    /// Import statement: `U module` or `U module::{items}`
     Use(Use),
-    /// `W Name { methods }` (trait definition - "What" interface)
+    /// Trait definition: `W Name { methods }` (W = "What" interface)
     Trait(Trait),
-    /// `X Type: Trait { methods }` (impl - "eXtend" implementation)
+    /// Implementation block: `X Type: Trait { methods }` (X = "eXtend")
     Impl(Impl),
 }
 
-/// Function definition
+/// Function definition with signature and body.
+///
+/// Represents both expression-form (`F f(x)->i64=x+1`) and
+/// block-form (`F f(x)->i64{R x+1}`) functions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
+    /// Function name
     pub name: Spanned<String>,
+    /// Generic type parameters
     pub generics: Vec<GenericParam>,
+    /// Function parameters
     pub params: Vec<Param>,
+    /// Return type (optional, can be inferred)
     pub ret_type: Option<Spanned<Type>>,
+    /// Function body (expression or block)
     pub body: FunctionBody,
+    /// Whether this function is public
     pub is_pub: bool,
+    /// Whether this is an async function
     pub is_async: bool,
-    pub attributes: Vec<Attribute>, // #[cfg(test)], #[inline], etc.
+    /// Attributes like `#[cfg(test)]`, `#\[inline\]`, etc.
+    pub attributes: Vec<Attribute>,
 }
 
 /// Function body - either expression or block
@@ -466,6 +505,10 @@ pub enum BinOp {
 }
 
 impl BinOp {
+    /// Returns the precedence level of this operator.
+    ///
+    /// Higher numbers indicate higher precedence (tighter binding).
+    /// For example, multiplication (10) binds tighter than addition (9).
     pub fn precedence(self) -> u8 {
         match self {
             BinOp::Or => 1,
