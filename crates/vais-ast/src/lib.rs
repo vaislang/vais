@@ -187,6 +187,7 @@ pub struct TraitMethod {
     pub params: Vec<Param>,
     pub ret_type: Option<Spanned<Type>>,
     pub default_body: Option<FunctionBody>,
+    pub is_async: bool,
 }
 
 /// Impl block: `X Type: Trait { methods }`

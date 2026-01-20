@@ -1169,7 +1169,7 @@ impl TypeChecker {
                     params,
                     ret,
                     has_default: method.default_body.is_some(),
-                    is_async: false, // TODO: Add async support for trait methods when AST supports it
+                    is_async: method.is_async,
                 },
             );
         }

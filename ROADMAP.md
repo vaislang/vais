@@ -429,20 +429,23 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 12% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 18% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (12%)
+> **상태**: 🔄 진행 중 (18%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
 - [x] **README.md 업데이트** - ROADMAP과 일치하도록 완료된 기능 체크박스 업데이트 (완료일: 2026-01-20)
 
 ### P1 - 높은 우선순위 (1주일 내)
-- [ ] **TODO 주석 해결** - trait 메서드의 async 지원 구현 또는 이슈 등록
+- [x] **TODO 주석 해결** - trait 메서드의 async 지원 구현 (완료일: 2026-01-20)
+  - TraitMethod에 is_async 필드 추가 (AST)
+  - 파서에서 `A F method()` 형태 파싱 지원
+  - 타입 체커에서 async 정보 전파
 - [ ] **파서 테스트 개선** - panic! 대신 assert 매크로 사용으로 변경
 - [ ] **vais-codegen 모듈 분리** - 45K+ 토큰의 lib.rs를 논리적 모듈로 분리
 - [ ] **vais-types 모듈 분리** - 타입 체커를 논리적 모듈로 분리

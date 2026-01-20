@@ -396,6 +396,14 @@ impl Parser {
 
     /// Parse trait method signature
     fn parse_trait_method(&mut self) -> ParseResult<TraitMethod> {
+        // Check for async keyword: `A F method_name()`
+        let is_async = if self.check(&Token::Async) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         self.expect(&Token::Function)?;
         let name = self.parse_ident()?;
 
@@ -425,6 +433,7 @@ impl Parser {
             params,
             ret_type,
             default_body,
+            is_async,
         })
     }
 
