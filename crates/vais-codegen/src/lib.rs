@@ -10,6 +10,8 @@ pub mod formatter;
 pub mod optimize;
 mod builtins;
 mod expr;
+mod types;
+mod stmt;
 
 pub use debug::{DebugConfig, DebugInfoBuilder};
 
@@ -17,6 +19,9 @@ use std::collections::HashMap;
 use thiserror::Error;
 use vais_ast::{*, IfElse};
 use vais_types::ResolvedType;
+
+// Re-export type structs from types module
+pub(crate) use types::*;
 
 #[derive(Debug, Error)]
 pub enum CodegenError {
@@ -100,95 +105,6 @@ pub struct CodeGenerator {
 
     // Debug info builder for DWARF metadata generation
     debug_info: DebugInfoBuilder,
-}
-
-/// Information about an await point in an async function
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct AsyncAwaitPoint {
-    /// State index after this await
-    state_index: usize,
-    /// Variable to store the awaited result
-    result_var: String,
-    /// LLVM type of the result
-    result_type: String,
-}
-
-/// Information about the current async function being compiled
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct AsyncFunctionInfo {
-    /// Original function name
-    name: String,
-    /// State struct name for this async function
-    state_struct: String,
-    /// Captured variables that need to be stored in state
-    captured_vars: Vec<(String, ResolvedType)>,
-    /// Return type of the future
-    ret_type: ResolvedType,
-}
-
-#[derive(Debug, Clone)]
-struct LoopLabels {
-    continue_label: String,
-    break_label: String,
-}
-
-#[derive(Debug, Clone)]
-struct FunctionInfo {
-    name: String,
-    params: Vec<(String, ResolvedType)>,
-    ret_type: ResolvedType,
-    is_extern: bool,
-}
-
-#[derive(Debug, Clone)]
-struct StructInfo {
-    #[allow(dead_code)]
-    name: String,
-    fields: Vec<(String, ResolvedType)>,
-}
-
-#[derive(Debug, Clone)]
-struct EnumInfo {
-    #[allow(dead_code)]
-    name: String,
-    variants: Vec<EnumVariantInfo>,
-}
-
-#[derive(Debug, Clone)]
-struct EnumVariantInfo {
-    #[allow(dead_code)]
-    name: String,
-    #[allow(dead_code)]
-    tag: u32,
-    fields: EnumVariantFields,
-}
-
-#[derive(Debug, Clone)]
-enum EnumVariantFields {
-    Unit,
-    Tuple(Vec<ResolvedType>),
-    Struct(Vec<(String, ResolvedType)>),
-}
-
-#[derive(Debug, Clone)]
-struct LocalVar {
-    ty: ResolvedType,
-    /// True if this is a function parameter (SSA value), false if alloca'd
-    is_param: bool,
-    /// The actual LLVM IR name for this variable (may differ from source name in loops)
-    llvm_name: String,
-}
-
-/// Information about a closure (lambda with captures)
-#[derive(Debug, Clone)]
-struct ClosureInfo {
-    /// The generated LLVM function name for this lambda
-    #[allow(dead_code)]
-    func_name: String,
-    /// Captured variable names and their loaded values (var_name, llvm_value)
-    captures: Vec<(String, String)>,
 }
 
 impl CodeGenerator {
@@ -537,16 +453,6 @@ impl CodeGenerator {
         Ok(())
     }
 
-    fn generate_struct_type(&self, name: &str, info: &StructInfo) -> String {
-        let fields: Vec<_> = info
-            .fields
-            .iter()
-            .map(|(_, ty)| self.type_to_llvm(ty))
-            .collect();
-
-        format!("%{} = type {{ {} }}", name, fields.join(", "))
-    }
-
     fn register_enum(&mut self, e: &vais_ast::Enum) -> CodegenResult<()> {
         let mut variants = Vec::new();
 
@@ -585,44 +491,6 @@ impl CodeGenerator {
         );
 
         Ok(())
-    }
-
-    fn generate_enum_type(&self, name: &str, info: &EnumInfo) -> String {
-        // Enum is represented as { i32 tag, union payload }
-        // For simplicity, we use the largest variant size for the payload
-        let mut max_payload_size = 0usize;
-        let mut payload_types: Vec<String> = Vec::new();
-
-        for variant in &info.variants {
-            let variant_types = match &variant.fields {
-                EnumVariantFields::Unit => vec![],
-                EnumVariantFields::Tuple(types) => {
-                    types.iter().map(|t| self.type_to_llvm(t)).collect()
-                }
-                EnumVariantFields::Struct(fields) => {
-                    fields.iter().map(|(_, t)| self.type_to_llvm(t)).collect()
-                }
-            };
-
-            // Estimate size (rough: each i64 = 8 bytes)
-            let size = variant_types.len() * 8;
-            if size > max_payload_size {
-                max_payload_size = size;
-                payload_types = variant_types;
-            }
-        }
-
-        if payload_types.is_empty() {
-            // Simple enum with no payload - just use i32 for tag
-            format!("%{} = type {{ i32 }}", name)
-        } else {
-            // Enum with payload - tag + payload struct
-            format!(
-                "%{} = type {{ i32, {{ {} }} }}",
-                name,
-                payload_types.join(", ")
-            )
-        }
     }
 
     fn generate_extern_decl(&self, info: &FunctionInfo) -> String {
@@ -1044,156 +912,6 @@ impl CodeGenerator {
 
         self.current_function = None;
         Ok(ir)
-    }
-
-    fn generate_block(
-        &mut self,
-        stmts: &[Spanned<Stmt>],
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        let mut ir = String::new();
-        let mut last_value = "void".to_string();
-
-        for stmt in stmts {
-            let (value, stmt_ir) = self.generate_stmt(stmt, counter)?;
-            ir.push_str(&stmt_ir);
-            last_value = value;
-        }
-
-        Ok((last_value, ir))
-    }
-
-    fn generate_stmt(
-        &mut self,
-        stmt: &Spanned<Stmt>,
-        counter: &mut usize,
-    ) -> CodegenResult<(String, String)> {
-        match &stmt.node {
-            Stmt::Let {
-                name,
-                ty,
-                value,
-                is_mut: _,
-            } => {
-                // Infer type BEFORE generating code, so we can use function return types
-                let inferred_ty = self.infer_expr_type(value);
-
-                // Check if this is a struct literal - handle specially
-                let is_struct_lit = matches!(&value.node, Expr::StructLit { .. });
-
-                let (val, val_ir) = self.generate_expr(value, counter)?;
-
-                let resolved_ty = ty
-                    .as_ref()
-                    .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(inferred_ty); // Use inferred type if not specified
-
-                // Generate unique LLVM name for this variable (to handle loops)
-                let llvm_name = format!("{}.{}", name.node, counter);
-                *counter += 1;
-
-                self.locals.insert(
-                    name.node.clone(),
-                    LocalVar {
-                        ty: resolved_ty.clone(),
-                        is_param: false, // alloca'd variable
-                        llvm_name: llvm_name.clone(),
-                    },
-                );
-
-                let mut ir = val_ir;
-                let llvm_ty = self.type_to_llvm(&resolved_ty);
-
-                // For struct literals, the value is already an alloca'd pointer
-                // We store the pointer to the struct (i.e., %Point*)
-                if is_struct_lit {
-                    // The val is already a pointer to the struct (%1, %2, etc)
-                    // Allocate space for a pointer and store the struct pointer
-                    ir.push_str(&format!(
-                        "  %{} = alloca {}*\n",
-                        llvm_name, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {}* {}, {}** %{}\n",
-                        llvm_ty, val, llvm_ty, llvm_name
-                    ));
-                } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
-                    // For struct values (e.g., from function returns),
-                    // alloca struct, store value, then store pointer to it
-                    // This keeps all struct variables as pointers for consistency
-                    let tmp_ptr = format!("%{}.struct", llvm_name);
-                    ir.push_str(&format!(
-                        "  {} = alloca {}\n",
-                        tmp_ptr, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
-                        llvm_ty, val, llvm_ty, tmp_ptr
-                    ));
-                    ir.push_str(&format!(
-                        "  %{} = alloca {}*\n",
-                        llvm_name, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {}* {}, {}** %{}\n",
-                        llvm_ty, tmp_ptr, llvm_ty, llvm_name
-                    ));
-                } else {
-                    // Allocate and store
-                    ir.push_str(&format!(
-                        "  %{} = alloca {}\n",
-                        llvm_name, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* %{}\n",
-                        llvm_ty, val, llvm_ty, llvm_name
-                    ));
-                }
-
-                // If this was a lambda with captures, register the closure info
-                if let Some(closure_info) = self.last_lambda_info.take() {
-                    self.closures.insert(name.node.clone(), closure_info);
-                }
-
-                Ok(("void".to_string(), ir))
-            }
-            Stmt::Expr(expr) => self.generate_expr(expr, counter),
-            Stmt::Return(expr) => {
-                if let Some(expr) = expr {
-                    let (val, ir) = self.generate_expr(expr, counter)?;
-                    Ok((val, ir))
-                } else {
-                    Ok(("void".to_string(), String::new()))
-                }
-            }
-            Stmt::Break(value) => {
-                if let Some(labels) = self.loop_stack.last() {
-                    let break_label = labels.break_label.clone();
-                    let mut ir = String::new();
-                    if let Some(expr) = value {
-                        let (val, expr_ir) = self.generate_expr(expr, counter)?;
-                        ir.push_str(&expr_ir);
-                        // Store break value if needed (for loop expressions)
-                        ir.push_str(&format!("  br label %{}\n", break_label));
-                        Ok((val, ir))
-                    } else {
-                        ir.push_str(&format!("  br label %{}\n", break_label));
-                        Ok(("void".to_string(), ir))
-                    }
-                } else {
-                    Err(CodegenError::Unsupported("break outside of loop".to_string()))
-                }
-            }
-            Stmt::Continue => {
-                if let Some(labels) = self.loop_stack.last() {
-                    let continue_label = labels.continue_label.clone();
-                    let ir = format!("  br label %{}\n", continue_label);
-                    Ok(("void".to_string(), ir))
-                } else {
-                    Err(CodegenError::Unsupported("continue outside of loop".to_string()))
-                }
-            }
-        }
     }
 
     fn generate_expr(
@@ -2738,116 +2456,6 @@ impl CodeGenerator {
                 // Return local_merge as the last block for this nested if-else
                 Ok((result, ir, all_terminated, local_merge))
             }
-        }
-    }
-
-    fn type_to_llvm(&self, ty: &ResolvedType) -> String {
-        match ty {
-            ResolvedType::I8 => "i8".to_string(),
-            ResolvedType::I16 => "i16".to_string(),
-            ResolvedType::I32 => "i32".to_string(),
-            ResolvedType::I64 => "i64".to_string(),
-            ResolvedType::I128 => "i128".to_string(),
-            ResolvedType::U8 => "i8".to_string(),
-            ResolvedType::U16 => "i16".to_string(),
-            ResolvedType::U32 => "i32".to_string(),
-            ResolvedType::U64 => "i64".to_string(),
-            ResolvedType::U128 => "i128".to_string(),
-            ResolvedType::F32 => "float".to_string(),
-            ResolvedType::F64 => "double".to_string(),
-            ResolvedType::Bool => "i1".to_string(),
-            ResolvedType::Str => "i8*".to_string(),
-            ResolvedType::Unit => "void".to_string(),
-            ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::Range(_inner) => {
-                // Range is represented as a struct with start and end fields
-                // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
-                "%Range".to_string()
-            }
-            ResolvedType::Named { name, .. } => {
-                // Single uppercase letter is likely a generic type parameter
-                if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
-                    "i64".to_string()
-                } else {
-                    // Return struct type without pointer - caller adds * when needed
-                    format!("%{}", name)
-                }
-            }
-            ResolvedType::Generic(_) => "i64".to_string(), // Generic erased to i64 at runtime
-            _ => "i64".to_string(), // Default fallback
-        }
-    }
-
-    /// Get bit width for integer types
-    fn get_integer_bits(&self, ty: &ResolvedType) -> u32 {
-        match ty {
-            ResolvedType::I8 | ResolvedType::U8 => 8,
-            ResolvedType::I16 | ResolvedType::U16 => 16,
-            ResolvedType::I32 | ResolvedType::U32 => 32,
-            ResolvedType::I64 | ResolvedType::U64 => 64,
-            ResolvedType::I128 | ResolvedType::U128 => 128,
-            _ => 0, // Not an integer type
-        }
-    }
-
-    /// Try to determine bit width from a value (heuristic based on SSA variable naming)
-    fn get_integer_bits_from_val(&self, val: &str) -> u32 {
-        // If it's a temp variable, we assume i64 (default Vais integer)
-        // If it's a literal number, we assume i64
-        if val.starts_with('%') || val.parse::<i64>().is_ok() {
-            64
-        } else {
-            0
-        }
-    }
-
-    fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
-        match ty {
-            Type::Named { name, generics } => match name.as_str() {
-                "i8" => ResolvedType::I8,
-                "i16" => ResolvedType::I16,
-                "i32" => ResolvedType::I32,
-                "i64" => ResolvedType::I64,
-                "i128" => ResolvedType::I128,
-                "u8" => ResolvedType::U8,
-                "u16" => ResolvedType::U16,
-                "u32" => ResolvedType::U32,
-                "u64" => ResolvedType::U64,
-                "u128" => ResolvedType::U128,
-                "f32" => ResolvedType::F32,
-                "f64" => ResolvedType::F64,
-                "bool" => ResolvedType::Bool,
-                "str" => ResolvedType::Str,
-                _ => {
-                    // Single uppercase letter is likely a generic type parameter
-                    if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
-                        ResolvedType::Generic(name.clone())
-                    } else {
-                        ResolvedType::Named {
-                            name: name.clone(),
-                            generics: generics
-                                .iter()
-                                .map(|g| self.ast_type_to_resolved(&g.node))
-                                .collect(),
-                        }
-                    }
-                }
-            },
-            Type::Array(inner) => {
-                ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
-            }
-            Type::Pointer(inner) => {
-                ResolvedType::Pointer(Box::new(self.ast_type_to_resolved(&inner.node)))
-            }
-            Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved(&inner.node))),
-            Type::RefMut(inner) => {
-                ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node)))
-            }
-            Type::Unit => ResolvedType::Unit,
-            _ => ResolvedType::Unknown,
         }
     }
 
