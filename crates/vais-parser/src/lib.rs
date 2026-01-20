@@ -1915,7 +1915,11 @@ impl Parser {
 
     fn expect(&mut self, expected: &Token) -> ParseResult<SpannedToken> {
         if self.check(expected) {
-            Ok(self.advance().unwrap())
+            self.advance().ok_or_else(|| ParseError::UnexpectedToken {
+                found: Token::Ident("EOF".into()),
+                span: self.current_span(),
+                expected: format!("{:?}", expected),
+            })
         } else {
             Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),

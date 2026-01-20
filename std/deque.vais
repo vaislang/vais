@@ -1,6 +1,7 @@
 # Deque - Double-ended queue (circular buffer implementation)
 # Stores i64 elements
 # Supports O(1) push/pop operations at both ends
+# Updated to use Option<T> for error handling
 
 # Helper function to copy one element from circular buffer to linear buffer
 # This is a recursive helper to work around loop variable mutability limitations
@@ -135,6 +136,26 @@ X Deque {
         }
     }
 
+    # Pop element from front using Option type
+    # Returns Some(value) if deque is not empty, None otherwise
+    F pop_front_opt(&self) -> Option {
+        I self.len == 0 {
+            None
+        } E {
+            ptr := self.data + self.head * 8
+            value := load_i64(ptr)
+
+            # Move head forward (wrapping around if needed)
+            self.head = self.head + 1
+            I self.head >= self.cap {
+                self.head = 0
+            }
+
+            self.len = self.len - 1
+            Some(value)
+        }
+    }
+
     # Pop element from back
     # Returns 0 if deque is empty
     F pop_back(&self) -> i64 {
@@ -155,6 +176,26 @@ X Deque {
         }
     }
 
+    # Pop element from back using Option type
+    # Returns Some(value) if deque is not empty, None otherwise
+    F pop_back_opt(&self) -> Option {
+        I self.len == 0 {
+            None
+        } E {
+            # Move tail back (wrapping around if needed)
+            I self.tail == 0 {
+                self.tail = self.cap - 1
+            } E {
+                self.tail = self.tail - 1
+            }
+
+            ptr := self.data + self.tail * 8
+            value := load_i64(ptr)
+            self.len = self.len - 1
+            Some(value)
+        }
+    }
+
     # Get element at front without removing
     # Returns 0 if deque is empty
     F front(&self) -> i64 {
@@ -163,6 +204,17 @@ X Deque {
         } E {
             ptr := self.data + self.head * 8
             load_i64(ptr)
+        }
+    }
+
+    # Get element at front using Option type
+    # Returns Some(value) if deque is not empty, None otherwise
+    F front_opt(&self) -> Option {
+        I self.len == 0 {
+            None
+        } E {
+            ptr := self.data + self.head * 8
+            Some(load_i64(ptr))
         }
     }
 
@@ -181,6 +233,21 @@ X Deque {
         }
     }
 
+    # Get element at back using Option type
+    # Returns Some(value) if deque is not empty, None otherwise
+    F back_opt(&self) -> Option {
+        I self.len == 0 {
+            None
+        } E {
+            # Calculate index of last element
+            back_idx_temp := self.tail - 1
+            back_idx := I back_idx_temp < 0 { self.cap - 1 } E { back_idx_temp }
+
+            ptr := self.data + back_idx * 8
+            Some(load_i64(ptr))
+        }
+    }
+
     # Get element at index (0-indexed from front)
     # Returns 0 if index is out of bounds
     F get(&self, index: i64) -> i64 {
@@ -195,6 +262,23 @@ X Deque {
 
             ptr := self.data + actual_idx * 8
             load_i64(ptr)
+        }
+    }
+
+    # Get element at index using Option type
+    # Returns Some(value) if index is valid, None otherwise
+    F get_opt(&self, index: i64) -> Option {
+        I index < 0 {
+            None
+        } E I index >= self.len {
+            None
+        } E {
+            # Calculate actual position in circular buffer
+            actual_idx_temp := self.head + index
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } E { actual_idx_temp }
+
+            ptr := self.data + actual_idx * 8
+            Some(load_i64(ptr))
         }
     }
 

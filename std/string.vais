@@ -1,5 +1,6 @@
 # String type - dynamic, heap-allocated string
 # Stores: data pointer, length, capacity
+# Updated to use Option<T> for error handling
 
 S String {
     data: i64,      # Pointer to char array (i8*)
@@ -37,6 +38,17 @@ X String {
             # Load byte at index
             ptr := self.data + index
             load_byte(ptr)
+        }
+    }
+
+    # Get character at index using Option type
+    # Returns Some(char) if index is valid, None otherwise
+    F char_at_opt(&self, index: i64) -> Option {
+        I index < 0 || index >= self.len {
+            None
+        } E {
+            ptr := self.data + index
+            Some(load_byte(ptr))
         }
     }
 

@@ -675,12 +675,10 @@ fn try_unroll_loop(lines: &[&str], start_idx: usize) -> Option<(Vec<String>, usi
 
     // Check if we can unroll (need known bound and increment)
     // For simplicity, we'll do partial unrolling without full analysis
-    if bound_value.is_none() || increment.is_none() {
-        return None;
-    }
-
-    let bound = bound_value.unwrap();
-    let inc = increment.unwrap();
+    let (bound, inc) = match (bound_value, increment) {
+        (Some(b), Some(i)) => (b, i),
+        _ => return None,
+    };
 
     // Only unroll small loops with reasonable iteration counts
     if inc <= 0 || bound <= 0 || bound > 1000 {

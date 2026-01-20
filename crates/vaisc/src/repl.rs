@@ -23,7 +23,7 @@ pub fn run() -> Result<(), String> {
     loop {
         // Print prompt
         print!("{} ", "vais>".green().bold());
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
 
         // Read input
         let mut input = String::new();
@@ -187,13 +187,18 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write temp file: {}", e))?;
 
     // Compile with clang
+    let bin_path_str = bin_path.to_str()
+        .ok_or("Invalid UTF-8 in binary path")?;
+    let ir_path_str = ir_path.to_str()
+        .ok_or("Invalid UTF-8 in IR path")?;
+
     let status = Command::new("clang")
         .args([
             "-O0",
             "-Wno-override-module",
             "-o",
-            bin_path.to_str().unwrap(),
-            ir_path.to_str().unwrap(),
+            bin_path_str,
+            ir_path_str,
         ])
         .output()
         .map_err(|_| "clang not found")?;

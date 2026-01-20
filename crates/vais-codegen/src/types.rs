@@ -124,7 +124,7 @@ impl CodeGenerator {
             }
             ResolvedType::Named { name, .. } => {
                 // Single uppercase letter is likely a generic type parameter
-                if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
+                if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                     "i64".to_string()
                 } else {
                     // Return struct type without pointer - caller adds * when needed
@@ -179,7 +179,7 @@ impl CodeGenerator {
                 "str" => ResolvedType::Str,
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
-                    if name.len() == 1 && name.chars().next().unwrap().is_uppercase() {
+                    if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                         ResolvedType::Generic(name.clone())
                     } else {
                         ResolvedType::Named {

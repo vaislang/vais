@@ -1,5 +1,6 @@
 # Vec - dynamic array (growable)
 # Stores i64 elements
+# Updated to use Option<T> for error handling
 
 S Vec {
     data: i64,      # Pointer to element array
@@ -41,6 +42,19 @@ X Vec {
         }
     }
 
+    # Get element at index using Option type
+    # Returns Some(value) if index is valid, None otherwise
+    F get_opt(&self, index: i64) -> Option {
+        I index < 0 {
+            None
+        } E I index >= self.len {
+            None
+        } E {
+            ptr := self.data + index * 8
+            Some(load_i64(ptr))
+        }
+    }
+
     # Set element at index
     F set(&self, index: i64, value: i64) -> i64 {
         I index >= 0 && index < self.len {
@@ -71,6 +85,18 @@ X Vec {
             load_i64(ptr)
         } E {
             0
+        }
+    }
+
+    # Pop element from end using Option type
+    # Returns Some(value) if vec is not empty, None otherwise
+    F pop_opt(&self) -> Option {
+        I self.len > 0 {
+            self.len = self.len - 1
+            ptr := self.data + self.len * 8
+            Some(load_i64(ptr))
+        } E {
+            None
         }
     }
 

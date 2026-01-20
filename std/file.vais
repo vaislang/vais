@@ -1,5 +1,11 @@
 # File I/O - basic file operations
 # Uses C standard library functions via extern
+# Updated to use Option<T> for error handling
+
+# Seek origin constants
+C SEEK_SET: i64 = 0  # Beginning of file
+C SEEK_CUR: i64 = 1  # Current position
+C SEEK_END: i64 = 2  # End of file
 
 # File handle wrapper
 S File {
@@ -16,31 +22,46 @@ X File {
     # Open file for reading
     # Returns File with handle=0 if failed
     F open_read(path: i64) -> File {
-        handle := fopen(path, "r")
-        I handle == 0 {
+        # Validate path is not null
+        I path == 0 {
             File { handle: 0, mode: 0 }
         } E {
-            File { handle: handle, mode: 1 }
+            handle := fopen(path, "r")
+            I handle == 0 {
+                File { handle: 0, mode: 0 }
+            } E {
+                File { handle: handle, mode: 1 }
+            }
         }
     }
 
     # Open file for writing (creates/truncates)
     F open_write(path: i64) -> File {
-        handle := fopen(path, "w")
-        I handle == 0 {
+        # Validate path is not null
+        I path == 0 {
             File { handle: 0, mode: 0 }
         } E {
-            File { handle: handle, mode: 2 }
+            handle := fopen(path, "w")
+            I handle == 0 {
+                File { handle: 0, mode: 0 }
+            } E {
+                File { handle: handle, mode: 2 }
+            }
         }
     }
 
     # Open file for appending
     F open_append(path: i64) -> File {
-        handle := fopen(path, "a")
-        I handle == 0 {
+        # Validate path is not null
+        I path == 0 {
             File { handle: 0, mode: 0 }
         } E {
-            File { handle: handle, mode: 3 }
+            handle := fopen(path, "a")
+            I handle == 0 {
+                File { handle: 0, mode: 0 }
+            } E {
+                File { handle: handle, mode: 3 }
+            }
         }
     }
 
@@ -63,10 +84,29 @@ X File {
         }
     }
 
+    # Read a single byte, returns Option<i64>
+    # None on EOF or error, Some(byte) on success
+    F read_byte_opt(&self) -> Option {
+        I self.handle == 0 {
+            None
+        } E {
+            byte := fgetc(self.handle)
+            I byte < 0 {
+                None
+            } E {
+                Some(byte)
+            }
+        }
+    }
+
     # Read up to count bytes into buffer
     # Returns number of bytes actually read
     F read(&self, buffer: i64, count: i64) -> i64 {
         I self.handle == 0 {
+            0
+        } EI buffer == 0 {
+            0
+        } EI count <= 0 {
             0
         } E {
             fread(buffer, 1, count, self.handle)
@@ -78,12 +118,35 @@ X File {
     F read_line(&self, buffer: i64, max_len: i64) -> i64 {
         I self.handle == 0 {
             0
+        } EI buffer == 0 {
+            0
+        } EI max_len <= 0 {
+            0
         } E {
             result := fgets(buffer, max_len, self.handle)
             I result == 0 {
                 0
             } E {
                 1
+            }
+        }
+    }
+
+    # Read a line into buffer using Result type
+    # Returns Ok(buffer_ptr) on success, Err(ERR_IO) on failure
+    F read_line_result(&self, buffer: i64, max_len: i64) -> Result {
+        I self.handle == 0 {
+            Err(ERR_INVALID())
+        } EI buffer == 0 {
+            Err(ERR_INVALID())
+        } EI max_len <= 0 {
+            Err(ERR_INVALID())
+        } E {
+            result := fgets(buffer, max_len, self.handle)
+            I result == 0 {
+                Err(ERR_IO())
+            } E {
+                Ok(buffer)
             }
         }
     }
@@ -108,6 +171,10 @@ X File {
     F write(&self, buffer: i64, count: i64) -> i64 {
         I self.handle == 0 {
             0
+        } EI buffer == 0 {
+            0
+        } EI count <= 0 {
+            0
         } E {
             fwrite(buffer, 1, count, self.handle)
         }
@@ -117,6 +184,8 @@ X File {
     # Returns 1 on success, 0 on error
     F write_str(&self, str: i64) -> i64 {
         I self.handle == 0 {
+            0
+        } EI str == 0 {
             0
         } E {
             result := fputs(str, self.handle)
@@ -142,6 +211,8 @@ X File {
     # Returns 0 on success, -1 on error
     F seek(&self, offset: i64, origin: i64) -> i64 {
         I self.handle == 0 {
+            0 - 1
+        } EI origin < SEEK_SET | origin > SEEK_END {
             0 - 1
         } E {
             fseek(self.handle, offset, origin)
@@ -187,33 +258,89 @@ X File {
 # Returns pointer to buffer (caller must free) or 0 on error
 # Sets size_out to number of bytes read
 F file_read_all(path: i64, size_out: i64) -> i64 {
-    f := File.open_read(path)
-    I f.handle == 0 {
-        store_i64(size_out, 0)
+    # Validate inputs
+    I path == 0 {
+        I size_out != 0 {
+            store_i64(size_out, 0)
+        }
+        0
+    } EI size_out == 0 {
         0
     } E {
-        # Get file size
-        f.seek(0, 2)  # Seek to end
-        size := f.tell()
-        f.seek(0, 0)  # Seek back to start
-
-        I size <= 0 {
-            f.close()
+        f := File.open_read(path)
+        I f.handle == 0 {
             store_i64(size_out, 0)
             0
         } E {
-            # Allocate buffer (+1 for null terminator)
-            buffer := malloc(size + 1)
-            I buffer == 0 {
+            # Get file size
+            f.seek(0, 2)  # Seek to end
+            size := f.tell()
+            f.seek(0, 0)  # Seek back to start
+
+            I size <= 0 {
                 f.close()
                 store_i64(size_out, 0)
                 0
             } E {
-                bytes_read := f.read(buffer, size)
-                store_byte(buffer + bytes_read, 0)  # Null terminate
+                # Allocate buffer (+1 for null terminator)
+                buffer := malloc(size + 1)
+                I buffer == 0 {
+                    f.close()
+                    store_i64(size_out, 0)
+                    0
+                } E {
+                    bytes_read := f.read(buffer, size)
+                    store_byte(buffer + bytes_read, 0)  # Null terminate
+                    f.close()
+                    store_i64(size_out, bytes_read)
+                    buffer
+                }
+            }
+        }
+    }
+}
+
+# Read entire file into buffer using Result type
+# Returns Ok(buffer_ptr) on success (caller must free), Err(error_code) on failure
+# Sets size_out to number of bytes read on success
+F file_read_all_result(path: i64, size_out: i64) -> Result {
+    # Validate inputs
+    I path == 0 {
+        I size_out != 0 {
+            store_i64(size_out, 0)
+        }
+        Err(ERR_INVALID())
+    } EI size_out == 0 {
+        Err(ERR_INVALID())
+    } E {
+        f := File.open_read(path)
+        I f.handle == 0 {
+            store_i64(size_out, 0)
+            Err(ERR_NOT_FOUND())
+        } E {
+            # Get file size
+            f.seek(0, 2)  # Seek to end
+            size := f.tell()
+            f.seek(0, 0)  # Seek back to start
+
+            I size <= 0 {
                 f.close()
-                store_i64(size_out, bytes_read)
-                buffer
+                store_i64(size_out, 0)
+                Err(ERR_IO())
+            } E {
+                # Allocate buffer (+1 for null terminator)
+                buffer := malloc(size + 1)
+                I buffer == 0 {
+                    f.close()
+                    store_i64(size_out, 0)
+                    Err(ERR_OVERFLOW())
+                } E {
+                    bytes_read := f.read(buffer, size)
+                    store_byte(buffer + bytes_read, 0)  # Null terminate
+                    f.close()
+                    store_i64(size_out, bytes_read)
+                    Ok(buffer)
+                }
             }
         }
     }
@@ -222,36 +349,59 @@ F file_read_all(path: i64, size_out: i64) -> i64 {
 # Write buffer to file (overwrites existing)
 # Returns number of bytes written
 F file_write_all(path: i64, buffer: i64, size: i64) -> i64 {
-    f := File.open_write(path)
-    I f.handle == 0 {
+    # Validate inputs
+    I path == 0 {
+        0
+    } EI buffer == 0 {
+        0
+    } EI size <= 0 {
         0
     } E {
-        written := f.write(buffer, size)
-        f.close()
-        written
+        f := File.open_write(path)
+        I f.handle == 0 {
+            0
+        } E {
+            written := f.write(buffer, size)
+            f.close()
+            written
+        }
     }
 }
 
 # Append buffer to file
 # Returns number of bytes written
 F file_append(path: i64, buffer: i64, size: i64) -> i64 {
-    f := File.open_append(path)
-    I f.handle == 0 {
+    # Validate inputs
+    I path == 0 {
+        0
+    } EI buffer == 0 {
+        0
+    } EI size <= 0 {
         0
     } E {
-        written := f.write(buffer, size)
-        f.close()
-        written
+        f := File.open_append(path)
+        I f.handle == 0 {
+            0
+        } E {
+            written := f.write(buffer, size)
+            f.close()
+            written
+        }
     }
 }
 
 # Check if file exists (try to open for reading)
 F file_exists(path: i64) -> i64 {
-    f := File.open_read(path)
-    I f.handle == 0 {
+    # Validate path is not null
+    I path == 0 {
         0
     } E {
-        f.close()
-        1
+        f := File.open_read(path)
+        I f.handle == 0 {
+            0
+        } E {
+            f.close()
+            1
+        }
     }
 }

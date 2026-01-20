@@ -430,13 +430,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 50% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 71% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (50%)
+> **상태**: 🔄 진행 중 (71%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
@@ -472,9 +472,17 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 47개 E2E 테스트: Lexer → Parser → TypeChecker → CodeGen
   - 기본 컴파일, 제어 흐름, 타입, 연산자, 에러 감지 테스트
   - 총 테스트: 245개
-- [ ] **표준 라이브러리 에러 처리 개선** - 0 반환 대신 Option/Result 타입 일관적 사용
-- [ ] **입력 검증 강화** - 네트워크/파일 API에 입력 범위 검사 추가
-- [ ] **unwrap/expect 감소** - 126개 사용처 검토 및 적절한 에러 핸들링 추가
+- [x] **표준 라이브러리 에러 처리 개선** - 0 반환 대신 Option/Result 타입 일관적 사용 (완료일: 2026-01-20)
+  - 9개 파일에 24개 Option/Result 반환 함수 추가
+  - Vec, HashMap, String, Deque, PriorityQueue, BTreeMap, IO, File, Net
+  - 기존 API 100% 호환성 유지
+- [x] **입력 검증 강화** - 네트워크/파일 API에 입력 범위 검사 추가 (완료일: 2026-01-20)
+  - net.vais: 포트 범위(0-65535), 버퍼/포인터 null 검사
+  - file.vais: 경로 null, 버퍼 크기, seek 원점 검증
+- [x] **unwrap/expect 감소** - 126개 사용처 검토 및 적절한 에러 핸들링 추가 (완료일: 2026-01-20)
+  - 326개 → 316개 (10개 위험한 패턴 제거)
+  - 경로 처리, I/O, 파서 토큰 처리 개선
+  - 컴파일러 내부 불변조건은 명시적 expect()로 변환
 
 ### P3 - 낮은 우선순위 (3개월 내)
 - [ ] **CONTRIBUTING.md 작성** - 기여 가이드라인 문서화

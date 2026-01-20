@@ -928,7 +928,8 @@ impl TypeChecker {
         };
 
         // Check return type
-        let expected_ret = self.current_fn_ret.clone().unwrap();
+        let expected_ret = self.current_fn_ret.clone()
+            .expect("Internal compiler error: current_fn_ret should be set during function checking");
         self.unify(&expected_ret, &body_type)?;
 
         self.current_fn_ret = None;
@@ -989,7 +990,8 @@ impl TypeChecker {
         };
 
         // Check return type
-        let expected_ret = self.current_fn_ret.clone().unwrap();
+        let expected_ret = self.current_fn_ret.clone()
+            .expect("Internal compiler error: current_fn_ret should be set during function checking");
         self.unify(&expected_ret, &body_type)?;
 
         self.current_fn_ret = None;
@@ -1520,7 +1522,8 @@ impl TypeChecker {
                         .generics
                         .iter()
                         .map(|param| {
-                            let ty = generic_substitutions.get(param).unwrap();
+                            let ty = generic_substitutions.get(param)
+                                .expect("Internal compiler error: generic parameter should exist in substitutions map");
                             self.apply_substitutions(ty)
                         })
                         .collect();

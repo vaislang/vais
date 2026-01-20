@@ -1,5 +1,6 @@
 # IO library - input/output operations
 # Provides functions for reading from stdin
+# Updated to use Option<T> and Result<T, E> for error handling
 #
 # Note: This module uses builtin functions (malloc, free, load_byte, store_byte, puts_ptr, strlen, memcpy)
 # that are provided by the compiler. String type requires importing std/string.vais separately.
@@ -58,6 +59,31 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
     }
 }
 
+# Read a line from stdin using Option type
+# Returns Some(buffer_ptr) on success, None on EOF/error
+F read_line_opt(buffer: i64, max_len: i64) -> Option {
+    stdin := get_stdin()
+    result := fgets(buffer, max_len, stdin)
+    I result == 0 {
+        None
+    } E {
+        # Remove trailing newline if present
+        i := 0
+        L i < max_len {
+            c := load_byte(buffer + i)
+            I c == 0 {
+                B Some(buffer)
+            }
+            I c == 10 {  # newline character '\n'
+                store_byte(buffer + i, 0)
+                B Some(buffer)
+            }
+            i = i + 1
+        }
+        Some(buffer)
+    }
+}
+
 # Read a line from stdin and return as String
 # max_len: maximum length to read (default 1024)
 F read_line_string(max_len: i64) -> String {
@@ -100,6 +126,22 @@ F read_i64() -> i64 {
     }
 }
 
+# Read an i64 integer using Result type
+# Returns Ok(value) on success, Err(ERR_IO) on failure
+F read_i64_result() -> Result {
+    buffer := malloc(64)
+    result := read_line(buffer, 64)
+
+    I result == 0 {
+        free(buffer)
+        Err(ERR_IO())
+    } E {
+        value := atol(buffer)
+        free(buffer)
+        Ok(value)
+    }
+}
+
 # Read a f64 floating-point number from stdin
 # Returns the float value, or 0.0 if invalid input
 F read_f64() -> f64 {
@@ -134,6 +176,26 @@ F read_word() -> i64 {
         # Failed
         free(buffer)
         0
+    }
+}
+
+# Read a word using Option type
+# Returns Some(buffer_ptr) on success (caller must free), None on EOF/error
+F read_word_opt() -> Option {
+    buffer := malloc(INPUT_BUFFER_SIZE)
+    stdin := get_stdin()
+
+    # Use scanf to read one word
+    format := "%s"
+    count := scanf(format, buffer)
+
+    I count == 1 {
+        # Success - return the buffer
+        Some(buffer)
+    } E {
+        # Failed
+        free(buffer)
+        None
     }
 }
 

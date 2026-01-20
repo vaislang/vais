@@ -492,8 +492,12 @@ fn compile_ir_to_binary(
     }
 
     args.push("-o".to_string());
-    args.push(bin_path.to_str().unwrap().to_string());
-    args.push(ir_path.to_str().unwrap().to_string());
+    args.push(bin_path.to_str()
+        .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
+        .to_string());
+    args.push(ir_path.to_str()
+        .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
+        .to_string());
 
     let status = Command::new("clang")
         .args(&args)

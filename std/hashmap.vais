@@ -1,5 +1,6 @@
 # HashMap - hash table with i64 keys and i64 values
 # Uses separate chaining for collision resolution
+# Updated to use Option<T> for error handling
 
 # Entry node for linked list in each bucket
 S Entry {
@@ -70,6 +71,22 @@ X HashMap {
             entry_key := load_i64(entry_ptr)  # Entry.key at offset 0
             I entry_key == key {
                 B load_i64(entry_ptr + 8)  # Entry.value at offset 8
+            }
+            entry_ptr = load_i64(entry_ptr + 16)  # Entry.next at offset 16
+        }
+    }
+
+    # Get value for key using Option type
+    # Returns Some(value) if found, None if not found
+    F get_opt(&self, key: i64) -> Option {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+
+        L {
+            I entry_ptr == 0 { B None }
+            entry_key := load_i64(entry_ptr)  # Entry.key at offset 0
+            I entry_key == key {
+                B Some(load_i64(entry_ptr + 8))  # Entry.value at offset 8
             }
             entry_ptr = load_i64(entry_ptr + 16)  # Entry.next at offset 16
         }
@@ -147,6 +164,37 @@ X HashMap {
                 free(entry_ptr)
                 self.size = self.size - 1
                 B value
+            }
+            prev_ptr = entry_ptr
+            entry_ptr = load_i64(entry_ptr + 16)
+        }
+    }
+
+    # Remove key-value pair using Option type
+    # Returns Some(removed_value) if found, None if not found
+    F remove_opt(&self, key: i64) -> Option {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        prev_ptr := 0
+
+        L {
+            I entry_ptr == 0 { B None }
+            entry_key := load_i64(entry_ptr)
+            I entry_key == key {
+                value := load_i64(entry_ptr + 8)
+                next := load_i64(entry_ptr + 16)
+
+                I prev_ptr == 0 {
+                    # Removing head of list
+                    store_i64(self.buckets + idx * 8, next)
+                } E {
+                    # Removing from middle/end
+                    store_i64(prev_ptr + 16, next)
+                }
+
+                free(entry_ptr)
+                self.size = self.size - 1
+                B Some(value)
             }
             prev_ptr = entry_ptr
             entry_ptr = load_i64(entry_ptr + 16)

@@ -1,5 +1,6 @@
 # PriorityQueue - Min-heap based priority queue
 # Stores i64 elements (smaller values have higher priority)
+# Updated to use Option<T> for error handling
 
 S PriorityQueue {
     data: i64,      # Pointer to element array
@@ -36,6 +37,16 @@ X PriorityQueue {
             0
         } E {
             load_i64(self.data)  # Root element at index 0
+        }
+    }
+
+    # Peek at the minimum element using Option type
+    # Returns Some(value) if not empty, None if empty
+    F peek_opt(&self) -> Option {
+        I self.size == 0 {
+            None
+        } E {
+            Some(load_i64(self.data))  # Root element at index 0
         }
     }
 
@@ -82,6 +93,34 @@ X PriorityQueue {
             @.sift_down(0)
 
             min_val
+        }
+    }
+
+    # Pop the minimum element using Option type
+    # Returns Some(value) if not empty, None if empty
+    F pop_opt(&self) -> Option {
+        I self.size == 0 {
+            None
+        } E I self.size == 1 {
+            # Special case: last element
+            self.size = 0
+            Some(load_i64(self.data))
+        } E {
+            # Get minimum element (root)
+            min_val := load_i64(self.data)
+
+            # Move last element to root
+            last_idx := self.size - 1
+            last_val := load_i64(self.data + last_idx * 8)
+            store_i64(self.data, last_val)
+
+            # Decrease size
+            self.size = self.size - 1
+
+            # Sift down to maintain heap property
+            @.sift_down(0)
+
+            Some(min_val)
         }
     }
 
