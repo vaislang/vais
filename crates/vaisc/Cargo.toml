@@ -20,3 +20,4 @@ clap = { version = "4.4", features = ["derive"] }
 miette = { workspace = true }
 thiserror = { workspace = true }
 colored = "2.1"
+rustyline = "14.0"

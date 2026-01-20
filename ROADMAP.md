@@ -430,13 +430,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 93% |
+| Phase 5: 품질 개선 | ✅ 완료 | 100% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (93%)
+> **상태**: ✅ 완료 (100%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
@@ -499,8 +499,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [ ] **i18n 에러 메시지** - 에러 메시지 다국어 지원 인프라 구축
 - [ ] **플러그인 시스템** - 컴파일러 확장 API 설계 및 구현
 - [ ] **제네릭 표준 라이브러리** - Vec<T>, HashMap<K,V>의 실제 제네릭 지원
-- [ ] **REPL 개선** - 멀티라인 입력, 히스토리, 탭 자동완성
-- [ ] **LSP Rename 기능** - 심볼 이름 변경 기능 추가
+- [x] **REPL 개선** - 멀티라인 입력, 히스토리, 탭 자동완성 (완료일: 2026-01-20)
+  - rustyline 기반 멀티라인 입력 (중괄호/괄호 균형 검사)
+  - 화살표 키 히스토리 탐색 (최대 100개, 파일 저장)
+  - 키워드 + 내장 함수 탭 자동완성
+- [x] **LSP Rename 기능** - 심볼 이름 변경 기능 추가 (완료일: 2026-01-20)
+  - textDocument/prepareRename, textDocument/rename 핸들러
+  - 변수, 함수, 구조체, 열거형, 트레이트 지원
 - [ ] **벤치마크 스위트** - 성능 측정 및 회귀 테스트
 
 ### 남은 작업

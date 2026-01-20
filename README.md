@@ -93,7 +93,7 @@ cargo test
 - [x] Type checker (generics, traits, type inference)
 - [x] Code generator (LLVM IR)
 - [x] Standard library (24 modules: Vec, HashMap, String, File, Net, etc.)
-- [x] LSP support (diagnostics, completion, hover, go-to-definition)
+- [x] LSP support (diagnostics, completion, hover, go-to-definition, references, rename)
 - [x] REPL (interactive environment)
 - [x] VSCode extension (syntax highlighting, LSP integration)
 - [x] Optimizer (constant folding, DCE, CSE, loop unrolling, LICM)

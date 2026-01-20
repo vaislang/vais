@@ -538,6 +538,10 @@ impl LanguageServer for VaisBackend {
                         },
                     ),
                 ),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                })),
                 ..Default::default()
             },
         })
@@ -1332,6 +1336,100 @@ impl LanguageServer for VaisBackend {
                 result_id: None,
                 data: tokens,
             })));
+        }
+
+        Ok(None)
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = &params.text_document.uri;
+        let position = params.position;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                // Convert position to offset
+                let line = position.line as usize;
+                let col = position.character as usize;
+                let line_start = doc.content.line_to_char(line);
+                let offset = line_start + col;
+
+                // Check if we're on a renameable symbol
+                if let Some(symbol_name) = self.get_identifier_at(ast, offset) {
+                    // Find the exact span of the symbol at the cursor
+                    let defs = self.collect_definitions(ast);
+                    let refs = self.collect_references(ast);
+
+                    // Check definitions
+                    for d in &defs {
+                        if d.span.start <= offset && offset <= d.span.end {
+                            let range = self.span_to_range(&doc.content, &d.span);
+                            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                                range,
+                                placeholder: symbol_name,
+                            }));
+                        }
+                    }
+
+                    // Check references
+                    for r in &refs {
+                        if r.span.start <= offset && offset <= r.span.end {
+                            let range = self.span_to_range(&doc.content, &r.span);
+                            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                                range,
+                                placeholder: symbol_name,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                // Convert position to offset
+                let line = position.line as usize;
+                let col = position.character as usize;
+                let line_start = doc.content.line_to_char(line);
+                let offset = line_start + col;
+
+                // Get the symbol name at the position
+                if let Some(symbol_name) = self.get_identifier_at(ast, offset) {
+                    // Find all references to this symbol
+                    let spans = self.find_all_references(ast, &symbol_name);
+
+                    if !spans.is_empty() {
+                        // Create text edits for all occurrences
+                        let text_edits: Vec<TextEdit> = spans
+                            .iter()
+                            .map(|span| TextEdit {
+                                range: self.span_to_range(&doc.content, span),
+                                new_text: new_name.clone(),
+                            })
+                            .collect();
+
+                        // Create workspace edit
+                        let mut changes = std::collections::HashMap::new();
+                        changes.insert(uri.clone(), text_edits);
+
+                        return Ok(Some(WorkspaceEdit {
+                            changes: Some(changes),
+                            document_changes: None,
+                            change_annotations: None,
+                        }));
+                    }
+                }
+            }
         }
 
         Ok(None)
