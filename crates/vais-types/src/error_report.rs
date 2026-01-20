@@ -188,6 +188,21 @@ pub trait DiagnosticError: fmt::Display {
         None
     }
 
+    /// Get the localized title
+    fn localized_title(&self) -> String {
+        self.title()
+    }
+
+    /// Get the localized message
+    fn localized_message(&self) -> String {
+        self.to_string()
+    }
+
+    /// Get the localized help message
+    fn localized_help(&self) -> Option<String> {
+        self.help()
+    }
+
     /// Format the error with source context
     fn format_with_source(&self, source: &str, filename: Option<&str>) -> String {
         let reporter = ErrorReporter::new(source);
@@ -203,6 +218,24 @@ pub trait DiagnosticError: fmt::Display {
             self.span(),
             &self.to_string(),
             self.help().as_deref(),
+        )
+    }
+
+    /// Format the error with source context using localized messages
+    fn format_localized(&self, source: &str, filename: Option<&str>) -> String {
+        let reporter = ErrorReporter::new(source);
+        let reporter = if let Some(f) = filename {
+            reporter.with_filename(f)
+        } else {
+            reporter
+        };
+
+        reporter.format_error(
+            self.error_code(),
+            &self.localized_title(),
+            self.span(),
+            &self.localized_message(),
+            self.localized_help().as_deref(),
         )
     }
 }

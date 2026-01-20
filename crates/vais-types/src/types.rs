@@ -111,6 +111,76 @@ impl TypeError {
             _ => None,
         }
     }
+
+    /// Get the localized title for this error
+    pub fn localized_title(&self) -> String {
+        let key = format!("type.{}.title", self.error_code());
+        vais_i18n::get_simple(&key)
+    }
+
+    /// Get the localized message for this error
+    pub fn localized_message(&self) -> String {
+        let key = format!("type.{}.message", self.error_code());
+        match self {
+            TypeError::Mismatch { expected, found, .. } => {
+                vais_i18n::get(&key, &[("expected", expected), ("found", found)])
+            }
+            TypeError::UndefinedVar(name, _) => {
+                vais_i18n::get(&key, &[("name", name)])
+            }
+            TypeError::UndefinedType(name, _) => {
+                vais_i18n::get(&key, &[("name", name)])
+            }
+            TypeError::UndefinedFunction(name, _) => {
+                vais_i18n::get(&key, &[("name", name)])
+            }
+            TypeError::NotCallable(type_name, _) => {
+                vais_i18n::get(&key, &[("type", type_name)])
+            }
+            TypeError::ArgCount { expected, got, .. } => {
+                vais_i18n::get(&key, &[
+                    ("expected", &expected.to_string()),
+                    ("got", &got.to_string()),
+                ])
+            }
+            TypeError::CannotInfer => {
+                vais_i18n::get_simple(&key)
+            }
+            TypeError::Duplicate(name, _) => {
+                vais_i18n::get(&key, &[("name", name)])
+            }
+            TypeError::ImmutableAssign(name, _) => {
+                vais_i18n::get(&key, &[("name", name)])
+            }
+            TypeError::NonExhaustiveMatch(patterns, _) => {
+                vais_i18n::get(&key, &[("patterns", patterns)])
+            }
+            TypeError::UnreachablePattern(arm, _) => {
+                vais_i18n::get(&key, &[("arm", &arm.to_string())])
+            }
+        }
+    }
+
+    /// Get the localized help message for this error
+    pub fn localized_help(&self) -> Option<String> {
+        let key = format!("type.{}.help", self.error_code());
+        if vais_i18n::has_key(&key) {
+            Some(match self {
+                TypeError::UndefinedVar(name, _) => {
+                    vais_i18n::get(&key, &[("name", name)])
+                }
+                TypeError::UndefinedFunction(name, _) => {
+                    vais_i18n::get(&key, &[("name", name)])
+                }
+                TypeError::ImmutableAssign(name, _) => {
+                    vais_i18n::get(&key, &[("name", name)])
+                }
+                _ => vais_i18n::get_simple(&key),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// Type checking result

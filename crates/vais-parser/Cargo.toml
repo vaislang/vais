@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 vais-lexer = { path = "../vais-lexer" }
 vais-ast = { path = "../vais-ast" }
+vais-i18n = { path = "../vais-i18n" }
 thiserror = { workspace = true }
 miette = { workspace = true }
 

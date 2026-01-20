@@ -7,6 +7,7 @@ members = [
     "crates/vais-types",
     "crates/vais-codegen",
     "crates/vais-lsp",
+    "crates/vais-i18n",
     "crates/vaisc",
 ]
 

@@ -18,6 +18,7 @@ use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
 use vais_parser::{parse, ParseError};
 use vais_types::{TypeChecker, TypeError, error_report::ErrorReporter};
+use vais_i18n::Locale;
 
 #[derive(Parser)]
 #[command(name = "vaisc")]
@@ -52,6 +53,10 @@ struct Cli {
     /// Verbose output
     #[arg(short, long)]
     verbose: bool,
+
+    /// Set the locale for error messages (en, ko, ja)
+    #[arg(long, value_name = "LOCALE", global = true)]
+    locale: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -131,6 +136,12 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
+
+    // Initialize i18n system
+    let locale = cli.locale
+        .as_ref()
+        .and_then(|s| Locale::from_str(s));
+    vais_i18n::init(locale);
 
     let result = match cli.command {
         Some(Commands::Build { input, output, emit_ir, opt_level, debug }) => {
@@ -276,37 +287,39 @@ fn cmd_build(
     Ok(())
 }
 
-/// Format a type error with source context
+/// Format a type error with source context (localized)
 fn format_type_error(error: &TypeError, source: &str, path: &PathBuf) -> String {
     let reporter = ErrorReporter::new(source)
         .with_filename(path.to_str().unwrap_or("unknown"));
 
     let span = error.span();
-    let title = error.to_string();
-    let help = error.help();
+    let title = error.localized_title();
+    let message = error.localized_message();
+    let help = error.localized_help();
 
     reporter.format_error(
         error.error_code(),
         &title,
         span,
-        &title,
+        &message,
         help.as_deref(),
     )
 }
 
-/// Format a parse error with source context
+/// Format a parse error with source context (localized)
 fn format_parse_error(error: &ParseError, source: &str, path: &PathBuf) -> String {
     let reporter = ErrorReporter::new(source)
         .with_filename(path.to_str().unwrap_or("unknown"));
 
     let span = error.span().map(|s| Span::new(s.start, s.end));
-    let title = error.to_string();
+    let title = error.localized_title();
+    let message = error.localized_message();
 
     reporter.format_error(
         error.error_code(),
         &title,
         span,
-        &title,
+        &message,
         None,
     )
 }

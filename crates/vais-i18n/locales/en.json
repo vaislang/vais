@@ -1,0 +1,73 @@
+{
+  "_meta": {
+    "locale": "en",
+    "version": "0.0.1",
+    "description": "English (default) messages for Vais compiler"
+  },
+
+  "type": {
+    "E001": {
+      "title": "Type mismatch",
+      "message": "expected {expected}, found {found}",
+      "help": "try using a type cast or conversion function"
+    },
+    "E002": {
+      "title": "Undefined variable",
+      "message": "variable '{name}' is not defined",
+      "help": "variable '{name}' not found in this scope"
+    },
+    "E003": {
+      "title": "Undefined type",
+      "message": "type '{name}' is not defined"
+    },
+    "E004": {
+      "title": "Undefined function",
+      "message": "function '{name}' is not defined",
+      "help": "function '{name}' not found in this scope"
+    },
+    "E005": {
+      "title": "Not callable",
+      "message": "cannot call non-function type: {type}"
+    },
+    "E006": {
+      "title": "Wrong argument count",
+      "message": "expected {expected} arguments, got {got}"
+    },
+    "E007": {
+      "title": "Cannot infer type",
+      "message": "type inference failed"
+    },
+    "E008": {
+      "title": "Duplicate definition",
+      "message": "'{name}' is already defined"
+    },
+    "E009": {
+      "title": "Immutable assignment",
+      "message": "cannot assign to immutable variable '{name}'",
+      "help": "consider declaring '{name}' as mutable: '{name}: mut Type'"
+    },
+    "E010": {
+      "title": "Non-exhaustive match",
+      "message": "missing patterns: {patterns}"
+    },
+    "E011": {
+      "title": "Unreachable pattern",
+      "message": "unreachable pattern at arm {arm}"
+    }
+  },
+
+  "parse": {
+    "P001": {
+      "title": "Unexpected token",
+      "message": "found {found}, expected {expected}"
+    },
+    "P002": {
+      "title": "Unexpected end of file",
+      "message": "unexpected end of file"
+    },
+    "P003": {
+      "title": "Invalid expression",
+      "message": "invalid or malformed expression"
+    }
+  }
+}

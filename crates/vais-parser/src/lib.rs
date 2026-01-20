@@ -51,6 +51,31 @@ impl ParseError {
             ParseError::InvalidExpression => "P003",
         }
     }
+
+    /// Get the localized title for this error
+    pub fn localized_title(&self) -> String {
+        let key = format!("parse.{}.title", self.error_code());
+        vais_i18n::get_simple(&key)
+    }
+
+    /// Get the localized message for this error
+    pub fn localized_message(&self) -> String {
+        let key = format!("parse.{}.message", self.error_code());
+        match self {
+            ParseError::UnexpectedToken { found, expected, .. } => {
+                vais_i18n::get(&key, &[
+                    ("found", &format!("{:?}", found)),
+                    ("expected", expected),
+                ])
+            }
+            ParseError::UnexpectedEof { .. } => {
+                vais_i18n::get_simple(&key)
+            }
+            ParseError::InvalidExpression => {
+                vais_i18n::get_simple(&key)
+            }
+        }
+    }
 }
 
 type ParseResult<T> = Result<T, ParseError>;
