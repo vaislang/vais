@@ -1,0 +1,29 @@
+[package]
+name = "vais-benches"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[lib]
+path = "lib.rs"
+
+[[bench]]
+name = "compile_bench"
+path = "compile_bench.rs"
+harness = false
+
+[[bench]]
+name = "runtime_bench"
+path = "runtime_bench.rs"
+harness = false
+
+[dependencies]
+vais-lexer = { path = "../crates/vais-lexer" }
+vais-parser = { path = "../crates/vais-parser" }
+vais-ast = { path = "../crates/vais-ast" }
+vais-types = { path = "../crates/vais-types" }
+vais-codegen = { path = "../crates/vais-codegen" }
+criterion = { version = "0.5", features = ["html_reports"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"

@@ -196,10 +196,16 @@ std/               # 표준 라이브러리 ✅
 ├── deque.vais
 └── net.vais       # NEW
 
-vscode-vais/       # VSCode Extension ✅ NEW
+vscode-vais/       # VSCode Extension ✅
 ├── package.json
 ├── language-configuration.json
 └── syntaxes/vais.tmLanguage.json
+
+benches/           # 벤치마크 스위트 ✅ NEW
+├── Cargo.toml
+├── compile_bench.rs
+├── runtime_bench.rs
+└── fixtures/      # 벤치마크 테스트 파일
 
 examples/          # 예제 코드 (40+ 파일) ✅
 ```
@@ -223,6 +229,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Debugger | ✅ 완료 | 100% |
 | i18n | ✅ 완료 | 100% |
 | Plugin System | ✅ 완료 | 100% |
+| Benchmark Suite | ✅ 완료 | 100% |
 
 **핵심 기능 진행률: 100%** (Phase 1-3 완료)
 
@@ -553,7 +560,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [x] **LSP Rename 기능** - 심볼 이름 변경 기능 추가 (완료일: 2026-01-20)
   - textDocument/prepareRename, textDocument/rename 핸들러
   - 변수, 함수, 구조체, 열거형, 트레이트 지원
-- [ ] **벤치마크 스위트** - 성능 측정 및 회귀 테스트
+- [x] **벤치마크 스위트** - 성능 측정 및 회귀 테스트 (완료일: 2026-01-20)
+  - Criterion 기반 벤치마크 프레임워크
+  - 4개 fixture 파일 (fibonacci, sort, struct_heavy, complex)
+  - 컴파일러 단계별 벤치마크 (lexer, parser, type_checker, codegen, full_compile)
+  - 런타임 비교 벤치마크 (Vais vs Rust)
+  - CI 통합 (main 브랜치 자동 측정, PR 비교)
 
 ### 남은 작업
 - (위 항목들 중 선택하여 진행)

@@ -1,0 +1,10 @@
+# Fibonacci benchmark - recursive function performance
+
+F fib(n: i64)->i64 = n <= 1 ? n : @(n - 1) + @(n - 2)
+
+F fib_iter(n: i64)->i64 = n <= 1 ? n : fib_loop(n, 0, 1, 2)
+
+F fib_loop(n: i64, a: i64, b: i64, i: i64)->i64 =
+    i > n ? b : @(n, b, a + b, i + 1)
+
+F main()->i64 = fib(20) + fib_iter(50)

@@ -11,6 +11,7 @@ members = [
     "crates/vais-plugin",
     "crates/vaisc",
     "examples/plugins/example-lint",
+    "benches",
 ]
 
 [workspace.package]

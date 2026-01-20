@@ -1,0 +1,30 @@
+# Struct benchmark - structure allocation and field access
+
+S Point {
+    x: i64,
+    y: i64
+}
+
+S Rectangle {
+    top_left: Point,
+    width: i64,
+    height: i64
+}
+
+S Circle {
+    center: Point,
+    radius: i64
+}
+
+F point_new(x: i64, y: i64)->Point = Point { x: x, y: y }
+
+F point_distance_squared(p1: Point, p2: Point)->i64 =
+    (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y)
+
+F rect_area(r: Rectangle)->i64 = r.width * r.height
+
+F circle_area_approx(c: Circle)->i64 = 3 * c.radius * c.radius
+
+F main()->i64 = point_distance_squared(point_new(0, 0), point_new(3, 4)) +
+    rect_area(Rectangle { top_left: point_new(0, 0), width: 10, height: 20 }) +
+    circle_area_approx(Circle { center: point_new(0, 0), radius: 5 })

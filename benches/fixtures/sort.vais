@@ -1,0 +1,21 @@
+# Sort benchmark - algorithm comparisons
+
+F factorial(n: i64)->i64 = n < 2 ? 1 : n * @(n - 1)
+
+F gcd(a: i64, b: i64)->i64 = b == 0 ? a : @(b, a % b)
+
+F is_prime(n: i64)->bool = n <= 1 ? false : check_prime(n, 2)
+
+F check_prime(n: i64, i: i64)->bool =
+    i * i > n ? true :
+    n % i == 0 ? false :
+    @(n, i + 1)
+
+F sum_primes(limit: i64)->i64 = sum_primes_helper(limit, 2, 0)
+
+F sum_primes_helper(limit: i64, n: i64, sum: i64)->i64 =
+    n > limit ? sum :
+    is_prime(n) ? @(limit, n + 1, sum + n) :
+    @(limit, n + 1, sum)
+
+F main()->i64 = factorial(10) + gcd(48, 18) + sum_primes(50)
