@@ -227,7 +227,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ## 🧪 테스트 현황
 
 ```
-✅ 36 tests passed, 0 failed
+✅ 198 tests passed, 0 failed
 ✅ 40+ example files compiled and running
 ```
 
@@ -429,13 +429,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 36% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 43% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (36%)
+> **상태**: 🔄 진행 중 (43%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
@@ -460,7 +460,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - lib.rs 2,814줄 → 2,346줄 (468줄 감소)
 
 ### P2 - 중간 우선순위 (1개월 내)
-- [ ] **엣지 케이스 테스트 추가** - 빈 파일, 잘못된 문법, 경계값 테스트
+- [x] **엣지 케이스 테스트 추가** - 빈 파일, 잘못된 문법, 경계값 테스트 (완료일: 2026-01-20)
+  - vais-lexer: 25개 테스트 추가 (9→34)
+  - vais-parser: 51개 테스트 추가 (6→57)
+  - vais-types: 38개 테스트 추가 (10→48)
+  - vais-codegen: 38개 테스트 추가 (20→58)
+  - 총 테스트: 198개 (이전 46개)
 - [ ] **통합 테스트 스위트 구축** - 전체 컴파일 파이프라인 테스트
 - [ ] **표준 라이브러리 에러 처리 개선** - 0 반환 대신 Option/Result 타입 일관적 사용
 - [ ] **입력 검증 강화** - 네트워크/파일 API에 입력 범위 검사 추가

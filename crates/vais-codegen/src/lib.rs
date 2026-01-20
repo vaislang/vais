@@ -3586,4 +3586,442 @@ mod tests {
 
         assert!(ir.contains("%Point = type { i64, i64 }"));
     }
+
+    // ==================== Edge Case Tests ====================
+
+    #[test]
+    fn test_empty_module() {
+        let source = "";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Should generate valid LLVM IR even with empty module
+        assert!(ir.contains("source_filename"));
+    }
+
+    #[test]
+    fn test_minimal_function() {
+        let source = "F f()->()=()";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define void @f"));
+        assert!(ir.contains("ret void"));
+    }
+
+    #[test]
+    fn test_function_returning_unit() {
+        let source = "F void_fn()->(){}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define void @void_fn"));
+    }
+
+    #[test]
+    fn test_empty_struct() {
+        let source = "S Empty{}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Empty struct should still generate a type
+        assert!(ir.contains("%Empty = type"));
+    }
+
+    #[test]
+    fn test_single_field_struct() {
+        let source = "S Single{x:i64}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("%Single = type { i64 }"));
+    }
+
+    #[test]
+    fn test_enum_with_variants() {
+        let source = "E Color{Red,Green,Blue}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Enum should generate a type
+        assert!(ir.contains("%Color = type"));
+    }
+
+    #[test]
+    fn test_i64_max_value() {
+        let source = "F max()->i64=9223372036854775807";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("9223372036854775807"));
+    }
+
+    #[test]
+    fn test_negative_number() {
+        let source = "F neg()->i64=-42";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Negative numbers involve subtraction from 0
+        assert!(ir.contains("sub i64 0, 42"));
+    }
+
+    #[test]
+    fn test_zero_value() {
+        let source = "F zero()->i64=0";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("ret i64 0"));
+    }
+
+    #[test]
+    fn test_float_values() {
+        let source = "F pi()->f64=3.141592653589793";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("double"));
+    }
+
+    #[test]
+    fn test_boolean_true() {
+        let source = "F yes()->bool=true";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("ret i1 true") || ir.contains("ret i1 1"));
+    }
+
+    #[test]
+    fn test_boolean_false() {
+        let source = "F no()->bool=false";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("ret i1 false") || ir.contains("ret i1 0"));
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let source = r#"F empty()->str="""#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Should handle empty string
+        assert!(ir.contains("@str") || ir.contains("i8*"));
+    }
+
+    #[test]
+    fn test_string_with_escape() {
+        let source = r#"F escaped()->str="hello\nworld""#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Should handle escape sequences
+        assert!(ir.contains("@str"));
+    }
+
+    #[test]
+    fn test_empty_array() {
+        let source = "F empty_arr()->*i64=[]";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Empty array should still work
+        assert!(ir.contains("define"));
+    }
+
+    #[test]
+    fn test_nested_if_else() {
+        let source = r#"
+            F classify(x:i64)->i64{
+                I x>0{
+                    I x>100{2}E{1}
+                }E{
+                    I x<-100{-2}E{-1}
+                }
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @classify"));
+        // Should have multiple branches
+        assert!(ir.contains("br i1"));
+    }
+
+    #[test]
+    fn test_simple_match() {
+        let source = "F digit(n:i64)->str=M n{0=>\"zero\",1=>\"one\",_=>\"other\"}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define"));
+    }
+
+    #[test]
+    fn test_for_loop() {
+        let source = "F sum_to(n:i64)->i64{s:=0;L i:0..n{s+=i};s}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @sum_to"));
+        assert!(ir.contains("loop"));
+    }
+
+    #[test]
+    fn test_while_loop() {
+        let source = "F count_down(n:i64)->i64{x:=n;L _:x>0{x-=1};x}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @count_down"));
+    }
+
+    #[test]
+    fn test_infinite_loop_with_break() {
+        let source = "F find()->i64{x:=0;L{I x>10{B x};x+=1};0}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @find"));
+    }
+
+    #[test]
+    fn test_arithmetic_operations() {
+        let source = "F math(a:i64,b:i64)->i64=a+b-a*b/a%b";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("add i64"));
+        assert!(ir.contains("sub i64"));
+        assert!(ir.contains("mul i64"));
+        assert!(ir.contains("sdiv i64"));
+        assert!(ir.contains("srem i64"));
+    }
+
+    #[test]
+    fn test_comparison_operations() {
+        let source = r#"
+            F compare(a:i64,b:i64)->bool{
+                x:=a<b;
+                y:=a<=b;
+                z:=a>b;
+                w:=a>=b;
+                u:=a==b;
+                v:=a!=b;
+                x
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("icmp slt"));
+        assert!(ir.contains("icmp sle"));
+        assert!(ir.contains("icmp sgt"));
+        assert!(ir.contains("icmp sge"));
+        assert!(ir.contains("icmp eq"));
+        assert!(ir.contains("icmp ne"));
+    }
+
+    #[test]
+    fn test_bitwise_operations() {
+        let source = "F bits(a:i64,b:i64)->i64{x:=a&b;y:=a|b;z:=a^b;w:=a<<2;v:=a>>1;x}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("and i64"));
+        assert!(ir.contains("or i64"));
+        assert!(ir.contains("xor i64"));
+        assert!(ir.contains("shl i64"));
+        assert!(ir.contains("ashr i64"));
+    }
+
+    #[test]
+    fn test_logical_operations() {
+        let source = "F logic(a:bool,b:bool)->bool=a&&b||!a";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i1 @logic"));
+    }
+
+    #[test]
+    fn test_unary_minus() {
+        let source = "F negate(x:i64)->i64=-x";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("sub i64 0"));
+    }
+
+    #[test]
+    fn test_bitwise_not() {
+        let source = "F complement(x:i64)->i64=~x";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("xor i64") && ir.contains("-1"));
+    }
+
+    #[test]
+    fn test_ternary_expression() {
+        let source = "F abs(x:i64)->i64=x<0?-x:x";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @abs"));
+        assert!(ir.contains("br i1"));
+    }
+
+    #[test]
+    fn test_compound_assignment() {
+        // In Vais, mutable variables use := for declaration
+        let source = r#"
+            F compound(x:i64)->i64{
+                y:=x;
+                y+=1;
+                y-=2;
+                y*=3;
+                y/=4;
+                y
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @compound"));
+    }
+
+    #[test]
+    fn test_struct_literal() {
+        let source = r#"
+            S Point{x:i64,y:i64}
+            F origin()->Point=Point{x:0,y:0}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("%Point = type { i64, i64 }"));
+        assert!(ir.contains("define %Point"));
+    }
+
+    #[test]
+    fn test_struct_field_access() {
+        let source = r#"
+            S Point{x:i64,y:i64}
+            F get_x(p:Point)->i64=p.x
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("getelementptr"));
+    }
+
+    #[test]
+    fn test_lambda_simple() {
+        let source = "F f()->i64{add:=|a:i64,b:i64|a+b;add(1,2)}";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @f"));
+    }
+
+    #[test]
+    fn test_recursive_factorial() {
+        let source = "F factorial(n:i64)->i64=n<=1?1:n*@(n-1)";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @factorial"));
+        assert!(ir.contains("call i64 @factorial"));
+    }
+
+    #[test]
+    fn test_multiple_functions() {
+        let source = r#"
+            F add(a:i64,b:i64)->i64=a+b
+            F sub(a:i64,b:i64)->i64=a-b
+            F mul(a:i64,b:i64)->i64=a*b
+            F test()->i64=mul(add(1,2),sub(5,2))
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @add"));
+        assert!(ir.contains("define i64 @sub"));
+        assert!(ir.contains("define i64 @mul"));
+        assert!(ir.contains("define i64 @test"));
+    }
+
+    #[test]
+    fn test_function_with_many_params() {
+        let source = "F many(a:i64,b:i64,c:i64,d:i64,e:i64,f:i64,g:i64,h:i64)->i64=a+b+c+d+e+f+g+h";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // LLVM IR uses %a, %b etc, and the define line may not have spaces
+        assert!(ir.contains("define i64 @many"));
+        assert!(ir.contains("i64 %a"));
+        assert!(ir.contains("i64 %h"));
+    }
+
+    #[test]
+    fn test_all_integer_types() {
+        let source = r#"
+            F test_i8(x:i8)->i8=x
+            F test_i16(x:i16)->i16=x
+            F test_i32(x:i32)->i32=x
+            F test_i64(x:i64)->i64=x
+            F test_u8(x:u8)->u8=x
+            F test_u16(x:u16)->u16=x
+            F test_u32(x:u32)->u32=x
+            F test_u64(x:u64)->u64=x
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i8 @test_i8"));
+        assert!(ir.contains("define i16 @test_i16"));
+        assert!(ir.contains("define i32 @test_i32"));
+        assert!(ir.contains("define i64 @test_i64"));
+        assert!(ir.contains("define i8 @test_u8"));
+        assert!(ir.contains("define i16 @test_u16"));
+        assert!(ir.contains("define i32 @test_u32"));
+        assert!(ir.contains("define i64 @test_u64"));
+    }
+
+    #[test]
+    fn test_float_types() {
+        let source = r#"
+            F test_f32(x:f32)->f32=x
+            F test_f64(x:f64)->f64=x
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define float @test_f32"));
+        assert!(ir.contains("define double @test_f64"));
+    }
+
+    #[test]
+    fn test_deeply_nested_expression() {
+        let source = "F deep(a:i64)->i64=((((a+1)+2)+3)+4)+5";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        assert!(ir.contains("define i64 @deep"));
+    }
+
+    #[test]
+    fn test_mixed_arithmetic_precedence() {
+        let source = "F prec(a:i64,b:i64,c:i64)->i64=a+b*c";
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+        // Should multiply first then add (precedence)
+        assert!(ir.contains("mul i64"));
+        assert!(ir.contains("add i64"));
+    }
 }

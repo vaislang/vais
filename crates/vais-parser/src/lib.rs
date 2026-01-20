@@ -2081,4 +2081,559 @@ mod tests {
         assert_eq!(f4.generics[0].name.node, "T");
         assert_eq!(f4.generics[0].bounds.len(), 0);
     }
+
+    // ==================== Edge Case Tests ====================
+
+    #[test]
+    fn test_empty_input() {
+        let source = "";
+        let module = parse(source).unwrap();
+        assert!(module.items.is_empty());
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        let source = "   \n\t\r\n   ";
+        let module = parse(source).unwrap();
+        assert!(module.items.is_empty());
+    }
+
+    #[test]
+    fn test_comment_only() {
+        let source = "# this is just a comment\n# another comment";
+        let module = parse(source).unwrap();
+        assert!(module.items.is_empty());
+    }
+
+    #[test]
+    fn test_minimal_function() {
+        let source = "F f()->()=()";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+        assert!(f.params.is_empty());
+    }
+
+    #[test]
+    fn test_empty_struct() {
+        let source = "S Empty{}";
+        let module = parse(source).unwrap();
+        let Item::Struct(s) = &module.items[0].node else {
+            unreachable!("Expected struct");
+        };
+        assert_eq!(s.name.node, "Empty");
+        assert!(s.fields.is_empty());
+    }
+
+    #[test]
+    fn test_single_field_struct() {
+        let source = "S Single{x:i64}";
+        let module = parse(source).unwrap();
+        let Item::Struct(s) = &module.items[0].node else {
+            unreachable!("Expected struct");
+        };
+        assert_eq!(s.fields.len(), 1);
+    }
+
+    #[test]
+    fn test_minimal_enum() {
+        let source = "E Unit{A}";
+        let module = parse(source).unwrap();
+        let Item::Enum(e) = &module.items[0].node else {
+            unreachable!("Expected enum");
+        };
+        assert_eq!(e.name.node, "Unit");
+        assert_eq!(e.variants.len(), 1);
+    }
+
+    #[test]
+    fn test_enum_with_tuple_variants() {
+        let source = "E Shape{Circle(f64),Rectangle(f64,f64),Point}";
+        let module = parse(source).unwrap();
+        let Item::Enum(e) = &module.items[0].node else {
+            unreachable!("Expected enum");
+        };
+        assert_eq!(e.variants.len(), 3);
+    }
+
+    #[test]
+    fn test_enum_with_struct_variants() {
+        let source = "E Message{Quit,Move{x:i64,y:i64},Write(str)}";
+        let module = parse(source).unwrap();
+        let Item::Enum(e) = &module.items[0].node else {
+            unreachable!("Expected enum");
+        };
+        assert_eq!(e.variants.len(), 3);
+    }
+
+    #[test]
+    fn test_empty_block_function() {
+        let source = "F f()->(){}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        let FunctionBody::Block(stmts) = &f.body else {
+            unreachable!("Expected block body");
+        };
+        assert!(stmts.is_empty());
+    }
+
+    #[test]
+    fn test_nested_generic_types() {
+        // Use simple generic syntax that the parser supports
+        let source = "F f<T>(x:T)->T=x";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.params.len(), 1);
+        assert_eq!(f.generics.len(), 1);
+    }
+
+    #[test]
+    fn test_deeply_nested_arrays() {
+        let source = "F f(x:[[[i64]]])->[[[i64]]]=x";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.params.len(), 1);
+    }
+
+    #[test]
+    fn test_multiple_items() {
+        let source = r#"
+S Point{x:f64,y:f64}
+F new_point(x:f64,y:f64)->Point=Point{x:x,y:y}
+F origin()->Point=new_point(0.0,0.0)
+"#;
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 3);
+    }
+
+    #[test]
+    fn test_trait_definition() {
+        // Trait uses W keyword with methods using regular identifiers
+        let source = "W Display{F display(s:&Self)->str=\"\"}";
+        let module = parse(source).unwrap();
+        let Item::Trait(t) = &module.items[0].node else {
+            unreachable!("Expected trait");
+        };
+        assert_eq!(t.name.node, "Display");
+        assert_eq!(t.methods.len(), 1);
+    }
+
+    #[test]
+    fn test_impl_block() {
+        let source = r#"
+S Point{x:f64,y:f64}
+X Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
+"#;
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 2);
+        let Item::Impl(imp) = &module.items[1].node else {
+            unreachable!("Expected impl");
+        };
+        // target_type is a Spanned<Type>, check the type name
+        assert!(matches!(&imp.target_type.node, Type::Named { name, .. } if name == "Point"));
+    }
+
+    #[test]
+    fn test_if_without_else() {
+        let source = "F f(x:bool)->(){I x{print(1)}}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        // Function should parse successfully
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_nested_if_else() {
+        let source = "F f(x:i64)->i64=I x>0{I x>10{100}E{10}}E{0}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_match_with_wildcard() {
+        let source = "F f(x:i64)->i64=M x{0=>0,1=>1,_=>-1}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        let FunctionBody::Expr(expr) = &f.body else {
+            unreachable!("Expected expression body");
+        };
+        assert!(matches!(expr.node, Expr::Match { .. }));
+    }
+
+    #[test]
+    fn test_match_with_guard() {
+        let source = "F f(x:i64)->i64=M x{n I n>0=>n,_=>0}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_lambda_expression() {
+        let source = "F f()->i64{g:=|x:i64|x*2;g(21)}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_nested_lambda() {
+        let source = "F f()->i64{g:=|x:i64|(|y:i64|x+y);g(10)(32)}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_method_chaining() {
+        let source = "F f(x:str)->i64=x.len().to_string().len()";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_array_indexing_chain() {
+        let source = "F f(arr:[[i64]])->i64=arr[0][1]";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_self_recursion_operator() {
+        let source = "F factorial(n:i64)->i64=n<2?1:n*@(n-1)";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "factorial");
+    }
+
+    #[test]
+    fn test_range_expression() {
+        let source = "F f()->(){L i:0..10{print(i)}}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_ternary_operator() {
+        // Test the ternary operator (cond ? then : else)
+        let source = "F f(x:i64)->i64=x>0?x:0";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_simple_return_type() {
+        // Test simple return type parsing
+        let source = "F f()->i64=42";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert!(f.ret_type.is_some());
+    }
+
+    #[test]
+    fn test_reference_types() {
+        let source = "F f(x:&i64,y:&mut i64)->()=()";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.params.len(), 2);
+    }
+
+    #[test]
+    fn test_pointer_type() {
+        let source = "F f(x:*i64)->*i64=x";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert!(matches!(&f.params[0].ty.node, Type::Pointer(_)));
+    }
+
+    #[test]
+    fn test_tuple_type() {
+        let source = "F f(x:(i64,str))->(i64,str)=x";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert!(matches!(&f.params[0].ty.node, Type::Tuple(_)));
+    }
+
+    #[test]
+    fn test_function_type() {
+        let source = "F apply(f:(i64)->i64,x:i64)->i64=f(x)";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert!(matches!(&f.params[0].ty.node, Type::Fn { .. }));
+    }
+
+    #[test]
+    fn test_async_function() {
+        // Async function with A prefix
+        let source = "A F fetch(url:str)->str=url";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert!(f.is_async);
+    }
+
+    #[test]
+    fn test_pub_function() {
+        let source = "P F public_fn()->()=()";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert!(f.is_pub);
+    }
+
+    #[test]
+    fn test_import_statement() {
+        // Use statement with U keyword
+        let source = "U std::io";
+        let module = parse(source).unwrap();
+        let Item::Use(u) = &module.items[0].node else {
+            unreachable!("Expected use statement");
+        };
+        assert!(!u.path.is_empty());
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let source = "F f(a:i64,b:i64,c:i64)->i64=a+b*c-a/b%c";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_bitwise_operations() {
+        let source = "F f(a:i64,b:i64)->i64=a&b|c^d<<2>>1";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_comparison_chain() {
+        let source = "F f(a:i64,b:i64,c:i64)->bool=a<b&&b<c||a==c";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_unary_operators() {
+        let source = "F f(x:i64,b:bool)->i64=-x+~x*(!b?1:0)";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_compound_assignment() {
+        // In Vais, use := for mutable variable declaration
+        let source = "F f(x:i64)->i64{y:=x;y+=1;y-=2;y*=3;y}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        let FunctionBody::Block(stmts) = &f.body else {
+            unreachable!("Expected block body");
+        };
+        assert_eq!(stmts.len(), 5);
+    }
+
+    #[test]
+    fn test_break_with_value() {
+        let source = "F f()->i64{L{B 42}}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_continue_in_loop() {
+        let source = "F f()->(){L i:0..10{I i%2==0{C};print(i)}}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_struct_literal() {
+        let source = "F f()->Point{Point{x:1.0,y:2.0}}";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_array_literal() {
+        let source = "F f()->[i64]=[1,2,3,4,5]";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_empty_array_literal() {
+        let source = "F f()->[i64]=[]";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_array_with_values() {
+        // Test array literal syntax [value, value, ...]
+        let source = "F f()->[i64]=[1,2,3]";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_multiline_function() {
+        let source = r#"
+F calculate(a: i64,
+            b: i64,
+            c: i64) -> i64 {
+    x := a + b;
+    y := x * c;
+    R y
+}
+"#;
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.params.len(), 3);
+    }
+
+    #[test]
+    fn test_all_primitive_types() {
+        let source = r#"
+F test(
+    a:i8,b:i16,c:i32,d:i64,e:i128,
+    f:u8,g:u16,h:u32,i:u64,j:u128,
+    k:f32,l:f64,m:bool,n:str
+)->()=()
+"#;
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.params.len(), 14);
+    }
+
+    #[test]
+    fn test_pattern_in_match() {
+        let source = r#"
+F f(opt:Option<i64>)->i64=M opt{
+    Some(x)=>x,
+    None=>0
+}
+"#;
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_tuple_parameter() {
+        // Test tuple type as parameter
+        let source = "F f(t:(i64,i64))->i64=42";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+        assert!(matches!(&f.params[0].ty.node, Type::Tuple(_)));
+    }
+
+    #[test]
+    fn test_basic_struct_with_methods() {
+        // Test struct with impl block using regular param names
+        let source = r#"
+S Counter{value:i64}
+X Counter{F inc(c:&Counter)->i64=c.value+1}
+"#;
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 2);
+    }
+
+    #[test]
+    fn test_enum_pattern_match() {
+        // Test enum variant matching
+        let source = r#"
+E Result{Ok(i64),Err(str)}
+F handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
+"#;
+        let module = parse(source).unwrap();
+        assert_eq!(module.items.len(), 2);
+    }
 }

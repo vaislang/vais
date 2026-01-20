@@ -437,4 +437,290 @@ mod tests {
             .collect();
         assert_eq!(s_tokens.len(), 3);  // s:=0, s+=x, final s
     }
+
+    // ==================== Edge Case Tests ====================
+
+    #[test]
+    fn test_empty_input() {
+        let source = "";
+        let tokens = tokenize(source).unwrap();
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        let source = "   \n\t\r\n   ";
+        let tokens = tokenize(source).unwrap();
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_comment_only() {
+        let source = "# this is just a comment\n# another comment";
+        let tokens = tokenize(source).unwrap();
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn test_single_character_identifiers() {
+        let source = "x y z _ a b c";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens.len(), 7);
+        assert_eq!(tokens[0].token, Token::Ident("x".to_string()));
+        assert_eq!(tokens[3].token, Token::Ident("_".to_string()));
+    }
+
+    #[test]
+    fn test_very_long_identifier() {
+        let long_name = "a".repeat(1000);
+        let source = format!("F {}()->()=()", long_name);
+        let tokens = tokenize(&source).unwrap();
+        assert_eq!(tokens[1].token, Token::Ident(long_name));
+    }
+
+    #[test]
+    fn test_i64_max() {
+        let source = "9223372036854775807";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Int(i64::MAX));
+    }
+
+    #[test]
+    fn test_negative_number_as_tokens() {
+        // Negative numbers are lexed as Minus followed by Int
+        let source = "-42";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Minus);
+        assert_eq!(tokens[1].token, Token::Int(42));
+    }
+
+    #[test]
+    fn test_float_edge_cases() {
+        let source = "0.0 1.0 0.5 123.456789";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Float(0.0));
+        assert_eq!(tokens[1].token, Token::Float(1.0));
+        assert_eq!(tokens[2].token, Token::Float(0.5));
+        assert_eq!(tokens[3].token, Token::Float(123.456789));
+    }
+
+    #[test]
+    fn test_multiple_underscores_in_number() {
+        let source = "1_2_3_4_5_6";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Int(123456));
+    }
+
+    #[test]
+    fn test_keyword_like_identifiers() {
+        // Keywords are uppercase single letters, these should be identifiers
+        let source = "Fn Struct Enum If Loop Match For While";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Ident("Fn".to_string()));
+        assert_eq!(tokens[1].token, Token::Ident("Struct".to_string()));
+        assert_eq!(tokens[2].token, Token::Ident("Enum".to_string()));
+        assert_eq!(tokens[3].token, Token::Ident("If".to_string()));
+        assert_eq!(tokens[4].token, Token::Ident("Loop".to_string()));
+        assert_eq!(tokens[5].token, Token::Ident("Match".to_string()));
+        assert_eq!(tokens[6].token, Token::Ident("For".to_string()));
+        assert_eq!(tokens[7].token, Token::Ident("While".to_string()));
+    }
+
+    #[test]
+    fn test_consecutive_operators() {
+        let source = "+++---***///";
+        let tokens = tokenize(source).unwrap();
+        // Should be lexed as separate operators
+        assert!(tokens.iter().any(|t| t.token == Token::Plus));
+        assert!(tokens.iter().any(|t| t.token == Token::Minus));
+        assert!(tokens.iter().any(|t| t.token == Token::Star));
+        assert!(tokens.iter().any(|t| t.token == Token::Slash));
+    }
+
+    #[test]
+    fn test_dot_vs_dotdot() {
+        let source = "a.b 0..10 x.y..z.w";
+        let tokens = tokenize(source).unwrap();
+        // Should correctly distinguish . from ..
+        let dot_count = tokens.iter().filter(|t| t.token == Token::Dot).count();
+        let dotdot_count = tokens.iter().filter(|t| t.token == Token::DotDot).count();
+        assert!(dot_count >= 2); // a.b, x.y, z.w
+        assert!(dotdot_count >= 1); // 0..10, y..z
+    }
+
+    #[test]
+    fn test_comparison_operators() {
+        let source = "< <= > >= == != <<";
+        let tokens = tokenize(source).unwrap();
+        assert!(tokens.iter().any(|t| t.token == Token::Lt));
+        assert!(tokens.iter().any(|t| t.token == Token::Lte));
+        assert!(tokens.iter().any(|t| t.token == Token::Gt));
+        assert!(tokens.iter().any(|t| t.token == Token::Gte));
+        assert!(tokens.iter().any(|t| t.token == Token::EqEq));
+        assert!(tokens.iter().any(|t| t.token == Token::Neq));
+    }
+
+    #[test]
+    fn test_string_with_escapes() {
+        let source = r#""hello\nworld\ttab""#;
+        let tokens = tokenize(source).unwrap();
+        // The lexer should handle escape sequences
+        assert!(matches!(&tokens[0].token, Token::String(_)));
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let source = r#""""#;
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::String("".to_string()));
+    }
+
+    #[test]
+    fn test_all_keywords() {
+        // F=Function, S=Struct, E=Enum, I=If, L=Loop, M=Match, R=Return, B=Break, C=Continue, T=Type, W=Trait, A=Async, P=Pub, U=Use, X=Impl
+        let source = "F S E I L M R B C T W A P U X";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Function);
+        assert_eq!(tokens[1].token, Token::Struct);
+        assert_eq!(tokens[2].token, Token::Enum);
+        assert_eq!(tokens[3].token, Token::If);
+        assert_eq!(tokens[4].token, Token::Loop);
+        assert_eq!(tokens[5].token, Token::Match);
+        assert_eq!(tokens[6].token, Token::Return);
+        assert_eq!(tokens[7].token, Token::Break);
+        assert_eq!(tokens[8].token, Token::Continue);
+        assert_eq!(tokens[9].token, Token::TypeKeyword);
+        assert_eq!(tokens[10].token, Token::Trait);  // W is Trait
+        assert_eq!(tokens[11].token, Token::Async);
+        assert_eq!(tokens[12].token, Token::Pub);
+        assert_eq!(tokens[13].token, Token::Use);
+        assert_eq!(tokens[14].token, Token::Impl);
+    }
+
+    #[test]
+    fn test_all_type_keywords() {
+        let source = "i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 bool str";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::I8);
+        assert_eq!(tokens[1].token, Token::I16);
+        assert_eq!(tokens[2].token, Token::I32);
+        assert_eq!(tokens[3].token, Token::I64);
+        assert_eq!(tokens[4].token, Token::I128);
+        assert_eq!(tokens[5].token, Token::U8);
+        assert_eq!(tokens[6].token, Token::U16);
+        assert_eq!(tokens[7].token, Token::U32);
+        assert_eq!(tokens[8].token, Token::U64);
+        assert_eq!(tokens[9].token, Token::U128);
+        assert_eq!(tokens[10].token, Token::F32);
+        assert_eq!(tokens[11].token, Token::F64);
+        assert_eq!(tokens[12].token, Token::Bool);
+        assert_eq!(tokens[13].token, Token::Str);
+    }
+
+    #[test]
+    fn test_all_brackets_and_delimiters() {
+        let source = "( ) [ ] { } < > , : ; . .. -> => @ ? !";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::LParen);
+        assert_eq!(tokens[1].token, Token::RParen);
+        assert_eq!(tokens[2].token, Token::LBracket);
+        assert_eq!(tokens[3].token, Token::RBracket);
+        assert_eq!(tokens[4].token, Token::LBrace);
+        assert_eq!(tokens[5].token, Token::RBrace);
+        assert_eq!(tokens[6].token, Token::Lt);
+        assert_eq!(tokens[7].token, Token::Gt);
+        assert_eq!(tokens[8].token, Token::Comma);
+        assert_eq!(tokens[9].token, Token::Colon);
+        assert_eq!(tokens[10].token, Token::Semi);
+        assert_eq!(tokens[11].token, Token::Dot);
+        assert_eq!(tokens[12].token, Token::DotDot);
+        assert_eq!(tokens[13].token, Token::Arrow);
+        assert_eq!(tokens[14].token, Token::FatArrow);
+        assert_eq!(tokens[15].token, Token::At);
+        assert_eq!(tokens[16].token, Token::Question);
+        assert_eq!(tokens[17].token, Token::Bang);
+    }
+
+    #[test]
+    fn test_assignment_operators() {
+        let source = "= := += -= *= /=";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Eq);
+        assert_eq!(tokens[1].token, Token::ColonEq);
+        assert_eq!(tokens[2].token, Token::PlusEq);
+        assert_eq!(tokens[3].token, Token::MinusEq);
+        assert_eq!(tokens[4].token, Token::StarEq);
+        assert_eq!(tokens[5].token, Token::SlashEq);
+    }
+
+    #[test]
+    fn test_bitwise_operators() {
+        let source = "& | ^ ~ << >>";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Amp);
+        assert_eq!(tokens[1].token, Token::Pipe);
+        assert_eq!(tokens[2].token, Token::Caret);
+        assert_eq!(tokens[3].token, Token::Tilde);
+        assert_eq!(tokens[4].token, Token::Shl);
+        assert_eq!(tokens[5].token, Token::Shr);
+    }
+
+    #[test]
+    fn test_logical_operators() {
+        // && is lexed as two Amp tokens, || as two Pipe tokens
+        let source = "&& ||";
+        let tokens = tokenize(source).unwrap();
+        // && -> Amp Amp
+        assert_eq!(tokens[0].token, Token::Amp);
+        assert_eq!(tokens[1].token, Token::Amp);
+        // || -> Pipe Pipe
+        assert_eq!(tokens[2].token, Token::Pipe);
+        assert_eq!(tokens[3].token, Token::Pipe);
+    }
+
+    #[test]
+    fn test_multiline_code() {
+        let source = r#"
+F add(a:i64,
+      b:i64)->i64 {
+    R a + b
+}
+"#;
+        let tokens = tokenize(source).unwrap();
+        // Should successfully tokenize multiline code
+        assert!(tokens.iter().any(|t| t.token == Token::Function));
+        assert!(tokens.iter().any(|t| t.token == Token::Return));
+    }
+
+    #[test]
+    fn test_unicode_in_string() {
+        let source = r#""안녕하세요 🚀 世界""#;
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::String("안녕하세요 🚀 世界".to_string()));
+    }
+
+    #[test]
+    fn test_identifier_with_numbers() {
+        let source = "x1 y2 var123 test_456";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Ident("x1".to_string()));
+        assert_eq!(tokens[1].token, Token::Ident("y2".to_string()));
+        assert_eq!(tokens[2].token, Token::Ident("var123".to_string()));
+        assert_eq!(tokens[3].token, Token::Ident("test_456".to_string()));
+    }
+
+    #[test]
+    fn test_span_accuracy() {
+        let source = "F f()->i64=42";
+        let tokens = tokenize(source).unwrap();
+
+        // Check that spans are accurate
+        assert_eq!(tokens[0].span.start, 0);
+        assert_eq!(tokens[0].span.end, 1); // "F"
+
+        // Find the "42" token and check its span
+        let int_token = tokens.iter().find(|t| t.token == Token::Int(42)).unwrap();
+        assert_eq!(int_token.span.start, 11);
+        assert_eq!(int_token.span.end, 13);
+    }
 }
