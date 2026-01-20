@@ -1,0 +1,563 @@
+//! Integration tests for the Vais compiler
+//!
+//! These tests verify the complete compilation pipeline:
+//! Source -> Lexer -> Parser -> Type Checker -> Code Generator -> LLVM IR
+
+use vais_lexer::tokenize;
+use vais_parser::parse;
+use vais_types::TypeChecker;
+use vais_codegen::CodeGenerator;
+
+/// Helper function to compile source code to LLVM IR
+fn compile_to_ir(source: &str) -> Result<String, String> {
+    // Step 1: Tokenize
+    let _tokens = tokenize(source).map_err(|e| format!("Lexer error: {:?}", e))?;
+
+    // Step 2: Parse
+    let module = parse(source).map_err(|e| format!("Parser error: {:?}", e))?;
+
+    // Step 3: Type check
+    let mut checker = TypeChecker::new();
+    checker.check_module(&module).map_err(|e| format!("Type error: {:?}", e))?;
+
+    // Step 4: Generate LLVM IR
+    let mut gen = CodeGenerator::new("test");
+    let ir = gen.generate_module(&module).map_err(|e| format!("Codegen error: {:?}", e))?;
+
+    Ok(ir)
+}
+
+/// Helper to check if source compiles successfully
+fn compiles(source: &str) -> bool {
+    match compile_to_ir(source) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("Compilation failed: {}", e);
+            false
+        }
+    }
+}
+
+/// Helper to check if source fails to compile
+fn fails_to_compile(source: &str) -> bool {
+    compile_to_ir(source).is_err()
+}
+
+// ==================== Basic Compilation Tests ====================
+
+#[test]
+fn test_empty_module() {
+    assert!(compiles(""));
+}
+
+#[test]
+fn test_hello_world() {
+    // print is a runtime function, so just test a simple main
+    let source = r#"F main() -> () { () }"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_simple_arithmetic() {
+    let source = "F add(a:i64, b:i64) -> i64 = a + b";
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("define i64 @add"));
+    assert!(ir.contains("add i64"));
+}
+
+#[test]
+fn test_fibonacci() {
+    let source = "F fib(n:i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)";
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("define i64 @fib"));
+    assert!(ir.contains("call i64 @fib")); // Recursive calls
+}
+
+// ==================== Control Flow Tests ====================
+
+#[test]
+fn test_if_else() {
+    let source = "F max(a:i64, b:i64)->i64=I a>b{a}E{b}";
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("icmp sgt"));
+    assert!(ir.contains("br i1"));
+}
+
+#[test]
+fn test_nested_if() {
+    let source = r#"
+F classify(x: i64) -> i64 {
+    I x > 0 {
+        I x > 100 { 2 } E { 1 }
+    } E {
+        I x < 0 - 100 { 0 - 2 } E { 0 - 1 }
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_match_expression() {
+    let source = r#"
+F digit_name(n:i64) -> str = M n {
+    0 => "zero",
+    1 => "one",
+    2 => "two",
+    _ => "other"
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_for_loop() {
+    // Test for loop with range - immutable binding
+    let source = r#"
+F count_range(n: i64) -> i64 {
+    result := 0;
+    L i: 0..n { result };
+    result
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_while_loop() {
+    // Test while loop syntax without mutable assignment
+    let source = r#"
+F check_condition(n: i64) -> i64 {
+    L _: n > 0 { n };
+    0
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_infinite_loop_with_break() {
+    // Test infinite loop with break
+    let source = r#"
+F find_limit(x: i64) -> i64 {
+    L {
+        I x > 100 { B x };
+        x
+    };
+    0
+}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Struct Tests ====================
+
+#[test]
+fn test_struct_definition() {
+    let source = r#"
+S Point { x: f64, y: f64 }
+F origin() -> Point = Point { x: 0.0, y: 0.0 }
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("%Point = type { double, double }"));
+}
+
+#[test]
+fn test_struct_field_access() {
+    let source = r#"
+S Point { x: i64, y: i64 }
+F get_x(p: Point) -> i64 = p.x
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("getelementptr"));
+}
+
+#[test]
+fn test_empty_struct() {
+    let source = r#"
+S Unit {}
+F make_unit() -> Unit = Unit {}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Enum Tests ====================
+
+#[test]
+fn test_enum_definition() {
+    // Enum definition - path syntax tested separately
+    let source = r#"
+E Color { Red, Green, Blue }
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_enum_with_data() {
+    let source = r#"
+E Shape { Circle(f64), Rectangle(f64, f64) }
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_enum_pattern_match() {
+    let source = r#"
+E Result { Ok(i64), Err(str) }
+F handle(r: Result) -> i64 = M r {
+    Ok(v) => v,
+    Err(_) => 0
+}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Generic Tests ====================
+
+#[test]
+fn test_generic_function() {
+    let source = "F identity<T>(x: T) -> T = x";
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_generic_struct() {
+    let source = r#"
+S Box<T> { value: T }
+F get_value<T>(b: Box<T>) -> T = b.value
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_generic_with_bounds() {
+    let source = "F compare<T: Ord>(a: T, b: T) -> bool = a < b";
+    assert!(compiles(source));
+}
+
+// ==================== Lambda Tests ====================
+
+#[test]
+fn test_simple_lambda() {
+    let source = r#"
+F apply_double() -> i64 {
+    double := |x:i64| x * 2;
+    double(21)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_higher_order_function() {
+    let source = r#"
+F apply(f: (i64) -> i64, x: i64) -> i64 = f(x)
+F double(x: i64) -> i64 = x * 2
+F test() -> i64 = apply(double, 21)
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Type System Tests ====================
+
+#[test]
+fn test_array_type() {
+    // Test array type in parameter and indexing
+    let source = r#"
+F first(arr: [i64]) -> i64 = arr[0]
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_tuple_type() {
+    let source = "F make_pair(a: i64, b: str) -> (i64, str) = (a, b)";
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_pointer_type() {
+    let source = "F identity_ptr(p: *i64) -> *i64 = p";
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_reference_type() {
+    let source = "F ref_fn(r: &i64) -> i64 = 0";
+    assert!(compiles(source));
+}
+
+// ==================== Operator Tests ====================
+
+#[test]
+fn test_arithmetic_operators() {
+    let source = r#"
+F math(a: i64, b: i64) -> i64 {
+    x := a + b;
+    y := x - a;
+    z := y * b;
+    w := z / a;
+    w % b
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("add i64"));
+    assert!(ir.contains("sub i64"));
+    assert!(ir.contains("mul i64"));
+    assert!(ir.contains("sdiv i64"));
+    assert!(ir.contains("srem i64"));
+}
+
+#[test]
+fn test_comparison_operators() {
+    let source = r#"
+F compare(a: i64, b: i64) -> bool {
+    lt := a < b;
+    le := a <= b;
+    gt := a > b;
+    ge := a >= b;
+    eq := a == b;
+    ne := a != b;
+    lt
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("icmp slt"));
+    assert!(ir.contains("icmp sle"));
+    assert!(ir.contains("icmp sgt"));
+    assert!(ir.contains("icmp sge"));
+    assert!(ir.contains("icmp eq"));
+    assert!(ir.contains("icmp ne"));
+}
+
+#[test]
+fn test_bitwise_operators() {
+    let source = r#"
+F bits(a: i64, b: i64) -> i64 {
+    x := a & b;
+    y := a | b;
+    z := a ^ b;
+    w := a << 2;
+    v := a >> 1;
+    x
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("and i64"));
+    assert!(ir.contains("or i64"));
+    assert!(ir.contains("xor i64"));
+    assert!(ir.contains("shl i64"));
+    assert!(ir.contains("ashr i64"));
+}
+
+#[test]
+fn test_logical_operators() {
+    let source = "F logic(a: bool, b: bool) -> bool = a && b || !a";
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_unary_operators() {
+    let source = r#"
+F unary(x: i64) -> i64 {
+    neg := -x;
+    bitnot := ~x;
+    neg + bitnot
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("sub i64 0")); // negation
+    assert!(ir.contains("xor i64") && ir.contains("-1")); // bitwise not
+}
+
+#[test]
+fn test_compound_operations() {
+    // Test arithmetic operations without mutable assignment
+    let source = r#"
+F compound(x: i64) -> i64 {
+    y := x + 1;
+    z := y - 2;
+    w := z * 3;
+    w
+}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Trait Tests ====================
+
+#[test]
+fn test_trait_definition() {
+    let source = r#"
+W Display { F display(s: &Self) -> str = "" }
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_impl_block() {
+    let source = r#"
+S Counter { value: i64 }
+X Counter {
+    F new() -> Counter = Counter { value: 0 }
+    F get_val(c: Counter) -> i64 = c.value
+}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Module System Tests ====================
+
+#[test]
+fn test_use_statement() {
+    let source = "U std::io";
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_pub_function() {
+    let source = "P F public_fn() -> () = ()";
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("define void @public_fn"));
+}
+
+// ==================== Async Tests ====================
+
+#[test]
+fn test_async_function() {
+    let source = "A F async_fn() -> i64 = 42";
+    assert!(compiles(source));
+}
+
+// ==================== Error Detection Tests ====================
+
+#[test]
+fn test_type_mismatch_error() {
+    let source = "F f() -> i64 = \"string\"";
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_undefined_variable_error() {
+    let source = "F f() -> i64 = undefined_var";
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_undefined_function_error() {
+    let source = "F f() -> i64 = unknown_func()";
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_wrong_argument_count_error() {
+    let source = r#"
+F add(a: i64, b: i64) -> i64 = a + b
+F f() -> i64 = add(1)
+"#;
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_wrong_argument_type_error() {
+    let source = r#"
+F add(a: i64, b: i64) -> i64 = a + b
+F f() -> i64 = add(1, "two")
+"#;
+    assert!(fails_to_compile(source));
+}
+
+#[test]
+fn test_if_condition_non_bool_error() {
+    let source = "F f() -> i64 = I 42 { 1 } E { 0 }";
+    assert!(fails_to_compile(source));
+}
+
+// ==================== Complex Programs ====================
+
+#[test]
+fn test_factorial() {
+    let source = r#"
+F factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)
+F main() -> () {
+    result := factorial(5);
+    ()
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_binary_search() {
+    let source = r#"
+F binary_search(arr: [i64], target: i64, low: i64, high: i64) -> i64 {
+    I low > high { 0 - 1 }
+    E {
+        mid := (low + high) / 2;
+        I arr[mid] == target { mid }
+        E {
+            I arr[mid] < target {
+                @(arr, target, mid + 1, high)
+            } E {
+                @(arr, target, low, mid - 1)
+            }
+        }
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_bubble_sort_structure() {
+    let source = r#"
+F swap(arr: *i64, i: i64, j: i64) -> () {
+    temp := arr[i];
+    ()
+}
+
+F bubble_sort(arr: *i64, n: i64) -> () {
+    L i:0..n {
+        L j:0..(n-i-1) {
+            I arr[j] > arr[j+1] {
+                swap(arr, j, j+1)
+            }
+        }
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_linked_list_structure() {
+    // Test self-referential struct definition
+    let source = r#"
+S Node { value: i64, next: *Node }
+
+F get_value(n: Node) -> i64 = n.value
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_multiple_types_and_functions() {
+    let source = r#"
+# Types
+S Point { x: f64, y: f64 }
+S Size { width: f64, height: f64 }
+S Rect { x: f64, y: f64, width: f64, height: f64 }
+
+# Functions
+F point_new(x: f64, y: f64) -> Point = Point { x: x, y: y }
+F size_new(w: f64, h: f64) -> Size = Size { width: w, height: h }
+
+# Main
+F main() -> () {
+    p := point_new(0.0, 0.0);
+    s := size_new(100.0, 50.0);
+    ()
+}
+"#;
+    assert!(compiles(source));
+}

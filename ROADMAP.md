@@ -227,8 +227,9 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ## 🧪 테스트 현황
 
 ```
-✅ 198 tests passed, 0 failed
+✅ 245 tests passed, 0 failed
 ✅ 40+ example files compiled and running
+✅ 47 E2E integration tests
 ```
 
 ---
@@ -429,13 +430,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 43% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 50% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (43%)
+> **상태**: 🔄 진행 중 (50%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
@@ -466,7 +467,11 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - vais-types: 38개 테스트 추가 (10→48)
   - vais-codegen: 38개 테스트 추가 (20→58)
   - 총 테스트: 198개 (이전 46개)
-- [ ] **통합 테스트 스위트 구축** - 전체 컴파일 파이프라인 테스트
+- [x] **통합 테스트 스위트 구축** - 전체 컴파일 파이프라인 테스트 (완료일: 2026-01-20)
+  - `crates/vaisc/tests/integration_tests.rs` 추가
+  - 47개 E2E 테스트: Lexer → Parser → TypeChecker → CodeGen
+  - 기본 컴파일, 제어 흐름, 타입, 연산자, 에러 감지 테스트
+  - 총 테스트: 245개
 - [ ] **표준 라이브러리 에러 처리 개선** - 0 반환 대신 Option/Result 타입 일관적 사용
 - [ ] **입력 검증 강화** - 네트워크/파일 API에 입력 범위 검사 추가
 - [ ] **unwrap/expect 감소** - 126개 사용처 검토 및 적절한 에러 핸들링 추가
