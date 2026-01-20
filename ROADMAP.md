@@ -429,13 +429,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 2: 표준 라이브러리 | ✅ 완료 | 100% |
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
-| Phase 5: 품질 개선 | 🔄 진행 중 | 30% |
+| Phase 5: 품질 개선 | 🔄 진행 중 | 36% |
 
 ---
 
 ## 🔧 Phase 5: 품질 개선 및 안정화
 
-> **상태**: 🔄 진행 중 (30%)
+> **상태**: 🔄 진행 중 (36%)
 
 ### P0 - 긴급 (즉시 수행)
 - [x] **테스트 실행 문제 해결** - 조사 결과 정상 작동 확인 (46 tests passed) (완료일: 2026-01-20)
@@ -454,7 +454,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - types.rs (259줄) - 타입 정의 및 변환
   - stmt.rs (162줄) - 문장 코드 생성
   - lib.rs 3,981줄 → 3,589줄 (392줄 감소)
-- [ ] **vais-types 모듈 분리** - 타입 체커를 논리적 모듈로 분리
+- [x] **vais-types 모듈 분리** - 타입 체커를 논리적 모듈로 분리 (완료일: 2026-01-20)
+  - types.rs (326줄) - 핵심 타입 정의
+  - inference.rs (176줄) - 타입 추론 알고리즘
+  - lib.rs 2,814줄 → 2,346줄 (468줄 감소)
 
 ### P2 - 중간 우선순위 (1개월 내)
 - [ ] **엣지 케이스 테스트 추가** - 빈 파일, 잘못된 문법, 경계값 테스트
