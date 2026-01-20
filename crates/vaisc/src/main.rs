@@ -19,6 +19,7 @@ use vais_lexer::tokenize;
 use vais_parser::{parse, ParseError};
 use vais_types::{TypeChecker, TypeError, error_report::ErrorReporter};
 use vais_i18n::Locale;
+use vais_plugin::{PluginRegistry, PluginsConfig, find_config, Diagnostic, DiagnosticLevel};
 
 #[derive(Parser)]
 #[command(name = "vaisc")]
@@ -57,6 +58,14 @@ struct Cli {
     /// Set the locale for error messages (en, ko, ja)
     #[arg(long, value_name = "LOCALE", global = true)]
     locale: Option<String>,
+
+    /// Disable all plugins
+    #[arg(long, global = true)]
+    no_plugins: bool,
+
+    /// Load additional plugin from file
+    #[arg(long, value_name = "PATH", global = true)]
+    plugin: Vec<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -143,15 +152,22 @@ fn main() {
         .and_then(|s| Locale::from_str(s));
     vais_i18n::init(locale);
 
+    // Load plugins
+    let plugins = if cli.no_plugins {
+        PluginRegistry::new()
+    } else {
+        load_plugins(&cli.plugin, cli.verbose)
+    };
+
     let result = match cli.command {
         Some(Commands::Build { input, output, emit_ir, opt_level, debug }) => {
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose)
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins)
         }
         Some(Commands::Run { input, args }) => {
-            cmd_run(&input, &args, cli.verbose)
+            cmd_run(&input, &args, cli.verbose, &plugins)
         }
         Some(Commands::Check { input }) => {
-            cmd_check(&input, cli.verbose)
+            cmd_check(&input, cli.verbose, &plugins)
         }
         Some(Commands::Repl) => {
             repl::run()
@@ -170,7 +186,7 @@ fn main() {
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose)
+                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins)
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -192,6 +208,7 @@ fn cmd_build(
     opt_level: u8,
     debug: bool,
     verbose: bool,
+    plugins: &PluginRegistry,
 ) -> Result<(), String> {
     // Read source for error reporting
     let main_source = fs::read_to_string(input)
@@ -205,9 +222,31 @@ fn cmd_build(
         println!("  {} total items (including imports)", merged_ast.items.len());
     }
 
+    // Run lint plugins
+    if !plugins.is_empty() {
+        let diagnostics = plugins.run_lint(&merged_ast);
+        if !diagnostics.is_empty() {
+            print_plugin_diagnostics(&diagnostics, &main_source, input);
+
+            // Check if any errors (not just warnings)
+            let has_errors = diagnostics.iter().any(|d| d.level == DiagnosticLevel::Error);
+            if has_errors {
+                return Err("Plugin lint check failed".to_string());
+            }
+        }
+    }
+
+    // Run transform plugins
+    let transformed_ast = if !plugins.is_empty() {
+        plugins.run_transform(merged_ast)
+            .map_err(|e| format!("Plugin transform error: {}", e))?
+    } else {
+        merged_ast
+    };
+
     // Type check
     let mut checker = TypeChecker::new();
-    if let Err(e) = checker.check_module(&merged_ast) {
+    if let Err(e) = checker.check_module(&transformed_ast) {
         // Format error with source context
         return Err(format_type_error(&e, &main_source, input));
     }
@@ -238,7 +277,7 @@ fn cmd_build(
         }
     }
 
-    let raw_ir = codegen.generate_module(&merged_ast)
+    let raw_ir = codegen.generate_module(&transformed_ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
 
     // Apply optimization passes before emitting IR
@@ -251,6 +290,20 @@ fn cmd_build(
         _ => OptLevel::O3,
     };
     let ir = optimize_ir(&raw_ir, opt);
+
+    // Run plugin optimizations
+    let plugin_opt = match effective_opt_level {
+        0 => vais_plugin::OptLevel::O0,
+        1 => vais_plugin::OptLevel::O1,
+        2 => vais_plugin::OptLevel::O2,
+        _ => vais_plugin::OptLevel::O3,
+    };
+    let ir = if !plugins.is_empty() {
+        plugins.run_optimize(&ir, plugin_opt)
+            .map_err(|e| format!("Plugin optimize error: {}", e))?
+    } else {
+        ir
+    };
 
     if verbose && opt_level > 0 && !debug {
         println!("{} Applied Vais IR optimizations (O{})", "Optimizing".cyan().bold(), opt_level);
@@ -273,6 +326,23 @@ fn cmd_build(
 
     if verbose || emit_ir {
         println!("{} {}", "Wrote".green().bold(), ir_path.display());
+    }
+
+    // Run codegen plugins (generate additional files)
+    if !plugins.is_empty() {
+        let output_dir = ir_path.parent().unwrap_or(Path::new("."));
+        match plugins.run_codegen(&transformed_ast, output_dir) {
+            Ok(generated_files) => {
+                for file in generated_files {
+                    if verbose {
+                        println!("{} {} (plugin)", "Generated".green().bold(), file.display());
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: Plugin codegen: {}", "Warning".yellow(), e);
+            }
+        }
     }
 
     // If not emit_ir only, compile to binary
@@ -538,10 +608,10 @@ fn compile_ir_to_binary(
     }
 }
 
-fn cmd_run(input: &PathBuf, args: &[String], verbose: bool) -> Result<(), String> {
+fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
     // Build first (no debug for run command by default)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose)?;
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins)?;
 
     // Run the binary
     if verbose {
@@ -560,7 +630,7 @@ fn cmd_run(input: &PathBuf, args: &[String], verbose: bool) -> Result<(), String
     Ok(())
 }
 
-fn cmd_check(input: &PathBuf, verbose: bool) -> Result<(), String> {
+fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
     let source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
@@ -575,6 +645,20 @@ fn cmd_check(input: &PathBuf, verbose: bool) -> Result<(), String> {
     // Parse
     let ast = parse(&source)
         .map_err(|e| format_parse_error(&e, &source, input))?;
+
+    // Run lint plugins
+    if !plugins.is_empty() {
+        let diagnostics = plugins.run_lint(&ast);
+        if !diagnostics.is_empty() {
+            print_plugin_diagnostics(&diagnostics, &source, input);
+
+            // Check if any errors (not just warnings)
+            let has_errors = diagnostics.iter().any(|d| d.level == DiagnosticLevel::Error);
+            if has_errors {
+                return Err("Plugin lint check failed".to_string());
+            }
+        }
+    }
 
     // Type check
     let mut checker = TypeChecker::new();
@@ -657,4 +741,111 @@ fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
         }
     }
     result
+}
+
+/// Load plugins from configuration and CLI arguments
+fn load_plugins(extra_plugins: &[PathBuf], verbose: bool) -> PluginRegistry {
+    let mut registry = PluginRegistry::new();
+
+    // Load configuration file if present
+    let config = if let Some(config_path) = find_config() {
+        if verbose {
+            println!("{} {}", "Loading plugin config".cyan(), config_path.display());
+        }
+        match PluginsConfig::load(&config_path) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("{}: {}", "Warning".yellow(), e);
+                PluginsConfig::empty()
+            }
+        }
+    } else {
+        PluginsConfig::empty()
+    };
+
+    // Load plugins from config paths
+    for plugin_path in &config.plugins.path {
+        match registry.load_from_path(plugin_path) {
+            Ok(info) => {
+                if verbose {
+                    println!("  {} {} v{}", "Loaded plugin".green(), info.name, info.version);
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: Failed to load '{}': {}", "Warning".yellow(), plugin_path.display(), e);
+            }
+        }
+    }
+
+    // Load extra plugins from CLI
+    for plugin_path in extra_plugins {
+        match registry.load_from_path(plugin_path) {
+            Ok(info) => {
+                if verbose {
+                    println!("  {} {} v{}", "Loaded plugin".green(), info.name, info.version);
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: Failed to load '{}': {}", "Warning".yellow(), plugin_path.display(), e);
+            }
+        }
+    }
+
+    // Apply configuration to loaded plugins
+    for (name, plugin_config) in &config.plugins.config {
+        if let Err(e) = registry.configure(name, plugin_config) {
+            eprintln!("{}: Failed to configure '{}': {}", "Warning".yellow(), name, e);
+        }
+    }
+
+    registry
+}
+
+/// Print plugin diagnostics
+fn print_plugin_diagnostics(diagnostics: &[Diagnostic], source: &str, path: &Path) {
+    let filename = path.to_str().unwrap_or("unknown");
+    let lines: Vec<&str> = source.lines().collect();
+
+    for diag in diagnostics {
+        let (_level_str, level_colored) = match diag.level {
+            DiagnosticLevel::Error => ("error", "error".red().bold()),
+            DiagnosticLevel::Warning => ("warning", "warning".yellow().bold()),
+            DiagnosticLevel::Info => ("info", "info".cyan().bold()),
+            DiagnosticLevel::Hint => ("hint", "hint".blue().bold()),
+        };
+
+        if let Some(span) = diag.span {
+            // Find line and column from span
+            let mut line_num = 1;
+            let mut col = 1;
+            let mut char_count = 0;
+            for (i, line) in lines.iter().enumerate() {
+                let line_len = line.len() + 1; // +1 for newline
+                if char_count + line_len > span.start {
+                    line_num = i + 1;
+                    col = span.start - char_count + 1;
+                    break;
+                }
+                char_count += line_len;
+            }
+
+            let underline_len = (span.end - span.start).max(1);
+            let source_line = lines.get(line_num - 1).unwrap_or(&"");
+
+            eprintln!("{}{} {}", level_colored, ":".bold(), diag.message);
+            eprintln!("  {} {}:{}:{}", "-->".blue().bold(), filename, line_num, col);
+            eprintln!("   {}", "|".blue().bold());
+            eprintln!("{:4}{} {}", line_num, "|".blue().bold(), source_line);
+            eprintln!("   {} {}{}", "|".blue().bold(), " ".repeat(col.saturating_sub(1)), "^".repeat(underline_len).yellow());
+            if let Some(help) = &diag.help {
+                eprintln!("   {} {} {}", "=".blue().bold(), "help:".cyan(), help);
+            }
+            eprintln!();
+        } else {
+            eprintln!("{}: {}", level_colored, diag.message);
+            if let Some(help) = &diag.help {
+                eprintln!("  {} {}", "help:".cyan(), help);
+            }
+        }
+    }
 }

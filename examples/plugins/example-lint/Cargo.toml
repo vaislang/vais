@@ -1,0 +1,12 @@
+[package]
+name = "vais-example-lint"
+version = "0.1.0"
+edition = "2021"
+description = "Example Vais lint plugin"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vais-plugin = { path = "../../../crates/vais-plugin" }
+vais-ast = { path = "../../../crates/vais-ast" }

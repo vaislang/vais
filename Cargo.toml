@@ -8,7 +8,9 @@ members = [
     "crates/vais-codegen",
     "crates/vais-lsp",
     "crates/vais-i18n",
+    "crates/vais-plugin",
     "crates/vaisc",
+    "examples/plugins/example-lint",
 ]
 
 [workspace.package]

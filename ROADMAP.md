@@ -173,7 +173,8 @@ crates/
 ├── vais-types/    # 타입 체커 ✅
 ├── vais-codegen/  # LLVM IR 생성기 ✅
 ├── vais-lsp/      # Language Server ✅
-├── vais-i18n/     # 다국어 에러 메시지 ✅ NEW
+├── vais-i18n/     # 다국어 에러 메시지 ✅
+├── vais-plugin/   # 플러그인 시스템 ✅ NEW
 └── vaisc/         # CLI 컴파일러 & REPL ✅
 
 std/               # 표준 라이브러리 ✅
@@ -221,6 +222,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Formatter | ✅ 완료 | 100% |
 | Debugger | ✅ 완료 | 100% |
 | i18n | ✅ 완료 | 100% |
+| Plugin System | ✅ 완료 | 100% |
 
 **핵심 기능 진행률: 100%** (Phase 1-3 완료)
 
@@ -248,6 +250,25 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ```
 
 ## 최근 변경사항 (2026-01-20)
+
+### 플러그인 시스템 추가
+- **vais-plugin 크레이트** 추가 (`crates/vais-plugin/`)
+  - libloading 기반 동적 라이브러리 로딩
+  - 4가지 플러그인 타입 지원:
+    - **Lint**: 코드 검사, 진단 메시지 반환
+    - **Transform**: 타입 검사 전 AST 수정
+    - **Optimize**: 코드 생성 후 LLVM IR 최적화
+    - **Codegen**: 추가 파일 생성 (바인딩, 문서 등)
+  - PluginRegistry: 플러그인 관리 및 실행
+  - PluginsConfig: vais-plugins.toml 설정 파싱
+- **CLI 옵션** 추가
+  - `--plugin <PATH>`: 추가 플러그인 로드
+  - `--no-plugins`: 모든 플러그인 비활성화
+- **예제 플러그인** (`examples/plugins/example-lint/`)
+  - naming-convention 린트 플러그인
+  - snake_case 명명 규칙 검사
+  - 함수 이름 길이 검사
+- **테스트 17개 추가**
 
 ### i18n 에러 메시지 다국어 지원
 - **vais-i18n 크레이트** 추가 (`crates/vais-i18n/`)
@@ -518,7 +539,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 영어(en), 한국어(ko), 일본어(ja) 지원
   - CLI `--locale` 옵션 추가 (VAIS_LANG 환경변수 지원)
   - TypeError/ParseError 에러 메시지 다국어 지원
-- [ ] **플러그인 시스템** - 컴파일러 확장 API 설계 및 구현
+- [x] **플러그인 시스템** - 컴파일러 확장 API 설계 및 구현 (완료일: 2026-01-20)
+  - vais-plugin 크레이트 추가 (libloading 기반 동적 로딩)
+  - 4가지 플러그인 타입: Lint, Transform, Optimize, Codegen
+  - CLI 옵션: `--plugin <PATH>`, `--no-plugins`
+  - vais-plugins.toml 설정 파일 지원
+  - 예제 플러그인: naming-convention lint 플러그인
 - [ ] **제네릭 표준 라이브러리** - Vec<T>, HashMap<K,V>의 실제 제네릭 지원
 - [x] **REPL 개선** - 멀티라인 입력, 히스토리, 탭 자동완성 (완료일: 2026-01-20)
   - rustyline 기반 멀티라인 입력 (중괄호/괄호 균형 검사)

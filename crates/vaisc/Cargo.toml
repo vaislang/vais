@@ -16,6 +16,7 @@ vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
 vais-i18n = { path = "../vais-i18n" }
+vais-plugin = { path = "../vais-plugin" }
 
 clap = { version = "4.4", features = ["derive"] }
 miette = { workspace = true }
