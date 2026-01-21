@@ -488,7 +488,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
-| Phase 6: 후속 개선 | 🔄 진행 중 | 40% |
+| Phase 6: 후속 개선 | 🔄 진행 중 | 60% |
 
 ---
 
@@ -606,7 +606,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 6: 후속 개선 및 확장
 
-> **상태**: 🔄 진행 중 (40%)
+> **상태**: 🔄 진행 중 (60%)
 > **추가일**: 2026-01-21
 
 ### P0 - 즉시 (1-2주)
@@ -620,9 +620,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - canonical 경로 검증 (std::fs::canonicalize)
   - 심볼릭 링크 처리 (외부 경로 차단)
   - 보안 테스트 11개 추가
-- [ ] **코드 중복 제거** - 공통 유틸리티 모듈화
-  - type_to_llvm 캐싱
-  - 에러 포맷팅 통합
+- [x] **코드 중복 제거** - 공통 유틸리티 모듈화 (완료일: 2026-01-21)
+  - type_to_llvm 캐싱 (RefCell+HashMap)
+  - 에러 포맷팅 통합 (FormattableError 트레이트)
+  - 9개 캐싱 테스트 추가
 
 ### P1 - 중기 (2-4주)
 - [ ] **성능 최적화**
@@ -662,7 +663,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
-| Phase 6: 후속 개선 | 🔄 진행 중 | 40% |
+| Phase 6: 후속 개선 | 🔄 진행 중 | 60% |
 
 ---
 

@@ -22,7 +22,9 @@ impl ErrorFormatContext {
 
     /// Get the filename for display purposes
     pub fn filename(&self) -> &str {
-        self.path.to_str().unwrap_or("unknown")
+        self.path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
     }
 
     /// Get the reporter for this context
