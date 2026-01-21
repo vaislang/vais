@@ -695,7 +695,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - Refactoring: 변수 추출, 함수 추출
 
 ### P2 - 장기 (4-8주)
-- [ ] **Wasm 컴파일 대상** - wasm32-unknown-unknown 타겟 지원
+- [x] **Wasm 컴파일 대상** - wasm32-unknown-unknown 타겟 지원 (완료일: 2026-01-21)
+  - CLI `--target` 옵션 추가 (wasm32, wasi, x86_64, aarch64, native)
+  - TargetTriple enum 및 관련 메서드 구현
+  - CodeGenerator에 타겟별 IR 헤더 생성 (target triple, data layout)
+  - 타겟별 clang 컴파일 옵션 분기 (wasm32, wasi, native)
+  - 참고: 실제 wasm 바이너리 생성은 wasm-sdk 설치 필요
 - [ ] **증분 컴파일** - 파일 해시 기반 캐싱, 변경된 파일만 재컴파일
 - [ ] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반
 - [ ] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (복잡도, 의존성)

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
 use vais_ast::{Item, Module};
-use vais_codegen::CodeGenerator;
+use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
 use vais_parser::parse;
@@ -91,6 +91,11 @@ enum Commands {
         /// Include debug information (DWARF) for source-level debugging
         #[arg(short = 'g', long)]
         debug: bool,
+
+        /// Target triple for compilation (default: native)
+        /// Examples: wasm32-unknown-unknown, wasm32-wasi, x86_64-unknown-linux-gnu
+        #[arg(long, value_name = "TRIPLE")]
+        target: Option<String>,
     },
 
     /// Run a Vais source file
@@ -161,8 +166,11 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug }) => {
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins)
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target }) => {
+            let target_triple = target.as_ref()
+                .and_then(|s| TargetTriple::from_str(s))
+                .unwrap_or(TargetTriple::Native);
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple)
         }
         Some(Commands::Run { input, args }) => {
             cmd_run(&input, &args, cli.verbose, &plugins)
@@ -187,7 +195,7 @@ fn main() {
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins)
+                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native)
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -210,6 +218,7 @@ fn cmd_build(
     debug: bool,
     verbose: bool,
     plugins: &PluginRegistry,
+    target: TargetTriple,
 ) -> Result<(), String> {
     // Read source for error reporting
     let main_source = fs::read_to_string(input)
@@ -261,7 +270,11 @@ fn cmd_build(
         .and_then(|s| s.to_str())
         .unwrap_or("main");
 
-    let mut codegen = CodeGenerator::new(module_name);
+    let mut codegen = CodeGenerator::new_with_target(module_name, target.clone());
+
+    if verbose && !matches!(target, TargetTriple::Native) {
+        println!("  {} {}", "Target:".cyan(), target.triple_str());
+    }
 
     // Enable debug info if requested
     if debug {
@@ -348,11 +361,16 @@ fn cmd_build(
 
     // If not emit_ir only, compile to binary
     if !emit_ir {
+        // Determine output extension based on target
+        let default_ext = match target {
+            TargetTriple::Wasm32Unknown | TargetTriple::Wasi => "wasm",
+            _ => "",
+        };
         let bin_path = output.unwrap_or_else(|| {
-            input.with_extension("")
+            input.with_extension(default_ext)
         });
 
-        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose)?;
+        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target)?;
     }
 
     Ok(())
@@ -587,8 +605,22 @@ fn compile_ir_to_binary(
     opt_level: u8,
     debug: bool,
     verbose: bool,
+    target: &TargetTriple,
 ) -> Result<(), String> {
-    // Try clang first, then llc + ld
+    match target {
+        TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
+        TargetTriple::Wasi => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
+        _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose),
+    }
+}
+
+fn compile_to_native(
+    ir_path: &Path,
+    bin_path: &Path,
+    opt_level: u8,
+    debug: bool,
+    verbose: bool,
+) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
     let mut args = vec![
@@ -635,10 +667,100 @@ fn compile_ir_to_binary(
     }
 }
 
+fn compile_to_wasm32(
+    ir_path: &Path,
+    bin_path: &Path,
+    opt_level: u8,
+    verbose: bool,
+) -> Result<(), String> {
+    let opt_flag = format!("-O{}", opt_level.min(3));
+
+    let ir_str = ir_path.to_str()
+        .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?;
+    let bin_str = bin_path.to_str()
+        .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?;
+
+    // WebAssembly 32-bit compilation
+    let args = vec![
+        "--target=wasm32-unknown-unknown",
+        "-nostdlib",
+        "-Wl,--no-entry",
+        "-Wl,--allow-undefined",
+        "-Wl,--export-all",
+        &opt_flag,
+        "-o", bin_str,
+        ir_str,
+    ];
+
+    let status = Command::new("clang")
+        .args(&args)
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            if verbose {
+                println!("{} {} (wasm32-unknown-unknown)", "Compiled".green().bold(), bin_path.display());
+            } else {
+                println!("{}", bin_path.display());
+            }
+            Ok(())
+        }
+        Ok(s) => {
+            Err(format!("clang wasm32 compilation failed with code {}", s.code().unwrap_or(-1)))
+        }
+        Err(_) => {
+            Err("clang not found. Install LLVM/clang with wasm32 support or use --emit-ir to output LLVM IR only.".to_string())
+        }
+    }
+}
+
+fn compile_to_wasi(
+    ir_path: &Path,
+    bin_path: &Path,
+    opt_level: u8,
+    verbose: bool,
+) -> Result<(), String> {
+    let opt_flag = format!("-O{}", opt_level.min(3));
+
+    let ir_str = ir_path.to_str()
+        .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?;
+    let bin_str = bin_path.to_str()
+        .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?;
+
+    // WASI compilation
+    let args = vec![
+        "--target=wasm32-wasi",
+        &opt_flag,
+        "-o", bin_str,
+        ir_str,
+    ];
+
+    let status = Command::new("clang")
+        .args(&args)
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            if verbose {
+                println!("{} {} (wasm32-wasi)", "Compiled".green().bold(), bin_path.display());
+            } else {
+                println!("{}", bin_path.display());
+            }
+            Ok(())
+        }
+        Ok(s) => {
+            Err(format!("clang wasi compilation failed with code {}", s.code().unwrap_or(-1)))
+        }
+        Err(_) => {
+            Err("clang not found. Install LLVM/clang with wasi-sdk or use --emit-ir to output LLVM IR only.".to_string())
+        }
+    }
+}
+
 fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
-    // Build first (no debug for run command by default)
+    // Build first (no debug for run command by default, native target only)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins)?;
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native)?;
 
     // Run the binary
     if verbose {

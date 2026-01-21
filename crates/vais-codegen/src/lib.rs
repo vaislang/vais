@@ -28,6 +28,70 @@ use thiserror::Error;
 use vais_ast::{*, IfElse};
 use vais_types::ResolvedType;
 
+/// Target architecture for code generation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TargetTriple {
+    /// Native target (auto-detect)
+    Native,
+    /// x86-64 Linux
+    X86_64,
+    /// ARM64 (Apple Silicon)
+    Aarch64,
+    /// WebAssembly 32-bit (no WASI)
+    Wasm32Unknown,
+    /// WebAssembly 32-bit with WASI
+    Wasi,
+}
+
+impl TargetTriple {
+    /// Parse a target triple string
+    pub fn from_str(s: &str) -> Option<Self> {
+        let s_lower = s.to_lowercase();
+        match s_lower.as_str() {
+            "native" | "auto" => Some(Self::Native),
+            "x86_64" | "x86_64-unknown-linux-gnu" | "x86_64-pc-linux-gnu" => Some(Self::X86_64),
+            "aarch64" | "aarch64-apple-darwin" | "arm64" => Some(Self::Aarch64),
+            "wasm32" | "wasm32-unknown-unknown" => Some(Self::Wasm32Unknown),
+            "wasi" | "wasm32-wasi" => Some(Self::Wasi),
+            _ => None,
+        }
+    }
+
+    /// Get the LLVM target triple string
+    pub fn triple_str(&self) -> &'static str {
+        match self {
+            Self::Native => "",  // Let clang auto-detect
+            Self::X86_64 => "x86_64-unknown-linux-gnu",
+            Self::Aarch64 => "aarch64-apple-darwin",
+            Self::Wasm32Unknown => "wasm32-unknown-unknown",
+            Self::Wasi => "wasm32-wasi",
+        }
+    }
+
+    /// Get the LLVM data layout for this target
+    pub fn data_layout(&self) -> &'static str {
+        match self {
+            Self::Native => "",  // Let clang auto-detect
+            Self::X86_64 => "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+            Self::Aarch64 => "e-m:o-i64:64-i128:128-n32:64-S128",
+            Self::Wasm32Unknown | Self::Wasi => "e-m:e-p:32:32-i64:64-n32:64-S128",
+        }
+    }
+
+    /// Check if this is a WebAssembly target
+    pub fn is_wasm(&self) -> bool {
+        matches!(self, Self::Wasm32Unknown | Self::Wasi)
+    }
+
+    /// Get pointer size in bits for this target
+    pub fn pointer_bits(&self) -> usize {
+        match self {
+            Self::Wasm32Unknown | Self::Wasi => 32,
+            _ => 64,
+        }
+    }
+}
+
 // Re-export type structs from types module
 pub(crate) use types::*;
 
@@ -72,6 +136,9 @@ type BlockResult = (String, String, bool);
 pub struct CodeGenerator {
     // Module name
     module_name: String,
+
+    // Target architecture
+    target: TargetTriple,
 
     // Function signatures for lookup
     functions: HashMap<String, FunctionInfo>,
@@ -139,7 +206,7 @@ pub struct CodeGenerator {
 }
 
 impl CodeGenerator {
-    /// Creates a new code generator for the given module.
+    /// Creates a new code generator for the given module with native target.
     ///
     /// Initializes the code generator with built-in functions registered.
     ///
@@ -147,8 +214,21 @@ impl CodeGenerator {
     ///
     /// * `module_name` - Name of the module being compiled
     pub fn new(module_name: &str) -> Self {
+        Self::new_with_target(module_name, TargetTriple::Native)
+    }
+
+    /// Creates a new code generator for the given module with specified target.
+    ///
+    /// Initializes the code generator with built-in functions registered.
+    ///
+    /// # Arguments
+    ///
+    /// * `module_name` - Name of the module being compiled
+    /// * `target` - Target architecture for code generation
+    pub fn new_with_target(module_name: &str, target: TargetTriple) -> Self {
         let mut gen = Self {
             module_name: module_name.to_string(),
+            target,
             functions: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
@@ -176,6 +256,11 @@ impl CodeGenerator {
         // Register built-in extern functions
         gen.register_builtin_functions();
         gen
+    }
+
+    /// Get the target triple for this code generator
+    pub fn target(&self) -> &TargetTriple {
+        &self.target
     }
 
     /// Enable debug info generation with source file information
@@ -298,7 +383,12 @@ impl CodeGenerator {
         ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
         ir.push_str("source_filename = \"<vais>\"\n");
 
-        // Note: target triple and data layout are omitted to let clang auto-detect
+        // Target triple and data layout (for non-native targets)
+        if !matches!(self.target, TargetTriple::Native) {
+            ir.push_str(&format!("target datalayout = \"{}\"\n", self.target.data_layout()));
+            ir.push_str(&format!("target triple = \"{}\"\n", self.target.triple_str()));
+        }
+        // Note: for Native target, omit these to let clang auto-detect
         ir.push('\n');
 
         // Initialize debug info if enabled
