@@ -22,6 +22,8 @@ pub use types::{
     // Monomorphization support
     GenericInstantiation, InstantiationKind,
     mangle_name, mangle_type, substitute_type,
+    // Const generics support
+    ResolvedConst, ConstBinOp,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
@@ -601,10 +603,10 @@ impl TypeChecker {
                         Type::Named { name, .. } => {
                             // Look up the struct definition to get its generics
                             self.structs.get(name)
-                                .map(|s| s.generics.iter().map(|g| GenericParam {
-                                    name: Spanned::new(g.clone(), Span::default()),
-                                    bounds: vec![],
-                                }).collect::<Vec<_>>())
+                                .map(|s| s.generics.iter().map(|g| GenericParam::new_type(
+                                    Spanned::new(g.clone(), Span::default()),
+                                    vec![],
+                                )).collect::<Vec<_>>())
                                 .unwrap_or_default()
                         }
                         _ => vec![],
@@ -836,10 +838,10 @@ impl TypeChecker {
 
         // Get struct generics and set them as current for type resolution
         let struct_generics: Vec<GenericParam> = self.structs.get(&type_name)
-            .map(|s| s.generics.iter().map(|g| GenericParam {
-                name: Spanned::new(g.clone(), Span::default()),
-                bounds: vec![],
-            }).collect())
+            .map(|s| s.generics.iter().map(|g| GenericParam::new_type(
+                Spanned::new(g.clone(), Span::default()),
+                vec![],
+            )).collect())
             .unwrap_or_default();
 
         // Combine struct generics with impl-level generics
@@ -1183,6 +1185,14 @@ impl TypeChecker {
             }
             // Break and Continue have "Never" type because execution doesn't continue past them
             Stmt::Break(_) | Stmt::Continue => Ok(ResolvedType::Never),
+
+            Stmt::Defer(expr) => {
+                // Type check the deferred expression
+                // Defer expressions typically should be function calls that return unit
+                self.check_expr(expr)?;
+                // Defer itself doesn't produce a value in the control flow
+                Ok(ResolvedType::Unit)
+            }
         }
     }
 
@@ -1850,14 +1860,17 @@ impl TypeChecker {
 
             Expr::Try(inner) => {
                 let inner_type = self.check_expr(inner)?;
-                if let ResolvedType::Result(ok_type) = inner_type {
-                    Ok(*ok_type)
-                } else {
-                    Err(TypeError::Mismatch {
-                        expected: "Result type".to_string(),
+                // Try operator (?) works on both Result<T> and Option<T>
+                // - Result<T>: returns T on Ok, propagates Err
+                // - Option<T>: returns T on Some, propagates None
+                match inner_type {
+                    ResolvedType::Result(ok_type) => Ok(*ok_type),
+                    ResolvedType::Optional(some_type) => Ok(*some_type),
+                    _ => Err(TypeError::Mismatch {
+                        expected: "Result or Option type".to_string(),
                         found: inner_type.to_string(),
-                        span: None,
-                    })
+                        span: Some(inner.span),
+                    }),
                 }
             }
 
@@ -2044,6 +2057,14 @@ impl TypeChecker {
                 }
             }
             Type::Array(inner) => ResolvedType::Array(Box::new(self.resolve_type(&inner.node))),
+            Type::ConstArray { element, size } => {
+                let resolved_element = self.resolve_type(&element.node);
+                let resolved_size = self.resolve_const_expr(size);
+                ResolvedType::ConstArray {
+                    element: Box::new(resolved_element),
+                    size: resolved_size,
+                }
+            }
             Type::Map(key, value) => ResolvedType::Map(
                 Box::new(self.resolve_type(&key.node)),
                 Box::new(self.resolve_type(&value.node)),
@@ -2068,6 +2089,49 @@ impl TypeChecker {
     }
 
     // Type inference methods have been moved to the inference module
+
+    /// Resolve a const expression from AST to internal representation
+    fn resolve_const_expr(&self, expr: &vais_ast::ConstExpr) -> types::ResolvedConst {
+        match expr {
+            vais_ast::ConstExpr::Literal(n) => types::ResolvedConst::Value(*n),
+            vais_ast::ConstExpr::Param(name) => types::ResolvedConst::Param(name.clone()),
+            vais_ast::ConstExpr::BinOp { op, left, right } => {
+                let resolved_left = self.resolve_const_expr(left);
+                let resolved_right = self.resolve_const_expr(right);
+                let resolved_op = match op {
+                    vais_ast::ConstBinOp::Add => types::ConstBinOp::Add,
+                    vais_ast::ConstBinOp::Sub => types::ConstBinOp::Sub,
+                    vais_ast::ConstBinOp::Mul => types::ConstBinOp::Mul,
+                    vais_ast::ConstBinOp::Div => types::ConstBinOp::Div,
+                };
+
+                // Try to evaluate if both sides are concrete values
+                if let (Some(l), Some(r)) = (resolved_left.try_evaluate(), resolved_right.try_evaluate()) {
+                    let result = match resolved_op {
+                        types::ConstBinOp::Add => l.checked_add(r),
+                        types::ConstBinOp::Sub => l.checked_sub(r),
+                        types::ConstBinOp::Mul => l.checked_mul(r),
+                        types::ConstBinOp::Div => {
+                            if r != 0 {
+                                l.checked_div(r)
+                            } else {
+                                None
+                            }
+                        }
+                    };
+                    if let Some(value) = result {
+                        return types::ResolvedConst::Value(value);
+                    }
+                }
+
+                types::ResolvedConst::BinOp {
+                    op: resolved_op,
+                    left: Box::new(resolved_left),
+                    right: Box::new(resolved_right),
+                }
+            }
+        }
+    }
 
     // === Scope management ===
 

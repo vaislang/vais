@@ -136,11 +136,50 @@ pub struct Param {
     pub is_mut: bool,
 }
 
+/// Generic parameter kind - either a type parameter or a const parameter
+#[derive(Debug, Clone, PartialEq)]
+pub enum GenericParamKind {
+    /// Type parameter with optional trait bounds (e.g., T, T: Display + Clone)
+    Type {
+        bounds: Vec<Spanned<String>>,
+    },
+    /// Const parameter with a type (e.g., const N: u64)
+    Const {
+        ty: Spanned<Type>,
+    },
+}
+
 /// Generic parameter with optional trait bounds
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericParam {
     pub name: Spanned<String>,
-    pub bounds: Vec<Spanned<String>>, // Trait constraints (e.g., T: Display + Clone)
+    pub bounds: Vec<Spanned<String>>, // Trait constraints (e.g., T: Display + Clone) - kept for backward compatibility
+    pub kind: GenericParamKind,
+}
+
+impl GenericParam {
+    /// Create a type generic parameter (backward compatible constructor)
+    pub fn new_type(name: Spanned<String>, bounds: Vec<Spanned<String>>) -> Self {
+        Self {
+            name,
+            bounds: bounds.clone(),
+            kind: GenericParamKind::Type { bounds },
+        }
+    }
+
+    /// Create a const generic parameter
+    pub fn new_const(name: Spanned<String>, ty: Spanned<Type>) -> Self {
+        Self {
+            name,
+            bounds: vec![],
+            kind: GenericParamKind::Const { ty },
+        }
+    }
+
+    /// Check if this is a const generic parameter
+    pub fn is_const(&self) -> bool {
+        matches!(self.kind, GenericParamKind::Const { .. })
+    }
 }
 
 /// Struct definition
@@ -238,6 +277,51 @@ pub struct Impl {
     pub methods: Vec<Spanned<Function>>,
 }
 
+/// Const expression for const generic parameters
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstExpr {
+    /// Literal integer: 10, 32
+    Literal(i64),
+    /// Const parameter reference: N
+    Param(String),
+    /// Binary operation: N + 1, A * B
+    BinOp {
+        op: ConstBinOp,
+        left: Box<ConstExpr>,
+        right: Box<ConstExpr>,
+    },
+}
+
+impl std::fmt::Display for ConstExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstExpr::Literal(n) => write!(f, "{}", n),
+            ConstExpr::Param(name) => write!(f, "{}", name),
+            ConstExpr::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
+        }
+    }
+}
+
+/// Binary operators for const expressions
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstBinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl std::fmt::Display for ConstBinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstBinOp::Add => write!(f, "+"),
+            ConstBinOp::Sub => write!(f, "-"),
+            ConstBinOp::Mul => write!(f, "*"),
+            ConstBinOp::Div => write!(f, "/"),
+        }
+    }
+}
+
 /// Type expressions
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -248,6 +332,11 @@ pub enum Type {
     },
     /// Array: `[T]`
     Array(Box<Spanned<Type>>),
+    /// Const-sized array: `[T; N]` where N is a const expression
+    ConstArray {
+        element: Box<Spanned<Type>>,
+        size: ConstExpr,
+    },
     /// Map: `[K:V]`
     Map(Box<Spanned<Type>>, Box<Spanned<Type>>),
     /// Tuple: `(T1, T2, ...)`
@@ -291,6 +380,8 @@ pub enum Stmt {
     Break(Option<Box<Spanned<Expr>>>),
     /// Continue: `C`
     Continue,
+    /// Defer: `D expr` - Execute expr when scope exits (LIFO order)
+    Defer(Box<Spanned<Expr>>),
 }
 
 /// Expressions
@@ -551,6 +642,7 @@ impl std::fmt::Display for Type {
                 Ok(())
             }
             Type::Array(inner) => write!(f, "[{}]", inner.node),
+            Type::ConstArray { element, size } => write!(f, "[{}; {}]", element.node, size),
             Type::Map(key, val) => write!(f, "[{}:{}]", key.node, val.node),
             Type::Tuple(types) => {
                 write!(f, "(")?;

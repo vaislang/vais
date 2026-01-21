@@ -186,6 +186,76 @@ impl TypeError {
 /// Type checking result
 pub type TypeResult<T> = Result<T, TypeError>;
 
+/// Resolved const value for const generics
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ResolvedConst {
+    /// Concrete integer value
+    Value(i64),
+    /// Unresolved const parameter
+    Param(String),
+    /// Binary operation (for type display/error messages)
+    BinOp {
+        op: ConstBinOp,
+        left: Box<ResolvedConst>,
+        right: Box<ResolvedConst>,
+    },
+}
+
+impl ResolvedConst {
+    /// Try to evaluate to a concrete value
+    pub fn try_evaluate(&self) -> Option<i64> {
+        match self {
+            ResolvedConst::Value(n) => Some(*n),
+            ResolvedConst::Param(_) => None,
+            ResolvedConst::BinOp { op, left, right } => {
+                let l = left.try_evaluate()?;
+                let r = right.try_evaluate()?;
+                Some(match op {
+                    ConstBinOp::Add => l.checked_add(r)?,
+                    ConstBinOp::Sub => l.checked_sub(r)?,
+                    ConstBinOp::Mul => l.checked_mul(r)?,
+                    ConstBinOp::Div => {
+                        if r == 0 {
+                            return None;
+                        }
+                        l.checked_div(r)?
+                    }
+                })
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for ResolvedConst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolvedConst::Value(n) => write!(f, "{}", n),
+            ResolvedConst::Param(name) => write!(f, "{}", name),
+            ResolvedConst::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
+        }
+    }
+}
+
+/// Const binary operation for const expressions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConstBinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl std::fmt::Display for ConstBinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstBinOp::Add => write!(f, "+"),
+            ConstBinOp::Sub => write!(f, "-"),
+            ConstBinOp::Mul => write!(f, "*"),
+            ConstBinOp::Div => write!(f, "/"),
+        }
+    }
+}
+
 /// Resolved type in the type system
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedType {
@@ -208,6 +278,11 @@ pub enum ResolvedType {
 
     // Compound types
     Array(Box<ResolvedType>),
+    /// Const-sized array: `[T; N]` where N is a const expression
+    ConstArray {
+        element: Box<ResolvedType>,
+        size: ResolvedConst,
+    },
     Map(Box<ResolvedType>, Box<ResolvedType>),
     Tuple(Vec<ResolvedType>),
     Optional(Box<ResolvedType>),
@@ -235,6 +310,9 @@ pub enum ResolvedType {
 
     // Generic type parameter (e.g., T in F foo<T>)
     Generic(String),
+
+    // Const generic parameter (e.g., N in F foo<const N: u64>)
+    ConstGeneric(String),
 
     // Unknown/Error type
     Unknown,
@@ -306,6 +384,7 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Str => write!(f, "str"),
             ResolvedType::Unit => write!(f, "()"),
             ResolvedType::Array(t) => write!(f, "[{}]", t),
+            ResolvedType::ConstArray { element, size } => write!(f, "[{}; {}]", element, size),
             ResolvedType::Map(k, v) => write!(f, "[{}:{}]", k, v),
             ResolvedType::Tuple(ts) => {
                 write!(f, "(")?;
@@ -350,6 +429,7 @@ impl std::fmt::Display for ResolvedType {
             }
             ResolvedType::Var(id) => write!(f, "?{}", id),
             ResolvedType::Generic(name) => write!(f, "{}", name),
+            ResolvedType::ConstGeneric(name) => write!(f, "const {}", name),
             ResolvedType::Unknown => write!(f, "?"),
             ResolvedType::Never => write!(f, "!"),
         }

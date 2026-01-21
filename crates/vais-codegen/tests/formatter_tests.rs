@@ -125,10 +125,7 @@ fn test_format_function_with_no_params() {
 fn test_format_function_with_generics() {
     let func = Function {
         name: ident("identity"),
-        generics: vec![GenericParam {
-            name: ident("T"),
-            bounds: vec![],
-        }],
+        generics: vec![GenericParam::new_type(ident("T"), vec![])],
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("T")),
@@ -155,10 +152,7 @@ fn test_format_function_with_generics() {
 fn test_format_function_with_bounded_generics() {
     let func = Function {
         name: ident("display"),
-        generics: vec![GenericParam {
-            name: ident("T"),
-            bounds: vec![ident("Display"), ident("Clone")],
-        }],
+        generics: vec![GenericParam::new_type(ident("T"), vec![ident("Display"), ident("Clone")])],
         params: vec![Param {
             name: ident("value"),
             ty: spanned(named_type("T")),
@@ -348,10 +342,7 @@ fn test_format_simple_struct() {
 fn test_format_generic_struct() {
     let s = Struct {
         name: ident("Container"),
-        generics: vec![GenericParam {
-            name: ident("T"),
-            bounds: vec![],
-        }],
+        generics: vec![GenericParam::new_type(ident("T"), vec![])],
         fields: vec![Field {
             name: ident("value"),
             ty: spanned(named_type("T")),
@@ -469,10 +460,7 @@ fn test_format_simple_enum() {
 fn test_format_enum_with_tuple_variants() {
     let e = Enum {
         name: ident("Option"),
-        generics: vec![GenericParam {
-            name: ident("T"),
-            bounds: vec![],
-        }],
+        generics: vec![GenericParam::new_type(ident("T"), vec![])],
         variants: vec![
             Variant {
                 name: ident("Some"),

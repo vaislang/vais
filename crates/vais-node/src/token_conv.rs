@@ -27,6 +27,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::SelfUpper => "Self",
         Token::Weak => "Weak",
         Token::Clone => "Clone",
+        Token::Const => "Const",
         Token::True => "True",
         Token::False => "False",
         Token::I8 => "i8",
@@ -89,6 +90,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Dot => "Dot",
         Token::ColonColon => "ColonColon",
         Token::HashBracket => "HashBracket",
+        Token::Defer => "Defer",
     }.to_string()
 }
 

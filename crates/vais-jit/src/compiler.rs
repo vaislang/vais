@@ -320,7 +320,38 @@ impl JitCompiler {
                 params: params.iter().map(|p| self.resolve_type(&p.node)).collect(),
                 ret: Box::new(self.resolve_type(&ret.node)),
             },
+            Type::ConstArray { element, size } => {
+                let resolved_element = self.resolve_type(&element.node);
+                let resolved_size = self.resolve_const_expr(size);
+                ResolvedType::ConstArray {
+                    element: Box::new(resolved_element),
+                    size: resolved_size,
+                }
+            }
             Type::Infer => ResolvedType::Unknown,
+        }
+    }
+
+    /// Resolves a const expression to a ResolvedConst.
+    fn resolve_const_expr(&self, expr: &vais_ast::ConstExpr) -> vais_types::ResolvedConst {
+        match expr {
+            vais_ast::ConstExpr::Literal(n) => vais_types::ResolvedConst::Value(*n),
+            vais_ast::ConstExpr::Param(name) => vais_types::ResolvedConst::Param(name.clone()),
+            vais_ast::ConstExpr::BinOp { op, left, right } => {
+                let resolved_left = self.resolve_const_expr(left);
+                let resolved_right = self.resolve_const_expr(right);
+                let resolved_op = match op {
+                    vais_ast::ConstBinOp::Add => vais_types::ConstBinOp::Add,
+                    vais_ast::ConstBinOp::Sub => vais_types::ConstBinOp::Sub,
+                    vais_ast::ConstBinOp::Mul => vais_types::ConstBinOp::Mul,
+                    vais_ast::ConstBinOp::Div => vais_types::ConstBinOp::Div,
+                };
+                vais_types::ResolvedConst::BinOp {
+                    op: resolved_op,
+                    left: Box::new(resolved_left),
+                    right: Box::new(resolved_right),
+                }
+            }
         }
     }
 
@@ -469,6 +500,11 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
 
             Stmt::Continue => {
                 Err(JitError::Unsupported("continue outside of loop context".to_string()))
+            }
+
+            Stmt::Defer(_) => {
+                // Defer is not yet supported in JIT mode
+                Err(JitError::Unsupported("defer not yet supported in JIT mode".to_string()))
             }
         }
     }

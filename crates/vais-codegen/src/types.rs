@@ -132,6 +132,17 @@ impl CodeGenerator {
             ResolvedType::Str => "i8*".to_string(),
             ResolvedType::Unit => "void".to_string(),
             ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
+            ResolvedType::ConstArray { element, size } => {
+                // Const-sized array: [N x T]
+                let elem_ty = self.type_to_llvm_impl(element);
+                match size.try_evaluate() {
+                    Some(n) => format!("[{} x {}]", n, elem_ty),
+                    None => {
+                        // If size cannot be evaluated, fall back to pointer (dynamic array)
+                        format!("{}*", elem_ty)
+                    }
+                }
+            }
             ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
             ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
             ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
@@ -179,6 +190,12 @@ impl CodeGenerator {
                     // Fallback to i64 for unresolved generics
                     "i64".to_string()
                 }
+            }
+            ResolvedType::ConstGeneric(param) => {
+                // Const generics should be resolved at monomorphization time
+                // If we reach here, it's an error, but fall back to i64
+                eprintln!("Warning: Unresolved const generic parameter: {}", param);
+                "i64".to_string()
             }
             _ => "i64".to_string(), // Default fallback
         }

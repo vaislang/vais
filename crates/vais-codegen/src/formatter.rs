@@ -481,6 +481,7 @@ impl Formatter {
                 }
             }
             Type::Array(inner) => format!("[{}]", self.format_type(&inner.node)),
+            Type::ConstArray { element, size } => format!("[{}; {}]", self.format_type(&element.node), size),
             Type::Map(key, value) => {
                 format!("[{}:{}]", self.format_type(&key.node), self.format_type(&value.node))
             }
@@ -574,6 +575,12 @@ impl Formatter {
             Stmt::Continue => {
                 self.output.push_str(&indent);
                 self.output.push_str("C\n");
+            }
+            Stmt::Defer(expr) => {
+                self.output.push_str(&indent);
+                self.output.push_str("D ");
+                self.output.push_str(&self.format_expr(&expr.node));
+                self.output.push('\n');
             }
         }
     }
@@ -914,6 +921,9 @@ impl Formatter {
                 s
             }
             Stmt::Continue => String::from("C"),
+            Stmt::Defer(expr) => {
+                format!("D {}", self.format_expr(&expr.node))
+            }
         }
     }
 

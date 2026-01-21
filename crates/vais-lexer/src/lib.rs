@@ -55,6 +55,8 @@ pub enum Token {
     Trait,
     #[token("X", priority = 3)]
     Impl,
+    #[token("D", priority = 3)]
+    Defer,
 
     // === Type Keywords ===
     #[token("mut")]
@@ -75,6 +77,8 @@ pub enum Token {
     Weak,
     #[token("clone")]
     Clone,
+    #[token("const")]
+    Const,
 
     // === Primitive Types ===
     #[token("i8")]
@@ -239,6 +243,7 @@ impl fmt::Display for Token {
             Token::Pub => write!(f, "P"),
             Token::Trait => write!(f, "W"),
             Token::Impl => write!(f, "X"),
+            Token::Defer => write!(f, "D"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
             Token::SelfUpper => write!(f, "Self"),
@@ -248,6 +253,7 @@ impl fmt::Display for Token {
             Token::Await => write!(f, "await"),
             Token::Weak => write!(f, "weak"),
             Token::Clone => write!(f, "clone"),
+            Token::Const => write!(f, "const"),
             Token::I8 => write!(f, "i8"),
             Token::I16 => write!(f, "i16"),
             Token::I32 => write!(f, "i32"),

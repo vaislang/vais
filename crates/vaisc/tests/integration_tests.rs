@@ -561,3 +561,195 @@ F main() -> () {
 "#;
     assert!(compiles(source));
 }
+
+// ==================== Try and Ternary Operator Tests ====================
+
+#[test]
+fn test_ternary_operator() {
+    let source = "F abs(x: i64) -> i64 = x < 0 ? -x : x";
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("define i64 @abs"));
+    assert!(ir.contains("br i1")); // conditional branch for ternary
+}
+
+#[test]
+fn test_ternary_with_unary_minus() {
+    // Test ternary where then branch starts with unary minus
+    let source = "F abs(x: i64) -> i64 = x < 0 ? -x : x";
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_try_operator_parsing() {
+    // Test that ? operator parses correctly
+    // Note: Full try operator functionality requires Result/Option types
+    let source = r#"
+F maybe_get(opt: i64?) -> i64? {
+    v := opt?
+    R Some(v)
+}
+"#;
+    // This should parse correctly
+    let module = vais_parser::parse(source);
+    assert!(module.is_ok());
+}
+
+#[test]
+fn test_try_operator_with_binary_op() {
+    // Test try operator followed by binary operator
+    let source = r#"
+F add_one(opt: i64?) -> i64? {
+    v := opt? + 1
+    R Some(v)
+}
+"#;
+    let module = vais_parser::parse(source);
+    assert!(module.is_ok());
+}
+
+#[test]
+fn test_try_and_ternary_together() {
+    // Test that try and ternary can coexist
+    let source = r#"
+F process(opt: i64?) -> i64? {
+    v := (opt?)
+    R v > 0 ? Some(v) : None
+}
+"#;
+    let module = vais_parser::parse(source);
+    assert!(module.is_ok());
+}
+
+// ==================== Const Generics Tests ====================
+
+#[test]
+fn test_const_array_type_literal() {
+    // Test parsing of const-sized array with literal size
+    let source = r#"
+S Data {
+    values: [i64; 10]
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_array_in_function_param() {
+    // Test parsing const-sized array in function parameter
+    let source = r#"
+F process(arr: [i64; 5]) -> i64 {
+    42
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_array_as_return_type() {
+    // Test parsing const-sized array as return type
+    let source = r#"
+S Container {
+    data: [i64; 3]
+}
+F get_data() -> [i64; 3] {
+    [1, 2, 3]
+}
+"#;
+    // Note: This test verifies parsing and type checking
+    let module = vais_parser::parse(source);
+    assert!(module.is_ok());
+}
+
+#[test]
+fn test_const_generic_parameter() {
+    // Test parsing const generic parameter in function
+    let source = r#"
+F identity<T, const N: u64>(x: T) -> T {
+    x
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_in_struct() {
+    // Test parsing const generic parameter in struct
+    let source = r#"
+S FixedArray<T, const N: u64> {
+    data: [T; N],
+    len: u64
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_expr_addition() {
+    // Test const expression with addition
+    let source = r#"
+F process(arr: [i64; 5 + 3]) -> i64 {
+    8
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_expr_multiplication() {
+    // Test const expression with multiplication
+    let source = r#"
+F process(arr: [i64; 4 * 3]) -> i64 {
+    12
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_expr_complex() {
+    // Test complex const expression
+    let source = r#"
+F process(arr: [i64; 2 * 3 + 4]) -> i64 {
+    10
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_array_in_nested_type() {
+    // Test const array in optional type
+    let source = r#"
+S Matrix {
+    data: [f64; 9]
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_multiple_const_generics() {
+    // Test multiple const generic parameters
+    let source = r#"
+S Matrix<const ROWS: u64, const COLS: u64> {
+    data: [f64; ROWS],
+    rows: u64,
+    cols: u64
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_mixed_type_and_const_generics() {
+    // Test mixing type and const generics
+    let source = r#"
+S Container<T, const N: u64> {
+    elements: [T; N],
+    count: u64
+}
+"#;
+    // Just test parsing for now
+    let module = vais_parser::parse(source);
+    assert!(module.is_ok());
+}

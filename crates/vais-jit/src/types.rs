@@ -47,6 +47,10 @@ impl TypeMapper {
             }
             ResolvedType::Unknown => self.pointer_type,
             ResolvedType::Never => types::I64, // Never type should not occur in JIT, but default to i64
+            ResolvedType::ConstArray { .. } => self.pointer_type, // Const arrays are represented as pointers
+            ResolvedType::ConstGeneric(_) => {
+                panic!("Unsubstituted const generic in JIT")
+            }
         }
     }
 

@@ -523,7 +523,7 @@ impl Parser {
         })
     }
 
-    /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>`
+    /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>` or `<const N: u64>`
     fn parse_generics(&mut self) -> ParseResult<Vec<GenericParam>> {
         if !self.check(&Token::Lt) {
             return Ok(Vec::new());
@@ -533,17 +533,26 @@ impl Parser {
         let mut generics = Vec::new();
 
         while !self.check(&Token::Gt) && !self.is_at_end() {
-            let name = self.parse_ident()?;
-
-            // Parse optional trait bounds: `: Trait1 + Trait2`
-            let bounds = if self.check(&Token::Colon) {
+            // Check for const generic parameter: `const N: u64`
+            if self.check(&Token::Const) {
                 self.advance();
-                self.parse_trait_bounds()?
+                let name = self.parse_ident()?;
+                self.expect(&Token::Colon)?;
+                let ty = self.parse_type()?;
+                generics.push(GenericParam::new_const(name, ty));
             } else {
-                Vec::new()
-            };
+                let name = self.parse_ident()?;
 
-            generics.push(GenericParam { name, bounds });
+                // Parse optional trait bounds: `: Trait1 + Trait2`
+                let bounds = if self.check(&Token::Colon) {
+                    self.advance();
+                    self.parse_trait_bounds()?
+                } else {
+                    Vec::new()
+                };
+
+                generics.push(GenericParam::new_type(name, bounds));
+            }
 
             if !self.check(&Token::Gt) {
                 self.expect(&Token::Comma)?;
@@ -709,6 +718,15 @@ impl Parser {
                 let value = self.parse_type()?;
                 self.expect(&Token::RBracket)?;
                 Type::Map(Box::new(key_or_elem), Box::new(value))
+            } else if self.check(&Token::Semi) {
+                // [T; N] - const-sized array
+                self.advance();
+                let size = self.parse_const_expr()?;
+                self.expect(&Token::RBracket)?;
+                Type::ConstArray {
+                    element: Box::new(key_or_elem),
+                    size,
+                }
             } else {
                 self.expect(&Token::RBracket)?;
                 Type::Array(Box::new(key_or_elem))
@@ -799,6 +817,147 @@ impl Parser {
         };
 
         Ok(name.to_string())
+    }
+
+    /// Parse a const expression: `N`, `10`, `N + 1`, `A * B`, etc.
+    /// Supports basic arithmetic operations for const generics.
+    fn parse_const_expr(&mut self) -> ParseResult<ConstExpr> {
+        self.parse_const_additive()
+    }
+
+    /// Parse additive const expressions: `A + B` or `A - B`
+    fn parse_const_additive(&mut self) -> ParseResult<ConstExpr> {
+        let mut left = self.parse_const_multiplicative()?;
+
+        while self.check(&Token::Plus) || self.check(&Token::Minus) {
+            let op = if self.check(&Token::Plus) {
+                self.advance();
+                ConstBinOp::Add
+            } else {
+                self.advance();
+                ConstBinOp::Sub
+            };
+            let right = self.parse_const_multiplicative()?;
+            left = ConstExpr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// Parse multiplicative const expressions: `A * B` or `A / B`
+    fn parse_const_multiplicative(&mut self) -> ParseResult<ConstExpr> {
+        let mut left = self.parse_const_primary()?;
+
+        while self.check(&Token::Star) || self.check(&Token::Slash) {
+            let op = if self.check(&Token::Star) {
+                self.advance();
+                ConstBinOp::Mul
+            } else {
+                self.advance();
+                ConstBinOp::Div
+            };
+            let right = self.parse_const_primary()?;
+            left = ConstExpr::BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// Parse primary const expression: `N`, `10`, or `(expr)`
+    fn parse_const_primary(&mut self) -> ParseResult<ConstExpr> {
+        let span = self.current_span();
+
+        // Handle parenthesized expressions
+        if self.check(&Token::LParen) {
+            self.advance();
+            let expr = self.parse_const_expr()?;
+            self.expect(&Token::RParen)?;
+            return Ok(expr);
+        }
+
+        // Handle integer literals
+        if let Some(tok) = self.peek() {
+            if let Token::Int(n) = &tok.token {
+                let value = *n;
+                self.advance();
+                return Ok(ConstExpr::Literal(value));
+            }
+        }
+
+        // Handle identifiers (const parameters)
+        if let Some(tok) = self.peek() {
+            match &tok.token {
+                Token::Ident(name) => {
+                    let name = name.clone();
+                    self.advance();
+                    return Ok(ConstExpr::Param(name));
+                }
+                // Single-letter keywords that can be used as const param names
+                Token::TypeKeyword => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("T".to_string()));
+                }
+                Token::Function => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("F".to_string()));
+                }
+                Token::Struct => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("S".to_string()));
+                }
+                Token::Enum => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("E".to_string()));
+                }
+                Token::Async => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("A".to_string()));
+                }
+                Token::Break => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("B".to_string()));
+                }
+                Token::Continue => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("C".to_string()));
+                }
+                Token::Loop => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("L".to_string()));
+                }
+                Token::Match => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("M".to_string()));
+                }
+                Token::Return => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("R".to_string()));
+                }
+                Token::Use => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("U".to_string()));
+                }
+                Token::Pub => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("P".to_string()));
+                }
+                _ => {}
+            }
+        }
+
+        Err(ParseError::UnexpectedToken {
+            found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+            span,
+            expected: "const expression (integer literal or identifier)".into(),
+        })
     }
 
     // === Helper methods ===
@@ -1294,6 +1453,80 @@ X Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
     }
 
     #[test]
+    fn test_ternary_with_unary_minus() {
+        // Test ternary with unary minus in then branch: x<0 ? -x : x
+        let source = "F abs(x:i64)->i64=x<0?-x:x";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "abs");
+        // Body should be a Ternary
+        let FunctionBody::Expr(body) = &f.body else {
+            panic!("Expected expression body");
+        };
+        assert!(matches!(body.node, Expr::Ternary { .. }));
+    }
+
+    #[test]
+    fn test_try_operator() {
+        // Test postfix try operator (?)
+        let source = "F f(x:i64?)->i64=x?";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+        // Verify the body is a Try expression
+        let FunctionBody::Expr(body) = &f.body else {
+            panic!("Expected expression body");
+        };
+        if let Expr::Try(inner) = &body.node {
+            assert!(matches!(inner.node, Expr::Ident(_)));
+        } else {
+            panic!("Expected Try expression");
+        }
+    }
+
+    #[test]
+    fn test_try_operator_in_expression() {
+        // Test try operator followed by binary operator
+        let source = "F f(x:i64?)->i64=x?+1";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        // Verify the body is a Binary expression with Try on left
+        let FunctionBody::Expr(body) = &f.body else {
+            panic!("Expected expression body");
+        };
+        if let Expr::Binary { left, .. } = &body.node {
+            assert!(matches!(left.node, Expr::Try(_)));
+        } else {
+            panic!("Expected Binary expression with Try on left");
+        }
+    }
+
+    #[test]
+    fn test_try_and_ternary_coexist() {
+        // Test that try and ternary can coexist: (x?) ? 1 : 0
+        let source = "F f(x:i64?)->i64=(x?)?1:0";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        // Body should be a Ternary with condition being Try
+        let FunctionBody::Expr(body) = &f.body else {
+            panic!("Expected expression body");
+        };
+        if let Expr::Ternary { cond, .. } = &body.node {
+            assert!(matches!(cond.node, Expr::Try(_)));
+        } else {
+            panic!("Expected Ternary expression");
+        }
+    }
+
+    #[test]
     fn test_simple_return_type() {
         // Test simple return type parsing
         let source = "F f()->i64=42";
@@ -1448,6 +1681,42 @@ X Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
             unreachable!("Expected function");
         };
         assert_eq!(f.name.node, "f");
+    }
+
+    #[test]
+    fn test_defer_statement() {
+        // Test basic defer statement
+        let source = "F f() -> () { h := open(); D close(h); () }";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "f");
+        // Check that body contains defer
+        let FunctionBody::Block(stmts) = &f.body else {
+            panic!("Expected block body");
+        };
+        // Should have 3 statements: let, defer, expr
+        assert_eq!(stmts.len(), 3);
+        assert!(matches!(stmts[1].node, Stmt::Defer(_)));
+    }
+
+    #[test]
+    fn test_multiple_defer_statements() {
+        // Test multiple defer statements (LIFO order)
+        let source = "F f() -> () { D cleanup1(); D cleanup2(); D cleanup3(); () }";
+        let module = parse(source).unwrap();
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        let FunctionBody::Block(stmts) = &f.body else {
+            panic!("Expected block body");
+        };
+        // Should have 4 statements: 3 defers + 1 expr
+        assert_eq!(stmts.len(), 4);
+        assert!(matches!(stmts[0].node, Stmt::Defer(_)));
+        assert!(matches!(stmts[1].node, Stmt::Defer(_)));
+        assert!(matches!(stmts[2].node, Stmt::Defer(_)));
     }
 
     #[test]
