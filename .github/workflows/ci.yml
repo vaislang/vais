@@ -71,6 +71,58 @@ jobs:
           name: vaisc-macos
           path: target/release/vaisc
 
+  # Coverage job - runs on Ubuntu only for consistent results
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+
+      - name: Generate coverage reports (HTML)
+        run: cargo tarpaulin --config tarpaulin.toml --out Html --output-dir target/coverage
+
+      - name: Generate coverage reports (Lcov)
+        run: cargo tarpaulin --config tarpaulin.toml --out Lcov --output-dir target/coverage
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: target/coverage/
+          retention-days: 30
+
+      - name: Upload Lcov to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./target/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+
   # Benchmark job - runs only on Ubuntu for consistency
   benchmark:
     name: Performance Benchmarks

@@ -2,6 +2,9 @@
 
 **AI-optimized systems programming language with token-efficient syntax.**
 
+[![CI](https://github.com/sswoo88/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sswoo88/vais/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sswoo88/vais/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/sswoo88/vais)
+
 Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
 
 ## Key Features
@@ -66,6 +69,42 @@ examples/          # Example programs (40+ files)
 cargo build --release
 cargo test
 ```
+
+## Test Coverage
+
+This project uses **cargo-tarpaulin** to measure test coverage. Coverage reports are generated automatically in the CI pipeline.
+
+### Local Coverage Measurement
+
+To generate coverage reports locally:
+
+```bash
+# Install cargo-tarpaulin (one-time setup)
+cargo install cargo-tarpaulin
+
+# Generate coverage reports (HTML and Lcov)
+cargo tarpaulin --config tarpaulin.toml
+
+# Or use the convenience alias
+cargo coverage
+
+# Generate HTML report only
+cargo coverage-html
+
+# Generate Lcov format for CI integration
+cargo coverage-lcov
+```
+
+Coverage reports are saved to `target/coverage/`:
+- `index.html` - Interactive HTML coverage report
+- `lcov.info` - Lcov format for codecov integration
+
+### CI Integration
+
+Coverage is measured automatically on every push and pull request to `main` and `develop` branches. Reports are:
+- Uploaded as GitHub Actions artifacts
+- Sent to Codecov for tracking trends
+- Available for 30 days in the CI artifacts
 
 ## Usage
 
@@ -142,6 +181,7 @@ cargo bench -p vais-benches --bench runtime_bench
 - [TUTORIAL.md](docs/TUTORIAL.md) - Getting started tutorial
 - [Architecture.md](docs/Architecture.md) - Compiler architecture and design
 - [INSTALLATION.md](docs/INSTALLATION.md) - Installation guide
+- [COVERAGE.md](docs/COVERAGE.md) - Test coverage measurement guide
 - [ROADMAP.md](ROADMAP.md) - Project roadmap and progress
 
 ## Legacy

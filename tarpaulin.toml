@@ -1,0 +1,70 @@
+# Cargo-tarpaulin configuration for test coverage reporting
+# Reference: https://github.com/xd009642/tarpaulin
+
+[coverage]
+# Timeout for the entire coverage process (in seconds)
+timeout = 300
+
+# Output formats: Stdout, Xml, Html, Lcov
+# Multiple formats can be specified
+out = ["Stdout", "Html", "Lcov"]
+
+# Output directory for coverage reports
+output-dir = "target/coverage"
+
+# Exclude files from coverage analysis
+exclude-files = [
+    "benches/*",
+    "examples/*",
+    "tests/*",
+]
+
+# Exclude packages from coverage
+exclude = [
+    "vais-benches",
+]
+
+# Ignore panics during execution
+ignore-panics = true
+
+# Ignore tests
+ignore-tests = false
+
+# Count lines of code
+count = true
+
+# Work with multiple packages
+workspace = true
+
+# Attempt to run code as a library instead of as an executable
+lib = true
+
+# Run binary targets
+bins = true
+
+# Run example targets
+examples = false
+
+# Run test targets
+tests = true
+
+# Use colored output
+color = "Auto"
+
+# Fail if coverage falls below threshold (percentage)
+fail-under = 0  # Set to 0 to allow any coverage for now, increase later
+
+# Parallel execution
+parallel = false
+
+# Precise reporting
+precise = true
+
+# Dump coverage report as follows:
+verbose = false
+
+# Run release builds
+release = false
+
+# Test only this package
+packages = []

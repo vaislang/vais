@@ -1,0 +1,19 @@
+# Cargo configuration
+# Contains custom aliases for common development tasks
+
+[alias]
+# Test coverage measurement
+# Usage: cargo coverage
+coverage = "tarpaulin --config tarpaulin.toml"
+
+# Quick coverage with HTML output only
+# Usage: cargo coverage-html
+coverage-html = "tarpaulin --config tarpaulin.toml --out Html --output-dir target/coverage"
+
+# Coverage with Lcov format (for CI/CD integration)
+# Usage: cargo coverage-lcov
+coverage-lcov = "tarpaulin --config tarpaulin.toml --out Lcov --output-dir target/coverage"
+
+# Run tests with output
+# Usage: cargo test-verbose
+test-verbose = "test --verbose"
