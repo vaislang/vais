@@ -12,6 +12,8 @@ pub enum Locale {
     Ko,
     /// Japanese (日本語)
     Ja,
+    /// Chinese (中文)
+    Zh,
 }
 
 impl Locale {
@@ -38,6 +40,9 @@ impl Locale {
             if lang_lower.starts_with("ja") {
                 return Self::Ja;
             }
+            if lang_lower.starts_with("zh") {
+                return Self::Zh;
+            }
         }
 
         // 3. Default to English
@@ -47,24 +52,26 @@ impl Locale {
     /// Parse a locale from a string
     ///
     /// Accepts various formats:
-    /// - Language codes: "en", "ko", "ja"
-    /// - Full names: "english", "korean", "japanese"
-    /// - Native names: "한국어", "日本語"
+    /// - Language codes: "en", "ko", "ja", "zh"
+    /// - Full names: "english", "korean", "japanese", "chinese"
+    /// - Native names: "한국어", "日本語", "中文"
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "en" | "english" => Some(Self::En),
             "ko" | "korean" | "한국어" => Some(Self::Ko),
             "ja" | "japanese" | "日本語" => Some(Self::Ja),
+            "zh" | "chinese" | "中文" => Some(Self::Zh),
             _ => None,
         }
     }
 
-    /// Get the locale code (e.g., "en", "ko", "ja")
+    /// Get the locale code (e.g., "en", "ko", "ja", "zh")
     pub fn code(&self) -> &'static str {
         match self {
             Self::En => "en",
             Self::Ko => "ko",
             Self::Ja => "ja",
+            Self::Zh => "zh",
         }
     }
 
@@ -74,12 +81,13 @@ impl Locale {
             Self::En => "English",
             Self::Ko => "한국어",
             Self::Ja => "日本語",
+            Self::Zh => "中文",
         }
     }
 
     /// Get all supported locales
     pub fn all() -> &'static [Locale] {
-        &[Self::En, Self::Ko, Self::Ja]
+        &[Self::En, Self::Ko, Self::Ja, Self::Zh]
     }
 }
 
@@ -98,9 +106,11 @@ mod tests {
         assert_eq!(Locale::from_str("en"), Some(Locale::En));
         assert_eq!(Locale::from_str("ko"), Some(Locale::Ko));
         assert_eq!(Locale::from_str("ja"), Some(Locale::Ja));
+        assert_eq!(Locale::from_str("zh"), Some(Locale::Zh));
         assert_eq!(Locale::from_str("english"), Some(Locale::En));
         assert_eq!(Locale::from_str("한국어"), Some(Locale::Ko));
         assert_eq!(Locale::from_str("日本語"), Some(Locale::Ja));
+        assert_eq!(Locale::from_str("中文"), Some(Locale::Zh));
         assert_eq!(Locale::from_str("invalid"), None);
     }
 
@@ -109,6 +119,7 @@ mod tests {
         assert_eq!(Locale::En.code(), "en");
         assert_eq!(Locale::Ko.code(), "ko");
         assert_eq!(Locale::Ja.code(), "ja");
+        assert_eq!(Locale::Zh.code(), "zh");
     }
 
     #[test]
@@ -116,6 +127,7 @@ mod tests {
         assert_eq!(Locale::En.native_name(), "English");
         assert_eq!(Locale::Ko.native_name(), "한국어");
         assert_eq!(Locale::Ja.native_name(), "日本語");
+        assert_eq!(Locale::Zh.native_name(), "中文");
     }
 
     #[test]

@@ -1,0 +1,73 @@
+{
+  "_meta": {
+    "locale": "zh",
+    "version": "0.0.1",
+    "description": "中文错误消息（Vais编译器）"
+  },
+
+  "type": {
+    "E001": {
+      "title": "类型不匹配",
+      "message": "期望类型 {expected}，但找到 {found}",
+      "help": "请尝试使用类型转换函数"
+    },
+    "E002": {
+      "title": "未定义的变量",
+      "message": "变量 '{name}' 未定义",
+      "help": "当前作用域中找不到变量 '{name}'"
+    },
+    "E003": {
+      "title": "未定义的类型",
+      "message": "类型 '{name}' 未定义"
+    },
+    "E004": {
+      "title": "未定义的函数",
+      "message": "函数 '{name}' 未定义",
+      "help": "当前作用域中找不到函数 '{name}'"
+    },
+    "E005": {
+      "title": "不可调用",
+      "message": "无法调用非函数类型：{type}"
+    },
+    "E006": {
+      "title": "参数个数不匹配",
+      "message": "期望 {expected} 个参数，但获得 {got} 个"
+    },
+    "E007": {
+      "title": "类型推断失败",
+      "message": "无法推断类型"
+    },
+    "E008": {
+      "title": "重复定义",
+      "message": "'{name}' 已经定义"
+    },
+    "E009": {
+      "title": "不可变变量赋值",
+      "message": "无法将值赋给不可变变量 '{name}'",
+      "help": "请将 '{name}' 声明为可变的：'{name}: mut Type'"
+    },
+    "E010": {
+      "title": "非穷尽匹配",
+      "message": "缺少模式：{patterns}"
+    },
+    "E011": {
+      "title": "无法到达的模式",
+      "message": "arm {arm} 处的模式无法到达"
+    }
+  },
+
+  "parse": {
+    "P001": {
+      "title": "意外的令牌",
+      "message": "期望 {expected}，但找到 {found}"
+    },
+    "P002": {
+      "title": "意外的文件结束",
+      "message": "文件意外结束"
+    },
+    "P003": {
+      "title": "无效的表达式",
+      "message": "无效或格式错误的表达式"
+    }
+  }
+}

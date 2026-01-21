@@ -1,7 +1,7 @@
 //! Internationalization (i18n) support for Vais compiler
 //!
 //! Provides localized error messages in multiple languages.
-//! Currently supports English (en), Korean (ko), and Japanese (ja).
+//! Currently supports English (en), Korean (ko), Japanese (ja), and Chinese (zh).
 //!
 //! # Example
 //!
@@ -141,6 +141,14 @@ mod tests {
 
         let title = get_simple("type.E001.title");
         assert_eq!(title, "型の不一致");
+    }
+
+    #[test]
+    fn test_chinese_locale() {
+        // Use I18n directly to avoid OnceCell race conditions
+        let i18n = I18n::with_locale(Locale::Zh);
+        let title = i18n.get_simple("type.E001.title");
+        assert_eq!(title, "类型不匹配");
     }
 
     #[test]

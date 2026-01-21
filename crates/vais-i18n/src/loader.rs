@@ -9,6 +9,7 @@ mod embedded {
     pub const EN_MESSAGES: &str = include_str!("../locales/en.json");
     pub const KO_MESSAGES: &str = include_str!("../locales/ko.json");
     pub const JA_MESSAGES: &str = include_str!("../locales/ja.json");
+    pub const ZH_MESSAGES: &str = include_str!("../locales/zh.json");
 }
 
 /// Load messages for a given locale
@@ -19,6 +20,7 @@ pub fn load_messages(locale: Locale) -> HashMap<String, String> {
         Locale::En => embedded::EN_MESSAGES,
         Locale::Ko => embedded::KO_MESSAGES,
         Locale::Ja => embedded::JA_MESSAGES,
+        Locale::Zh => embedded::ZH_MESSAGES,
     };
 
     parse_messages(json_str).unwrap_or_default()
@@ -108,6 +110,9 @@ mod tests {
 
         let ja_messages = load_messages(Locale::Ja);
         assert!(ja_messages.contains_key("type.E001.title"));
+
+        let zh_messages = load_messages(Locale::Zh);
+        assert!(zh_messages.contains_key("type.E001.title"));
     }
 
     #[test]
