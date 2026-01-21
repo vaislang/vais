@@ -551,7 +551,7 @@ impl CodeGenerator {
 
         // Then block
         ir.push_str(&format!("{}:\n", then_label));
-        self.current_block = then_label.clone();
+        self.current_block.clone_from(&then_label);
         let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
         ir.push_str(&then_ir);
         let then_actual_block = self.current_block.clone();
@@ -564,7 +564,7 @@ impl CodeGenerator {
 
         // Else block
         ir.push_str(&format!("{}:\n", else_label));
-        self.current_block = else_label.clone();
+        self.current_block.clone_from(&else_label);
         let (else_val, else_ir, else_terminated, nested_last_block, has_else) = if let Some(else_branch) = else_ {
             let (v, i, t, last) = self.generate_if_else_with_term(else_branch, counter, &merge_label)?;
             (v, i, t, last, true)
@@ -585,7 +585,7 @@ impl CodeGenerator {
 
         // Merge block
         ir.push_str(&format!("{}:\n", merge_label));
-        self.current_block = merge_label.clone();
+        self.current_block.clone_from(&merge_label);
         let result = self.next_temp(counter);
 
         if !has_else {
@@ -624,8 +624,8 @@ impl CodeGenerator {
         let loop_end = self.next_label("loop.end");
 
         self.loop_stack.push(LoopLabels {
-            continue_label: loop_start.clone(),
-            break_label: loop_end.clone(),
+            continue_label: loop_start.to_string(),
+            break_label: loop_end.to_string(),
         });
 
         let mut ir = String::new();

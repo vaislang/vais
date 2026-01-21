@@ -685,7 +685,11 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [x] **다국어 확장** - 중국어(zh) 에러 메시지 추가 (완료일: 2026-01-21)
   - locales/zh.json 생성 (14개 에러 메시지)
   - Locale::Zh 지원 추가
-- [ ] **clone() 최적화** - codegen에서 참조 기반 리팩토링 (127개 호출 분석)
+- [x] **clone() 최적화** - codegen에서 참조 기반 리팩토링 (완료일: 2026-01-21)
+  - 195개 → 153개 (42개 제거, 21.5% 감소)
+  - formatter.rs: 11개 → 1개 (90.9% 감소)
+  - lib.rs: 127개 → 100개 (21.3% 감소)
+  - clone() → to_string(), clone_from() 패턴 적용
 - [x] **LSP 추가 기능** - Code Actions 구현 (완료일: 2026-01-21)
   - Quick fixes: 변수 생성, import 추가, 타입 캐스트
   - Refactoring: 변수 추출, 함수 추출

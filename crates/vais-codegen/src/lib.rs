@@ -645,7 +645,7 @@ impl CodeGenerator {
             .generics
             .iter()
             .zip(inst.type_args.iter())
-            .map(|(g, t)| (g.name.node.clone(), t.clone()))
+            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
             .collect();
 
         // Save and set generic substitutions
@@ -658,7 +658,7 @@ impl CodeGenerator {
             .map(|f| {
                 let ty = self.ast_type_to_resolved(&f.ty.node);
                 let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
-                (f.name.node.clone(), concrete_ty)
+                (f.name.node.to_string(), concrete_ty)
             })
             .collect();
 
@@ -675,10 +675,10 @@ impl CodeGenerator {
 
         // Register the specialized struct
         let struct_info = StructInfo {
-            name: inst.mangled_name.clone(),
+            name: inst.mangled_name.to_string(),
             fields,
         };
-        self.structs.insert(inst.mangled_name.clone(), struct_info);
+        self.structs.insert(inst.mangled_name.to_string(), struct_info);
 
         // Restore old substitutions
         self.generic_substitutions = old_subst;
@@ -703,13 +703,13 @@ impl CodeGenerator {
             .generics
             .iter()
             .zip(inst.type_args.iter())
-            .map(|(g, t)| (g.name.node.clone(), t.clone()))
+            .map(|(g, t)| (g.name.node.to_string(), t.clone()))
             .collect();
 
         // Save and set generic substitutions
         let old_subst = std::mem::replace(&mut self.generic_substitutions, substitutions.clone());
 
-        self.current_function = Some(inst.mangled_name.clone());
+        self.current_function = Some(inst.mangled_name.to_string());
         self.locals.clear();
         self.label_counter = 0;
         self.loop_stack.clear();
@@ -725,11 +725,11 @@ impl CodeGenerator {
 
                 // Register parameter as local
                 self.locals.insert(
-                    p.name.node.clone(),
+                    p.name.node.to_string(),
                     LocalVar {
                         ty: concrete_ty,
                         is_param: true,
-                        llvm_name: p.name.node.clone(),
+                        llvm_name: p.name.node.to_string(),
                     },
                 );
 
@@ -854,7 +854,7 @@ impl CodeGenerator {
             .iter()
             .map(|p| {
                 let ty = self.ast_type_to_resolved(&p.ty.node);
-                (p.name.node.clone(), ty)
+                (p.name.node.to_string(), ty)
             })
             .collect();
 
@@ -865,9 +865,9 @@ impl CodeGenerator {
             .unwrap_or(ResolvedType::Unit);
 
         self.functions.insert(
-            f.name.node.clone(),
+            f.name.node.to_string(),
             FunctionInfo {
-                name: f.name.node.clone(),
+                name: f.name.node.to_string(),
                 params,
                 ret_type,
                 is_extern: false,
@@ -902,7 +902,7 @@ impl CodeGenerator {
         for p in &f.params {
             if p.name.node != "self" {
                 let ty = self.ast_type_to_resolved(&p.ty.node);
-                params.push((p.name.node.clone(), ty));
+                params.push((p.name.node.to_string(), ty));
             }
         }
 
@@ -913,7 +913,7 @@ impl CodeGenerator {
             .unwrap_or(ResolvedType::Unit);
 
         self.functions.insert(
-            method_name.clone(),
+            method_name.to_string(),
             FunctionInfo {
                 name: method_name,
                 params,
@@ -931,14 +931,14 @@ impl CodeGenerator {
             .iter()
             .map(|f| {
                 let ty = self.ast_type_to_resolved(&f.ty.node);
-                (f.name.node.clone(), ty)
+                (f.name.node.to_string(), ty)
             })
             .collect();
 
         self.structs.insert(
-            s.name.node.clone(),
+            s.name.node.to_string(),
             StructInfo {
-                name: s.name.node.clone(),
+                name: s.name.node.to_string(),
                 fields,
             },
         );
@@ -962,23 +962,23 @@ impl CodeGenerator {
                 VariantFields::Struct(fields) => {
                     let resolved: Vec<_> = fields
                         .iter()
-                        .map(|f| (f.name.node.clone(), self.ast_type_to_resolved(&f.ty.node)))
+                        .map(|f| (f.name.node.to_string(), self.ast_type_to_resolved(&f.ty.node)))
                         .collect();
                     EnumVariantFields::Struct(resolved)
                 }
             };
 
             variants.push(EnumVariantInfo {
-                name: variant.name.node.clone(),
+                name: variant.name.node.to_string(),
                 tag: tag as u32,
                 fields,
             });
         }
 
         self.enums.insert(
-            e.name.node.clone(),
+            e.name.node.to_string(),
             EnumInfo {
-                name: e.name.node.clone(),
+                name: e.name.node.to_string(),
                 variants,
             },
         );
@@ -1009,7 +1009,7 @@ impl CodeGenerator {
             return self.generate_async_function(f);
         }
 
-        self.current_function = Some(f.name.node.clone());
+        self.current_function = Some(f.name.node.to_string());
         self.locals.clear();
         self.label_counter = 0;
         self.loop_stack.clear();
@@ -1028,11 +1028,11 @@ impl CodeGenerator {
                 // Register parameter as local (SSA value, not alloca)
                 // For params, llvm_name matches the source name
                 self.locals.insert(
-                    p.name.node.clone(),
+                    p.name.node.to_string(),
                     LocalVar {
                         ty: ty.clone(),
                         is_param: true,
-                        llvm_name: p.name.node.clone(),
+                        llvm_name: p.name.node.to_string(),
                     },
                 );
 
@@ -1121,7 +1121,7 @@ impl CodeGenerator {
         // Collect parameters for state struct
         let params: Vec<_> = f.params.iter().map(|p| {
             let ty = self.ast_type_to_resolved(&p.ty.node);
-            (p.name.node.clone(), ty)
+            (p.name.node.to_string(), ty)
         }).collect();
 
         let ret_type = f
@@ -1136,8 +1136,8 @@ impl CodeGenerator {
         self.async_state_counter = 0;
         self.async_await_points.clear();
         self.current_async_function = Some(AsyncFunctionInfo {
-            name: func_name.clone(),
-            state_struct: state_struct_name.clone(),
+            name: func_name.to_string(),
+            state_struct: state_struct_name.to_string(),
             captured_vars: params.clone(),
             ret_type: ret_type.clone(),
         });
@@ -1285,7 +1285,7 @@ impl CodeGenerator {
         // Method name: StructName_methodName
         let method_name = format!("{}_{}", struct_name, f.name.node);
 
-        self.current_function = Some(method_name.clone());
+        self.current_function = Some(method_name.to_string());
         self.locals.clear();
         self.label_counter = 0;
         self.loop_stack.clear();
@@ -1329,11 +1329,11 @@ impl CodeGenerator {
             let llvm_ty = self.type_to_llvm(&ty);
 
             self.locals.insert(
-                p.name.node.clone(),
+                p.name.node.to_string(),
                 LocalVar {
                     ty: ty.clone(),
                     is_param: true,
-                    llvm_name: p.name.node.clone(),
+                    llvm_name: p.name.node.to_string(),
                 },
             );
 

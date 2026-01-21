@@ -128,15 +128,21 @@ impl Formatter {
         // Generics
         if !f.generics.is_empty() {
             self.output.push('<');
-            let generics: Vec<String> = f.generics.iter().map(|g| {
-                if g.bounds.is_empty() {
-                    g.name.node.clone()
-                } else {
-                    let bounds: Vec<&str> = g.bounds.iter().map(|b| b.node.as_str()).collect();
-                    format!("{}: {}", g.name.node, bounds.join(" + "))
+            let mut first = true;
+            for g in &f.generics {
+                if !first {
+                    self.output.push_str(", ");
                 }
-            }).collect();
-            self.output.push_str(&generics.join(", "));
+                first = false;
+                if g.bounds.is_empty() {
+                    self.output.push_str(&g.name.node);
+                } else {
+                    self.output.push_str(&g.name.node);
+                    self.output.push_str(": ");
+                    let bounds: Vec<&str> = g.bounds.iter().map(|b| b.node.as_str()).collect();
+                    self.output.push_str(&bounds.join(" + "));
+                }
+            }
             self.output.push('>');
         }
 
@@ -195,8 +201,14 @@ impl Formatter {
         // Generics
         if !s.generics.is_empty() {
             self.output.push('<');
-            let generics: Vec<String> = s.generics.iter().map(|g| g.name.node.clone()).collect();
-            self.output.push_str(&generics.join(", "));
+            let mut first = true;
+            for g in &s.generics {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                first = false;
+                self.output.push_str(&g.name.node);
+            }
             self.output.push('>');
         }
 
@@ -242,8 +254,14 @@ impl Formatter {
         // Generics
         if !e.generics.is_empty() {
             self.output.push('<');
-            let generics: Vec<String> = e.generics.iter().map(|g| g.name.node.clone()).collect();
-            self.output.push_str(&generics.join(", "));
+            let mut first = true;
+            for g in &e.generics {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                first = false;
+                self.output.push_str(&g.name.node);
+            }
             self.output.push('>');
         }
 
@@ -298,8 +316,14 @@ impl Formatter {
 
         if !t.generics.is_empty() {
             self.output.push('<');
-            let generics: Vec<String> = t.generics.iter().map(|g| g.name.node.clone()).collect();
-            self.output.push_str(&generics.join(", "));
+            let mut first = true;
+            for g in &t.generics {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                first = false;
+                self.output.push_str(&g.name.node);
+            }
             self.output.push('>');
         }
 
@@ -338,8 +362,14 @@ impl Formatter {
 
         if !t.generics.is_empty() {
             self.output.push('<');
-            let generics: Vec<String> = t.generics.iter().map(|g| g.name.node.clone()).collect();
-            self.output.push_str(&generics.join(", "));
+            let mut first = true;
+            for g in &t.generics {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                first = false;
+                self.output.push_str(&g.name.node);
+            }
             self.output.push('>');
         }
 
@@ -444,7 +474,7 @@ impl Formatter {
         match ty {
             Type::Named { name, generics } => {
                 if generics.is_empty() {
-                    name.clone()
+                    name.to_string()
                 } else {
                     let gens: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
                     format!("{}<{}>", name, gens.join(", "))
@@ -655,7 +685,7 @@ impl Formatter {
             Expr::Bool(b) => if *b { "true" } else { "false" }.to_string(),
             Expr::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
             Expr::Unit => "()".to_string(),
-            Expr::Ident(name) => name.clone(),
+            Expr::Ident(name) => name.to_string(),
             Expr::SelfCall => "@".to_string(),
 
             Expr::Binary { op, left, right } => {
@@ -920,7 +950,7 @@ impl Formatter {
     fn format_pattern(&self, pattern: &Pattern) -> String {
         match pattern {
             Pattern::Wildcard => "_".to_string(),
-            Pattern::Ident(name) => name.clone(),
+            Pattern::Ident(name) => name.to_string(),
             Pattern::Literal(lit) => match lit {
                 Literal::Int(n) => n.to_string(),
                 Literal::Float(n) => n.to_string(),
@@ -936,14 +966,14 @@ impl Formatter {
                     if let Some(pat) = p {
                         format!("{}: {}", n.node, self.format_pattern(&pat.node))
                     } else {
-                        n.node.clone()
+                        n.node.to_string()
                     }
                 }).collect();
                 format!("{} {{ {} }}", name.node, fs.join(", "))
             }
             Pattern::Variant { name, fields } => {
                 if fields.is_empty() {
-                    name.node.clone()
+                    name.node.to_string()
                 } else {
                     let fs: Vec<String> = fields.iter().map(|p| self.format_pattern(&p.node)).collect();
                     format!("{}({})", name.node, fs.join(", "))
