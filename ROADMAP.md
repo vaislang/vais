@@ -488,7 +488,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
-| Phase 6: 후속 개선 | 🔄 진행 중 | 70% |
+| Phase 6: 후속 개선 | 🔄 진행 중 | 80% |
 
 ---
 
@@ -606,7 +606,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 6: 후속 개선 및 확장
 
-> **상태**: 🔄 진행 중 (70%)
+> **상태**: 🔄 진행 중 (80%)
 > **추가일**: 2026-01-21
 
 ### P0 - 즉시 (1-2주)
@@ -632,10 +632,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 패턴 매칭 exhaustiveness 캐싱
   - 9개 최적화 테스트 추가
   - Criterion 벤치마크 추가
-- [ ] **문서 확충**
-  - Architecture.md - 컴파일 파이프라인 설명
-  - 설치 가이드 - 플랫폼별 상세
-  - 벤치마크 결과 - README에 추가
+- [x] **문서 확충** (완료일: 2026-01-21)
+  - Architecture.md - 컴파일 파이프라인, 크레이트 구조, 설계 결정 설명 (500줄)
+  - INSTALLATION.md - 플랫폼별 설치 가이드 (377줄)
+  - README.md - 벤치마크 결과 및 문서 링크 추가
 - [ ] **LSP 통합 테스트** - Mock 클라이언트 E2E 테스트
 - [ ] **플러그인/formatter 테스트** - 로드/실행 테스트 추가
 
@@ -665,7 +665,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
-| Phase 6: 후속 개선 | 🔄 진행 중 | 70% |
+| Phase 6: 후속 개선 | 🔄 진행 중 | 80% |
 
 ---
 
