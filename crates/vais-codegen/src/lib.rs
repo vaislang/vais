@@ -8,12 +8,18 @@
 pub mod debug;
 pub mod formatter;
 pub mod optimize;
+pub mod visitor;
 mod builtins;
 mod expr;
+mod expr_visitor;
+mod expr_helpers;
+mod stmt_visitor;
 mod types;
 mod stmt;
 #[cfg(test)]
 mod cache_tests;
+
+pub use visitor::{ExprVisitor, StmtVisitor, ItemVisitor};
 
 pub use debug::{DebugConfig, DebugInfoBuilder};
 

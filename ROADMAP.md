@@ -673,9 +673,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - docs/COVERAGE.md 문서화
 
 ### P1 - 중기 (2-4주)
-- [ ] **Codegen 리팩토링** - Visitor 패턴 도입
-  - 현재: 5,234줄, 120개 함수
-  - 목표: 코드 생성 로직을 Visitor trait로 추상화
+- [x] **Codegen 리팩토링** - Visitor 패턴 도입 (완료일: 2026-01-21)
+  - visitor.rs: ExprVisitor, StmtVisitor, ItemVisitor trait 정의 (234줄)
+  - expr_visitor.rs: 표현식 방문자 구현 (361줄)
+  - expr_helpers.rs: 표현식 헬퍼 분리 (1,314줄)
+  - stmt_visitor.rs: 문장 방문자 구현 (185줄)
+  - 전체 테스트 통과
 - [x] **고급 튜토리얼 작성** (완료일: 2026-01-21)
   - async_tutorial.md - Async/Await 패턴, Future trait, 비동기 에러 처리
   - generic_tutorial.md - 제네릭, 트레이트, 바운드, 표준 라이브러리 활용
