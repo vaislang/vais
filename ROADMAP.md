@@ -793,14 +793,47 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - type_to_llvm에서 structs.contains_key() 체크 추가
 
 ### P1 - 높은 우선순위 (2-4주)
-- [ ] **`?` 연산자 (에러 전파)** - Result<T,E>/Option<T>에서 조기 반환 지원
-- [ ] **`defer` 문** - Go 스타일 cleanup 구문 (스코프 종료 시 실행)
-- [ ] **해시 함수 제네릭화** - HashMap의 hash() 함수를 다양한 타입 지원
-- [ ] **패키지 매니저 설계** - vais.toml 기반 의존성 관리
+- [x] **`?` 연산자 (에러 전파)** - Result<T,E>/Option<T>에서 조기 반환 지원 (완료일: 2026-01-22)
+  - Parser: postfix try 연산자 파싱 (Expr::Try)
+  - TypeChecker: Result<T,E> → T, Option<T> → T 추론
+  - Codegen: 에러/None 시 조기 반환 IR 생성
+- [x] **`defer` 문** - Go 스타일 cleanup 구문 (완료일: 2026-01-22)
+  - Lexer: Token::Defer (`D`) 추가
+  - Parser: Stmt::Defer 파싱 지원
+  - Codegen: defer_stack으로 LIFO 순서 실행
+  - 모든 return 경로에서 defer cleanup 호출
+- [x] **해시 함수 제네릭화** - HashMap의 hash() 함수를 다양한 타입 지원 (완료일: 2026-01-22)
+  - std/hash.vais 모듈 추가 (mult_hash, hash_string, combine_hash 등)
+  - HashMap이 std/hash 모듈의 mult_hash 함수 사용
+  - DJB2 알고리즘 기반 문자열 해시 지원
+- [x] **패키지 매니저 설계** - vais.toml 기반 의존성 관리 (완료일: 2026-01-22)
+  - vais.toml manifest 파일 파싱 (toml crate)
+  - `vais pkg init` - 새 패키지 초기화
+  - `vais pkg build` - 패키지 빌드
+  - `vais pkg check` - 타입 검사
+  - `vais pkg add/remove` - 의존성 관리
+  - `vais pkg clean` - 빌드 아티팩트 정리
+  - 경로 기반 의존성 해결
+  - 설계 문서: docs/design/package-manager-design.md
 
 ### P2 - 중간 우선순위 (1-2개월)
-- [ ] **패키지 레지스트리** - 중앙 패키지 저장소 구현
-- [ ] **Const generics** - 컴파일 타임 상수를 제네릭 파라미터로 사용 (`[T; N]`)
+- [x] **패키지 레지스트리** - 중앙 패키지 저장소 구현 (완료일: 2026-01-22)
+  - crates/vaisc/src/registry/ 모듈 추가
+  - SemVer 버전 파싱/비교 (version.rs)
+  - HTTP/로컬 레지스트리 클라이언트 (client.rs)
+  - 패키지 캐싱 ~/.vais/registry/ (cache.rs)
+  - tar.gz 압축/해제 (archive.rs)
+  - 의존성 해결 알고리즘 (resolver.rs)
+  - vais.lock 파일 생성 (lockfile.rs)
+  - CLI 명령어: `vais pkg install`, `vais pkg update`, `vais pkg search`, `vais pkg info`, `vais pkg cache`
+- [x] **Const generics** - 컴파일 타임 상수를 제네릭 파라미터로 사용 (`[T; N]`) (완료일: 2026-01-22)
+  - GenericParamKind::Const - const 제네릭 파라미터 지원
+  - ConstExpr - 컴파일 타임 상수 표현식 (리터럴, 파라미터, 연산)
+  - Type::ConstArray / ResolvedType::ConstArray - `[T; N]` 문법
+  - 파서: `const N: u64` 문법 및 `[T; N]` 배열 타입 파싱
+  - 타입체커: resolve_const_expr(), 상수 연산 평가
+  - 코드젠: LLVM `[N x T]` 배열 타입 생성
+  - 11개 통합 테스트 추가
 - [ ] **SIMD intrinsics** - 벡터 연산 intrinsic 함수
 
 ### P3 - 낮은 우선순위 (3-6개월)
@@ -827,7 +860,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
-| Phase 8: 생산성 향상 | 🔄 진행 중 | P0 완료 |
+| Phase 8: 생산성 향상 | 🔄 진행 중 | P0+P1 완료, P2 진행 중 |
 
 ---
 
