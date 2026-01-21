@@ -52,8 +52,8 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Registered functions by name
     functions: HashMap<String, FunctionValue<'ctx>>,
 
-    /// Local variables (alloca pointers)
-    locals: HashMap<String, PointerValue<'ctx>>,
+    /// Local variables (alloca pointers and their types)
+    locals: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
 
     /// String constants
     string_constants: HashMap<String, GlobalValue<'ctx>>,
@@ -73,6 +73,9 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Generated struct types (for deduplication)
     generated_structs: HashMap<String, StructType<'ctx>>,
+
+    /// Struct field names (struct name -> field names in order)
+    struct_fields: HashMap<String, Vec<String>>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -107,6 +110,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             current_function: None,
             generic_substitutions: HashMap::new(),
             generated_structs: HashMap::new(),
+            struct_fields: HashMap::new(),
         };
 
         // Declare built-in functions
@@ -189,6 +193,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map(|f| self.type_mapper.map_type(&f.ty))
             .collect();
 
+        // Store field names for later field access lookups
+        let field_names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
+        self.struct_fields.insert(s.name.clone(), field_names);
+
         let struct_type = self.context.struct_type(&field_types, false);
         self.type_mapper.register_struct(&s.name, struct_type);
         self.generated_structs.insert(s.name.clone(), struct_type);
@@ -232,7 +240,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.build_store(alloca, param_value)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.locals.insert(param.name.clone(), alloca);
+            self.locals.insert(param.name.clone(), (alloca, param_type));
         }
 
         // Generate function body
@@ -327,13 +335,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     fn generate_var(&mut self, name: &str) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let ptr = self
+        let (ptr, var_type) = self
             .locals
             .get(name)
             .ok_or_else(|| CodegenError::UndefinedVar(name.to_string()))?;
 
         let value = self.builder.build_load(
-            self.context.i64_type(), // TODO: proper type lookup
+            *var_type,
             *ptr,
             name,
         ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -515,7 +523,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.builder.build_store(alloca, val)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                self.locals.insert(name.clone(), alloca);
+                self.locals.insert(name.clone(), (alloca, var_type));
                 Ok(self.context.struct_type(&[], false).const_zero().into())
             }
             Stmt::Expr(expr) => self.generate_expr(expr),
@@ -605,13 +613,54 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let obj_val = self.generate_expr(obj)?;
 
-        // For now, assume struct value and extract field by index
-        // TODO: proper field name to index mapping
-        let struct_val = obj_val.into_struct_value();
-        let field_idx = 0; // TODO: lookup field index by name
+        // Get struct type name from the expression
+        let struct_name = self.infer_struct_name(obj)?;
 
+        // Lookup field index by name
+        let field_idx = self.get_field_index(&struct_name, field)?;
+
+        let struct_val = obj_val.into_struct_value();
         self.builder.build_extract_value(struct_val, field_idx, field)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    /// Infers the struct name from an expression (for field access).
+    fn infer_struct_name(&self, expr: &Expr) -> CodegenResult<String> {
+        match &expr.kind {
+            ExprKind::Var(name) => {
+                // Look up variable type - would need type info stored with locals
+                // For now, return an error if we can't determine the type
+                Err(CodegenError::Unsupported(format!(
+                    "Cannot infer struct type for variable: {}. Consider adding type annotations.",
+                    name
+                )))
+            }
+            ExprKind::StructLiteral(name, _) => Ok(name.clone()),
+            _ => Err(CodegenError::Unsupported(format!(
+                "Cannot infer struct type for expression: {:?}",
+                expr.kind
+            ))),
+        }
+    }
+
+    /// Gets the field index by name for a struct.
+    fn get_field_index(&self, struct_name: &str, field_name: &str) -> CodegenResult<u32> {
+        if let Some(fields) = self.struct_fields.get(struct_name) {
+            for (idx, name) in fields.iter().enumerate() {
+                if name == field_name {
+                    return Ok(idx as u32);
+                }
+            }
+            Err(CodegenError::UndefinedVar(format!(
+                "Field '{}' not found in struct '{}'",
+                field_name, struct_name
+            )))
+        } else {
+            Err(CodegenError::UndefinedVar(format!(
+                "Struct '{}' not found",
+                struct_name
+            )))
+        }
     }
 
     /// Generates a fresh label name.

@@ -774,6 +774,48 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ---
 
+## 🚀 Phase 8: 생산성 향상 및 생태계 확장
+
+> **상태**: 🔄 진행 중 (P0 완료)
+> **추가일**: 2026-01-22
+
+### P0 - 긴급 (완료)
+- [x] **Option codegen 버그 수정** - if-expression에서 Option<T> 반환 타입 처리 (완료일: 2026-01-22)
+  - is_expr_value()에서 enum variant constructor 감지
+  - phi 노드에서 중첩된 if-else 값 처리 개선
+  - match 표현식에서 enum 함수 호출 결과 처리
+  - Vec<T>.get_opt(), pop_opt() 활성화
+- [x] **inkwell TODO 해결** - generator.rs의 3개 TODO 완료 (완료일: 2026-01-22)
+  - 변수 로드 시 적절한 타입 조회 (locals에 타입 정보 저장)
+  - 필드 이름으로 인덱스 매핑 (struct_fields 맵 추가)
+- [x] **Generic 반환 타입 수정** - vec_new() 등 활성화 (완료일: 2026-01-22)
+  - struct 타입도 enum처럼 기본 이름 사용 (레이아웃 동일)
+  - type_to_llvm에서 structs.contains_key() 체크 추가
+
+### P1 - 높은 우선순위 (2-4주)
+- [ ] **`?` 연산자 (에러 전파)** - Result<T,E>/Option<T>에서 조기 반환 지원
+- [ ] **`defer` 문** - Go 스타일 cleanup 구문 (스코프 종료 시 실행)
+- [ ] **해시 함수 제네릭화** - HashMap의 hash() 함수를 다양한 타입 지원
+- [ ] **패키지 매니저 설계** - vais.toml 기반 의존성 관리
+
+### P2 - 중간 우선순위 (1-2개월)
+- [ ] **패키지 레지스트리** - 중앙 패키지 저장소 구현
+- [ ] **Const generics** - 컴파일 타임 상수를 제네릭 파라미터로 사용 (`[T; N]`)
+- [ ] **SIMD intrinsics** - 벡터 연산 intrinsic 함수
+
+### P3 - 낮은 우선순위 (3-6개월)
+- [ ] **Union types** - Tagged union 외 untagged union 지원
+- [ ] **Compile-time evaluation** - comptime 블록으로 컴파일 타임 계산
+- [ ] **Playground** - 웹 기반 Vais 실행 환경
+- [ ] **표준 라이브러리 확장** - Time, Random, UUID, Base64, URL 파서
+
+### P4 - 미래 (6개월+)
+- [ ] **Garbage Collection 옵션** - 선택적 GC 모드 (REPL/스크립팅용)
+- [ ] **Hot reloading** - 코드 변경 시 실행 중인 프로그램 업데이트
+- [ ] **GPU 타겟** - CUDA/OpenCL/WebGPU 코드 생성
+
+---
+
 ## 📊 진행률 요약
 
 | Phase | 상태 | 진행률 |
@@ -784,7 +826,8 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
-| Phase 7: 아키텍처 개선 | ✅ P0+P1 완료 | 100% (P0+P1) |
+| Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
+| Phase 8: 생산성 향상 | 🔄 진행 중 | P0 완료 |
 
 ---
 

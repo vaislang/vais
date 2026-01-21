@@ -46,17 +46,16 @@ X Vec<T> {
 
     # Get element at index using Option type
     # Returns Some(value) if index is valid, None otherwise
-    # NOTE: Temporarily disabled due to code generation issue with Option in if-expressions
-    # F get_opt(&self, index: i64) -> Option<T> {
-    #     I index < 0 {
-    #         None
-    #     } E I index >= self.len {
-    #         None
-    #     } E {
-    #         ptr := self.data + index * 8
-    #         Some(load_i64(ptr))
-    #     }
-    # }
+    F get_opt(&self, index: i64) -> Option<T> {
+        I index < 0 {
+            None
+        } E I index >= self.len {
+            None
+        } E {
+            ptr := self.data + index * 8
+            Some(load_i64(ptr))
+        }
+    }
 
     # Set element at index
     F set(&self, index: i64, value: T) -> i64 {
@@ -93,16 +92,15 @@ X Vec<T> {
 
     # Pop element from end using Option type
     # Returns Some(value) if vec is not empty, None otherwise
-    # NOTE: Temporarily disabled due to code generation issue with Option in if-expressions
-    # F pop_opt(&self) -> Option<T> {
-    #     I self.len > 0 {
-    #         self.len = self.len - 1
-    #         ptr := self.data + self.len * 8
-    #         Some(load_i64(ptr))
-    #     } E {
-    #         None
-    #     }
-    # }
+    F pop_opt(&self) -> Option<T> {
+        I self.len > 0 {
+            self.len = self.len - 1
+            ptr := self.data + self.len * 8
+            Some(load_i64(ptr))
+        } E {
+            None
+        }
+    }
 
     # Grow capacity (double it)
     F grow(&self) -> i64 {
@@ -133,7 +131,6 @@ X Vec<T> {
 }
 
 # Create new Vec<i64> with initial capacity of 8 (backward compatibility)
-# NOTE: Temporarily disabled due to code generation issues with generic return types
-# F vec_new() -> Vec<i64> {
-#     Vec.with_capacity(8)
-# }
+F vec_new() -> Vec<i64> {
+    Vec.with_capacity(8)
+}

@@ -145,7 +145,13 @@ impl CodeGenerator {
                 if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                     "i64".to_string()
                 } else if !generics.is_empty() {
-                    // Generic struct with type arguments
+                    // In Vais, all values are i64-sized, so struct/enum layout is the same
+                    // regardless of type arguments. Use base name for both enums and structs.
+                    if self.enums.contains_key(name) || self.structs.contains_key(name) {
+                        return format!("%{}", name);
+                    }
+
+                    // Generic struct with type arguments (not in our structs map - external?)
                     // Check if all generics are concrete (not Generic or Var types)
                     let all_concrete = generics.iter().all(|g| {
                         !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))

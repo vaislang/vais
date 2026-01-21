@@ -2222,7 +2222,9 @@ impl CodeGenerator {
                 ir.push_str(&else_ir);
 
                 // For struct results, load the value before branch if it's a pointer
-                let else_val_for_phi = if is_struct_result && !else_terminated && has_else {
+                // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
+                // it's already a phi node value (not a pointer), so don't load it
+                let else_val_for_phi = if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
                     let loaded = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = load {}, {}* {}\n",
@@ -3222,7 +3224,9 @@ impl CodeGenerator {
                 ir.push_str(&else_ir);
 
                 // For struct results, load the value before branch if it's a pointer
-                let else_val_for_phi = if is_struct_result && !else_terminated && has_else {
+                // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
+                // it's already a phi node value (not a pointer), so don't load it
+                let else_val_for_phi = if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
                     let loaded = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = load {}, {}* {}\n",
@@ -3288,7 +3292,24 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         // Generate the expression to match against
-        let (match_val, mut ir) = self.generate_expr(match_expr, counter)?;
+        let (match_val_raw, mut ir) = self.generate_expr(match_expr, counter)?;
+
+        // Check if match expression is a struct/enum value (not a pointer)
+        // If it's a function call returning enum, we need to store it first
+        let match_type = self.infer_expr_type(match_expr);
+        let is_enum_or_struct = matches!(&match_type, ResolvedType::Named { .. });
+        let is_value = self.is_expr_value(match_expr);
+
+        // If it's an enum/struct value from a function call, store it on the stack
+        let match_val = if is_enum_or_struct && is_value {
+            let llvm_type = self.type_to_llvm(&match_type);
+            let stack_ptr = self.next_temp(counter);
+            ir.push_str(&format!("  {} = alloca {}\n", stack_ptr, llvm_type));
+            ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_type, match_val_raw, llvm_type, stack_ptr));
+            stack_ptr
+        } else {
+            match_val_raw
+        };
 
         let merge_label = self.next_label("match.merge");
         let mut arm_labels: Vec<String> = Vec::new();
@@ -3969,20 +3990,37 @@ impl CodeGenerator {
 
     /// Check if an expression produces a value (not a pointer)
     /// struct literals produce pointers, if-else/match/call produce values
+    /// enum variant constructors (Some(x), None) produce pointers
     fn is_expr_value(&self, expr: &Spanned<Expr>) -> bool {
         match &expr.node {
             Expr::StructLit { .. } => false, // struct literal is a pointer
             Expr::If { .. } => true,          // if-else produces a value (phi node)
             Expr::Match { .. } => true,       // match produces a value
-            Expr::Call { .. } => true,        // function call produces a value
+            // Check if Call is an enum variant constructor
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(name) = &func.node {
+                    // Enum variant constructors (e.g., Some(x)) return pointers
+                    if self.get_tuple_variant_info(name).is_some() {
+                        return false;
+                    }
+                }
+                true // regular function call produces a value
+            }
             Expr::MethodCall { .. } => true,  // method call produces a value
             Expr::StaticMethodCall { .. } => true, // static method call produces a value
             // Struct-typed local variables are stored as pointers (double-pointer)
             // so generate_expr returns a pointer, not a value
             Expr::Ident(name) => {
+                // Unit enum variants (e.g., None) produce pointers
+                if self.is_unit_enum_variant(name) {
+                    return false;
+                }
                 if let Some(local) = self.locals.get(name) {
-                    // If it's a struct type and not a parameter, it's stored as a pointer
-                    !(matches!(local.ty, ResolvedType::Named { .. }) && !local.is_param)
+                    // Struct/enum types are always pointers:
+                    // - Parameters: passed as pointers (%Struct* %param)
+                    // - Locals: stored as double-pointers (%Struct** %var)
+                    // Either way, generate_expr returns a pointer, not a value
+                    !matches!(local.ty, ResolvedType::Named { .. })
                 } else {
                     true
                 }
