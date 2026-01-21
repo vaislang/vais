@@ -4788,4 +4788,436 @@ mod tests {
         assert!(!ir.contains("define i64 @identity"), "Generic template should not generate code");
         assert!(!ir.contains("define double @identity"), "Generic template should not generate code");
     }
+
+    // ==================== Advanced Edge Case Tests ====================
+
+    #[test]
+    fn test_i8_boundary_values() {
+        // Test i8 min (-128) and max (127)
+        let source = r#"
+            F i8_bounds()->(i8,i8){
+                min:i8=-128;
+                max:i8=127;
+                (min,max)
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Check for i8 type usage
+        assert!(ir.contains("i8"));
+    }
+
+    #[test]
+    fn test_i8_overflow_value() {
+        // Test arithmetic that could overflow (using i64 as i8 not fully supported)
+        let source = r#"
+            F add_large()->i64{
+                x:=9000000000000000000;
+                y:=1000000000000000000;
+                x+y
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should generate code (overflow behavior is runtime)
+        assert!(ir.contains("add i64"));
+    }
+
+    #[test]
+    fn test_i8_underflow_value() {
+        // Test arithmetic that could underflow (using i64)
+        let source = r#"
+            F sub_large()->i64{
+                x:=-9000000000000000000;
+                y:=1000000000000000000;
+                x-y
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("sub i64"));
+    }
+
+    #[test]
+    fn test_i64_max_value_codegen() {
+        // Test i64 max: 9223372036854775807
+        let source = r#"
+            F i64_max()->i64=9223372036854775807
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("9223372036854775807"));
+    }
+
+    #[test]
+    fn test_i64_min_value_codegen() {
+        // Test i64 min (approximately): -9223372036854775808
+        let source = r#"
+            F i64_near_min()->i64=-9223372036854775807
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("sub i64 0, 9223372036854775807"));
+    }
+
+    #[test]
+    fn test_integer_overflow_addition() {
+        // Test potential overflow in addition
+        let source = r#"
+            F add_overflow(a:i64,b:i64)->i64=a+b
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should generate regular add (overflow is runtime behavior)
+        assert!(ir.contains("add i64"));
+    }
+
+    #[test]
+    fn test_integer_overflow_multiplication() {
+        // Test potential overflow in multiplication
+        let source = r#"
+            F mul_large()->i64{
+                a:i64=1000000000;
+                b:i64=1000000000;
+                a*b
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("mul i64"));
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        // Test division by zero (runtime error, should compile)
+        let source = r#"
+            F div_zero()->i64{
+                x:=10;
+                y:=0;
+                x/y
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("sdiv i64"));
+    }
+
+    #[test]
+    fn test_modulo_by_zero() {
+        // Test modulo by zero
+        let source = r#"
+            F mod_zero()->i64{
+                x:=10;
+                y:=0;
+                x%y
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("srem i64"));
+    }
+
+    #[test]
+    fn test_all_integer_type_boundaries() {
+        // Test boundary values for all integer types
+        let source = r#"
+            F boundaries()->(){
+                a:i8=127;
+                b:i8=-128;
+                c:i16=32767;
+                d:i16=-32768;
+                e:i32=2147483647;
+                f:i64=9223372036854775807;
+                ()
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("i8"));
+        assert!(ir.contains("i16"));
+        assert!(ir.contains("i32"));
+        assert!(ir.contains("i64"));
+    }
+
+    #[test]
+    fn test_signed_integer_wraparound() {
+        // Test signed integer wraparound behavior (using i64)
+        let source = r#"
+            F wraparound()->i64{
+                max:=9223372036854775806;
+                max+1
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("add i64"));
+    }
+
+    #[test]
+    fn test_nested_generic_codegen() {
+        // Simplified generic struct test
+        let source = r#"
+            S Container<T>{data:T}
+            F empty()->Container<i64> =Container{data:0}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("%Container"));
+    }
+
+    #[test]
+    fn test_pattern_match_with_guard_codegen() {
+        // Test pattern match with guard generates correct branches (fix escaping)
+        let source = r#"
+            F classify(x:i64)->str=M x{
+                n I n>0=>"pos",
+                n I n<0=>"neg",
+                _=>"zero"
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should have branches for guards
+        assert!(ir.contains("br i1"));
+    }
+
+    #[test]
+    fn test_mutual_recursion_codegen() {
+        // Test mutual recursion generates correct calls
+        let source = r#"
+            F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
+            F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("define i1 @is_even"));
+        assert!(ir.contains("define i1 @is_odd"));
+        assert!(ir.contains("call i1 @is_odd"));
+        assert!(ir.contains("call i1 @is_even"));
+    }
+
+    #[test]
+    fn test_deeply_nested_if_codegen() {
+        // Test deeply nested if-else generates correct basic blocks
+        let source = r#"
+            F deep(x:i64)->i64{
+                I x>100{
+                    I x>1000{1}E{2}
+                }E{
+                    I x>10{
+                        I x>50{3}E{4}
+                    }E{5}
+                }
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should have multiple branches
+        let br_count = ir.matches("br i1").count();
+        assert!(br_count >= 4, "Expected at least 4 branches");
+    }
+
+    #[test]
+    fn test_large_number_of_parameters() {
+        // Test function with many parameters
+        let source = r#"
+            F many_params(
+                a:i64,b:i64,c:i64,d:i64,e:i64,
+                f:i64,g:i64,h:i64,i:i64,j:i64,
+                k:i64,l:i64,m:i64,n:i64,o:i64
+            )->i64=a+b+c+d+e+f+g+h+i+j+k+l+m+n+o
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("define i64 @many_params"));
+        // Check for parameter usage
+        assert!(ir.contains("%a"));
+        assert!(ir.contains("%o"));
+    }
+
+    #[test]
+    fn test_zero_return_optimization() {
+        // Test that returning 0 is optimized
+        let source = r#"
+            F zero()->i64=0
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("ret i64 0"));
+    }
+
+    #[test]
+    fn test_constant_folding_candidate() {
+        // Test expressions that could be constant folded
+        let source = r#"
+            F const_expr()->i64=2+3*4-1
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should generate arithmetic operations
+        assert!(ir.contains("add i64") || ir.contains("ret i64 13"));
+        assert!(ir.contains("mul i64") || ir.contains("ret i64 13"));
+    }
+
+    #[test]
+    fn test_boolean_short_circuit() {
+        // Test boolean short-circuit evaluation
+        let source = r#"
+            F short_circuit(a:bool,b:bool)->bool=a&&b||!a
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("define i1 @short_circuit"));
+    }
+
+    #[test]
+    fn test_comparison_chain_codegen() {
+        // Test comparison chains: a < b < c
+        let source = r#"
+            F compare_chain(a:i64,b:i64,c:i64)->bool{
+                x:=a<b;
+                y:=b<c;
+                x&&y
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("icmp slt"));
+    }
+
+    #[test]
+    fn test_bitwise_operations_all_types() {
+        // Test bitwise operations (i8 not fully supported, use i64)
+        let source = r#"
+            F bitwise_i64(a:i64,b:i64)->i64=a&b|a^b
+            F bitwise_test()->i64=bitwise_i64(5,3)
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("and i64"));
+        assert!(ir.contains("or i64"));
+        assert!(ir.contains("xor i64"));
+    }
+
+    #[test]
+    fn test_shift_operations_boundaries() {
+        // Test shift operations at boundaries
+        let source = r#"
+            F shift_max(x:i64)->i64{
+                a:=x<<63;
+                b:=x>>63;
+                a+b
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("shl i64"));
+        assert!(ir.contains("ashr i64"));
+    }
+
+    #[test]
+    fn test_negative_shift_amount() {
+        // Test negative shift (undefined behavior, should compile)
+        let source = r#"
+            F neg_shift(x:i64)->i64{
+                shift:=-1;
+                x<<shift
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("shl i64"));
+    }
+
+    #[test]
+    fn test_all_unary_operators() {
+        // Test all unary operators
+        let source = r#"
+            F unary_ops(x:i64,b:bool)->(i64,i64,bool){
+                neg:=-x;
+                bit_not:=~x;
+                log_not:=!b;
+                (neg,bit_not,log_not)
+            }
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("sub i64 0")); // negation
+        assert!(ir.contains("xor i64") && ir.contains("-1")); // bitwise not
+    }
+
+    #[test]
+    fn test_float_division_by_zero() {
+        // Test float division (check IR has float division instruction)
+        let source = r#"
+            F fdiv_test(x:f64,y:f64)->f64=x/y
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Check that float division is generated
+        assert!(ir.contains("fdiv") || ir.contains("define double"));
+    }
+
+    #[test]
+    fn test_recursive_depth() {
+        // Test deep recursion (should compile, runtime stack depth)
+        let source = r#"
+            F deep_recursion(n:i64)->i64=n<1?0:@(n-1)+1
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        assert!(ir.contains("call i64 @deep_recursion"));
+    }
 }

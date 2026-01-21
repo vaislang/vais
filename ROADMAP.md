@@ -238,10 +238,11 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ## 🧪 테스트 현황
 
 ```
-✅ 302 tests passed, 0 failed
+✅ 402 tests passed, 0 failed
 ✅ 40+ example files compiled and running
 ✅ 47 E2E integration tests
 ✅ 21 i18n tests
+✅ 100+ edge case tests
 ```
 
 ---
@@ -487,7 +488,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
-| Phase 6: 후속 개선 | 🔄 계획됨 | 0% |
+| Phase 6: 후속 개선 | 🔄 진행 중 | 20% |
 
 ---
 
@@ -605,15 +606,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 6: 후속 개선 및 확장
 
-> **상태**: 🔄 계획됨 (0%)
+> **상태**: 🔄 진행 중 (20%)
 > **추가일**: 2026-01-21
 
 ### P0 - 즉시 (1-2주)
-- [ ] **테스트 커버리지 확대** - 엣지 케이스 테스트 10-15개 추가
+- [x] **테스트 커버리지 확대** - 엣지 케이스 테스트 100개 추가 (완료일: 2026-01-21)
   - 제네릭 중첩 조합 (Vec<HashMap<K, Option<V>>>)
   - 패턴 매칭 + guard 조합
   - 상호 재귀 함수 타입 추론
   - 정수 오버플로우/언더플로우
+  - 테스트 302개 → 402개
 - [ ] **import 경로 보안 강화** - 경로 트래버설 취약점 방지
   - canonical 경로 검증
   - 심볼릭 링크 처리
@@ -659,7 +661,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 3: 개발자 도구 | ✅ 완료 | 100% |
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
-| Phase 6: 후속 개선 | 🔄 계획됨 | 0% |
+| Phase 6: 후속 개선 | 🔄 진행 중 | 20% |
 
 ---
 

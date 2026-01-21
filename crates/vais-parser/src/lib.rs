@@ -2709,4 +2709,365 @@ F handle(r:Result)->i64=M r{Ok(v)=>v,Err(_)=>0}
         let module = parse(source).unwrap();
         assert_eq!(module.items.len(), 2);
     }
+
+    // ==================== Advanced Edge Case Tests ====================
+
+    #[test]
+    fn test_nested_generic_vec_hashmap() {
+        // Test nested generic: Vec<HashMap<K, V> > with spaces
+        let source = "S Container{data:Vec<HashMap<str,i64> >}";
+        let module = parse(source).unwrap();
+
+        let Item::Struct(s) = &module.items[0].node else {
+            unreachable!("Expected struct");
+        };
+        assert_eq!(s.name.node, "Container");
+        assert_eq!(s.fields.len(), 1);
+    }
+
+    #[test]
+    fn test_option_of_vec_generic() {
+        // Test Option<Vec<T> > combination with spaces (need space before =)
+        let source = r#"F get_items<T>()->Option<Vec<T> > ="""#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "get_items");
+        assert_eq!(f.generics.len(), 1);
+    }
+
+    #[test]
+    fn test_hashmap_option_value() {
+        // Test HashMap<K, Option<V> > with spaces
+        let source = "S Cache{entries:HashMap<str,Option<i64> >}";
+        let module = parse(source).unwrap();
+
+        let Item::Struct(s) = &module.items[0].node else {
+            unreachable!("Expected struct");
+        };
+        assert_eq!(s.name.node, "Cache");
+    }
+
+    #[test]
+    fn test_deeply_nested_generics() {
+        // Test Vec<HashMap<K, Option<Vec<T> > > > with spaces (need space before =)
+        let source = "F complex<T>()->Vec<HashMap<str,Option<Vec<T> > > > =[]";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "complex");
+    }
+
+    #[test]
+    fn test_pattern_match_with_guard() {
+        // Test pattern matching with guard condition
+        let source = "F classify(x:i64)->str=M x{n I n>0=>\"pos\",n I n<0=>\"neg\",_=>\"zero\"}";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "classify");
+    }
+
+    #[test]
+    fn test_pattern_match_guard_complex() {
+        // Test pattern match with complex guard
+        let source = r#"
+F filter(opt:Option<i64>)->i64=M opt{
+    Some(x) I x>0&&x<100=>x,
+    Some(x) I x>=100=>100,
+    Some(_)=>0,
+    None=>-1
+}
+"#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "filter");
+    }
+
+    #[test]
+    fn test_nested_pattern_destructuring() {
+        // Test nested destructuring in pattern match
+        let source = r#"
+E Nested{Pair((i64,i64)),Single(i64),None}
+F sum(n:Nested)->i64=M n{
+    Pair((a,b))=>a+b,
+    Single(x)=>x,
+    None=>0
+}
+"#;
+        let module = parse(source).unwrap();
+
+        assert_eq!(module.items.len(), 2);
+        let Item::Function(f) = &module.items[1].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "sum");
+    }
+
+    #[test]
+    fn test_pattern_guard_with_multiple_conditions() {
+        // Test guard with multiple && || conditions
+        let source = "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "check");
+    }
+
+    #[test]
+    fn test_nested_option_pattern() {
+        // Test nested Option patterns: Option<Option<T> > with spaces
+        let source = r#"
+F unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
+    Some(Some(x))=>x,
+    Some(None)=>-1,
+    None=>-2
+}
+"#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "unwrap_twice");
+    }
+
+    #[test]
+    fn test_mutual_recursion_type_inference() {
+        // Test mutual recursion: two functions calling each other
+        let source = r#"
+F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
+F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
+"#;
+        let module = parse(source).unwrap();
+
+        assert_eq!(module.items.len(), 2);
+        let Item::Function(f1) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        let Item::Function(f2) = &module.items[1].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f1.name.node, "is_even");
+        assert_eq!(f2.name.node, "is_odd");
+    }
+
+    #[test]
+    fn test_three_way_mutual_recursion() {
+        // Test three functions in mutual recursion
+        let source = r#"
+F a(n:i64)->i64=n<1?0:b(n-1)+1
+F b(n:i64)->i64=n<1?0:c(n-1)+1
+F c(n:i64)->i64=n<1?0:a(n-1)+1
+"#;
+        let module = parse(source).unwrap();
+
+        assert_eq!(module.items.len(), 3);
+    }
+
+    #[test]
+    fn test_indirect_recursion_through_lambda() {
+        // Test recursion through lambda (advanced case)
+        let source = r#"
+F outer(n:i64)->i64{
+    helper:=|x:i64|x<1?0:outer(x-1)+1;
+    helper(n)
+}
+"#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "outer");
+    }
+
+    #[test]
+    fn test_generic_mutual_recursion() {
+        // Test mutual recursion with generics
+        let source = r#"
+F transform_a<T>(x:T)->T=transform_b(x)
+F transform_b<T>(x:T)->T=x
+"#;
+        let module = parse(source).unwrap();
+
+        assert_eq!(module.items.len(), 2);
+    }
+
+    #[test]
+    fn test_i8_boundary_parsing() {
+        // Test i8 min/max: -128, 127
+        let source = "F i8_test()->(){min:i8=-128;max:i8=127}";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "i8_test");
+    }
+
+    #[test]
+    fn test_i16_boundaries() {
+        // Test i16 boundaries: -32768, 32767
+        let source = "F i16_test()->(){min:i16=-32768;max:i16=32767}";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "i16_test");
+    }
+
+    #[test]
+    fn test_i64_max_parsing() {
+        // Test i64 max: 9223372036854775807
+        let source = "F i64_max()->i64=9223372036854775807";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "i64_max");
+    }
+
+    #[test]
+    fn test_pattern_with_range() {
+        // Test pattern matching with ranges
+        let source = r#"
+F grade(score:i64)->str=M score{
+    x I x>=90=>"A",
+    x I x>=80=>"B",
+    x I x>=70=>"C",
+    x I x>=60=>"D",
+    _=>"F"
+}
+"#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "grade");
+    }
+
+    #[test]
+    fn test_destructure_nested_struct() {
+        // Test destructuring nested structs in pattern match
+        let source = r#"
+S Point{x:i64,y:i64}
+S Line{start:Point,end:Point}
+F length(line:Line)->i64=line.end.x-line.start.x
+"#;
+        let module = parse(source).unwrap();
+
+        assert_eq!(module.items.len(), 3);
+    }
+
+    #[test]
+    fn test_guard_with_method_call() {
+        // Test guard condition with method calls
+        let source = "F check_len(s:str)->bool=M s{x I x.len()>0=>true,_=>false}";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "check_len");
+    }
+
+    #[test]
+    fn test_multiple_generic_constraints() {
+        // Test function with multiple generic parameters with bounds
+        let source = "F combine<A:Clone,B:Default,C:Ord>(a:A,b:B,c:C)->C=c";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.generics.len(), 3);
+        assert_eq!(f.generics[0].bounds.len(), 1);
+        assert_eq!(f.generics[1].bounds.len(), 1);
+        assert_eq!(f.generics[2].bounds.len(), 1);
+    }
+
+    #[test]
+    fn test_enum_with_generic_variants() {
+        // Test enum with generic variants
+        let source = "E Result<T,E>{Ok(T),Err(E)}";
+        let module = parse(source).unwrap();
+
+        let Item::Enum(e) = &module.items[0].node else {
+            unreachable!("Expected enum");
+        };
+        assert_eq!(e.name.node, "Result");
+        assert_eq!(e.generics.len(), 2);
+        assert_eq!(e.variants.len(), 2);
+    }
+
+    #[test]
+    fn test_deeply_nested_if_else() {
+        // Test deeply nested if-else chains
+        let source = r#"
+F classify(n:i64)->str{
+    I n>1000{
+        I n>10000{"huge"}E{"large"}
+    }E{
+        I n>100{
+            I n>500{"medium-large"}E{"medium"}
+        }E{
+            I n>10{"small"}E{"tiny"}
+        }
+    }
+}
+"#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "classify");
+    }
+
+    #[test]
+    fn test_pattern_with_multiple_bindings() {
+        // Test pattern with multiple variable bindings and guards
+        let source = r#"
+F process(a:i64,b:i64)->i64=M (a,b){
+    (x,y) I x>0&&y>0=>x+y,
+    (x,y) I x<0&&y<0=>x-y,
+    (x,y) I x==0||y==0=>0,
+    (x,y)=>x*y
+}
+"#;
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "process");
+    }
+
+    #[test]
+    fn test_self_recursion_with_multiple_params() {
+        // Test self-recursion with multiple parameters
+        let source = "F gcd(a:i64,b:i64)->i64=b==0?a:@(b,a%b)";
+        let module = parse(source).unwrap();
+
+        let Item::Function(f) = &module.items[0].node else {
+            unreachable!("Expected function");
+        };
+        assert_eq!(f.name.node, "gcd");
+        assert_eq!(f.params.len(), 2);
+    }
 }
