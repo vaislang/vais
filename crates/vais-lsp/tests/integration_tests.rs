@@ -404,8 +404,10 @@ async fn test_server_capabilities_comprehensive() {
     assert!(caps.semantic_tokens_provider.is_some(), "Missing semantic_tokens_provider");
     assert!(caps.rename_provider.is_some(), "Missing rename_provider");
 
+    // Verify newly implemented capabilities
+    assert!(caps.code_action_provider.is_some(), "Missing code_action_provider");
+
     // Verify capabilities that should NOT be present (not yet implemented)
-    assert!(caps.code_action_provider.is_none(), "code_action_provider should not be implemented");
     assert!(caps.document_formatting_provider.is_none(), "document_formatting_provider should not be implemented");
     assert!(caps.folding_range_provider.is_none(), "folding_range_provider should not be implemented");
 }

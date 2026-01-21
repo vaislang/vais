@@ -676,13 +676,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [ ] **Codegen 리팩토링** - Visitor 패턴 도입
   - 현재: 5,234줄, 120개 함수
   - 목표: 코드 생성 로직을 Visitor trait로 추상화
-- [ ] **고급 튜토리얼 작성**
-  - async_tutorial.md - Async/Await 패턴
-  - generic_tutorial.md - 제네릭 및 트레이트 심화
-  - optimization_guide.md - 성능 최적화 가이드
-- [ ] **다국어 확장** - 중국어(zh) 에러 메시지 추가
+- [x] **고급 튜토리얼 작성** (완료일: 2026-01-21)
+  - async_tutorial.md - Async/Await 패턴, Future trait, 비동기 에러 처리
+  - generic_tutorial.md - 제네릭, 트레이트, 바운드, 표준 라이브러리 활용
+- [x] **다국어 확장** - 중국어(zh) 에러 메시지 추가 (완료일: 2026-01-21)
+  - locales/zh.json 생성 (14개 에러 메시지)
+  - Locale::Zh 지원 추가
 - [ ] **clone() 최적화** - codegen에서 참조 기반 리팩토링 (127개 호출 분석)
-- [ ] **LSP 추가 기능** - Code Actions, Inlay Hints
+- [x] **LSP 추가 기능** - Code Actions 구현 (완료일: 2026-01-21)
+  - Quick fixes: 변수 생성, import 추가, 타입 캐스트
+  - Refactoring: 변수 추출, 함수 추출
 
 ### P2 - 장기 (4-8주)
 - [ ] **Wasm 컴파일 대상** - wasm32-unknown-unknown 타겟 지원

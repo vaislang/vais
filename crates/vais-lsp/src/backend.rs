@@ -587,6 +587,7 @@ impl LanguageServer for VaisBackend {
                     prepare_provider: Some(true),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 })),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 ..Default::default()
             },
         })
@@ -1488,5 +1489,357 @@ impl LanguageServer for VaisBackend {
         }
 
         Ok(None)
+    }
+
+    async fn code_action(
+        &self,
+        params: CodeActionParams,
+    ) -> Result<Option<CodeActionResponse>> {
+        let uri = &params.text_document.uri;
+        let range = params.range;
+        let mut actions = Vec::new();
+
+        if let Some(doc) = self.documents.get(uri) {
+            // Get diagnostics from the context
+            let diagnostics = &params.context.diagnostics;
+            if !diagnostics.is_empty() {
+                for diagnostic in diagnostics {
+                    // Quick fix for undefined variables
+                    if diagnostic.message.starts_with("Undefined variable:") {
+                        let var_name = diagnostic
+                            .message
+                            .strip_prefix("Undefined variable: ")
+                            .unwrap_or("");
+
+                        // Suggest creating a variable
+                        let insert_position = Position::new(range.start.line, 0);
+                        let edit = WorkspaceEdit {
+                            changes: Some({
+                                let mut map = std::collections::HashMap::new();
+                                map.insert(
+                                    uri.clone(),
+                                    vec![TextEdit {
+                                        range: Range::new(insert_position, insert_position),
+                                        new_text: format!("L {}: i64 = 0\n", var_name),
+                                    }],
+                                );
+                                map
+                            }),
+                            document_changes: None,
+                            change_annotations: None,
+                        };
+
+                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                            title: format!("Create variable '{}'", var_name),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            diagnostics: Some(vec![diagnostic.clone()]),
+                            edit: Some(edit),
+                            ..Default::default()
+                        }));
+                    }
+
+                    // Quick fix for undefined functions - suggest import
+                    if diagnostic.message.starts_with("Undefined function:") {
+                        let func_name = diagnostic
+                            .message
+                            .strip_prefix("Undefined function: ")
+                            .unwrap_or("");
+
+                        // Map of common functions to their modules
+                        let module_suggestions = [
+                            ("sqrt", "std/math"),
+                            ("sin", "std/math"),
+                            ("cos", "std/math"),
+                            ("tan", "std/math"),
+                            ("pow", "std/math"),
+                            ("log", "std/math"),
+                            ("exp", "std/math"),
+                            ("floor", "std/math"),
+                            ("ceil", "std/math"),
+                            ("abs", "std/math"),
+                            ("abs_i64", "std/math"),
+                            ("min", "std/math"),
+                            ("max", "std/math"),
+                            ("read_i64", "std/io"),
+                            ("read_f64", "std/io"),
+                            ("read_line", "std/io"),
+                            ("read_char", "std/io"),
+                        ];
+
+                        for (name, module) in &module_suggestions {
+                            if func_name == *name {
+                                // Check if import already exists
+                                let has_import = if let Some(ast) = &doc.ast {
+                                    ast.items.iter().any(|item| {
+                                        if let vais_ast::Item::Use(use_item) = &item.node {
+                                            // Convert path to string for comparison
+                                            let path_str = use_item.path.iter()
+                                                .map(|s| s.node.as_str())
+                                                .collect::<Vec<_>>()
+                                                .join("/");
+                                            path_str == *module
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                } else {
+                                    false
+                                };
+
+                                if !has_import {
+                                    let edit = WorkspaceEdit {
+                                        changes: Some({
+                                            let mut map = std::collections::HashMap::new();
+                                            map.insert(
+                                                uri.clone(),
+                                                vec![TextEdit {
+                                                    range: Range::new(
+                                                        Position::new(0, 0),
+                                                        Position::new(0, 0),
+                                                    ),
+                                                    new_text: format!("U {}\n", module),
+                                                }],
+                                            );
+                                            map
+                                        }),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    };
+
+                                    actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: format!("Import {} from {}", func_name, module),
+                                        kind: Some(CodeActionKind::QUICKFIX),
+                                        diagnostics: Some(vec![diagnostic.clone()]),
+                                        edit: Some(edit),
+                                        ..Default::default()
+                                    }));
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Quick fix for type mismatches - suggest type cast
+                    if diagnostic.message.starts_with("Type mismatch:") {
+                        if diagnostic.message.contains("expected i64, found f64")
+                            || diagnostic.message.contains("expected f64, found i64")
+                        {
+                            let cast_type = if diagnostic.message.contains("expected i64") {
+                                "i64"
+                            } else {
+                                "f64"
+                            };
+
+                            // Get the text at the diagnostic range
+                            let line = diagnostic.range.start.line as usize;
+                            if let Some(line_rope) = doc.content.get_line(line) {
+                                let line_str: String = line_rope.chars().collect();
+                                let start = diagnostic.range.start.character as usize;
+                                let end = diagnostic.range.end.character as usize;
+                                if end <= line_str.len() {
+                                    let text = &line_str[start..end];
+
+                                    let edit = WorkspaceEdit {
+                                        changes: Some({
+                                            let mut map = std::collections::HashMap::new();
+                                            map.insert(
+                                                uri.clone(),
+                                                vec![TextEdit {
+                                                    range: diagnostic.range,
+                                                    new_text: format!("{} as {}", text, cast_type),
+                                                }],
+                                            );
+                                            map
+                                        }),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    };
+
+                                    actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: format!("Cast to {}", cast_type),
+                                        kind: Some(CodeActionKind::QUICKFIX),
+                                        diagnostics: Some(vec![diagnostic.clone()]),
+                                        edit: Some(edit),
+                                        ..Default::default()
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Refactor: Extract to variable (if there's a selection)
+            if range.start != range.end {
+                let start_line = range.start.line as usize;
+                let end_line = range.end.line as usize;
+
+                // Only support single-line selections for now
+                if start_line == end_line {
+                    if let Some(line_rope) = doc.content.get_line(start_line) {
+                        let line_str: String = line_rope.chars().collect();
+                        let start_char = range.start.character as usize;
+                        let end_char = range.end.character as usize;
+
+                        if end_char <= line_str.len() {
+                            let selected_text = &line_str[start_char..end_char];
+
+                            // Only suggest if selection is not empty and looks like an expression
+                            if !selected_text.trim().is_empty()
+                                && !selected_text.trim().starts_with("L ")
+                            {
+                                let var_name = "value";
+                                let indent = line_str
+                                    .chars()
+                                    .take_while(|c| c.is_whitespace())
+                                    .collect::<String>();
+
+                                let edit = WorkspaceEdit {
+                                    changes: Some({
+                                        let mut map = std::collections::HashMap::new();
+                                        map.insert(
+                                            uri.clone(),
+                                            vec![
+                                                // Insert variable declaration above
+                                                TextEdit {
+                                                    range: Range::new(
+                                                        Position::new(range.start.line, 0),
+                                                        Position::new(range.start.line, 0),
+                                                    ),
+                                                    new_text: format!(
+                                                        "{}L {}: _ = {}\n",
+                                                        indent, var_name, selected_text
+                                                    ),
+                                                },
+                                                // Replace selection with variable reference
+                                                TextEdit {
+                                                    range,
+                                                    new_text: var_name.to_string(),
+                                                },
+                                            ],
+                                        );
+                                        map
+                                    }),
+                                    document_changes: None,
+                                    change_annotations: None,
+                                };
+
+                                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                    title: "Extract to variable".to_string(),
+                                    kind: Some(CodeActionKind::REFACTOR_EXTRACT),
+                                    diagnostics: None,
+                                    edit: Some(edit),
+                                    ..Default::default()
+                                }));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Refactor: Extract to function (for multi-line or complex selections)
+            if range.start.line != range.end.line || (range.end.character - range.start.character) > 30 {
+                let start_line = range.start.line as usize;
+                let end_line = range.end.line as usize;
+
+                // Collect selected lines
+                let mut selected_lines = Vec::new();
+                for line_idx in start_line..=end_line {
+                    if let Some(line_rope) = doc.content.get_line(line_idx) {
+                        let line_str: String = line_rope.chars().collect();
+
+                        if line_idx == start_line && line_idx == end_line {
+                            // Single line case
+                            let start_char = range.start.character as usize;
+                            let end_char = range.end.character as usize;
+                            if end_char <= line_str.len() {
+                                selected_lines.push(line_str[start_char..end_char].to_string());
+                            }
+                        } else if line_idx == start_line {
+                            // First line
+                            let start_char = range.start.character as usize;
+                            if start_char < line_str.len() {
+                                selected_lines.push(line_str[start_char..].to_string());
+                            }
+                        } else if line_idx == end_line {
+                            // Last line
+                            let end_char = range.end.character as usize;
+                            if end_char <= line_str.len() {
+                                selected_lines.push(line_str[..end_char].to_string());
+                            }
+                        } else {
+                            // Middle lines
+                            selected_lines.push(line_str);
+                        }
+                    }
+                }
+
+                if !selected_lines.is_empty() {
+                    let selected_text = selected_lines.join("\n");
+
+                    if !selected_text.trim().is_empty() {
+                        let func_name = "extracted_function";
+
+                        // Find indentation of first line
+                        let first_line_str: String = doc.content.get_line(start_line)
+                            .map(|rope| rope.chars().collect())
+                            .unwrap_or_default();
+                        let indent = first_line_str
+                            .chars()
+                            .take_while(|c| c.is_whitespace())
+                            .collect::<String>();
+
+                        // Create function definition
+                        let function_def = format!(
+                            "\nF {}() -> _ {{\n{}{}\n}}\n",
+                            func_name,
+                            indent,
+                            selected_text.lines().collect::<Vec<_>>().join(&format!("\n{}", indent))
+                        );
+
+                        let edit = WorkspaceEdit {
+                            changes: Some({
+                                let mut map = std::collections::HashMap::new();
+                                map.insert(
+                                    uri.clone(),
+                                    vec![
+                                        // Insert function at top of file
+                                        TextEdit {
+                                            range: Range::new(
+                                                Position::new(0, 0),
+                                                Position::new(0, 0),
+                                            ),
+                                            new_text: function_def,
+                                        },
+                                        // Replace selection with function call
+                                        TextEdit {
+                                            range,
+                                            new_text: format!("{}()", func_name),
+                                        },
+                                    ],
+                                );
+                                map
+                            }),
+                            document_changes: None,
+                            change_annotations: None,
+                        };
+
+                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                            title: "Extract to function".to_string(),
+                            kind: Some(CodeActionKind::REFACTOR_EXTRACT),
+                            diagnostics: None,
+                            edit: Some(edit),
+                            ..Default::default()
+                        }));
+                    }
+                }
+            }
+        }
+
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
     }
 }
