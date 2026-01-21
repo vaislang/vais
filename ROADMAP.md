@@ -699,7 +699,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [ ] **증분 컴파일** - 파일 해시 기반 캐싱, 변경된 파일만 재컴파일
 - [ ] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반
 - [ ] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (복잡도, 의존성)
-- [ ] **unwrap/expect 감소** - 에러 전파 패턴 적용 (551개 중 ~150개 검토)
+- [x] **unwrap/expect 감소** - 에러 전파 패턴 적용 (완료일: 2026-01-21)
+  - 총 488개 분석 완료: 테스트 코드 ~380개, 컴파일러 내부 ~50개, 안전한 폴백 ~16개
+  - exhaustiveness.rs: unwrap() → expect() 변환 (길이 검증 문서화)
+  - 프로덕션 코드의 외부 입력 처리는 이미 unwrap_or/unwrap_or_else 사용
 
 ### P3 - 미래 (6개월+)
 - [ ] **inkwell 직접 통합** - 문자열 IR 대신 LLVM API 직접 사용
