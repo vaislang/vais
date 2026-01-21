@@ -644,24 +644,54 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 플러그인 테스트 26개 (PluginRegistry, PluginsConfig, Diagnostic, 에러 핸들링)
   - Formatter 테스트 34개 (함수, 구조체, 열거형, 제어 흐름, 들여쓰기)
 
+### 남은 작업
+- (없음 - P2/P3 항목은 Phase 7로 이동)
+
+---
+
+## 🚀 Phase 7: 아키텍처 개선 및 확장
+
+> **상태**: 📋 계획 중 (0%)
+> **추가일**: 2026-01-21
+
+### P0 - 즉시 (1-2주)
+- [ ] **TODO 주석 해결** - 플러그인 이름으로 로드 기능 구현 (registry.rs:32)
+- [ ] **Parser 모듈 분해 1단계** - 표현식 파싱을 expr.rs로 분리
+  - 현재: 3,073줄 단일 파일
+  - 목표: lib.rs ~1,500줄, expr.rs ~1,000줄, stmt.rs ~500줄
+- [ ] **테스트 커버리지 보고서** - cargo-tarpaulin 또는 llvm-cov 설정
+
+### P1 - 중기 (2-4주)
+- [ ] **Codegen 리팩토링** - Visitor 패턴 도입
+  - 현재: 5,234줄, 120개 함수
+  - 목표: 코드 생성 로직을 Visitor trait로 추상화
+- [ ] **고급 튜토리얼 작성**
+  - async_tutorial.md - Async/Await 패턴
+  - generic_tutorial.md - 제네릭 및 트레이트 심화
+  - optimization_guide.md - 성능 최적화 가이드
+- [ ] **다국어 확장** - 중국어(zh) 에러 메시지 추가
+- [ ] **clone() 최적화** - codegen에서 참조 기반 리팩토링 (127개 호출 분석)
+- [ ] **LSP 추가 기능** - Code Actions, Inlay Hints
+
 ### P2 - 장기 (4-8주)
-- [ ] **Parser 모듈 분해** - 2,712줄 → 표현식/문장 모듈 분리
-- [ ] **Codegen 리팩토링** - 4,791줄 → 상태 관리 분리, Visitor 패턴
-- [ ] **다국어 확장** - 중국어, 스페인어, 프랑스어 메시지 추가
-- [ ] **플러그인 확장** - 포맷터 플러그인, 분석 플러그인
+- [ ] **Wasm 컴파일 대상** - wasm32-unknown-unknown 타겟 지원
+- [ ] **증분 컴파일** - 파일 해시 기반 캐싱, 변경된 파일만 재컴파일
+- [ ] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반
+- [ ] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (복잡도, 의존성)
+- [ ] **unwrap/expect 감소** - 에러 전파 패턴 적용 (551개 중 ~150개 검토)
 
 ### P3 - 미래 (6개월+)
-- [ ] **Wasm 컴파일 대상** - wasm32 타겟 지원
-- [ ] **증분 컴파일** - 변경된 파일만 재컴파일
-- [ ] **IntelliJ IDE 플러그인** - LSP 기반 플러그인
-- [ ] **라이브러리화** - Python/Node.js 바인딩
+- [ ] **inkwell 직접 통합** - 문자열 IR 대신 LLVM API 직접 사용
+- [ ] **언어 바인딩** - Python/Node.js에서 vaisc 호출 (pyo3, napi-rs)
+- [ ] **Self-hosting** - vaisc를 Vais로 재작성
+- [ ] **JIT 컴파일** - REPL에서 JIT 실행 (cranelift 또는 LLVM JIT)
 
 ### 남은 작업
 - (위 항목들 중 선택하여 진행)
 
 ---
 
-## 📊 진행률 요약 (Phase 6 포함)
+## 📊 진행률 요약
 
 | Phase | 상태 | 진행률 |
 |-------|------|--------|
@@ -671,6 +701,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
+| Phase 7: 아키텍처 개선 | 📋 계획 중 | 0% |
 
 ---
 
