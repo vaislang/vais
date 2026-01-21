@@ -651,7 +651,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 7: 아키텍처 개선 및 확장
 
-> **상태**: 🔨 진행 중 (10%)
+> **상태**: ✅ P0 완료 (100%)
 > **추가일**: 2026-01-21
 
 ### P0 - 즉시 (1-2주)
@@ -660,10 +660,17 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 플러그인 검색 디렉토리: ~/.vais/plugins/, /usr/local/lib/vais/plugins/, VAIS_PLUGIN_PATH
   - 플랫폼별 라이브러리 확장자 지원 (dylib/so/dll)
   - 테스트 4개 추가
-- [ ] **Parser 모듈 분해 1단계** - 표현식 파싱을 expr.rs로 분리
-  - 현재: 3,073줄 단일 파일
-  - 목표: lib.rs ~1,500줄, expr.rs ~1,000줄, stmt.rs ~500줄
-- [ ] **테스트 커버리지 보고서** - cargo-tarpaulin 또는 llvm-cov 설정
+- [x] **Parser 모듈 분해 1단계** - 표현식 파싱을 expr.rs로 분리 (완료일: 2026-01-21)
+  - lib.rs 3,073줄 → lib.rs 1,937줄 + expr.rs 1,049줄 + stmt.rs 117줄
+  - 표현식 파싱(binary, unary, postfix, primary, control flow) → expr.rs
+  - 문장 파싱(let, return, break, continue) → stmt.rs
+  - 테스트 81개 통과
+- [x] **테스트 커버리지 보고서** - cargo-tarpaulin 설정 (완료일: 2026-01-21)
+  - tarpaulin.toml 설정 파일 생성
+  - .cargo/config.toml에 cargo coverage alias 추가
+  - scripts/coverage.sh 스크립트 생성
+  - CI 워크플로우에 coverage job 추가
+  - docs/COVERAGE.md 문서화
 
 ### P1 - 중기 (2-4주)
 - [ ] **Codegen 리팩토링** - Visitor 패턴 도입
@@ -705,7 +712,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
-| Phase 7: 아키텍처 개선 | 🔨 진행 중 | 10% |
+| Phase 7: 아키텍처 개선 | 🔨 P0 완료 | 100% (P0) |
 
 ---
 
