@@ -2,8 +2,20 @@
 //!
 //! Generates LLVM IR from typed AST for native code generation.
 //!
-//! Note: This is a placeholder structure. Full LLVM integration requires
-//! the inkwell crate and LLVM installation.
+//! # Backends
+//!
+//! This crate supports two code generation backends:
+//!
+//! - **text-codegen** (default): Generates LLVM IR as text, then compiles via clang.
+//!   Does not require LLVM installation.
+//!
+//! - **inkwell-codegen**: Uses inkwell bindings for direct LLVM API access.
+//!   Provides better type safety and performance. Requires LLVM 17+.
+//!
+//! # Feature Flags
+//!
+//! - `text-codegen` (default): Enable text-based IR generation
+//! - `inkwell-codegen`: Enable inkwell-based generation (requires LLVM 17+)
 
 pub mod debug;
 pub mod formatter;
@@ -18,6 +30,13 @@ mod types;
 mod stmt;
 #[cfg(test)]
 mod cache_tests;
+
+// Inkwell-based code generator (optional)
+#[cfg(feature = "inkwell-codegen")]
+pub mod inkwell;
+
+#[cfg(feature = "inkwell-codegen")]
+pub use inkwell::InkwellCodeGenerator;
 
 pub use visitor::{ExprVisitor, StmtVisitor, ItemVisitor};
 

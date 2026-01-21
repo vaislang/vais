@@ -729,7 +729,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 프로덕션 코드의 외부 입력 처리는 이미 unwrap_or/unwrap_or_else 사용
 
 ### P3 - 미래 (6개월+)
-- [ ] **inkwell 직접 통합** - 문자열 IR 대신 LLVM API 직접 사용
+- [x] **inkwell 직접 통합** - 문자열 IR 대신 LLVM API 직접 사용 (완료일: 2026-01-21)
+  - inkwell 0.4 (LLVM 17) 의존성 추가 (optional feature)
+  - feature flag: `text-codegen` (기본), `inkwell-codegen`
+  - InkwellCodeGenerator 구현 (generator.rs)
+  - TypeMapper: Vais → LLVM 타입 매핑 (types.rs)
+  - 빌트인 함수 선언 (builtins.rs)
+  - 설계 문서: docs/design/inkwell-integration-design.md
+  - 참고: 실제 사용은 LLVM 17+ 설치 필요
 - [x] **언어 바인딩** - Python/Node.js에서 vaisc 호출 (완료일: 2026-01-21)
   - vais-python 크레이트 (pyo3 기반)
     - compile(), check(), parse(), tokenize() 함수

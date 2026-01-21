@@ -33,7 +33,7 @@ miette = { version = "7.0", features = ["fancy"] }
 logos = "0.14"
 
 # LLVM (optional - requires LLVM 17 installed)
-# inkwell = { version = "0.4", features = ["llvm17-0"] }
+inkwell = { version = "0.4", features = ["llvm17-0"] }
 
 # Utils
 ariadne = "0.4"
