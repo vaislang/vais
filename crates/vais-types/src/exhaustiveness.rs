@@ -9,6 +9,9 @@
 
 use crate::ResolvedType;
 use vais_ast::{Literal, MatchArm, Pattern, Spanned};
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// Result of exhaustiveness check
 #[derive(Debug, Clone)]
@@ -52,14 +55,42 @@ pub enum PatternSpace {
 /// Exhaustiveness checker
 pub struct ExhaustivenessChecker {
     /// Enum definitions for looking up variants
-    enums: std::collections::HashMap<String, Vec<String>>,
+    enums: HashMap<String, Vec<String>>,
+    /// Cache for exhaustiveness check results
+    /// Key: (type hash, patterns hash) -> ExhaustivenessResult
+    cache: HashMap<(u64, u64), ExhaustivenessResult>,
 }
 
 impl ExhaustivenessChecker {
     pub fn new() -> Self {
         Self {
-            enums: std::collections::HashMap::new(),
+            enums: HashMap::new(),
+            cache: HashMap::new(),
         }
+    }
+
+    /// Clear the exhaustiveness check cache
+    pub fn clear_cache(&mut self) {
+        self.cache.clear();
+    }
+
+    /// Compute hash for a type
+    fn hash_type(ty: &ResolvedType) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", ty).hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Compute hash for match arms patterns
+    fn hash_patterns(arms: &[MatchArm]) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        for arm in arms {
+            format!("{:?}", arm.pattern).hash(&mut hasher);
+            if arm.guard.is_some() {
+                "guard".hash(&mut hasher);
+            }
+        }
+        hasher.finish()
     }
 
     /// Register enum variants for exhaustiveness checking
@@ -67,12 +98,22 @@ impl ExhaustivenessChecker {
         self.enums.insert(name.to_string(), variants);
     }
 
-    /// Check if a match expression is exhaustive
+    /// Check if a match expression is exhaustive (with caching)
     pub fn check_match(
-        &self,
+        &mut self,
         scrutinee_type: &ResolvedType,
         arms: &[MatchArm],
     ) -> ExhaustivenessResult {
+        // Check cache first
+        let type_hash = Self::hash_type(scrutinee_type);
+        let patterns_hash = Self::hash_patterns(arms);
+        let cache_key = (type_hash, patterns_hash);
+
+        if let Some(cached) = self.cache.get(&cache_key) {
+            return cached.clone();
+        }
+
+        // Perform the check
         let mut missing_patterns = Vec::new();
         let mut unreachable_arms = Vec::new();
 
@@ -104,11 +145,15 @@ impl ExhaustivenessChecker {
             missing_patterns = self.space_to_patterns(&uncovered, scrutinee_type);
         }
 
-        ExhaustivenessResult {
+        let result = ExhaustivenessResult {
             is_exhaustive,
             missing_patterns,
             unreachable_arms,
-        }
+        };
+
+        // Store in cache
+        self.cache.insert(cache_key, result.clone());
+        result
     }
 
     /// Convert a type to its full pattern space
@@ -565,7 +610,7 @@ mod tests {
 
     #[test]
     fn test_exhaustive_bool_match() {
-        let checker = ExhaustivenessChecker::new();
+        let mut checker = ExhaustivenessChecker::new();
         let arms = vec![
             make_arm(make_bool_pattern(true)),
             make_arm(make_bool_pattern(false)),
@@ -577,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_non_exhaustive_bool_match() {
-        let checker = ExhaustivenessChecker::new();
+        let mut checker = ExhaustivenessChecker::new();
         let arms = vec![make_arm(make_bool_pattern(true))];
         let result = checker.check_match(&ResolvedType::Bool, &arms);
         assert!(!result.is_exhaustive);
@@ -586,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_exhaustive_with_wildcard() {
-        let checker = ExhaustivenessChecker::new();
+        let mut checker = ExhaustivenessChecker::new();
         let arms = vec![make_arm(make_int_pattern(0)), make_arm(make_wildcard())];
         let result = checker.check_match(&ResolvedType::I64, &arms);
         assert!(result.is_exhaustive);
@@ -594,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_non_exhaustive_int_match() {
-        let checker = ExhaustivenessChecker::new();
+        let mut checker = ExhaustivenessChecker::new();
         let arms = vec![
             make_arm(make_int_pattern(0)),
             make_arm(make_int_pattern(1)),
@@ -605,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_unreachable_arm() {
-        let checker = ExhaustivenessChecker::new();
+        let mut checker = ExhaustivenessChecker::new();
         let arms = vec![
             make_arm(make_wildcard()),
             make_arm(make_int_pattern(0)), // This is unreachable

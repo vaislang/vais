@@ -4,6 +4,8 @@
 //! substitution, and fresh type variable generation.
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use vais_ast::{Expr, Spanned};
 use crate::types::{ResolvedType, TypeError, TypeResult, FunctionSig, GenericInstantiation};
 use crate::TypeChecker;
@@ -141,9 +143,40 @@ impl TypeChecker {
         ResolvedType::Var(id)
     }
 
-    /// Substitute generic type parameters with concrete types
+    /// Compute hash for a type (for memoization)
+    fn hash_type(ty: &ResolvedType) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", ty).hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Compute hash for substitution map (for memoization)
+    fn hash_substitutions(substitutions: &HashMap<String, ResolvedType>) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        let mut keys: Vec<_> = substitutions.keys().collect();
+        keys.sort();
+        for key in keys {
+            key.hash(&mut hasher);
+            if let Some(value) = substitutions.get(key) {
+                format!("{:?}", value).hash(&mut hasher);
+            }
+        }
+        hasher.finish()
+    }
+
+    /// Substitute generic type parameters with concrete types (with memoization)
     pub(crate) fn substitute_generics(&self, ty: &ResolvedType, substitutions: &HashMap<String, ResolvedType>) -> ResolvedType {
-        match ty {
+        // Check cache first
+        let type_hash = Self::hash_type(ty);
+        let subst_hash = Self::hash_substitutions(substitutions);
+        let cache_key = (type_hash, subst_hash);
+
+        if let Some(cached) = self.substitute_cache.borrow().get(&cache_key) {
+            return cached.clone();
+        }
+
+        // Compute the substitution
+        let result = match ty {
             ResolvedType::Generic(name) => {
                 substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
             }
@@ -184,7 +217,11 @@ impl TypeChecker {
                 generics: generics.iter().map(|g| self.substitute_generics(g, substitutions)).collect(),
             },
             _ => ty.clone(),
-        }
+        };
+
+        // Store in cache
+        self.substitute_cache.borrow_mut().insert(cache_key, result.clone());
+        result
     }
 
     /// Check a generic function call, inferring type arguments from actual arguments

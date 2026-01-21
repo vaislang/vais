@@ -12,7 +12,7 @@ mod traits;
 mod inference;
 
 use std::collections::HashMap;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use vais_ast::*;
 
 // Re-export core types
@@ -83,6 +83,10 @@ pub struct TypeChecker {
 
     // Generic instantiations required for monomorphization
     generic_instantiations: Vec<GenericInstantiation>,
+
+    // Memoization cache for substitute_generics
+    // Key: (type hash, substitution map hash) -> Result type
+    substitute_cache: RefCell<HashMap<(u64, u64), ResolvedType>>,
 }
 
 impl TypeChecker {
@@ -105,6 +109,7 @@ impl TypeChecker {
             exhaustiveness_checker: ExhaustivenessChecker::new(),
             warnings: Vec::new(),
             generic_instantiations: Vec::new(),
+            substitute_cache: RefCell::new(HashMap::new()),
         };
         checker.register_builtins();
         checker

@@ -198,11 +198,13 @@ impl CodeGenerator {
     }
 
     /// Set generic substitutions for the current context
+    #[allow(dead_code)]
     pub(crate) fn set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
         self.generic_substitutions = subst;
     }
 
     /// Clear generic substitutions
+    #[allow(dead_code)]
     pub(crate) fn clear_generic_substitutions(&mut self) {
         self.generic_substitutions.clear();
     }
@@ -213,11 +215,13 @@ impl CodeGenerator {
     }
 
     /// Generate mangled name for a generic function
+    #[allow(dead_code)]
     pub(crate) fn mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
         vais_types::mangle_name(name, generics)
     }
 
     /// Get the size of a type in bytes (for generic operations)
+    #[allow(dead_code)]
     pub(crate) fn type_size(&self, ty: &ResolvedType) -> usize {
         match ty {
             ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,

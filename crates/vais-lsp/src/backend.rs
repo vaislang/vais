@@ -87,11 +87,24 @@ struct SymbolRef {
     span: Span,
 }
 
+/// Cached symbol information for a document
+#[derive(Debug, Clone)]
+struct SymbolCache {
+    /// Document version this cache is valid for
+    version: i32,
+    /// All symbol definitions in the document
+    definitions: Vec<SymbolDef>,
+    /// All symbol references in the document
+    references: Vec<SymbolRef>,
+}
+
 /// Document state
 pub struct Document {
     pub content: Rope,
     pub ast: Option<Module>,
     pub version: i32,
+    /// Cached symbol information (invalidated on document change)
+    symbol_cache: Option<SymbolCache>,
 }
 
 /// Vais Language Server Backend
@@ -114,6 +127,8 @@ impl VaisBackend {
             Ok(module) => {
                 if let Some(mut doc) = self.documents.get_mut(uri) {
                     doc.ast = Some(module);
+                    // Invalidate symbol cache on parse
+                    doc.symbol_cache = None;
                 }
                 // Clear diagnostics on successful parse
                 self.client
@@ -137,6 +152,38 @@ impl VaisBackend {
                     .await;
             }
         }
+    }
+
+    /// Get or build symbol cache for a document
+    fn get_symbol_cache(&self, uri: &Url) -> Option<SymbolCache> {
+        if let Some(doc) = self.documents.get(uri) {
+            // Check if cache is valid
+            if let Some(cache) = &doc.symbol_cache {
+                if cache.version == doc.version {
+                    return Some(cache.clone());
+                }
+            }
+
+            // Build new cache if AST is available
+            if let Some(ast) = &doc.ast {
+                let definitions = self.collect_definitions(ast);
+                let references = self.collect_references(ast);
+                let cache = SymbolCache {
+                    version: doc.version,
+                    definitions,
+                    references,
+                };
+
+                // Store cache in document
+                drop(doc); // Release read lock
+                if let Some(mut doc_mut) = self.documents.get_mut(uri) {
+                    doc_mut.symbol_cache = Some(cache.clone());
+                }
+
+                return Some(cache);
+            }
+        }
+        None
     }
 
     /// Get position offset in text
@@ -423,16 +470,15 @@ impl VaisBackend {
         }
     }
 
-    /// Find definition for an identifier at position
-    fn find_definition_at(&self, ast: &Module, offset: usize) -> Option<SymbolDef> {
-        let defs = self.collect_definitions(ast);
-        let refs = self.collect_references(ast);
+    /// Find definition for an identifier at position (using cache)
+    fn find_definition_at(&self, uri: &Url, offset: usize) -> Option<SymbolDef> {
+        let cache = self.get_symbol_cache(uri)?;
 
         // First check if we're on a reference
-        for r in &refs {
+        for r in &cache.references {
             if r.span.start <= offset && offset <= r.span.end {
                 // Found a reference, now find its definition
-                for d in &defs {
+                for d in &cache.definitions {
                     if d.name == r.name {
                         return Some(d.clone());
                     }
@@ -441,7 +487,7 @@ impl VaisBackend {
         }
 
         // Check if we're on a definition itself
-        for d in &defs {
+        for d in &cache.definitions {
             if d.span.start <= offset && offset <= d.span.end {
                 return Some(d.clone());
             }
@@ -450,41 +496,40 @@ impl VaisBackend {
         None
     }
 
-    /// Find all references to a symbol
-    fn find_all_references(&self, ast: &Module, symbol_name: &str) -> Vec<Span> {
+    /// Find all references to a symbol (using cache)
+    fn find_all_references(&self, uri: &Url, symbol_name: &str) -> Vec<Span> {
         let mut locations = Vec::new();
-        let defs = self.collect_definitions(ast);
-        let refs = self.collect_references(ast);
 
-        // Add definition location
-        for d in &defs {
-            if d.name == symbol_name {
-                locations.push(d.span);
+        if let Some(cache) = self.get_symbol_cache(uri) {
+            // Add definition location
+            for d in &cache.definitions {
+                if d.name == symbol_name {
+                    locations.push(d.span);
+                }
             }
-        }
 
-        // Add reference locations
-        for r in &refs {
-            if r.name == symbol_name {
-                locations.push(r.span);
+            // Add reference locations
+            for r in &cache.references {
+                if r.name == symbol_name {
+                    locations.push(r.span);
+                }
             }
         }
 
         locations
     }
 
-    /// Get the identifier name at a position
-    fn get_identifier_at(&self, ast: &Module, offset: usize) -> Option<String> {
-        let defs = self.collect_definitions(ast);
-        let refs = self.collect_references(ast);
+    /// Get the identifier name at a position (using cache)
+    fn get_identifier_at(&self, uri: &Url, offset: usize) -> Option<String> {
+        let cache = self.get_symbol_cache(uri)?;
 
-        for d in &defs {
+        for d in &cache.definitions {
             if d.span.start <= offset && offset <= d.span.end {
                 return Some(d.name.clone());
             }
         }
 
-        for r in &refs {
+        for r in &cache.references {
             if r.span.start <= offset && offset <= r.span.end {
                 return Some(r.name.clone());
             }
@@ -568,6 +613,7 @@ impl LanguageServer for VaisBackend {
                 content: Rope::from_str(&content),
                 ast: None,
                 version,
+                symbol_cache: None,
             },
         );
 
@@ -583,6 +629,8 @@ impl LanguageServer for VaisBackend {
             if let Some(mut doc) = self.documents.get_mut(&uri) {
                 doc.content = Rope::from_str(&content);
                 doc.version = params.text_document.version;
+                // Invalidate symbol cache on content change
+                doc.symbol_cache = None;
             }
 
             self.parse_document(&uri, &content).await;
@@ -606,7 +654,7 @@ impl LanguageServer for VaisBackend {
 
             // Get identifier at position
             if let Some(ast) = &doc.ast {
-                let ident = self.get_identifier_at(ast, offset);
+                let ident = self.get_identifier_at(uri, offset);
 
                 // Check for builtin functions first
                 if let Some(ref name) = ident {
@@ -1187,15 +1235,16 @@ impl LanguageServer for VaisBackend {
         let position = params.text_document_position_params.position;
 
         if let Some(doc) = self.documents.get(uri) {
-            if let Some(ast) = &doc.ast {
-                // Convert position to offset
-                let line = position.line as usize;
-                let col = position.character as usize;
-                let line_start = doc.content.line_to_char(line);
-                let offset = line_start + col;
+            // Convert position to offset
+            let line = position.line as usize;
+            let col = position.character as usize;
+            let line_start = doc.content.line_to_char(line);
+            let offset = line_start + col;
+            drop(doc); // Release read lock
 
-                // Use the new find_definition_at method
-                if let Some(def) = self.find_definition_at(ast, offset) {
+            // Use the new find_definition_at method (uses cache)
+            if let Some(def) = self.find_definition_at(uri, offset) {
+                if let Some(doc) = self.documents.get(uri) {
                     let range = self.span_to_range(&doc.content, &def.span);
                     return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                         uri: uri.clone(),
@@ -1216,16 +1265,18 @@ impl LanguageServer for VaisBackend {
         let position = params.text_document_position.position;
 
         if let Some(doc) = self.documents.get(uri) {
-            if let Some(ast) = &doc.ast {
-                // Convert position to offset
-                let line = position.line as usize;
-                let col = position.character as usize;
-                let line_start = doc.content.line_to_char(line);
-                let offset = line_start + col;
+            // Convert position to offset
+            let line = position.line as usize;
+            let col = position.character as usize;
+            let line_start = doc.content.line_to_char(line);
+            let offset = line_start + col;
+            drop(doc); // Release read lock
 
-                // Get the symbol name at the position
-                if let Some(symbol_name) = self.get_identifier_at(ast, offset) {
-                    let spans = self.find_all_references(ast, &symbol_name);
+            // Get the symbol name at the position (uses cache)
+            if let Some(symbol_name) = self.get_identifier_at(uri, offset) {
+                let spans = self.find_all_references(uri, &symbol_name);
+
+                if let Some(doc) = self.documents.get(uri) {
                     let locations: Vec<Location> = spans
                         .iter()
                         .map(|span| Location {
@@ -1349,38 +1400,41 @@ impl LanguageServer for VaisBackend {
         let position = params.position;
 
         if let Some(doc) = self.documents.get(uri) {
-            if let Some(ast) = &doc.ast {
-                // Convert position to offset
-                let line = position.line as usize;
-                let col = position.character as usize;
-                let line_start = doc.content.line_to_char(line);
-                let offset = line_start + col;
+            // Convert position to offset
+            let line = position.line as usize;
+            let col = position.character as usize;
+            let line_start = doc.content.line_to_char(line);
+            let offset = line_start + col;
+            drop(doc); // Release read lock
 
-                // Check if we're on a renameable symbol
-                if let Some(symbol_name) = self.get_identifier_at(ast, offset) {
-                    // Find the exact span of the symbol at the cursor
-                    let defs = self.collect_definitions(ast);
-                    let refs = self.collect_references(ast);
+            // Check if we're on a renameable symbol
+            if let Some(symbol_name) = self.get_identifier_at(uri, offset) {
+                // Find the exact span of the symbol at the cursor using cache
+                if let Some(cache) = self.get_symbol_cache(uri) {
+                    let defs = &cache.definitions;
+                    let refs = &cache.references;
 
-                    // Check definitions
-                    for d in &defs {
-                        if d.span.start <= offset && offset <= d.span.end {
-                            let range = self.span_to_range(&doc.content, &d.span);
-                            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-                                range,
-                                placeholder: symbol_name,
-                            }));
+                    if let Some(doc) = self.documents.get(uri) {
+                        // Check definitions
+                        for d in defs {
+                            if d.span.start <= offset && offset <= d.span.end {
+                                let range = self.span_to_range(&doc.content, &d.span);
+                                return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                                    range,
+                                    placeholder: symbol_name.clone(),
+                                }));
+                            }
                         }
-                    }
 
-                    // Check references
-                    for r in &refs {
-                        if r.span.start <= offset && offset <= r.span.end {
-                            let range = self.span_to_range(&doc.content, &r.span);
-                            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-                                range,
-                                placeholder: symbol_name,
-                            }));
+                        // Check references
+                        for r in refs {
+                            if r.span.start <= offset && offset <= r.span.end {
+                                let range = self.span_to_range(&doc.content, &r.span);
+                                return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                                    range,
+                                    placeholder: symbol_name,
+                                }));
+                            }
                         }
                     }
                 }
@@ -1396,19 +1450,20 @@ impl LanguageServer for VaisBackend {
         let new_name = params.new_name;
 
         if let Some(doc) = self.documents.get(uri) {
-            if let Some(ast) = &doc.ast {
-                // Convert position to offset
-                let line = position.line as usize;
-                let col = position.character as usize;
-                let line_start = doc.content.line_to_char(line);
-                let offset = line_start + col;
+            // Convert position to offset
+            let line = position.line as usize;
+            let col = position.character as usize;
+            let line_start = doc.content.line_to_char(line);
+            let offset = line_start + col;
+            drop(doc); // Release read lock
 
-                // Get the symbol name at the position
-                if let Some(symbol_name) = self.get_identifier_at(ast, offset) {
-                    // Find all references to this symbol
-                    let spans = self.find_all_references(ast, &symbol_name);
+            // Get the symbol name at the position (uses cache)
+            if let Some(symbol_name) = self.get_identifier_at(uri, offset) {
+                // Find all references to this symbol
+                let spans = self.find_all_references(uri, &symbol_name);
 
-                    if !spans.is_empty() {
+                if !spans.is_empty() {
+                    if let Some(doc) = self.documents.get(uri) {
                         // Create text edits for all occurrences
                         let text_edits: Vec<TextEdit> = spans
                             .iter()

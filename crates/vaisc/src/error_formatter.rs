@@ -28,7 +28,7 @@ impl ErrorFormatContext {
     }
 
     /// Get the reporter for this context
-    pub fn reporter(&self) -> ErrorReporter {
+    pub fn reporter(&self) -> ErrorReporter<'_> {
         ErrorReporter::new(&self.source)
             .with_filename(self.filename())
     }

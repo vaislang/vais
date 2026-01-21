@@ -18,8 +18,13 @@ fn get_project_root() -> PathBuf {
 }
 
 /// Helper to create a temporary test directory structure
-fn setup_test_env() -> PathBuf {
-    let test_dir = get_project_root().join("target").join("test_imports");
+/// Each test gets its own isolated directory based on test_name to avoid conflicts
+/// when tests run in parallel
+fn setup_test_env(test_name: &str) -> PathBuf {
+    let test_dir = get_project_root()
+        .join("target")
+        .join("test_imports")
+        .join(test_name);
 
     // Clean up if exists
     let _ = fs::remove_dir_all(&test_dir);
@@ -54,7 +59,7 @@ fn setup_test_env() -> PathBuf {
 
 #[test]
 fn test_valid_local_import() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("valid_local_import");
     let safe_dir = test_dir.join("safe");
 
     // Create a test file that imports from the same directory
@@ -83,7 +88,7 @@ fn test_valid_local_import() {
 
 #[test]
 fn test_valid_std_import() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("valid_std_import");
 
     // Set VAIS_STD_PATH to our test std directory
     let std_dir = test_dir.join("std");
@@ -111,7 +116,7 @@ fn test_valid_std_import() {
 
 #[test]
 fn test_path_traversal_attack_absolute() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("path_traversal_attack_absolute");
 
     // Try to import using absolute path to /etc/passwd
     let source = "U /etc/passwd\nF main() -> () = ()";
@@ -134,7 +139,7 @@ fn test_path_traversal_attack_absolute() {
 
 #[test]
 fn test_path_traversal_attack_relative() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("path_traversal_attack_relative");
     let safe_dir = test_dir.join("safe");
 
     // Try to escape safe directory using ../
@@ -165,7 +170,7 @@ fn test_path_traversal_attack_relative() {
 #[test]
 #[cfg(unix)]
 fn test_symlink_attack_outside_project() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("symlink_attack_outside_project");
     let safe_dir = test_dir.join("safe");
 
     // Create a symlink in safe directory pointing to unsafe directory
@@ -208,7 +213,7 @@ fn test_symlink_attack_outside_project() {
 #[test]
 #[cfg(unix)]
 fn test_symlink_attack_to_system_file() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("symlink_attack_to_system_file");
     let safe_dir = test_dir.join("safe");
 
     // Create a symlink pointing to /etc/hosts
@@ -221,12 +226,15 @@ fn test_symlink_attack_to_system_file() {
     }
 
     // Try to import the symlinked system file
-    let source = "U system\nF main() -> () = ()";
+    // Note: We use "build" command instead of "check" because "check" only parses
+    // and type-checks the single file without resolving imports, so the symlink
+    // security validation wouldn't be triggered.
+    let source = "U system\nF main() -> i64 = 42";
     let test_file = safe_dir.join("test_system.vais");
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(&["run", "--bin", "vaisc", "build", "--emit-ir"])
         .arg(&test_file)
         .current_dir(&get_project_root())
         .output()
@@ -251,7 +259,7 @@ fn test_symlink_attack_to_system_file() {
 
 #[test]
 fn test_valid_relative_import_in_project() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("valid_relative_import_in_project");
 
     // Create a module in the test directory
     fs::write(
@@ -282,7 +290,7 @@ fn test_valid_relative_import_in_project() {
 
 #[test]
 fn test_non_vais_file_rejection() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("non_vais_file_rejection");
 
     // Create a non-.vais file
     fs::write(
@@ -312,7 +320,7 @@ fn test_non_vais_file_rejection() {
 
 #[test]
 fn test_empty_import_path() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("empty_import_path");
 
     // Try empty import (if parser allows it)
     let source = "U\nF main() -> () = ()";
@@ -335,15 +343,16 @@ fn test_empty_import_path() {
 
 #[test]
 fn test_module_not_found_error_message() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("module_not_found_error_message");
 
     // Try to import non-existent module
-    let source = "U nonexistent_module\nF main() -> () = ()";
+    // Note: We use "build" command to trigger import resolution
+    let source = "U nonexistent_module\nF main() -> i64 = 42";
     let test_file = test_dir.join("test_notfound.vais");
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(&["run", "--bin", "vaisc", "build", "--emit-ir"])
         .arg(&test_file)
         .current_dir(&get_project_root())
         .output()
@@ -360,7 +369,7 @@ fn test_module_not_found_error_message() {
 
 #[test]
 fn test_nested_module_path() {
-    let test_dir = setup_test_env();
+    let test_dir = setup_test_env("nested_module_path");
 
     // Create nested directory structure
     fs::create_dir_all(test_dir.join("a/b/c")).unwrap();
