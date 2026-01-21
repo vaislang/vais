@@ -4,9 +4,12 @@
 
 use crate::config::PluginsConfig;
 use crate::loader::{load_plugin, LoadedPlugin};
-use crate::traits::{Diagnostic, DiagnosticLevel, OptLevel, PluginConfig, PluginType};
-use std::path::{Path, PathBuf};
+use crate::traits::{
+    ComplexityReport, DependencyGraph, Diagnostic, DiagnosticLevel, FormatConfig, OptLevel,
+    PluginConfig, PluginType,
+};
 use std::env;
+use std::path::{Path, PathBuf};
 use vais_ast::Module;
 
 /// Plugin registry that manages all loaded plugins
@@ -290,12 +293,77 @@ impl PluginRegistry {
             .any(|d| d.level == DiagnosticLevel::Error)
     }
 
+    /// Run all formatter plugins on a module
+    ///
+    /// Returns the formatted source code. If multiple formatters are loaded,
+    /// they are applied in sequence.
+    pub fn run_format(&self, module: &Module, config: &FormatConfig) -> Result<String, String> {
+        let mut result = String::new();
+        let mut formatted = false;
+
+        for loaded in &self.plugins {
+            if let Some(formatter) = loaded.as_formatter() {
+                result = formatter.format_module(module, config)?;
+                formatted = true;
+            }
+        }
+
+        if !formatted {
+            return Err("No formatter plugins loaded".to_string());
+        }
+
+        Ok(result)
+    }
+
+    /// Run complexity analysis on a module
+    ///
+    /// Aggregates complexity reports from all analysis plugins.
+    /// If no analysis plugins are loaded, returns an empty report.
+    pub fn run_analysis_complexity(&self, module: &Module) -> ComplexityReport {
+        let mut combined_report = ComplexityReport::new();
+
+        for loaded in &self.plugins {
+            if let Some(analysis) = loaded.as_analysis() {
+                let report = analysis.analyze_complexity(module);
+
+                // Aggregate function complexity
+                for (name, complexity) in report.function_complexity {
+                    combined_report.add_function(name, complexity);
+                }
+
+                // Aggregate suggestions
+                for suggestion in report.suggestions {
+                    combined_report.add_suggestion(suggestion);
+                }
+            }
+        }
+
+        combined_report
+    }
+
+    /// Run dependency analysis on a module
+    ///
+    /// Returns the dependency graph from the first analysis plugin found.
+    /// If multiple analysis plugins are loaded, only the first one is used.
+    /// If no analysis plugins are loaded, returns an empty graph.
+    pub fn run_analysis_dependencies(&self, module: &Module) -> DependencyGraph {
+        for loaded in &self.plugins {
+            if let Some(analysis) = loaded.as_analysis() {
+                return analysis.analyze_dependencies(module);
+            }
+        }
+
+        DependencyGraph::new()
+    }
+
     /// Get plugin counts by type
-    pub fn counts_by_type(&self) -> (usize, usize, usize, usize) {
+    pub fn counts_by_type(&self) -> (usize, usize, usize, usize, usize, usize) {
         let mut lint = 0;
         let mut transform = 0;
         let mut optimize = 0;
         let mut codegen = 0;
+        let mut formatter = 0;
+        let mut analysis = 0;
 
         for loaded in &self.plugins {
             match loaded.plugin_type {
@@ -303,10 +371,12 @@ impl PluginRegistry {
                 PluginType::Transform => transform += 1,
                 PluginType::Optimize => optimize += 1,
                 PluginType::Codegen => codegen += 1,
+                PluginType::Formatter => formatter += 1,
+                PluginType::Analysis => analysis += 1,
             }
         }
 
-        (lint, transform, optimize, codegen)
+        (lint, transform, optimize, codegen, formatter, analysis)
     }
 }
 
@@ -418,5 +488,53 @@ mod tests {
             Some(val) => env::set_var("VAIS_PLUGIN_PATH", val),
             None => env::remove_var("VAIS_PLUGIN_PATH"),
         }
+    }
+
+    #[test]
+    fn test_run_format_empty() {
+        use crate::traits::FormatConfig;
+
+        let registry = PluginRegistry::new();
+        let module = Module { items: vec![] };
+        let config = FormatConfig::new();
+
+        let result = registry.run_format(&module, &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No formatter plugins"));
+    }
+
+    #[test]
+    fn test_run_analysis_complexity_empty() {
+        let registry = PluginRegistry::new();
+        let module = Module { items: vec![] };
+
+        let report = registry.run_analysis_complexity(&module);
+        assert_eq!(report.overall_complexity, 0);
+        assert!(report.function_complexity.is_empty());
+        assert!(report.suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_run_analysis_dependencies_empty() {
+        let registry = PluginRegistry::new();
+        let module = Module { items: vec![] };
+
+        let graph = registry.run_analysis_dependencies(&module);
+        assert!(graph.dependencies.is_empty());
+        assert!(graph.dependents.is_empty());
+        assert!(!graph.has_cycles());
+    }
+
+    #[test]
+    fn test_counts_by_type_all_zeros() {
+        let registry = PluginRegistry::new();
+        let (lint, transform, optimize, codegen, formatter, analysis) = registry.counts_by_type();
+
+        assert_eq!(lint, 0);
+        assert_eq!(transform, 0);
+        assert_eq!(optimize, 0);
+        assert_eq!(codegen, 0);
+        assert_eq!(formatter, 0);
+        assert_eq!(analysis, 0);
     }
 }

@@ -1,0 +1,18 @@
+[package]
+name = "vais-python"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "vais"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+
+# Vais crates
+vais-lexer = { path = "../vais-lexer" }
+vais-parser = { path = "../vais-parser" }
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+vais-codegen = { path = "../vais-codegen" }

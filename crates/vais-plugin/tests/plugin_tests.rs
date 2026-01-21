@@ -10,8 +10,9 @@ use std::any::Any;
 use std::path::PathBuf;
 use vais_ast::{Module, Span};
 use vais_plugin::{
-    Diagnostic, DiagnosticLevel, LintPlugin, OptLevel, Plugin, PluginConfig, PluginInfo,
-    PluginRegistry, PluginsConfig, PluginsSection, TransformPlugin,
+    AnalysisPlugin, ComplexityReport, DependencyGraph, DependencyInfo, Diagnostic,
+    DiagnosticLevel, FormatConfig, FormatterPlugin, LintPlugin, OptLevel, Plugin, PluginConfig,
+    PluginInfo, PluginRegistry, PluginsConfig, PluginsSection, TransformPlugin,
 };
 
 // ============================================================================
@@ -129,6 +130,125 @@ impl TransformPlugin for MockTransformPlugin {
     }
 }
 
+/// Mock formatter plugin for testing
+struct MockFormatterPlugin {
+    name: &'static str,
+}
+
+impl MockFormatterPlugin {
+    fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+}
+
+impl Plugin for MockFormatterPlugin {
+    fn info(&self) -> PluginInfo {
+        PluginInfo {
+            name: self.name,
+            version: "0.1.0",
+            description: "Mock formatter plugin for testing",
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl FormatterPlugin for MockFormatterPlugin {
+    fn format_module(&self, module: &Module, config: &FormatConfig) -> Result<String, String> {
+        // Simple mock formatter that just returns a formatted string
+        let mut output = String::new();
+        output.push_str(&format!("// Formatted by {} with indent_size={}\n",
+            self.name, config.indent_size));
+        output.push_str(&format!("// Module with {} items\n", module.items.len()));
+        Ok(output)
+    }
+}
+
+/// Mock analysis plugin for testing
+struct MockAnalysisPlugin {
+    name: &'static str,
+}
+
+impl MockAnalysisPlugin {
+    fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+}
+
+impl Plugin for MockAnalysisPlugin {
+    fn info(&self) -> PluginInfo {
+        PluginInfo {
+            name: self.name,
+            version: "0.1.0",
+            description: "Mock analysis plugin for testing",
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl AnalysisPlugin for MockAnalysisPlugin {
+    fn analyze_complexity(&self, module: &Module) -> ComplexityReport {
+        let mut report = ComplexityReport::new();
+
+        // Analyze functions in the module
+        for item in &module.items {
+            if let vais_ast::Item::Function(f) = &item.node {
+                // Simple complexity: count statements in function body
+                let complexity = match &f.body {
+                    vais_ast::FunctionBody::Block(stmts) => stmts.len(),
+                    vais_ast::FunctionBody::Expr(_) => 1,
+                };
+                report.add_function(f.name.node.clone(), complexity);
+
+                if complexity > 5 {
+                    report.add_suggestion(format!(
+                        "Function '{}' has complexity {}, consider refactoring",
+                        f.name.node, complexity
+                    ));
+                }
+            }
+        }
+
+        report
+    }
+
+    fn analyze_dependencies(&self, module: &Module) -> DependencyGraph {
+        let mut graph = DependencyGraph::new();
+
+        // Analyze use statements (imports) in the module
+        for item in &module.items {
+            if let vais_ast::Item::Use(use_stmt) = &item.node {
+                // Extract the string values from Spanned<String>
+                let path_parts: Vec<String> = use_stmt.path.iter()
+                    .map(|s| s.node.clone())
+                    .collect();
+
+                let dep = DependencyInfo {
+                    name: path_parts.join("::"),
+                    external: path_parts.first().map(|s| s.as_str() == "std").unwrap_or(false),
+                    span: Some(item.span),
+                };
+                graph.add_dependency(dep);
+            }
+        }
+
+        graph
+    }
+}
+
 // ============================================================================
 // PluginRegistry Tests
 // ============================================================================
@@ -169,12 +289,14 @@ fn test_empty_registry_operations() {
 #[test]
 fn test_plugin_registry_counts_by_type() {
     let registry = PluginRegistry::new();
-    let (lint, transform, optimize, codegen) = registry.counts_by_type();
+    let (lint, transform, optimize, codegen, formatter, analysis) = registry.counts_by_type();
 
     assert_eq!(lint, 0);
     assert_eq!(transform, 0);
     assert_eq!(optimize, 0);
     assert_eq!(codegen, 0);
+    assert_eq!(formatter, 0);
+    assert_eq!(analysis, 0);
 }
 
 // ============================================================================
@@ -530,4 +652,150 @@ fn test_plugin_default_init() {
     // Default init should succeed
     let result = plugin.init(&config);
     assert!(result.is_ok());
+}
+
+// ============================================================================
+// FormatterPlugin Tests
+// ============================================================================
+
+#[test]
+fn test_formatter_plugin_basic() {
+    let formatter = MockFormatterPlugin::new("test-formatter");
+    let module = Module { items: vec![] };
+    let config = FormatConfig::new();
+
+    let result = formatter.format_module(&module, &config);
+    assert!(result.is_ok());
+
+    let formatted = result.unwrap();
+    assert!(formatted.contains("test-formatter"));
+    assert!(formatted.contains("indent_size=4"));
+    assert!(formatted.contains("0 items"));
+}
+
+#[test]
+fn test_formatter_plugin_with_custom_config() {
+    let formatter = MockFormatterPlugin::new("test-formatter");
+    let module = Module { items: vec![] };
+    let mut config = FormatConfig::new();
+    config.indent_size = 2;
+    config.line_length = 80;
+    config.use_tabs = true;
+
+    let result = formatter.format_module(&module, &config);
+    assert!(result.is_ok());
+
+    let formatted = result.unwrap();
+    assert!(formatted.contains("indent_size=2"));
+}
+
+#[test]
+fn test_format_config_from_plugin_config() {
+    let mut plugin_config = PluginConfig::new();
+    plugin_config.values.insert(
+        "indent_size".to_string(),
+        toml::Value::Integer(2),
+    );
+    plugin_config.values.insert(
+        "line_length".to_string(),
+        toml::Value::Integer(120),
+    );
+    plugin_config.values.insert(
+        "use_tabs".to_string(),
+        toml::Value::Boolean(true),
+    );
+
+    let format_config = FormatConfig::from_plugin_config(&plugin_config);
+    assert_eq!(format_config.indent_size, 2);
+    assert_eq!(format_config.line_length, 120);
+    assert!(format_config.use_tabs);
+}
+
+// ============================================================================
+// AnalysisPlugin Tests
+// ============================================================================
+
+#[test]
+fn test_analysis_plugin_complexity_empty_module() {
+    let analyzer = MockAnalysisPlugin::new("test-analyzer");
+    let module = Module { items: vec![] };
+
+    let report = analyzer.analyze_complexity(&module);
+    assert_eq!(report.overall_complexity, 0);
+    assert!(report.function_complexity.is_empty());
+    assert!(report.suggestions.is_empty());
+}
+
+#[test]
+fn test_analysis_plugin_dependencies_empty_module() {
+    let analyzer = MockAnalysisPlugin::new("test-analyzer");
+    let module = Module { items: vec![] };
+
+    let graph = analyzer.analyze_dependencies(&module);
+    assert_eq!(graph.dependency_count(), 0);
+    assert_eq!(graph.external_dependency_count(), 0);
+    assert!(!graph.has_cycles());
+}
+
+#[test]
+fn test_complexity_report_builder() {
+    let mut report = ComplexityReport::new();
+    assert_eq!(report.overall_complexity, 0);
+
+    report.add_function("main".to_string(), 10);
+    report.add_function("helper".to_string(), 5);
+    assert_eq!(report.overall_complexity, 15);
+    assert_eq!(report.function_complexity.len(), 2);
+
+    report.add_suggestion("Reduce complexity in main()".to_string());
+    assert_eq!(report.suggestions.len(), 1);
+
+    let (name, &complexity) = report.max_complexity_function().unwrap();
+    assert_eq!(name, "main");
+    assert_eq!(complexity, 10);
+}
+
+#[test]
+fn test_dependency_graph_builder() {
+    let mut graph = DependencyGraph::new();
+
+    graph.add_dependency(DependencyInfo {
+        name: "std::io".to_string(),
+        external: true,
+        span: None,
+    });
+    graph.add_dependency(DependencyInfo {
+        name: "local::util".to_string(),
+        external: false,
+        span: Some(Span::new(0, 20)),
+    });
+
+    assert_eq!(graph.dependency_count(), 2);
+    assert_eq!(graph.external_dependency_count(), 1);
+
+    graph.add_dependent("other::module".to_string());
+    assert_eq!(graph.dependents.len(), 1);
+
+    graph.add_cycle(vec!["A".to_string(), "B".to_string(), "A".to_string()]);
+    assert!(graph.has_cycles());
+}
+
+#[test]
+fn test_plugin_info_formatter() {
+    let plugin = MockFormatterPlugin::new("test-formatter");
+    let info = plugin.info();
+
+    assert_eq!(info.name, "test-formatter");
+    assert_eq!(info.version, "0.1.0");
+    assert!(info.description.contains("formatter"));
+}
+
+#[test]
+fn test_plugin_info_analysis() {
+    let plugin = MockAnalysisPlugin::new("test-analyzer");
+    let info = plugin.info();
+
+    assert_eq!(info.name, "test-analyzer");
+    assert_eq!(info.version, "0.1.0");
+    assert!(info.description.contains("analysis"));
 }

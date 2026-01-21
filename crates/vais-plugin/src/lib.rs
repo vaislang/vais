@@ -69,7 +69,8 @@ pub use config::{find_config, load_default, PluginsConfig, PluginsSection};
 pub use loader::{is_plugin_library, library_extension, load_plugin, LoadedPlugin};
 pub use registry::PluginRegistry;
 pub use traits::{
-    CodegenPlugin, Diagnostic, DiagnosticLevel, LintPlugin, OptLevel, OptimizePlugin, Plugin,
+    AnalysisPlugin, CodegenPlugin, ComplexityReport, DependencyGraph, DependencyInfo, Diagnostic,
+    DiagnosticLevel, FormatConfig, FormatterPlugin, LintPlugin, OptLevel, OptimizePlugin, Plugin,
     PluginConfig, PluginInfo, PluginType, TransformPlugin,
 };
 

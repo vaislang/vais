@@ -710,7 +710,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - CLI `--force-rebuild` 옵션 추가
   - 캐시 버전 및 컴파일러 버전 검증
 - [ ] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반
-- [ ] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (복잡도, 의존성)
+- [x] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (완료일: 2026-01-21)
+  - FormatterPlugin trait 추가 (format_module, FormatConfig)
+  - AnalysisPlugin trait 추가 (analyze_complexity, analyze_dependencies)
+  - ComplexityReport, DependencyGraph 데이터 구조
+  - PluginRegistry에 run_format, run_analysis_* 메서드 추가
+  - 테스트 35개 통과
 - [x] **unwrap/expect 감소** - 에러 전파 패턴 적용 (완료일: 2026-01-21)
   - 총 488개 분석 완료: 테스트 코드 ~380개, 컴파일러 내부 ~50개, 안전한 폴백 ~16개
   - exhaustiveness.rs: unwrap() → expect() 변환 (길이 검증 문서화)
@@ -718,7 +723,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ### P3 - 미래 (6개월+)
 - [ ] **inkwell 직접 통합** - 문자열 IR 대신 LLVM API 직접 사용
-- [ ] **언어 바인딩** - Python/Node.js에서 vaisc 호출 (pyo3, napi-rs)
+- [x] **언어 바인딩** - Python/Node.js에서 vaisc 호출 (완료일: 2026-01-21)
+  - vais-python 크레이트 (pyo3 기반)
+    - compile(), check(), parse(), tokenize() 함수
+    - Python 3.13 이하 필요 (PyO3 제한)
+  - vais-node 크레이트 (napi-rs 기반)
+    - compile(), check(), parse(), tokenize() 함수
+    - 빌드 검증 완료
 - [ ] **Self-hosting** - vaisc를 Vais로 재작성
 - [ ] **JIT 컴파일** - REPL에서 JIT 실행 (cranelift 또는 LLVM JIT)
 

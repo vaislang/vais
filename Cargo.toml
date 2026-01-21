@@ -9,6 +9,8 @@ members = [
     "crates/vais-lsp",
     "crates/vais-i18n",
     "crates/vais-plugin",
+    # "crates/vais-python",  # Requires Python <= 3.13 (PyO3 limitation)
+    "crates/vais-node",
     "crates/vaisc",
     "examples/plugins/example-lint",
     "benches",

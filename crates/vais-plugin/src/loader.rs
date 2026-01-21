@@ -3,7 +3,8 @@
 //! Loads plugins from shared libraries (.so, .dylib, .dll)
 
 use crate::traits::{
-    CodegenPlugin, LintPlugin, OptimizePlugin, Plugin, PluginType, TransformPlugin,
+    AnalysisPlugin, CodegenPlugin, FormatterPlugin, LintPlugin, OptimizePlugin, Plugin, PluginType,
+    TransformPlugin,
 };
 use libloading::{Library, Symbol};
 use std::path::Path;
@@ -19,6 +20,8 @@ pub type CreateLintPluginFn = unsafe fn() -> *mut dyn LintPlugin;
 pub type CreateTransformPluginFn = unsafe fn() -> *mut dyn TransformPlugin;
 pub type CreateOptimizePluginFn = unsafe fn() -> *mut dyn OptimizePlugin;
 pub type CreateCodegenPluginFn = unsafe fn() -> *mut dyn CodegenPlugin;
+pub type CreateFormatterPluginFn = unsafe fn() -> *mut dyn FormatterPlugin;
+pub type CreateAnalysisPluginFn = unsafe fn() -> *mut dyn AnalysisPlugin;
 
 /// A loaded plugin with its library handle
 pub struct LoadedPlugin {
@@ -39,6 +42,8 @@ enum PluginImpl {
     Transform(Box<dyn TransformPlugin>),
     Optimize(Box<dyn OptimizePlugin>),
     Codegen(Box<dyn CodegenPlugin>),
+    Formatter(Box<dyn FormatterPlugin>),
+    Analysis(Box<dyn AnalysisPlugin>),
 }
 
 impl LoadedPlugin {
@@ -70,6 +75,22 @@ impl LoadedPlugin {
     pub fn as_codegen(&self) -> Option<&dyn CodegenPlugin> {
         match &self.plugin_impl {
             PluginImpl::Codegen(p) => Some(p.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Try to cast to a FormatterPlugin
+    pub fn as_formatter(&self) -> Option<&dyn FormatterPlugin> {
+        match &self.plugin_impl {
+            PluginImpl::Formatter(p) => Some(p.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Try to cast to an AnalysisPlugin
+    pub fn as_analysis(&self) -> Option<&dyn AnalysisPlugin> {
+        match &self.plugin_impl {
+            PluginImpl::Analysis(p) => Some(p.as_ref()),
             _ => None,
         }
     }
@@ -168,6 +189,26 @@ pub fn load_plugin(path: &Path) -> Result<LoadedPlugin, String> {
                 return Err("Plugin create_codegen_plugin returned null".to_string());
             }
             PluginImpl::Codegen(Box::from_raw(raw))
+        },
+        PluginType::Formatter => unsafe {
+            let create: Symbol<CreateFormatterPluginFn> = library
+                .get(b"create_formatter_plugin")
+                .map_err(|e| format!("Formatter plugin missing create_formatter_plugin function: {}", e))?;
+            let raw = create();
+            if raw.is_null() {
+                return Err("Plugin create_formatter_plugin returned null".to_string());
+            }
+            PluginImpl::Formatter(Box::from_raw(raw))
+        },
+        PluginType::Analysis => unsafe {
+            let create: Symbol<CreateAnalysisPluginFn> = library
+                .get(b"create_analysis_plugin")
+                .map_err(|e| format!("Analysis plugin missing create_analysis_plugin function: {}", e))?;
+            let raw = create();
+            if raw.is_null() {
+                return Err("Plugin create_analysis_plugin returned null".to_string());
+            }
+            PluginImpl::Analysis(Box::from_raw(raw))
         },
     };
 

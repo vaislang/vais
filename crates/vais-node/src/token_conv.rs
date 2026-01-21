@@ -1,0 +1,111 @@
+//! Token conversion utilities for Python bindings
+
+use vais_lexer::Token;
+
+/// Convert Token to string representation
+pub fn token_to_string(token: &Token) -> String {
+    match token {
+        Token::Function => "Function",
+        Token::Struct => "Struct",
+        Token::Enum => "Enum",
+        Token::If => "If",
+        Token::Loop => "Loop",
+        Token::Match => "Match",
+        Token::Async => "Async",
+        Token::Return => "Return",
+        Token::Break => "Break",
+        Token::Continue => "Continue",
+        Token::TypeKeyword => "Type",
+        Token::Use => "Use",
+        Token::Trait => "Trait",
+        Token::Impl => "Impl",
+        Token::Pub => "Pub",
+        Token::Mut => "Mut",
+        Token::Spawn => "Spawn",
+        Token::Await => "Await",
+        Token::SelfLower => "self",
+        Token::SelfUpper => "Self",
+        Token::Weak => "Weak",
+        Token::Clone => "Clone",
+        Token::True => "True",
+        Token::False => "False",
+        Token::I8 => "i8",
+        Token::I16 => "i16",
+        Token::I32 => "i32",
+        Token::I64 => "i64",
+        Token::I128 => "i128",
+        Token::U8 => "u8",
+        Token::U16 => "u16",
+        Token::U32 => "u32",
+        Token::U64 => "u64",
+        Token::U128 => "u128",
+        Token::F32 => "f32",
+        Token::F64 => "f64",
+        Token::Bool => "bool",
+        Token::Str => "str",
+        Token::Int(_) => "Int",
+        Token::Float(_) => "Float",
+        Token::String(_) => "String",
+        Token::Ident(_) => "Ident",
+        Token::Plus => "Plus",
+        Token::Minus => "Minus",
+        Token::Star => "Star",
+        Token::Slash => "Slash",
+        Token::Percent => "Percent",
+        Token::Lt => "Lt",
+        Token::Gt => "Gt",
+        Token::Lte => "Lte",
+        Token::Gte => "Gte",
+        Token::EqEq => "EqEq",
+        Token::Neq => "Neq",
+        Token::Amp => "Amp",
+        Token::Pipe => "Pipe",
+        Token::Bang => "Bang",
+        Token::Tilde => "Tilde",
+        Token::Caret => "Caret",
+        Token::Shl => "Shl",
+        Token::Shr => "Shr",
+        Token::Eq => "Eq",
+        Token::ColonEq => "ColonEq",
+        Token::PlusEq => "PlusEq",
+        Token::MinusEq => "MinusEq",
+        Token::StarEq => "StarEq",
+        Token::SlashEq => "SlashEq",
+        Token::Arrow => "Arrow",
+        Token::FatArrow => "FatArrow",
+        Token::DotDot => "DotDot",
+        Token::DotDotEq => "DotDotEq",
+        Token::Question => "Question",
+        Token::At => "At",
+        Token::LParen => "LParen",
+        Token::RParen => "RParen",
+        Token::LBrace => "LBrace",
+        Token::RBrace => "RBrace",
+        Token::LBracket => "LBracket",
+        Token::RBracket => "RBracket",
+        Token::Comma => "Comma",
+        Token::Colon => "Colon",
+        Token::Semi => "Semi",
+        Token::Dot => "Dot",
+        Token::ColonColon => "ColonColon",
+        Token::HashBracket => "HashBracket",
+    }.to_string()
+}
+
+/// Extract text from token if it contains data
+pub fn token_text(token: &Token, source: &str, span: &std::ops::Range<usize>) -> Option<String> {
+    match token {
+        Token::Ident(s) => Some(s.clone()),
+        Token::Int(i) => Some(i.to_string()),
+        Token::Float(f) => Some(f.to_string()),
+        Token::String(s) => Some(s.clone()),
+        _ => {
+            // For other tokens, extract from source
+            if span.start < source.len() && span.end <= source.len() {
+                Some(source[span.start..span.end].to_string())
+            } else {
+                None
+            }
+        }
+    }
+}

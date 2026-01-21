@@ -1,0 +1,21 @@
+[package]
+name = "vais-node"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2.16", default-features = false, features = ["napi8", "error_anyhow"] }
+napi-derive = "2.16"
+
+# Vais crates
+vais-lexer = { path = "../vais-lexer" }
+vais-parser = { path = "../vais-parser" }
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+vais-codegen = { path = "../vais-codegen" }
+
+[build-dependencies]
+napi-build = "2.1"
