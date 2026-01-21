@@ -1161,9 +1161,11 @@ impl TypeChecker {
                 if let Some(expected) = self.current_fn_ret.clone() {
                     self.unify(&expected, &ret_type)?;
                 }
-                Ok(ResolvedType::Unit)
+                // Return has "Never" type because execution doesn't continue past it
+                Ok(ResolvedType::Never)
             }
-            Stmt::Break(_) | Stmt::Continue => Ok(ResolvedType::Unit),
+            // Break and Continue have "Never" type because execution doesn't continue past them
+            Stmt::Break(_) | Stmt::Continue => Ok(ResolvedType::Never),
         }
     }
 

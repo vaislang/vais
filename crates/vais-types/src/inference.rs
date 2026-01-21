@@ -28,6 +28,8 @@ impl TypeChecker {
             }
             // Unknown type unifies with anything (used as placeholder)
             (ResolvedType::Unknown, _) | (_, ResolvedType::Unknown) => Ok(()),
+            // Never type unifies with any type (represents non-returning expressions like return, break)
+            (ResolvedType::Never, _) | (_, ResolvedType::Never) => Ok(()),
             // Generic type parameters match with any type (type erasure)
             (ResolvedType::Generic(_), _) | (_, ResolvedType::Generic(_)) => Ok(()),
             (ResolvedType::Array(a), ResolvedType::Array(b)) => self.unify(a, b),

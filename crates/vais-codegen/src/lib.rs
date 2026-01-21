@@ -1193,20 +1193,32 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
+                let (value, block_ir, terminated) = self.generate_block_stmts(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
-                // Get debug location from last statement or function end
-                let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
-                let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
-                if ret_type == ResolvedType::Unit {
-                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
-                } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    // For struct returns, load the value from pointer
-                    let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+
+                // If block is already terminated (has return/break), don't emit ret
+                if terminated {
+                    // Block already has a terminator, no need for ret
                 } else {
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                    // Get debug location from last statement or function end
+                    let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
+                    let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
+                    if ret_type == ResolvedType::Unit {
+                        ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                    } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                        // Check if the result is already a value (from phi node) or a pointer (from struct lit)
+                        if self.is_block_result_value(stmts) {
+                            // Value (e.g., from if-else phi node) - return directly
+                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                        } else {
+                            // Pointer (e.g., from struct literal) - load then return
+                            let loaded = format!("%ret.{}", counter);
+                            ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
+                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                        }
+                    } else {
+                        ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                    }
                 }
             }
         }
@@ -1493,19 +1505,31 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir) = self.generate_block(stmts, &mut counter)?;
+                let (value, block_ir, terminated) = self.generate_block_stmts(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
-                let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
-                let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
-                if ret_type == ResolvedType::Unit {
-                    ir.push_str(&format!("  ret void{}\n", ret_dbg));
-                } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    // For struct returns, load the value from pointer
-                    let loaded = format!("%ret.{}", counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+
+                // If block is already terminated (has return/break), don't emit ret
+                if terminated {
+                    // Block already has a terminator, no need for ret
                 } else {
-                    ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                    let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
+                    let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
+                    if ret_type == ResolvedType::Unit {
+                        ir.push_str(&format!("  ret void{}\n", ret_dbg));
+                    } else if matches!(ret_type, ResolvedType::Named { .. }) {
+                        // Check if the result is already a value (from phi node) or a pointer (from struct lit)
+                        if self.is_block_result_value(stmts) {
+                            // Value (e.g., from if-else phi node) - return directly
+                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                        } else {
+                            // Pointer (e.g., from struct literal) - load then return
+                            let loaded = format!("%ret.{}", counter);
+                            ir.push_str(&format!("  {} = load {}, {}* {}{}\n", loaded, ret_llvm, ret_llvm, value, ret_dbg));
+                            ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, loaded, ret_dbg));
+                        }
+                    } else {
+                        ir.push_str(&format!("  ret {} {}{}\n", ret_llvm, value, ret_dbg));
+                    }
                 }
             }
         }
@@ -2053,11 +2077,17 @@ impl CodeGenerator {
                         "  {} = inttoptr i64 {} to i8*\n",
                         ptr_tmp, arg_val
                     ));
-                    let result = self.next_temp(counter);
+                    let i32_result = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
                         "  {} = call i32 @puts(i8* {}){}\n",
-                        result, ptr_tmp, dbg_info
+                        i32_result, ptr_tmp, dbg_info
+                    ));
+                    // Convert i32 result to i64 for consistency
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = sext i32 {} to i64\n",
+                        result, i32_result
                     ));
                     Ok((result, ir))
                 } else if ret_ty == "void" {
@@ -2070,6 +2100,23 @@ impl CodeGenerator {
                         dbg_info
                     ));
                     Ok(("void".to_string(), ir))
+                } else if ret_ty == "i32" {
+                    // i32 return function call - convert to i64 for consistency
+                    let i32_tmp = self.next_temp(counter);
+                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
+                    ir.push_str(&format!(
+                        "  {} = call i32 @{}({}){}\n",
+                        i32_tmp,
+                        actual_fn_name,
+                        arg_vals.join(", "),
+                        dbg_info
+                    ));
+                    let tmp = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = sext i32 {} to i64\n",
+                        tmp, i32_tmp
+                    ));
+                    Ok((tmp, ir))
                 } else {
                     // Direct function call with return value
                     let tmp = self.next_temp(counter);
@@ -2091,6 +2138,14 @@ impl CodeGenerator {
                 let then_label = self.next_label("then");
                 let else_label = self.next_label("else");
                 let merge_label = self.next_label("merge");
+
+                // Infer the type of the then block for phi node
+                let block_type = self.infer_block_type(then);
+                let llvm_type = self.type_to_llvm(&block_type);
+
+                // Check if the result is a struct type (returned as pointer from struct literals)
+                let is_struct_result = matches!(&block_type, ResolvedType::Named { .. })
+                    && !self.is_block_result_value(then);
 
                 // Generate condition
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
@@ -2114,6 +2169,19 @@ impl CodeGenerator {
                 self.current_block = then_label.clone();
                 let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
                 ir.push_str(&then_ir);
+
+                // For struct results, load the value before branch if it's a pointer
+                let then_val_for_phi = if is_struct_result && !then_terminated {
+                    let loaded = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        loaded, llvm_type, llvm_type, then_val
+                    ));
+                    loaded
+                } else {
+                    then_val.clone()
+                };
+
                 let then_actual_block = self.current_block.clone();
                 // Only emit branch to merge if block is not terminated
                 let then_from_label = if !then_terminated {
@@ -2133,6 +2201,19 @@ impl CodeGenerator {
                     ("0".to_string(), String::new(), false, String::new(), false)
                 };
                 ir.push_str(&else_ir);
+
+                // For struct results, load the value before branch if it's a pointer
+                let else_val_for_phi = if is_struct_result && !else_terminated && has_else {
+                    let loaded = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        loaded, llvm_type, llvm_type, else_val
+                    ));
+                    loaded
+                } else {
+                    else_val.clone()
+                };
+
                 // Only emit branch to merge if block is not terminated
                 let else_from_label = if !else_terminated {
                     ir.push_str(&format!("  br label %{}\n", merge_label));
@@ -2151,33 +2232,28 @@ impl CodeGenerator {
                 self.current_block = merge_label.clone();
                 let result = self.next_temp(counter);
 
-                // Detect if values are pointers (start with % and come from enum constructors)
-                // For such cases, we need to ptrtoint them to use in phi i64
-                let then_val_for_phi = then_val.clone();
-                let else_val_for_phi = else_val.clone();
-
                 // If there's no else branch, don't use phi - the value is not meaningful
                 // This avoids type mismatches when then branch returns i32 (e.g., putchar)
                 if !has_else {
                     // If-only statement: value is not used, just use 0
                     ir.push_str(&format!("  {} = add i64 0, 0\n", result));
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
-                    // Both branches reach merge
+                    // Both branches reach merge - use the inferred type
                     ir.push_str(&format!(
-                        "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-                        result, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
+                        "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
+                        result, llvm_type, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
                     ));
                 } else if !then_from_label.is_empty() {
                     // Only then branch reaches merge
                     ir.push_str(&format!(
-                        "  {} = phi i64 [ {}, %{} ]\n",
-                        result, then_val_for_phi, then_from_label
+                        "  {} = phi {} [ {}, %{} ]\n",
+                        result, llvm_type, then_val_for_phi, then_from_label
                     ));
                 } else if !else_from_label.is_empty() {
                     // Only else branch reaches merge
                     ir.push_str(&format!(
-                        "  {} = phi i64 [ {}, %{} ]\n",
-                        result, else_val_for_phi, else_from_label
+                        "  {} = phi {} [ {}, %{} ]\n",
+                        result, llvm_type, else_val_for_phi, else_from_label
                     ));
                 } else {
                     // Neither branch reaches merge (both break/continue)
@@ -2589,18 +2665,10 @@ impl CodeGenerator {
                     arg_vals.push(format!("{} {}", arg_llvm_ty, val));
                 }
 
-                // Determine return type from struct methods
-                let ret_type = if let ResolvedType::Named { name, .. } = &recv_type {
-                    if let Some(struct_info) = self.structs.get(name) {
-                        // For now, assume i64 return
-                        let _ = struct_info;
-                        "i64"
-                    } else {
-                        "i64"
-                    }
-                } else {
-                    "i64"
-                };
+                // Determine return type from function registry
+                let ret_type = self.functions.get(&full_method_name)
+                    .map(|info| self.type_to_llvm(&info.ret_type))
+                    .unwrap_or_else(|| "i64".to_string());
 
                 let tmp = self.next_temp(counter);
                 ir.push_str(&format!(
@@ -3074,6 +3142,14 @@ impl CodeGenerator {
                 let else_label = self.next_label("elseif.else");
                 let local_merge = self.next_label("elseif.merge");
 
+                // Infer the type of the then block for phi node
+                let block_type = self.infer_block_type(then_stmts);
+                let llvm_type = self.type_to_llvm(&block_type);
+
+                // Check if the result is a struct type (returned as pointer from struct literals)
+                let is_struct_result = matches!(&block_type, ResolvedType::Named { .. })
+                    && !self.is_block_result_value(then_stmts);
+
                 let (cond_val, cond_ir) = self.generate_expr(cond, counter)?;
                 let mut ir = cond_ir;
 
@@ -3094,6 +3170,19 @@ impl CodeGenerator {
                 self.current_block = then_label.clone();
                 let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then_stmts, counter)?;
                 ir.push_str(&then_ir);
+
+                // For struct results, load the value before branch if it's a pointer
+                let then_val_for_phi = if is_struct_result && !then_terminated {
+                    let loaded = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        loaded, llvm_type, llvm_type, then_val
+                    ));
+                    loaded
+                } else {
+                    then_val.clone()
+                };
+
                 let then_actual_block = self.current_block.clone();
                 let then_from_label = if !then_terminated {
                     ir.push_str(&format!("  br label %{}\n", local_merge));
@@ -3105,12 +3194,26 @@ impl CodeGenerator {
                 // Else branch
                 ir.push_str(&format!("{}:\n", else_label));
                 self.current_block = else_label.clone();
+                let has_else = else_branch.is_some();
                 let (else_val, else_ir, else_terminated, nested_last_block) = if let Some(nested) = else_branch {
                     self.generate_if_else_with_term(nested, counter, &local_merge)?
                 } else {
                     ("0".to_string(), String::new(), false, String::new())
                 };
                 ir.push_str(&else_ir);
+
+                // For struct results, load the value before branch if it's a pointer
+                let else_val_for_phi = if is_struct_result && !else_terminated && has_else {
+                    let loaded = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        loaded, llvm_type, llvm_type, else_val
+                    ));
+                    loaded
+                } else {
+                    else_val.clone()
+                };
+
                 let else_from_label = if !else_terminated {
                     ir.push_str(&format!("  br label %{}\n", local_merge));
                     // If there was a nested if-else, use its merge block as the predecessor
@@ -3134,18 +3237,18 @@ impl CodeGenerator {
                 // Build phi node only from non-terminated predecessors
                 if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     ir.push_str(&format!(
-                        "  {} = phi i64 [ {}, %{} ], [ {}, %{} ]\n",
-                        result, then_val, then_from_label, else_val, else_from_label
+                        "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
+                        result, llvm_type, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
                     ));
                 } else if !then_from_label.is_empty() {
                     ir.push_str(&format!(
-                        "  {} = phi i64 [ {}, %{} ]\n",
-                        result, then_val, then_from_label
+                        "  {} = phi {} [ {}, %{} ]\n",
+                        result, llvm_type, then_val_for_phi, then_from_label
                     ));
                 } else if !else_from_label.is_empty() {
                     ir.push_str(&format!(
-                        "  {} = phi i64 [ {}, %{} ]\n",
-                        result, else_val, else_from_label
+                        "  {} = phi {} [ {}, %{} ]\n",
+                        result, llvm_type, else_val_for_phi, else_from_label
                     ));
                 } else {
                     // Unreachable merge block
@@ -3816,6 +3919,59 @@ impl CodeGenerator {
         }
     }
 
+    /// Infer type of a statement block (for if-else phi nodes)
+    fn infer_block_type(&self, stmts: &[Spanned<Stmt>]) -> ResolvedType {
+        // Look at the last statement to determine block type
+        if let Some(last_stmt) = stmts.last() {
+            match &last_stmt.node {
+                Stmt::Expr(expr) => self.infer_expr_type(expr),
+                Stmt::Return(Some(expr)) => self.infer_expr_type(expr),
+                _ => ResolvedType::I64,
+            }
+        } else {
+            ResolvedType::I64
+        }
+    }
+
+    /// Check if block's last expression is a value (not a pointer to struct)
+    /// Returns true if the value from generate_block_stmts is already a value,
+    /// false if it's a pointer that needs to be loaded
+    fn is_block_result_value(&self, stmts: &[Spanned<Stmt>]) -> bool {
+        if let Some(last_stmt) = stmts.last() {
+            match &last_stmt.node {
+                Stmt::Expr(expr) => self.is_expr_value(expr),
+                Stmt::Return(Some(expr)) => self.is_expr_value(expr),
+                _ => true,
+            }
+        } else {
+            true
+        }
+    }
+
+    /// Check if an expression produces a value (not a pointer)
+    /// struct literals produce pointers, if-else/match/call produce values
+    fn is_expr_value(&self, expr: &Spanned<Expr>) -> bool {
+        match &expr.node {
+            Expr::StructLit { .. } => false, // struct literal is a pointer
+            Expr::If { .. } => true,          // if-else produces a value (phi node)
+            Expr::Match { .. } => true,       // match produces a value
+            Expr::Call { .. } => true,        // function call produces a value
+            Expr::MethodCall { .. } => true,  // method call produces a value
+            Expr::StaticMethodCall { .. } => true, // static method call produces a value
+            // Struct-typed local variables are stored as pointers (double-pointer)
+            // so generate_expr returns a pointer, not a value
+            Expr::Ident(name) => {
+                if let Some(local) = self.locals.get(name) {
+                    // If it's a struct type and not a parameter, it's stored as a pointer
+                    !(matches!(local.ty, ResolvedType::Named { .. }) && !local.is_param)
+                } else {
+                    true
+                }
+            }
+            _ => true,
+        }
+    }
+
     /// Infer type of expression (simple version for let statement)
     fn infer_expr_type(&self, expr: &Spanned<Expr>) -> ResolvedType {
         match &expr.node {
@@ -3823,6 +3979,14 @@ impl CodeGenerator {
             Expr::Float(_) => ResolvedType::F64,
             Expr::Bool(_) => ResolvedType::Bool,
             Expr::String(_) => ResolvedType::Str,
+            // @ refers to self in methods
+            Expr::SelfCall => {
+                if let Some(local) = self.locals.get("self") {
+                    local.ty.clone()
+                } else {
+                    ResolvedType::I64
+                }
+            }
             Expr::Ident(name) => {
                 // Look up local variable type
                 if let Some(local) = self.locals.get(name) {
@@ -3856,7 +4020,12 @@ impl CodeGenerator {
                     }
                     // Check function info
                     if let Some(fn_info) = self.functions.get(fn_name) {
-                        return fn_info.ret_type.clone();
+                        let ret_ty = fn_info.ret_type.clone();
+                        // Convert i32 returns to i64 since codegen promotes them
+                        if ret_ty == ResolvedType::I32 {
+                            return ResolvedType::I64;
+                        }
+                        return ret_ty;
                     }
                 }
                 ResolvedType::I64 // Default

@@ -238,6 +238,10 @@ pub enum ResolvedType {
 
     // Unknown/Error type
     Unknown,
+
+    // Never type - represents a type that never returns (e.g., return, break, continue)
+    // This type unifies with any other type
+    Never,
 }
 
 impl ResolvedType {
@@ -347,6 +351,7 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Var(id) => write!(f, "?{}", id),
             ResolvedType::Generic(name) => write!(f, "{}", name),
             ResolvedType::Unknown => write!(f, "?"),
+            ResolvedType::Never => write!(f, "!"),
         }
     }
 }

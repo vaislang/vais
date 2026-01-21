@@ -142,10 +142,45 @@ impl CodeGenerator {
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
                 if let Some(expr) = expr {
-                    let (val, ir) = self.generate_expr(expr, counter)?;
-                    Ok((val, ir))
+                    let (val, mut ir) = self.generate_expr(expr, counter)?;
+
+                    // Get the return type of the current function
+                    let (ret_type, ret_resolved) = if let Some(fn_name) = &self.current_function {
+                        self.functions.get(fn_name)
+                            .map(|info| (self.type_to_llvm(&info.ret_type), info.ret_type.clone()))
+                            .unwrap_or_else(|| ("i64".to_string(), ResolvedType::I64))
+                    } else {
+                        ("i64".to_string(), ResolvedType::I64)
+                    };
+
+                    // For struct-typed local variables, we get a pointer from generate_expr
+                    // but we need to return by value, so dereference the pointer
+                    let final_val = if let Expr::Ident(name) = &expr.node {
+                        if let Some(local) = self.locals.get(name) {
+                            if !local.is_param && matches!(local.ty, ResolvedType::Named { .. }) && matches!(ret_resolved, ResolvedType::Named { .. }) {
+                                // val is a pointer to the struct, load the actual value
+                                let loaded = format!("%ret.{}", counter);
+                                *counter += 1;
+                                ir.push_str(&format!(
+                                    "  {} = load {}, {}* {}\n",
+                                    loaded, ret_type, ret_type, val
+                                ));
+                                loaded
+                            } else {
+                                val
+                            }
+                        } else {
+                            val
+                        }
+                    } else {
+                        val
+                    };
+
+                    // Emit the ret instruction
+                    ir.push_str(&format!("  ret {} {}\n", ret_type, final_val));
+                    Ok((final_val, ir))
                 } else {
-                    Ok(("void".to_string(), String::new()))
+                    Ok(("void".to_string(), "  ret void\n".to_string()))
                 }
             }
             Stmt::Break(value) => {

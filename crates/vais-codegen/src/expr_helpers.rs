@@ -522,8 +522,11 @@ impl CodeGenerator {
         let arg_val = arg_vals.first().map(|s| s.split_whitespace().last().unwrap_or("0")).unwrap_or("0");
         let ptr_tmp = self.next_temp(counter);
         ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr_tmp, arg_val));
+        let i32_result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = call i32 @puts(i8* {}){}\n", i32_result, ptr_tmp, dbg_info));
+        // Convert i32 result to i64 for consistency
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = call i32 @puts(i8* {}){}\n", result, ptr_tmp, dbg_info));
+        ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
         Ok((result, std::mem::take(ir)))
     }
 

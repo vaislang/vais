@@ -46,6 +46,7 @@ impl TypeMapper {
                 panic!("Unresolved type variable in JIT")
             }
             ResolvedType::Unknown => self.pointer_type,
+            ResolvedType::Never => types::I64, // Never type should not occur in JIT, but default to i64
         }
     }
 
