@@ -197,6 +197,11 @@ impl CodeGenerator {
                 eprintln!("Warning: Unresolved const generic parameter: {}", param);
                 "i64".to_string()
             }
+            ResolvedType::Vector { element, lanes } => {
+                // SIMD vector type: <lanes x element_type>
+                let elem_ty = self.type_to_llvm_impl(element);
+                format!("<{} x {}>", lanes, elem_ty)
+            }
             _ => "i64".to_string(), // Default fallback
         }
     }
@@ -242,6 +247,16 @@ impl CodeGenerator {
                 "f64" => ResolvedType::F64,
                 "bool" => ResolvedType::Bool,
                 "str" => ResolvedType::Str,
+                // SIMD Vector types
+                "Vec2f32" => ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 2 },
+                "Vec4f32" => ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 4 },
+                "Vec8f32" => ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 8 },
+                "Vec2f64" => ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 2 },
+                "Vec4f64" => ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 4 },
+                "Vec4i32" => ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 4 },
+                "Vec8i32" => ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 8 },
+                "Vec2i64" => ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 2 },
+                "Vec4i64" => ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 4 },
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {

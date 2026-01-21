@@ -1,0 +1,31 @@
+F dot_product(a: Vec4f32, b: Vec4f32) -> f32 {
+    product := simd_mul_vec4f32(a, b)
+    simd_reduce_add_vec4f32(product)
+}
+
+F vec_add_test(a: Vec4i32, b: Vec4i32) -> Vec4i32 {
+    simd_add_vec4i32(a, b)
+}
+
+F vec_mul_test(a: Vec4i32, b: Vec4i32) -> Vec4i32 {
+    simd_mul_vec4i32(a, b)
+}
+
+F main() -> i32 {
+    v1 := vec4i32(1, 2, 3, 4)
+    v2 := vec4i32(5, 6, 7, 8)
+
+    sum := simd_add_vec4i32(v1, v2)
+
+    product := simd_mul_vec4i32(v1, v2)
+
+    total := simd_reduce_add_vec4i32(sum)
+
+    v3 := vec2i64(100, 200)
+    v4 := vec2i64(1, 2)
+
+    sum64 := simd_add_vec2i64(v3, v4)
+    total64 := simd_reduce_add_vec2i64(sum64)
+
+    0
+}

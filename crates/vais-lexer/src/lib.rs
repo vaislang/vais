@@ -110,6 +110,26 @@ pub enum Token {
     #[token("str")]
     Str,
 
+    // === SIMD Vector Types ===
+    #[token("Vec2f32")]
+    Vec2f32,
+    #[token("Vec4f32")]
+    Vec4f32,
+    #[token("Vec8f32")]
+    Vec8f32,
+    #[token("Vec2f64")]
+    Vec2f64,
+    #[token("Vec4f64")]
+    Vec4f64,
+    #[token("Vec4i32")]
+    Vec4i32,
+    #[token("Vec8i32")]
+    Vec8i32,
+    #[token("Vec2i64")]
+    Vec2i64,
+    #[token("Vec4i64")]
+    Vec4i64,
+
     // === Literals ===
     // Note: negative sign is handled by unary operator, not here
     #[regex(r"[0-9][0-9_]*", |lex| lex.slice().replace('_', "").parse::<i64>().ok())]
@@ -268,6 +288,15 @@ impl fmt::Display for Token {
             Token::F64 => write!(f, "f64"),
             Token::Bool => write!(f, "bool"),
             Token::Str => write!(f, "str"),
+            Token::Vec2f32 => write!(f, "Vec2f32"),
+            Token::Vec4f32 => write!(f, "Vec4f32"),
+            Token::Vec8f32 => write!(f, "Vec8f32"),
+            Token::Vec2f64 => write!(f, "Vec2f64"),
+            Token::Vec4f64 => write!(f, "Vec4f64"),
+            Token::Vec4i32 => write!(f, "Vec4i32"),
+            Token::Vec8i32 => write!(f, "Vec8i32"),
+            Token::Vec2i64 => write!(f, "Vec2i64"),
+            Token::Vec4i64 => write!(f, "Vec4i64"),
             Token::Int(n) => write!(f, "{}", n),
             Token::Float(n) => write!(f, "{}", n),
             Token::String(s) => write!(f, "\"{}\"", s),

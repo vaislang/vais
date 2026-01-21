@@ -54,6 +54,7 @@ impl CodeGenerator {
         self.register_file_functions();
         self.register_string_functions();
         self.register_async_functions();
+        self.register_simd_functions();
     }
 
     fn register_io_functions(&mut self) {
@@ -291,6 +292,300 @@ impl CodeGenerator {
         register_extern!(self, "sched_yield",
             vec![],
             ResolvedType::I32
+        );
+    }
+
+    fn register_simd_functions(&mut self) {
+        // Helper to create vector types
+        let vec2f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 2 };
+        let vec4f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 4 };
+        let vec8f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 8 };
+        let vec2f64 = ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 2 };
+        let vec4f64 = ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 4 };
+        let vec4i32 = ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 4 };
+        let vec8i32 = ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 8 };
+        let vec2i64 = ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 2 };
+        let vec4i64 = ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 4 };
+
+        // === Vector Constructors ===
+        self.functions.insert(
+            "vec2f32".to_string(),
+            FunctionInfo {
+                name: "vec2f32".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::F32),
+                    ("y".to_string(), ResolvedType::F32),
+                ],
+                ret_type: vec2f32.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec4f32".to_string(),
+            FunctionInfo {
+                name: "vec4f32".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::F32),
+                    ("y".to_string(), ResolvedType::F32),
+                    ("z".to_string(), ResolvedType::F32),
+                    ("w".to_string(), ResolvedType::F32),
+                ],
+                ret_type: vec4f32.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec8f32".to_string(),
+            FunctionInfo {
+                name: "vec8f32".to_string(),
+                params: vec![
+                    ("a".to_string(), ResolvedType::F32),
+                    ("b".to_string(), ResolvedType::F32),
+                    ("c".to_string(), ResolvedType::F32),
+                    ("d".to_string(), ResolvedType::F32),
+                    ("e".to_string(), ResolvedType::F32),
+                    ("f".to_string(), ResolvedType::F32),
+                    ("g".to_string(), ResolvedType::F32),
+                    ("h".to_string(), ResolvedType::F32),
+                ],
+                ret_type: vec8f32.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec2f64".to_string(),
+            FunctionInfo {
+                name: "vec2f64".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::F64),
+                    ("y".to_string(), ResolvedType::F64),
+                ],
+                ret_type: vec2f64.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec4f64".to_string(),
+            FunctionInfo {
+                name: "vec4f64".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::F64),
+                    ("y".to_string(), ResolvedType::F64),
+                    ("z".to_string(), ResolvedType::F64),
+                    ("w".to_string(), ResolvedType::F64),
+                ],
+                ret_type: vec4f64.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec4i32".to_string(),
+            FunctionInfo {
+                name: "vec4i32".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::I32),
+                    ("y".to_string(), ResolvedType::I32),
+                    ("z".to_string(), ResolvedType::I32),
+                    ("w".to_string(), ResolvedType::I32),
+                ],
+                ret_type: vec4i32.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec8i32".to_string(),
+            FunctionInfo {
+                name: "vec8i32".to_string(),
+                params: vec![
+                    ("a".to_string(), ResolvedType::I32),
+                    ("b".to_string(), ResolvedType::I32),
+                    ("c".to_string(), ResolvedType::I32),
+                    ("d".to_string(), ResolvedType::I32),
+                    ("e".to_string(), ResolvedType::I32),
+                    ("f".to_string(), ResolvedType::I32),
+                    ("g".to_string(), ResolvedType::I32),
+                    ("h".to_string(), ResolvedType::I32),
+                ],
+                ret_type: vec8i32.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec2i64".to_string(),
+            FunctionInfo {
+                name: "vec2i64".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::I64),
+                    ("y".to_string(), ResolvedType::I64),
+                ],
+                ret_type: vec2i64.clone(),
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "vec4i64".to_string(),
+            FunctionInfo {
+                name: "vec4i64".to_string(),
+                params: vec![
+                    ("x".to_string(), ResolvedType::I64),
+                    ("y".to_string(), ResolvedType::I64),
+                    ("z".to_string(), ResolvedType::I64),
+                    ("w".to_string(), ResolvedType::I64),
+                ],
+                ret_type: vec4i64.clone(),
+                is_extern: false,
+            },
+        );
+
+        // === SIMD Arithmetic Operations ===
+        macro_rules! register_simd_binop {
+            ($name:expr, $vec_ty:expr) => {
+                self.functions.insert(
+                    $name.to_string(),
+                    FunctionInfo {
+                        name: $name.to_string(),
+                        params: vec![
+                            ("a".to_string(), $vec_ty.clone()),
+                            ("b".to_string(), $vec_ty.clone()),
+                        ],
+                        ret_type: $vec_ty.clone(),
+                        is_extern: false,
+                    },
+                );
+            };
+        }
+
+        // Vec4f32 operations
+        register_simd_binop!("simd_add_vec4f32", vec4f32);
+        register_simd_binop!("simd_sub_vec4f32", vec4f32);
+        register_simd_binop!("simd_mul_vec4f32", vec4f32);
+        register_simd_binop!("simd_div_vec4f32", vec4f32);
+
+        // Vec8f32 operations
+        register_simd_binop!("simd_add_vec8f32", vec8f32);
+        register_simd_binop!("simd_sub_vec8f32", vec8f32);
+        register_simd_binop!("simd_mul_vec8f32", vec8f32);
+        register_simd_binop!("simd_div_vec8f32", vec8f32);
+
+        // Vec2f64 operations
+        register_simd_binop!("simd_add_vec2f64", vec2f64);
+        register_simd_binop!("simd_sub_vec2f64", vec2f64);
+        register_simd_binop!("simd_mul_vec2f64", vec2f64);
+        register_simd_binop!("simd_div_vec2f64", vec2f64);
+
+        // Vec4f64 operations
+        register_simd_binop!("simd_add_vec4f64", vec4f64);
+        register_simd_binop!("simd_sub_vec4f64", vec4f64);
+        register_simd_binop!("simd_mul_vec4f64", vec4f64);
+        register_simd_binop!("simd_div_vec4f64", vec4f64);
+
+        // Vec4i32 operations
+        register_simd_binop!("simd_add_vec4i32", vec4i32);
+        register_simd_binop!("simd_sub_vec4i32", vec4i32);
+        register_simd_binop!("simd_mul_vec4i32", vec4i32);
+
+        // Vec8i32 operations
+        register_simd_binop!("simd_add_vec8i32", vec8i32);
+        register_simd_binop!("simd_sub_vec8i32", vec8i32);
+        register_simd_binop!("simd_mul_vec8i32", vec8i32);
+
+        // Vec2i64 operations
+        register_simd_binop!("simd_add_vec2i64", vec2i64);
+        register_simd_binop!("simd_sub_vec2i64", vec2i64);
+        register_simd_binop!("simd_mul_vec2i64", vec2i64);
+
+        // Vec4i64 operations
+        register_simd_binop!("simd_add_vec4i64", vec4i64);
+        register_simd_binop!("simd_sub_vec4i64", vec4i64);
+        register_simd_binop!("simd_mul_vec4i64", vec4i64);
+
+        // === Horizontal Reduction Operations ===
+        self.functions.insert(
+            "simd_reduce_add_vec4f32".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec4f32".to_string(),
+                params: vec![("v".to_string(), vec4f32)],
+                ret_type: ResolvedType::F32,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec8f32".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec8f32".to_string(),
+                params: vec![("v".to_string(), vec8f32)],
+                ret_type: ResolvedType::F32,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec2f64".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec2f64".to_string(),
+                params: vec![("v".to_string(), vec2f64)],
+                ret_type: ResolvedType::F64,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec4f64".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec4f64".to_string(),
+                params: vec![("v".to_string(), vec4f64)],
+                ret_type: ResolvedType::F64,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec4i32".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec4i32".to_string(),
+                params: vec![("v".to_string(), vec4i32)],
+                ret_type: ResolvedType::I32,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec8i32".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec8i32".to_string(),
+                params: vec![("v".to_string(), vec8i32)],
+                ret_type: ResolvedType::I32,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec2i64".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec2i64".to_string(),
+                params: vec![("v".to_string(), vec2i64)],
+                ret_type: ResolvedType::I64,
+                is_extern: false,
+            },
+        );
+
+        self.functions.insert(
+            "simd_reduce_add_vec4i64".to_string(),
+            FunctionInfo {
+                name: "simd_reduce_add_vec4i64".to_string(),
+                params: vec![("v".to_string(), vec4i64)],
+                ret_type: ResolvedType::I64,
+                is_extern: false,
+            },
         );
     }
 }

@@ -243,6 +243,11 @@ impl CodeGenerator {
             if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
                 return self.generate_enum_variant_constructor(&enum_name, tag, args, counter);
             }
+
+            // Check if this is a SIMD intrinsic - do this BEFORE regular function lookup
+            if Self::is_simd_intrinsic(name) {
+                return self.generate_simd_intrinsic(name, args, counter);
+            }
         }
 
         // Check if this is a direct function call or indirect (lambda) call
@@ -1339,5 +1344,205 @@ impl CodeGenerator {
         self.needs_unwrap_panic = true;
 
         Ok((value, ir))
+    }
+
+    // === SIMD Intrinsic Support ===
+
+    /// Check if a function name is a SIMD intrinsic
+    pub(crate) fn is_simd_intrinsic(name: &str) -> bool {
+        name.starts_with("vec") && (
+            name.ends_with("f32") || name.ends_with("f64") ||
+            name.ends_with("i32") || name.ends_with("i64")
+        ) || name.starts_with("simd_")
+    }
+
+    /// Generate SIMD intrinsic call
+    pub(crate) fn generate_simd_intrinsic(
+        &mut self,
+        fn_name: &str,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let mut ir = String::new();
+        let mut arg_vals = Vec::new();
+
+        // Evaluate all arguments first
+        for arg in args {
+            let (val, arg_ir) = self.generate_expr(arg, counter)?;
+            ir.push_str(&arg_ir);
+            arg_vals.push(val);
+        }
+
+        // Handle vector constructors
+        if fn_name.starts_with("vec") && !fn_name.starts_with("vec_") {
+            return self.generate_vector_constructor(fn_name, &arg_vals, counter, ir);
+        }
+
+        // Handle SIMD binary operations
+        if fn_name.starts_with("simd_add_") || fn_name.starts_with("simd_sub_") ||
+           fn_name.starts_with("simd_mul_") || fn_name.starts_with("simd_div_") {
+            return self.generate_simd_binop(fn_name, &arg_vals, counter, ir);
+        }
+
+        // Handle SIMD reduce operations
+        if fn_name.starts_with("simd_reduce_add_") {
+            return self.generate_simd_reduce_add(fn_name, &arg_vals, counter, ir);
+        }
+
+        Err(CodegenError::Unsupported(format!("Unknown SIMD intrinsic: {}", fn_name)))
+    }
+
+    /// Generate vector constructor (e.g., vec4f32(x, y, z, w))
+    fn generate_vector_constructor(
+        &mut self,
+        fn_name: &str,
+        arg_vals: &[String],
+        counter: &mut usize,
+        mut ir: String,
+    ) -> CodegenResult<(String, String)> {
+        // Parse vector type from name (e.g., "vec4f32" -> lanes=4, element="float")
+        let (lanes, elem_ty) = self.parse_vector_type_name(fn_name)?;
+
+        // Build vector using insertelement instructions
+        // Start with undef and insert each element
+        let vec_ty = format!("<{} x {}>", lanes, elem_ty);
+        let mut current_vec = format!("undef");
+
+        for (i, val) in arg_vals.iter().enumerate() {
+            let next_vec = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = insertelement {} {}, {} {}, i32 {}\n",
+                next_vec, vec_ty, current_vec, elem_ty, val, i
+            ));
+            current_vec = next_vec;
+        }
+
+        Ok((current_vec, ir))
+    }
+
+    /// Generate SIMD binary operation (add, sub, mul, div)
+    fn generate_simd_binop(
+        &mut self,
+        fn_name: &str,
+        arg_vals: &[String],
+        counter: &mut usize,
+        mut ir: String,
+    ) -> CodegenResult<(String, String)> {
+        if arg_vals.len() != 2 {
+            return Err(CodegenError::TypeError(format!(
+                "SIMD binary operation {} requires 2 arguments", fn_name
+            )));
+        }
+
+        // Parse operation and type from name (e.g., "simd_add_vec4f32")
+        let (op, vec_suffix) = if fn_name.starts_with("simd_add_") {
+            ("add", &fn_name[9..])
+        } else if fn_name.starts_with("simd_sub_") {
+            ("sub", &fn_name[9..])
+        } else if fn_name.starts_with("simd_mul_") {
+            ("mul", &fn_name[9..])
+        } else if fn_name.starts_with("simd_div_") {
+            ("div", &fn_name[9..])
+        } else {
+            return Err(CodegenError::Unsupported(format!("Unknown SIMD op: {}", fn_name)));
+        };
+
+        let (lanes, elem_ty) = self.parse_vector_type_name(vec_suffix)?;
+        let vec_ty = format!("<{} x {}>", lanes, elem_ty);
+
+        // Determine LLVM instruction based on element type
+        let llvm_op = match (op, elem_ty.as_str()) {
+            ("add", "float") | ("add", "double") => "fadd",
+            ("sub", "float") | ("sub", "double") => "fsub",
+            ("mul", "float") | ("mul", "double") => "fmul",
+            ("div", "float") | ("div", "double") => "fdiv",
+            ("add", _) => "add",
+            ("sub", _) => "sub",
+            ("mul", _) => "mul",
+            ("div", _) => "sdiv",
+            _ => return Err(CodegenError::Unsupported(format!("Unknown op: {}", op))),
+        };
+
+        let result = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = {} {} {}, {}\n",
+            result, llvm_op, vec_ty, arg_vals[0], arg_vals[1]
+        ));
+
+        Ok((result, ir))
+    }
+
+    /// Generate SIMD reduce add operation
+    fn generate_simd_reduce_add(
+        &mut self,
+        fn_name: &str,
+        arg_vals: &[String],
+        counter: &mut usize,
+        mut ir: String,
+    ) -> CodegenResult<(String, String)> {
+        if arg_vals.len() != 1 {
+            return Err(CodegenError::TypeError(format!(
+                "SIMD reduce operation {} requires 1 argument", fn_name
+            )));
+        }
+
+        // Parse type from name (e.g., "simd_reduce_add_vec4f32")
+        let vec_suffix = &fn_name[16..]; // Skip "simd_reduce_add_"
+        let (lanes, elem_ty) = self.parse_vector_type_name(vec_suffix)?;
+
+        // Use LLVM vector reduce intrinsics
+        let intrinsic = match elem_ty.as_str() {
+            "float" => format!("@llvm.vector.reduce.fadd.v{}f32", lanes),
+            "double" => format!("@llvm.vector.reduce.fadd.v{}f64", lanes),
+            "i32" => format!("@llvm.vector.reduce.add.v{}i32", lanes),
+            "i64" => format!("@llvm.vector.reduce.add.v{}i64", lanes),
+            _ => return Err(CodegenError::Unsupported(format!("Unknown element type: {}", elem_ty))),
+        };
+
+        let vec_ty = format!("<{} x {}>", lanes, elem_ty);
+        let result = self.next_temp(counter);
+
+        // For float/double, we need an initial value for ordered reduction
+        if elem_ty == "float" || elem_ty == "double" {
+            let zero = if elem_ty == "float" { "0.0" } else { "0.0" };
+            ir.push_str(&format!(
+                "  {} = call {} {}({} {}, {} {})\n",
+                result, elem_ty, intrinsic, elem_ty, zero, vec_ty, arg_vals[0]
+            ));
+        } else {
+            ir.push_str(&format!(
+                "  {} = call {} {}({} {})\n",
+                result, elem_ty, intrinsic, vec_ty, arg_vals[0]
+            ));
+        }
+
+        Ok((result, ir))
+    }
+
+    /// Parse vector type name to get lanes and element type
+    fn parse_vector_type_name(&self, name: &str) -> CodegenResult<(u32, String)> {
+        // e.g., "vec4f32" -> (4, "float"), "vec2i64" -> (2, "i64")
+        let (lanes, elem) = if name.starts_with("vec") {
+            let rest = &name[3..]; // Remove "vec" prefix
+            if rest.ends_with("f32") {
+                let lanes_str = &rest[..rest.len()-3];
+                (lanes_str.parse::<u32>().unwrap_or(4), "float".to_string())
+            } else if rest.ends_with("f64") {
+                let lanes_str = &rest[..rest.len()-3];
+                (lanes_str.parse::<u32>().unwrap_or(2), "double".to_string())
+            } else if rest.ends_with("i32") {
+                let lanes_str = &rest[..rest.len()-3];
+                (lanes_str.parse::<u32>().unwrap_or(4), "i32".to_string())
+            } else if rest.ends_with("i64") {
+                let lanes_str = &rest[..rest.len()-3];
+                (lanes_str.parse::<u32>().unwrap_or(2), "i64".to_string())
+            } else {
+                return Err(CodegenError::Unsupported(format!("Unknown vector type: {}", name)));
+            }
+        } else {
+            return Err(CodegenError::Unsupported(format!("Invalid vector type name: {}", name)));
+        };
+
+        Ok((lanes, elem))
     }
 }

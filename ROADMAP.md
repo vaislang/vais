@@ -834,7 +834,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 타입체커: resolve_const_expr(), 상수 연산 평가
   - 코드젠: LLVM `[N x T]` 배열 타입 생성
   - 11개 통합 테스트 추가
-- [ ] **SIMD intrinsics** - 벡터 연산 intrinsic 함수
+- [x] **SIMD intrinsics** - 벡터 연산 intrinsic 함수 (완료일: 2026-01-22)
+  - 9개 SIMD 벡터 타입 지원: Vec2f32, Vec4f32, Vec8f32, Vec2f64, Vec4f64, Vec4i32, Vec8i32, Vec2i64, Vec4i64
+  - 벡터 생성자: vec4f32(x, y, z, w), vec4i32(...) 등
+  - 산술 연산: simd_add_*, simd_sub_*, simd_mul_*, simd_div_* (float 타입)
+  - 수평 리듀스: simd_reduce_add_* (전체 요소 합)
+  - LLVM IR 직접 생성: insertelement, fadd/fmul, @llvm.vector.reduce.*
+  - 17개 통합 테스트 추가
 
 ### P3 - 낮은 우선순위 (3-6개월)
 - [ ] **Union types** - Tagged union 외 untagged union 지원

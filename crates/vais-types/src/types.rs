@@ -320,6 +320,13 @@ pub enum ResolvedType {
     // Never type - represents a type that never returns (e.g., return, break, continue)
     // This type unifies with any other type
     Never,
+
+    // SIMD vector type: <lanes x element_type>
+    // e.g., Vector { element: F32, lanes: 4 } -> <4 x float>
+    Vector {
+        element: Box<ResolvedType>,
+        lanes: u32,
+    },
 }
 
 impl ResolvedType {
@@ -432,6 +439,7 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::ConstGeneric(name) => write!(f, "const {}", name),
             ResolvedType::Unknown => write!(f, "?"),
             ResolvedType::Never => write!(f, "!"),
+            ResolvedType::Vector { element, lanes } => write!(f, "Vec{}x{}", lanes, element),
         }
     }
 }
@@ -610,6 +618,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         }
         ResolvedType::Generic(name) => name.clone(),
         ResolvedType::Var(id) => format!("v{}", id),
+        ResolvedType::Vector { element, lanes } => format!("vec{}_{}", lanes, mangle_type(element)),
         _ => "unknown".to_string(),
     }
 }
@@ -670,6 +679,12 @@ pub fn substitute_type(
             ResolvedType::Fn {
                 params: new_params,
                 ret: new_ret,
+            }
+        }
+        ResolvedType::Vector { element, lanes } => {
+            ResolvedType::Vector {
+                element: Box::new(substitute_type(element, substitutions)),
+                lanes: *lanes,
             }
         }
         // Primitives and other types pass through unchanged

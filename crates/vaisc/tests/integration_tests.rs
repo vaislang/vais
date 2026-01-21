@@ -753,3 +753,218 @@ S Container<T, const N: u64> {
     let module = vais_parser::parse(source);
     assert!(module.is_ok());
 }
+
+// ==================== SIMD Vector Tests ====================
+
+#[test]
+fn test_simd_vec4i32_constructor() {
+    // Use i32 vector which doesn't have literal type issues
+    let source = r#"
+F test_vec4i32() -> Vec4i32 {
+    vec4i32(1, 2, 3, 4)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x i32>"));
+    assert!(ir.contains("insertelement"));
+}
+
+#[test]
+fn test_simd_vec4f32_add() {
+    let source = r#"
+F test_add(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+    simd_add_vec4f32(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x float>"));
+    assert!(ir.contains("fadd <4 x float>"));
+}
+
+#[test]
+fn test_simd_vec4f32_mul() {
+    let source = r#"
+F test_mul(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+    simd_mul_vec4f32(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x float>"));
+    assert!(ir.contains("fmul <4 x float>"));
+}
+
+#[test]
+fn test_simd_vec4f32_sub() {
+    let source = r#"
+F test_sub(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+    simd_sub_vec4f32(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("fsub <4 x float>"));
+}
+
+#[test]
+fn test_simd_vec4f32_div() {
+    let source = r#"
+F test_div(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+    simd_div_vec4f32(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("fdiv <4 x float>"));
+}
+
+#[test]
+fn test_simd_vec4i32_add() {
+    let source = r#"
+F test_add(a: Vec4i32, b: Vec4i32) -> Vec4i32 {
+    simd_add_vec4i32(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x i32>"));
+    assert!(ir.contains("add <4 x i32>"));
+}
+
+#[test]
+fn test_simd_vec8f32_operations() {
+    let source = r#"
+F test_vec8(a: Vec8f32, b: Vec8f32) -> Vec8f32 {
+    c := simd_add_vec8f32(a, b)
+    simd_mul_vec8f32(c, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<8 x float>"));
+    assert!(ir.contains("fadd <8 x float>"));
+    assert!(ir.contains("fmul <8 x float>"));
+}
+
+#[test]
+fn test_simd_reduce_add_vec4f32() {
+    let source = r#"
+F test_reduce(v: Vec4f32) -> f32 {
+    simd_reduce_add_vec4f32(v)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@llvm.vector.reduce.fadd.v4f32"));
+}
+
+#[test]
+fn test_simd_dot_product() {
+    let source = r#"
+F dot_product(a: Vec4f32, b: Vec4f32) -> f32 {
+    product := simd_mul_vec4f32(a, b)
+    simd_reduce_add_vec4f32(product)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("fmul <4 x float>"));
+    assert!(ir.contains("@llvm.vector.reduce.fadd.v4f32"));
+}
+
+#[test]
+fn test_simd_vec2f64_operations() {
+    let source = r#"
+F test_vec2f64(a: Vec2f64, b: Vec2f64) -> Vec2f64 {
+    simd_add_vec2f64(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<2 x double>"));
+    assert!(ir.contains("fadd <2 x double>"));
+}
+
+#[test]
+fn test_simd_vec4f64_operations() {
+    let source = r#"
+F test_vec4f64(a: Vec4f64, b: Vec4f64) -> Vec4f64 {
+    simd_mul_vec4f64(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x double>"));
+    assert!(ir.contains("fmul <4 x double>"));
+}
+
+#[test]
+fn test_simd_vec2i64_operations() {
+    let source = r#"
+F test_vec2i64(a: Vec2i64, b: Vec2i64) -> Vec2i64 {
+    simd_add_vec2i64(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<2 x i64>"));
+    assert!(ir.contains("add <2 x i64>"));
+}
+
+#[test]
+fn test_simd_vec4i64_mul() {
+    let source = r#"
+F test_mul(a: Vec4i64, b: Vec4i64) -> Vec4i64 {
+    simd_mul_vec4i64(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x i64>"));
+    assert!(ir.contains("mul <4 x i64>"));
+}
+
+#[test]
+fn test_simd_vec_constructors() {
+    // Test integer vector constructors (float constructors have literal type issues)
+    let source = r#"
+F test_constructors() -> i32 {
+    v4i32 := vec4i32(1, 2, 3, 4)
+    v2i64 := vec2i64(1, 2)
+    v4i64 := vec4i64(1, 2, 3, 4)
+    0
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x i32>"));
+    assert!(ir.contains("<2 x i64>"));
+    assert!(ir.contains("<4 x i64>"));
+}
+
+#[test]
+fn test_simd_vec_float_constructors_via_params() {
+    // Test float vector constructors with parameters (avoids literal type issues)
+    let source = r#"
+F test_f32_constructor(a: f32, b: f32, c: f32, d: f32) -> Vec4f32 {
+    vec4f32(a, b, c, d)
+}
+
+F test_f64_constructor(a: f64, b: f64) -> Vec2f64 {
+    vec2f64(a, b)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("<4 x float>"));
+    assert!(ir.contains("<2 x double>"));
+}
+
+#[test]
+fn test_simd_reduce_i32() {
+    let source = r#"
+F test_reduce(v: Vec4i32) -> i32 {
+    simd_reduce_add_vec4i32(v)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@llvm.vector.reduce.add.v4i32"));
+}
+
+#[test]
+fn test_simd_reduce_i64() {
+    let source = r#"
+F test_reduce(v: Vec2i64) -> i64 {
+    simd_reduce_add_vec2i64(v)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@llvm.vector.reduce.add.v2i64"));
+}

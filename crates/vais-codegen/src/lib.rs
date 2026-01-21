@@ -180,6 +180,9 @@ pub struct CodeGenerator {
     // Stack of loop labels for break/continue
     loop_stack: Vec<LoopLabels>,
 
+    // Stack of deferred expressions per function (LIFO order)
+    defer_stack: Vec<vais_ast::Spanned<vais_ast::Expr>>,
+
     // String constants for global storage
     string_constants: Vec<(String, String)>, // (name, value)
 
@@ -255,6 +258,7 @@ impl CodeGenerator {
             locals: HashMap::new(),
             label_counter: 0,
             loop_stack: Vec::new(),
+            defer_stack: Vec::new(),
             string_constants: Vec::new(),
             string_counter: 0,
             lambda_functions: Vec::new(),
@@ -1122,6 +1126,7 @@ impl CodeGenerator {
         self.locals.clear();
         self.label_counter = 0;
         self.loop_stack.clear();
+        self.clear_defer_stack();
 
         // Create debug info for this function
         let func_line = self.debug_info.offset_to_line(span.start);
@@ -1180,6 +1185,11 @@ impl CodeGenerator {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
                 ir.push_str(&expr_ir);
+
+                // Execute deferred expressions before return (LIFO order)
+                let defer_ir = self.generate_defer_cleanup(&mut counter)?;
+                ir.push_str(&defer_ir);
+
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
                     ir.push_str(&format!("  ret void{}\n", ret_dbg));
@@ -1199,7 +1209,12 @@ impl CodeGenerator {
                 // If block is already terminated (has return/break), don't emit ret
                 if terminated {
                     // Block already has a terminator, no need for ret
+                    // Note: defer cleanup for early returns is handled in Return statement
                 } else {
+                    // Execute deferred expressions before return (LIFO order)
+                    let defer_ir = self.generate_defer_cleanup(&mut counter)?;
+                    ir.push_str(&defer_ir);
+
                     // Get debug location from last statement or function end
                     let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);
                     let ret_dbg = self.debug_info.dbg_ref_from_offset(ret_offset);
@@ -1851,6 +1866,11 @@ impl CodeGenerator {
                         // Return pointer to the enum
                         return Ok((enum_ptr, ir));
                     }
+
+                    // Check if this is a SIMD intrinsic
+                    if Self::is_simd_intrinsic(name) {
+                        return self.generate_simd_intrinsic(name, args, counter);
+                    }
                 }
 
                 // Check if this is a direct function call or indirect (lambda) call
@@ -2370,6 +2390,15 @@ impl CodeGenerator {
                             ));
                         }
                     }
+                } else if let Expr::Deref(inner) = &target.node {
+                    // Pointer dereference assignment: *ptr = value
+                    let (ptr_val, ptr_ir) = self.generate_expr(inner, counter)?;
+                    ir.push_str(&ptr_ir);
+                    // Store value at the pointed-to location
+                    ir.push_str(&format!(
+                        "  store i64 {}, i64* {}\n",
+                        val, ptr_val
+                    ));
                 } else if let Expr::Field { expr: obj_expr, field } = &target.node {
                     // Field assignment: obj.field = value
                     let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
@@ -2742,8 +2771,8 @@ impl CodeGenerator {
             Expr::Ref(inner) => {
                 // For simple references, just return the address
                 if let Expr::Ident(name) = &inner.node {
-                    if self.locals.contains_key(name.as_str()) {
-                        return Ok((format!("%{}", name), String::new()));
+                    if let Some(local) = self.locals.get(name.as_str()) {
+                        return Ok((format!("%{}", local.llvm_name), String::new()));
                     }
                 }
                 // For complex expressions, evaluate and return
