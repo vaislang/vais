@@ -5,6 +5,7 @@
 mod doc_gen;
 mod repl;
 mod error_formatter;
+mod incremental;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
@@ -96,6 +97,10 @@ enum Commands {
         /// Examples: wasm32-unknown-unknown, wasm32-wasi, x86_64-unknown-linux-gnu
         #[arg(long, value_name = "TRIPLE")]
         target: Option<String>,
+
+        /// Force full rebuild, ignoring incremental cache
+        #[arg(long)]
+        force_rebuild: bool,
     },
 
     /// Run a Vais source file
@@ -166,11 +171,11 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild }) => {
             let target_triple = target.as_ref()
                 .and_then(|s| TargetTriple::from_str(s))
                 .unwrap_or(TargetTriple::Native);
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple)
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild)
         }
         Some(Commands::Run { input, args }) => {
             cmd_run(&input, &args, cli.verbose, &plugins)
@@ -195,7 +200,7 @@ fn main() {
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native)
+                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native, false)
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -219,7 +224,74 @@ fn cmd_build(
     verbose: bool,
     plugins: &PluginRegistry,
     target: TargetTriple,
+    force_rebuild: bool,
 ) -> Result<(), String> {
+    use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
+
+    // Initialize incremental compilation cache
+    let cache_dir = get_cache_dir(input);
+    let mut cache = IncrementalCache::new(cache_dir).ok();
+
+    // Set compilation options for cache validity checking
+    if let Some(ref mut c) = cache {
+        c.set_compilation_options(CompilationOptions {
+            opt_level,
+            debug,
+            target_triple: target.triple_str().to_string(),
+        });
+    }
+
+    // Check if we can skip compilation (only when not forcing rebuild)
+    if !force_rebuild {
+        if let Some(ref mut c) = cache {
+            match c.detect_changes(input) {
+                Ok(dirty_set) => {
+                    if dirty_set.is_empty() {
+                        if verbose {
+                            println!("{} {} (no changes detected)", "Skipping".cyan().bold(), input.display());
+                            let stats = c.stats();
+                            println!("  {} files cached, {} dependencies tracked",
+                                stats.total_files, stats.total_dependencies);
+                        }
+                        // Still need to output the binary path if not emit_ir
+                        if !emit_ir {
+                            let default_ext = match target {
+                                TargetTriple::Wasm32Unknown | TargetTriple::Wasi => "wasm",
+                                _ => "",
+                            };
+                            let bin_path = output.clone().unwrap_or_else(|| {
+                                input.with_extension(default_ext)
+                            });
+                            if bin_path.exists() {
+                                if !verbose {
+                                    println!("{}", bin_path.display());
+                                }
+                                return Ok(());
+                            }
+                        } else {
+                            let ir_path = output.clone().unwrap_or_else(|| input.with_extension("ll"));
+                            if ir_path.exists() {
+                                if !verbose {
+                                    println!("{}", ir_path.display());
+                                }
+                                return Ok(());
+                            }
+                        }
+                    } else if verbose {
+                        println!("{} {} file(s) changed", "Rebuilding".yellow().bold(), dirty_set.count());
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        println!("{} Cache check failed: {}", "Warning".yellow(), e);
+                    }
+                }
+            }
+        }
+    } else if verbose {
+        println!("{} (--force-rebuild)", "Full rebuild".yellow().bold());
+    }
+
     // Read source for error reporting
     let main_source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
@@ -371,6 +443,31 @@ fn cmd_build(
         });
 
         compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target)?;
+    }
+
+    // Update incremental compilation cache after successful build
+    if let Some(ref mut c) = cache {
+        // Update file metadata for all loaded modules
+        for loaded_path in &loaded_modules {
+            if let Err(e) = c.update_file(loaded_path) {
+                if verbose {
+                    eprintln!("{}: Cache update for '{}': {}", "Warning".yellow(), loaded_path.display(), e);
+                }
+            }
+        }
+
+        // Persist cache to disk
+        if let Err(e) = c.persist() {
+            if verbose {
+                eprintln!("{}: Cannot save cache: {}", "Warning".yellow(), e);
+            }
+        } else if verbose {
+            let stats = c.stats();
+            println!("{} {} files, {} dependencies",
+                "Cache updated:".cyan(),
+                stats.total_files,
+                stats.total_dependencies);
+        }
     }
 
     Ok(())
@@ -758,9 +855,9 @@ fn compile_to_wasi(
 }
 
 fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
-    // Build first (no debug for run command by default, native target only)
+    // Build first (no debug for run command by default, native target only, use incremental cache)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native)?;
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false)?;
 
     // Run the binary
     if verbose {

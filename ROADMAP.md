@@ -701,7 +701,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - CodeGenerator에 타겟별 IR 헤더 생성 (target triple, data layout)
   - 타겟별 clang 컴파일 옵션 분기 (wasm32, wasi, native)
   - 참고: 실제 wasm 바이너리 생성은 wasm-sdk 설치 필요
-- [ ] **증분 컴파일** - 파일 해시 기반 캐싱, 변경된 파일만 재컴파일
+- [x] **증분 컴파일** - 파일 해시 기반 캐싱, 변경된 파일만 재컴파일 (완료일: 2026-01-21)
+  - IncrementalCache 구조체 (crates/vaisc/src/incremental.rs)
+  - SHA256 파일 해시 기반 변경 감지
+  - 의존성 그래프 (DependencyGraph) - forward/reverse 의존성 추적
+  - 캐시 상태 JSON 직렬화 (.vais-cache/cache_state.json)
+  - CompilationOptions로 opt_level, debug, target_triple 변경 감지
+  - CLI `--force-rebuild` 옵션 추가
+  - 캐시 버전 및 컴파일러 버전 검증
 - [ ] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반
 - [ ] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (복잡도, 의존성)
 - [x] **unwrap/expect 감소** - 에러 전파 패턴 적용 (완료일: 2026-01-21)

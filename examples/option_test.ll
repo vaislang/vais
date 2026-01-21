@@ -2,74 +2,126 @@
 source_filename = "<vais>"
 
 %Option = type { i32, { i64 } }
-declare i32 @puts(i8*)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @fputc(i64, i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @fgetc(i64)
-declare i64 @malloc(i64)
-declare i32 @printf(i8*)
-declare i32 @strcmp(i8*, i8*)
-declare i32 @sched_yield()
-declare i32 @strncmp(i8*, i8*, i64)
-declare i64 @fgets(i64, i64, i64)
-declare i64 @strlen(i64)
-declare i64 @ftell(i64)
-declare i32 @usleep(i64)
-declare i64 @fflush(i64)
-declare i64 @fopen(i8*, i8*)
-declare i64 @fseek(i64, i64, i64)
-declare i32 @fclose(i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i64 @fputs(i8*, i64)
 declare i32 @putchar(i32)
 declare i64 @feof(i64)
+declare i64 @strlen(i64)
+declare i32 @puts(i8*)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @fgets(i64, i64, i64)
+declare i64 @memcpy(i64, i64, i64)
+declare i32 @printf(i8*)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @fputc(i64, i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i32 @usleep(i64)
 declare void @exit(i32)
+declare i64 @fputs(i8*, i64)
+declare i64 @fgetc(i64)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @fopen(i8*, i8*)
+declare i32 @fclose(i64)
+declare i32 @strncmp(i8*, i8*, i64)
 declare void @free(i64)
-@.str.0 = private unnamed_addr constant [21 x i8] c"Testing Option type:\00"
-@.str.1 = private unnamed_addr constant [9 x i8] c"10 / 2 =\00"
-@.str.2 = private unnamed_addr constant [9 x i8] c"10 / 0 =\00"
-
-define i64 @divide(i64 %a, i64 %b) {
+declare i64 @malloc(i64)
+declare i64 @fflush(i64)
+declare i32 @sched_yield()
+declare i64 @ftell(i64)
+define i64 @Option_is_some(%Option* %self) {
 entry:
-  %0 = icmp eq i64 %b, 0
-  %1 = zext i1 %0 to i64
-  %2 = icmp ne i64 %1, 0
-  br i1 %2, label %then0, label %else1
-then0:
-  br label %merge2
-else1:
-  %3 = sdiv i64 %a, %b
-  br label %merge2
-merge2:
-  %4 = phi i64 [ 0, %then0 ], [ %3, %else1 ]
-  ret i64 %4
+  br label %match.check1
+match.check1:
+  %0 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %1 = load i32, i32* %0
+  %2 = icmp eq i32 %1, 1
+  br i1 %2, label %match.arm3, label %match.check2
+match.arm3:
+  %3 = getelementptr { i32, i64 }, { i32, i64 }* %self, i32 0, i32 1
+  %4 = load i64, i64* %3
+  br label %match.merge0
+match.check2:
+  br i1 1, label %match.arm4, label %match.merge0
+match.arm4:
+  br label %match.merge0
+match.merge0:
+  %5 = phi i64 [ 1, %match.arm3 ], [ 0, %match.arm4 ]
+  ret i64 %5
+}
+
+define i64 @Option_is_none(%Option* %self) {
+entry:
+  br label %match.check1
+match.check1:
+  %0 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %1 = load i32, i32* %0
+  %2 = icmp eq i32 %1, 1
+  br i1 %2, label %match.arm3, label %match.check2
+match.arm3:
+  %3 = getelementptr { i32, i64 }, { i32, i64 }* %self, i32 0, i32 1
+  %4 = load i64, i64* %3
+  br label %match.merge0
+match.check2:
+  br i1 1, label %match.arm4, label %match.merge0
+match.arm4:
+  br label %match.merge0
+match.merge0:
+  %5 = phi i64 [ 0, %match.arm3 ], [ 1, %match.arm4 ]
+  ret i64 %5
+}
+
+define i64 @Option_unwrap_or(%Option* %self, i64 %default) {
+entry:
+  br label %match.check1
+match.check1:
+  %0 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %1 = load i32, i32* %0
+  %2 = icmp eq i32 %1, 1
+  br i1 %2, label %match.arm3, label %match.check2
+match.arm3:
+  %3 = getelementptr { i32, i64 }, { i32, i64 }* %self, i32 0, i32 1
+  %4 = load i64, i64* %3
+  %v.5 = alloca i64
+  store i64 %4, i64* %v.5
+  %6 = load i64, i64* %v.5
+  br label %match.merge0
+match.check2:
+  br i1 1, label %match.arm4, label %match.merge0
+match.arm4:
+  br label %match.merge0
+match.merge0:
+  %7 = phi i64 [ %6, %match.arm3 ], [ %default, %match.arm4 ]
+  ret i64 %7
 }
 
 define i64 @main() {
 entry:
-  %0 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.0, i64 0, i64 0))
-  %1 = call i64 @divide(i64 10, i64 2)
-  %r1.2 = alloca i64
-  store i64 %1, i64* %r1.2
-  %3 = call i32 @puts(i8* getelementptr ([9 x i8], [9 x i8]* @.str.1, i64 0, i64 0))
-  %4 = load i64, i64* %r1.2
-  %5 = add i64 %4, 48
-  %6 = trunc i64 %5 to i32
-  %7 = call i32 @putchar(i32 %6)
-  %8 = trunc i64 10 to i32
-  %9 = call i32 @putchar(i32 %8)
-  %10 = call i64 @divide(i64 10, i64 0)
-  %r2.11 = alloca i64
-  store i64 %10, i64* %r2.11
-  %12 = call i32 @puts(i8* getelementptr ([9 x i8], [9 x i8]* @.str.2, i64 0, i64 0))
-  %13 = load i64, i64* %r2.11
-  %14 = add i64 %13, 48
-  %15 = trunc i64 %14 to i32
-  %16 = call i32 @putchar(i32 %15)
-  %17 = trunc i64 10 to i32
-  %18 = call i32 @putchar(i32 %17)
-  ret i64 0
+  %0 = alloca %Option
+  %1 = getelementptr %Option, %Option* %0, i32 0, i32 0
+  store i32 1, i32* %1
+  %2 = getelementptr %Option, %Option* %0, i32 0, i32 1
+  store i64 42, i64* %2
+  %x.3 = alloca %Option*
+  store %Option* %0, %Option** %x.3
+  %4 = load %Option*, %Option** %x.3
+  br label %match.check1
+match.check1:
+  %5 = getelementptr { i32 }, { i32 }* %4, i32 0, i32 0
+  %6 = load i32, i32* %5
+  %7 = icmp eq i32 %6, 1
+  br i1 %7, label %match.arm3, label %match.check2
+match.arm3:
+  %8 = getelementptr { i32, i64 }, { i32, i64 }* %4, i32 0, i32 1
+  %9 = load i64, i64* %8
+  %v.10 = alloca i64
+  store i64 %9, i64* %v.10
+  %11 = load i64, i64* %v.10
+  br label %match.merge0
+match.check2:
+  br i1 1, label %match.arm4, label %match.merge0
+match.arm4:
+  br label %match.merge0
+match.merge0:
+  %12 = phi i64 [ %11, %match.arm3 ], [ 0, %match.arm4 ]
+  ret i64 %12
 }
 
 

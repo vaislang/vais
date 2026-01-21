@@ -1,30 +1,30 @@
 ; ModuleID = 'set_test'
 source_filename = "<vais>"
 
-declare i64 @fputc(i64, i64)
-declare i64 @fgets(i64, i64, i64)
-declare i64 @fgetc(i64)
+declare i32 @sched_yield()
+declare i64 @fopen(i8*, i8*)
+declare i64 @malloc(i64)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @feof(i64)
 declare i32 @puts(i8*)
+declare i64 @ftell(i64)
+declare i64 @strlen(i64)
+declare i32 @usleep(i64)
+declare i64 @fputc(i64, i64)
+declare i64 @fseek(i64, i64, i64)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @fgets(i64, i64, i64)
+declare i64 @fputs(i8*, i64)
+declare i32 @strcmp(i8*, i8*)
+declare i32 @putchar(i32)
+declare i64 @fflush(i64)
+declare i32 @printf(i8*)
+declare i64 @fread(i64, i64, i64, i64)
+declare i64 @fgetc(i64)
 declare void @exit(i32)
 declare i32 @fclose(i64)
-declare i64 @fseek(i64, i64, i64)
-declare i64 @fflush(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i32 @strcmp(i8*, i8*)
-declare i32 @sched_yield()
-declare i64 @strlen(i64)
-declare i64 @feof(i64)
 declare void @free(i64)
-declare i64 @malloc(i64)
-declare i64 @fputs(i8*, i64)
-declare i32 @usleep(i64)
-declare i32 @printf(i8*)
-declare i32 @putchar(i32)
-declare i64 @fopen(i8*, i8*)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i64 @ftell(i64)
 @.str.0 = private unnamed_addr constant [29 x i8] c"Test 1: Basic Set Operations\00"
 @.str.1 = private unnamed_addr constant [31 x i8] c"  Inserted 10, 20, 30. Count: \00"
 @.str.2 = private unnamed_addr constant [16 x i8] c"  Contains 10: \00"
@@ -162,7 +162,7 @@ merge5:
   %14 = phi i64 [ 1, %then3 ], [ %13, %else4 ]
   br label %merge2
 merge2:
-  %15 = phi i64 [ 0, %then0 ], [ %14, %else1 ]
+  %15 = phi i64 [ 0, %then0 ], [ %14, %merge5 ]
   ret i64 %15
 }
 
@@ -381,17 +381,17 @@ merge11:
 else7:
   br label %merge8
 merge8:
-  %84 = phi i64 [ %83, %then6 ], [ 0, %else7 ]
+  %84 = phi i64 [ %83, %merge11 ], [ 0, %else7 ]
   br label %merge5
 else4:
   br label %merge5
 merge5:
-  %85 = phi i64 [ %84, %then3 ], [ 0, %else4 ]
+  %85 = phi i64 [ %84, %merge8 ], [ 0, %else4 ]
   br label %merge2
 else1:
   br label %merge2
 merge2:
-  %86 = phi i64 [ %85, %then0 ], [ 0, %else1 ]
+  %86 = phi i64 [ %85, %merge5 ], [ 0, %else1 ]
   ret i64 %86
 }
 
@@ -521,7 +521,7 @@ merge5:
 else1:
   br label %merge2
 merge2:
-  %52 = phi i64 [ %51, %then0 ], [ 0, %else1 ]
+  %52 = phi i64 [ %51, %merge5 ], [ 0, %else1 ]
   ret i64 %52
 }
 
@@ -571,13 +571,13 @@ else4:
   %26 = call i32 @puts(i8* getelementptr ([26 x i8], [26 x i8]* @.str.16, i64 0, i64 0))
   br label %merge5
 merge5:
-  %27 = phi i64 [ %25, %then3 ], [ 1, %else4 ]
+  %27 = phi i64 [ %25, %merge8 ], [ 1, %else4 ]
   br label %merge2
 else1:
   %28 = call i32 @puts(i8* getelementptr ([26 x i8], [26 x i8]* @.str.17, i64 0, i64 0))
   br label %merge2
 merge2:
-  %29 = phi i64 [ %27, %then0 ], [ 1, %else1 ]
+  %29 = phi i64 [ %27, %merge5 ], [ 1, %else1 ]
   ret i64 %29
 }
 
