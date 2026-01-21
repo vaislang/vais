@@ -22,6 +22,10 @@ serde_json = "1.0"
 dashmap = "5"
 ropey = "1"
 
+[lib]
+name = "vais_lsp"
+path = "src/lib.rs"
+
 [[bin]]
 name = "vais-lsp"
 path = "src/main.rs"
