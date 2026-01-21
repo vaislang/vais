@@ -405,7 +405,7 @@ impl CodeGenerator {
                 ptr_tmp, dbg_info
             ));
             Ok(("void".to_string(), std::mem::take(ir)))
-        } else if fn_name == "memcpy" {
+        } else if fn_name == "memcpy" || fn_name == "memcpy_str" {
             self.generate_memcpy_call(arg_vals, counter, span, ir)
         } else if fn_name == "strlen" {
             self.generate_strlen_call(arg_vals, counter, span, ir)
@@ -475,14 +475,30 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> CodegenResult<(String, String)> {
         let dbg_info = self.debug_info.dbg_ref_from_span(span);
-        let dest_val = arg_vals.get(0).map(|s| s.split_whitespace().last().unwrap_or("0")).unwrap_or("0");
-        let src_val = arg_vals.get(1).map(|s| s.split_whitespace().last().unwrap_or("0")).unwrap_or("0");
+        let dest_full = arg_vals.get(0).map(|s| s.as_str()).unwrap_or("i64 0");
+        let src_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
         let n_val = arg_vals.get(2).map(|s| s.split_whitespace().last().unwrap_or("0")).unwrap_or("0");
 
-        let dest_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", dest_ptr, dest_val));
-        let src_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", src_ptr, src_val));
+        // Handle dest pointer
+        let dest_ptr = if dest_full.starts_with("i8*") {
+            dest_full.split_whitespace().last().unwrap_or("null").to_string()
+        } else {
+            let dest_val = dest_full.split_whitespace().last().unwrap_or("0");
+            let ptr = self.next_temp(counter);
+            ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr, dest_val));
+            ptr
+        };
+
+        // Handle src pointer (can be i64 or i8* for memcpy_str)
+        let src_ptr = if src_full.starts_with("i8*") {
+            src_full.split_whitespace().last().unwrap_or("null").to_string()
+        } else {
+            let src_val = src_full.split_whitespace().last().unwrap_or("0");
+            let ptr = self.next_temp(counter);
+            ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr, src_val));
+            ptr
+        };
+
         let result = self.next_temp(counter);
         ir.push_str(&format!(
             "  {} = call i8* @memcpy(i8* {}, i8* {}, i64 {}){}\n",
@@ -502,11 +518,21 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> CodegenResult<(String, String)> {
         let dbg_info = self.debug_info.dbg_ref_from_span(span);
-        let arg_val = arg_vals.first().map(|s| s.split_whitespace().last().unwrap_or("0")).unwrap_or("0");
-        let ptr_tmp = self.next_temp(counter);
-        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr_tmp, arg_val));
+        let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = call i64 @strlen(i8* {}){}\n", result, ptr_tmp, dbg_info));
+
+        // Check if the argument is already i8* (str type) or i64 (pointer as integer)
+        if arg_full.starts_with("i8*") {
+            // Already a pointer, use directly
+            let ptr_val = arg_full.split_whitespace().last().unwrap_or("null");
+            ir.push_str(&format!("  {} = call i64 @strlen(i8* {}){}\n", result, ptr_val, dbg_info));
+        } else {
+            // Convert i64 to pointer
+            let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
+            let ptr_tmp = self.next_temp(counter);
+            ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr_tmp, arg_val));
+            ir.push_str(&format!("  {} = call i64 @strlen(i8* {}){}\n", result, ptr_tmp, dbg_info));
+        }
         Ok((result, std::mem::take(ir)))
     }
 

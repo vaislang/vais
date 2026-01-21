@@ -111,6 +111,16 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
+        // memcpy_str: same as memcpy but accepts str as src
+        register_extern!(self, "memcpy_str" => "memcpy",
+            vec![
+                ("dest".to_string(), ResolvedType::I64),
+                ("src".to_string(), ResolvedType::Str),
+                ("n".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
         // load_byte: load single byte from memory (internal helper)
         register_helper!(self, "load_byte" => "__load_byte",
             vec![("ptr".to_string(), ResolvedType::I64)],
@@ -244,9 +254,9 @@ impl CodeGenerator {
     }
 
     fn register_string_functions(&mut self) {
-        // strlen: (s) -> len
+        // strlen: (s) -> len (accepts str)
         register_extern!(self, "strlen",
-            vec![("s".to_string(), ResolvedType::I64)],
+            vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
 

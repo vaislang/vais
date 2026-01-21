@@ -1,0 +1,90 @@
+# Vais Self-Hosting Compiler - Span Module
+# Source location tracking for error reporting
+
+# Span represents a range of bytes in source code
+S Span {
+    start: i64,
+    end: i64
+}
+
+# Spanned wraps a value with its source location
+S Spanned<T> {
+    node: T,
+    span: Span
+}
+
+X Span {
+    # Create a new span
+    F new(start: i64, end: i64) -> Span = Span {
+        start: start,
+        end: end
+    }
+
+    # Create an empty span (for generated nodes)
+    F empty() -> Span = Span { start: 0, end: 0 }
+
+    # Merge two spans into one covering both
+    F merge(&self, other_start: i64, other_end: i64) -> Span {
+        s := I self.start < other_start { self.start } E { other_start }
+        e := I self.end > other_end { self.end } E { other_end }
+        Span { start: s, end: e }
+    }
+
+    # Get the length of the span
+    F len(&self) -> i64 = self.end - self.start
+
+    # Check if span is empty (returns 1 for true, 0 for false)
+    F is_empty(&self) -> i64 = I self.start >= self.end { 1 } E { 0 }
+
+    # Check if this span contains a position
+    F contains(&self, pos: i64) -> i64 {
+        I pos >= self.start && pos < self.end { 1 } E { 0 }
+    }
+
+    # Check if this span overlaps with another
+    F overlaps(&self, other_start: i64, other_end: i64) -> i64 {
+        I self.start < other_end && other_start < self.end { 1 } E { 0 }
+    }
+}
+
+X Spanned<T> {
+    # Create a new spanned value
+    F new(node: T, span: Span) -> Spanned<T> = Spanned {
+        node: node,
+        span: span
+    }
+
+    # Create a spanned value with a range
+    F with_range(node: T, start: i64, end: i64) -> Spanned<T> = Spanned {
+        node: node,
+        span: Span { start: start, end: end }
+    }
+}
+
+# Position represents line and column in source
+S Position {
+    line: i64,
+    column: i64
+}
+
+X Position {
+    F new(line: i64, column: i64) -> Position = Position {
+        line: line,
+        column: column
+    }
+}
+
+# SourceLocation contains both byte offset and line/column
+S SourceLocation {
+    offset: i64,
+    line: i64,
+    column: i64
+}
+
+X SourceLocation {
+    F new(offset: i64, line: i64, column: i64) -> SourceLocation = SourceLocation {
+        offset: offset,
+        line: line,
+        column: column
+    }
+}

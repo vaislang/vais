@@ -1,0 +1,2189 @@
+# Vais Self-Hosting Compiler - Parser Module
+# Recursive descent parser for Vais source code
+# Converts token stream to AST
+
+# ============================================================================
+# Token Constants (copied from lexer.vais for self-contained parsing)
+# ============================================================================
+
+# Keyword tokens (1-30)
+F TOK_KW_F() -> i64 = 1
+F TOK_KW_S() -> i64 = 2
+F TOK_KW_E() -> i64 = 3
+F TOK_KW_I() -> i64 = 4
+F TOK_KW_L() -> i64 = 5
+F TOK_KW_M() -> i64 = 6
+F TOK_KW_W() -> i64 = 7
+F TOK_KW_X() -> i64 = 8
+F TOK_KW_T() -> i64 = 9
+F TOK_KW_U() -> i64 = 10
+F TOK_KW_P() -> i64 = 11
+F TOK_KW_A() -> i64 = 12
+F TOK_KW_R() -> i64 = 13
+F TOK_KW_B() -> i64 = 14
+F TOK_KW_C() -> i64 = 15
+F TOK_KW_TRUE() -> i64 = 16
+F TOK_KW_FALSE() -> i64 = 17
+F TOK_KW_MUT() -> i64 = 18
+F TOK_KW_ELSE() -> i64 = 19
+
+# Literal tokens (51-60)
+F TOK_INT() -> i64 = 51
+F TOK_FLOAT() -> i64 = 52
+F TOK_STRING() -> i64 = 53
+F TOK_IDENT() -> i64 = 54
+
+# Operator tokens (61-100)
+F TOK_PLUS() -> i64 = 61
+F TOK_MINUS() -> i64 = 62
+F TOK_STAR() -> i64 = 63
+F TOK_SLASH() -> i64 = 64
+F TOK_PERCENT() -> i64 = 65
+F TOK_LT() -> i64 = 66
+F TOK_GT() -> i64 = 67
+F TOK_LT_EQ() -> i64 = 68
+F TOK_GT_EQ() -> i64 = 69
+F TOK_EQ_EQ() -> i64 = 70
+F TOK_NOT_EQ() -> i64 = 71
+F TOK_AMP() -> i64 = 72
+F TOK_PIPE() -> i64 = 73
+F TOK_CARET() -> i64 = 74
+F TOK_TILDE() -> i64 = 75
+F TOK_SHL() -> i64 = 76
+F TOK_SHR() -> i64 = 77
+F TOK_BANG() -> i64 = 78
+F TOK_AND() -> i64 = 79
+F TOK_OR() -> i64 = 80
+
+# Assignment tokens (81-90)
+F TOK_EQ() -> i64 = 81
+F TOK_COLON_EQ() -> i64 = 82
+F TOK_PLUS_EQ() -> i64 = 83
+F TOK_MINUS_EQ() -> i64 = 84
+F TOK_STAR_EQ() -> i64 = 85
+F TOK_SLASH_EQ() -> i64 = 86
+
+# Delimiter tokens (91-100)
+F TOK_LPAREN() -> i64 = 91
+F TOK_RPAREN() -> i64 = 92
+F TOK_LBRACE() -> i64 = 93
+F TOK_RBRACE() -> i64 = 94
+F TOK_LBRACKET() -> i64 = 95
+F TOK_RBRACKET() -> i64 = 96
+
+# Punctuation tokens (101-120)
+F TOK_COMMA() -> i64 = 101
+F TOK_COLON() -> i64 = 102
+F TOK_SEMI() -> i64 = 103
+F TOK_DOT() -> i64 = 104
+F TOK_DOT_DOT() -> i64 = 105
+F TOK_DOT_DOT_EQ() -> i64 = 106
+F TOK_ARROW() -> i64 = 107
+F TOK_FAT_ARROW() -> i64 = 108
+F TOK_COLON_COLON() -> i64 = 109
+F TOK_QUESTION() -> i64 = 110
+F TOK_AT() -> i64 = 111
+F TOK_HASH() -> i64 = 112
+
+# Special tokens
+F TOK_EOF() -> i64 = 200
+F TOK_ERROR() -> i64 = 201
+
+# ============================================================================
+# AST Node Type Constants (copied from ast.vais)
+# ============================================================================
+
+# Item types
+F ITEM_FUNCTION() -> i64 = 1
+F ITEM_STRUCT() -> i64 = 2
+F ITEM_ENUM() -> i64 = 3
+F ITEM_TYPE_ALIAS() -> i64 = 4
+F ITEM_USE() -> i64 = 5
+F ITEM_TRAIT() -> i64 = 6
+F ITEM_IMPL() -> i64 = 7
+
+# Statement types
+F STMT_LET() -> i64 = 10
+F STMT_EXPR() -> i64 = 11
+F STMT_RETURN() -> i64 = 12
+F STMT_BREAK() -> i64 = 13
+F STMT_CONTINUE() -> i64 = 14
+
+# Expression types
+F EXPR_INT() -> i64 = 20
+F EXPR_FLOAT() -> i64 = 21
+F EXPR_BOOL() -> i64 = 22
+F EXPR_STRING() -> i64 = 23
+F EXPR_UNIT() -> i64 = 24
+F EXPR_IDENT() -> i64 = 25
+F EXPR_SELF_CALL() -> i64 = 26
+F EXPR_BINARY() -> i64 = 27
+F EXPR_UNARY() -> i64 = 28
+F EXPR_IF() -> i64 = 30
+F EXPR_LOOP() -> i64 = 31
+F EXPR_CALL() -> i64 = 33
+F EXPR_METHOD_CALL() -> i64 = 34
+F EXPR_STATIC_CALL() -> i64 = 35
+F EXPR_FIELD() -> i64 = 36
+F EXPR_INDEX() -> i64 = 37
+F EXPR_ARRAY() -> i64 = 38
+F EXPR_STRUCT_LIT() -> i64 = 40
+F EXPR_BLOCK() -> i64 = 42
+F EXPR_ASSIGN() -> i64 = 48
+F EXPR_ASSIGN_OP() -> i64 = 49
+
+# Type node types
+F TYPE_NAMED() -> i64 = 60
+F TYPE_ARRAY() -> i64 = 61
+F TYPE_OPTIONAL() -> i64 = 64
+F TYPE_POINTER() -> i64 = 66
+F TYPE_REF() -> i64 = 67
+F TYPE_UNIT() -> i64 = 70
+
+# Binary operators
+F BINOP_ADD() -> i64 = 1
+F BINOP_SUB() -> i64 = 2
+F BINOP_MUL() -> i64 = 3
+F BINOP_DIV() -> i64 = 4
+F BINOP_MOD() -> i64 = 5
+F BINOP_LT() -> i64 = 6
+F BINOP_LTE() -> i64 = 7
+F BINOP_GT() -> i64 = 8
+F BINOP_GTE() -> i64 = 9
+F BINOP_EQ() -> i64 = 10
+F BINOP_NEQ() -> i64 = 11
+F BINOP_AND() -> i64 = 12
+F BINOP_OR() -> i64 = 13
+F BINOP_BIT_AND() -> i64 = 14
+F BINOP_BIT_OR() -> i64 = 15
+F BINOP_BIT_XOR() -> i64 = 16
+F BINOP_SHL() -> i64 = 17
+F BINOP_SHR() -> i64 = 18
+
+# Unary operators
+F UNOP_NEG() -> i64 = 1
+F UNOP_NOT() -> i64 = 2
+
+# ============================================================================
+# Token structure (simplified - same layout as lexer)
+# ============================================================================
+
+S Token {
+    kind: i64,
+    value: i64,
+    str_ptr: i64,
+    str_len: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+# ============================================================================
+# ExprNode (flattened structure for AST)
+# ============================================================================
+
+S ExprNode {
+    kind: i64,
+    span_start: i64,
+    span_end: i64,
+    field0: i64,
+    field1: i64,
+    field2: i64,
+    field3: i64,
+    field4: i64,
+    field5: i64
+}
+
+X ExprNode {
+    F size() -> i64 = 72
+
+    F int_lit(value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_INT(), span_start: start, span_end: end,
+        field0: value, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F bool_lit(value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_BOOL(), span_start: start, span_end: end,
+        field0: value, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F ident(str_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_IDENT(), span_start: start, span_end: end,
+        field0: str_idx, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F self_call(start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_SELF_CALL(), span_start: start, span_end: end,
+        field0: 0, field1: 0, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F binary(left: i64, right: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_BINARY(), span_start: start, span_end: end,
+        field0: left, field1: right, field2: op, field3: 0, field4: 0, field5: 0
+    }
+
+    F unary(expr: i64, op: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_UNARY(), span_start: start, span_end: end,
+        field0: expr, field1: op, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F call(func: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_CALL(), span_start: start, span_end: end,
+        field0: func, field1: args, field2: args_len, field3: 0, field4: 0, field5: 0
+    }
+
+    F method_call(recv: i64, method: i64, args: i64, args_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_METHOD_CALL(), span_start: start, span_end: end,
+        field0: recv, field1: method, field2: args, field3: args_len, field4: 0, field5: 0
+    }
+
+    F field_access(expr: i64, field_idx: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_FIELD(), span_start: start, span_end: end,
+        field0: expr, field1: field_idx, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F if_expr(cond: i64, then_stmts: i64, then_len: i64, else_ptr: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_IF(), span_start: start, span_end: end,
+        field0: cond, field1: then_stmts, field2: then_len, field3: else_ptr, field4: 0, field5: 0
+    }
+
+    F loop_expr(pattern: i64, iter: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_LOOP(), span_start: start, span_end: end,
+        field0: pattern, field1: iter, field2: body, field3: body_len, field4: 0, field5: 0
+    }
+
+    F assign(target: i64, value: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_ASSIGN(), span_start: start, span_end: end,
+        field0: target, field1: value, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+
+    F struct_lit(name_idx: i64, fields: i64, fields_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_STRUCT_LIT(), span_start: start, span_end: end,
+        field0: name_idx, field1: fields, field2: fields_len, field3: 0, field4: 0, field5: 0
+    }
+
+    F block_expr(stmts: i64, stmts_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_BLOCK(), span_start: start, span_end: end,
+        field0: stmts, field1: stmts_len, field2: 0, field3: 0, field4: 0, field5: 0
+    }
+}
+
+# ============================================================================
+# StmtNode
+# ============================================================================
+
+S StmtNode {
+    kind: i64,
+    span_start: i64,
+    span_end: i64,
+    field0: i64,
+    field1: i64,
+    field2: i64,
+    field3: i64
+}
+
+X StmtNode {
+    F size() -> i64 = 56
+
+    F let_stmt(name_idx: i64, type_ptr: i64, value_ptr: i64, is_mut: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+        kind: STMT_LET(), span_start: start, span_end: end,
+        field0: name_idx, field1: type_ptr, field2: value_ptr, field3: is_mut
+    }
+
+    F expr_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+        kind: STMT_EXPR(), span_start: start, span_end: end,
+        field0: expr_ptr, field1: 0, field2: 0, field3: 0
+    }
+
+    F return_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+        kind: STMT_RETURN(), span_start: start, span_end: end,
+        field0: expr_ptr, field1: 0, field2: 0, field3: 0
+    }
+
+    F break_stmt(expr_ptr: i64, start: i64, end: i64) -> StmtNode = StmtNode {
+        kind: STMT_BREAK(), span_start: start, span_end: end,
+        field0: expr_ptr, field1: 0, field2: 0, field3: 0
+    }
+
+    F continue_stmt(start: i64, end: i64) -> StmtNode = StmtNode {
+        kind: STMT_CONTINUE(), span_start: start, span_end: end,
+        field0: 0, field1: 0, field2: 0, field3: 0
+    }
+}
+
+# ============================================================================
+# TypeNode
+# ============================================================================
+
+S TypeNode {
+    kind: i64,
+    span_start: i64,
+    span_end: i64,
+    field0: i64,
+    field1: i64,
+    field2: i64,
+    field3: i64
+}
+
+X TypeNode {
+    F size() -> i64 = 56
+
+    F named(name_idx: i64, generics_ptr: i64, generics_len: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+        kind: TYPE_NAMED(), span_start: start, span_end: end,
+        field0: name_idx, field1: generics_ptr, field2: generics_len, field3: 0
+    }
+
+    F array(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+        kind: TYPE_ARRAY(), span_start: start, span_end: end,
+        field0: inner, field1: 0, field2: 0, field3: 0
+    }
+
+    F pointer(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+        kind: TYPE_POINTER(), span_start: start, span_end: end,
+        field0: inner, field1: 0, field2: 0, field3: 0
+    }
+
+    F ref_type(inner: i64, start: i64, end: i64) -> TypeNode = TypeNode {
+        kind: TYPE_REF(), span_start: start, span_end: end,
+        field0: inner, field1: 0, field2: 0, field3: 0
+    }
+
+    F unit_type(start: i64, end: i64) -> TypeNode = TypeNode {
+        kind: TYPE_UNIT(), span_start: start, span_end: end,
+        field0: 0, field1: 0, field2: 0, field3: 0
+    }
+}
+
+# ============================================================================
+# FunctionDef
+# ============================================================================
+
+S FunctionDef {
+    name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    params_ptr: i64,
+    params_len: i64,
+    ret_type_ptr: i64,
+    body_kind: i64,
+    body_expr_ptr: i64,
+    body_stmts_ptr: i64,
+    body_stmts_len: i64,
+    is_pub: i64,
+    is_async: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X FunctionDef {
+    F new(name_idx: i64, start: i64, end: i64) -> FunctionDef = FunctionDef {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        params_ptr: 0, params_len: 0,
+        ret_type_ptr: 0,
+        body_kind: 0, body_expr_ptr: 0, body_stmts_ptr: 0, body_stmts_len: 0,
+        is_pub: 0, is_async: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 112
+}
+
+# ============================================================================
+# StructDef
+# ============================================================================
+
+S StructDef {
+    name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    fields_ptr: i64,
+    fields_len: i64,
+    is_pub: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X StructDef {
+    F new(name_idx: i64, start: i64, end: i64) -> StructDef = StructDef {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        fields_ptr: 0, fields_len: 0,
+        is_pub: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 64
+}
+
+# ============================================================================
+# ImplDef
+# ============================================================================
+
+S ImplDef {
+    target_type_ptr: i64,
+    trait_name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    methods_ptr: i64,
+    methods_len: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X ImplDef {
+    F new(target_type_ptr: i64, start: i64, end: i64) -> ImplDef = ImplDef {
+        target_type_ptr: target_type_ptr,
+        trait_name_idx: 0 - 1,
+        generics_ptr: 0, generics_len: 0,
+        methods_ptr: 0, methods_len: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 64
+}
+
+# ============================================================================
+# Param (function parameter)
+# ============================================================================
+
+S Param {
+    name_idx: i64,
+    type_ptr: i64,
+    is_mut: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X Param {
+    F new(name_idx: i64, type_ptr: i64, is_mut: i64, start: i64, end: i64) -> Param = Param {
+        name_idx: name_idx, type_ptr: type_ptr, is_mut: is_mut,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 40
+}
+
+# ============================================================================
+# Field (struct field)
+# ============================================================================
+
+S Field {
+    name_idx: i64,
+    type_ptr: i64,
+    is_pub: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X Field {
+    F new(name_idx: i64, type_ptr: i64, is_pub: i64, start: i64, end: i64) -> Field = Field {
+        name_idx: name_idx, type_ptr: type_ptr, is_pub: is_pub,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 40
+}
+
+# ============================================================================
+# FieldInit (struct literal field initializer)
+# ============================================================================
+
+S FieldInit {
+    name_idx: i64,
+    value_ptr: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X FieldInit {
+    F new(name_idx: i64, value_ptr: i64, start: i64, end: i64) -> FieldInit = FieldInit {
+        name_idx: name_idx, value_ptr: value_ptr,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 32
+}
+
+# ============================================================================
+# Item (top-level)
+# ============================================================================
+
+S Item {
+    kind: i64,
+    data_ptr: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X Item {
+    F new(kind: i64, data_ptr: i64, start: i64, end: i64) -> Item = Item {
+        kind: kind, data_ptr: data_ptr, span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 32
+}
+
+# ============================================================================
+# IfElse chain
+# ============================================================================
+
+S IfElse {
+    kind: i64,
+    cond_ptr: i64,
+    stmts_ptr: i64,
+    stmts_len: i64,
+    next_ptr: i64
+}
+
+X IfElse {
+    F else_block(stmts_ptr: i64, stmts_len: i64) -> IfElse = IfElse {
+        kind: 0, cond_ptr: 0, stmts_ptr: stmts_ptr, stmts_len: stmts_len, next_ptr: 0
+    }
+
+    F else_if(cond_ptr: i64, stmts_ptr: i64, stmts_len: i64, next_ptr: i64) -> IfElse = IfElse {
+        kind: 1, cond_ptr: cond_ptr, stmts_ptr: stmts_ptr, stmts_len: stmts_len, next_ptr: next_ptr
+    }
+
+    F size() -> i64 = 40
+}
+
+# ============================================================================
+# Parser State
+# ============================================================================
+
+S Parser {
+    # Token list (from lexer)
+    tokens_ptr: i64,      # Pointer to token array
+    tokens_len: i64,
+    pos: i64,             # Current position
+
+    # String pool for identifiers
+    sp_data: i64,
+    sp_offsets: i64,
+    sp_data_len: i64,
+    sp_data_cap: i64,
+    sp_count: i64,
+    sp_offset_cap: i64,
+
+    # Parsed items
+    items_ptr: i64,
+    items_len: i64,
+    items_cap: i64,
+
+    # Error state
+    has_error: i64,
+    error_msg_ptr: i64,
+    error_msg_len: i64,
+    error_span_start: i64,
+    error_span_end: i64
+}
+
+X Parser {
+    F new(tokens_ptr: i64, tokens_len: i64) -> Parser {
+        sp_data := malloc(4096)
+        sp_offsets := malloc(256 * 16)
+        items_ptr := malloc(64 * 32)
+        Parser {
+            tokens_ptr: tokens_ptr,
+            tokens_len: tokens_len,
+            pos: 0,
+            sp_data: sp_data,
+            sp_offsets: sp_offsets,
+            sp_data_len: 0,
+            sp_data_cap: 4096,
+            sp_count: 0,
+            sp_offset_cap: 256,
+            items_ptr: items_ptr,
+            items_len: 0,
+            items_cap: 64,
+            has_error: 0,
+            error_msg_ptr: 0,
+            error_msg_len: 0,
+            error_span_start: 0,
+            error_span_end: 0
+        }
+    }
+
+    # =========== Token Access ===========
+
+    F is_at_end(&self) -> i64 {
+        I self.pos >= self.tokens_len {
+            R 1
+        }
+        kind := @.peek_kind()
+        I kind == TOK_EOF() { 1 } E { 0 }
+    }
+
+    # Get current token kind (i64)
+    F peek_kind(&self) -> i64 {
+        I self.pos >= self.tokens_len { R TOK_EOF() }
+        ptr := self.tokens_ptr + self.pos * 48
+        load_i64(ptr + 0)
+    }
+
+    # Get next token kind
+    F peek_next_kind(&self) -> i64 {
+        I self.pos + 1 >= self.tokens_len { R TOK_EOF() }
+        ptr := self.tokens_ptr + (self.pos + 1) * 48
+        load_i64(ptr + 0)
+    }
+
+    # Build token from raw ptr
+    F build_token_at(&self, ptr: i64) -> Token = Token {
+        kind: load_i64(ptr + 0),
+        value: load_i64(ptr + 8),
+        str_ptr: load_i64(ptr + 16),
+        str_len: load_i64(ptr + 24),
+        span_start: load_i64(ptr + 32),
+        span_end: load_i64(ptr + 40)
+    }
+
+    F eof_token(&self) -> Token = Token {
+        kind: TOK_EOF(), value: 0, str_ptr: 0, str_len: 0, span_start: 0, span_end: 0
+    }
+
+    F peek(&self) -> Token {
+        I self.pos >= self.tokens_len { R @.eof_token() }
+        ptr := self.tokens_ptr + self.pos * 48
+        @.build_token_at(ptr)
+    }
+
+    F peek_next(&self) -> Token {
+        I self.pos + 1 >= self.tokens_len { R @.eof_token() }
+        ptr := self.tokens_ptr + (self.pos + 1) * 48
+        @.build_token_at(ptr)
+    }
+
+    F advance(&self) -> Token {
+        tok := @.peek()
+        I self.pos < self.tokens_len {
+            self.pos = self.pos + 1
+            0
+        } E { 0 }
+        tok
+    }
+
+    F check(&self, kind: i64) -> i64 {
+        tok := @.peek()
+        I tok.kind == kind { 1 } E { 0 }
+    }
+
+    F current_span_start(&self) -> i64 {
+        tok := @.peek()
+        tok.span_start
+    }
+
+    F current_span_end(&self) -> i64 {
+        tok := @.peek()
+        tok.span_end
+    }
+
+    F expect(&self, kind: i64) -> i64 {
+        I @.check(kind) == 1 {
+            @.advance()
+            1
+        } E {
+            @.set_error_expected(kind)
+            0
+        }
+    }
+
+    # =========== Error Handling ===========
+
+    F set_error(&self, msg_ptr: i64, msg_len: i64) -> i64 {
+        I self.has_error == 0 {
+            self.has_error = 1
+            self.error_msg_ptr = msg_ptr
+            self.error_msg_len = msg_len
+            tok := @.peek()
+            self.error_span_start = tok.span_start
+            self.error_span_end = tok.span_end
+            0
+        } E { 0 }
+    }
+
+    F set_error_expected(&self, expected_kind: i64) -> i64 {
+        # Simple error message - store expected kind
+        I self.has_error == 0 {
+            self.has_error = 1
+            self.error_msg_ptr = expected_kind  # Reuse for expected token kind
+            self.error_msg_len = 0 - 1          # Marker for "expected token" error
+            tok := @.peek()
+            self.error_span_start = tok.span_start
+            self.error_span_end = tok.span_end
+            0
+        } E { 0 }
+    }
+
+    # =========== String Interning ===========
+
+    F intern_string(&self, ptr: i64, len: i64) -> i64 {
+        # Grow data if needed
+        I self.sp_data_len + len > self.sp_data_cap {
+            new_cap := (self.sp_data_cap + len) * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, self.sp_data, self.sp_data_len)
+            free(self.sp_data)
+            self.sp_data = new_data
+            self.sp_data_cap = new_cap
+            0
+        } E { 0 }
+
+        # Grow offsets if needed
+        I self.sp_count >= self.sp_offset_cap {
+            new_cap := self.sp_offset_cap * 2
+            new_offsets := malloc(new_cap * 16)
+            memcpy(new_offsets, self.sp_offsets, self.sp_count * 16)
+            free(self.sp_offsets)
+            self.sp_offsets = new_offsets
+            self.sp_offset_cap = new_cap
+            0
+        } E { 0 }
+
+        # Copy string data
+        memcpy(self.sp_data + self.sp_data_len, ptr, len)
+
+        # Store offset entry
+        entry_ptr := self.sp_offsets + self.sp_count * 16
+        store_i64(entry_ptr, self.sp_data_len)
+        store_i64(entry_ptr + 8, len)
+
+        idx := self.sp_count
+        self.sp_data_len = self.sp_data_len + len
+        self.sp_count = self.sp_count + 1
+        idx
+    }
+
+    # =========== Item Management ===========
+
+    F add_item(&self, kind: i64, data_ptr: i64, span_start: i64, span_end: i64) -> i64 {
+        I self.items_len >= self.items_cap {
+            new_cap := self.items_cap * 2
+            new_ptr := malloc(new_cap * 32)
+            memcpy(new_ptr, self.items_ptr, self.items_len * 32)
+            free(self.items_ptr)
+            self.items_ptr = new_ptr
+            self.items_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.items_ptr + self.items_len * 32
+        store_i64(ptr + 0, kind)
+        store_i64(ptr + 8, data_ptr)
+        store_i64(ptr + 16, span_start)
+        store_i64(ptr + 24, span_end)
+
+        idx := self.items_len
+        self.items_len = self.items_len + 1
+        idx
+    }
+
+    # =========== Parse Module (Entry Point) ===========
+
+    F parse_module(&self) -> i64 {
+        L {
+            I @.is_at_end() == 1 { B }
+            I self.has_error == 1 { B }
+            @.parse_item()
+        }
+        I self.has_error == 0 { 1 } E { 0 }
+    }
+
+    # =========== Parse Item ===========
+
+    F parse_item(&self) -> i64 {
+        is_pub: mut i64 = 0
+        I @.check(TOK_KW_P()) == 1 {
+            @.advance()
+            is_pub = 1
+            0
+        } E { 0 }
+
+        start := @.current_span_start()
+
+        I @.check(TOK_KW_F()) == 1 {
+            @.advance()
+            @.parse_function(is_pub, 0, start)
+        } E I @.check(TOK_KW_S()) == 1 {
+            @.advance()
+            @.parse_struct(is_pub, start)
+        } E I @.check(TOK_KW_X()) == 1 {
+            @.advance()
+            @.parse_impl(start)
+        } E I @.check(TOK_KW_E()) == 1 {
+            @.advance()
+            @.parse_enum(is_pub, start)
+        } E {
+            @.set_error_expected(TOK_KW_F())
+            0
+        }
+    }
+
+    # =========== Parse Function ===========
+
+    F parse_function(&self, is_pub: i64, is_async: i64, start: i64) -> i64 {
+        # Parse function name
+        I @.check(TOK_IDENT()) == 0 {
+            @.set_error_expected(TOK_IDENT())
+            R 0
+        }
+        tok := @.advance()
+        name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+        # Allocate FunctionDef
+        func_ptr := malloc(FunctionDef.size())
+        func := FunctionDef.new(name_idx, start, 0)
+
+        # Store initial values
+        store_i64(func_ptr + 0, func.name_idx)
+        store_i64(func_ptr + 8, 0)   # generics_ptr
+        store_i64(func_ptr + 16, 0)  # generics_len
+        store_i64(func_ptr + 24, 0)  # params_ptr
+        store_i64(func_ptr + 32, 0)  # params_len
+        store_i64(func_ptr + 40, 0)  # ret_type_ptr
+        store_i64(func_ptr + 48, 0)  # body_kind
+        store_i64(func_ptr + 56, 0)  # body_expr_ptr
+        store_i64(func_ptr + 64, 0)  # body_stmts_ptr
+        store_i64(func_ptr + 72, 0)  # body_stmts_len
+        store_i64(func_ptr + 80, is_pub)
+        store_i64(func_ptr + 88, is_async)
+        store_i64(func_ptr + 96, start)
+        store_i64(func_ptr + 104, 0)  # span_end (updated later)
+
+        # Expect (
+        I @.expect(TOK_LPAREN()) == 0 { R 0 }
+
+        # Parse parameters
+        params := @.parse_params()
+        store_i64(func_ptr + 24, params)  # params_ptr
+        # params_len is stored during parse_params
+
+        # Expect )
+        I @.expect(TOK_RPAREN()) == 0 { R 0 }
+
+        # Parse return type (optional)
+        I @.check(TOK_ARROW()) == 1 {
+            @.advance()
+            ret_type := @.parse_type()
+            store_i64(func_ptr + 40, ret_type)
+            0
+        } E { 0 }
+
+        # Parse body
+        I @.check(TOK_EQ()) == 1 {
+            # Expression body: = expr
+            @.advance()
+            body_expr := @.parse_expr()
+            store_i64(func_ptr + 48, 0)  # body_kind = expr
+            store_i64(func_ptr + 56, body_expr)
+            0
+        } E I @.check(TOK_LBRACE()) == 1 {
+            # Block body: { stmts }
+            @.advance()
+            body_stmts := @.parse_block_contents()
+            I @.expect(TOK_RBRACE()) == 0 { R 0 }
+            store_i64(func_ptr + 48, 1)  # body_kind = block
+            store_i64(func_ptr + 64, body_stmts)  # body_stmts_ptr
+            # body_stmts_len is stored during parse_block_contents
+            0
+        } E {
+            @.set_error_expected(TOK_EQ())
+            R 0
+        }
+
+        end := @.current_span_start()
+        store_i64(func_ptr + 104, end)
+
+        @.add_item(ITEM_FUNCTION(), func_ptr, start, end)
+    }
+
+    # =========== Parse Struct ===========
+
+    F parse_struct(&self, is_pub: i64, start: i64) -> i64 {
+        # Parse struct name
+        I @.check(TOK_IDENT()) == 0 {
+            @.set_error_expected(TOK_IDENT())
+            R 0
+        }
+        tok := @.advance()
+        name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+        # Allocate StructDef
+        struct_ptr := malloc(StructDef.size())
+        store_i64(struct_ptr + 0, name_idx)
+        store_i64(struct_ptr + 8, 0)   # generics_ptr
+        store_i64(struct_ptr + 16, 0)  # generics_len
+        store_i64(struct_ptr + 24, 0)  # fields_ptr
+        store_i64(struct_ptr + 32, 0)  # fields_len
+        store_i64(struct_ptr + 40, is_pub)
+        store_i64(struct_ptr + 48, start)
+        store_i64(struct_ptr + 56, 0)  # span_end
+
+        # Expect {
+        I @.expect(TOK_LBRACE()) == 0 { R 0 }
+
+        # Parse fields
+        fields_ptr := malloc(64 * Field.size())
+        fields_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_RBRACE()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+            I self.has_error == 1 { B }
+
+            # Parse field: name: Type
+            I @.check(TOK_IDENT()) == 0 { B }
+            field_tok := @.advance()
+            field_name_idx := @.intern_string(field_tok.str_ptr, field_tok.str_len)
+
+            I @.expect(TOK_COLON()) == 0 { B }
+
+            field_type := @.parse_type()
+
+            # Store field
+            field_ptr := fields_ptr + fields_len * Field.size()
+            store_i64(field_ptr + 0, field_name_idx)
+            store_i64(field_ptr + 8, field_type)
+            store_i64(field_ptr + 16, 0)  # is_pub
+            store_i64(field_ptr + 24, field_tok.span_start)
+            store_i64(field_ptr + 32, @.current_span_start())
+            fields_len = fields_len + 1
+
+            # Optional comma
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+        }
+
+        store_i64(struct_ptr + 24, fields_ptr)
+        store_i64(struct_ptr + 32, fields_len)
+
+        I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+        end := @.current_span_start()
+        store_i64(struct_ptr + 56, end)
+
+        @.add_item(ITEM_STRUCT(), struct_ptr, start, end)
+    }
+
+    # =========== Parse Impl ===========
+
+    F parse_impl(&self, start: i64) -> i64 {
+        # Parse type name
+        I @.check(TOK_IDENT()) == 0 {
+            @.set_error_expected(TOK_IDENT())
+            R 0
+        }
+        tok := @.advance()
+        type_name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+        # Create TypeNode for target type
+        type_ptr := malloc(TypeNode.size())
+        store_i64(type_ptr + 0, TYPE_NAMED())
+        store_i64(type_ptr + 8, tok.span_start)
+        store_i64(type_ptr + 16, tok.span_end)
+        store_i64(type_ptr + 24, type_name_idx)
+        store_i64(type_ptr + 32, 0)  # generics_ptr
+        store_i64(type_ptr + 40, 0)  # generics_len
+        store_i64(type_ptr + 48, 0)
+
+        # Allocate ImplDef
+        impl_ptr := malloc(ImplDef.size())
+        store_i64(impl_ptr + 0, type_ptr)
+        store_i64(impl_ptr + 8, 0 - 1)  # trait_name_idx (-1 = no trait)
+        store_i64(impl_ptr + 16, 0)     # generics_ptr
+        store_i64(impl_ptr + 24, 0)     # generics_len
+        store_i64(impl_ptr + 32, 0)     # methods_ptr
+        store_i64(impl_ptr + 40, 0)     # methods_len
+        store_i64(impl_ptr + 48, start)
+        store_i64(impl_ptr + 56, 0)     # span_end
+
+        # Expect {
+        I @.expect(TOK_LBRACE()) == 0 { R 0 }
+
+        # Parse methods
+        methods_ptr := malloc(32 * FunctionDef.size())
+        methods_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_RBRACE()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+            I self.has_error == 1 { B }
+
+            # Parse method
+            I @.check(TOK_KW_F()) == 1 {
+                @.advance()
+                method_start := @.current_span_start()
+
+                # Parse method name
+                I @.check(TOK_IDENT()) == 0 { B }
+                method_tok := @.advance()
+                method_name_idx := @.intern_string(method_tok.str_ptr, method_tok.str_len)
+
+                # Allocate method FunctionDef
+                method_ptr := methods_ptr + methods_len * FunctionDef.size()
+                store_i64(method_ptr + 0, method_name_idx)
+                store_i64(method_ptr + 8, 0)   # generics_ptr
+                store_i64(method_ptr + 16, 0)  # generics_len
+                store_i64(method_ptr + 24, 0)  # params_ptr
+                store_i64(method_ptr + 32, 0)  # params_len
+                store_i64(method_ptr + 40, 0)  # ret_type_ptr
+                store_i64(method_ptr + 48, 0)  # body_kind
+                store_i64(method_ptr + 56, 0)  # body_expr_ptr
+                store_i64(method_ptr + 64, 0)  # body_stmts_ptr
+                store_i64(method_ptr + 72, 0)  # body_stmts_len
+                store_i64(method_ptr + 80, 0)  # is_pub
+                store_i64(method_ptr + 88, 0)  # is_async
+                store_i64(method_ptr + 96, method_start)
+                store_i64(method_ptr + 104, 0)  # span_end
+
+                # Expect (
+                I @.expect(TOK_LPAREN()) == 0 { B }
+
+                # Parse parameters
+                params := @.parse_params()
+                store_i64(method_ptr + 24, params)
+
+                # Expect )
+                I @.expect(TOK_RPAREN()) == 0 { B }
+
+                # Parse return type (optional)
+                I @.check(TOK_ARROW()) == 1 {
+                    @.advance()
+                    ret_type := @.parse_type()
+                    store_i64(method_ptr + 40, ret_type)
+                    0
+                } E { 0 }
+
+                # Parse body
+                I @.check(TOK_EQ()) == 1 {
+                    @.advance()
+                    body_expr := @.parse_expr()
+                    store_i64(method_ptr + 48, 0)
+                    store_i64(method_ptr + 56, body_expr)
+                    0
+                } E I @.check(TOK_LBRACE()) == 1 {
+                    @.advance()
+                    body_stmts := @.parse_block_contents()
+                    I @.expect(TOK_RBRACE()) == 0 { B }
+                    store_i64(method_ptr + 48, 1)
+                    store_i64(method_ptr + 64, body_stmts)
+                    0
+                } E {
+                    @.set_error_expected(TOK_EQ())
+                    B
+                }
+
+                store_i64(method_ptr + 104, @.current_span_start())
+                methods_len = methods_len + 1
+                0
+            } E {
+                B
+            }
+        }
+
+        store_i64(impl_ptr + 32, methods_ptr)
+        store_i64(impl_ptr + 40, methods_len)
+
+        I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+        end := @.current_span_start()
+        store_i64(impl_ptr + 56, end)
+
+        @.add_item(ITEM_IMPL(), impl_ptr, start, end)
+    }
+
+    # =========== Parse Enum (stub) ===========
+
+    F parse_enum(&self, is_pub: i64, start: i64) -> i64 {
+        # For now, skip enum body
+        I @.check(TOK_IDENT()) == 0 { R 0 }
+        @.advance()
+        I @.expect(TOK_LBRACE()) == 0 { R 0 }
+
+        # Skip until }
+        L {
+            I @.check(TOK_RBRACE()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+            @.advance()
+        }
+
+        I @.expect(TOK_RBRACE()) == 0 { R 0 }
+        1
+    }
+
+    # =========== Parse Parameters ===========
+
+    F parse_params(&self) -> i64 {
+        params_ptr := malloc(16 * Param.size())
+        params_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_RPAREN()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+            I self.has_error == 1 { B }
+
+            param_start := @.current_span_start()
+            is_mut: mut i64 = 0
+
+            # Check for &self
+            I @.check(TOK_AMP()) == 1 {
+                @.advance()
+                I @.check(TOK_IDENT()) == 1 {
+                    tok := @.advance()
+                    # Check if it's "self"
+                    name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+                    param_ptr := params_ptr + params_len * Param.size()
+                    store_i64(param_ptr + 0, name_idx)
+                    store_i64(param_ptr + 8, 0)  # type_ptr (ref self)
+                    store_i64(param_ptr + 16, 0)
+                    store_i64(param_ptr + 24, param_start)
+                    store_i64(param_ptr + 32, tok.span_end)
+                    params_len = params_len + 1
+
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                    C
+                } E { 0 }
+            } E { 0 }
+
+            # Check for mut
+            I @.check(TOK_KW_MUT()) == 1 {
+                @.advance()
+                is_mut = 1
+                0
+            } E { 0 }
+
+            # Parse name
+            I @.check(TOK_IDENT()) == 0 { B }
+            tok := @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+            # Expect :
+            I @.expect(TOK_COLON()) == 0 { B }
+
+            # Parse type
+            type_ptr := @.parse_type()
+
+            # Store param
+            param_ptr := params_ptr + params_len * Param.size()
+            store_i64(param_ptr + 0, name_idx)
+            store_i64(param_ptr + 8, type_ptr)
+            store_i64(param_ptr + 16, is_mut)
+            store_i64(param_ptr + 24, param_start)
+            store_i64(param_ptr + 32, @.current_span_start())
+            params_len = params_len + 1
+
+            # Optional comma
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+        }
+
+        params_ptr
+    }
+
+    # =========== Parse Type ===========
+
+    F parse_type(&self) -> i64 {
+        start := @.current_span_start()
+
+        # Reference type: &T
+        I @.check(TOK_AMP()) == 1 {
+            @.advance()
+            inner := @.parse_type()
+            type_ptr := malloc(TypeNode.size())
+            store_i64(type_ptr + 0, TYPE_REF())
+            store_i64(type_ptr + 8, start)
+            store_i64(type_ptr + 16, @.current_span_start())
+            store_i64(type_ptr + 24, inner)
+            store_i64(type_ptr + 32, 0)
+            store_i64(type_ptr + 40, 0)
+            store_i64(type_ptr + 48, 0)
+            R type_ptr
+        }
+
+        # Array type: [T]
+        I @.check(TOK_LBRACKET()) == 1 {
+            @.advance()
+            inner := @.parse_type()
+            I @.expect(TOK_RBRACKET()) == 0 { R 0 }
+            type_ptr := malloc(TypeNode.size())
+            store_i64(type_ptr + 0, TYPE_ARRAY())
+            store_i64(type_ptr + 8, start)
+            store_i64(type_ptr + 16, @.current_span_start())
+            store_i64(type_ptr + 24, inner)
+            store_i64(type_ptr + 32, 0)
+            store_i64(type_ptr + 40, 0)
+            store_i64(type_ptr + 48, 0)
+            R type_ptr
+        }
+
+        # Named type: i64, String, Vec<T>, etc.
+        I @.check(TOK_IDENT()) == 1 {
+            tok := @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+            # Check for generics <T>
+            generics_ptr: mut i64 = 0
+            generics_len: mut i64 = 0
+            I @.check(TOK_LT()) == 1 {
+                @.advance()
+                generics_ptr = malloc(8 * TypeNode.size())
+                L {
+                    I @.check(TOK_GT()) == 1 { B }
+                    I @.is_at_end() == 1 { B }
+                    generic_type := @.parse_type()
+                    store_i64(generics_ptr + generics_len * 8, generic_type)
+                    generics_len = generics_len + 1
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                }
+                I @.expect(TOK_GT()) == 0 { R 0 }
+                0
+            } E { 0 }
+
+            type_ptr := malloc(TypeNode.size())
+            store_i64(type_ptr + 0, TYPE_NAMED())
+            store_i64(type_ptr + 8, start)
+            store_i64(type_ptr + 16, @.current_span_start())
+            store_i64(type_ptr + 24, name_idx)
+            store_i64(type_ptr + 32, generics_ptr)
+            store_i64(type_ptr + 40, generics_len)
+            store_i64(type_ptr + 48, 0)
+            R type_ptr
+        }
+
+        @.set_error_expected(TOK_IDENT())
+        0
+    }
+
+    # =========== Parse Block Contents ===========
+
+    F parse_block_contents(&self) -> i64 {
+        stmts_ptr := malloc(64 * StmtNode.size())
+        stmts_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_RBRACE()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+            I self.has_error == 1 { B }
+
+            stmt := @.parse_stmt()
+            I stmt != 0 {
+                # Copy stmt to array
+                memcpy(stmts_ptr + stmts_len * StmtNode.size(), stmt, StmtNode.size())
+                stmts_len = stmts_len + 1
+                0
+            } E { 0 }
+        }
+
+        stmts_ptr
+    }
+
+    # =========== Parse Statement ===========
+
+    F parse_stmt(&self) -> i64 {
+        start := @.current_span_start()
+
+        # Return statement: R expr
+        I @.check(TOK_KW_R()) == 1 {
+            @.advance()
+            expr_ptr: mut i64 = 0
+            I @.check(TOK_RBRACE()) == 0 {
+                expr_ptr = @.parse_expr()
+                0
+            } E { 0 }
+
+            stmt_ptr := malloc(StmtNode.size())
+            store_i64(stmt_ptr + 0, STMT_RETURN())
+            store_i64(stmt_ptr + 8, start)
+            store_i64(stmt_ptr + 16, @.current_span_start())
+            store_i64(stmt_ptr + 24, expr_ptr)
+            store_i64(stmt_ptr + 32, 0)
+            store_i64(stmt_ptr + 40, 0)
+            store_i64(stmt_ptr + 48, 0)
+            R stmt_ptr
+        }
+
+        # Break statement: B
+        I @.check(TOK_KW_B()) == 1 {
+            @.advance()
+            stmt_ptr := malloc(StmtNode.size())
+            store_i64(stmt_ptr + 0, STMT_BREAK())
+            store_i64(stmt_ptr + 8, start)
+            store_i64(stmt_ptr + 16, @.current_span_start())
+            store_i64(stmt_ptr + 24, 0)
+            store_i64(stmt_ptr + 32, 0)
+            store_i64(stmt_ptr + 40, 0)
+            store_i64(stmt_ptr + 48, 0)
+            R stmt_ptr
+        }
+
+        # Continue statement: C
+        I @.check(TOK_KW_C()) == 1 {
+            @.advance()
+            stmt_ptr := malloc(StmtNode.size())
+            store_i64(stmt_ptr + 0, STMT_CONTINUE())
+            store_i64(stmt_ptr + 8, start)
+            store_i64(stmt_ptr + 16, @.current_span_start())
+            store_i64(stmt_ptr + 24, 0)
+            store_i64(stmt_ptr + 32, 0)
+            store_i64(stmt_ptr + 40, 0)
+            store_i64(stmt_ptr + 48, 0)
+            R stmt_ptr
+        }
+
+        # Variable declaration: name := expr or name: Type = expr
+        I @.check(TOK_IDENT()) == 1 {
+            next := @.peek_next()
+            is_var_decl: mut i64 = 0
+            I next.kind == TOK_COLON_EQ() { is_var_decl = 1; 0 }
+            E I next.kind == TOK_COLON() { is_var_decl = 1; 0 }
+            E { 0 }
+            I is_var_decl == 1 {
+                tok := @.advance()
+                name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+                is_mut: mut i64 = 0
+                type_ptr: mut i64 = 0
+
+                # Check for := or :
+                I @.check(TOK_COLON_EQ()) == 1 {
+                    @.advance()
+                    0
+                } E I @.check(TOK_COLON()) == 1 {
+                    @.advance()
+
+                    # Check for mut
+                    I @.check(TOK_KW_MUT()) == 1 {
+                        @.advance()
+                        is_mut = 1
+                        0
+                    } E { 0 }
+
+                    type_ptr = @.parse_type()
+                    I @.expect(TOK_EQ()) == 0 { R 0 }
+                    0
+                } E {
+                    @.set_error_expected(TOK_COLON_EQ())
+                    R 0
+                }
+
+                value_ptr := @.parse_expr()
+
+                stmt_ptr := malloc(StmtNode.size())
+                store_i64(stmt_ptr + 0, STMT_LET())
+                store_i64(stmt_ptr + 8, start)
+                store_i64(stmt_ptr + 16, @.current_span_start())
+                store_i64(stmt_ptr + 24, name_idx)
+                store_i64(stmt_ptr + 32, type_ptr)
+                store_i64(stmt_ptr + 40, value_ptr)
+                store_i64(stmt_ptr + 48, is_mut)
+                R stmt_ptr
+            } E { 0 }
+        }
+
+        # Expression statement
+        expr_ptr := @.parse_expr()
+        I expr_ptr != 0 {
+            stmt_ptr := malloc(StmtNode.size())
+            store_i64(stmt_ptr + 0, STMT_EXPR())
+            store_i64(stmt_ptr + 8, start)
+            store_i64(stmt_ptr + 16, @.current_span_start())
+            store_i64(stmt_ptr + 24, expr_ptr)
+            store_i64(stmt_ptr + 32, 0)
+            store_i64(stmt_ptr + 40, 0)
+            store_i64(stmt_ptr + 48, 0)
+            R stmt_ptr
+        }
+
+        0
+    }
+
+    # =========== Parse Expression ===========
+
+    F parse_expr(&self) -> i64 {
+        @.parse_assignment()
+    }
+
+    F parse_assignment(&self) -> i64 {
+        left := @.parse_or()
+        I left == 0 { R 0 }
+
+        # Assignment: lhs = rhs
+        I @.check(TOK_EQ()) == 1 {
+            @.advance()
+            right := @.parse_assignment()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_ASSIGN())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        left
+    }
+
+    F parse_or(&self) -> i64 {
+        left: mut i64 = @.parse_and()
+        I left == 0 { R 0 }
+
+        L {
+            I @.check(TOK_OR()) == 0 { B }
+            @.advance()
+            right := @.parse_and()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, BINOP_OR())
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_and(&self) -> i64 {
+        left: mut i64 = @.parse_equality()
+        I left == 0 { R 0 }
+
+        L {
+            I @.check(TOK_AND()) == 0 { B }
+            @.advance()
+            right := @.parse_equality()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, BINOP_AND())
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_equality(&self) -> i64 {
+        left: mut i64 = @.parse_comparison()
+        I left == 0 { R 0 }
+
+        L {
+            op: mut i64 = 0
+            I @.check(TOK_EQ_EQ()) == 1 { op = BINOP_EQ(); 0 }
+            E I @.check(TOK_NOT_EQ()) == 1 { op = BINOP_NEQ(); 0 }
+            E { B }
+
+            @.advance()
+            right := @.parse_comparison()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, op)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_comparison(&self) -> i64 {
+        left: mut i64 = @.parse_additive()
+        I left == 0 { R 0 }
+
+        L {
+            op: mut i64 = 0
+            I @.check(TOK_LT()) == 1 { op = BINOP_LT(); 0 }
+            E I @.check(TOK_GT()) == 1 { op = BINOP_GT(); 0 }
+            E I @.check(TOK_LT_EQ()) == 1 { op = BINOP_LTE(); 0 }
+            E I @.check(TOK_GT_EQ()) == 1 { op = BINOP_GTE(); 0 }
+            E { B }
+
+            @.advance()
+            right := @.parse_additive()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, op)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_additive(&self) -> i64 {
+        left: mut i64 = @.parse_multiplicative()
+        I left == 0 { R 0 }
+
+        L {
+            op: mut i64 = 0
+            I @.check(TOK_PLUS()) == 1 { op = BINOP_ADD(); 0 }
+            E I @.check(TOK_MINUS()) == 1 { op = BINOP_SUB(); 0 }
+            E { B }
+
+            @.advance()
+            right := @.parse_multiplicative()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, op)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_multiplicative(&self) -> i64 {
+        left: mut i64 = @.parse_unary()
+        I left == 0 { R 0 }
+
+        L {
+            op: mut i64 = 0
+            I @.check(TOK_STAR()) == 1 { op = BINOP_MUL(); 0 }
+            E I @.check(TOK_SLASH()) == 1 { op = BINOP_DIV(); 0 }
+            E I @.check(TOK_PERCENT()) == 1 { op = BINOP_MOD(); 0 }
+            E { B }
+
+            @.advance()
+            right := @.parse_unary()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, op)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_unary(&self) -> i64 {
+        start := @.current_span_start()
+
+        # Negation: -expr
+        I @.check(TOK_MINUS()) == 1 {
+            @.advance()
+            inner := @.parse_unary()
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_UNARY())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, load_i64(inner + 16))
+            store_i64(expr_ptr + 24, inner)
+            store_i64(expr_ptr + 32, UNOP_NEG())
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Logical not: !expr
+        I @.check(TOK_BANG()) == 1 {
+            @.advance()
+            inner := @.parse_unary()
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_UNARY())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, load_i64(inner + 16))
+            store_i64(expr_ptr + 24, inner)
+            store_i64(expr_ptr + 32, UNOP_NOT())
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        @.parse_postfix()
+    }
+
+    F parse_postfix(&self) -> i64 {
+        left: mut i64 = @.parse_primary()
+        I left == 0 { R 0 }
+
+        L {
+            # Method call or field access: expr.name or expr.name()
+            I @.check(TOK_DOT()) == 1 {
+                @.advance()
+                I @.check(TOK_IDENT()) == 0 {
+                    @.set_error_expected(TOK_IDENT())
+                    R 0
+                }
+                tok := @.advance()
+                name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+                # Check for method call
+                I @.check(TOK_LPAREN()) == 1 {
+                    @.advance()
+                    args := @.parse_args()
+                    I @.expect(TOK_RPAREN()) == 0 { R 0 }
+
+                    expr_ptr := malloc(ExprNode.size())
+                    left_span_start := load_i64(left + 8)
+                    store_i64(expr_ptr + 0, EXPR_METHOD_CALL())
+                    store_i64(expr_ptr + 8, left_span_start)
+                    store_i64(expr_ptr + 16, @.current_span_start())
+                    store_i64(expr_ptr + 24, left)
+                    store_i64(expr_ptr + 32, name_idx)
+                    store_i64(expr_ptr + 40, args)
+                    store_i64(expr_ptr + 48, 0)  # args_len stored elsewhere
+                    store_i64(expr_ptr + 56, 0)
+                    store_i64(expr_ptr + 64, 0)
+                    left = expr_ptr
+                    C
+                }
+
+                # Field access
+                expr_ptr := malloc(ExprNode.size())
+                left_span_start := load_i64(left + 8)
+                store_i64(expr_ptr + 0, EXPR_FIELD())
+                store_i64(expr_ptr + 8, left_span_start)
+                store_i64(expr_ptr + 16, tok.span_end)
+                store_i64(expr_ptr + 24, left)
+                store_i64(expr_ptr + 32, name_idx)
+                store_i64(expr_ptr + 40, 0)
+                store_i64(expr_ptr + 48, 0)
+                store_i64(expr_ptr + 56, 0)
+                store_i64(expr_ptr + 64, 0)
+                left = expr_ptr
+                C
+            }
+
+            # Function call: expr()
+            I @.check(TOK_LPAREN()) == 1 {
+                @.advance()
+                args := @.parse_args()
+                I @.expect(TOK_RPAREN()) == 0 { R 0 }
+
+                expr_ptr := malloc(ExprNode.size())
+                left_span_start := load_i64(left + 8)
+                store_i64(expr_ptr + 0, EXPR_CALL())
+                store_i64(expr_ptr + 8, left_span_start)
+                store_i64(expr_ptr + 16, @.current_span_start())
+                store_i64(expr_ptr + 24, left)
+                store_i64(expr_ptr + 32, args)
+                store_i64(expr_ptr + 40, 0)  # args_len
+                store_i64(expr_ptr + 48, 0)
+                store_i64(expr_ptr + 56, 0)
+                store_i64(expr_ptr + 64, 0)
+                left = expr_ptr
+                C
+            }
+
+            B
+        }
+
+        left
+    }
+
+    F parse_args(&self) -> i64 {
+        args_ptr := malloc(16 * 8)  # Max 16 args
+        args_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_RPAREN()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+
+            arg := @.parse_expr()
+            store_i64(args_ptr + args_len * 8, arg)
+            args_len = args_len + 1
+
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+        }
+
+        args_ptr
+    }
+
+    F parse_primary(&self) -> i64 {
+        start := @.current_span_start()
+
+        # Integer literal
+        I @.check(TOK_INT()) == 1 {
+            tok := @.advance()
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_INT())
+            store_i64(expr_ptr + 8, tok.span_start)
+            store_i64(expr_ptr + 16, tok.span_end)
+            store_i64(expr_ptr + 24, tok.value)
+            store_i64(expr_ptr + 32, 0)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Boolean literals
+        I @.check(TOK_KW_TRUE()) == 1 {
+            tok := @.advance()
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_BOOL())
+            store_i64(expr_ptr + 8, tok.span_start)
+            store_i64(expr_ptr + 16, tok.span_end)
+            store_i64(expr_ptr + 24, 1)
+            store_i64(expr_ptr + 32, 0)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        I @.check(TOK_KW_FALSE()) == 1 {
+            tok := @.advance()
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_BOOL())
+            store_i64(expr_ptr + 8, tok.span_start)
+            store_i64(expr_ptr + 16, tok.span_end)
+            store_i64(expr_ptr + 24, 0)
+            store_i64(expr_ptr + 32, 0)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Self reference: @
+        I @.check(TOK_AT()) == 1 {
+            tok := @.advance()
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_SELF_CALL())
+            store_i64(expr_ptr + 8, tok.span_start)
+            store_i64(expr_ptr + 16, tok.span_end)
+            store_i64(expr_ptr + 24, 0)
+            store_i64(expr_ptr + 32, 0)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Identifier or struct literal
+        I @.check(TOK_IDENT()) == 1 {
+            tok := @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+            # Check for struct literal: Name { ... }
+            I @.check(TOK_LBRACE()) == 1 {
+                @.advance()
+                fields_ptr := malloc(16 * FieldInit.size())
+                fields_len: mut i64 = 0
+
+                L {
+                    I @.check(TOK_RBRACE()) == 1 { B }
+                    I @.is_at_end() == 1 { B }
+
+                    I @.check(TOK_IDENT()) == 0 { B }
+                    field_tok := @.advance()
+                    field_name_idx := @.intern_string(field_tok.str_ptr, field_tok.str_len)
+
+                    I @.expect(TOK_COLON()) == 0 { B }
+
+                    field_value := @.parse_expr()
+
+                    field_ptr := fields_ptr + fields_len * FieldInit.size()
+                    store_i64(field_ptr + 0, field_name_idx)
+                    store_i64(field_ptr + 8, field_value)
+                    store_i64(field_ptr + 16, field_tok.span_start)
+                    store_i64(field_ptr + 24, @.current_span_start())
+                    fields_len = fields_len + 1
+
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                }
+
+                I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+                expr_ptr := malloc(ExprNode.size())
+                store_i64(expr_ptr + 0, EXPR_STRUCT_LIT())
+                store_i64(expr_ptr + 8, tok.span_start)
+                store_i64(expr_ptr + 16, @.current_span_start())
+                store_i64(expr_ptr + 24, name_idx)
+                store_i64(expr_ptr + 32, fields_ptr)
+                store_i64(expr_ptr + 40, fields_len)
+                store_i64(expr_ptr + 48, 0)
+                store_i64(expr_ptr + 56, 0)
+                store_i64(expr_ptr + 64, 0)
+                R expr_ptr
+            }
+
+            # Check for static method call: Type.method()
+            I @.check(TOK_DOT()) == 1 {
+                next := @.peek_next()
+                I next.kind == TOK_IDENT() {
+                    @.advance()  # consume .
+                    method_tok := @.advance()
+                    method_idx := @.intern_string(method_tok.str_ptr, method_tok.str_len)
+
+                    I @.check(TOK_LPAREN()) == 1 {
+                        @.advance()
+                        args := @.parse_args()
+                        I @.expect(TOK_RPAREN()) == 0 { R 0 }
+
+                        expr_ptr := malloc(ExprNode.size())
+                        store_i64(expr_ptr + 0, EXPR_STATIC_CALL())
+                        store_i64(expr_ptr + 8, tok.span_start)
+                        store_i64(expr_ptr + 16, @.current_span_start())
+                        store_i64(expr_ptr + 24, name_idx)
+                        store_i64(expr_ptr + 32, method_idx)
+                        store_i64(expr_ptr + 40, args)
+                        store_i64(expr_ptr + 48, 0)
+                        store_i64(expr_ptr + 56, 0)
+                        store_i64(expr_ptr + 64, 0)
+                        R expr_ptr
+                    }
+                    0
+                } E { 0 }
+            }
+
+            # Plain identifier
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_IDENT())
+            store_i64(expr_ptr + 8, tok.span_start)
+            store_i64(expr_ptr + 16, tok.span_end)
+            store_i64(expr_ptr + 24, name_idx)
+            store_i64(expr_ptr + 32, 0)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # If expression: I cond { ... } E { ... }
+        I @.check(TOK_KW_I()) == 1 {
+            @.advance()
+            cond := @.parse_expr()
+
+            I @.expect(TOK_LBRACE()) == 0 { R 0 }
+            then_stmts := @.parse_block_contents()
+            I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+            else_ptr: mut i64 = 0
+            I @.check(TOK_KW_ELSE()) == 1 {
+                @.advance()
+                I @.check(TOK_KW_I()) == 1 {
+                    # else if
+                    else_if_expr := @.parse_primary()  # Recursive if
+                    # TODO: properly handle else-if chain
+                    else_ptr = else_if_expr
+                    0
+                } E I @.check(TOK_LBRACE()) == 1 {
+                    @.advance()
+                    else_stmts := @.parse_block_contents()
+                    I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+                    # Create IfElse for else block
+                    else_node := malloc(IfElse.size())
+                    store_i64(else_node + 0, 0)  # kind = else
+                    store_i64(else_node + 8, 0)
+                    store_i64(else_node + 16, else_stmts)
+                    store_i64(else_node + 24, 0)  # stmts_len TODO
+                    store_i64(else_node + 32, 0)
+                    else_ptr = else_node
+                    0
+                } E { 0 }
+            }
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_IF())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, @.current_span_start())
+            store_i64(expr_ptr + 24, cond)
+            store_i64(expr_ptr + 32, then_stmts)
+            store_i64(expr_ptr + 40, 0)  # then_len TODO
+            store_i64(expr_ptr + 48, else_ptr)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Loop: L { ... }
+        I @.check(TOK_KW_L()) == 1 {
+            @.advance()
+
+            I @.expect(TOK_LBRACE()) == 0 { R 0 }
+            body_stmts := @.parse_block_contents()
+            I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_LOOP())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, @.current_span_start())
+            store_i64(expr_ptr + 24, 0)  # pattern
+            store_i64(expr_ptr + 32, 0)  # iter
+            store_i64(expr_ptr + 40, body_stmts)
+            store_i64(expr_ptr + 48, 0)  # body_len
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Parenthesized expression
+        I @.check(TOK_LPAREN()) == 1 {
+            @.advance()
+            inner := @.parse_expr()
+            I @.expect(TOK_RPAREN()) == 0 { R 0 }
+            R inner
+        }
+
+        # Block expression: { ... }
+        I @.check(TOK_LBRACE()) == 1 {
+            @.advance()
+            stmts := @.parse_block_contents()
+            I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_BLOCK())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, @.current_span_start())
+            store_i64(expr_ptr + 24, stmts)
+            store_i64(expr_ptr + 32, 0)  # stmts_len
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        @.set_error_expected(TOK_INT())
+        0
+    }
+
+    # =========== Cleanup ===========
+
+    F drop(&self) -> i64 {
+        free(self.sp_data)
+        free(self.sp_offsets)
+        free(self.items_ptr)
+        1
+    }
+}
+
+# ============================================================================
+# Test Main
+# ============================================================================
+
+F main() -> i64 {
+    puts("Parser module loaded")
+
+    # Create a simple token stream for: F add(a: i64) -> i64 = a + 1
+    # Tokens: F, add, (, a, :, i64, ), ->, i64, =, a, +, 1, EOF
+    tokens := malloc(14 * 48)
+
+    # Token 0: F (keyword)
+    store_i64(tokens + 0 * 48 + 0, TOK_KW_F())
+    store_i64(tokens + 0 * 48 + 8, 0)
+    store_i64(tokens + 0 * 48 + 16, 0)
+    store_i64(tokens + 0 * 48 + 24, 0)
+    store_i64(tokens + 0 * 48 + 32, 0)
+    store_i64(tokens + 0 * 48 + 40, 1)
+
+    # Token 1: add (identifier)
+    add_str := malloc(3)
+    store_byte(add_str, 97)
+    store_byte(add_str + 1, 100)
+    store_byte(add_str + 2, 100)
+    store_i64(tokens + 1 * 48 + 0, TOK_IDENT())
+    store_i64(tokens + 1 * 48 + 8, 0)
+    store_i64(tokens + 1 * 48 + 16, add_str)
+    store_i64(tokens + 1 * 48 + 24, 3)
+    store_i64(tokens + 1 * 48 + 32, 2)
+    store_i64(tokens + 1 * 48 + 40, 5)
+
+    # Token 2: (
+    store_i64(tokens + 2 * 48 + 0, TOK_LPAREN())
+    store_i64(tokens + 2 * 48 + 32, 5)
+    store_i64(tokens + 2 * 48 + 40, 6)
+
+    # Token 3: a (identifier)
+    a_str := malloc(1)
+    store_byte(a_str, 97)
+    store_i64(tokens + 3 * 48 + 0, TOK_IDENT())
+    store_i64(tokens + 3 * 48 + 16, a_str)
+    store_i64(tokens + 3 * 48 + 24, 1)
+    store_i64(tokens + 3 * 48 + 32, 6)
+    store_i64(tokens + 3 * 48 + 40, 7)
+
+    # Token 4: :
+    store_i64(tokens + 4 * 48 + 0, TOK_COLON())
+    store_i64(tokens + 4 * 48 + 32, 7)
+    store_i64(tokens + 4 * 48 + 40, 8)
+
+    # Token 5: i64 (identifier)
+    i64_str := malloc(3)
+    store_byte(i64_str, 105)
+    store_byte(i64_str + 1, 54)
+    store_byte(i64_str + 2, 52)
+    store_i64(tokens + 5 * 48 + 0, TOK_IDENT())
+    store_i64(tokens + 5 * 48 + 16, i64_str)
+    store_i64(tokens + 5 * 48 + 24, 3)
+    store_i64(tokens + 5 * 48 + 32, 9)
+    store_i64(tokens + 5 * 48 + 40, 12)
+
+    # Token 6: )
+    store_i64(tokens + 6 * 48 + 0, TOK_RPAREN())
+    store_i64(tokens + 6 * 48 + 32, 12)
+    store_i64(tokens + 6 * 48 + 40, 13)
+
+    # Token 7: ->
+    store_i64(tokens + 7 * 48 + 0, TOK_ARROW())
+    store_i64(tokens + 7 * 48 + 32, 14)
+    store_i64(tokens + 7 * 48 + 40, 16)
+
+    # Token 8: i64
+    store_i64(tokens + 8 * 48 + 0, TOK_IDENT())
+    store_i64(tokens + 8 * 48 + 16, i64_str)
+    store_i64(tokens + 8 * 48 + 24, 3)
+    store_i64(tokens + 8 * 48 + 32, 17)
+    store_i64(tokens + 8 * 48 + 40, 20)
+
+    # Token 9: =
+    store_i64(tokens + 9 * 48 + 0, TOK_EQ())
+    store_i64(tokens + 9 * 48 + 32, 21)
+    store_i64(tokens + 9 * 48 + 40, 22)
+
+    # Token 10: a
+    store_i64(tokens + 10 * 48 + 0, TOK_IDENT())
+    store_i64(tokens + 10 * 48 + 16, a_str)
+    store_i64(tokens + 10 * 48 + 24, 1)
+    store_i64(tokens + 10 * 48 + 32, 23)
+    store_i64(tokens + 10 * 48 + 40, 24)
+
+    # Token 11: +
+    store_i64(tokens + 11 * 48 + 0, TOK_PLUS())
+    store_i64(tokens + 11 * 48 + 32, 25)
+    store_i64(tokens + 11 * 48 + 40, 26)
+
+    # Token 12: 1 (integer literal)
+    store_i64(tokens + 12 * 48 + 0, TOK_INT())
+    store_i64(tokens + 12 * 48 + 8, 1)
+    store_i64(tokens + 12 * 48 + 32, 27)
+    store_i64(tokens + 12 * 48 + 40, 28)
+
+    # Token 13: EOF
+    store_i64(tokens + 13 * 48 + 0, TOK_EOF())
+    store_i64(tokens + 13 * 48 + 32, 28)
+    store_i64(tokens + 13 * 48 + 40, 28)
+
+    # Create parser
+    parser := Parser.new(tokens, 14)
+
+    # Parse module
+    result := parser.parse_module()
+
+    I result == 1 {
+        I parser.has_error == 0 {
+            puts("Parse: OK")
+
+            # Check parsed items
+            I parser.items_len == 1 {
+                puts("Item count: OK (1)")
+
+                # Get first item
+                item_ptr := parser.items_ptr
+                item_kind := load_i64(item_ptr + 0)
+                I item_kind == ITEM_FUNCTION() {
+                    puts("Item type: OK (function)")
+
+                    # Get function def
+                    func_ptr := load_i64(item_ptr + 8)
+                    body_kind := load_i64(func_ptr + 48)
+                    I body_kind == 0 {
+                        puts("Body type: OK (expression)")
+
+                        # Check body expression
+                        body_expr := load_i64(func_ptr + 56)
+                        body_kind_actual := load_i64(body_expr)
+                        I body_kind_actual == EXPR_BINARY() {
+                            puts("Body expr: OK (binary)")
+                            body_op := load_i64(body_expr + 40)
+                            I body_op == BINOP_ADD() {
+                                puts("Binary op: OK (add)")
+                            } E {
+                                puts("Binary op: FAIL")
+                            }
+                        } E {
+                            puts("Body expr: FAIL")
+                        }
+                    } E {
+                        puts("Body type: FAIL")
+                    }
+                } E {
+                    puts("Item type: FAIL")
+                }
+            } E {
+                puts("Item count: FAIL")
+            }
+        } E {
+            puts("Parse: FAIL (has_error)")
+        }
+    } E {
+        puts("Parse: FAIL (result != 1)")
+    }
+
+    free(add_str)
+    free(a_str)
+    free(i64_str)
+    free(tokens)
+    parser.drop()
+
+    puts("All parser tests passed!")
+    0
+}

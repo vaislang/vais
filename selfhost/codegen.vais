@@ -1,0 +1,1785 @@
+# Vais Self-Hosting Compiler - Code Generator Module
+# Generates LLVM IR from typed AST
+# Note: This is a simplified code generator for bootstrapping purposes
+
+# ============================================================================
+# LLVM IR Generation Constants
+# ============================================================================
+
+# Binary operators for LLVM
+F OP_ADD() -> i64 = 1
+F OP_SUB() -> i64 = 2
+F OP_MUL() -> i64 = 3
+F OP_DIV() -> i64 = 4
+F OP_MOD() -> i64 = 5
+F OP_LT() -> i64 = 6
+F OP_LTE() -> i64 = 7
+F OP_GT() -> i64 = 8
+F OP_GTE() -> i64 = 9
+F OP_EQ() -> i64 = 10
+F OP_NEQ() -> i64 = 11
+F OP_AND() -> i64 = 12
+F OP_OR() -> i64 = 13
+F OP_BIT_AND() -> i64 = 14
+F OP_BIT_OR() -> i64 = 15
+F OP_BIT_XOR() -> i64 = 16
+F OP_SHL() -> i64 = 17
+F OP_SHR() -> i64 = 18
+
+# Unary operators
+F UOP_NEG() -> i64 = 1
+F UOP_NOT() -> i64 = 2
+F UOP_BITNOT() -> i64 = 3
+
+# Type kinds for LLVM mapping
+F LLVM_VOID() -> i64 = 0
+F LLVM_I1() -> i64 = 1
+F LLVM_I8() -> i64 = 2
+F LLVM_I16() -> i64 = 3
+F LLVM_I32() -> i64 = 4
+F LLVM_I64() -> i64 = 5
+F LLVM_I128() -> i64 = 6
+F LLVM_FLOAT() -> i64 = 7
+F LLVM_DOUBLE() -> i64 = 8
+F LLVM_PTR() -> i64 = 9
+F LLVM_STRUCT() -> i64 = 10
+
+# ============================================================================
+# String Buffer for IR Output
+# ============================================================================
+
+S StringBuffer {
+    data: i64,       # Pointer to string data
+    len: i64,        # Current length
+    cap: i64         # Capacity
+}
+
+X StringBuffer {
+    F new(initial_cap: i64) -> StringBuffer {
+        data := malloc(initial_cap)
+        StringBuffer { data: data, len: 0, cap: initial_cap }
+    }
+
+    F append_byte(&self, byte: i64) -> i64 {
+        I self.len >= self.cap {
+            @.grow()
+            0
+        } E { 0 }
+        store_byte(self.data + self.len, byte)
+        self.len = self.len + 1
+        1
+    }
+
+    F append_ptr(&self, ptr: i64, len: i64) -> i64 {
+        I self.len + len > self.cap {
+            @.grow_to(self.len + len + 1024)
+            0
+        } E { 0 }
+        memcpy(self.data + self.len, ptr, len)
+        self.len = self.len + len
+        1
+    }
+
+    F append_cstr(&self, s: str) -> i64 {
+        len := strlen(s)
+        I self.len + len > self.cap {
+            @.grow_to(self.len + len + 1024)
+            0
+        } E { 0 }
+        memcpy_str(self.data + self.len, s, len)
+        self.len = self.len + len
+        1
+    }
+
+    F append_i64(&self, value: i64) -> i64 {
+        # Convert i64 to string and append
+        I value == 0 {
+            @.append_byte(48)  # '0'
+            1
+        } E I value < 0 {
+            @.append_byte(45)  # '-'
+            @.append_i64(0 - value)
+        } E {
+            # Recursively build digits
+            I value >= 10 {
+                @.append_i64(value / 10)
+                0
+            } E { 0 }
+            digit := (value % 10) + 48
+            @.append_byte(digit)
+            1
+        }
+    }
+
+    F append_newline(&self) -> i64 = @.append_byte(10)
+
+    F grow(&self) -> i64 {
+        @.grow_to(self.cap * 2)
+    }
+
+    F grow_to(&self, new_cap: i64) -> i64 {
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        1
+    }
+
+    F get_ptr(&self) -> i64 = self.data
+    F get_len(&self) -> i64 = self.len
+
+    F clear(&self) -> i64 {
+        self.len = 0
+        1
+    }
+
+    F drop(&self) -> i64 {
+        free(self.data)
+        1
+    }
+}
+
+# ============================================================================
+# Local Variable Info
+# ============================================================================
+
+S LocalVar {
+    name_idx: i64,       # String pool index
+    llvm_name_ptr: i64,  # LLVM register name (e.g., "%x", "%1")
+    llvm_name_len: i64,
+    type_kind: i64,      # LLVM type kind
+    is_param: i64,       # 1 if function parameter
+    is_alloca: i64       # 1 if stack allocated (has pointer semantics)
+}
+
+X LocalVar {
+    F size() -> i64 = 48
+
+    F new(name_idx: i64, llvm_ptr: i64, llvm_len: i64, type_kind: i64, is_param: i64) -> LocalVar = LocalVar {
+        name_idx: name_idx,
+        llvm_name_ptr: llvm_ptr,
+        llvm_name_len: llvm_len,
+        type_kind: type_kind,
+        is_param: is_param,
+        is_alloca: 0
+    }
+}
+
+# ============================================================================
+# Function Info
+# ============================================================================
+
+S FunctionInfo {
+    name_idx: i64,
+    params_ptr: i64,      # Array of (name_idx, type_kind) pairs
+    params_len: i64,
+    ret_type: i64,        # LLVM type kind
+    is_extern: i64
+}
+
+X FunctionInfo {
+    F size() -> i64 = 40
+
+    F new(name_idx: i64) -> FunctionInfo = FunctionInfo {
+        name_idx: name_idx,
+        params_ptr: 0, params_len: 0,
+        ret_type: LLVM_VOID(),
+        is_extern: 0
+    }
+}
+
+# ============================================================================
+# Struct Info
+# ============================================================================
+
+S StructFieldInfo {
+    name_idx: i64,
+    type_kind: i64,
+    offset: i64
+}
+
+X StructFieldInfo {
+    F size() -> i64 = 24
+}
+
+S StructTypeInfo {
+    name_idx: i64,
+    fields_ptr: i64,
+    fields_len: i64,
+    total_size: i64
+}
+
+X StructTypeInfo {
+    F size() -> i64 = 32
+
+    F new(name_idx: i64) -> StructTypeInfo = StructTypeInfo {
+        name_idx: name_idx,
+        fields_ptr: 0, fields_len: 0,
+        total_size: 0
+    }
+}
+
+# ============================================================================
+# Loop Context (for break/continue)
+# ============================================================================
+
+S LoopContext {
+    break_label_ptr: i64,
+    break_label_len: i64,
+    continue_label_ptr: i64,
+    continue_label_len: i64
+}
+
+X LoopContext {
+    F size() -> i64 = 32
+}
+
+# ============================================================================
+# Code Generator
+# ============================================================================
+
+S CodeGenerator {
+    # Output buffer
+    output: i64,         # Pointer to StringBuffer
+
+    # String pool reference
+    sp_data: i64,
+    sp_offsets: i64,
+    sp_count: i64,
+
+    # Registered functions
+    functions_ptr: i64,
+    functions_len: i64,
+    functions_cap: i64,
+
+    # Registered structs
+    structs_ptr: i64,
+    structs_len: i64,
+    structs_cap: i64,
+
+    # Local variables in current function
+    locals_ptr: i64,
+    locals_len: i64,
+    locals_cap: i64,
+
+    # Loop stack for break/continue
+    loop_stack_ptr: i64,
+    loop_stack_len: i64,
+    loop_stack_cap: i64,
+
+    # Counters
+    reg_counter: i64,
+    label_counter: i64,
+    string_counter: i64,
+
+    # String constants (for global storage)
+    strings_ptr: i64,     # Array of (name_ptr, name_len, value_ptr, value_len)
+    strings_len: i64,
+    strings_cap: i64,
+
+    # Current function context
+    current_fn_name_idx: i64,
+    current_fn_ret_type: i64,
+
+    # Temp buffer for building strings
+    temp_buf: i64         # Pointer to StringBuffer
+}
+
+X CodeGenerator {
+    F new() -> CodeGenerator {
+        output_buf := malloc(88)  # StringBuffer size (approximated)
+        temp := StringBuffer.new(8192)
+        store_i64(output_buf, temp.data)
+        store_i64(output_buf + 8, temp.len)
+        store_i64(output_buf + 16, temp.cap)
+
+        temp_buf := malloc(88)
+        temp2 := StringBuffer.new(4096)
+        store_i64(temp_buf, temp2.data)
+        store_i64(temp_buf + 8, temp2.len)
+        store_i64(temp_buf + 16, temp2.cap)
+
+        CodeGenerator {
+            output: output_buf,
+            sp_data: 0, sp_offsets: 0, sp_count: 0,
+            functions_ptr: malloc(128 * FunctionInfo.size()),
+            functions_len: 0, functions_cap: 128,
+            structs_ptr: malloc(64 * StructTypeInfo.size()),
+            structs_len: 0, structs_cap: 64,
+            locals_ptr: malloc(64 * LocalVar.size()),
+            locals_len: 0, locals_cap: 64,
+            loop_stack_ptr: malloc(16 * LoopContext.size()),
+            loop_stack_len: 0, loop_stack_cap: 16,
+            reg_counter: 0,
+            label_counter: 0,
+            string_counter: 0,
+            strings_ptr: malloc(256 * 32),  # 256 strings, 32 bytes each
+            strings_len: 0, strings_cap: 256,
+            current_fn_name_idx: 0,
+            current_fn_ret_type: LLVM_VOID(),
+            temp_buf: temp_buf
+        }
+    }
+
+    # ========== String Pool Access ==========
+
+    F set_string_pool(&self, sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
+        self.sp_data = sp_data
+        self.sp_offsets = sp_offsets
+        self.sp_count = sp_count
+        1
+    }
+
+    F get_string_ptr(&self, idx: i64) -> i64 {
+        entry_ptr := self.sp_offsets + idx * 16
+        offset := load_i64(entry_ptr)
+        self.sp_data + offset
+    }
+
+    F get_string_len(&self, idx: i64) -> i64 {
+        entry_ptr := self.sp_offsets + idx * 16
+        load_i64(entry_ptr + 8)
+    }
+
+    # ========== Output Methods ==========
+
+    F emit_ptr(&self, ptr: i64, len: i64) -> i64 {
+        buf_data: mut i64 = load_i64(self.output)
+        buf_len := load_i64(self.output + 8)
+        buf_cap := load_i64(self.output + 16)
+
+        I buf_len + len > buf_cap {
+            new_cap := (buf_cap + len) * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, buf_data, buf_len)
+            free(buf_data)
+            store_i64(self.output, new_data)
+            store_i64(self.output + 16, new_cap)
+            buf_data = new_data
+            0
+        } E { 0 }
+
+        memcpy(buf_data + buf_len, ptr, len)
+        store_i64(self.output + 8, buf_len + len)
+        1
+    }
+
+    F emit(&self, ptr: i64, len: i64) -> i64 = @.emit_ptr(ptr, len)
+
+    F emit_cstr(&self, s: str) -> i64 {
+        len := strlen(s)
+        buf_data: mut i64 = load_i64(self.output)
+        buf_len := load_i64(self.output + 8)
+        buf_cap := load_i64(self.output + 16)
+
+        I buf_len + len > buf_cap {
+            new_cap := (buf_cap + len) * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, buf_data, buf_len)
+            free(buf_data)
+            store_i64(self.output, new_data)
+            store_i64(self.output + 16, new_cap)
+            buf_data = new_data
+            0
+        } E { 0 }
+
+        memcpy_str(buf_data + buf_len, s, len)
+        store_i64(self.output + 8, buf_len + len)
+        1
+    }
+
+    F emit_i64(&self, value: i64) -> i64 {
+        # Clear temp buffer
+        store_i64(self.temp_buf + 8, 0)
+        tb_data := load_i64(self.temp_buf)
+
+        I value == 0 {
+            store_byte(tb_data, 48)
+            @.emit_ptr(tb_data, 1)
+        } E I value < 0 {
+            store_byte(tb_data, 45)
+            @.emit_ptr(tb_data, 1)
+            @.emit_i64(0 - value)
+        } E {
+            @.emit_positive_i64(value)
+        }
+    }
+
+    F emit_positive_i64(&self, value: i64) -> i64 {
+        I value == 0 { R 1 }
+        @.emit_positive_i64(value / 10)
+        digit := (value % 10) + 48
+        tb_data := load_i64(self.temp_buf)
+        store_byte(tb_data, digit)
+        @.emit_ptr(tb_data, 1)
+    }
+
+    F emit_newline(&self) -> i64 {
+        tb_data := load_i64(self.temp_buf)
+        store_byte(tb_data, 10)
+        @.emit_ptr(tb_data, 1)
+    }
+
+    F emit_string_idx(&self, idx: i64) -> i64 {
+        ptr := @.get_string_ptr(idx)
+        len := @.get_string_len(idx)
+        @.emit_ptr(ptr, len)
+    }
+
+    # ========== Register/Label Generation ==========
+
+    F fresh_reg(&self) -> i64 {
+        n := self.reg_counter
+        self.reg_counter = self.reg_counter + 1
+        n
+    }
+
+    F fresh_label(&self) -> i64 {
+        n := self.label_counter
+        self.label_counter = self.label_counter + 1
+        n
+    }
+
+    F emit_reg(&self, n: i64) -> i64 {
+        @.emit_cstr("%")
+        @.emit_i64(n)
+    }
+
+    F emit_label(&self, prefix: str, n: i64) -> i64 {
+        @.emit_cstr(prefix)
+        @.emit_i64(n)
+    }
+
+    # ========== Type Conversion ==========
+
+    F type_to_llvm_str(&self, type_kind: i64) -> i64 {
+        I type_kind == LLVM_VOID() { @.emit_cstr("void") }
+        E I type_kind == LLVM_I1() { @.emit_cstr("i1") }
+        E I type_kind == LLVM_I8() { @.emit_cstr("i8") }
+        E I type_kind == LLVM_I16() { @.emit_cstr("i16") }
+        E I type_kind == LLVM_I32() { @.emit_cstr("i32") }
+        E I type_kind == LLVM_I64() { @.emit_cstr("i64") }
+        E I type_kind == LLVM_I128() { @.emit_cstr("i128") }
+        E I type_kind == LLVM_FLOAT() { @.emit_cstr("float") }
+        E I type_kind == LLVM_DOUBLE() { @.emit_cstr("double") }
+        E I type_kind == LLVM_PTR() { @.emit_cstr("i8*") }
+        E { @.emit_cstr("i64") }  # Default
+    }
+
+    F resolved_type_to_llvm(&self, resolved_kind: i64) -> i64 {
+        # Map ResolvedType kind to LLVM type kind
+        # TY_I8 = 1, TY_I16 = 2, TY_I32 = 3, TY_I64 = 4, etc.
+        I resolved_kind == 1 { LLVM_I8() }
+        E I resolved_kind == 2 { LLVM_I16() }
+        E I resolved_kind == 3 { LLVM_I32() }
+        E I resolved_kind == 4 { LLVM_I64() }
+        E I resolved_kind == 5 { LLVM_I128() }
+        E I resolved_kind == 6 { LLVM_I8() }   # u8
+        E I resolved_kind == 7 { LLVM_I16() }  # u16
+        E I resolved_kind == 8 { LLVM_I32() }  # u32
+        E I resolved_kind == 9 { LLVM_I64() }  # u64
+        E I resolved_kind == 10 { LLVM_I128() } # u128
+        E I resolved_kind == 11 { LLVM_FLOAT() }
+        E I resolved_kind == 12 { LLVM_DOUBLE() }
+        E I resolved_kind == 13 { LLVM_I1() }  # bool
+        E I resolved_kind == 14 { LLVM_PTR() } # str
+        E I resolved_kind == 15 { LLVM_VOID() } # unit
+        E I resolved_kind == 21 { LLVM_PTR() } # pointer
+        E I resolved_kind == 22 { LLVM_PTR() } # ref
+        E I resolved_kind == 23 { LLVM_PTR() } # ref_mut
+        E { LLVM_I64() }
+    }
+
+    # ========== Local Variables ==========
+
+    F add_local(&self, name_idx: i64, llvm_ptr: i64, llvm_len: i64, type_kind: i64, is_param: i64) -> i64 {
+        I self.locals_len >= self.locals_cap {
+            new_cap := self.locals_cap * 2
+            new_ptr := malloc(new_cap * LocalVar.size())
+            memcpy(new_ptr, self.locals_ptr, self.locals_len * LocalVar.size())
+            free(self.locals_ptr)
+            self.locals_ptr = new_ptr
+            self.locals_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.locals_ptr + self.locals_len * LocalVar.size()
+        store_i64(ptr, name_idx)
+        store_i64(ptr + 8, llvm_ptr)
+        store_i64(ptr + 16, llvm_len)
+        store_i64(ptr + 24, type_kind)
+        store_i64(ptr + 32, is_param)
+        store_i64(ptr + 40, 0)  # is_alloca
+
+        self.locals_len = self.locals_len + 1
+        self.locals_len - 1
+    }
+
+    F find_local(&self, name_idx: i64) -> i64 {
+        i: mut i64 = self.locals_len
+        L { I i == 0 { B }
+            i = i - 1
+            ptr := self.locals_ptr + i * LocalVar.size()
+            local_name := load_i64(ptr)
+            I local_name == name_idx {
+                R ptr
+            } E { 0 }
+        }
+        0  # Not found
+    }
+
+    F clear_locals(&self) -> i64 {
+        self.locals_len = 0
+        1
+    }
+
+    # ========== Function Registration ==========
+
+    F add_function(&self, name_idx: i64, ret_type: i64, is_extern: i64) -> i64 {
+        I self.functions_len >= self.functions_cap {
+            new_cap := self.functions_cap * 2
+            new_ptr := malloc(new_cap * FunctionInfo.size())
+            memcpy(new_ptr, self.functions_ptr, self.functions_len * FunctionInfo.size())
+            free(self.functions_ptr)
+            self.functions_ptr = new_ptr
+            self.functions_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.functions_ptr + self.functions_len * FunctionInfo.size()
+        store_i64(ptr, name_idx)
+        store_i64(ptr + 8, 0)    # params_ptr
+        store_i64(ptr + 16, 0)   # params_len
+        store_i64(ptr + 24, ret_type)
+        store_i64(ptr + 32, is_extern)
+
+        self.functions_len = self.functions_len + 1
+        ptr
+    }
+
+    F find_function(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.functions_len { B }
+            ptr := self.functions_ptr + i * FunctionInfo.size()
+            fn_name := load_i64(ptr)
+            I fn_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0
+    }
+
+    # ========== Struct Registration ==========
+
+    F add_struct(&self, name_idx: i64) -> i64 {
+        I self.structs_len >= self.structs_cap {
+            new_cap := self.structs_cap * 2
+            new_ptr := malloc(new_cap * StructTypeInfo.size())
+            memcpy(new_ptr, self.structs_ptr, self.structs_len * StructTypeInfo.size())
+            free(self.structs_ptr)
+            self.structs_ptr = new_ptr
+            self.structs_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.structs_ptr + self.structs_len * StructTypeInfo.size()
+        store_i64(ptr, name_idx)
+        store_i64(ptr + 8, 0)   # fields_ptr
+        store_i64(ptr + 16, 0)  # fields_len
+        store_i64(ptr + 24, 0)  # total_size
+
+        self.structs_len = self.structs_len + 1
+        ptr
+    }
+
+    F find_struct(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.structs_len { B }
+            ptr := self.structs_ptr + i * StructTypeInfo.size()
+            struct_name := load_i64(ptr)
+            I struct_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0
+    }
+
+    # ========== Loop Stack ==========
+
+    F push_loop(&self, break_ptr: i64, break_len: i64, continue_ptr: i64, continue_len: i64) -> i64 {
+        I self.loop_stack_len >= self.loop_stack_cap {
+            new_cap := self.loop_stack_cap * 2
+            new_ptr := malloc(new_cap * LoopContext.size())
+            memcpy(new_ptr, self.loop_stack_ptr, self.loop_stack_len * LoopContext.size())
+            free(self.loop_stack_ptr)
+            self.loop_stack_ptr = new_ptr
+            self.loop_stack_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.loop_stack_ptr + self.loop_stack_len * LoopContext.size()
+        store_i64(ptr, break_ptr)
+        store_i64(ptr + 8, break_len)
+        store_i64(ptr + 16, continue_ptr)
+        store_i64(ptr + 24, continue_len)
+
+        self.loop_stack_len = self.loop_stack_len + 1
+        1
+    }
+
+    F pop_loop(&self) -> i64 {
+        I self.loop_stack_len > 0 {
+            self.loop_stack_len = self.loop_stack_len - 1
+            1
+        } E { 0 }
+    }
+
+    F current_loop(&self) -> i64 {
+        I self.loop_stack_len == 0 { 0 }
+        E { self.loop_stack_ptr + (self.loop_stack_len - 1) * LoopContext.size() }
+    }
+
+    # ========== String Constants ==========
+
+    F add_string_constant(&self, value_ptr: i64, value_len: i64) -> i64 {
+        # Returns the string constant name index
+        idx := self.strings_len
+
+        I self.strings_len >= self.strings_cap {
+            new_cap := self.strings_cap * 2
+            new_ptr := malloc(new_cap * 32)
+            memcpy(new_ptr, self.strings_ptr, self.strings_len * 32)
+            free(self.strings_ptr)
+            self.strings_ptr = new_ptr
+            self.strings_cap = new_cap
+            0
+        } E { 0 }
+
+        # Store: name will be ".str.N", value is the string content
+        ptr := self.strings_ptr + self.strings_len * 32
+        store_i64(ptr, idx)       # index as name
+        store_i64(ptr + 8, value_ptr)
+        store_i64(ptr + 16, value_len)
+
+        self.strings_len = self.strings_len + 1
+        idx
+    }
+
+    # ========== Code Generation Entry Point ==========
+
+    F generate_module(&self, module_ptr: i64) -> i64 {
+        # Get module data
+        items_ptr := load_i64(module_ptr)
+        items_len := load_i64(module_ptr + 8)
+
+        # Set string pool
+        sp_data := load_i64(module_ptr + 24)
+        sp_offsets := load_i64(module_ptr + 32)
+        sp_count := load_i64(module_ptr + 56)
+        @.set_string_pool(sp_data, sp_offsets, sp_count)
+
+        # Emit module header
+        @.emit_cstr("; ModuleID = 'vais_module'\n")
+        @.emit_cstr("source_filename = \"<vais>\"\n\n")
+
+        # First pass: register all declarations
+        i: mut i64 = 0
+        L { I i >= items_len { B }
+            item_ptr := items_ptr + i * 32
+            kind := load_i64(item_ptr)
+            data_ptr := load_i64(item_ptr + 8)
+
+            # ITEM_FUNCTION = 1
+            I kind == 1 {
+                @.register_function_decl(data_ptr)
+            }
+            # ITEM_STRUCT = 2
+            E I kind == 2 {
+                @.register_struct_decl(data_ptr)
+            }
+            E { 0 }
+
+            i = i + 1
+        }
+
+        # Emit struct type definitions
+        j: mut i64 = 0
+        L { I j >= self.structs_len { B }
+            struct_ptr := self.structs_ptr + j * StructTypeInfo.size()
+            @.emit_struct_type(struct_ptr)
+            j = j + 1
+        }
+
+        # Emit extern function declarations
+        @.emit_extern_declarations()
+
+        # Second pass: generate function bodies
+        i = 0
+        L { I i >= items_len { B }
+            item_ptr := items_ptr + i * 32
+            kind := load_i64(item_ptr)
+            data_ptr := load_i64(item_ptr + 8)
+
+            # ITEM_FUNCTION = 1
+            I kind == 1 {
+                @.generate_function(data_ptr)
+            }
+            # ITEM_IMPL = 7
+            E I kind == 7 {
+                @.generate_impl(data_ptr)
+            }
+            E { 0 }
+
+            i = i + 1
+        }
+
+        # Emit string constants
+        @.emit_string_constants()
+
+        # Emit helper functions
+        @.emit_helper_functions()
+
+        1
+    }
+
+    F register_function_decl(&self, fn_ptr: i64) -> i64 {
+        name_idx := load_i64(fn_ptr)
+        ret_type_ptr := load_i64(fn_ptr + 40)
+
+        ret_llvm := I ret_type_ptr == 0 {
+            LLVM_VOID()
+        } E {
+            ret_kind := load_i64(ret_type_ptr)
+            @.resolved_type_to_llvm(ret_kind)
+        }
+
+        @.add_function(name_idx, ret_llvm, 0)
+    }
+
+    F register_struct_decl(&self, struct_ptr: i64) -> i64 {
+        name_idx := load_i64(struct_ptr)
+        @.add_struct(name_idx)
+    }
+
+    F emit_struct_type(&self, struct_info_ptr: i64) -> i64 {
+        name_idx := load_i64(struct_info_ptr)
+        fields_ptr := load_i64(struct_info_ptr + 8)
+        fields_len := load_i64(struct_info_ptr + 16)
+
+        @.emit_cstr("%")
+        @.emit_string_idx(name_idx)
+        @.emit_cstr(" = type { ")
+
+        i: mut i64 = 0
+        L { I i >= fields_len { B }
+            I i > 0 { @.emit_cstr(", ") } E { 0 }
+
+            field_ptr := fields_ptr + i * StructFieldInfo.size()
+            field_type := load_i64(field_ptr + 8)
+            @.type_to_llvm_str(field_type)
+
+            i = i + 1
+        }
+
+        @.emit_cstr(" }\n")
+        1
+    }
+
+    F emit_extern_declarations(&self) -> i64 {
+        # Emit built-in extern functions
+        @.emit_cstr("\n; External declarations\n")
+        @.emit_cstr("declare i8* @malloc(i64)\n")
+        @.emit_cstr("declare void @free(i8*)\n")
+        @.emit_cstr("declare i8* @memcpy(i8*, i8*, i64)\n")
+        @.emit_cstr("declare i64 @strlen(i8*)\n")
+        @.emit_cstr("declare i32 @puts(i8*)\n")
+        @.emit_cstr("declare i64 @printf(i8*, ...)\n")
+        @.emit_cstr("\n")
+        1
+    }
+
+    F emit_string_constants(&self) -> i64 {
+        I self.strings_len == 0 { R 1 }
+
+        @.emit_cstr("\n; String constants\n")
+
+        i: mut i64 = 0
+        L { I i >= self.strings_len { B }
+            ptr := self.strings_ptr + i * 32
+            idx := load_i64(ptr)
+            value_ptr := load_i64(ptr + 8)
+            value_len := load_i64(ptr + 16)
+
+            @.emit_cstr("@.str.")
+            @.emit_i64(idx)
+            @.emit_cstr(" = private unnamed_addr constant [")
+            @.emit_i64(value_len + 1)
+            @.emit_cstr(" x i8] c\"")
+
+            # Emit string content with escaping
+            j: mut i64 = 0
+            L { I j >= value_len { B }
+                c := load_byte(value_ptr + j)
+                I c == 10 {
+                    @.emit_cstr("\\0A")
+                } E I c == 13 {
+                    @.emit_cstr("\\0D")
+                } E I c == 34 {
+                    @.emit_cstr("\\22")
+                } E I c == 92 {
+                    @.emit_cstr("\\5C")
+                } E I c == 0 {
+                    @.emit_cstr("\\00")
+                } E {
+                    tb_data := load_i64(self.temp_buf)
+                    store_byte(tb_data, c)
+                    @.emit(tb_data, 1)
+                }
+                j = j + 1
+            }
+
+            @.emit_cstr("\\00\"\n")
+            i = i + 1
+        }
+        1
+    }
+
+    F emit_helper_functions(&self) -> i64 {
+        @.emit_cstr("\n; Helper functions for memory operations\n")
+
+        # load_byte
+        @.emit_cstr("define i64 @load_byte(i64 %ptr) {\n")
+        @.emit_cstr("entry:\n")
+        @.emit_cstr("  %0 = inttoptr i64 %ptr to i8*\n")
+        @.emit_cstr("  %1 = load i8, i8* %0\n")
+        @.emit_cstr("  %2 = zext i8 %1 to i64\n")
+        @.emit_cstr("  ret i64 %2\n")
+        @.emit_cstr("}\n\n")
+
+        # store_byte
+        @.emit_cstr("define void @store_byte(i64 %ptr, i64 %val) {\n")
+        @.emit_cstr("entry:\n")
+        @.emit_cstr("  %0 = inttoptr i64 %ptr to i8*\n")
+        @.emit_cstr("  %1 = trunc i64 %val to i8\n")
+        @.emit_cstr("  store i8 %1, i8* %0\n")
+        @.emit_cstr("  ret void\n")
+        @.emit_cstr("}\n\n")
+
+        # load_i64
+        @.emit_cstr("define i64 @load_i64(i64 %ptr) {\n")
+        @.emit_cstr("entry:\n")
+        @.emit_cstr("  %0 = inttoptr i64 %ptr to i64*\n")
+        @.emit_cstr("  %1 = load i64, i64* %0\n")
+        @.emit_cstr("  ret i64 %1\n")
+        @.emit_cstr("}\n\n")
+
+        # store_i64
+        @.emit_cstr("define void @store_i64(i64 %ptr, i64 %val) {\n")
+        @.emit_cstr("entry:\n")
+        @.emit_cstr("  %0 = inttoptr i64 %ptr to i64*\n")
+        @.emit_cstr("  store i64 %val, i64* %0\n")
+        @.emit_cstr("  ret void\n")
+        @.emit_cstr("}\n")
+
+        1
+    }
+
+    # ========== Function Generation ==========
+
+    F generate_function(&self, fn_ptr: i64) -> i64 {
+        name_idx := load_i64(fn_ptr)
+        generics_ptr := load_i64(fn_ptr + 8)
+        generics_len := load_i64(fn_ptr + 16)
+        params_ptr := load_i64(fn_ptr + 24)
+        params_len := load_i64(fn_ptr + 32)
+        ret_type_ptr := load_i64(fn_ptr + 40)
+        body_kind := load_i64(fn_ptr + 48)
+        body_expr_ptr := load_i64(fn_ptr + 56)
+        body_stmts_ptr := load_i64(fn_ptr + 64)
+        body_stmts_len := load_i64(fn_ptr + 72)
+
+        # Skip generic functions for now
+        I generics_len > 0 { R 1 }
+
+        # Reset state
+        @.clear_locals()
+        self.reg_counter = 0
+        self.label_counter = 0
+        self.current_fn_name_idx = name_idx
+
+        # Determine return type
+        ret_llvm := I ret_type_ptr == 0 {
+            self.current_fn_ret_type = LLVM_VOID()
+            LLVM_VOID()
+        } E {
+            ret_kind := load_i64(ret_type_ptr)
+            llvm_kind := @.resolved_type_to_llvm(ret_kind)
+            self.current_fn_ret_type = llvm_kind
+            llvm_kind
+        }
+
+        # Emit function signature
+        @.emit_cstr("define ")
+        @.type_to_llvm_str(ret_llvm)
+        @.emit_cstr(" @")
+        @.emit_string_idx(name_idx)
+        @.emit_cstr("(")
+
+        # Emit parameters
+        i: mut i64 = 0
+        L { I i >= params_len { B }
+            I i > 0 { @.emit_cstr(", ") } E { 0 }
+
+            param_ptr := params_ptr + i * 40  # Param.size() = 40
+            param_name_idx := load_i64(param_ptr)
+            param_type_ptr := load_i64(param_ptr + 8)
+
+            param_llvm := I param_type_ptr == 0 {
+                LLVM_I64()
+            } E {
+                type_kind := load_i64(param_type_ptr)
+                @.resolved_type_to_llvm(type_kind)
+            }
+
+            @.type_to_llvm_str(param_llvm)
+            @.emit_cstr(" %")
+            @.emit_string_idx(param_name_idx)
+
+            # Register parameter as local
+            param_name_ptr := @.get_string_ptr(param_name_idx)
+            param_name_len := @.get_string_len(param_name_idx)
+            @.add_local(param_name_idx, param_name_ptr, param_name_len, param_llvm, 1)
+
+            i = i + 1
+        }
+
+        @.emit_cstr(") {\n")
+        @.emit_cstr("entry:\n")
+
+        # Generate body
+        I body_kind == 0 {
+            # Expression body
+            result_reg := @.generate_expr(body_expr_ptr)
+
+            I ret_llvm == LLVM_VOID() {
+                @.emit_cstr("  ret void\n")
+            } E {
+                @.emit_cstr("  ret ")
+                @.type_to_llvm_str(ret_llvm)
+                @.emit_cstr(" ")
+                @.emit_reg(result_reg)
+                @.emit_cstr("\n")
+            }
+        } E {
+            # Block body
+            @.generate_stmts(body_stmts_ptr, body_stmts_len)
+
+            # Add implicit return if needed
+            I ret_llvm == LLVM_VOID() {
+                @.emit_cstr("  ret void\n")
+            } E { 0 }
+        }
+
+        @.emit_cstr("}\n\n")
+        1
+    }
+
+    F generate_impl(&self, impl_ptr: i64) -> i64 {
+        methods_ptr := load_i64(impl_ptr + 32)
+        methods_len := load_i64(impl_ptr + 40)
+
+        i: mut i64 = 0
+        L { I i >= methods_len { B }
+            method_ptr := load_i64(methods_ptr + i * 8)
+            @.generate_function(method_ptr)
+            i = i + 1
+        }
+        1
+    }
+
+    # ========== Statement Generation ==========
+
+    F generate_stmts(&self, stmts_ptr: i64, stmts_len: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= stmts_len { B }
+            stmt_ptr := load_i64(stmts_ptr + i * 8)
+            @.generate_stmt(stmt_ptr)
+            i = i + 1
+        }
+        1
+    }
+
+    F generate_stmt(&self, stmt_ptr: i64) -> i64 {
+        kind := load_i64(stmt_ptr)
+
+        # STMT_LET = 10
+        I kind == 10 {
+            @.generate_let_stmt(stmt_ptr)
+        }
+        # STMT_EXPR = 11
+        E I kind == 11 {
+            expr_ptr := load_i64(stmt_ptr + 24)
+            @.generate_expr(expr_ptr)
+            1
+        }
+        # STMT_RETURN = 12
+        E I kind == 12 {
+            @.generate_return_stmt(stmt_ptr)
+        }
+        # STMT_BREAK = 13
+        E I kind == 13 {
+            @.generate_break_stmt()
+        }
+        # STMT_CONTINUE = 14
+        E I kind == 14 {
+            @.generate_continue_stmt()
+        }
+        E { 1 }
+    }
+
+    F generate_let_stmt(&self, stmt_ptr: i64) -> i64 {
+        name_idx := load_i64(stmt_ptr + 24)
+        type_ptr := load_i64(stmt_ptr + 32)
+        value_ptr := load_i64(stmt_ptr + 40)
+        is_mut := load_i64(stmt_ptr + 48)
+
+        # Determine type
+        var_type := I type_ptr != 0 {
+            type_kind := load_i64(type_ptr)
+            @.resolved_type_to_llvm(type_kind)
+        } E {
+            LLVM_I64()  # Default
+        }
+
+        # Allocate stack space
+        alloca_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(alloca_reg)
+        @.emit_cstr(" = alloca ")
+        @.type_to_llvm_str(var_type)
+        @.emit_cstr("\n")
+
+        # Store initial value if present
+        I value_ptr != 0 {
+            value_reg := @.generate_expr(value_ptr)
+            @.emit_cstr("  store ")
+            @.type_to_llvm_str(var_type)
+            @.emit_cstr(" ")
+            @.emit_reg(value_reg)
+            @.emit_cstr(", ")
+            @.type_to_llvm_str(var_type)
+            @.emit_cstr("* ")
+            @.emit_reg(alloca_reg)
+            @.emit_cstr("\n")
+            0
+        } E { 0 }
+
+        # Register local variable (store alloca register as name)
+        name_ptr := @.get_string_ptr(name_idx)
+        name_len := @.get_string_len(name_idx)
+
+        # Store alloca reg number in local
+        local_idx := @.add_local(name_idx, alloca_reg, 0, var_type, 0)
+        # Mark as alloca
+        local_ptr := self.locals_ptr + local_idx * LocalVar.size()
+        store_i64(local_ptr + 40, 1)  # is_alloca = 1
+
+        1
+    }
+
+    F generate_return_stmt(&self, stmt_ptr: i64) -> i64 {
+        expr_ptr := load_i64(stmt_ptr + 24)
+
+        I expr_ptr == 0 || self.current_fn_ret_type == LLVM_VOID() {
+            @.emit_cstr("  ret void\n")
+        } E {
+            value_reg := @.generate_expr(expr_ptr)
+            @.emit_cstr("  ret ")
+            @.type_to_llvm_str(self.current_fn_ret_type)
+            @.emit_cstr(" ")
+            @.emit_reg(value_reg)
+            @.emit_cstr("\n")
+        }
+        1
+    }
+
+    F generate_break_stmt(&self) -> i64 {
+        loop_ctx := @.current_loop()
+        I loop_ctx != 0 {
+            break_label := load_i64(loop_ctx)
+            @.emit_cstr("  br label %end")
+            @.emit_i64(break_label)
+            @.emit_cstr("\n")
+            1
+        } E { 0 }
+    }
+
+    F generate_continue_stmt(&self) -> i64 {
+        loop_ctx := @.current_loop()
+        I loop_ctx != 0 {
+            continue_label := load_i64(loop_ctx + 16)
+            @.emit_cstr("  br label %cond")
+            @.emit_i64(continue_label)
+            @.emit_cstr("\n")
+            1
+        } E { 0 }
+    }
+
+    # ========== Expression Generation ==========
+
+    F generate_expr(&self, expr_ptr: i64) -> i64 {
+        I expr_ptr == 0 { R 0 }
+
+        kind := load_i64(expr_ptr)
+
+        # EXPR_INT = 20
+        I kind == 20 {
+            value := load_i64(expr_ptr + 24)
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, ")
+            @.emit_i64(value)
+            @.emit_cstr("\n")
+            result
+        }
+        # EXPR_FLOAT = 21
+        E I kind == 21 {
+            # For now, emit as i64 (float bits)
+            value := load_i64(expr_ptr + 24)
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, ")
+            @.emit_i64(value)
+            @.emit_cstr("\n")
+            result
+        }
+        # EXPR_BOOL = 22
+        E I kind == 22 {
+            value := load_i64(expr_ptr + 24)
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, ")
+            I value != 0 { @.emit_cstr("1") } E { @.emit_cstr("0") }
+            @.emit_cstr("\n")
+            result
+        }
+        # EXPR_STRING = 23
+        E I kind == 23 {
+            str_idx := load_i64(expr_ptr + 24)
+            str_ptr := @.get_string_ptr(str_idx)
+            str_len := @.get_string_len(str_idx)
+
+            # Add string constant
+            const_idx := @.add_string_constant(str_ptr, str_len)
+
+            # Get pointer to string constant
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = getelementptr [")
+            @.emit_i64(str_len + 1)
+            @.emit_cstr(" x i8], [")
+            @.emit_i64(str_len + 1)
+            @.emit_cstr(" x i8]* @.str.")
+            @.emit_i64(const_idx)
+            @.emit_cstr(", i64 0, i64 0\n")
+
+            # Convert to i64
+            result2 := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result2)
+            @.emit_cstr(" = ptrtoint i8* ")
+            @.emit_reg(result)
+            @.emit_cstr(" to i64\n")
+
+            result2
+        }
+        # EXPR_IDENT = 25
+        E I kind == 25 {
+            name_idx := load_i64(expr_ptr + 24)
+            @.generate_ident(name_idx)
+        }
+        # EXPR_BINARY = 27
+        E I kind == 27 {
+            @.generate_binary(expr_ptr)
+        }
+        # EXPR_UNARY = 28
+        E I kind == 28 {
+            @.generate_unary(expr_ptr)
+        }
+        # EXPR_IF = 30
+        E I kind == 30 {
+            @.generate_if(expr_ptr)
+        }
+        # EXPR_LOOP = 31
+        E I kind == 31 {
+            @.generate_loop(expr_ptr)
+        }
+        # EXPR_CALL = 33
+        E I kind == 33 {
+            @.generate_call(expr_ptr)
+        }
+        # EXPR_BLOCK = 42
+        E I kind == 42 {
+            @.generate_block_expr(expr_ptr)
+        }
+        # EXPR_ASSIGN = 48
+        E I kind == 48 {
+            @.generate_assign(expr_ptr)
+        }
+        E {
+            # Unknown expression, return 0
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, 0 ; unknown expr kind ")
+            @.emit_i64(kind)
+            @.emit_cstr("\n")
+            result
+        }
+    }
+
+    F generate_ident(&self, name_idx: i64) -> i64 {
+        local_ptr := @.find_local(name_idx)
+        I local_ptr != 0 {
+            is_alloca := load_i64(local_ptr + 40)
+            type_kind := load_i64(local_ptr + 24)
+
+            I is_alloca == 1 {
+                # Load from alloca
+                alloca_reg := load_i64(local_ptr + 8)
+                result := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(result)
+                @.emit_cstr(" = load ")
+                @.type_to_llvm_str(type_kind)
+                @.emit_cstr(", ")
+                @.type_to_llvm_str(type_kind)
+                @.emit_cstr("* ")
+                @.emit_reg(alloca_reg)
+                @.emit_cstr("\n")
+                result
+            } E {
+                # Direct use of parameter
+                result := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(result)
+                @.emit_cstr(" = add ")
+                @.type_to_llvm_str(type_kind)
+                @.emit_cstr(" 0, %")
+                @.emit_string_idx(name_idx)
+                @.emit_cstr("\n")
+                result
+            }
+        } E {
+            # Unknown variable
+            result := @.fresh_reg()
+            @.emit_cstr("  ; unknown var: ")
+            @.emit_string_idx(name_idx)
+            @.emit_cstr("\n")
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, 0\n")
+            result
+        }
+    }
+
+    F generate_binary(&self, expr_ptr: i64) -> i64 {
+        left_ptr := load_i64(expr_ptr + 24)
+        right_ptr := load_i64(expr_ptr + 32)
+        op := load_i64(expr_ptr + 40)
+
+        left_reg := @.generate_expr(left_ptr)
+        right_reg := @.generate_expr(right_ptr)
+        result := @.fresh_reg()
+
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = ")
+
+        I op == OP_ADD() { @.emit_cstr("add i64 ") }
+        E I op == OP_SUB() { @.emit_cstr("sub i64 ") }
+        E I op == OP_MUL() { @.emit_cstr("mul i64 ") }
+        E I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
+        E I op == OP_MOD() { @.emit_cstr("srem i64 ") }
+        E I op == OP_LT() { @.emit_cstr("icmp slt i64 ") }
+        E I op == OP_LTE() { @.emit_cstr("icmp sle i64 ") }
+        E I op == OP_GT() { @.emit_cstr("icmp sgt i64 ") }
+        E I op == OP_GTE() { @.emit_cstr("icmp sge i64 ") }
+        E I op == OP_EQ() { @.emit_cstr("icmp eq i64 ") }
+        E I op == OP_NEQ() { @.emit_cstr("icmp ne i64 ") }
+        E I op == OP_AND() { @.emit_cstr("and i64 ") }
+        E I op == OP_OR() { @.emit_cstr("or i64 ") }
+        E I op == OP_BIT_AND() { @.emit_cstr("and i64 ") }
+        E I op == OP_BIT_OR() { @.emit_cstr("or i64 ") }
+        E I op == OP_BIT_XOR() { @.emit_cstr("xor i64 ") }
+        E I op == OP_SHL() { @.emit_cstr("shl i64 ") }
+        E I op == OP_SHR() { @.emit_cstr("ashr i64 ") }
+        E { @.emit_cstr("add i64 ") }
+
+        @.emit_reg(left_reg)
+        @.emit_cstr(", ")
+        @.emit_reg(right_reg)
+        @.emit_cstr("\n")
+
+        # For comparison ops, extend result to i64
+        I op >= OP_LT() && op <= OP_NEQ() {
+            ext_result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(ext_result)
+            @.emit_cstr(" = zext i1 ")
+            @.emit_reg(result)
+            @.emit_cstr(" to i64\n")
+            ext_result
+        } E {
+            result
+        }
+    }
+
+    F generate_unary(&self, expr_ptr: i64) -> i64 {
+        inner_ptr := load_i64(expr_ptr + 24)
+        op := load_i64(expr_ptr + 32)
+
+        inner_reg := @.generate_expr(inner_ptr)
+        result := @.fresh_reg()
+
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = ")
+
+        I op == UOP_NEG() {
+            @.emit_cstr("sub i64 0, ")
+            @.emit_reg(inner_reg)
+        }
+        E I op == UOP_NOT() {
+            @.emit_cstr("xor i64 ")
+            @.emit_reg(inner_reg)
+            @.emit_cstr(", 1")
+        }
+        E I op == UOP_BITNOT() {
+            @.emit_cstr("xor i64 ")
+            @.emit_reg(inner_reg)
+            @.emit_cstr(", -1")
+        }
+        E {
+            @.emit_cstr("add i64 0, ")
+            @.emit_reg(inner_reg)
+        }
+
+        @.emit_cstr("\n")
+        result
+    }
+
+    F generate_if(&self, expr_ptr: i64) -> i64 {
+        cond_ptr := load_i64(expr_ptr + 24)
+        then_stmts := load_i64(expr_ptr + 32)
+        then_len := load_i64(expr_ptr + 40)
+        else_ptr := load_i64(expr_ptr + 48)
+
+        label_id := @.fresh_label()
+
+        # Generate condition
+        cond_reg := @.generate_expr(cond_ptr)
+
+        # Truncate to i1 for branch
+        cond_i1 := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(cond_i1)
+        @.emit_cstr(" = trunc i64 ")
+        @.emit_reg(cond_reg)
+        @.emit_cstr(" to i1\n")
+
+        # Branch
+        @.emit_cstr("  br i1 ")
+        @.emit_reg(cond_i1)
+        @.emit_cstr(", label %then")
+        @.emit_i64(label_id)
+        @.emit_cstr(", label %else")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Then block
+        @.emit_cstr("then")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        @.generate_stmts(then_stmts, then_len)
+        @.emit_cstr("  br label %end")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Else block
+        @.emit_cstr("else")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        I else_ptr != 0 {
+            @.generate_else(else_ptr)
+            0
+        } E { 0 }
+        @.emit_cstr("  br label %end")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # End block
+        @.emit_cstr("end")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+
+        # Return unit (0)
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = add i64 0, 0\n")
+        result
+    }
+
+    F generate_else(&self, else_ptr: i64) -> i64 {
+        kind := load_i64(else_ptr)
+        I kind == 0 {
+            # else block
+            stmts_ptr := load_i64(else_ptr + 16)
+            stmts_len := load_i64(else_ptr + 24)
+            @.generate_stmts(stmts_ptr, stmts_len)
+        } E {
+            # else-if
+            cond_ptr := load_i64(else_ptr + 8)
+            stmts_ptr := load_i64(else_ptr + 16)
+            stmts_len := load_i64(else_ptr + 24)
+            next_ptr := load_i64(else_ptr + 32)
+
+            label_id := @.fresh_label()
+
+            cond_reg := @.generate_expr(cond_ptr)
+            cond_i1 := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(cond_i1)
+            @.emit_cstr(" = trunc i64 ")
+            @.emit_reg(cond_reg)
+            @.emit_cstr(" to i1\n")
+
+            @.emit_cstr("  br i1 ")
+            @.emit_reg(cond_i1)
+            @.emit_cstr(", label %elseif_then")
+            @.emit_i64(label_id)
+            @.emit_cstr(", label %elseif_else")
+            @.emit_i64(label_id)
+            @.emit_cstr("\n")
+
+            @.emit_cstr("elseif_then")
+            @.emit_i64(label_id)
+            @.emit_cstr(":\n")
+            @.generate_stmts(stmts_ptr, stmts_len)
+            @.emit_cstr("  br label %elseif_end")
+            @.emit_i64(label_id)
+            @.emit_cstr("\n")
+
+            @.emit_cstr("elseif_else")
+            @.emit_i64(label_id)
+            @.emit_cstr(":\n")
+            I next_ptr != 0 {
+                @.generate_else(next_ptr)
+                0
+            } E { 0 }
+            @.emit_cstr("  br label %elseif_end")
+            @.emit_i64(label_id)
+            @.emit_cstr("\n")
+
+            @.emit_cstr("elseif_end")
+            @.emit_i64(label_id)
+            @.emit_cstr(":\n")
+        }
+        1
+    }
+
+    F generate_loop(&self, expr_ptr: i64) -> i64 {
+        body_stmts := load_i64(expr_ptr + 40)
+        body_len := load_i64(expr_ptr + 48)
+
+        label_id := @.fresh_label()
+
+        # Push loop context
+        @.push_loop(label_id, 0, label_id, 0)
+
+        # Jump to loop condition
+        @.emit_cstr("  br label %cond")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Condition (infinite loop, always branch to body)
+        @.emit_cstr("cond")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        @.emit_cstr("  br label %body")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Body
+        @.emit_cstr("body")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        @.generate_stmts(body_stmts, body_len)
+        @.emit_cstr("  br label %cond")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # End
+        @.emit_cstr("end")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+
+        # Pop loop context
+        @.pop_loop()
+
+        # Return unit
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = add i64 0, 0\n")
+        result
+    }
+
+    F generate_call(&self, expr_ptr: i64) -> i64 {
+        func_ptr := load_i64(expr_ptr + 24)
+        args_ptr := load_i64(expr_ptr + 32)
+        args_len := load_i64(expr_ptr + 40)
+
+        # Get function name
+        func_kind := load_i64(func_ptr)
+        I func_kind != 25 {
+            # Not an identifier, return 0
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, 0 ; non-ident call\n")
+            R result
+        }
+
+        func_name_idx := load_i64(func_ptr + 24)
+
+        # Look up function
+        fn_info := @.find_function(func_name_idx)
+        ret_type := I fn_info != 0 {
+            load_i64(fn_info + 24)
+        } E {
+            LLVM_I64()  # Default
+        }
+
+        # Generate arguments
+        arg_regs_ptr := malloc(args_len * 8)
+        i: mut i64 = 0
+        L { I i >= args_len { B }
+            arg_expr := load_i64(args_ptr + i * 8)
+            arg_reg := @.generate_expr(arg_expr)
+            store_i64(arg_regs_ptr + i * 8, arg_reg)
+            i = i + 1
+        }
+
+        # Emit call
+        result := @.fresh_reg()
+
+        I ret_type == LLVM_VOID() {
+            @.emit_cstr("  call void @")
+        } E {
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = call ")
+            @.type_to_llvm_str(ret_type)
+            @.emit_cstr(" @")
+        }
+
+        @.emit_string_idx(func_name_idx)
+        @.emit_cstr("(")
+
+        i = 0
+        L { I i >= args_len { B }
+            I i > 0 { @.emit_cstr(", ") } E { 0 }
+            @.emit_cstr("i64 ")
+            arg_reg := load_i64(arg_regs_ptr + i * 8)
+            @.emit_reg(arg_reg)
+            i = i + 1
+        }
+
+        @.emit_cstr(")\n")
+
+        free(arg_regs_ptr)
+
+        I ret_type == LLVM_VOID() {
+            zero := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(zero)
+            @.emit_cstr(" = add i64 0, 0\n")
+            zero
+        } E {
+            result
+        }
+    }
+
+    F generate_block_expr(&self, expr_ptr: i64) -> i64 {
+        stmts_ptr := load_i64(expr_ptr + 24)
+        stmts_len := load_i64(expr_ptr + 32)
+
+        @.generate_stmts(stmts_ptr, stmts_len)
+
+        # Return unit
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = add i64 0, 0\n")
+        result
+    }
+
+    F generate_assign(&self, expr_ptr: i64) -> i64 {
+        target_ptr := load_i64(expr_ptr + 24)
+        value_ptr := load_i64(expr_ptr + 32)
+
+        target_kind := load_i64(target_ptr)
+        I target_kind != 25 {
+            # Not an identifier target, just evaluate value
+            R @.generate_expr(value_ptr)
+        }
+
+        target_name_idx := load_i64(target_ptr + 24)
+        local_ptr := @.find_local(target_name_idx)
+
+        I local_ptr == 0 {
+            # Unknown variable
+            R @.generate_expr(value_ptr)
+        }
+
+        is_alloca := load_i64(local_ptr + 40)
+        type_kind := load_i64(local_ptr + 24)
+
+        I is_alloca != 1 {
+            # Can't assign to parameter (for now)
+            R @.generate_expr(value_ptr)
+        }
+
+        value_reg := @.generate_expr(value_ptr)
+        alloca_reg := load_i64(local_ptr + 8)
+
+        @.emit_cstr("  store ")
+        @.type_to_llvm_str(type_kind)
+        @.emit_cstr(" ")
+        @.emit_reg(value_reg)
+        @.emit_cstr(", ")
+        @.type_to_llvm_str(type_kind)
+        @.emit_cstr("* ")
+        @.emit_reg(alloca_reg)
+        @.emit_cstr("\n")
+
+        value_reg
+    }
+
+    # ========== Output ==========
+
+    F get_output(&self) -> i64 = load_i64(self.output)
+    F get_output_len(&self) -> i64 = load_i64(self.output + 8)
+
+    F drop(&self) -> i64 {
+        # Free output buffer
+        buf_data := load_i64(self.output)
+        free(buf_data)
+        free(self.output)
+
+        # Free temp buffer
+        temp_data := load_i64(self.temp_buf)
+        free(temp_data)
+        free(self.temp_buf)
+
+        # Free other allocations
+        free(self.functions_ptr)
+        free(self.structs_ptr)
+        free(self.locals_ptr)
+        free(self.loop_stack_ptr)
+        free(self.strings_ptr)
+
+        1
+    }
+}
+
+# ============================================================================
+# Test main
+# ============================================================================
+
+F main() -> i64 {
+    puts("Code generator module loaded")
+
+    # Test StringBuffer
+    buf := StringBuffer.new(64)
+    buf.append_cstr("Hello, ")
+    buf.append_cstr("World!")
+    I buf.len == 13 {
+        puts("StringBuffer append: OK")
+    } E {
+        puts("StringBuffer append: FAIL")
+    }
+
+    buf.append_i64(42)
+    I buf.len == 15 {
+        puts("StringBuffer append_i64: OK")
+    } E {
+        puts("StringBuffer append_i64: FAIL")
+    }
+
+    buf.drop()
+
+    # Test CodeGenerator creation
+    gen := CodeGenerator.new()
+    I gen.functions_cap == 128 {
+        puts("CodeGenerator creation: OK")
+    } E {
+        puts("CodeGenerator creation: FAIL")
+    }
+
+    # Test register generation
+    reg1 := gen.fresh_reg()
+    reg2 := gen.fresh_reg()
+    I reg1 == 0 && reg2 == 1 {
+        puts("Register generation: OK")
+    } E {
+        puts("Register generation: FAIL")
+    }
+
+    # Test label generation
+    label1 := gen.fresh_label()
+    label2 := gen.fresh_label()
+    I label1 == 0 && label2 == 1 {
+        puts("Label generation: OK")
+    } E {
+        puts("Label generation: FAIL")
+    }
+
+    # Test local variable management
+    gen.add_local(0, 0, 0, LLVM_I64(), 1)
+    found := gen.find_local(0)
+    I found != 0 {
+        puts("Local variable: OK")
+    } E {
+        puts("Local variable: FAIL")
+    }
+
+    # Test type conversion
+    I gen.resolved_type_to_llvm(4) == LLVM_I64() {
+        puts("Type conversion i64: OK")
+    } E {
+        puts("Type conversion i64: FAIL")
+    }
+
+    I gen.resolved_type_to_llvm(13) == LLVM_I1() {
+        puts("Type conversion bool: OK")
+    } E {
+        puts("Type conversion bool: FAIL")
+    }
+
+    gen.drop()
+
+    puts("All code generator tests passed!")
+    0
+}

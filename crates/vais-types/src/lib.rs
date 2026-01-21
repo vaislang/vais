@@ -270,14 +270,31 @@ impl TypeChecker {
             },
         );
 
-        // strlen: (s) -> i64
+        // memcpy_str: (dest, src_str, n) -> i64 (accepts str as src)
+        self.functions.insert(
+            "memcpy_str".to_string(),
+            FunctionSig {
+                name: "memcpy_str".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("dest".to_string(), ResolvedType::I64, false),
+                    ("src".to_string(), ResolvedType::Str, false),
+                    ("n".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
+        // strlen: (s) -> i64 (accepts str)
         self.functions.insert(
             "strlen".to_string(),
             FunctionSig {
                 name: "strlen".to_string(),
                 generics: vec![],
                 generic_bounds: HashMap::new(),
-                params: vec![("s".to_string(), ResolvedType::I64, false)],
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
             },

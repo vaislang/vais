@@ -1,0 +1,401 @@
+# Vais Self-Hosting Compiler - Bootstrap Test Suite
+# Tests integration of all compiler modules
+
+# ============================================================================
+# Test Infrastructure
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS]")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL]")
+        puts(test_name)
+        puts("  Expected:")
+        println_i64(expected)
+        puts("  Actual:")
+        println_i64(actual)
+        0
+    }
+}
+
+F assert_neq(a: i64, b: i64, test_name: str) -> i64 {
+    I a != b {
+        puts("[PASS]")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL]")
+        puts(test_name)
+        0
+    }
+}
+
+# ============================================================================
+# StringBuffer Tests
+# ============================================================================
+
+S StringBuffer {
+    data: i64,
+    len: i64,
+    cap: i64
+}
+
+X StringBuffer {
+    F new(initial_cap: i64) -> StringBuffer {
+        data := malloc(initial_cap)
+        StringBuffer { data: data, len: 0, cap: initial_cap }
+    }
+
+    F append_byte(&self, byte: i64) -> i64 {
+        I self.len >= self.cap {
+            @.grow()
+            0
+        } E { 0 }
+        store_byte(self.data + self.len, byte)
+        self.len = self.len + 1
+        1
+    }
+
+    F append_cstr(&self, s: str) -> i64 {
+        len := strlen(s)
+        I self.len + len > self.cap {
+            @.grow_to(self.len + len + 1024)
+            0
+        } E { 0 }
+        memcpy_str(self.data + self.len, s, len)
+        self.len = self.len + len
+        1
+    }
+
+    F grow(&self) -> i64 {
+        @.grow_to(self.cap * 2)
+    }
+
+    F grow_to(&self, new_cap: i64) -> i64 {
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        1
+    }
+
+    F get_byte(&self, idx: i64) -> i64 {
+        load_byte(self.data + idx)
+    }
+
+    F free(&self) -> i64 {
+        free(self.data)
+        1
+    }
+}
+
+F test_string_buffer() -> i64 {
+    puts("\n=== StringBuffer Tests ===")
+
+    buf := StringBuffer.new(16)
+    r1 := assert_neq(buf.data, 0, "StringBuffer.new allocates memory")
+    r2 := assert_eq(buf.len, 0, "StringBuffer.new has len=0")
+    r3 := assert_eq(buf.cap, 16, "StringBuffer.new has cap=16")
+
+    buf.append_byte(65)
+    buf.append_byte(66)
+    buf.append_byte(67)
+    r4 := assert_eq(buf.len, 3, "append_byte increases len")
+    r5 := assert_eq(buf.get_byte(0), 65, "append_byte stores 'A'")
+    r6 := assert_eq(buf.get_byte(1), 66, "append_byte stores 'B'")
+    r7 := assert_eq(buf.get_byte(2), 67, "append_byte stores 'C'")
+
+    buf.append_cstr("DEF")
+    r8 := assert_eq(buf.len, 6, "append_cstr increases len")
+    r9 := assert_eq(buf.get_byte(3), 68, "append_cstr stores 'D'")
+    r10 := assert_eq(buf.get_byte(4), 69, "append_cstr stores 'E'")
+    r11 := assert_eq(buf.get_byte(5), 70, "append_cstr stores 'F'")
+
+    buf.grow_to(64)
+    r12 := assert_eq(buf.cap, 64, "grow_to increases capacity")
+    r13 := assert_eq(buf.len, 6, "grow_to preserves len")
+    r14 := assert_eq(buf.get_byte(0), 65, "grow_to preserves data")
+
+    buf.free()
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + r11 + r12 + r13 + r14
+}
+
+# ============================================================================
+# Token Constants Tests
+# ============================================================================
+
+F test_token_constants() -> i64 {
+    puts("\n=== Token Constants Tests ===")
+
+    TOK_EOF := 0
+    TOK_IDENT := 1
+    TOK_INT := 2
+    TOK_FLOAT := 3
+    TOK_STRING := 4
+    TOK_CHAR := 5
+
+    r1 := assert_neq(TOK_EOF, TOK_IDENT, "TOK_EOF != TOK_IDENT")
+    r2 := assert_neq(TOK_INT, TOK_FLOAT, "TOK_INT != TOK_FLOAT")
+    r3 := assert_neq(TOK_STRING, TOK_CHAR, "TOK_STRING != TOK_CHAR")
+
+    TOK_FN := 10
+    TOK_LET := 11
+    TOK_IF := 12
+    TOK_ELSE := 13
+
+    r4 := assert_neq(TOK_FN, TOK_LET, "TOK_FN != TOK_LET")
+    r5 := assert_neq(TOK_IF, TOK_ELSE, "TOK_IF != TOK_ELSE")
+    r6 := assert_neq(TOK_FN, TOK_EOF, "TOK_FN != TOK_EOF")
+
+    r1 + r2 + r3 + r4 + r5 + r6
+}
+
+# ============================================================================
+# AST Node Kind Tests
+# ============================================================================
+
+F AST_INT_LIT() -> i64 = 1
+F AST_FLOAT_LIT() -> i64 = 2
+F AST_IDENT() -> i64 = 5
+F AST_BINARY() -> i64 = 6
+F AST_IF() -> i64 = 9
+F AST_FN_DEF() -> i64 = 13
+
+F test_ast_node_kinds() -> i64 {
+    puts("\n=== AST Node Kind Tests ===")
+
+    r1 := assert_neq(AST_INT_LIT(), AST_FLOAT_LIT(), "INT_LIT != FLOAT_LIT")
+    r2 := assert_neq(AST_IDENT(), AST_BINARY(), "IDENT != BINARY")
+    r3 := assert_neq(AST_IF(), AST_FN_DEF(), "IF != FN_DEF")
+    r4 := assert_eq(AST_INT_LIT(), 1, "INT_LIT = 1")
+    r5 := assert_eq(AST_FLOAT_LIT(), 2, "FLOAT_LIT = 2")
+
+    r1 + r2 + r3 + r4 + r5
+}
+
+# ============================================================================
+# LLVM Type Mapping Tests
+# ============================================================================
+
+F LLVM_VOID() -> i64 = 0
+F LLVM_I1() -> i64 = 1
+F LLVM_I8() -> i64 = 2
+F LLVM_I32() -> i64 = 4
+F LLVM_I64() -> i64 = 5
+F LLVM_PTR() -> i64 = 9
+
+F test_llvm_type_mapping() -> i64 {
+    puts("\n=== LLVM Type Mapping Tests ===")
+
+    r1 := assert_eq(LLVM_VOID(), 0, "LLVM_VOID = 0")
+    r2 := assert_eq(LLVM_I1(), 1, "LLVM_I1 = 1")
+    r3 := assert_eq(LLVM_I8(), 2, "LLVM_I8 = 2")
+    r4 := assert_eq(LLVM_I32(), 4, "LLVM_I32 = 4")
+    r5 := assert_eq(LLVM_I64(), 5, "LLVM_I64 = 5")
+    r6 := assert_eq(LLVM_PTR(), 9, "LLVM_PTR = 9")
+
+    r1 + r2 + r3 + r4 + r5 + r6
+}
+
+# ============================================================================
+# Binary Operator Tests
+# ============================================================================
+
+F test_binary_operators() -> i64 {
+    puts("\n=== Binary Operator Tests ===")
+
+    r1 := assert_eq(5 + 3, 8, "5 + 3 = 8")
+    r2 := assert_eq(10 - 4, 6, "10 - 4 = 6")
+    r3 := assert_eq(6 * 7, 42, "6 * 7 = 42")
+    r4 := assert_eq(20 / 4, 5, "20 / 4 = 5")
+    r5 := assert_eq(17 % 5, 2, "17 % 5 = 2")
+
+    # Comparison tests using conditional expressions
+    r6 := assert_eq(I 3 < 5 { 1 } E { 0 }, 1, "3 < 5")
+    r7 := assert_eq(I 5 <= 5 { 1 } E { 0 }, 1, "5 <= 5")
+    r8 := assert_eq(I 7 > 3 { 1 } E { 0 }, 1, "7 > 3")
+    r9 := assert_eq(I 5 >= 5 { 1 } E { 0 }, 1, "5 >= 5")
+    r10 := assert_eq(I 4 == 4 { 1 } E { 0 }, 1, "4 == 4")
+    r11 := assert_eq(I 4 != 5 { 1 } E { 0 }, 1, "4 != 5")
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + r11
+}
+
+# ============================================================================
+# Control Flow Tests
+# ============================================================================
+
+F test_control_flow() -> i64 {
+    puts("\n=== Control Flow Tests ===")
+
+    x := 10
+    result1 := I x > 5 { 1 } E { 0 }
+    r1 := assert_eq(result1, 1, "if x > 5 then 1 else 0")
+
+    result2 := I x < 5 { 1 } E { 0 }
+    r2 := assert_eq(result2, 0, "if x < 5 then 1 else 0")
+
+    y := 20
+    result3 := I x > 5 {
+        I y > 15 { 2 } E { 1 }
+    } E { 0 }
+    r3 := assert_eq(result3, 2, "nested if: x > 5 && y > 15")
+
+    # Loop test
+    counter: mut i64 = 0
+    sum: mut i64 = 0
+    L {
+        I counter >= 5 { B } E { 0 }
+        sum = sum + counter
+        counter = counter + 1
+    }
+    r4 := assert_eq(sum, 10, "loop: sum of 0..4 = 10")
+    r5 := assert_eq(counter, 5, "loop: counter ends at 5")
+
+    r1 + r2 + r3 + r4 + r5
+}
+
+# ============================================================================
+# Memory Operations Tests
+# ============================================================================
+
+F test_memory_operations() -> i64 {
+    puts("\n=== Memory Operations Tests ===")
+
+    ptr := malloc(64)
+    r1 := assert_neq(ptr, 0, "malloc returns non-null")
+
+    store_byte(ptr, 42)
+    val := load_byte(ptr)
+    r2 := assert_eq(val, 42, "store_byte/load_byte works")
+
+    store_i64(ptr, 123456789)
+    val2 := load_i64(ptr)
+    r3 := assert_eq(val2, 123456789, "store_i64/load_i64 works")
+
+    ptr2 := malloc(64)
+    store_i64(ptr, 999)
+    store_i64(ptr + 8, 888)
+    memcpy(ptr2, ptr, 16)
+    r4 := assert_eq(load_i64(ptr2), 999, "memcpy copies first i64")
+    r5 := assert_eq(load_i64(ptr2 + 8), 888, "memcpy copies second i64")
+
+    free(ptr)
+    free(ptr2)
+
+    r1 + r2 + r3 + r4 + r5
+}
+
+# ============================================================================
+# Expression Evaluator Integration Test
+# ============================================================================
+
+F OP_ADD() -> i64 = 1
+F OP_SUB() -> i64 = 2
+F OP_MUL() -> i64 = 3
+F OP_DIV() -> i64 = 4
+F OP_MOD() -> i64 = 5
+
+F eval_simple_expr(a: i64, b: i64, op: i64) -> i64 {
+    I op == OP_ADD() { a + b }
+    E I op == OP_SUB() { a - b }
+    E I op == OP_MUL() { a * b }
+    E I op == OP_DIV() { a / b }
+    E I op == OP_MOD() { a % b }
+    E { 0 }
+}
+
+F test_expression_evaluator() -> i64 {
+    puts("\n=== Expression Evaluator Test ===")
+
+    r1 := assert_eq(eval_simple_expr(10, 3, OP_ADD()), 13, "eval: 10 + 3 = 13")
+    r2 := assert_eq(eval_simple_expr(10, 3, OP_SUB()), 7, "eval: 10 - 3 = 7")
+    r3 := assert_eq(eval_simple_expr(10, 3, OP_MUL()), 30, "eval: 10 * 3 = 30")
+    r4 := assert_eq(eval_simple_expr(10, 3, OP_DIV()), 3, "eval: 10 / 3 = 3")
+    r5 := assert_eq(eval_simple_expr(10, 3, OP_MOD()), 1, "eval: 10 % 3 = 1")
+
+    r1 + r2 + r3 + r4 + r5
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("  Vais Self-Hosting Compiler Bootstrap Test")
+    puts("===========================================")
+
+    total: mut i64 = 0
+    passed: mut i64 = 0
+
+    passed = passed + test_string_buffer()
+    total = total + 14
+
+    passed = passed + test_token_constants()
+    total = total + 6
+
+    passed = passed + test_ast_node_kinds()
+    total = total + 5
+
+    passed = passed + test_llvm_type_mapping()
+    total = total + 6
+
+    passed = passed + test_binary_operators()
+    total = total + 11
+
+    passed = passed + test_control_flow()
+    total = total + 5
+
+    passed = passed + test_memory_operations()
+    total = total + 5
+
+    passed = passed + test_expression_evaluator()
+    total = total + 5
+
+    puts("\n===========================================")
+    puts("  Test Summary")
+    puts("===========================================")
+    puts("Total tests: ")
+    println_i64(total)
+    puts("Passed: ")
+    println_i64(passed)
+    puts("Failed: ")
+    println_i64(total - passed)
+
+    I passed == total {
+        puts("\nAll tests PASSED!")
+        0
+    } E {
+        puts("\nSome tests FAILED!")
+        1
+    }
+}

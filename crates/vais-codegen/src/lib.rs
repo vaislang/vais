@@ -2015,28 +2015,34 @@ impl CodeGenerator {
                         ptr_tmp, dbg_info
                     ));
                     Ok(("void".to_string(), ir))
-                } else if fn_name == "memcpy" {
-                    // Special handling for memcpy: convert i64 pointers to i8*
-                    let dest_val = arg_vals.get(0)
-                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
-                        .unwrap_or("0");
-                    let src_val = arg_vals.get(1)
-                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
-                        .unwrap_or("0");
+                } else if fn_name == "memcpy" || fn_name == "memcpy_str" {
+                    // Special handling for memcpy/memcpy_str: convert pointers as needed
+                    let dest_full = arg_vals.get(0).map(|s| s.as_str()).unwrap_or("i64 0");
+                    let src_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
                     let n_val = arg_vals.get(2)
                         .map(|s| s.split_whitespace().last().unwrap_or("0"))
                         .unwrap_or("0");
 
-                    let dest_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = inttoptr i64 {} to i8*\n",
-                        dest_ptr, dest_val
-                    ));
-                    let src_ptr = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = inttoptr i64 {} to i8*\n",
-                        src_ptr, src_val
-                    ));
+                    // Handle dest pointer
+                    let dest_ptr = if dest_full.starts_with("i8*") {
+                        dest_full.split_whitespace().last().unwrap_or("null").to_string()
+                    } else {
+                        let dest_val = dest_full.split_whitespace().last().unwrap_or("0");
+                        let ptr = self.next_temp(counter);
+                        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr, dest_val));
+                        ptr
+                    };
+
+                    // Handle src pointer (can be i64 or i8* for memcpy_str)
+                    let src_ptr = if src_full.starts_with("i8*") {
+                        src_full.split_whitespace().last().unwrap_or("null").to_string()
+                    } else {
+                        let src_val = src_full.split_whitespace().last().unwrap_or("0");
+                        let ptr = self.next_temp(counter);
+                        ir.push_str(&format!("  {} = inttoptr i64 {} to i8*\n", ptr, src_val));
+                        ptr
+                    };
+
                     let result = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
@@ -2051,21 +2057,34 @@ impl CodeGenerator {
                     ));
                     Ok((result_i64, ir))
                 } else if fn_name == "strlen" {
-                    // Special handling for strlen: convert i64 to i8*
-                    let arg_val = arg_vals.first()
-                        .map(|s| s.split_whitespace().last().unwrap_or("0"))
-                        .unwrap_or("0");
-                    let ptr_tmp = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = inttoptr i64 {} to i8*\n",
-                        ptr_tmp, arg_val
-                    ));
+                    // Special handling for strlen: convert i64 to i8* if needed
+                    let arg_full = arg_vals.first()
+                        .map(|s| s.as_str())
+                        .unwrap_or("i64 0");
                     let result = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  {} = call i64 @strlen(i8* {}){}\n",
-                        result, ptr_tmp, dbg_info
-                    ));
+
+                    // Check if the argument is already i8* (str type) or i64 (pointer as integer)
+                    if arg_full.starts_with("i8*") {
+                        // Already a pointer, use directly
+                        let ptr_val = arg_full.split_whitespace().last().unwrap_or("null");
+                        ir.push_str(&format!(
+                            "  {} = call i64 @strlen(i8* {}){}\n",
+                            result, ptr_val, dbg_info
+                        ));
+                    } else {
+                        // Convert i64 to pointer
+                        let arg_val = arg_full.split_whitespace().last().unwrap_or("0");
+                        let ptr_tmp = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = inttoptr i64 {} to i8*\n",
+                            ptr_tmp, arg_val
+                        ));
+                        ir.push_str(&format!(
+                            "  {} = call i64 @strlen(i8* {}){}\n",
+                            result, ptr_tmp, dbg_info
+                        ));
+                    }
                     Ok((result, ir))
                 } else if fn_name == "puts_ptr" {
                     // Special handling for puts_ptr: convert i64 to i8*

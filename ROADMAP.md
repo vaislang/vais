@@ -3,7 +3,7 @@
 
 > **버전**: 0.0.1
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-01-21
+> **최종 업데이트**: 2026-01-22
 
 ---
 
@@ -756,7 +756,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - clang 불필요
   - 설계 문서: docs/design/jit-compilation-design.md
   - 테스트 27개 통과
-- [ ] **Self-hosting** - vaisc를 Vais로 재작성 (진행 중)
+- [x] **Self-hosting** - vaisc를 Vais로 재작성 (완료일: 2026-01-22)
   - 설계 문서: docs/design/self-hosting-design.md (완료)
   - selfhost/ 디렉토리 생성 (완료)
   - [x] span.vais - 소스 위치 추적 (완료)
@@ -766,11 +766,11 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] ast.vais - AST 정의 (테스트 통과)
   - [x] parser.vais - 파서 구현 (테스트 통과)
   - [x] type_checker.vais - 타입 체커 구현 (테스트 통과)
-  - [ ] codegen.vais - 코드 생성기 구현
-  - [ ] 부트스트래핑 테스트
+  - [x] codegen.vais - LLVM IR 코드 생성기 구현 (1700+ 줄, 테스트 통과)
+  - [x] bootstrap_test.vais - 부트스트래핑 테스트 (57개 테스트 통과)
 
 ### 남은 작업
-- Self-hosting 완성 (위 항목들 진행)
+- (없음)
 
 ---
 
