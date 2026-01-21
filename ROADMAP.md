@@ -709,7 +709,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - CompilationOptions로 opt_level, debug, target_triple 변경 감지
   - CLI `--force-rebuild` 옵션 추가
   - 캐시 버전 및 컴파일러 버전 검증
-- [ ] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반
+- [x] **IntelliJ IDE 플러그인** - LSP 클라이언트 기반 (완료일: 2026-01-21)
+  - intellij-vais/ 프로젝트 디렉토리
+  - Kotlin/Gradle 기반 IntelliJ Platform Plugin SDK
+  - 구문 강조 (VaisLexer, VaisSyntaxHighlighter)
+  - Color Settings Page
+  - LSP 클라이언트 통합 (lsp4j 기반)
+  - vais-lsp 바이너리 자동 탐색
+  - 빌드: `./gradlew buildPlugin` → intellij-vais-0.0.1.zip
 - [x] **플러그인 확장** - 포맷터 플러그인 API, 분석 플러그인 (완료일: 2026-01-21)
   - FormatterPlugin trait 추가 (format_module, FormatConfig)
   - AnalysisPlugin trait 추가 (analyze_complexity, analyze_dependencies)

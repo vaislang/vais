@@ -1,0 +1,79 @@
+<!-- Plugin Configuration File -->
+<idea-plugin>
+    <id>com.vais.intellij</id>
+    <name>Vais Language Support</name>
+    <vendor email="support@vais-lang.org" url="https://github.com/sswoo88/vais">Vais Team</vendor>
+
+    <description><![CDATA[
+    Vais language support for IntelliJ IDEA.
+
+    <h2>Features</h2>
+    <ul>
+        <li>Syntax highlighting</li>
+        <li>Code completion</li>
+        <li>Go to definition</li>
+        <li>Find references</li>
+        <li>Hover information</li>
+        <li>Error diagnostics</li>
+        <li>Code formatting</li>
+    </ul>
+
+    <h2>Requirements</h2>
+    <ul>
+        <li>vais-lsp binary in PATH or configured location</li>
+    </ul>
+    ]]></description>
+
+    <change-notes><![CDATA[
+    <h3>0.0.1</h3>
+    <ul>
+        <li>Initial release</li>
+        <li>LSP client integration</li>
+        <li>Basic syntax highlighting</li>
+    </ul>
+    ]]></change-notes>
+
+    <!-- Product and plugin compatibility requirements -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File Type -->
+        <fileType
+            name="Vais"
+            implementationClass="com.vais.intellij.VaisFileType"
+            fieldName="INSTANCE"
+            language="Vais"
+            extensions="vais"/>
+
+        <!-- Language -->
+        <lang.parserDefinition
+            language="Vais"
+            implementationClass="com.vais.intellij.VaisParserDefinition"/>
+
+        <!-- Syntax Highlighter -->
+        <lang.syntaxHighlighterFactory
+            language="Vais"
+            implementationClass="com.vais.intellij.VaisSyntaxHighlighterFactory"/>
+
+        <!-- Color Settings Page -->
+        <colorSettingsPage
+            implementation="com.vais.intellij.VaisColorSettingsPage"/>
+
+        <!-- LSP Server Support (via lsp4j) -->
+        <notificationGroup
+            id="Vais LSP"
+            displayType="BALLOON"/>
+    </extensions>
+
+    <applicationListeners>
+        <listener
+            class="com.vais.intellij.lsp.VaisLspServerStartupActivity"
+            topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
+    <projectListeners>
+        <listener
+            class="com.vais.intellij.lsp.VaisLspProjectListener"
+            topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </projectListeners>
+</idea-plugin>
