@@ -756,10 +756,21 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - clang 불필요
   - 설계 문서: docs/design/jit-compilation-design.md
   - 테스트 27개 통과
-- [ ] **Self-hosting** - vaisc를 Vais로 재작성
+- [ ] **Self-hosting** - vaisc를 Vais로 재작성 (진행 중)
+  - 설계 문서: docs/design/self-hosting-design.md (완료)
+  - selfhost/ 디렉토리 생성 (완료)
+  - [x] span.vais - 소스 위치 추적 (완료)
+  - [x] token.vais - 토큰 정의 (완료)
+  - [x] lexer.vais - 기본 렉서 구조 (완료)
+  - [x] lexer.vais - tokenize 기능 완성 (테스트 통과)
+  - [x] ast.vais - AST 정의 (테스트 통과)
+  - [x] parser.vais - 파서 구현 (테스트 통과)
+  - [x] type_checker.vais - 타입 체커 구현 (테스트 통과)
+  - [ ] codegen.vais - 코드 생성기 구현
+  - [ ] 부트스트래핑 테스트
 
 ### 남은 작업
-- (위 항목들 중 선택하여 진행)
+- Self-hosting 완성 (위 항목들 진행)
 
 ---
 

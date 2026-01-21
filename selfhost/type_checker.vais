@@ -1,0 +1,1762 @@
+# Vais Self-Hosting Compiler - Type Checker Module
+# Static type checking with basic inference for the Vais language
+# Note: This is a simplified type checker for bootstrapping purposes
+
+# ============================================================================
+# Type Kind Constants
+# ============================================================================
+
+F TY_I8() -> i64 = 1
+F TY_I16() -> i64 = 2
+F TY_I32() -> i64 = 3
+F TY_I64() -> i64 = 4
+F TY_I128() -> i64 = 5
+F TY_U8() -> i64 = 6
+F TY_U16() -> i64 = 7
+F TY_U32() -> i64 = 8
+F TY_U64() -> i64 = 9
+F TY_U128() -> i64 = 10
+F TY_F32() -> i64 = 11
+F TY_F64() -> i64 = 12
+F TY_BOOL() -> i64 = 13
+F TY_STR() -> i64 = 14
+F TY_UNIT() -> i64 = 15
+F TY_ARRAY() -> i64 = 16
+F TY_MAP() -> i64 = 17
+F TY_TUPLE() -> i64 = 18
+F TY_OPTIONAL() -> i64 = 19
+F TY_RESULT() -> i64 = 20
+F TY_POINTER() -> i64 = 21
+F TY_REF() -> i64 = 22
+F TY_REF_MUT() -> i64 = 23
+F TY_FN() -> i64 = 24
+F TY_NAMED() -> i64 = 25
+F TY_GENERIC() -> i64 = 26
+F TY_VAR() -> i64 = 27
+F TY_UNKNOWN() -> i64 = 28
+F TY_NEVER() -> i64 = 29
+
+# ============================================================================
+# Error Kind Constants
+# ============================================================================
+
+F ERR_MISMATCH() -> i64 = 1
+F ERR_UNDEFINED_VAR() -> i64 = 2
+F ERR_UNDEFINED_TYPE() -> i64 = 3
+F ERR_UNDEFINED_FUNC() -> i64 = 4
+F ERR_NOT_CALLABLE() -> i64 = 5
+F ERR_ARG_COUNT() -> i64 = 6
+F ERR_CANNOT_INFER() -> i64 = 7
+F ERR_DUPLICATE() -> i64 = 8
+F ERR_IMMUTABLE_ASSIGN() -> i64 = 9
+
+# ============================================================================
+# Resolved Type Representation
+# Uses flattened structure with raw memory
+# ============================================================================
+
+S ResolvedType {
+    kind: i64,
+    # For compound types:
+    # ARRAY/OPTIONAL/RESULT/POINTER/REF/REF_MUT: field0 = inner_type_ptr
+    # MAP: field0 = key_type_ptr, field1 = value_type_ptr
+    # TUPLE: field0 = types_ptr, field1 = types_len
+    # FN: field0 = params_ptr, field1 = params_len, field2 = ret_type_ptr
+    # NAMED: field0 = name_idx, field1 = generics_ptr, field2 = generics_len
+    # GENERIC: field0 = name_idx
+    # VAR: field0 = var_id
+    field0: i64,
+    field1: i64,
+    field2: i64
+}
+
+X ResolvedType {
+    F size() -> i64 = 32
+
+    F i8_type() -> ResolvedType = ResolvedType { kind: TY_I8(), field0: 0, field1: 0, field2: 0 }
+    F i16_type() -> ResolvedType = ResolvedType { kind: TY_I16(), field0: 0, field1: 0, field2: 0 }
+    F i32_type() -> ResolvedType = ResolvedType { kind: TY_I32(), field0: 0, field1: 0, field2: 0 }
+    F i64_type() -> ResolvedType = ResolvedType { kind: TY_I64(), field0: 0, field1: 0, field2: 0 }
+    F i128_type() -> ResolvedType = ResolvedType { kind: TY_I128(), field0: 0, field1: 0, field2: 0 }
+    F u8_type() -> ResolvedType = ResolvedType { kind: TY_U8(), field0: 0, field1: 0, field2: 0 }
+    F u16_type() -> ResolvedType = ResolvedType { kind: TY_U16(), field0: 0, field1: 0, field2: 0 }
+    F u32_type() -> ResolvedType = ResolvedType { kind: TY_U32(), field0: 0, field1: 0, field2: 0 }
+    F u64_type() -> ResolvedType = ResolvedType { kind: TY_U64(), field0: 0, field1: 0, field2: 0 }
+    F u128_type() -> ResolvedType = ResolvedType { kind: TY_U128(), field0: 0, field1: 0, field2: 0 }
+    F f32_type() -> ResolvedType = ResolvedType { kind: TY_F32(), field0: 0, field1: 0, field2: 0 }
+    F f64_type() -> ResolvedType = ResolvedType { kind: TY_F64(), field0: 0, field1: 0, field2: 0 }
+    F bool_type() -> ResolvedType = ResolvedType { kind: TY_BOOL(), field0: 0, field1: 0, field2: 0 }
+    F str_type() -> ResolvedType = ResolvedType { kind: TY_STR(), field0: 0, field1: 0, field2: 0 }
+    F unit_type() -> ResolvedType = ResolvedType { kind: TY_UNIT(), field0: 0, field1: 0, field2: 0 }
+    F unknown_type() -> ResolvedType = ResolvedType { kind: TY_UNKNOWN(), field0: 0, field1: 0, field2: 0 }
+    F never_type() -> ResolvedType = ResolvedType { kind: TY_NEVER(), field0: 0, field1: 0, field2: 0 }
+
+    F array_type(inner_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_ARRAY(), field0: inner_ptr, field1: 0, field2: 0
+    }
+
+    F optional_type(inner_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_OPTIONAL(), field0: inner_ptr, field1: 0, field2: 0
+    }
+
+    F result_type(inner_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_RESULT(), field0: inner_ptr, field1: 0, field2: 0
+    }
+
+    F pointer_type(inner_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_POINTER(), field0: inner_ptr, field1: 0, field2: 0
+    }
+
+    F ref_type(inner_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_REF(), field0: inner_ptr, field1: 0, field2: 0
+    }
+
+    F ref_mut_type(inner_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_REF_MUT(), field0: inner_ptr, field1: 0, field2: 0
+    }
+
+    F map_type(key_ptr: i64, value_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_MAP(), field0: key_ptr, field1: value_ptr, field2: 0
+    }
+
+    F tuple_type(types_ptr: i64, types_len: i64) -> ResolvedType = ResolvedType {
+        kind: TY_TUPLE(), field0: types_ptr, field1: types_len, field2: 0
+    }
+
+    F fn_type(params_ptr: i64, params_len: i64, ret_ptr: i64) -> ResolvedType = ResolvedType {
+        kind: TY_FN(), field0: params_ptr, field1: params_len, field2: ret_ptr
+    }
+
+    F named_type(name_idx: i64, generics_ptr: i64, generics_len: i64) -> ResolvedType = ResolvedType {
+        kind: TY_NAMED(), field0: name_idx, field1: generics_ptr, field2: generics_len
+    }
+
+    F generic_type(name_idx: i64) -> ResolvedType = ResolvedType {
+        kind: TY_GENERIC(), field0: name_idx, field1: 0, field2: 0
+    }
+
+    F var_type(var_id: i64) -> ResolvedType = ResolvedType {
+        kind: TY_VAR(), field0: var_id, field1: 0, field2: 0
+    }
+
+    F is_numeric(&self) -> i64 {
+        I self.kind == TY_I8() || self.kind == TY_I16() || self.kind == TY_I32() ||
+           self.kind == TY_I64() || self.kind == TY_I128() ||
+           self.kind == TY_U8() || self.kind == TY_U16() || self.kind == TY_U32() ||
+           self.kind == TY_U64() || self.kind == TY_U128() ||
+           self.kind == TY_F32() || self.kind == TY_F64() ||
+           self.kind == TY_GENERIC() || self.kind == TY_VAR() || self.kind == TY_UNKNOWN() {
+            1
+        } E { 0 }
+    }
+
+    F is_integer(&self) -> i64 {
+        I self.kind == TY_I8() || self.kind == TY_I16() || self.kind == TY_I32() ||
+           self.kind == TY_I64() || self.kind == TY_I128() ||
+           self.kind == TY_U8() || self.kind == TY_U16() || self.kind == TY_U32() ||
+           self.kind == TY_U64() || self.kind == TY_U128() {
+            1
+        } E { 0 }
+    }
+
+    F is_float(&self) -> i64 {
+        I self.kind == TY_F32() || self.kind == TY_F64() { 1 } E { 0 }
+    }
+
+    F equals(&self, other: i64) -> i64 {
+        other_ptr := other
+        other_kind := load_i64(other_ptr)
+        I self.kind != other_kind { 0 }
+        E I self.kind == TY_ARRAY() || self.kind == TY_OPTIONAL() ||
+              self.kind == TY_RESULT() || self.kind == TY_POINTER() ||
+              self.kind == TY_REF() || self.kind == TY_REF_MUT() {
+            # Compare inner types
+            other_field0 := load_i64(other_ptr + 8)
+            inner_self := self.field0
+            I inner_self == 0 && other_field0 == 0 { 1 }
+            E I inner_self == 0 || other_field0 == 0 { 0 }
+            E {
+                # Recursive comparison
+                inner_ty_ptr := inner_self
+                inner_kind := load_i64(inner_ty_ptr)
+                other_inner_kind := load_i64(other_field0)
+                I inner_kind == other_inner_kind { 1 } E { 0 }
+            }
+        }
+        E I self.kind == TY_NAMED() {
+            other_name := load_i64(other_ptr + 8)
+            I self.field0 == other_name { 1 } E { 0 }
+        }
+        E I self.kind == TY_VAR() {
+            other_var := load_i64(other_ptr + 8)
+            I self.field0 == other_var { 1 } E { 0 }
+        }
+        E { 1 }  # Primitives match by kind
+    }
+}
+
+# ============================================================================
+# Type Error
+# ============================================================================
+
+S TypeError {
+    kind: i64,
+    span_start: i64,
+    span_end: i64,
+    expected_idx: i64,  # String index for expected type
+    found_idx: i64,     # String index for found type
+    name_idx: i64       # Name index for undefined errors
+}
+
+X TypeError {
+    F size() -> i64 = 48
+
+    F mismatch(expected: i64, found: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_MISMATCH(), span_start: start, span_end: end,
+        expected_idx: expected, found_idx: found, name_idx: 0
+    }
+
+    F undefined_var(name: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_UNDEFINED_VAR(), span_start: start, span_end: end,
+        expected_idx: 0, found_idx: 0, name_idx: name
+    }
+
+    F undefined_type(name: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_UNDEFINED_TYPE(), span_start: start, span_end: end,
+        expected_idx: 0, found_idx: 0, name_idx: name
+    }
+
+    F undefined_func(name: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_UNDEFINED_FUNC(), span_start: start, span_end: end,
+        expected_idx: 0, found_idx: 0, name_idx: name
+    }
+
+    F not_callable(type_idx: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_NOT_CALLABLE(), span_start: start, span_end: end,
+        expected_idx: 0, found_idx: type_idx, name_idx: 0
+    }
+
+    F arg_count(expected: i64, got: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_ARG_COUNT(), span_start: start, span_end: end,
+        expected_idx: expected, found_idx: got, name_idx: 0
+    }
+
+    F immutable_assign(name: i64, start: i64, end: i64) -> TypeError = TypeError {
+        kind: ERR_IMMUTABLE_ASSIGN(), span_start: start, span_end: end,
+        expected_idx: 0, found_idx: 0, name_idx: name
+    }
+}
+
+# ============================================================================
+# Variable Info (for scope tracking)
+# ============================================================================
+
+S VarInfo {
+    type_ptr: i64,  # Pointer to ResolvedType
+    is_mut: i64,
+    name_idx: i64
+}
+
+X VarInfo {
+    F size() -> i64 = 24
+
+    F new(type_ptr: i64, is_mut: i64, name_idx: i64) -> VarInfo = VarInfo {
+        type_ptr: type_ptr, is_mut: is_mut, name_idx: name_idx
+    }
+}
+
+# ============================================================================
+# Function Signature
+# ============================================================================
+
+S FunctionSig {
+    name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    params_ptr: i64,      # Array of (name_idx, type_ptr, is_mut) triples
+    params_len: i64,
+    ret_type_ptr: i64,
+    is_async: i64
+}
+
+X FunctionSig {
+    F size() -> i64 = 56
+
+    F new(name_idx: i64) -> FunctionSig = FunctionSig {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        params_ptr: 0, params_len: 0,
+        ret_type_ptr: 0,
+        is_async: 0
+    }
+}
+
+# ============================================================================
+# Struct Definition (for type environment)
+# ============================================================================
+
+S StructDefInfo {
+    name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    fields_ptr: i64,      # Array of (name_idx, type_ptr) pairs
+    fields_len: i64,
+    methods_ptr: i64,     # Array of FunctionSig pointers
+    methods_len: i64
+}
+
+X StructDefInfo {
+    F size() -> i64 = 56
+
+    F new(name_idx: i64) -> StructDefInfo = StructDefInfo {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        fields_ptr: 0, fields_len: 0,
+        methods_ptr: 0, methods_len: 0
+    }
+}
+
+# ============================================================================
+# Enum Definition
+# ============================================================================
+
+S EnumDefInfo {
+    name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    variants_ptr: i64,    # Array of variant info
+    variants_len: i64
+}
+
+X EnumDefInfo {
+    F size() -> i64 = 40
+
+    F new(name_idx: i64) -> EnumDefInfo = EnumDefInfo {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        variants_ptr: 0, variants_len: 0
+    }
+}
+
+# ============================================================================
+# Scope - Variable environment
+# ============================================================================
+
+S Scope {
+    vars_ptr: i64,      # HashMap-like: array of VarInfo
+    vars_len: i64,
+    vars_cap: i64
+}
+
+X Scope {
+    F size() -> i64 = 24
+
+    F new(cap: i64) -> Scope {
+        ptr := malloc(cap * VarInfo.size())
+        Scope { vars_ptr: ptr, vars_len: 0, vars_cap: cap }
+    }
+
+    F add_var(&self, name_idx: i64, type_ptr: i64, is_mut: i64) -> i64 {
+        I self.vars_len >= self.vars_cap {
+            new_cap := self.vars_cap * 2
+            new_ptr := malloc(new_cap * VarInfo.size())
+            memcpy(new_ptr, self.vars_ptr, self.vars_len * VarInfo.size())
+            free(self.vars_ptr)
+            self.vars_ptr = new_ptr
+            self.vars_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.vars_ptr + self.vars_len * VarInfo.size()
+        store_i64(ptr, type_ptr)
+        store_i64(ptr + 8, is_mut)
+        store_i64(ptr + 16, name_idx)
+        self.vars_len = self.vars_len + 1
+        self.vars_len - 1
+    }
+
+    F find_var(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.vars_len { B }
+            ptr := self.vars_ptr + i * VarInfo.size()
+            var_name := load_i64(ptr + 16)
+            I var_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0  # Not found
+    }
+
+    F drop(&self) -> i64 {
+        free(self.vars_ptr)
+        1
+    }
+}
+
+# ============================================================================
+# Type Checker
+# ============================================================================
+
+S TypeChecker {
+    # Type environment
+    structs_ptr: i64,       # Array of StructDefInfo
+    structs_len: i64,
+    structs_cap: i64,
+
+    enums_ptr: i64,         # Array of EnumDefInfo
+    enums_len: i64,
+    enums_cap: i64,
+
+    functions_ptr: i64,     # Array of FunctionSig
+    functions_len: i64,
+    functions_cap: i64,
+
+    # Scope stack
+    scopes_ptr: i64,        # Array of Scope pointers
+    scopes_len: i64,
+    scopes_cap: i64,
+
+    # Current function context
+    current_fn_ret_ptr: i64,
+    current_fn_name_idx: i64,
+
+    # Current generic parameters
+    current_generics_ptr: i64,
+    current_generics_len: i64,
+
+    # Type variable counter
+    next_type_var: i64,
+
+    # Errors
+    errors_ptr: i64,
+    errors_len: i64,
+    errors_cap: i64,
+
+    # String pool reference (from Module)
+    sp_data: i64,
+    sp_offsets: i64,
+    sp_count: i64
+}
+
+X TypeChecker {
+    F new() -> TypeChecker {
+        # Allocate storage
+        structs := malloc(64 * StructDefInfo.size())
+        enums := malloc(32 * EnumDefInfo.size())
+        functions := malloc(256 * FunctionSig.size())
+        scopes := malloc(32 * 8)  # Pointers to Scope
+        errors := malloc(64 * TypeError.size())
+
+        # Create initial global scope
+        global_scope_ptr := malloc(Scope.size())
+        global_scope := Scope.new(64)
+        store_i64(global_scope_ptr, global_scope.vars_ptr)
+        store_i64(global_scope_ptr + 8, global_scope.vars_len)
+        store_i64(global_scope_ptr + 16, global_scope.vars_cap)
+        store_i64(scopes, global_scope_ptr)
+
+        tc := TypeChecker {
+            structs_ptr: structs, structs_len: 0, structs_cap: 64,
+            enums_ptr: enums, enums_len: 0, enums_cap: 32,
+            functions_ptr: functions, functions_len: 0, functions_cap: 256,
+            scopes_ptr: scopes, scopes_len: 1, scopes_cap: 32,
+            current_fn_ret_ptr: 0, current_fn_name_idx: 0,
+            current_generics_ptr: 0, current_generics_len: 0,
+            next_type_var: 0,
+            errors_ptr: errors, errors_len: 0, errors_cap: 64,
+            sp_data: 0, sp_offsets: 0, sp_count: 0
+        }
+
+        # Register built-in functions
+        tc.register_builtins()
+        tc
+    }
+
+    F register_builtins(&self) -> i64 {
+        # We'll add built-in function signatures here
+        # For now, they'll be registered by the caller using add_function
+        0
+    }
+
+    F set_string_pool(&self, sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
+        self.sp_data = sp_data
+        self.sp_offsets = sp_offsets
+        self.sp_count = sp_count
+        1
+    }
+
+    F get_string_ptr(&self, idx: i64) -> i64 {
+        entry_ptr := self.sp_offsets + idx * 16
+        offset := load_i64(entry_ptr)
+        self.sp_data + offset
+    }
+
+    F get_string_len(&self, idx: i64) -> i64 {
+        entry_ptr := self.sp_offsets + idx * 16
+        load_i64(entry_ptr + 8)
+    }
+
+    # ========== Scope Management ==========
+
+    F push_scope(&self) -> i64 {
+        I self.scopes_len >= self.scopes_cap {
+            new_cap := self.scopes_cap * 2
+            new_ptr := malloc(new_cap * 8)
+            memcpy(new_ptr, self.scopes_ptr, self.scopes_len * 8)
+            free(self.scopes_ptr)
+            self.scopes_ptr = new_ptr
+            self.scopes_cap = new_cap
+            0
+        } E { 0 }
+
+        new_scope_ptr := malloc(Scope.size())
+        new_scope := Scope.new(32)
+        store_i64(new_scope_ptr, new_scope.vars_ptr)
+        store_i64(new_scope_ptr + 8, new_scope.vars_len)
+        store_i64(new_scope_ptr + 16, new_scope.vars_cap)
+
+        store_i64(self.scopes_ptr + self.scopes_len * 8, new_scope_ptr)
+        self.scopes_len = self.scopes_len + 1
+        1
+    }
+
+    F pop_scope(&self) -> i64 {
+        I self.scopes_len <= 1 { 0 }
+        E {
+            self.scopes_len = self.scopes_len - 1
+            scope_ptr := load_i64(self.scopes_ptr + self.scopes_len * 8)
+            vars_ptr := load_i64(scope_ptr)
+            free(vars_ptr)
+            free(scope_ptr)
+            1
+        }
+    }
+
+    F add_var(&self, name_idx: i64, type_ptr: i64, is_mut: i64) -> i64 {
+        I self.scopes_len == 0 { R 0 }
+        scope_ptr := load_i64(self.scopes_ptr + (self.scopes_len - 1) * 8)
+        vars_ptr: mut i64 = load_i64(scope_ptr)
+        vars_len := load_i64(scope_ptr + 8)
+        vars_cap := load_i64(scope_ptr + 16)
+
+        I vars_len >= vars_cap {
+            new_cap := vars_cap * 2
+            new_ptr := malloc(new_cap * VarInfo.size())
+            memcpy(new_ptr, vars_ptr, vars_len * VarInfo.size())
+            free(vars_ptr)
+            store_i64(scope_ptr, new_ptr)
+            store_i64(scope_ptr + 16, new_cap)
+            vars_ptr = new_ptr
+            0
+        } E { 0 }
+
+        ptr := vars_ptr + vars_len * VarInfo.size()
+        store_i64(ptr, type_ptr)
+        store_i64(ptr + 8, is_mut)
+        store_i64(ptr + 16, name_idx)
+        store_i64(scope_ptr + 8, vars_len + 1)
+        1
+    }
+
+    F lookup_var(&self, name_idx: i64) -> i64 {
+        # Search from innermost to outermost scope
+        idx: mut i64 = self.scopes_len
+        L { I idx == 0 { B }
+            idx = idx - 1
+            scope_ptr := load_i64(self.scopes_ptr + idx * 8)
+            vars_ptr := load_i64(scope_ptr)
+            vars_len := load_i64(scope_ptr + 8)
+
+            j: mut i64 = 0
+            L { I j >= vars_len { B }
+                ptr := vars_ptr + j * VarInfo.size()
+                var_name := load_i64(ptr + 16)
+                I var_name == name_idx {
+                    R ptr
+                } E {
+                    j = j + 1
+                }
+            }
+        }
+        0  # Not found
+    }
+
+    # ========== Function Registry ==========
+
+    F add_function(&self, sig_ptr: i64) -> i64 {
+        I self.functions_len >= self.functions_cap {
+            new_cap := self.functions_cap * 2
+            new_ptr := malloc(new_cap * FunctionSig.size())
+            memcpy(new_ptr, self.functions_ptr, self.functions_len * FunctionSig.size())
+            free(self.functions_ptr)
+            self.functions_ptr = new_ptr
+            self.functions_cap = new_cap
+            0
+        } E { 0 }
+
+        memcpy(self.functions_ptr + self.functions_len * FunctionSig.size(), sig_ptr, FunctionSig.size())
+        self.functions_len = self.functions_len + 1
+        self.functions_len - 1
+    }
+
+    F find_function(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.functions_len { B }
+            ptr := self.functions_ptr + i * FunctionSig.size()
+            fn_name := load_i64(ptr)
+            I fn_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0  # Not found
+    }
+
+    # ========== Struct Registry ==========
+
+    F add_struct(&self, def_ptr: i64) -> i64 {
+        I self.structs_len >= self.structs_cap {
+            new_cap := self.structs_cap * 2
+            new_ptr := malloc(new_cap * StructDefInfo.size())
+            memcpy(new_ptr, self.structs_ptr, self.structs_len * StructDefInfo.size())
+            free(self.structs_ptr)
+            self.structs_ptr = new_ptr
+            self.structs_cap = new_cap
+            0
+        } E { 0 }
+
+        memcpy(self.structs_ptr + self.structs_len * StructDefInfo.size(), def_ptr, StructDefInfo.size())
+        self.structs_len = self.structs_len + 1
+        self.structs_len - 1
+    }
+
+    F find_struct(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.structs_len { B }
+            ptr := self.structs_ptr + i * StructDefInfo.size()
+            struct_name := load_i64(ptr)
+            I struct_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0  # Not found
+    }
+
+    # ========== Enum Registry ==========
+
+    F add_enum(&self, def_ptr: i64) -> i64 {
+        I self.enums_len >= self.enums_cap {
+            new_cap := self.enums_cap * 2
+            new_ptr := malloc(new_cap * EnumDefInfo.size())
+            memcpy(new_ptr, self.enums_ptr, self.enums_len * EnumDefInfo.size())
+            free(self.enums_ptr)
+            self.enums_ptr = new_ptr
+            self.enums_cap = new_cap
+            0
+        } E { 0 }
+
+        memcpy(self.enums_ptr + self.enums_len * EnumDefInfo.size(), def_ptr, EnumDefInfo.size())
+        self.enums_len = self.enums_len + 1
+        self.enums_len - 1
+    }
+
+    F find_enum(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.enums_len { B }
+            ptr := self.enums_ptr + i * EnumDefInfo.size()
+            enum_name := load_i64(ptr)
+            I enum_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0  # Not found
+    }
+
+    # ========== Error Reporting ==========
+
+    F add_error(&self, err_ptr: i64) -> i64 {
+        I self.errors_len >= self.errors_cap {
+            new_cap := self.errors_cap * 2
+            new_ptr := malloc(new_cap * TypeError.size())
+            memcpy(new_ptr, self.errors_ptr, self.errors_len * TypeError.size())
+            free(self.errors_ptr)
+            self.errors_ptr = new_ptr
+            self.errors_cap = new_cap
+            0
+        } E { 0 }
+
+        memcpy(self.errors_ptr + self.errors_len * TypeError.size(), err_ptr, TypeError.size())
+        self.errors_len = self.errors_len + 1
+        self.errors_len - 1
+    }
+
+    F has_errors(&self) -> i64 {
+        I self.errors_len > 0 { 1 } E { 0 }
+    }
+
+    F get_error_count(&self) -> i64 = self.errors_len
+
+    F get_error(&self, idx: i64) -> i64 {
+        I idx >= self.errors_len { 0 }
+        E { self.errors_ptr + idx * TypeError.size() }
+    }
+
+    # ========== Type Resolution ==========
+
+    F resolve_type_node(&self, type_node_ptr: i64) -> i64 {
+        I type_node_ptr == 0 {
+            # Return unit type for missing type annotation
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.unit_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        } E {
+            kind := load_i64(type_node_ptr)
+
+            # TYPE_NAMED = 60
+            I kind == 60 {
+                name_idx := load_i64(type_node_ptr + 24)  # field0
+                @.resolve_named_type(name_idx)
+            }
+            # TYPE_ARRAY = 61
+            E I kind == 61 {
+                inner_ptr := load_i64(type_node_ptr + 24)
+                inner_resolved := @.resolve_type_node(inner_ptr)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.array_type(inner_resolved)
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # TYPE_OPTIONAL = 64
+            E I kind == 64 {
+                inner_ptr := load_i64(type_node_ptr + 24)
+                inner_resolved := @.resolve_type_node(inner_ptr)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.optional_type(inner_resolved)
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # TYPE_POINTER = 66
+            E I kind == 66 {
+                inner_ptr := load_i64(type_node_ptr + 24)
+                inner_resolved := @.resolve_type_node(inner_ptr)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.pointer_type(inner_resolved)
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # TYPE_UNIT = 70
+            E I kind == 70 {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unit_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # TYPE_INFER = 71
+            E I kind == 71 {
+                @.fresh_type_var()
+            }
+            E {
+                # Unknown type node kind - return unknown
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unknown_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+        }
+    }
+
+    F resolve_named_type(&self, name_idx: i64) -> i64 {
+        type_ptr := malloc(ResolvedType.size())
+
+        # Check for built-in types by comparing strings
+        # We need to compare the actual string content
+        name_ptr := @.get_string_ptr(name_idx)
+        name_len := @.get_string_len(name_idx)
+
+        # Check for "i64"
+        I name_len == 3 && load_byte(name_ptr) == 105 &&
+           load_byte(name_ptr + 1) == 54 && load_byte(name_ptr + 2) == 52 {
+            ty := ResolvedType.i64_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+        # Check for "i32"
+        E I name_len == 3 && load_byte(name_ptr) == 105 &&
+             load_byte(name_ptr + 1) == 51 && load_byte(name_ptr + 2) == 50 {
+            ty := ResolvedType.i32_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+        # Check for "bool"
+        E I name_len == 4 && load_byte(name_ptr) == 98 &&
+             load_byte(name_ptr + 1) == 111 && load_byte(name_ptr + 2) == 111 &&
+             load_byte(name_ptr + 3) == 108 {
+            ty := ResolvedType.bool_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+        # Check for "str" or "Str"
+        E I name_len == 3 && (load_byte(name_ptr) == 115 || load_byte(name_ptr) == 83) &&
+             load_byte(name_ptr + 1) == 116 && load_byte(name_ptr + 2) == 114 {
+            ty := ResolvedType.str_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+        # Check for "f64"
+        E I name_len == 3 && load_byte(name_ptr) == 102 &&
+             load_byte(name_ptr + 1) == 54 && load_byte(name_ptr + 2) == 52 {
+            ty := ResolvedType.f64_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+        # Check for "f32"
+        E I name_len == 3 && load_byte(name_ptr) == 102 &&
+             load_byte(name_ptr + 1) == 51 && load_byte(name_ptr + 2) == 50 {
+            ty := ResolvedType.f32_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+        E {
+            # Check if it's a known struct or enum
+            struct_ptr := @.find_struct(name_idx)
+            I struct_ptr != 0 {
+                ty := ResolvedType.named_type(name_idx, 0, 0)
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            } E {
+                enum_ptr := @.find_enum(name_idx)
+                I enum_ptr != 0 {
+                    ty := ResolvedType.named_type(name_idx, 0, 0)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                } E {
+                    # Check if it's a generic type parameter
+                    I @.is_generic_param(name_idx) == 1 {
+                        ty := ResolvedType.generic_type(name_idx)
+                        store_i64(type_ptr, ty.kind)
+                        store_i64(type_ptr + 8, ty.field0)
+                        store_i64(type_ptr + 16, ty.field1)
+                        store_i64(type_ptr + 24, ty.field2)
+                        type_ptr
+                    } E {
+                        # Unknown type
+                        ty := ResolvedType.unknown_type()
+                        store_i64(type_ptr, ty.kind)
+                        store_i64(type_ptr + 8, ty.field0)
+                        store_i64(type_ptr + 16, ty.field1)
+                        store_i64(type_ptr + 24, ty.field2)
+                        type_ptr
+                    }
+                }
+            }
+        }
+    }
+
+    F is_generic_param(&self, name_idx: i64) -> i64 {
+        I self.current_generics_ptr == 0 { R 0 }
+        i: mut i64 = 0
+        L { I i >= self.current_generics_len { B }
+            param_idx := load_i64(self.current_generics_ptr + i * 8)
+            I param_idx == name_idx { R 1 }
+            E { i = i + 1 }
+        }
+        0
+    }
+
+    F fresh_type_var(&self) -> i64 {
+        var_id := self.next_type_var
+        self.next_type_var = self.next_type_var + 1
+
+        type_ptr := malloc(ResolvedType.size())
+        ty := ResolvedType.var_type(var_id)
+        store_i64(type_ptr, ty.kind)
+        store_i64(type_ptr + 8, ty.field0)
+        store_i64(type_ptr + 16, ty.field1)
+        store_i64(type_ptr + 24, ty.field2)
+        type_ptr
+    }
+
+    # ========== Type Checking ==========
+
+    F check_expr(&self, expr_ptr: i64) -> i64 {
+        I expr_ptr == 0 {
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.unit_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        } E {
+            kind := load_i64(expr_ptr)
+            span_start := load_i64(expr_ptr + 8)
+            span_end := load_i64(expr_ptr + 16)
+
+            # EXPR_INT = 20
+            I kind == 20 {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.i64_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_FLOAT = 21
+            E I kind == 21 {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.f64_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_BOOL = 22
+            E I kind == 22 {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.bool_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_STRING = 23
+            E I kind == 23 {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.str_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_UNIT = 24
+            E I kind == 24 {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unit_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_IDENT = 25
+            E I kind == 25 {
+                name_idx := load_i64(expr_ptr + 24)  # field0
+                var_info := @.lookup_var(name_idx)
+                I var_info != 0 {
+                    load_i64(var_info)  # Return the type pointer
+                } E {
+                    # Check if it's a function name
+                    fn_ptr := @.find_function(name_idx)
+                    I fn_ptr != 0 {
+                        # Return function type
+                        ret_type_ptr := load_i64(fn_ptr + 40)  # ret_type_ptr field
+                        ret_type_ptr
+                    } E {
+                        # Undefined variable error
+                        err := TypeError.undefined_var(name_idx, span_start, span_end)
+                        err_ptr := malloc(TypeError.size())
+                        store_i64(err_ptr, err.kind)
+                        store_i64(err_ptr + 8, err.span_start)
+                        store_i64(err_ptr + 16, err.span_end)
+                        store_i64(err_ptr + 24, err.expected_idx)
+                        store_i64(err_ptr + 32, err.found_idx)
+                        store_i64(err_ptr + 40, err.name_idx)
+                        @.add_error(err_ptr)
+
+                        type_ptr := malloc(ResolvedType.size())
+                        ty := ResolvedType.unknown_type()
+                        store_i64(type_ptr, ty.kind)
+                        store_i64(type_ptr + 8, ty.field0)
+                        store_i64(type_ptr + 16, ty.field1)
+                        store_i64(type_ptr + 24, ty.field2)
+                        type_ptr
+                    }
+                }
+            }
+            # EXPR_BINARY = 27
+            E I kind == 27 {
+                left_ptr := load_i64(expr_ptr + 24)   # field0
+                right_ptr := load_i64(expr_ptr + 32)  # field1
+                op := load_i64(expr_ptr + 40)         # field2
+
+                left_ty := @.check_expr(left_ptr)
+                right_ty := @.check_expr(right_ptr)
+
+                # Comparison operators return bool
+                I op >= 6 && op <= 11 {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.bool_type()
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+                # Logical operators return bool
+                E I op == 12 || op == 13 {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.bool_type()
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+                # Arithmetic operators return left operand type
+                E {
+                    left_ty
+                }
+            }
+            # EXPR_UNARY = 28
+            E I kind == 28 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0
+                op := load_i64(expr_ptr + 32)         # field1
+
+                inner_ty := @.check_expr(inner_ptr)
+
+                # NOT operator returns bool
+                I op == 2 {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.bool_type()
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                } E {
+                    inner_ty
+                }
+            }
+            # EXPR_CALL = 33
+            E I kind == 33 {
+                func_ptr := load_i64(expr_ptr + 24)   # field0
+                args_ptr := load_i64(expr_ptr + 32)   # field1
+                args_len := load_i64(expr_ptr + 40)   # field2
+
+                # Get the function being called
+                func_kind := load_i64(func_ptr)
+                I func_kind == 25 {  # EXPR_IDENT
+                    name_idx := load_i64(func_ptr + 24)
+                    fn_sig := @.find_function(name_idx)
+                    I fn_sig != 0 {
+                        # Check argument count
+                        expected_params := load_i64(fn_sig + 32)  # params_len
+                        I expected_params != args_len {
+                            err := TypeError.arg_count(expected_params, args_len, span_start, span_end)
+                            err_ptr := malloc(TypeError.size())
+                            store_i64(err_ptr, err.kind)
+                            store_i64(err_ptr + 8, err.span_start)
+                            store_i64(err_ptr + 16, err.span_end)
+                            store_i64(err_ptr + 24, err.expected_idx)
+                            store_i64(err_ptr + 32, err.found_idx)
+                            store_i64(err_ptr + 40, err.name_idx)
+                            @.add_error(err_ptr)
+                            0
+                        } E { 0 }
+
+                        # Type check arguments
+                        i: mut i64 = 0
+                        L { I i >= args_len { B }
+                            arg_expr_ptr := load_i64(args_ptr + i * 8)
+                            @.check_expr(arg_expr_ptr)
+                            i = i + 1
+                        }
+
+                        # Return the return type
+                        load_i64(fn_sig + 40)  # ret_type_ptr
+                    } E {
+                        # Undefined function
+                        err := TypeError.undefined_func(name_idx, span_start, span_end)
+                        err_ptr := malloc(TypeError.size())
+                        store_i64(err_ptr, err.kind)
+                        store_i64(err_ptr + 8, err.span_start)
+                        store_i64(err_ptr + 16, err.span_end)
+                        store_i64(err_ptr + 24, err.expected_idx)
+                        store_i64(err_ptr + 32, err.found_idx)
+                        store_i64(err_ptr + 40, err.name_idx)
+                        @.add_error(err_ptr)
+
+                        type_ptr := malloc(ResolvedType.size())
+                        ty := ResolvedType.unknown_type()
+                        store_i64(type_ptr, ty.kind)
+                        store_i64(type_ptr + 8, ty.field0)
+                        store_i64(type_ptr + 16, ty.field1)
+                        store_i64(type_ptr + 24, ty.field2)
+                        type_ptr
+                    }
+                } E {
+                    # Calling a non-identifier expression
+                    @.check_expr(func_ptr)
+                }
+            }
+            # EXPR_IF = 30
+            E I kind == 30 {
+                cond_ptr := load_i64(expr_ptr + 24)       # field0
+                then_stmts := load_i64(expr_ptr + 32)     # field1
+                then_len := load_i64(expr_ptr + 40)       # field2
+                else_ptr := load_i64(expr_ptr + 48)       # field3
+
+                # Check condition is bool
+                cond_ty := @.check_expr(cond_ptr)
+
+                # Check then block
+                @.push_scope()
+                then_ty := @.check_stmts(then_stmts, then_len)
+                @.pop_scope()
+
+                # Check else block if present
+                I else_ptr != 0 {
+                    @.push_scope()
+                    else_ty := @.check_else(else_ptr)
+                    @.pop_scope()
+                    then_ty  # Return then type (should match else)
+                } E {
+                    then_ty
+                }
+            }
+            # EXPR_LOOP = 31
+            E I kind == 31 {
+                body_stmts := load_i64(expr_ptr + 40)  # field2
+                body_len := load_i64(expr_ptr + 48)   # field3
+
+                @.push_scope()
+                @.check_stmts(body_stmts, body_len)
+                @.pop_scope()
+
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unit_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_BLOCK = 42
+            E I kind == 42 {
+                stmts_ptr := load_i64(expr_ptr + 24)  # field0
+                stmts_len := load_i64(expr_ptr + 32)  # field1
+
+                @.push_scope()
+                result := @.check_stmts(stmts_ptr, stmts_len)
+                @.pop_scope()
+                result
+            }
+            # EXPR_RETURN = handled in check_stmt
+            # EXPR_ASSIGN = 48
+            E I kind == 48 {
+                target_ptr := load_i64(expr_ptr + 24)  # field0
+                value_ptr := load_i64(expr_ptr + 32)   # field1
+
+                target_kind := load_i64(target_ptr)
+                I target_kind == 25 {  # EXPR_IDENT
+                    name_idx := load_i64(target_ptr + 24)
+                    var_info := @.lookup_var(name_idx)
+                    I var_info != 0 {
+                        is_mut := load_i64(var_info + 8)
+                        I is_mut == 0 {
+                            err := TypeError.immutable_assign(name_idx, span_start, span_end)
+                            err_ptr := malloc(TypeError.size())
+                            store_i64(err_ptr, err.kind)
+                            store_i64(err_ptr + 8, err.span_start)
+                            store_i64(err_ptr + 16, err.span_end)
+                            store_i64(err_ptr + 24, err.expected_idx)
+                            store_i64(err_ptr + 32, err.found_idx)
+                            store_i64(err_ptr + 40, err.name_idx)
+                            @.add_error(err_ptr)
+                            0
+                        } E { 0 }
+                        0
+                    } E { 0 }
+                    0
+                } E { 0 }
+
+                @.check_expr(value_ptr)
+            }
+            # EXPR_STRUCT_LIT = 40
+            E I kind == 40 {
+                name_idx := load_i64(expr_ptr + 24)  # field0
+
+                # Check if struct exists
+                struct_ptr := @.find_struct(name_idx)
+                I struct_ptr != 0 {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.named_type(name_idx, 0, 0)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                } E {
+                    err := TypeError.undefined_type(name_idx, span_start, span_end)
+                    err_ptr := malloc(TypeError.size())
+                    store_i64(err_ptr, err.kind)
+                    store_i64(err_ptr + 8, err.span_start)
+                    store_i64(err_ptr + 16, err.span_end)
+                    store_i64(err_ptr + 24, err.expected_idx)
+                    store_i64(err_ptr + 32, err.found_idx)
+                    store_i64(err_ptr + 40, err.name_idx)
+                    @.add_error(err_ptr)
+
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.unknown_type()
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+            }
+            # EXPR_FIELD = 36
+            E I kind == 36 {
+                base_ptr := load_i64(expr_ptr + 24)   # field0
+                field_idx := load_i64(expr_ptr + 32)  # field1
+
+                base_ty := @.check_expr(base_ptr)
+                base_kind := load_i64(base_ty)
+
+                I base_kind == TY_NAMED() {
+                    struct_name := load_i64(base_ty + 8)
+                    struct_ptr := @.find_struct(struct_name)
+                    I struct_ptr != 0 {
+                        # Look up field type
+                        fields_ptr := load_i64(struct_ptr + 24)
+                        fields_len := load_i64(struct_ptr + 32)
+
+                        i: mut i64 = 0
+                        L { I i >= fields_len { B }
+                            field_name := load_i64(fields_ptr + i * 16)
+                            I field_name == field_idx {
+                                R load_i64(fields_ptr + i * 16 + 8)
+                            } E {
+                                i = i + 1
+                            }
+                        }
+
+                        # Field not found
+                        type_ptr := malloc(ResolvedType.size())
+                        ty := ResolvedType.unknown_type()
+                        store_i64(type_ptr, ty.kind)
+                        store_i64(type_ptr + 8, ty.field0)
+                        store_i64(type_ptr + 16, ty.field1)
+                        store_i64(type_ptr + 24, ty.field2)
+                        type_ptr
+                    } E {
+                        base_ty
+                    }
+                } E {
+                    base_ty
+                }
+            }
+            # EXPR_METHOD_CALL = 34
+            E I kind == 34 {
+                recv_ptr := load_i64(expr_ptr + 24)    # field0
+                method_idx := load_i64(expr_ptr + 32)  # field1
+                args_ptr := load_i64(expr_ptr + 40)    # field2
+                args_len := load_i64(expr_ptr + 48)    # field3
+
+                recv_ty := @.check_expr(recv_ptr)
+
+                # Type check arguments
+                i: mut i64 = 0
+                L { I i >= args_len { B }
+                    arg_ptr := load_i64(args_ptr + i * 8)
+                    @.check_expr(arg_ptr)
+                    i = i + 1
+                }
+
+                # For now, return unknown - proper method lookup TBD
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unknown_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_SELF_CALL = 26
+            E I kind == 26 {
+                # @.method_name(...) - need to resolve self type
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unknown_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            E {
+                # Unknown expression type
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unknown_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+        }
+    }
+
+    F check_else(&self, else_ptr: i64) -> i64 {
+        kind := load_i64(else_ptr)
+        I kind == 0 {  # else block
+            stmts_ptr := load_i64(else_ptr + 16)
+            stmts_len := load_i64(else_ptr + 24)
+            @.check_stmts(stmts_ptr, stmts_len)
+        } E {  # else-if
+            cond_ptr := load_i64(else_ptr + 8)
+            stmts_ptr := load_i64(else_ptr + 16)
+            stmts_len := load_i64(else_ptr + 24)
+            next_ptr := load_i64(else_ptr + 32)
+
+            @.check_expr(cond_ptr)
+            then_ty := @.check_stmts(stmts_ptr, stmts_len)
+
+            I next_ptr != 0 {
+                @.check_else(next_ptr)
+            } E {
+                then_ty
+            }
+        }
+    }
+
+    F check_stmt(&self, stmt_ptr: i64) -> i64 {
+        kind := load_i64(stmt_ptr)
+        span_start := load_i64(stmt_ptr + 8)
+        span_end := load_i64(stmt_ptr + 16)
+
+        # STMT_LET = 10
+        I kind == 10 {
+            name_idx := load_i64(stmt_ptr + 24)   # field0
+            type_ptr := load_i64(stmt_ptr + 32)   # field1
+            value_ptr := load_i64(stmt_ptr + 40)  # field2
+            is_mut := load_i64(stmt_ptr + 48)     # field3
+
+            # Resolve type annotation or infer from value
+            var_type := I type_ptr != 0 {
+                @.resolve_type_node(type_ptr)
+            } E I value_ptr != 0 {
+                @.check_expr(value_ptr)
+            } E {
+                @.fresh_type_var()
+            }
+
+            # Add variable to scope
+            @.add_var(name_idx, var_type, is_mut)
+
+            type_result := malloc(ResolvedType.size())
+            ty := ResolvedType.unit_type()
+            store_i64(type_result, ty.kind)
+            store_i64(type_result + 8, ty.field0)
+            store_i64(type_result + 16, ty.field1)
+            store_i64(type_result + 24, ty.field2)
+            type_result
+        }
+        # STMT_EXPR = 11
+        E I kind == 11 {
+            expr_ptr := load_i64(stmt_ptr + 24)  # field0
+            @.check_expr(expr_ptr)
+        }
+        # STMT_RETURN = 12
+        E I kind == 12 {
+            expr_ptr := load_i64(stmt_ptr + 24)  # field0
+            I expr_ptr != 0 {
+                @.check_expr(expr_ptr)
+            } E {
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unit_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+        }
+        # STMT_BREAK = 13, STMT_CONTINUE = 14
+        E {
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.never_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+    }
+
+    F check_stmts(&self, stmts_ptr: i64, stmts_len: i64) -> i64 {
+        I stmts_len == 0 {
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.unit_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        } E {
+            last_type: mut i64 = 0
+            i: mut i64 = 0
+            L { I i >= stmts_len { B }
+                stmt_ptr := load_i64(stmts_ptr + i * 8)
+                last_type = @.check_stmt(stmt_ptr)
+                i = i + 1
+            }
+            last_type
+        }
+    }
+
+    F check_function(&self, fn_def_ptr: i64) -> i64 {
+        name_idx := load_i64(fn_def_ptr)
+        generics_ptr := load_i64(fn_def_ptr + 8)
+        generics_len := load_i64(fn_def_ptr + 16)
+        params_ptr := load_i64(fn_def_ptr + 24)
+        params_len := load_i64(fn_def_ptr + 32)
+        ret_type_ptr := load_i64(fn_def_ptr + 40)
+        body_kind := load_i64(fn_def_ptr + 48)
+        body_expr_ptr := load_i64(fn_def_ptr + 56)
+        body_stmts_ptr := load_i64(fn_def_ptr + 64)
+        body_stmts_len := load_i64(fn_def_ptr + 72)
+
+        # Set current generics
+        old_generics_ptr := self.current_generics_ptr
+        old_generics_len := self.current_generics_len
+        self.current_generics_ptr = generics_ptr
+        self.current_generics_len = generics_len
+
+        # Resolve return type
+        ret_resolved := @.resolve_type_node(ret_type_ptr)
+        self.current_fn_ret_ptr = ret_resolved
+        self.current_fn_name_idx = name_idx
+
+        # Create new scope for function body
+        @.push_scope()
+
+        # Add parameters to scope
+        i: mut i64 = 0
+        L { I i >= params_len { B }
+            param_ptr := params_ptr + i * 40  # Param.size() = 40
+            param_name := load_i64(param_ptr)
+            param_type_ptr := load_i64(param_ptr + 8)
+            param_is_mut := load_i64(param_ptr + 16)
+
+            param_resolved := @.resolve_type_node(param_type_ptr)
+            @.add_var(param_name, param_resolved, param_is_mut)
+            i = i + 1
+        }
+
+        # Check body
+        I body_kind == 0 {
+            # Expression body
+            @.check_expr(body_expr_ptr)
+        } E {
+            # Block body
+            @.check_stmts(body_stmts_ptr, body_stmts_len)
+        }
+
+        @.pop_scope()
+
+        # Restore generics
+        self.current_generics_ptr = old_generics_ptr
+        self.current_generics_len = old_generics_len
+        self.current_fn_ret_ptr = 0
+        self.current_fn_name_idx = 0
+
+        1
+    }
+
+    F check_struct(&self, struct_def_ptr: i64) -> i64 {
+        # Struct definitions are collected in first pass
+        # Type check field types here
+        fields_ptr := load_i64(struct_def_ptr + 24)
+        fields_len := load_i64(struct_def_ptr + 32)
+
+        i: mut i64 = 0
+        L { I i >= fields_len { B }
+            field_type_ptr := load_i64(fields_ptr + i * 40 + 8)
+            @.resolve_type_node(field_type_ptr)
+            i = i + 1
+        }
+        1
+    }
+
+    F check_impl(&self, impl_def_ptr: i64) -> i64 {
+        methods_ptr := load_i64(impl_def_ptr + 32)
+        methods_len := load_i64(impl_def_ptr + 40)
+
+        i: mut i64 = 0
+        L { I i >= methods_len { B }
+            method_ptr := load_i64(methods_ptr + i * 8)
+            @.check_function(method_ptr)
+            i = i + 1
+        }
+        1
+    }
+
+    F check_item(&self, item_ptr: i64) -> i64 {
+        kind := load_i64(item_ptr)
+        data_ptr := load_i64(item_ptr + 8)
+
+        # ITEM_FUNCTION = 1
+        I kind == 1 {
+            @.check_function(data_ptr)
+        }
+        # ITEM_STRUCT = 2
+        E I kind == 2 {
+            @.check_struct(data_ptr)
+        }
+        # ITEM_IMPL = 7
+        E I kind == 7 {
+            @.check_impl(data_ptr)
+        }
+        E { 1 }
+    }
+
+    F check_module(&self, module_ptr: i64) -> i64 {
+        items_ptr := load_i64(module_ptr)
+        items_len := load_i64(module_ptr + 8)
+
+        # Set string pool
+        sp_data := load_i64(module_ptr + 24)
+        sp_offsets := load_i64(module_ptr + 32)
+        sp_count := load_i64(module_ptr + 56)
+        @.set_string_pool(sp_data, sp_offsets, sp_count)
+
+        # First pass: collect all type definitions
+        i: mut i64 = 0
+        L { I i >= items_len { B }
+            item_ptr := items_ptr + i * 32
+            kind := load_i64(item_ptr)
+            data_ptr := load_i64(item_ptr + 8)
+
+            # ITEM_STRUCT = 2
+            I kind == 2 {
+                @.add_struct(data_ptr)
+            }
+            # ITEM_ENUM = 3
+            E I kind == 3 {
+                @.add_enum(data_ptr)
+            }
+            # ITEM_FUNCTION = 1
+            E I kind == 1 {
+                # Register function signature
+                sig_ptr := malloc(FunctionSig.size())
+                name_idx := load_i64(data_ptr)
+                store_i64(sig_ptr, name_idx)
+                store_i64(sig_ptr + 8, load_i64(data_ptr + 8))   # generics_ptr
+                store_i64(sig_ptr + 16, load_i64(data_ptr + 16)) # generics_len
+                store_i64(sig_ptr + 24, load_i64(data_ptr + 24)) # params_ptr
+                store_i64(sig_ptr + 32, load_i64(data_ptr + 32)) # params_len
+
+                # Resolve return type
+                ret_type_node := load_i64(data_ptr + 40)
+                ret_resolved := @.resolve_type_node(ret_type_node)
+                store_i64(sig_ptr + 40, ret_resolved)
+                store_i64(sig_ptr + 48, load_i64(data_ptr + 88)) # is_async
+
+                @.add_function(sig_ptr)
+            } E { 0 }
+
+            i = i + 1
+        }
+
+        # Second pass: type check all items
+        i = 0
+        L { I i >= items_len { B }
+            item_ptr := items_ptr + i * 32
+            @.check_item(item_ptr)
+            i = i + 1
+        }
+
+        I self.errors_len == 0 { 1 } E { 0 }
+    }
+
+    F drop(&self) -> i64 {
+        # Free all scopes
+        i: mut i64 = 0
+        L { I i >= self.scopes_len { B }
+            scope_ptr := load_i64(self.scopes_ptr + i * 8)
+            vars_ptr := load_i64(scope_ptr)
+            free(vars_ptr)
+            free(scope_ptr)
+            i = i + 1
+        }
+
+        free(self.scopes_ptr)
+        free(self.structs_ptr)
+        free(self.enums_ptr)
+        free(self.functions_ptr)
+        free(self.errors_ptr)
+        1
+    }
+}
+
+# ============================================================================
+# Test main
+# ============================================================================
+
+F main() -> i64 {
+    puts("Type checker module loaded")
+
+    # Test ResolvedType creation
+    ty := ResolvedType.i64_type()
+    I ty.kind == TY_I64() {
+        puts("ResolvedType i64: OK")
+    } E {
+        puts("ResolvedType i64: FAIL")
+    }
+
+    I ty.is_numeric() == 1 {
+        puts("is_numeric: OK")
+    } E {
+        puts("is_numeric: FAIL")
+    }
+
+    I ty.is_integer() == 1 {
+        puts("is_integer: OK")
+    } E {
+        puts("is_integer: FAIL")
+    }
+
+    # Test bool type
+    bool_ty := ResolvedType.bool_type()
+    I bool_ty.kind == TY_BOOL() {
+        puts("ResolvedType bool: OK")
+    } E {
+        puts("ResolvedType bool: FAIL")
+    }
+
+    I bool_ty.is_numeric() == 0 {
+        puts("bool is_numeric: OK")
+    } E {
+        puts("bool is_numeric: FAIL")
+    }
+
+    # Test TypeChecker creation
+    tc := TypeChecker.new()
+    I tc.scopes_len == 1 {
+        puts("TypeChecker initial scope: OK")
+    } E {
+        puts("TypeChecker initial scope: FAIL")
+    }
+
+    # Test scope operations
+    tc.push_scope()
+    I tc.scopes_len == 2 {
+        puts("push_scope: OK")
+    } E {
+        puts("push_scope: FAIL")
+    }
+
+    tc.pop_scope()
+    I tc.scopes_len == 1 {
+        puts("pop_scope: OK")
+    } E {
+        puts("pop_scope: FAIL")
+    }
+
+    # Test variable registration
+    type_ptr := malloc(ResolvedType.size())
+    ty2 := ResolvedType.i64_type()
+    store_i64(type_ptr, ty2.kind)
+    store_i64(type_ptr + 8, ty2.field0)
+    store_i64(type_ptr + 16, ty2.field1)
+    store_i64(type_ptr + 24, ty2.field2)
+
+    tc.add_var(0, type_ptr, 1)  # name_idx=0, type=i64, is_mut=1
+
+    found := tc.lookup_var(0)
+    I found != 0 {
+        puts("Variable lookup: OK")
+    } E {
+        puts("Variable lookup: FAIL")
+    }
+
+    # Test function registration
+    sig := FunctionSig.new(1)  # name_idx = 1
+    sig_ptr := malloc(FunctionSig.size())
+    store_i64(sig_ptr, sig.name_idx)
+    store_i64(sig_ptr + 8, sig.generics_ptr)
+    store_i64(sig_ptr + 16, sig.generics_len)
+    store_i64(sig_ptr + 24, sig.params_ptr)
+    store_i64(sig_ptr + 32, sig.params_len)
+    store_i64(sig_ptr + 40, type_ptr)  # ret type
+    store_i64(sig_ptr + 48, sig.is_async)
+
+    tc.add_function(sig_ptr)
+
+    fn_found := tc.find_function(1)
+    I fn_found != 0 {
+        puts("Function lookup: OK")
+    } E {
+        puts("Function lookup: FAIL")
+    }
+
+    # Test error tracking
+    I tc.has_errors() == 0 {
+        puts("No errors initially: OK")
+    } E {
+        puts("No errors initially: FAIL")
+    }
+
+    # Cleanup
+    free(type_ptr)
+    free(sig_ptr)
+    tc.drop()
+
+    puts("All type checker tests passed!")
+    0
+}
