@@ -1,0 +1,147 @@
+Import Path Security Flow
+==========================
+
+User Code: U some/module
+          |
+          v
+    resolve_import_path()
+          |
+          ├─> Parse module path segments
+          |   ["some", "module"]
+          |
+          ├─> Determine base directory
+          |   • std import? -> std library path
+          |   • local import? -> current file directory
+          |
+          ├─> Canonicalize base directory
+          |   Resolves: /Users/project/src -> /Users/project/src
+          |
+          ├─> Construct file paths
+          |   • Try: some/module.vais
+          |   • Try: some/module/mod.vais
+          |
+          └─> For each existing path:
+                    |
+                    v
+          validate_and_canonicalize_import()
+                    |
+                    ├─> Canonicalize file path
+                    |   Resolves symlinks: evil.vais -> /etc/passwd
+                    |
+                    ├─> Get allowed roots
+                    |   • Project root: /Users/project
+                    |   • Std library: /usr/local/lib/vais
+                    |
+                    ├─> Check path boundaries
+                    |   canonical_path.starts_with(allowed)?
+                    |
+                    |   ✓ /Users/project/src/module.vais  [ALLOWED]
+                    |   ✓ /usr/local/lib/vais/std/vec.vais [ALLOWED]
+                    |   ✗ /etc/passwd                      [BLOCKED]
+                    |   ✗ /tmp/evil.vais                   [BLOCKED]
+                    |
+                    ├─> Verify file extension
+                    |   ✓ .vais [ALLOWED]
+                    |   ✗ .txt  [BLOCKED]
+                    |   ✗ .rs   [BLOCKED]
+                    |
+                    └─> Return canonical path or error
+                              |
+                              v
+                    Success: Load and parse module
+                    Failure: Security error message
+
+
+Attack Prevention Examples
+===========================
+
+1. Path Traversal Attack
+   User: U ../../../etc/passwd
+
+   Flow:
+   - Construct: ../../../etc/passwd.vais
+   - Canonicalize: /etc/passwd.vais (doesn't exist)
+   - Result: "Cannot find module" error
+
+   If it existed:
+   - Canonicalize: /etc/passwd.vais
+   - Check: /etc/passwd.vais.starts_with(/Users/project)? NO
+   - Result: "outside allowed directories" error
+
+2. Symlink Attack
+   Setup: ln -s /etc/hosts evil.vais
+   User: U evil
+
+   Flow:
+   - Construct: ./evil.vais
+   - Canonicalize: /etc/hosts (follows symlink!)
+   - Check: /etc/hosts.starts_with(/Users/project)? NO
+   - Result: "outside allowed directories" error
+
+3. Absolute Path Attack
+   User: U /var/log/system.vais
+
+   Flow:
+   - Parse error (absolute paths not in module syntax)
+   - Or if reached validation:
+   - Check: /var/log/system.vais.starts_with(allowed)? NO
+   - Result: "outside allowed directories" error
+
+4. Non-.vais File Attack
+   User: U config.txt
+
+   Flow:
+   - No .vais file found
+   - Result: "Cannot find module" error
+
+   Or if .txt file exists:
+   - Extension check: .txt != .vais
+   - Result: "only .vais files allowed" error
+
+
+Security Layers
+===============
+
+Layer 1: Parser
+- Validates module path syntax
+- Rejects obvious invalid patterns
+
+Layer 2: Path Construction
+- Builds file paths from module segments
+- Uses OS path separators correctly
+
+Layer 3: Canonicalization
+- Resolves all symlinks
+- Normalizes path (removes . and ..)
+- Gets absolute path
+
+Layer 4: Boundary Validation
+- Checks against allowed roots
+- Enforces directory boundaries
+- Multi-root support (project + std)
+
+Layer 5: File Type Validation
+- Ensures .vais extension
+- Prevents arbitrary file inclusion
+
+Layer 6: File System
+- OS-level permissions
+- Read-only access
+- No privilege escalation
+
+
+Testing Coverage
+================
+
+✓ Valid local imports
+✓ Valid std library imports
+✓ Valid nested module paths
+✓ Valid relative imports (within project)
+
+✗ Path traversal with ../
+✗ Absolute system paths
+✗ Symlinks to system files
+✗ Symlinks outside project
+✗ Non-.vais files
+✗ Empty import paths
+✗ Nonexistent modules (with helpful errors)

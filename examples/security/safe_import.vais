@@ -1,0 +1,14 @@
+# Example: Safe Import Usage
+# This file demonstrates proper import usage
+
+# Import from standard library - SAFE
+U std/vec
+
+# Import from local module - SAFE (when module exists)
+# U utils
+
+# Function that uses imported functionality
+F main() -> () {
+    # Use vec functionality (when std/vec is properly implemented)
+    ()
+}

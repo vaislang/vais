@@ -505,7 +505,7 @@ fn get_std_path() -> Option<PathBuf> {
     None
 }
 
-/// Resolve import path to file path
+/// Resolve import path to file path with security validation
 fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty import path".to_string());
@@ -524,6 +524,11 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
         base_dir.to_path_buf()
     };
 
+    // Canonicalize the search base to get the absolute path
+    // This resolves symlinks and normalizes the path
+    let canonical_base = search_base.canonicalize()
+        .map_err(|_| format!("Cannot resolve base directory: {}", search_base.display()))?;
+
     // Convert module path to file path
     // e.g., `U utils` -> `utils.vais` or `utils/mod.vais`
     // e.g., `U std/option` -> `std/option.vais`
@@ -534,10 +539,11 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
             let as_file = file_path.join(format!("{}.vais", segment.node));
             let as_dir = file_path.join(&segment.node).join("mod.vais");
 
+            // Try file path first
             if as_file.exists() {
-                return Ok(as_file);
+                return validate_and_canonicalize_import(&as_file, &canonical_base);
             } else if as_dir.exists() {
-                return Ok(as_dir);
+                return validate_and_canonicalize_import(&as_dir, &canonical_base);
             } else {
                 return Err(format!(
                     "Cannot find module '{}': tried '{}' and '{}'",
@@ -552,6 +558,59 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
     }
 
     Err(format!("Invalid import path"))
+}
+
+/// Validate and canonicalize an import path for security
+///
+/// This function performs critical security checks:
+/// 1. Resolves the real path (following symlinks)
+/// 2. Ensures the resolved path is within allowed directories
+/// 3. Prevents path traversal attacks (../)
+/// 4. Prevents symlink attacks
+fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<PathBuf, String> {
+    // Canonicalize the path to resolve symlinks and get absolute path
+    let canonical_path = path.canonicalize()
+        .map_err(|e| format!("Cannot access file '{}': {}", path.display(), e))?;
+
+    // Get the project root for additional validation
+    let project_root = std::env::current_dir()
+        .and_then(|p| p.canonicalize())
+        .ok();
+
+    // Get std library path for validation
+    let std_root = get_std_path()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .and_then(|p| p.canonicalize().ok());
+
+    // Check if the canonical path is within allowed directories
+    let is_within_allowed = canonical_path.starts_with(allowed_base);
+
+    // Also check if it's within project root or std library
+    let is_within_project = project_root.as_ref()
+        .map(|root| canonical_path.starts_with(root))
+        .unwrap_or(false);
+
+    let is_within_std = std_root.as_ref()
+        .map(|root| canonical_path.starts_with(root))
+        .unwrap_or(false);
+
+    if !is_within_allowed && !is_within_project && !is_within_std {
+        // Security: Path traversal or symlink attack detected
+        return Err(format!(
+            "Import path '{}' is outside allowed directories",
+            path.display()
+        ));
+    }
+
+    // Verify the file has .vais extension for additional safety
+    if canonical_path.extension().map(|e| e != "vais").unwrap_or(true) {
+        return Err(format!(
+            "Invalid import file type: '{}' (only .vais files allowed)",
+            canonical_path.display()
+        ));
+    }
+
+    Ok(canonical_path)
 }
 
 fn compile_ir_to_binary(
