@@ -12,6 +12,8 @@ mod builtins;
 mod expr;
 mod types;
 mod stmt;
+#[cfg(test)]
+mod cache_tests;
 
 pub use debug::{DebugConfig, DebugInfoBuilder};
 
@@ -124,6 +126,10 @@ pub struct CodeGenerator {
 
     // Generated function instantiations (mangled_name -> already_generated)
     generated_functions: HashMap<String, bool>,
+
+    // Cache for type_to_llvm conversions to avoid repeated computations
+    // Uses interior mutability to allow caching through immutable references
+    type_to_llvm_cache: std::cell::RefCell<HashMap<String, String>>,
 }
 
 impl CodeGenerator {
@@ -158,6 +164,7 @@ impl CodeGenerator {
             generic_substitutions: HashMap::new(),
             generated_structs: HashMap::new(),
             generated_functions: HashMap::new(),
+            type_to_llvm_cache: std::cell::RefCell::new(HashMap::new()),
         };
 
         // Register built-in extern functions

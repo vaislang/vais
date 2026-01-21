@@ -1,8 +1,7 @@
 //! Type definitions and type conversion utilities for Vais code generator
 
-use std::collections::HashMap;
 use vais_ast::Type;
-use vais_types::{ResolvedType, mangle_type};
+use vais_types::ResolvedType;
 
 #[derive(Debug, Clone)]
 pub(crate) struct LoopLabels {
@@ -96,8 +95,26 @@ pub(crate) struct AsyncFunctionInfo {
 use crate::CodeGenerator;
 
 impl CodeGenerator {
-    /// Convert a ResolvedType to LLVM IR type string
+    /// Convert a ResolvedType to LLVM IR type string with caching
     pub(crate) fn type_to_llvm(&self, ty: &ResolvedType) -> String {
+        // Create a key for caching - use the debug representation
+        let cache_key = format!("{:?}", ty);
+
+        // Check cache first
+        if let Some(cached) = self.type_to_llvm_cache.borrow().get(&cache_key) {
+            return cached.clone();
+        }
+
+        // Convert type to LLVM representation
+        let result = self.type_to_llvm_impl(ty);
+
+        // Cache the result using interior mutability
+        self.type_to_llvm_cache.borrow_mut().insert(cache_key, result.clone());
+        result
+    }
+
+    /// Internal implementation of type_to_llvm without caching
+    fn type_to_llvm_impl(&self, ty: &ResolvedType) -> String {
         match ty {
             ResolvedType::I8 => "i8".to_string(),
             ResolvedType::I16 => "i16".to_string(),
@@ -114,10 +131,10 @@ impl CodeGenerator {
             ResolvedType::Bool => "i1".to_string(),
             ResolvedType::Str => "i8*".to_string(),
             ResolvedType::Unit => "void".to_string(),
-            ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm(inner)),
-            ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm(inner)),
+            ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
+            ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
+            ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
+            ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
             ResolvedType::Range(_inner) => {
                 // Range is represented as a struct with start and end fields
                 // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
@@ -128,9 +145,21 @@ impl CodeGenerator {
                 if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                     "i64".to_string()
                 } else if !generics.is_empty() {
-                    // Generic struct with type arguments - use mangled name
-                    let mangled = self.mangle_struct_name(name, generics);
-                    format!("%{}", mangled)
+                    // Generic struct with type arguments
+                    // Check if all generics are concrete (not Generic or Var types)
+                    let all_concrete = generics.iter().all(|g| {
+                        !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))
+                    });
+
+                    if all_concrete {
+                        // Use mangled name for concrete instantiations
+                        let mangled = self.mangle_struct_name(name, generics);
+                        format!("%{}", mangled)
+                    } else {
+                        // For generic types with unresolved parameters, use base struct name
+                        // In Vais, all values are i64-sized, so struct layout is the same
+                        format!("%{}", name)
+                    }
                 } else {
                     // Non-generic struct - return struct type without pointer
                     format!("%{}", name)
@@ -139,7 +168,7 @@ impl CodeGenerator {
             ResolvedType::Generic(param) => {
                 // Check if we have a substitution for this generic parameter
                 if let Some(concrete) = self.get_generic_substitution(param) {
-                    self.type_to_llvm(&concrete)
+                    self.type_to_llvm_impl(&concrete)
                 } else {
                     // Fallback to i64 for unresolved generics
                     "i64".to_string()

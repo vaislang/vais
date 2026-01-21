@@ -4,6 +4,7 @@
 
 mod doc_gen;
 mod repl;
+mod error_formatter;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
@@ -12,12 +13,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
-use vais_ast::{Item, Module, Span};
+use vais_ast::{Item, Module};
 use vais_codegen::CodeGenerator;
 use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
-use vais_parser::{parse, ParseError};
-use vais_types::{TypeChecker, TypeError, error_report::ErrorReporter};
+use vais_parser::parse;
+use vais_types::{TypeChecker};
 use vais_i18n::Locale;
 use vais_plugin::{PluginRegistry, PluginsConfig, find_config, Diagnostic, DiagnosticLevel};
 
@@ -248,7 +249,7 @@ fn cmd_build(
     let mut checker = TypeChecker::new();
     if let Err(e) = checker.check_module(&transformed_ast) {
         // Format error with source context
-        return Err(format_type_error(&e, &main_source, input));
+        return Err(error_formatter::format_type_error(&e, &main_source, input));
     }
 
     if verbose {
@@ -357,42 +358,9 @@ fn cmd_build(
     Ok(())
 }
 
-/// Format a type error with source context (localized)
-fn format_type_error(error: &TypeError, source: &str, path: &PathBuf) -> String {
-    let reporter = ErrorReporter::new(source)
-        .with_filename(path.to_str().unwrap_or("unknown"));
-
-    let span = error.span();
-    let title = error.localized_title();
-    let message = error.localized_message();
-    let help = error.localized_help();
-
-    reporter.format_error(
-        error.error_code(),
-        &title,
-        span,
-        &message,
-        help.as_deref(),
-    )
-}
-
-/// Format a parse error with source context (localized)
-fn format_parse_error(error: &ParseError, source: &str, path: &PathBuf) -> String {
-    let reporter = ErrorReporter::new(source)
-        .with_filename(path.to_str().unwrap_or("unknown"));
-
-    let span = error.span().map(|s| Span::new(s.start, s.end));
-    let title = error.localized_title();
-    let message = error.localized_message();
-
-    reporter.format_error(
-        error.error_code(),
-        &title,
-        span,
-        &message,
-        None,
-    )
-}
+// Note: Error formatting functions have been moved to the error_formatter module
+// They are now re-exported through error_formatter::format_type_error and error_formatter::format_parse_error
+// This provides a centralized location for error handling logic
 
 /// Load a module and recursively resolve its imports
 fn load_module_with_imports(
@@ -430,7 +398,7 @@ fn load_module_with_imports_internal(
         .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
 
     let ast = parse(&source)
-        .map_err(|e| format_parse_error(&e, source, path))?;
+        .map_err(|e| error_formatter::format_parse_error(&e, source, path))?;
 
     if verbose {
         println!("  {} items", ast.items.len());
@@ -703,7 +671,7 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
 
     // Parse
     let ast = parse(&source)
-        .map_err(|e| format_parse_error(&e, &source, input))?;
+        .map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
 
     // Run lint plugins
     if !plugins.is_empty() {
@@ -722,7 +690,7 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
     // Type check
     let mut checker = TypeChecker::new();
     if let Err(e) = checker.check_module(&ast) {
-        return Err(format_type_error(&e, &source, input));
+        return Err(error_formatter::format_type_error(&e, &source, input));
     }
 
     println!("{} No errors found", "OK".green().bold());
