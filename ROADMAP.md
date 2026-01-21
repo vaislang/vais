@@ -651,11 +651,15 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 7: 아키텍처 개선 및 확장
 
-> **상태**: 📋 계획 중 (0%)
+> **상태**: 🔨 진행 중 (10%)
 > **추가일**: 2026-01-21
 
 ### P0 - 즉시 (1-2주)
-- [ ] **TODO 주석 해결** - 플러그인 이름으로 로드 기능 구현 (registry.rs:32)
+- [x] **TODO 주석 해결** - 플러그인 이름으로 로드 기능 구현 (완료일: 2026-01-21)
+  - load_plugin_by_name() 메서드 추가
+  - 플러그인 검색 디렉토리: ~/.vais/plugins/, /usr/local/lib/vais/plugins/, VAIS_PLUGIN_PATH
+  - 플랫폼별 라이브러리 확장자 지원 (dylib/so/dll)
+  - 테스트 4개 추가
 - [ ] **Parser 모듈 분해 1단계** - 표현식 파싱을 expr.rs로 분리
   - 현재: 3,073줄 단일 파일
   - 목표: lib.rs ~1,500줄, expr.rs ~1,000줄, stmt.rs ~500줄
@@ -701,7 +705,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
-| Phase 7: 아키텍처 개선 | 📋 계획 중 | 0% |
+| Phase 7: 아키텍처 개선 | 🔨 진행 중 | 10% |
 
 ---
 

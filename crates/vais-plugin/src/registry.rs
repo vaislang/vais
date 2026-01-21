@@ -6,6 +6,7 @@ use crate::config::PluginsConfig;
 use crate::loader::{load_plugin, LoadedPlugin};
 use crate::traits::{Diagnostic, DiagnosticLevel, OptLevel, PluginConfig, PluginType};
 use std::path::{Path, PathBuf};
+use std::env;
 use vais_ast::Module;
 
 /// Plugin registry that manages all loaded plugins
@@ -29,12 +30,107 @@ impl PluginRegistry {
             self.load_plugin_file(path, config)?;
         }
 
-        // TODO: Load plugins by name from installed location
-        // for name in &config.plugins.enabled {
-        //     self.load_plugin_by_name(name, config)?;
-        // }
+        // Load plugins by name from installed location
+        for name in &config.plugins.enabled {
+            self.load_plugin_by_name(name, config)?;
+        }
 
         Ok(())
+    }
+
+    /// Get plugin search directories
+    ///
+    /// Returns directories where plugins may be installed:
+    /// 1. ~/.vais/plugins/ (user plugins)
+    /// 2. /usr/local/lib/vais/plugins/ (system plugins on Unix)
+    /// 3. VAIS_PLUGIN_PATH environment variable (custom paths)
+    fn plugin_search_dirs() -> Vec<PathBuf> {
+        let mut dirs = Vec::new();
+
+        // User plugins directory: ~/.vais/plugins/
+        if let Some(home) = env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")) {
+            let user_plugins = PathBuf::from(home).join(".vais").join("plugins");
+            dirs.push(user_plugins);
+        }
+
+        // System plugins directory (Unix only)
+        #[cfg(unix)]
+        {
+            dirs.push(PathBuf::from("/usr/local/lib/vais/plugins"));
+            dirs.push(PathBuf::from("/usr/lib/vais/plugins"));
+        }
+
+        // Custom paths from VAIS_PLUGIN_PATH environment variable
+        if let Ok(plugin_path) = env::var("VAIS_PLUGIN_PATH") {
+            for path in plugin_path.split(':') {
+                if !path.is_empty() {
+                    dirs.push(PathBuf::from(path));
+                }
+            }
+        }
+
+        dirs
+    }
+
+    /// Get the platform-specific library extension
+    fn library_extension() -> &'static str {
+        #[cfg(target_os = "macos")]
+        { "dylib" }
+        #[cfg(target_os = "linux")]
+        { "so" }
+        #[cfg(target_os = "windows")]
+        { "dll" }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        { "so" }
+    }
+
+    /// Load a plugin by name from installed locations
+    ///
+    /// Searches for a plugin library file in standard installation directories.
+    /// The library file should be named `lib{name}.{ext}` or `{name}.{ext}`.
+    pub fn load_plugin_by_name(&mut self, name: &str, config: &PluginsConfig) -> Result<(), String> {
+        let ext = Self::library_extension();
+        let search_dirs = Self::plugin_search_dirs();
+
+        // Possible filenames for the plugin
+        let filenames = [
+            format!("lib{}.{}", name, ext),
+            format!("{}.{}", name, ext),
+            format!("libvais_{}.{}", name, ext),
+            format!("vais_{}.{}", name, ext),
+        ];
+
+        // Search for the plugin in all directories
+        for dir in &search_dirs {
+            if !dir.exists() {
+                continue;
+            }
+
+            for filename in &filenames {
+                let plugin_path = dir.join(filename);
+                if plugin_path.exists() && plugin_path.is_file() {
+                    return self.load_plugin_file(&plugin_path, config);
+                }
+            }
+        }
+
+        // Plugin not found - provide helpful error message
+        let search_paths: Vec<_> = search_dirs
+            .iter()
+            .filter(|d| d.exists())
+            .map(|d| d.display().to_string())
+            .collect();
+
+        let searched_msg = if search_paths.is_empty() {
+            "No plugin directories found.".to_string()
+        } else {
+            format!("Searched in: {}", search_paths.join(", "))
+        };
+
+        Err(format!(
+            "Plugin '{}' not found. {}\nExpected filename: lib{}.{} or {}.{}",
+            name, searched_msg, name, ext, name, ext
+        ))
     }
 
     /// Load a plugin from a file
@@ -268,5 +364,59 @@ mod tests {
             Diagnostic::error("error"),
         ];
         assert!(PluginRegistry::has_errors(&with_errors));
+    }
+
+    #[test]
+    fn test_library_extension() {
+        let ext = PluginRegistry::library_extension();
+        #[cfg(target_os = "macos")]
+        assert_eq!(ext, "dylib");
+        #[cfg(target_os = "linux")]
+        assert_eq!(ext, "so");
+        #[cfg(target_os = "windows")]
+        assert_eq!(ext, "dll");
+    }
+
+    #[test]
+    fn test_plugin_search_dirs_includes_home() {
+        // Ensure HOME is set for the test
+        let dirs = PluginRegistry::plugin_search_dirs();
+
+        // Should include user plugins directory if HOME is set
+        if env::var_os("HOME").is_some() || env::var_os("USERPROFILE").is_some() {
+            assert!(dirs.iter().any(|d| d.to_string_lossy().contains(".vais/plugins")));
+        }
+    }
+
+    #[test]
+    fn test_load_plugin_by_name_not_found() {
+        let mut registry = PluginRegistry::new();
+        let config = PluginsConfig::default();
+
+        let result = registry.load_plugin_by_name("nonexistent_plugin", &config);
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert!(err.contains("Plugin 'nonexistent_plugin' not found"));
+        assert!(err.contains("Expected filename"));
+    }
+
+    #[test]
+    fn test_plugin_search_dirs_with_env_var() {
+        // Save original value
+        let original = env::var("VAIS_PLUGIN_PATH").ok();
+
+        // Set custom plugin path
+        env::set_var("VAIS_PLUGIN_PATH", "/custom/path1:/custom/path2");
+
+        let dirs = PluginRegistry::plugin_search_dirs();
+        assert!(dirs.iter().any(|d| d == Path::new("/custom/path1")));
+        assert!(dirs.iter().any(|d| d == Path::new("/custom/path2")));
+
+        // Restore original value
+        match original {
+            Some(val) => env::set_var("VAIS_PLUGIN_PATH", val),
+            None => env::remove_var("VAIS_PLUGIN_PATH"),
+        }
     }
 }
