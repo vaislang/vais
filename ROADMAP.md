@@ -651,7 +651,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 7: 아키텍처 개선 및 확장
 
-> **상태**: ✅ P0 완료 (100%)
+> **상태**: ✅ P0+P1 완료 (100%)
 > **추가일**: 2026-01-21
 
 ### P0 - 즉시 (1-2주)
@@ -722,7 +722,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 4: 향후 개선 | ✅ 완료 | 100% |
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
-| Phase 7: 아키텍처 개선 | 🔨 P0 완료 | 100% (P0) |
+| Phase 7: 아키텍처 개선 | ✅ P0+P1 완료 | 100% (P0+P1) |
 
 ---
 
