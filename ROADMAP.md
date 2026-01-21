@@ -174,7 +174,8 @@ crates/
 ├── vais-codegen/  # LLVM IR 생성기 ✅
 ├── vais-lsp/      # Language Server ✅
 ├── vais-i18n/     # 다국어 에러 메시지 ✅
-├── vais-plugin/   # 플러그인 시스템 ✅ NEW
+├── vais-plugin/   # 플러그인 시스템 ✅
+├── vais-jit/      # Cranelift JIT 컴파일러 ✅ NEW
 └── vaisc/         # CLI 컴파일러 & REPL ✅
 
 std/               # 표준 라이브러리 ✅
@@ -230,6 +231,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | i18n | ✅ 완료 | 100% |
 | Plugin System | ✅ 완료 | 100% |
 | Benchmark Suite | ✅ 완료 | 100% |
+| JIT Compiler | ✅ 완료 | 100% |
 
 **핵심 기능 진행률: 100%** (Phase 1-3 완료)
 
@@ -744,8 +746,17 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - vais-node 크레이트 (napi-rs 기반)
     - compile(), check(), parse(), tokenize() 함수
     - 빌드 검증 완료
+- [x] **JIT 컴파일** - REPL에서 Cranelift JIT 실행 (완료일: 2026-01-21)
+  - vais-jit 크레이트 추가 (Cranelift 기반)
+    - JitCompiler: JIT 컴파일러 구현
+    - TypeMapper: Vais → Cranelift 타입 매핑
+    - JitRuntime: 외부 함수 해결 (libc, libm)
+  - REPL JIT 모드 지원 (`--features jit`)
+    - 디스크 I/O 없이 즉시 실행
+    - clang 불필요
+  - 설계 문서: docs/design/jit-compilation-design.md
+  - 테스트 27개 통과
 - [ ] **Self-hosting** - vaisc를 Vais로 재작성
-- [ ] **JIT 컴파일** - REPL에서 JIT 실행 (cranelift 또는 LLVM JIT)
 
 ### 남은 작업
 - (위 항목들 중 선택하여 진행)

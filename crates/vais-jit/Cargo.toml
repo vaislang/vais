@@ -1,0 +1,29 @@
+[package]
+name = "vais-jit"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "JIT compiler for Vais using Cranelift"
+
+[dependencies]
+# Cranelift JIT
+cranelift = "0.115"
+cranelift-jit = "0.115"
+cranelift-module = "0.115"
+cranelift-native = "0.115"
+cranelift-codegen = "0.115"
+
+# Vais crates
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+
+# Error handling
+thiserror.workspace = true
+
+# Platform-specific
+target-lexicon = "0.12"
+libc = "0.2"
+
+[dev-dependencies]
+vais-parser = { path = "../vais-parser" }

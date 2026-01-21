@@ -1,6 +1,7 @@
 //! Interactive REPL for Vais
 //!
 //! Read-Eval-Print-Loop for interactive Vais development.
+//! Supports JIT compilation when the `jit` feature is enabled.
 
 use colored::Colorize;
 use rustyline::completion::{Completer, Pair};
@@ -10,12 +11,18 @@ use rustyline::hint::Hinter;
 use rustyline::history::History;
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{Context, Editor, Helper};
+#[cfg(not(feature = "jit"))]
 use std::fs;
+#[cfg(not(feature = "jit"))]
 use std::process::Command;
 
+#[cfg(not(feature = "jit"))]
 use vais_codegen::CodeGenerator;
 use vais_parser::parse;
 use vais_types::TypeChecker;
+
+#[cfg(feature = "jit")]
+use vais_jit::JitCompiler;
 
 /// REPL helper with completion, validation, and highlighting
 struct ReplHelper {
@@ -135,6 +142,9 @@ impl Validator for ReplHelper {
 
 /// Start the interactive REPL
 pub fn run() -> Result<(), String> {
+    #[cfg(feature = "jit")]
+    println!("{}", "Vais REPL v0.0.1 (JIT enabled)".bold().cyan());
+    #[cfg(not(feature = "jit"))]
     println!("{}", "Vais REPL v0.0.1".bold().cyan());
     println!("Type expressions to evaluate, or :help for commands");
     println!();
@@ -148,6 +158,9 @@ pub fn run() -> Result<(), String> {
     let _ = rl.load_history(&history_path);
 
     let mut definitions: Vec<String> = Vec::new();
+
+    #[cfg(feature = "jit")]
+    let mut jit = JitCompiler::new().map_err(|e| format!("Failed to initialize JIT: {}", e))?;
 
     loop {
         // Read input with readline
@@ -166,6 +179,11 @@ pub fn run() -> Result<(), String> {
 
                 // Handle commands
                 if input.starts_with(':') {
+                    #[cfg(feature = "jit")]
+                    if handle_command_jit(input, &mut definitions, &rl, &mut jit) {
+                        break;
+                    }
+                    #[cfg(not(feature = "jit"))]
                     if handle_command(input, &mut definitions, &rl) {
                         break;
                     }
@@ -183,6 +201,9 @@ pub fn run() -> Result<(), String> {
                 if is_definition {
                     handle_definition(input, &mut definitions);
                 } else {
+                    #[cfg(feature = "jit")]
+                    handle_expression_jit(input, &definitions, &mut jit);
+                    #[cfg(not(feature = "jit"))]
                     handle_expression(input, &definitions);
                 }
             }
@@ -208,6 +229,7 @@ pub fn run() -> Result<(), String> {
 }
 
 /// Handle REPL commands (returns true if should exit)
+#[cfg(not(feature = "jit"))]
 fn handle_command(
     input: &str,
     definitions: &mut Vec<String>,
@@ -295,7 +317,8 @@ fn handle_definition(input: &str, definitions: &mut Vec<String>) {
     }
 }
 
-/// Handle an expression evaluation
+/// Handle an expression evaluation (clang-based, used when JIT is not enabled)
+#[cfg(not(feature = "jit"))]
 fn handle_expression(input: &str, definitions: &[String]) {
     let mut source = String::new();
     for def in definitions {
@@ -314,7 +337,8 @@ fn handle_expression(input: &str, definitions: &[String]) {
     }
 }
 
-/// Evaluate a REPL expression by compiling and running it
+/// Evaluate a REPL expression by compiling and running it (clang-based)
+#[cfg(not(feature = "jit"))]
 fn evaluate_expr(source: &str) -> Result<String, String> {
     // Parse
     let ast = parse(source).map_err(|e| format!("Parse error: {}", e))?;
@@ -375,4 +399,115 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
     } else {
         Ok(format!("{}\nReturn: {}", stdout.trim(), exit_code))
     }
+}
+
+// ============== JIT-enabled REPL functions ==============
+
+/// Handle REPL commands (JIT version) - returns true if should exit
+#[cfg(feature = "jit")]
+fn handle_command_jit(
+    input: &str,
+    definitions: &mut Vec<String>,
+    rl: &Editor<ReplHelper, rustyline::history::DefaultHistory>,
+    jit: &mut JitCompiler,
+) -> bool {
+    match input {
+        ":quit" | ":q" | ":exit" => {
+            println!("Goodbye!");
+            return true;
+        }
+        ":help" | ":h" => {
+            println!("{}", "Commands:".bold());
+            println!("  :help, :h     Show this help");
+            println!("  :quit, :q     Exit the REPL");
+            println!("  :clear        Clear definitions and reset JIT");
+            println!("  :defs         Show current definitions");
+            println!("  :history      Show input history");
+            println!();
+            println!("{}", "Features:".bold());
+            println!("  - JIT compilation (Cranelift backend)");
+            println!("  - Multiline input: Unclosed braces/parens continue to next line");
+            println!("  - History: Use up/down arrows to navigate (max 100 entries)");
+            println!("  - Tab completion: Press Tab for keyword/function suggestions");
+            println!();
+            println!("{}", "Examples:".bold());
+            println!("  F add(a:i64,b:i64)->i64{{a+b}}    Define a function");
+            println!("  add(2, 3)                       Call a function");
+            println!("  1 + 2 * 3                       Evaluate expression");
+        }
+        ":clear" => {
+            definitions.clear();
+            if let Err(e) = jit.clear() {
+                println!("{} Failed to reset JIT: {}", "Warning:".yellow().bold(), e);
+            }
+            println!("Definitions and JIT state cleared");
+        }
+        ":defs" => {
+            if definitions.is_empty() {
+                println!("No definitions");
+            } else {
+                println!("{}", "Current definitions:".bold());
+                for def in definitions.iter() {
+                    println!("  {}", def);
+                }
+            }
+        }
+        ":history" => {
+            let history = rl.history();
+            if history.is_empty() {
+                println!("No history");
+            } else {
+                for (i, item) in history.iter().enumerate() {
+                    println!("{:3}  {}", i + 1, item);
+                }
+            }
+        }
+        _ => {
+            println!("{} Unknown command: {}", "Error:".red().bold(), input);
+        }
+    }
+    false
+}
+
+/// Handle an expression evaluation using JIT compilation
+#[cfg(feature = "jit")]
+fn handle_expression_jit(input: &str, definitions: &[String], jit: &mut JitCompiler) {
+    let mut source = String::new();
+    for def in definitions {
+        source.push_str(def);
+        source.push('\n');
+    }
+    source.push_str(&format!("F __repl_main()->i64{{{}}}", input));
+
+    match evaluate_expr_jit(&source, jit) {
+        Ok(result) => {
+            println!("{} {}", "=>".cyan(), result);
+        }
+        Err(e) => {
+            println!("{} {}", "Error:".red().bold(), e);
+        }
+    }
+}
+
+/// Evaluate a REPL expression using JIT compilation
+#[cfg(feature = "jit")]
+fn evaluate_expr_jit(source: &str, jit: &mut JitCompiler) -> Result<String, String> {
+    // Parse
+    let ast = parse(source).map_err(|e| format!("Parse error: {}", e))?;
+
+    // Type check
+    let mut checker = TypeChecker::new();
+    checker
+        .check_module(&ast)
+        .map_err(|e| format!("Type error: {}", e))?;
+
+    // Reset JIT for fresh compilation
+    jit.clear().map_err(|e| format!("JIT reset error: {}", e))?;
+
+    // JIT compile and run
+    let result = jit
+        .compile_and_run_main(&ast)
+        .map_err(|e| format!("JIT error: {}", e))?;
+
+    Ok(format!("{}", result))
 }

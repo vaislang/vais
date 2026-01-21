@@ -9,6 +9,10 @@ license.workspace = true
 name = "vaisc"
 path = "src/main.rs"
 
+[features]
+default = []
+jit = ["vais-jit"]
+
 [dependencies]
 vais-lexer = { path = "../vais-lexer" }
 vais-parser = { path = "../vais-parser" }
@@ -17,6 +21,7 @@ vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
 vais-i18n = { path = "../vais-i18n" }
 vais-plugin = { path = "../vais-plugin" }
+vais-jit = { path = "../vais-jit", optional = true }
 
 clap = { version = "4.4", features = ["derive"] }
 miette = { workspace = true }
