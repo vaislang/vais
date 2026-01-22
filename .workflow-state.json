@@ -1,16 +1,16 @@
 {
-  "phase": "done",
-  "request": "Stage 2 부트스트래핑 기초 검증",
+  "phase": "in_progress",
+  "request": "Stage 2 부트스트래핑 완성",
   "tasks": [
-    { "id": 1, "name": "vaisc-stage1 파이프라인 통합", "status": "completed", "model": "Opus", "notes": "main.vais에 Lexer→Parser→Codegen 파이프라인 통합, 파일 읽기 지원" },
-    { "id": 2, "name": "간단한 Vais 함수 컴파일 검증", "status": "completed", "model": "Opus", "notes": "calc(x) = x + 10 → LLVM IR → 바이너리 → Result: 20 검증" }
+    { "id": 1, "name": "토큰 확장 (X, 연산자 등)", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "파서 확장 (S/X/함수/표현식)", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "코드젠 확장 (S/X/블록/if/loop)", "status": "in_progress", "model": "Opus" }
   ],
-  "currentTask": null,
-  "completedAt": "2026-01-22T15:00:00Z",
+  "currentTask": 3,
   "progress": {
-    "main.vais": "888줄, 전체 Lexer/Parser/Codegen 파이프라인 포함",
-    "test2.vais": "F calc(x: i64) -> i64 = x + 10 형식 테스트",
-    "vaisc-stage1": "파일 읽기 + 14토큰 렉싱 + 파싱 + IR 생성 + 출력 파일 작성"
+    "main.vais": "1950줄 (887줄 → 1950줄, +1063줄)",
+    "parser": "완전한 S/X/함수/표현식 파싱 지원",
+    "codegen": "아직 단순한 함수+산술 표현식만 지원"
   },
-  "summary": "vaisc-stage1이 이제 파일을 읽고 Lexer→Parser→Codegen 파이프라인을 실행하여 실행 가능한 LLVM IR을 생성합니다. 간단한 함수 (F name(param: i64) -> i64 = expr) 형식 지원."
+  "summary": "main.vais의 파서가 S(구조체), X(impl), 복잡한 표현식(블록, if, loop, 메서드 호출, 필드 접근)을 파싱할 수 있도록 확장됨. 코드 생성기 확장이 필요함."
 }
