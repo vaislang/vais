@@ -6,6 +6,7 @@
 pub mod error_report;
 pub mod exhaustiveness;
 pub mod types;
+pub mod comptime;
 
 // Private modules
 mod traits;
@@ -27,6 +28,7 @@ pub use types::{
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
+pub use comptime::{ComptimeEvaluator, ComptimeValue};
 use traits::TraitImpl;
 use types::VarInfo;
 
@@ -2429,6 +2431,20 @@ impl TypeChecker {
                 // For now, spawn is synchronous and returns the inner value directly
                 // Future: Return Task<T> type for proper async handling
                 Ok(inner_type)
+            }
+
+            Expr::Comptime { body } => {
+                // Evaluate the comptime expression at compile time
+                let mut evaluator = comptime::ComptimeEvaluator::new();
+                let value = evaluator.eval(body)?;
+
+                // Return the type based on the evaluated value
+                match value {
+                    comptime::ComptimeValue::Int(_) => Ok(ResolvedType::I64),
+                    comptime::ComptimeValue::Float(_) => Ok(ResolvedType::F64),
+                    comptime::ComptimeValue::Bool(_) => Ok(ResolvedType::Bool),
+                    comptime::ComptimeValue::Unit => Ok(ResolvedType::Unit),
+                }
             }
         }
     }

@@ -523,6 +523,10 @@ pub enum Expr {
     },
     /// Spawn: `spawn{expr}`
     Spawn(Box<Spanned<Expr>>),
+    /// Comptime: `comptime { expr }` - Evaluated at compile time
+    Comptime {
+        body: Box<Spanned<Expr>>,
+    },
 }
 
 /// If-else branch

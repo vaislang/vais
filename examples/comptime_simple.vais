@@ -1,0 +1,14 @@
+# Simple comptime test - basic arithmetic
+
+F test1()->i64 = comptime { 4 * 8 }
+
+F test2()->i64 = comptime { 10 + 20 }
+
+F test3()->bool = comptime { 5 > 3 }
+
+F main()->i64 {
+    printf("Test 1 (4 * 8): %ld\n", test1())
+    printf("Test 2 (10 + 20): %ld\n", test2())
+    printf("Test 3 (5 > 3): %d\n", test3())
+    0
+}

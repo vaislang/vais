@@ -1,0 +1,249 @@
+# Time library - time-related functions and types
+# Provides time measurement, sleep operations, and duration handling
+
+# Duration structure - represents a time span
+S Duration {
+    secs: i64,      # Seconds component
+    nanos: i64      # Nanoseconds component (0-999999999)
+}
+
+X Duration {
+    # Create a new Duration from seconds and nanoseconds
+    F new(secs: i64, nanos: i64) -> Duration {
+        # Normalize nanoseconds to be in range [0, 999999999]
+        extra_secs := nanos / 1000000000
+        norm_nanos := nanos % 1000000000
+
+        I norm_nanos < 0 {
+            norm_nanos = norm_nanos + 1000000000
+            extra_secs = extra_secs - 1
+        }
+
+        Duration { secs: secs + extra_secs, nanos: norm_nanos }
+    }
+
+    # Create Duration from seconds only
+    F from_secs(secs: i64) -> Duration {
+        Duration { secs: secs, nanos: 0 }
+    }
+
+    # Create Duration from milliseconds
+    F from_millis(millis: i64) -> Duration {
+        secs := millis / 1000
+        nanos := (millis % 1000) * 1000000
+        Duration { secs: secs, nanos: nanos }
+    }
+
+    # Create Duration from microseconds
+    F from_micros(micros: i64) -> Duration {
+        secs := micros / 1000000
+        nanos := (micros % 1000000) * 1000
+        Duration { secs: secs, nanos: nanos }
+    }
+
+    # Create Duration from nanoseconds
+    F from_nanos(nanos: i64) -> Duration {
+        secs := nanos / 1000000000
+        norm_nanos := nanos % 1000000000
+        Duration { secs: secs, nanos: norm_nanos }
+    }
+
+    # Get total seconds (truncated)
+    F as_secs(&self) -> i64 {
+        self.secs
+    }
+
+    # Get total milliseconds
+    F as_millis(&self) -> i64 {
+        self.secs * 1000 + self.nanos / 1000000
+    }
+
+    # Get total microseconds
+    F as_micros(&self) -> i64 {
+        self.secs * 1000000 + self.nanos / 1000
+    }
+
+    # Get total nanoseconds
+    F as_nanos(&self) -> i64 {
+        self.secs * 1000000000 + self.nanos
+    }
+
+    # Get subsecond nanoseconds component
+    F subsec_nanos(&self) -> i64 {
+        self.nanos
+    }
+
+    # Get subsecond milliseconds component
+    F subsec_millis(&self) -> i64 {
+        self.nanos / 1000000
+    }
+
+    # Get subsecond microseconds component
+    F subsec_micros(&self) -> i64 {
+        self.nanos / 1000
+    }
+
+    # Add two durations
+    F add(&self, other: Duration) -> Duration {
+        total_secs := self.secs + other.secs
+        total_nanos := self.nanos + other.nanos
+        Duration.new(total_secs, total_nanos)
+    }
+
+    # Subtract duration (returns 0 if result would be negative)
+    F sub(&self, other: Duration) -> Duration {
+        I self.secs < other.secs {
+            Duration { secs: 0, nanos: 0 }
+        } E I self.secs == other.secs {
+            I self.nanos < other.nanos {
+                Duration { secs: 0, nanos: 0 }
+            } E {
+                Duration { secs: 0, nanos: self.nanos - other.nanos }
+            }
+        } E {
+            diff_secs := self.secs - other.secs
+            I self.nanos < other.nanos {
+                Duration { secs: diff_secs - 1, nanos: self.nanos + 1000000000 - other.nanos }
+            } E {
+                Duration { secs: diff_secs, nanos: self.nanos - other.nanos }
+            }
+        }
+    }
+}
+
+# Extern C time functions
+
+# Get current time as Unix timestamp (seconds since epoch)
+X F time(tloc: i64) -> i64
+
+# Get current time with microsecond precision
+# tv points to struct timeval { tv_sec: i64, tv_usec: i64 }
+X F gettimeofday(tv: i64, tz: i64) -> i64
+
+# Sleep for microseconds
+X F usleep(micros: i64) -> i64
+
+# Sleep using nanosleep
+# req points to struct timespec { tv_sec: i64, tv_nsec: i64 }
+# rem points to remaining time (can be 0)
+X F nanosleep(req: i64, rem: i64) -> i64
+
+# Get current Unix timestamp (seconds since epoch)
+# Returns seconds since January 1, 1970 00:00:00 UTC
+F time_now() -> i64 {
+    time(0)
+}
+
+# Get current time in milliseconds
+# Returns milliseconds since epoch
+F time_millis() -> i64 {
+    # Allocate timeval struct on stack (16 bytes: 8 for tv_sec, 8 for tv_usec)
+    tv := malloc(16)
+    result := gettimeofday(tv, 0)
+
+    I result == 0 {
+        # Success - read tv_sec and tv_usec
+        tv_sec := load_i64(tv)
+        tv_usec := load_i64(tv + 8)
+        free(tv)
+        tv_sec * 1000 + tv_usec / 1000
+    } E {
+        # Failed - fallback to time()
+        free(tv)
+        time(0) * 1000
+    }
+}
+
+# Get current time in microseconds
+# Returns microseconds since epoch
+F time_micros() -> i64 {
+    # Allocate timeval struct on stack (16 bytes)
+    tv := malloc(16)
+    result := gettimeofday(tv, 0)
+
+    I result == 0 {
+        # Success - read tv_sec and tv_usec
+        tv_sec := load_i64(tv)
+        tv_usec := load_i64(tv + 8)
+        free(tv)
+        tv_sec * 1000000 + tv_usec
+    } E {
+        # Failed - fallback to time()
+        free(tv)
+        time(0) * 1000000
+    }
+}
+
+# Sleep for the given number of milliseconds
+F sleep_millis(millis: i64) -> i64 {
+    I millis <= 0 {
+        0
+    } E {
+        micros := millis * 1000
+        usleep(micros)
+    }
+}
+
+# Sleep for the given number of microseconds
+F sleep_micros(micros: i64) -> i64 {
+    I micros <= 0 {
+        0
+    } E {
+        usleep(micros)
+    }
+}
+
+# Sleep for the given number of seconds
+F sleep_secs(secs: i64) -> i64 {
+    I secs <= 0 {
+        0
+    } E {
+        usleep(secs * 1000000)
+    }
+}
+
+# Sleep for the given duration
+F sleep_duration(dur: Duration) -> i64 {
+    # Allocate timespec struct (16 bytes: 8 for tv_sec, 8 for tv_nsec)
+    ts := malloc(16)
+    store_i64(ts, dur.secs)
+    store_i64(ts + 8, dur.nanos)
+
+    result := nanosleep(ts, 0)
+    free(ts)
+    result
+}
+
+# Sleep for milliseconds (alias for compatibility)
+F sleep(millis: i64) -> i64 {
+    sleep_millis(millis)
+}
+
+# Measure elapsed time in milliseconds
+# Usage: start := time_millis(); /* do work */; elapsed := elapsed_millis(start);
+F elapsed_millis(start: i64) -> i64 {
+    now := time_millis()
+    now - start
+}
+
+# Measure elapsed time in microseconds
+F elapsed_micros(start: i64) -> i64 {
+    now := time_micros()
+    now - start
+}
+
+# Get current time as Duration since epoch
+F now_duration() -> Duration {
+    tv := malloc(16)
+    result := gettimeofday(tv, 0)
+
+    I result == 0 {
+        tv_sec := load_i64(tv)
+        tv_usec := load_i64(tv + 8)
+        free(tv)
+        Duration { secs: tv_sec, nanos: tv_usec * 1000 }
+    } E {
+        free(tv)
+        Duration { secs: time(0), nanos: 0 }
+    }
+}

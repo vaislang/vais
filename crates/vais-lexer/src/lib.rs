@@ -81,6 +81,8 @@ pub enum Token {
     Clone,
     #[token("const")]
     Const,
+    #[token("comptime")]
+    Comptime,
 
     // === Primitive Types ===
     #[token("i8")]
@@ -277,6 +279,7 @@ impl fmt::Display for Token {
             Token::Weak => write!(f, "weak"),
             Token::Clone => write!(f, "clone"),
             Token::Const => write!(f, "const"),
+            Token::Comptime => write!(f, "comptime"),
             Token::I8 => write!(f, "i8"),
             Token::I16 => write!(f, "i16"),
             Token::I32 => write!(f, "i32"),

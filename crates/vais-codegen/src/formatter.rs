@@ -923,6 +923,7 @@ impl Formatter {
             }
 
             Expr::Spawn(expr) => format!("spawn {{ {} }}", self.format_expr(&expr.node)),
+            Expr::Comptime { body } => format!("comptime {{ {} }}", self.format_expr(&body.node)),
         }
     }
 

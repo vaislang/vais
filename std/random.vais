@@ -1,0 +1,235 @@
+# Random number generation library
+# Provides pseudo-random number generation using Linear Congruential Generator (LCG)
+# and C standard library rand/srand functions
+
+# Global RNG state for LCG
+# Using multiplier: 1103515245, increment: 12345, modulus: 2^31
+G rng_state: i64 = 123456789
+
+# Extern C random functions
+X F srand(seed: i64) -> i64
+X F rand() -> i64
+
+# Constants for LCG algorithm
+C LCG_A: i64 = 1103515245      # Multiplier
+C LCG_C: i64 = 12345            # Increment
+C LCG_M: i64 = 2147483648       # Modulus (2^31)
+
+# Set the random seed for the LCG
+F random_seed(seed: i64) -> i64 {
+    rng_state = seed
+    srand(seed)  # Also seed C rand() for compatibility
+    0
+}
+
+# Generate a random i64 using LCG algorithm
+# Returns a positive random number in range [0, 2^31-1]
+F random_i64() -> i64 {
+    # LCG formula: next = (a * current + c) mod m
+    rng_state = (LCG_A * rng_state + LCG_C) % LCG_M
+
+    # Ensure positive value
+    I rng_state < 0 {
+        rng_state = 0 - rng_state
+    }
+
+    rng_state
+}
+
+# Generate a random i64 using C rand()
+# Returns a random number from C stdlib
+F random_c() -> i64 {
+    rand()
+}
+
+# Generate a random number in range [min, max] (inclusive)
+F random_range(min: i64, max: i64) -> i64 {
+    I min >= max {
+        min
+    } E {
+        range := max - min + 1
+        min + (random_i64() % range)
+    }
+}
+
+# Generate a random number in range [0, n) (exclusive)
+F random_below(n: i64) -> i64 {
+    I n <= 0 {
+        0
+    } E {
+        random_i64() % n
+    }
+}
+
+# Generate a random f64 in range [0.0, 1.0)
+F random_f64() -> f64 {
+    # Get random integer and divide by max value to get float in [0, 1)
+    r := random_i64()
+    r_f64 := i64_to_f64(r)
+    max_f64 := i64_to_f64(LCG_M)
+    r_f64 / max_f64
+}
+
+# Generate a random f64 in range [min, max)
+F random_f64_range(min: f64, max: f64) -> f64 {
+    I min >= max {
+        min
+    } E {
+        range := max - min
+        min + random_f64() * range
+    }
+}
+
+# Generate a random boolean (0 or 1)
+F random_bool() -> i64 {
+    random_i64() % 2
+}
+
+# Shuffle an array using Fisher-Yates algorithm
+# arr: pointer to array of i64
+# len: length of array
+F random_shuffle(arr: i64, len: i64) -> i64 {
+    I arr == 0 || len <= 1 {
+        0
+    } E {
+        i := len - 1
+        L i > 0 {
+            # Pick random index from 0 to i
+            j := random_below(i + 1)
+
+            # Swap arr[i] and arr[j]
+            ptr_i := arr + i * 8
+            ptr_j := arr + j * 8
+            temp := load_i64(ptr_i)
+            store_i64(ptr_i, load_i64(ptr_j))
+            store_i64(ptr_j, temp)
+
+            i = i - 1
+        }
+        0
+    }
+}
+
+# Generate random bytes into buffer
+# buffer: pointer to byte buffer
+# count: number of random bytes to generate
+F random_bytes(buffer: i64, count: i64) -> i64 {
+    I buffer == 0 || count <= 0 {
+        0
+    } E {
+        i := 0
+        L i < count {
+            # Generate random byte (0-255)
+            byte := random_i64() % 256
+            store_byte(buffer + i, byte)
+            i = i + 1
+        }
+        count
+    }
+}
+
+# Generate a random alphanumeric character
+# Returns ASCII value of random char from [0-9A-Za-z]
+F random_alnum() -> i64 {
+    # 62 alphanumeric characters: 0-9 (10), A-Z (26), a-z (26)
+    r := random_below(62)
+
+    I r < 10 {
+        # 0-9: ASCII 48-57
+        48 + r
+    } E I r < 36 {
+        # A-Z: ASCII 65-90
+        65 + (r - 10)
+    } E {
+        # a-z: ASCII 97-122
+        97 + (r - 36)
+    }
+}
+
+# Generate a random hex character
+# Returns ASCII value of random char from [0-9a-f]
+F random_hex() -> i64 {
+    r := random_below(16)
+    I r < 10 {
+        # 0-9: ASCII 48-57
+        48 + r
+    } E {
+        # a-f: ASCII 97-102
+        97 + (r - 10)
+    }
+}
+
+# Helper: Convert i64 to f64 (using LLVM intrinsic)
+# Note: This should be a builtin or extern function in real implementation
+F i64_to_f64(x: i64) -> f64 {
+    # Simple approximation for positive numbers
+    # In practice, this would use proper conversion
+    result := 0.0
+    I x == 0 {
+        0.0
+    } E {
+        # Build up the float value
+        remaining := x
+        multiplier := 1.0
+        L remaining > 0 {
+            digit := remaining % 10
+            result = result + (digit * multiplier)
+            multiplier = multiplier * 10.0
+            remaining = remaining / 10
+        }
+        result
+    }
+}
+
+# Alternative random_f64 using simpler division
+F random_f64_simple() -> f64 {
+    # Generate random number and scale to [0, 1)
+    r := random_i64()
+    # Use direct float division
+    f_r := r
+    f_max := LCG_M
+    f_r / f_max
+}
+
+# Initialize random seed with current time
+# Requires std/time.vais to be imported
+F random_init() -> i64 {
+    # Get current time as seed
+    seed := time_now()
+    random_seed(seed)
+}
+
+# Fast random number using xorshift algorithm
+# Maintains separate state from LCG
+G xorshift_state: i64 = 88172645463325252
+
+F random_xorshift() -> i64 {
+    x := xorshift_state
+    I x == 0 {
+        x = 88172645463325252
+    }
+
+    # Xorshift algorithm
+    x = x ^ (x << 13)
+    x = x ^ (x >> 7)
+    x = x ^ (x << 17)
+
+    xorshift_state = x
+
+    # Return positive value
+    I x < 0 {
+        0 - x
+    } E {
+        x
+    }
+}
+
+# Set xorshift seed
+F random_xorshift_seed(seed: i64) -> i64 {
+    I seed == 0 {
+        xorshift_state = 88172645463325252
+    } E {
+        xorshift_state = seed
+    }
+    0
+}

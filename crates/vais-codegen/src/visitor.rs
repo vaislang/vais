@@ -205,6 +205,9 @@ pub trait ExprVisitor {
 
     /// Visit an unwrap expression (expr!)
     fn visit_unwrap(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
+
+    /// Visit a comptime expression (comptime { ... })
+    fn visit_comptime(&mut self, body: &Spanned<Expr>, counter: &mut usize) -> GenResult;
 }
 
 /// Visitor trait for statement code generation

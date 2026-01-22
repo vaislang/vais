@@ -1,0 +1,135 @@
+# Comptime feature tests for Vais language
+# Tests compile-time evaluation of expressions
+
+# Test 1: Simple arithmetic at compile time
+F test_simple_arithmetic()->i64 = comptime { 4 * 8 }
+
+# Test 2: Comptime block with variables
+F test_with_variables()->i64 = comptime {
+    x := 10
+    y := 20
+    x + y
+}
+
+# Test 3: Comptime loop (hash calculation)
+F test_loop()->i64 = comptime {
+    x := 5381
+    L i:0..10 {
+        x = x * 33 + i
+    }
+    x
+}
+
+# Test 4: Comptime conditional
+F test_conditional()->i64 = comptime {
+    x := 42
+    I x > 40 {
+        100
+    } E {
+        50
+    }
+}
+
+# Test 5: Complex expression with nested operations
+F test_complex()->i64 = comptime {
+    a := 2
+    b := 3
+    c := 4
+    (a + b) * c - (a * b)
+}
+
+# Test 6: Comptime factorial (recursive-style with loop)
+F test_factorial()->i64 = comptime {
+    n := 5
+    result := 1
+    L i:1..=n {
+        result = result * i
+    }
+    result
+}
+
+# Test 7: Comptime power calculation
+F test_power()->i64 = comptime {
+    base := 2
+    exp := 10
+    result := 1
+    L i:0..exp {
+        result = result * base
+    }
+    result
+}
+
+# Test 8: Comptime ternary operator
+F test_ternary()->i64 = comptime {
+    x := 15
+    x > 10 ? 1 : 0
+}
+
+# Test 9: Comptime bitwise operations
+F test_bitwise()->i64 = comptime {
+    a := 0xFF
+    b := 0x0F
+    (a & b) | (a ^ b)
+}
+
+# Test 10: Comptime with boolean logic
+F test_boolean()->bool = comptime {
+    x := true
+    y := false
+    x && !y || y
+}
+
+# Test 11: Array size from comptime
+C ARRAY_SIZE = comptime { 4 * 8 }
+F test_array_size()->i64 = ARRAY_SIZE
+
+# Test 12: Nested comptime expressions
+F test_nested()->i64 = comptime {
+    inner := comptime { 5 + 3 }
+    outer := inner * 2
+    outer
+}
+
+# Test 13: Comptime float arithmetic
+F test_float()->f64 = comptime {
+    x := 3.14
+    y := 2.0
+    x * y
+}
+
+# Test 14: Comptime modulo
+F test_modulo()->i64 = comptime {
+    dividend := 100
+    divisor := 7
+    dividend % divisor
+}
+
+# Test 15: Comptime shift operations
+F test_shift()->i64 = comptime {
+    base := 1
+    shifted_left := base << 10
+    shifted_right := shifted_left >> 5
+    shifted_right
+}
+
+# Main function to run all tests
+F main()->i64 {
+    # Print test results
+    printf("Test 1 - Simple arithmetic: %ld\n", test_simple_arithmetic())
+    printf("Test 2 - With variables: %ld\n", test_with_variables())
+    printf("Test 3 - Loop: %ld\n", test_loop())
+    printf("Test 4 - Conditional: %ld\n", test_conditional())
+    printf("Test 5 - Complex: %ld\n", test_complex())
+    printf("Test 6 - Factorial: %ld\n", test_factorial())
+    printf("Test 7 - Power: %ld\n", test_power())
+    printf("Test 8 - Ternary: %ld\n", test_ternary())
+    printf("Test 9 - Bitwise: %ld\n", test_bitwise())
+    printf("Test 10 - Boolean: %d\n", test_boolean())
+    printf("Test 11 - Array size: %ld\n", test_array_size())
+    printf("Test 12 - Nested: %ld\n", test_nested())
+    printf("Test 13 - Float: %f\n", test_float())
+    printf("Test 14 - Modulo: %ld\n", test_modulo())
+    printf("Test 15 - Shift: %ld\n", test_shift())
+
+    0
+}

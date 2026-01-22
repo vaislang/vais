@@ -67,24 +67,62 @@ impl Parser {
     }
 
     /// Parse ternary: `cond ? then : else`
+    /// Distinguishes from postfix try (expr?) by checking if ? is followed by
+    /// an expression start token. If not, it's postfix try.
     pub(crate) fn parse_ternary(&mut self) -> ParseResult<Spanned<Expr>> {
         let cond = self.parse_or()?;
 
         if self.check(&Token::Question) {
-            self.advance();
-            let then = self.parse_ternary()?;
-            self.expect(&Token::Colon)?;
-            let else_ = self.parse_ternary()?;
+            // Check if the token after ? can start an expression
+            // If not, this ? is postfix try, not ternary
+            if let Some(next) = self.peek_next() {
+                let can_start_expr = matches!(
+                    next.token,
+                    Token::Int(_)
+                        | Token::Float(_)
+                        | Token::String(_)
+                        | Token::True
+                        | Token::False
+                        | Token::Ident(_)
+                        | Token::LParen
+                        | Token::LBracket
+                        | Token::LBrace
+                        | Token::If
+                        | Token::Loop
+                        | Token::Match
+                        | Token::Spawn
+                        | Token::Pipe      // lambda
+                        | Token::Minus     // unary minus
+                        | Token::Bang      // unary not
+                        | Token::Tilde     // bitwise not
+                        | Token::Amp       // reference
+                        | Token::Star      // dereference
+                        | Token::At        // self recursion
+                        | Token::SelfLower // self
+                );
 
-            let span = cond.span.merge(else_.span);
-            return Ok(Spanned::new(
-                Expr::Ternary {
-                    cond: Box::new(cond),
-                    then: Box::new(then),
-                    else_: Box::new(else_),
-                },
-                span,
-            ));
+                if can_start_expr {
+                    // This looks like ternary, proceed
+                    self.advance();
+                    let then = self.parse_ternary()?;
+                    self.expect(&Token::Colon)?;
+                    let else_ = self.parse_ternary()?;
+
+                    let span = cond.span.merge(else_.span);
+                    return Ok(Spanned::new(
+                        Expr::Ternary {
+                            cond: Box::new(cond),
+                            then: Box::new(then),
+                            else_: Box::new(else_),
+                        },
+                        span,
+                    ));
+                }
+                // else: not an expression start, so it's postfix try
+                // Don't consume ?, let parse_postfix_try handle it
+            }
+            // No next token after ? means it's postfix try at end of input
+            // Don't consume ?, let parse_postfix_try handle it
         }
 
         Ok(cond)
@@ -581,14 +619,48 @@ impl Parser {
                     Span::new(start, end),
                 );
             } else if self.check(&Token::Question) {
-                // Check if this is postfix try (expr?) or ternary (cond ? then : else)
-                // If there's a following expression followed by ':', it's ternary - don't consume
-                // The ternary is handled at parse_ternary level
-                // Here we only handle postfix try: expr? where ? is at end or followed by binary op
-                //
-                // Simplest heuristic: if next token is an expression start, it's likely ternary
-                // So we don't handle ? here at all - let ternary handle it
-                break;
+                // Distinguish postfix try (expr?) from ternary (cond ? then : else)
+                // Check if ? is followed by an expression-start token
+                // If yes, it could be ternary - don't consume here, let parse_ternary handle
+                // If no, it's postfix try
+                let is_ternary = if let Some(next) = self.peek_next() {
+                    matches!(
+                        next.token,
+                        Token::Int(_)
+                            | Token::Float(_)
+                            | Token::String(_)
+                            | Token::True
+                            | Token::False
+                            | Token::Ident(_)
+                            | Token::LParen
+                            | Token::LBracket
+                            | Token::LBrace
+                            | Token::If
+                            | Token::Loop
+                            | Token::Match
+                            | Token::Spawn
+                            | Token::Pipe      // lambda
+                            | Token::Minus     // unary minus
+                            | Token::Bang      // unary not
+                            | Token::Tilde     // bitwise not
+                            | Token::Amp       // reference
+                            | Token::Star      // dereference
+                            | Token::At        // self recursion
+                            | Token::SelfLower // self
+                    )
+                } else {
+                    false
+                };
+
+                if is_ternary {
+                    // Let parse_ternary handle this
+                    break;
+                } else {
+                    // Postfix try
+                    self.advance();
+                    let end = self.prev_span().end;
+                    expr = Spanned::new(Expr::Try(Box::new(expr)), Span::new(start, end));
+                }
             } else if self.check(&Token::Bang) {
                 self.advance();
                 let end = self.prev_span().end;
@@ -718,6 +790,19 @@ impl Parser {
             Token::Pipe => {
                 // Lambda expression: |params| body
                 return self.parse_lambda(start);
+            }
+            Token::Comptime => {
+                // Comptime expression: comptime { expr }
+                self.expect(&Token::LBrace)?;
+                let body = self.parse_expr()?;
+                self.expect(&Token::RBrace)?;
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Comptime {
+                        body: Box::new(body),
+                    },
+                    Span::new(start, end),
+                ));
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -1036,6 +1121,9 @@ impl Parser {
             Token::TypeKeyword => "T".to_string(),
             Token::Use => "U".to_string(),
             Token::Pub => "P".to_string(),
+            Token::Trait => "W".to_string(),
+            Token::Impl => "X".to_string(),
+            Token::Defer => "D".to_string(),
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token,

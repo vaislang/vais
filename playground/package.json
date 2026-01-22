@@ -1,0 +1,18 @@
+{
+  "name": "vais-playground",
+  "version": "0.1.0",
+  "description": "Web-based playground for Vais programming language",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "wasm:build": "cd .. && cargo build --release --target wasm32-unknown-unknown --package vaisc"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.52.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.3"
+  }
+}

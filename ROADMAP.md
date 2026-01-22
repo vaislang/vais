@@ -776,7 +776,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 8: 생산성 향상 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (P0 완료)
+> **상태**: ✅ 완료 (100%)
 > **추가일**: 2026-01-22
 
 ### P0 - 긴급 (완료)
@@ -849,9 +849,23 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 제네릭 union 지원 (O Either<L, R> { left: L, right: R })
   - 메모리 레이아웃: 가장 큰 필드 타입 기준
   - 필드 접근은 호출자 책임 (unsafe, 컴파일러가 활성 필드 추적 안함)
-- [ ] **Compile-time evaluation** - comptime 블록으로 컴파일 타임 계산
-- [ ] **Playground** - 웹 기반 Vais 실행 환경
-- [ ] **표준 라이브러리 확장** - Time, Random, UUID, Base64, URL 파서
+- [x] **Compile-time evaluation** - comptime 블록으로 컴파일 타임 계산 (완료일: 2026-01-22)
+  - `comptime { expr }` 문법으로 컴파일 타임 평가
+  - ComptimeValue 타입 (Int, Float, Bool, Unit)
+  - 산술/비트/논리/비교 연산 지원
+  - 조건문, 반복문, 변수 바인딩 지원
+  - vais-types/src/comptime.rs 모듈 추가
+- [x] **Playground** - 웹 기반 Vais 실행 환경 (완료일: 2026-01-22)
+  - playground/ 디렉토리 (Vite + Monaco Editor)
+  - 13개 예제 코드 스니펫
+  - Vais 구문 강조 및 자동 완성
+  - 반응형 UI, 다크 테마
+- [x] **표준 라이브러리 확장** - Time, Random, UUID, Base64, URL 파서 (완료일: 2026-01-22)
+  - std/time.vais: Duration, time_now(), sleep()
+  - std/random.vais: LCG 난수 생성, random_range()
+  - std/uuid.vais: UUID v4 생성
+  - std/base64.vais: Base64 인코딩/디코딩
+  - std/url.vais: URL 파싱, percent-encoding
 
 ### P4 - 미래 (6개월+)
 - [ ] **Garbage Collection 옵션** - 선택적 GC 모드 (REPL/스크립팅용)
@@ -871,7 +885,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
-| Phase 8: 생산성 향상 | 🔄 진행 중 | P0+P1 완료, P2 진행 중 |
+| Phase 8: 생산성 향상 | ✅ 완료 | 100% (P0-P3 완료) |
 
 ---
 

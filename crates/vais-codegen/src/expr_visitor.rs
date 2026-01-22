@@ -79,6 +79,7 @@ impl ExprVisitor for CodeGenerator {
             }
             Expr::Try(inner) => self.visit_try(inner, counter),
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
+            Expr::Comptime { body } => self.visit_comptime(body, counter),
         }
     }
 
@@ -357,5 +358,21 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_unwrap(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         self.generate_unwrap_expr(inner, counter)
+    }
+
+    fn visit_comptime(&mut self, body: &Spanned<Expr>, _counter: &mut usize) -> GenResult {
+        // Evaluate the comptime expression at compile time
+        let mut evaluator = vais_types::ComptimeEvaluator::new();
+        let value = evaluator.eval(body).map_err(|e| {
+            CodegenError::TypeError(format!("Comptime evaluation failed: {}", e))
+        })?;
+
+        // Return the evaluated constant as LLVM IR
+        match value {
+            vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
+            vais_types::ComptimeValue::Float(f) => Ok((format!("{:e}", f), String::new())),
+            vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
+            vais_types::ComptimeValue::Unit => Ok(("void".to_string(), String::new())),
+        }
     }
 }

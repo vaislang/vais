@@ -1,0 +1,273 @@
+# UUID library - Universally Unique Identifier generation
+# Supports UUID v4 (random-based) generation and string conversion
+# Requires std/random.vais for random number generation
+
+U std/random
+U std/string
+
+# UUID structure - 128-bit identifier stored as two 64-bit integers
+S Uuid {
+    high: i64,      # High 64 bits
+    low: i64        # Low 64 bits
+}
+
+X Uuid {
+    # Create a new UUID with given high and low values
+    F new(high: i64, low: i64) -> Uuid {
+        Uuid { high: high, low: low }
+    }
+
+    # Create a nil UUID (all zeros)
+    F nil() -> Uuid {
+        Uuid { high: 0, low: 0 }
+    }
+
+    # Check if UUID is nil
+    F is_nil(&self) -> i64 {
+        I self.high == 0 && self.low == 0 { 1 } E { 0 }
+    }
+
+    # Compare two UUIDs for equality
+    F equals(&self, other: Uuid) -> i64 {
+        I self.high == other.high && self.low == other.low { 1 } E { 0 }
+    }
+
+    # Convert UUID to string representation
+    # Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    # where x is any hex digit and y is one of 8, 9, A, or B
+    F to_string(&self) -> String {
+        # UUID string is 36 characters (32 hex + 4 hyphens)
+        s := String.with_capacity(40)
+
+        # Extract bytes from high and low
+        # high contains bytes 0-7, low contains bytes 8-15
+
+        # Bytes 0-3 (8 hex chars)
+        @.append_hex_byte(s, (self.high >> 56) & 255)
+        @.append_hex_byte(s, (self.high >> 48) & 255)
+        @.append_hex_byte(s, (self.high >> 40) & 255)
+        @.append_hex_byte(s, (self.high >> 32) & 255)
+
+        s.push_char(45)  # '-'
+
+        # Bytes 4-5 (4 hex chars)
+        @.append_hex_byte(s, (self.high >> 24) & 255)
+        @.append_hex_byte(s, (self.high >> 16) & 255)
+
+        s.push_char(45)  # '-'
+
+        # Bytes 6-7 (4 hex chars)
+        @.append_hex_byte(s, (self.high >> 8) & 255)
+        @.append_hex_byte(s, self.high & 255)
+
+        s.push_char(45)  # '-'
+
+        # Bytes 8-9 (4 hex chars)
+        @.append_hex_byte(s, (self.low >> 56) & 255)
+        @.append_hex_byte(s, (self.low >> 48) & 255)
+
+        s.push_char(45)  # '-'
+
+        # Bytes 10-15 (12 hex chars)
+        @.append_hex_byte(s, (self.low >> 40) & 255)
+        @.append_hex_byte(s, (self.low >> 32) & 255)
+        @.append_hex_byte(s, (self.low >> 24) & 255)
+        @.append_hex_byte(s, (self.low >> 16) & 255)
+        @.append_hex_byte(s, (self.low >> 8) & 255)
+        @.append_hex_byte(s, self.low & 255)
+
+        s
+    }
+
+    # Helper: Append a byte as two hex characters to string
+    F append_hex_byte(&self, s: String, byte: i64) -> i64 {
+        high_nibble := (byte >> 4) & 15
+        low_nibble := byte & 15
+
+        s.push_char(nibble_to_hex(high_nibble))
+        s.push_char(nibble_to_hex(low_nibble))
+        0
+    }
+
+    # Print UUID to stdout
+    F print(&self) -> i64 {
+        s := @.to_string()
+        s.print()
+        s.drop()
+        0
+    }
+}
+
+# Convert nibble (0-15) to hex character
+F nibble_to_hex(n: i64) -> i64 {
+    I n < 10 {
+        48 + n  # '0' + n
+    } E {
+        97 + (n - 10)  # 'a' + (n - 10)
+    }
+}
+
+# Convert hex character to value (0-15), returns -1 if invalid
+F hex_to_nibble(c: i64) -> i64 {
+    I c >= 48 && c <= 57 {
+        # '0'-'9'
+        c - 48
+    } E I c >= 97 && c <= 102 {
+        # 'a'-'f'
+        c - 97 + 10
+    } E I c >= 65 && c <= 70 {
+        # 'A'-'F'
+        c - 65 + 10
+    } E {
+        0 - 1
+    }
+}
+
+# Generate a random UUID v4
+# UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+# - Version is 4 (random)
+# - Variant is RFC 4122 (bits 6-7 of byte 8 are 10)
+F uuid_v4() -> Uuid {
+    # Generate 16 random bytes
+    bytes := malloc(16)
+    random_bytes(bytes, 16)
+
+    # Read as two i64 values
+    high := load_i64(bytes)
+    low := load_i64(bytes + 8)
+
+    free(bytes)
+
+    # Set version to 4 (bits 12-15 of byte 6)
+    # Clear bits 12-15 of high (byte 6 is bits 48-55)
+    high = high & 0xFFFFFFFFFFFF0FFF
+    # Set to 0100 (4)
+    high = high | 0x0000000000004000
+
+    # Set variant to RFC 4122 (bits 6-7 of byte 8)
+    # Byte 8 is bits 56-63 of low
+    # Clear bits 6-7
+    low = low & 0x3FFFFFFFFFFFFFFF
+    # Set to 10
+    low = low | 0x8000000000000000
+
+    Uuid { high: high, low: low }
+}
+
+# Generate UUID v4 and return as string
+F uuid_v4_string() -> String {
+    uuid := uuid_v4()
+    uuid.to_string()
+}
+
+# Parse UUID from string
+# Accepts format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# Returns Uuid.nil() if parsing fails
+F uuid_parse(s: String) -> Uuid {
+    # UUID string must be exactly 36 characters
+    I s.len != 36 {
+        Uuid.nil()
+    } E {
+        # Verify hyphens are in correct positions
+        I s.char_at(8) != 45 || s.char_at(13) != 45 || s.char_at(18) != 45 || s.char_at(23) != 45 {
+            Uuid.nil()
+        } E {
+            # Parse hex digits
+            high := 0
+            low := 0
+
+            # Bytes 0-7 (high)
+            # Positions: 0-1, 2-3, 4-5, 6-7, 9-10, 11-12, 14-15, 16-17
+            pos_high := malloc(8 * 8)  # Array of 8 positions for high bytes
+            store_i64(pos_high + 0, 0)
+            store_i64(pos_high + 8, 2)
+            store_i64(pos_high + 16, 4)
+            store_i64(pos_high + 24, 6)
+            store_i64(pos_high + 32, 9)
+            store_i64(pos_high + 40, 11)
+            store_i64(pos_high + 48, 14)
+            store_i64(pos_high + 56, 16)
+
+            i := 0
+            L i < 8 {
+                pos := load_i64(pos_high + i * 8)
+                b := parse_hex_byte(s, pos)
+                I b < 0 {
+                    free(pos_high)
+                    B Uuid.nil()
+                }
+                # Shift and add byte to high
+                high = (high << 8) | b
+                i = i + 1
+            }
+
+            free(pos_high)
+
+            # Bytes 8-15 (low)
+            # Positions: 19-20, 21-22, 24-25, 26-27, 28-29, 30-31, 32-33, 34-35
+            pos_low := malloc(8 * 8)
+            store_i64(pos_low + 0, 19)
+            store_i64(pos_low + 8, 21)
+            store_i64(pos_low + 16, 24)
+            store_i64(pos_low + 24, 26)
+            store_i64(pos_low + 32, 28)
+            store_i64(pos_low + 40, 30)
+            store_i64(pos_low + 48, 32)
+            store_i64(pos_low + 56, 34)
+
+            i = 0
+            L i < 8 {
+                pos := load_i64(pos_low + i * 8)
+                b := parse_hex_byte(s, pos)
+                I b < 0 {
+                    free(pos_low)
+                    B Uuid.nil()
+                }
+                low = (low << 8) | b
+                i = i + 1
+            }
+
+            free(pos_low)
+
+            Uuid { high: high, low: low }
+        }
+    }
+}
+
+# Parse a hex byte (2 characters) from string at position
+# Returns -1 if invalid
+F parse_hex_byte(s: String, pos: i64) -> i64 {
+    I pos + 1 >= s.len {
+        0 - 1
+    } E {
+        high := hex_to_nibble(s.char_at(pos))
+        low := hex_to_nibble(s.char_at(pos + 1))
+
+        I high < 0 || low < 0 {
+            0 - 1
+        } E {
+            (high << 4) | low
+        }
+    }
+}
+
+# Parse UUID from C string (null-terminated)
+F uuid_parse_cstr(cstr: i64) -> Uuid {
+    I cstr == 0 {
+        Uuid.nil()
+    } E {
+        s := str_from(cstr)
+        uuid := uuid_parse(s)
+        s.drop()
+        uuid
+    }
+}
+
+# Generate a simple sequential UUID for testing
+# Not suitable for production use
+G uuid_counter: i64 = 0
+
+F uuid_sequential() -> Uuid {
+    uuid_counter = uuid_counter + 1
+    Uuid { high: 0, low: uuid_counter }
+}
