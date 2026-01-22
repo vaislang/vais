@@ -894,7 +894,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 9: 언어 완성도 및 생산성 향상
 
-> **상태**: 🔄 진행 중 (90%)
+> **상태**: ✅ 완료 (100%)
 > **추가일**: 2026-01-22
 > **예상 기간**: 12주 (약 3개월)
 
@@ -962,9 +962,15 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - PgoConfig: 브랜치 가중치, 간접 호출 프로모션, hot/cold 임계값 설정
   - instrument_ir_for_pgo(), annotate_function_hotness() 헬퍼 함수
   - 9개 PGO 테스트 추가
-- [ ] **Incremental Build 고도화** - 의존성 캐싱 개선
-  - 모듈별 해시 캐싱
-  - 변경된 함수만 재컴파일
+- [x] **Incremental Build 고도화** - 함수 수준 증분 컴파일 (완료일: 2026-01-22)
+  - FunctionMetadata, TypeMetadata 구조체 추가 (함수/타입 해시, 라인 범위, 의존성)
+  - DefinitionExtractor: 소스에서 함수/구조체/열거형 정의 추출
+  - detect_function_changes(): 함수 수준 변경 감지 (추가/수정/삭제/영향받음)
+  - FunctionChangeSet: 변경된 함수 집합 관리
+  - DirtySet 확장: dirty_functions, dirty_types 맵 추가
+  - detect_changes_fine_grained(): 함수 수준 정밀 변경 감지
+  - get_reusable_objects(): 캐시된 오브젝트 파일 재사용
+  - 10개 테스트 추가 (전체 13개 증분 컴파일 테스트 통과)
 
 ### P3 - 경험 (1-2주)
 - [x] **Profiler 통합** - 성능 프로파일링 도구 (`std/profiler.vais`) (완료일: 2026-01-22)
@@ -982,8 +988,8 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - Assertions: assert, assert_eq, assert_ne, assert_gt, assert_lt, assert_str_eq 등
   - ANSI 컬러 출력, 테스트 시간 측정
 
-### 남은 작업
-- Incremental Build 고도화 (P2)
+### 완료
+- Phase 9 모든 작업 완료 (100%)
 
 ---
 
@@ -999,7 +1005,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
-| Phase 9: 언어 완성도 | 🔄 진행 중 | 90% |
+| Phase 9: 언어 완성도 | ✅ 완료 | 100% |
 
 ---
 

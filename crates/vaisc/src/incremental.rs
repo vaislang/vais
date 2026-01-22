@@ -30,6 +30,37 @@ pub struct FileMetadata {
     pub hash: String,
     pub timestamp: u64,
     pub size: u64,
+    /// Function-level metadata for fine-grained incremental compilation
+    #[serde(default)]
+    pub functions: HashMap<String, FunctionMetadata>,
+    /// Struct/enum definitions for type change detection
+    #[serde(default)]
+    pub types: HashMap<String, TypeMetadata>,
+}
+
+/// Function-level metadata for incremental compilation
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FunctionMetadata {
+    /// Hash of the function body/signature
+    pub hash: String,
+    /// Line range (start, end) in the source file
+    pub line_range: (u32, u32),
+    /// Function dependencies (called functions, used types)
+    pub dependencies: Vec<String>,
+    /// Whether this function was modified since last build
+    #[serde(default)]
+    pub is_dirty: bool,
+}
+
+/// Type (struct/enum) metadata for incremental compilation
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TypeMetadata {
+    /// Hash of the type definition
+    pub hash: String,
+    /// Line range in source
+    pub line_range: (u32, u32),
+    /// Types this type depends on (field types, variant types)
+    pub dependencies: Vec<String>,
 }
 
 /// Dependency graph for tracking file relationships
@@ -127,6 +158,10 @@ pub struct DirtySet {
     pub modified_files: HashSet<PathBuf>,
     /// Files affected by modified files (through dependencies)
     pub affected_files: HashSet<PathBuf>,
+    /// Function-level dirty tracking: file -> dirty function names
+    pub dirty_functions: HashMap<PathBuf, HashSet<String>>,
+    /// Type-level dirty tracking: file -> dirty type names
+    pub dirty_types: HashMap<PathBuf, HashSet<String>>,
 }
 
 impl DirtySet {
@@ -145,6 +180,37 @@ impl DirtySet {
     /// Total count of dirty files
     pub fn count(&self) -> usize {
         self.modified_files.len() + self.affected_files.len()
+    }
+
+    /// Check if only specific functions changed (partial recompilation possible)
+    pub fn has_partial_changes(&self) -> bool {
+        !self.dirty_functions.is_empty() && self.modified_files.is_empty()
+    }
+
+    /// Get dirty functions for a file
+    pub fn get_dirty_functions(&self, file: &Path) -> Option<&HashSet<String>> {
+        self.dirty_functions.get(file)
+    }
+
+    /// Mark a function as dirty
+    pub fn mark_function_dirty(&mut self, file: PathBuf, func_name: String) {
+        self.dirty_functions
+            .entry(file)
+            .or_default()
+            .insert(func_name);
+    }
+
+    /// Mark a type as dirty
+    pub fn mark_type_dirty(&mut self, file: PathBuf, type_name: String) {
+        self.dirty_types
+            .entry(file)
+            .or_default()
+            .insert(type_name);
+    }
+
+    /// Get count of dirty functions across all files
+    pub fn dirty_function_count(&self) -> usize {
+        self.dirty_functions.values().map(|s| s.len()).sum()
     }
 }
 
@@ -252,7 +318,7 @@ impl IncrementalCache {
         Ok(dirty_set)
     }
 
-    /// Update cache with a compiled file
+    /// Update cache with a compiled file (basic - no function-level metadata)
     pub fn update_file(&mut self, path: &Path) -> Result<(), String> {
         let canonical = path.canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
@@ -267,6 +333,8 @@ impl IncrementalCache {
                 .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
                 .unwrap_or(0),
             size: metadata.len(),
+            functions: HashMap::new(),
+            types: HashMap::new(),
         };
 
         self.state.dep_graph.update_file_metadata(canonical, file_meta);
@@ -337,6 +405,203 @@ impl IncrementalCache {
             last_build: self.state.last_build,
         }
     }
+
+    /// Detect function-level changes in a file
+    pub fn detect_function_changes(&self, path: &Path) -> Result<Option<FunctionChangeSet>, String> {
+        let canonical = path.canonicalize()
+            .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
+
+        // Get cached metadata
+        let cached_meta = match self.state.dep_graph.file_metadata.get(&canonical) {
+            Some(m) => m,
+            None => return Ok(None), // New file, no function-level comparison possible
+        };
+
+        // Read current file content
+        let content = fs::read_to_string(&canonical)
+            .map_err(|e| format!("Cannot read file: {}", e))?;
+
+        // Extract current definitions
+        let mut extractor = DefinitionExtractor::new();
+        extractor.extract_from_source(&content)?;
+
+        // Compare with cached
+        let change_set = detect_function_changes(&cached_meta.functions, &extractor.functions);
+
+        Ok(Some(change_set))
+    }
+
+    /// Update file with function-level metadata
+    pub fn update_file_with_functions(&mut self, path: &Path) -> Result<(), String> {
+        let canonical = path.canonicalize()
+            .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
+
+        // Read file content
+        let content = fs::read_to_string(&canonical)
+            .map_err(|e| format!("Cannot read file: {}", e))?;
+
+        // Compute file hash
+        let hash = compute_file_hash(&canonical)?;
+        let metadata = fs::metadata(&canonical)
+            .map_err(|e| format!("Cannot get file metadata: {}", e))?;
+
+        // Extract function and type definitions
+        let mut extractor = DefinitionExtractor::new();
+        extractor.extract_from_source(&content)?;
+
+        let file_meta = FileMetadata {
+            hash,
+            timestamp: metadata.modified()
+                .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
+                .unwrap_or(0),
+            size: metadata.len(),
+            functions: extractor.functions,
+            types: extractor.types,
+        };
+
+        self.state.dep_graph.update_file_metadata(canonical, file_meta);
+        Ok(())
+    }
+
+    /// Detect changes with function-level granularity
+    pub fn detect_changes_fine_grained(&mut self, entry_file: &Path) -> Result<DirtySet, String> {
+        let mut dirty_set = DirtySet::default();
+
+        // Check if compilation options changed
+        if let (Some(current), Some(cached)) = (&self.current_options, &self.state.compilation_options) {
+            if current != cached {
+                // Options changed - mark all files as dirty
+                for file in self.state.dep_graph.file_metadata.keys() {
+                    dirty_set.modified_files.insert(file.clone());
+                }
+                return Ok(dirty_set);
+            }
+        }
+
+        let entry_canonical = entry_file.canonicalize()
+            .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
+
+        // Collect all known files from cache
+        let known_files: Vec<PathBuf> = self.state.dep_graph.file_metadata.keys().cloned().collect();
+
+        for file_path in known_files {
+            if !file_path.exists() {
+                // File was deleted
+                dirty_set.modified_files.insert(file_path);
+                continue;
+            }
+
+            let current_hash = compute_file_hash(&file_path)?;
+            if let Some(cached_meta) = self.state.dep_graph.file_metadata.get(&file_path) {
+                if current_hash != cached_meta.hash {
+                    // File changed - check at function level
+                    if let Ok(Some(func_changes)) = self.detect_function_changes(&file_path) {
+                        if func_changes.is_empty() {
+                            // No actual function changes (whitespace/comments only)
+                            continue;
+                        }
+
+                        // Check if it's partial changes (only some functions modified)
+                        let total_functions = cached_meta.functions.len();
+                        let changed_count = func_changes.modified.len() + func_changes.added.len();
+
+                        // If more than 50% of functions changed, mark whole file dirty
+                        if changed_count > total_functions / 2 || func_changes.removed.len() > 0 {
+                            dirty_set.modified_files.insert(file_path.clone());
+                        } else {
+                            // Mark only specific functions as dirty
+                            for func_name in func_changes.all_dirty() {
+                                dirty_set.mark_function_dirty(file_path.clone(), func_name);
+                            }
+                        }
+                    } else {
+                        // No cached function info, mark whole file
+                        dirty_set.modified_files.insert(file_path);
+                    }
+                }
+            } else {
+                // New file not in cache
+                dirty_set.modified_files.insert(file_path);
+            }
+        }
+
+        // Check if entry file is new
+        if !self.state.dep_graph.file_metadata.contains_key(&entry_canonical) {
+            dirty_set.modified_files.insert(entry_canonical);
+        }
+
+        // Propagate changes to dependent files
+        for modified in dirty_set.modified_files.clone() {
+            let dependents = self.state.dep_graph.get_dependents(&modified);
+            dirty_set.affected_files.extend(dependents);
+        }
+
+        // Propagate function-level changes to affected functions in other files
+        let dirty_funcs: Vec<(PathBuf, HashSet<String>)> = dirty_set.dirty_functions
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        for (file_path, func_names) in dirty_funcs {
+            // Get files that depend on this file
+            let dependents = self.state.dep_graph.get_dependents(&file_path);
+
+            for dependent in dependents {
+                if let Some(dep_meta) = self.state.dep_graph.file_metadata.get(&dependent) {
+                    // Check which functions in the dependent file use the changed functions
+                    for (dep_func_name, dep_func) in &dep_meta.functions {
+                        for dep_item in &dep_func.dependencies {
+                            if func_names.contains(dep_item) {
+                                dirty_set.mark_function_dirty(dependent.clone(), dep_func_name.clone());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(dirty_set)
+    }
+
+    /// Get cached object file path for a function
+    pub fn get_cached_object_path(&self, file: &Path, func_name: &str) -> PathBuf {
+        let file_hash = file.to_string_lossy().replace(['/', '\\', ':'], "_");
+        self.cache_dir.join(format!("{}_{}.o", file_hash, func_name))
+    }
+
+    /// Check if a function's object file is cached
+    pub fn has_cached_object(&self, file: &Path, func_name: &str) -> bool {
+        self.get_cached_object_path(file, func_name).exists()
+    }
+
+    /// Get all cached object paths for non-dirty functions in a file
+    pub fn get_reusable_objects(&self, file: &Path, dirty_set: &DirtySet) -> Vec<PathBuf> {
+        let mut objects = Vec::new();
+
+        let canonical = match file.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return objects,
+        };
+
+        if let Some(meta) = self.state.dep_graph.file_metadata.get(&canonical) {
+            let dirty_funcs = dirty_set.dirty_functions
+                .get(&canonical)
+                .cloned()
+                .unwrap_or_default();
+
+            for func_name in meta.functions.keys() {
+                if !dirty_funcs.contains(func_name) {
+                    let obj_path = self.get_cached_object_path(&canonical, func_name);
+                    if obj_path.exists() {
+                        objects.push(obj_path);
+                    }
+                }
+            }
+        }
+
+        objects
+    }
 }
 
 /// Cache statistics for verbose output
@@ -357,6 +622,341 @@ pub fn compute_file_hash(path: &Path) -> Result<String, String> {
     let result = hasher.finalize();
 
     Ok(format!("{:x}", result))
+}
+
+/// Compute SHA256 hash of a string (for function bodies, type definitions)
+pub fn compute_content_hash(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let result = hasher.finalize();
+    format!("{:x}", result)
+}
+
+/// Function/type extractor for incremental compilation
+pub struct DefinitionExtractor {
+    /// Extracted function metadata
+    pub functions: HashMap<String, FunctionMetadata>,
+    /// Extracted type metadata
+    pub types: HashMap<String, TypeMetadata>,
+}
+
+impl DefinitionExtractor {
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+            types: HashMap::new(),
+        }
+    }
+
+    /// Extract definitions from source content
+    /// This is a simplified parser that looks for function and type patterns
+    pub fn extract_from_source(&mut self, content: &str) -> Result<(), String> {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut current_line = 0;
+
+        while current_line < lines.len() {
+            let line = lines[current_line].trim();
+
+            // Function definition: F name(...) or F name<...>(...)
+            if let Some(func_info) = self.try_parse_function(line, &lines, current_line) {
+                let (name, start, end, body) = func_info;
+                let hash = compute_content_hash(&body);
+                let deps = self.extract_dependencies(&body);
+
+                self.functions.insert(name.clone(), FunctionMetadata {
+                    hash,
+                    line_range: (start as u32, end as u32),
+                    dependencies: deps,
+                    is_dirty: false,
+                });
+
+                current_line = end + 1;
+                continue;
+            }
+
+            // Struct definition: S name { ... }
+            if let Some(type_info) = self.try_parse_struct(line, &lines, current_line) {
+                let (name, start, end, body) = type_info;
+                let hash = compute_content_hash(&body);
+                let deps = self.extract_type_dependencies(&body);
+
+                self.types.insert(name.clone(), TypeMetadata {
+                    hash,
+                    line_range: (start as u32, end as u32),
+                    dependencies: deps,
+                });
+
+                current_line = end + 1;
+                continue;
+            }
+
+            // Enum definition: E name { ... }
+            if let Some(type_info) = self.try_parse_enum(line, &lines, current_line) {
+                let (name, start, end, body) = type_info;
+                let hash = compute_content_hash(&body);
+                let deps = self.extract_type_dependencies(&body);
+
+                self.types.insert(name.clone(), TypeMetadata {
+                    hash,
+                    line_range: (start as u32, end as u32),
+                    dependencies: deps,
+                });
+
+                current_line = end + 1;
+                continue;
+            }
+
+            current_line += 1;
+        }
+
+        Ok(())
+    }
+
+    /// Try to parse a function definition, returns (name, start_line, end_line, body)
+    fn try_parse_function(&self, line: &str, lines: &[&str], start: usize) -> Option<(String, usize, usize, String)> {
+        // Match patterns: "F name(", "F name<", "pub F name("
+        let line_trimmed = line.trim_start_matches("pub ").trim();
+        if !line_trimmed.starts_with("F ") {
+            return None;
+        }
+
+        // Extract function name
+        let after_f = line_trimmed[2..].trim();
+        let name_end = after_f.find(|c| c == '(' || c == '<').unwrap_or(after_f.len());
+        let name = after_f[..name_end].trim().to_string();
+
+        if name.is_empty() {
+            return None;
+        }
+
+        // Find matching braces
+        let (end_line, body) = self.find_block_end(lines, start)?;
+
+        Some((name, start, end_line, body))
+    }
+
+    /// Try to parse a struct definition
+    fn try_parse_struct(&self, line: &str, lines: &[&str], start: usize) -> Option<(String, usize, usize, String)> {
+        let line_trimmed = line.trim_start_matches("pub ").trim();
+        if !line_trimmed.starts_with("S ") {
+            return None;
+        }
+
+        let after_s = line_trimmed[2..].trim();
+        let name_end = after_s.find(|c| c == '{' || c == '<' || c == ' ').unwrap_or(after_s.len());
+        let name = after_s[..name_end].trim().to_string();
+
+        if name.is_empty() {
+            return None;
+        }
+
+        let (end_line, body) = self.find_block_end(lines, start)?;
+        Some((name, start, end_line, body))
+    }
+
+    /// Try to parse an enum definition
+    fn try_parse_enum(&self, line: &str, lines: &[&str], start: usize) -> Option<(String, usize, usize, String)> {
+        let line_trimmed = line.trim_start_matches("pub ").trim();
+        if !line_trimmed.starts_with("E ") {
+            return None;
+        }
+
+        let after_e = line_trimmed[2..].trim();
+        let name_end = after_e.find(|c| c == '{' || c == '<' || c == ' ').unwrap_or(after_e.len());
+        let name = after_e[..name_end].trim().to_string();
+
+        if name.is_empty() {
+            return None;
+        }
+
+        let (end_line, body) = self.find_block_end(lines, start)?;
+        Some((name, start, end_line, body))
+    }
+
+    /// Find the end of a block (matching braces)
+    fn find_block_end(&self, lines: &[&str], start: usize) -> Option<(usize, String)> {
+        let mut brace_count = 0;
+        let mut found_open = false;
+        let mut body = String::new();
+
+        for (i, line) in lines.iter().enumerate().skip(start) {
+            body.push_str(line);
+            body.push('\n');
+
+            for ch in line.chars() {
+                if ch == '{' {
+                    brace_count += 1;
+                    found_open = true;
+                } else if ch == '}' {
+                    brace_count -= 1;
+                }
+            }
+
+            if found_open && brace_count == 0 {
+                return Some((i, body));
+            }
+        }
+
+        None
+    }
+
+    /// Extract function dependencies from body (called functions, used types)
+    fn extract_dependencies(&self, body: &str) -> Vec<String> {
+        let mut deps = Vec::new();
+
+        // Simple pattern matching for function calls: name(
+        // This is a simplified approach - a real implementation would use the AST
+        let words: Vec<&str> = body.split(|c: char| !c.is_alphanumeric() && c != '_')
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        for window in words.windows(1) {
+            let word = window[0];
+            // Skip Vais keywords
+            if !is_vais_keyword(word) && word.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
+                // Check if followed by ( in original body
+                if body.contains(&format!("{}(", word)) || body.contains(&format!("{}<", word)) {
+                    if !deps.contains(&word.to_string()) {
+                        deps.push(word.to_string());
+                    }
+                }
+            }
+        }
+
+        deps
+    }
+
+    /// Extract type dependencies from type definition
+    fn extract_type_dependencies(&self, body: &str) -> Vec<String> {
+        let mut deps = Vec::new();
+
+        // Look for type references: field: Type, Vec<Type>, etc.
+        let words: Vec<&str> = body.split(|c: char| !c.is_alphanumeric() && c != '_')
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        for word in words {
+            // Type names start with uppercase (convention)
+            if word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+               && !is_vais_keyword(word)
+               && !is_builtin_type(word) {
+                if !deps.contains(&word.to_string()) {
+                    deps.push(word.to_string());
+                }
+            }
+        }
+
+        deps
+    }
+}
+
+impl Default for DefinitionExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Check if a word is a Vais keyword
+fn is_vais_keyword(word: &str) -> bool {
+    matches!(word,
+        "F" | "S" | "E" | "T" | "I" | "M" | "N" | "C" |
+        "V" | "L" | "W" | "R" | "B" | "P" |
+        "if" | "else" | "for" | "while" | "return" | "break" | "continue" |
+        "true" | "false" | "self" | "Self" | "pub" | "mut" | "async" | "await" |
+        "import" | "from" | "as" | "match" | "spawn" | "defer"
+    )
+}
+
+/// Check if a type is a builtin type
+fn is_builtin_type(word: &str) -> bool {
+    matches!(word,
+        "i8" | "i16" | "i32" | "i64" | "i128" |
+        "u8" | "u16" | "u32" | "u64" | "u128" |
+        "f32" | "f64" | "bool" | "str" | "String" |
+        "Vec" | "HashMap" | "HashSet" | "Option" | "Result" |
+        "Box" | "Rc" | "Arc" | "RefCell" | "Mutex"
+    )
+}
+
+/// Compare function metadata and detect changes
+pub fn detect_function_changes(
+    old_meta: &HashMap<String, FunctionMetadata>,
+    new_meta: &HashMap<String, FunctionMetadata>,
+) -> FunctionChangeSet {
+    let mut change_set = FunctionChangeSet::default();
+
+    // Find added and modified functions
+    for (name, new_fn) in new_meta {
+        if let Some(old_fn) = old_meta.get(name) {
+            if old_fn.hash != new_fn.hash {
+                change_set.modified.insert(name.clone());
+            }
+        } else {
+            change_set.added.insert(name.clone());
+        }
+    }
+
+    // Find removed functions
+    for name in old_meta.keys() {
+        if !new_meta.contains_key(name) {
+            change_set.removed.insert(name.clone());
+        }
+    }
+
+    // Find affected functions (functions that depend on changed functions)
+    let all_changed: HashSet<_> = change_set.modified.iter()
+        .chain(change_set.added.iter())
+        .chain(change_set.removed.iter())
+        .cloned()
+        .collect();
+
+    for (name, func) in new_meta {
+        if all_changed.contains(name) {
+            continue;
+        }
+        for dep in &func.dependencies {
+            if all_changed.contains(dep) {
+                change_set.affected.insert(name.clone());
+                break;
+            }
+        }
+    }
+
+    change_set
+}
+
+/// Set of function changes
+#[derive(Debug, Default)]
+pub struct FunctionChangeSet {
+    /// Newly added functions
+    pub added: HashSet<String>,
+    /// Modified functions (hash changed)
+    pub modified: HashSet<String>,
+    /// Removed functions
+    pub removed: HashSet<String>,
+    /// Functions affected by changes (through dependencies)
+    pub affected: HashSet<String>,
+}
+
+impl FunctionChangeSet {
+    /// Check if there are any changes
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.modified.is_empty()
+            && self.removed.is_empty() && self.affected.is_empty()
+    }
+
+    /// Get all functions that need recompilation
+    pub fn all_dirty(&self) -> HashSet<String> {
+        let mut all = self.added.clone();
+        all.extend(self.modified.clone());
+        all.extend(self.affected.clone());
+        all
+    }
+
+    /// Total count of changes
+    pub fn count(&self) -> usize {
+        self.added.len() + self.modified.len() + self.removed.len() + self.affected.len()
+    }
 }
 
 /// Import tracker for collecting dependencies during parsing
@@ -491,5 +1091,267 @@ mod tests {
         fs::write(&source_file, "F main() { 1 }").unwrap();
         let dirty = cache.detect_changes(&source_file).unwrap();
         assert!(!dirty.is_empty());
+    }
+
+    #[test]
+    fn test_definition_extractor_functions() {
+        let source = r#"
+F add(a: i32, b: i32) -> i32 {
+    R a + b
+}
+
+F main() {
+    V x = add(1, 2)
+    print(x)
+}
+"#;
+        let mut extractor = DefinitionExtractor::new();
+        extractor.extract_from_source(source).unwrap();
+
+        assert_eq!(extractor.functions.len(), 2);
+        assert!(extractor.functions.contains_key("add"));
+        assert!(extractor.functions.contains_key("main"));
+
+        // Check that main depends on add
+        let main_meta = extractor.functions.get("main").unwrap();
+        assert!(main_meta.dependencies.contains(&"add".to_string()));
+    }
+
+    #[test]
+    fn test_definition_extractor_structs() {
+        let source = r#"
+S Point {
+    x: i32,
+    y: i32,
+}
+
+S Line {
+    start: Point,
+    end: Point,
+}
+
+F distance(p1: Point, p2: Point) -> f64 {
+    R 0.0
+}
+"#;
+        let mut extractor = DefinitionExtractor::new();
+        extractor.extract_from_source(source).unwrap();
+
+        assert_eq!(extractor.types.len(), 2);
+        assert!(extractor.types.contains_key("Point"));
+        assert!(extractor.types.contains_key("Line"));
+
+        // Line depends on Point
+        let line_meta = extractor.types.get("Line").unwrap();
+        assert!(line_meta.dependencies.contains(&"Point".to_string()));
+
+        assert_eq!(extractor.functions.len(), 1);
+    }
+
+    #[test]
+    fn test_definition_extractor_enums() {
+        let source = r#"
+E Color {
+    Red,
+    Green,
+    Blue,
+}
+
+E Shape {
+    Circle { radius: f64 },
+    Rectangle { width: f64, height: f64 },
+}
+"#;
+        let mut extractor = DefinitionExtractor::new();
+        extractor.extract_from_source(source).unwrap();
+
+        assert_eq!(extractor.types.len(), 2);
+        assert!(extractor.types.contains_key("Color"));
+        assert!(extractor.types.contains_key("Shape"));
+    }
+
+    #[test]
+    fn test_function_change_detection() {
+        let source1 = r#"
+F add(a: i32, b: i32) -> i32 {
+    R a + b
+}
+
+F main() {
+    V x = add(1, 2)
+}
+"#;
+        let source2 = r#"
+F add(a: i32, b: i32) -> i32 {
+    R a + b + 1
+}
+
+F main() {
+    V x = add(1, 2)
+}
+"#;
+        let mut extractor1 = DefinitionExtractor::new();
+        extractor1.extract_from_source(source1).unwrap();
+
+        let mut extractor2 = DefinitionExtractor::new();
+        extractor2.extract_from_source(source2).unwrap();
+
+        let changes = detect_function_changes(&extractor1.functions, &extractor2.functions);
+
+        // add was modified
+        assert!(changes.modified.contains("add"));
+        // main was affected (depends on add)
+        assert!(changes.affected.contains("main"));
+        // No additions or removals
+        assert!(changes.added.is_empty());
+        assert!(changes.removed.is_empty());
+    }
+
+    #[test]
+    fn test_function_addition_detection() {
+        let source1 = r#"
+F main() {
+    V x = 1
+}
+"#;
+        let source2 = r#"
+F helper() -> i32 {
+    R 42
+}
+
+F main() {
+    V x = 1
+}
+"#;
+        let mut extractor1 = DefinitionExtractor::new();
+        extractor1.extract_from_source(source1).unwrap();
+
+        let mut extractor2 = DefinitionExtractor::new();
+        extractor2.extract_from_source(source2).unwrap();
+
+        let changes = detect_function_changes(&extractor1.functions, &extractor2.functions);
+
+        assert!(changes.added.contains("helper"));
+        assert!(changes.modified.is_empty());
+        assert!(changes.removed.is_empty());
+    }
+
+    #[test]
+    fn test_function_removal_detection() {
+        let source1 = r#"
+F helper() -> i32 {
+    R 42
+}
+
+F main() {
+    V x = helper()
+}
+"#;
+        let source2 = r#"
+F main() {
+    V x = 1
+}
+"#;
+        let mut extractor1 = DefinitionExtractor::new();
+        extractor1.extract_from_source(source1).unwrap();
+
+        let mut extractor2 = DefinitionExtractor::new();
+        extractor2.extract_from_source(source2).unwrap();
+
+        let changes = detect_function_changes(&extractor1.functions, &extractor2.functions);
+
+        assert!(changes.removed.contains("helper"));
+        assert!(changes.modified.contains("main")); // main's hash changed too
+    }
+
+    #[test]
+    fn test_dirty_set_function_tracking() {
+        let mut dirty_set = DirtySet::default();
+        let file = PathBuf::from("/test.vais");
+
+        dirty_set.mark_function_dirty(file.clone(), "func1".to_string());
+        dirty_set.mark_function_dirty(file.clone(), "func2".to_string());
+
+        assert!(dirty_set.has_partial_changes());
+        assert_eq!(dirty_set.dirty_function_count(), 2);
+
+        let funcs = dirty_set.get_dirty_functions(&file).unwrap();
+        assert!(funcs.contains("func1"));
+        assert!(funcs.contains("func2"));
+    }
+
+    #[test]
+    fn test_content_hash() {
+        let content1 = "F main() { R 1 }";
+        let content2 = "F main() { R 2 }";
+        let content3 = "F main() { R 1 }"; // Same as content1
+
+        let hash1 = compute_content_hash(content1);
+        let hash2 = compute_content_hash(content2);
+        let hash3 = compute_content_hash(content3);
+
+        assert_eq!(hash1.len(), 64);
+        assert_ne!(hash1, hash2);
+        assert_eq!(hash1, hash3);
+    }
+
+    #[test]
+    fn test_fine_grained_change_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache_dir = temp_dir.path().join(".vais-cache");
+        let source_file = temp_dir.path().join("test.vais");
+
+        // Initial source with multiple functions
+        let source1 = r#"F add(a: i32, b: i32) -> i32 {
+    R a + b
+}
+
+F sub(a: i32, b: i32) -> i32 {
+    R a - b
+}
+
+F main() {
+    V x = add(1, 2)
+    V y = sub(3, 1)
+}"#;
+        fs::write(&source_file, source1).unwrap();
+
+        let mut cache = IncrementalCache::new(cache_dir.clone()).unwrap();
+        cache.set_compilation_options(CompilationOptions {
+            opt_level: 0,
+            debug: false,
+            target_triple: "native".to_string(),
+        });
+
+        // Initial build - use update_file_with_functions
+        cache.update_file_with_functions(&source_file).unwrap();
+        cache.persist().unwrap();
+
+        // Verify functions were extracted
+        let canonical = source_file.canonicalize().unwrap();
+        let meta = cache.state.dep_graph.file_metadata.get(&canonical).unwrap();
+        assert_eq!(meta.functions.len(), 3);
+
+        // Modify only the add function
+        let source2 = r#"F add(a: i32, b: i32) -> i32 {
+    R a + b + 1
+}
+
+F sub(a: i32, b: i32) -> i32 {
+    R a - b
+}
+
+F main() {
+    V x = add(1, 2)
+    V y = sub(3, 1)
+}"#;
+        fs::write(&source_file, source2).unwrap();
+
+        // Detect function-level changes
+        let changes = cache.detect_function_changes(&source_file).unwrap().unwrap();
+
+        assert!(changes.modified.contains("add"));
+        assert!(changes.affected.contains("main")); // main depends on add
+        assert!(!changes.modified.contains("sub")); // sub unchanged
     }
 }
