@@ -1,0 +1,302 @@
+# Vais Self-Hosting Compiler - Shared StringPool Module
+# Global string interning for consistent string indices across all modules
+# All modules should use this shared StringPool via references
+
+# ============================================================================
+# Memory comparison helper (byte-by-byte)
+# ============================================================================
+
+F memcmp(a: i64, b: i64, len: i64) -> i64 {
+    i: mut i64 = 0
+    L {
+        I i >= len { R 0 }  # Equal
+        ba := load_byte(a + i)
+        bb := load_byte(b + i)
+        I ba != bb {
+            R ba - bb
+        }
+        i = i + 1
+    }
+    0
+}
+
+# Print i64 helper
+F sp_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        sp_print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            sp_print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+# ============================================================================
+# StringPool Reference - Lightweight reference to shared StringPool
+# ============================================================================
+
+S StringPoolRef {
+    data: i64,       # Pointer to StringPool.data
+    offsets: i64,    # Pointer to StringPool.offsets
+    data_len: i64,   # Pointer to data_len (for read/write)
+    data_cap: i64,   # Pointer to data_cap
+    count: i64,      # Pointer to count
+    offset_cap: i64  # Pointer to offset_cap
+}
+
+X StringPoolRef {
+    # Create a reference from raw pointers (all point to mutable locations)
+    F from_ptrs(data: i64, offsets: i64, data_len: i64, data_cap: i64, count: i64, offset_cap: i64) -> StringPoolRef = StringPoolRef {
+        data: data, offsets: offsets, data_len: data_len,
+        data_cap: data_cap, count: count, offset_cap: offset_cap
+    }
+
+    # Check if reference is valid (non-null)
+    F is_valid(&self) -> i64 {
+        I self.data != 0 && self.offsets != 0 { 1 } E { 0 }
+    }
+}
+
+# ============================================================================
+# Global StringPool - Single instance for entire compilation
+# ============================================================================
+
+S GlobalStringPool {
+    data: i64,       # Concatenated string data
+    offsets: i64,    # Array of (offset, len) pairs - 16 bytes each
+    data_len: i64,   # Current used length in data
+    data_cap: i64,   # Capacity of data buffer
+    count: i64,      # Number of interned strings
+    offset_cap: i64  # Capacity of offsets array
+}
+
+X GlobalStringPool {
+    # Create a new global string pool with initial capacities
+    F new(data_cap: i64, string_cap: i64) -> GlobalStringPool {
+        data := malloc(data_cap)
+        offsets := malloc(string_cap * 16)
+        GlobalStringPool {
+            data: data,
+            offsets: offsets,
+            data_len: 0,
+            data_cap: data_cap,
+            count: 0,
+            offset_cap: string_cap
+        }
+    }
+
+    # Get a reference to this pool that can be shared with other modules
+    F get_ref(&self) -> StringPoolRef = StringPoolRef {
+        data: self.data,
+        offsets: self.offsets,
+        data_len: self.data_len,
+        data_cap: self.data_cap,
+        count: self.count,
+        offset_cap: self.offset_cap
+    }
+
+    # Get pointer to string data by index
+    F get_ptr(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.count { R 0 }
+        entry_ptr := self.offsets + idx * 16
+        offset := load_i64(entry_ptr)
+        self.data + offset
+    }
+
+    # Get length of string by index
+    F get_len(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.count { R 0 }
+        entry_ptr := self.offsets + idx * 16
+        load_i64(entry_ptr + 8)
+    }
+
+    # Find existing string, returns -1 if not found
+    F find(&self, ptr: i64, len: i64) -> i64 {
+        i: mut i64 = 0
+        L {
+            I i >= self.count { R 0 - 1 }
+
+            entry_ptr := self.offsets + i * 16
+            stored_offset := load_i64(entry_ptr)
+            stored_len := load_i64(entry_ptr + 8)
+
+            I stored_len == len {
+                # Compare bytes
+                I memcmp(self.data + stored_offset, ptr, len) == 0 {
+                    R i
+                }
+                0
+            } E { 0 }
+
+            i = i + 1
+        }
+        0 - 1
+    }
+
+    # Compare string at index with raw bytes
+    F equals(&self, idx: i64, ptr: i64, len: i64) -> i64 {
+        stored_len := @.get_len(idx)
+        I stored_len != len { R 0 }
+        stored_ptr := @.get_ptr(idx)
+        I memcmp(stored_ptr, ptr, len) == 0 { 1 } E { 0 }
+    }
+
+    # Intern a string (copy data and return index)
+    # Returns string index (0-based)
+    F intern(&self, ptr: i64, len: i64) -> i64 {
+        # First check if string already exists (deduplication)
+        existing := @.find(ptr, len)
+        I existing >= 0 {
+            R existing
+        }
+
+        # Grow data buffer if needed
+        I self.data_len + len > self.data_cap {
+            new_cap := (self.data_cap + len) * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, self.data, self.data_len)
+            free(self.data)
+            self.data = new_data
+            self.data_cap = new_cap
+            0
+        } E { 0 }
+
+        # Grow offsets array if needed
+        I self.count >= self.offset_cap {
+            new_cap := self.offset_cap * 2
+            new_offsets := malloc(new_cap * 16)
+            memcpy(new_offsets, self.offsets, self.count * 16)
+            free(self.offsets)
+            self.offsets = new_offsets
+            self.offset_cap = new_cap
+            0
+        } E { 0 }
+
+        # Copy string data
+        memcpy(self.data + self.data_len, ptr, len)
+
+        # Store offset entry (offset: i64, len: i64)
+        entry_ptr := self.offsets + self.count * 16
+        store_i64(entry_ptr, self.data_len)
+        store_i64(entry_ptr + 8, len)
+
+        idx := self.count
+        self.data_len = self.data_len + len
+        self.count = self.count + 1
+        idx
+    }
+
+    # Compare string at index with C string (disabled - requires memcmp_str)
+    # F equals_cstr(&self, idx: i64, cstr: str) -> i64 { ... }
+
+    # Print string at index (for debugging)
+    F print(&self, idx: i64) -> i64 {
+        ptr := @.get_ptr(idx)
+        len := @.get_len(idx)
+        I ptr != 0 && len > 0 {
+            i: mut i64 = 0
+            L {
+                I i >= len { B }
+                putchar(load_byte(ptr + i))
+                i = i + 1
+            }
+            0
+        } E { 0 }
+    }
+
+    # Get total number of interned strings
+    F size(&self) -> i64 = self.count
+
+    # Free all allocated memory
+    F drop(&self) -> i64 {
+        free(self.data)
+        free(self.offsets)
+        1
+    }
+}
+
+# ============================================================================
+# Test function
+# ============================================================================
+
+F main() -> i64 {
+    puts("=== StringPool Tests ===\n")
+
+    pool := GlobalStringPool.new(1024, 64)
+
+    # Test basic operations using raw pointers
+    # Create test data in memory
+    test1 := malloc(5)
+    store_byte(test1, 104)  # 'h'
+    store_byte(test1 + 1, 101)  # 'e'
+    store_byte(test1 + 2, 108)  # 'l'
+    store_byte(test1 + 3, 108)  # 'l'
+    store_byte(test1 + 4, 111)  # 'o'
+
+    test2 := malloc(5)
+    store_byte(test2, 119)  # 'w'
+    store_byte(test2 + 1, 111)  # 'o'
+    store_byte(test2 + 2, 114)  # 'r'
+    store_byte(test2 + 3, 108)  # 'l'
+    store_byte(test2 + 4, 100)  # 'd'
+
+    # Test interning
+    idx1 := pool.intern(test1, 5)
+    idx2 := pool.intern(test2, 5)
+    idx3 := pool.intern(test1, 5)  # Should dedupe
+
+    puts("Interned 'hello': index ")
+    sp_print_i64(idx1)
+    putchar(10)
+
+    puts("Interned 'world': index ")
+    sp_print_i64(idx2)
+    putchar(10)
+
+    puts("Interned 'hello' again: index ")
+    sp_print_i64(idx3)
+    puts(" (should be same as first)\n")
+
+    I idx1 == idx3 {
+        puts("PASS: Deduplication works\n")
+        0
+    } E {
+        puts("FAIL: Deduplication broken\n")
+        0
+    }
+
+    # Test retrieval
+    puts("String at idx1: ")
+    pool.print(idx1)
+    putchar(10)
+
+    puts("String at idx2: ")
+    pool.print(idx2)
+    putchar(10)
+
+    # Test comparison with raw bytes
+    I pool.equals(idx1, test1, 5) == 1 {
+        puts("PASS: String comparison works\n")
+        0
+    } E {
+        puts("FAIL: String comparison broken\n")
+        0
+    }
+
+    puts("Total strings: ")
+    sp_print_i64(pool.size())
+    putchar(10)
+
+    free(test1)
+    free(test2)
+    pool.drop()
+    puts("=== StringPool Tests Done ===\n")
+    0
+}

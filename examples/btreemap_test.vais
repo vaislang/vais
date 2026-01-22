@@ -1,0 +1,137 @@
+# BTreeMap test
+
+U std/btreemap
+
+F verify_keys(map: i64) -> i64 {
+    I btreemap_get(map, 1) != 10 { 0 }
+    E I btreemap_get(map, 5) != 50 { 0 }
+    E I btreemap_get(map, 8) != 80 { 0 }
+    E I btreemap_get(map, 15) != 150 { 0 }
+    E I btreemap_get(map, 20) != 200 { 0 }
+    E I btreemap_get(map, 25) != 250 { 0 }
+    E I btreemap_get(map, 30) != 300 { 0 }
+    E { 1 }
+}
+
+F print_num(n: i64) -> i64 {
+    I n >= 100 {
+        putchar((n / 100) % 10 + 48)
+    }
+    I n >= 10 {
+        putchar((n / 10) % 10 + 48)
+    }
+    putchar(n % 10 + 48)
+    0
+}
+
+F main() -> i64 {
+    puts("=== BTreeMap Test ===")
+
+    # Test 1: Create and basic operations
+    puts("Test 1: Create and put")
+    map := btreemap_new()
+
+    btreemap_put(map, 10, 100)
+    btreemap_put(map, 20, 200)
+    btreemap_put(map, 5, 50)
+
+    puts("  Size after 3 inserts: ")
+    print_num(btreemap_size(map))
+    putchar(10)
+
+    # Test 2: Get values
+    puts("Test 2: Get values")
+    v1 := btreemap_get(map, 10)
+    puts("  get(10) = ")
+    print_num(v1)
+    putchar(10)
+
+    v2 := btreemap_get(map, 20)
+    puts("  get(20) = ")
+    print_num(v2)
+    putchar(10)
+
+    v3 := btreemap_get(map, 5)
+    puts("  get(5) = ")
+    print_num(v3)
+    putchar(10)
+
+    # Test 3: Contains
+    puts("Test 3: Contains")
+    c1 := btreemap_contains(map, 10)
+    puts("  contains(10) = ")
+    print_num(c1)
+    putchar(10)
+
+    c2 := btreemap_contains(map, 99)
+    puts("  contains(99) = ")
+    print_num(c2)
+    putchar(10)
+
+    # Test 4: Update existing key
+    puts("Test 4: Update")
+    btreemap_put(map, 10, 999)
+    v4 := btreemap_get(map, 10)
+    puts("  After put(10, 999), get(10) = ")
+    print_num(v4)
+    putchar(10)
+
+    size := btreemap_size(map)
+    puts("  Size still: ")
+    print_num(size)
+    putchar(10)
+
+    # Test 5: Min/Max
+    puts("Test 5: Min/Max")
+    min_k := btreemap_min_key(map)
+    puts("  min_key = ")
+    print_num(min_k)
+    putchar(10)
+
+    max_k := btreemap_max_key(map)
+    puts("  max_key = ")
+    print_num(max_k)
+    putchar(10)
+
+    # Test 6: More insertions (trigger split)
+    puts("Test 6: More insertions (trigger split)")
+    btreemap_put(map, 15, 150)
+    btreemap_put(map, 25, 250)
+    btreemap_put(map, 30, 300)
+    btreemap_put(map, 1, 10)
+    btreemap_put(map, 8, 80)
+
+    size2 := btreemap_size(map)
+    puts("  Size after more inserts: ")
+    print_num(size2)
+    putchar(10)
+
+    # Verify all keys still accessible
+    puts("  Verifying all keys...")
+    ok := verify_keys(map)
+    I ok == 1 {
+        puts("  All keys verified: OK")
+        0
+    } E {
+        puts("  Verification FAILED")
+        0
+    }
+
+    # Test 7: New min/max after insertions
+    puts("Test 7: Updated Min/Max")
+    min_k2 := btreemap_min_key(map)
+    puts("  min_key = ")
+    print_num(min_k2)
+    putchar(10)
+
+    max_k2 := btreemap_max_key(map)
+    puts("  max_key = ")
+    print_num(max_k2)
+    putchar(10)
+
+    # Cleanup
+    btreemap_free(map)
+
+    puts("=== BTreeMap Tests Completed ===")
+    0
+}

@@ -1,0 +1,66 @@
+# Test defer statement - Go-style cleanup syntax
+# D statements execute in LIFO order when function returns
+
+F set_value(ptr: &i64, val: i64) {
+    *ptr = val
+}
+
+# Test basic defer - use pointer to observe side effect
+F test_defer_basic(out: &i64) -> i64 {
+    *out = 0
+    D set_value(out, 100)
+    R 0
+}
+
+# Test LIFO order
+F test_defer_lifo(out: &i64) -> i64 {
+    *out = 0
+    D set_value(out, 1)   # Runs LAST
+    D set_value(out, 2)   # Runs second
+    D set_value(out, 3)   # Runs FIRST
+    R 0
+}
+
+# Test defer with early return
+F test_defer_early_return(out: &i64, cond: i64) -> i64 {
+    *out = 0
+    D set_value(out, 200)
+
+    I cond > 0 {
+        R 1
+    }
+
+    R 0
+}
+
+F print_digit(n: i64) -> i64 {
+    putchar(n + 48)
+}
+
+F main() -> i64 {
+    result := 0
+
+    # Test 1: Basic defer execution
+    puts("Test 1 (expect 100):")
+    test_defer_basic(&result)
+    print_digit(result / 100)
+    print_digit((result / 10) % 10)
+    print_digit(result % 10)
+    putchar(10)
+
+    # Test 2: LIFO order
+    puts("Test 2 (expect 1):")
+    test_defer_lifo(&result)
+    print_digit(result)
+    putchar(10)
+
+    # Test 3: Defer with early return
+    puts("Test 3 (expect 200):")
+    test_defer_early_return(&result, 1)
+    print_digit(result / 100)
+    print_digit((result / 10) % 10)
+    print_digit(result % 10)
+    putchar(10)
+
+    R 0
+}

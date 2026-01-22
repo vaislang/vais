@@ -1,0 +1,828 @@
+# JSON - Lightweight JSON parser and generator
+# Supports: null, bool, number (i64), string, array, object
+# Uses recursive approach with explicit parser state passing
+
+# JSON value types (discriminant)
+# 0 = null
+# 1 = bool (data: 0=false, 1=true)
+# 2 = number (data: i64 value)
+# 3 = number (data: scaled integer, value * 1000000 for decimals)
+# 4 = string (data: pointer, extra: length)
+# 5 = array (data: pointer to array struct)
+# 6 = object (data: pointer to object struct)
+
+# =====================================================
+# Helper functions (recursive style)
+# =====================================================
+
+# Initialize memory to zero recursively
+F init_mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } E {
+        store_i64(ptr + idx * 8, 0)
+        init_mem_zero(ptr, count, idx + 1)
+    }
+}
+
+# Hash string recursively
+F hash_str_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
+    I idx >= len { h } E {
+        c := load_byte(s + idx)
+        new_h := h * 33 + c
+        abs_h := I new_h < 0 { 0 - new_h } E { new_h }
+        hash_str_rec(s, len, idx + 1, abs_h)
+    }
+}
+
+F json_hash_string(s: i64, len: i64) -> i64 {
+    hash_str_rec(s, len, 0, 5381)
+}
+
+# String equality check recursively
+F str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { 1 }
+    E I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    E { str_eq_rec(a, b, len, idx + 1) }
+}
+
+F json_str_eq(a: i64, b: i64, len: i64) -> i64 {
+    str_eq_rec(a, b, len, 0)
+}
+
+# =====================================================
+# Object functions
+# =====================================================
+
+F json_object_new() -> i64 {
+    cap := 16
+    buckets := malloc(cap * 8)
+    init_mem_zero(buckets, cap, 0)
+
+    obj := malloc(24)
+    store_i64(obj, buckets)
+    store_i64(obj + 8, 0)   # size
+    store_i64(obj + 16, cap)
+    obj
+}
+
+F json_object_set(obj: i64, key: i64, key_len: i64, value_ptr: i64) -> i64 {
+    buckets := load_i64(obj)
+    cap := load_i64(obj + 16)
+
+    h := json_hash_string(key, key_len) % cap
+    entry_ptr := load_i64(buckets + h * 8)
+
+    # Insert new entry at head
+    new_entry := malloc(32)
+    key_copy := malloc(key_len + 1)
+    memcpy(key_copy, key, key_len)
+    store_byte(key_copy + key_len, 0)
+
+    store_i64(new_entry, key_copy)
+    store_i64(new_entry + 8, key_len)
+    store_i64(new_entry + 16, value_ptr)
+    store_i64(new_entry + 24, entry_ptr)
+    store_i64(buckets + h * 8, new_entry)
+
+    size := load_i64(obj + 8) + 1
+    store_i64(obj + 8, size)
+    1
+}
+
+F json_object_get_rec(node: i64, key: i64, key_len: i64) -> i64 {
+    I node == 0 { 0 } E {
+        node_key := load_i64(node)
+        node_key_len := load_i64(node + 8)
+        I node_key_len == key_len && json_str_eq(node_key, key, key_len) == 1 {
+            load_i64(node + 16)
+        } E {
+            json_object_get_rec(load_i64(node + 24), key, key_len)
+        }
+    }
+}
+
+# =====================================================
+# Array functions
+# =====================================================
+
+F json_array_new() -> i64 {
+    data := malloc(64)
+    arr := malloc(24)
+    store_i64(arr, data)
+    store_i64(arr + 8, 0)   # len
+    store_i64(arr + 16, 8)  # cap
+    arr
+}
+
+F json_array_push(arr: i64, value_ptr: i64) -> i64 {
+    arr_len := load_i64(arr + 8)
+    arr_cap := load_i64(arr + 16)
+
+    I arr_len >= arr_cap {
+        old_data := load_i64(arr)
+        new_cap := arr_cap * 2
+        new_data := malloc(new_cap * 8)
+        memcpy(new_data, old_data, arr_len * 8)
+        free(old_data)
+        store_i64(arr, new_data)
+        store_i64(arr + 16, new_cap)
+    }
+
+    data := load_i64(arr)
+    store_i64(data + arr_len * 8, value_ptr)
+    store_i64(arr + 8, arr_len + 1)
+    arr_len + 1
+}
+
+# =====================================================
+# Free functions
+# =====================================================
+
+F json_free_value(v: i64) -> i64 {
+    I v == 0 {
+        0
+    } E {
+        tag := load_i64(v)
+        data := load_i64(v + 8)
+
+        I tag == 4 && data != 0 {
+            free(data)
+        }
+        0
+    }
+}
+
+# =====================================================
+# Parser functions (using explicit state passing)
+# Parser state: [input_ptr, pos, len] - 24 bytes
+# =====================================================
+
+F parser_new(input: i64, len: i64) -> i64 {
+    p := malloc(24)
+    store_i64(p, input)      # input pointer
+    store_i64(p + 8, 0)      # position
+    store_i64(p + 16, len)   # length
+    p
+}
+
+F parser_peek(p: i64) -> i64 {
+    pos := load_i64(p + 8)
+    len := load_i64(p + 16)
+    I pos >= len { 0 } E {
+        input := load_i64(p)
+        load_byte(input + pos)
+    }
+}
+
+F parser_advance(p: i64) -> i64 {
+    pos := load_i64(p + 8)
+    len := load_i64(p + 16)
+    I pos < len {
+        input := load_i64(p)
+        c := load_byte(input + pos)
+        store_i64(p + 8, pos + 1)
+        c
+    } E { 0 }
+}
+
+F parser_skip_ws(p: i64) -> i64 {
+    c := parser_peek(p)
+    I c == 32 || c == 9 || c == 10 || c == 13 {
+        parser_advance(p)
+        parser_skip_ws(p)
+    }
+    0
+}
+
+F parser_parse(p: i64) -> i64 {
+    parser_skip_ws(p)
+    result := parser_parse_value(p)
+    parser_skip_ws(p)
+    result
+}
+
+F parser_parse_value(p: i64) -> i64 {
+    c := parser_peek(p)
+    I c == 110 { parser_parse_null(p) }
+    E I c == 116 { parser_parse_true(p) }
+    E I c == 102 { parser_parse_false(p) }
+    E I c == 34 { parser_parse_string(p) }
+    E I c == 91 { parser_parse_array(p) }
+    E I c == 123 { parser_parse_object(p) }
+    E I c == 45 || (c >= 48 && c <= 57) { parser_parse_number(p) }
+    E { 0 }
+}
+
+F parser_parse_null(p: i64) -> i64 {
+    parser_advance(p)  # n
+    parser_advance(p)  # u
+    parser_advance(p)  # l
+    parser_advance(p)  # l
+    result := malloc(24)
+    store_i64(result, 0)
+    store_i64(result + 8, 0)
+    store_i64(result + 16, 0)
+    result
+}
+
+F parser_parse_true(p: i64) -> i64 {
+    parser_advance(p)  # t
+    parser_advance(p)  # r
+    parser_advance(p)  # u
+    parser_advance(p)  # e
+    result := malloc(24)
+    store_i64(result, 1)
+    store_i64(result + 8, 1)
+    store_i64(result + 16, 0)
+    result
+}
+
+F parser_parse_false(p: i64) -> i64 {
+    parser_advance(p)  # f
+    parser_advance(p)  # a
+    parser_advance(p)  # l
+    parser_advance(p)  # s
+    parser_advance(p)  # e
+    result := malloc(24)
+    store_i64(result, 1)
+    store_i64(result + 8, 0)
+    store_i64(result + 16, 0)
+    result
+}
+
+F parser_parse_string(p: i64) -> i64 {
+    parser_advance(p)  # Opening '"'
+    buf := malloc(256)
+    buf_len := parser_parse_str_chars(p, buf, 0, 256)
+    store_byte(buf + buf_len, 0)
+
+    result := malloc(24)
+    store_i64(result, 4)
+    store_i64(result + 8, buf)
+    store_i64(result + 16, buf_len)
+    result
+}
+
+F parser_parse_str_chars(p: i64, buf: i64, len: i64, cap: i64) -> i64 {
+    c := parser_peek(p)
+    I c == 0 || c == 34 {
+        parser_advance(p)
+        len
+    } E I c == 92 {
+        # Escape sequence
+        parser_advance(p)  # consume backslash
+        escaped := parser_advance(p)
+        char_to_store := I escaped == 110 { 10 }
+            E I escaped == 116 { 9 }
+            E I escaped == 114 { 13 }
+            E { escaped }
+        store_byte(buf + len, char_to_store)
+        parser_parse_str_chars(p, buf, len + 1, cap)
+    } E {
+        parser_advance(p)
+        store_byte(buf + len, c)
+        parser_parse_str_chars(p, buf, len + 1, cap)
+    }
+}
+
+F parser_parse_number(p: i64) -> i64 {
+    is_neg := I parser_peek(p) == 45 { parser_advance(p); 1 } E { 0 }
+    int_part := parser_parse_digits(p, 0)
+
+    I parser_peek(p) == 46 {
+        parser_advance(p)
+        frac := parser_parse_frac(p, 0, 100000)
+        # Skip exponent
+        c := parser_peek(p)
+        I c == 101 || c == 69 { parser_skip_exp(p) }
+
+        base_scaled := int_part * 1000000 + frac
+        scaled := I is_neg == 1 { 0 - base_scaled } E { base_scaled }
+        result := malloc(24)
+        store_i64(result, 3)
+        store_i64(result + 8, scaled)
+        store_i64(result + 16, 0)
+        result
+    } E {
+        c := parser_peek(p)
+        I c == 101 || c == 69 { parser_skip_exp(p) }
+
+        final_int := I is_neg == 1 { 0 - int_part } E { int_part }
+        result := malloc(24)
+        store_i64(result, 2)
+        store_i64(result + 8, final_int)
+        store_i64(result + 16, 0)
+        result
+    }
+}
+
+F parser_parse_digits(p: i64, acc: i64) -> i64 {
+    c := parser_peek(p)
+    I c >= 48 && c <= 57 {
+        parser_advance(p)
+        parser_parse_digits(p, acc * 10 + (c - 48))
+    } E { acc }
+}
+
+F parser_parse_frac(p: i64, acc: i64, scale: i64) -> i64 {
+    c := parser_peek(p)
+    I c >= 48 && c <= 57 && scale > 0 {
+        parser_advance(p)
+        parser_parse_frac(p, acc + (c - 48) * scale, scale / 10)
+    } E { acc }
+}
+
+F parser_skip_exp(p: i64) -> i64 {
+    parser_advance(p)
+    c := parser_peek(p)
+    I c == 43 || c == 45 { parser_advance(p) }
+    parser_skip_digits(p)
+}
+
+F parser_skip_digits(p: i64) -> i64 {
+    c := parser_peek(p)
+    I c >= 48 && c <= 57 {
+        parser_advance(p)
+        parser_skip_digits(p)
+    }
+    0
+}
+
+F parser_parse_array(p: i64) -> i64 {
+    parser_advance(p)  # '['
+    parser_skip_ws(p)
+
+    arr := json_array_new()
+
+    I parser_peek(p) == 93 {
+        parser_advance(p)
+    } E {
+        parser_parse_array_items(p, arr)
+    }
+
+    result := malloc(24)
+    store_i64(result, 5)
+    store_i64(result + 8, arr)
+    store_i64(result + 16, load_i64(arr + 8))
+    result
+}
+
+F parser_parse_array_items(p: i64, arr: i64) -> i64 {
+    value := parser_parse_value(p)
+    json_array_push(arr, value)
+    parser_skip_ws(p)
+
+    c := parser_peek(p)
+    I c == 44 {
+        parser_advance(p)
+        parser_skip_ws(p)
+        parser_parse_array_items(p, arr)
+    } E I c == 93 {
+        parser_advance(p)
+    }
+    0
+}
+
+F parser_parse_object(p: i64) -> i64 {
+    parser_advance(p)  # '{'
+    parser_skip_ws(p)
+
+    obj := json_object_new()
+
+    I parser_peek(p) == 125 {
+        parser_advance(p)
+    } E {
+        parser_parse_object_items(p, obj)
+    }
+
+    result := malloc(24)
+    store_i64(result, 6)
+    store_i64(result + 8, obj)
+    store_i64(result + 16, load_i64(obj + 8))
+    result
+}
+
+F parser_parse_object_items(p: i64, obj: i64) -> i64 {
+    parser_skip_ws(p)
+    key_value := parser_parse_string(p)
+    key_ptr := load_i64(key_value + 8)
+    key_len := load_i64(key_value + 16)
+
+    parser_skip_ws(p)
+    parser_advance(p)  # ':'
+    parser_skip_ws(p)
+
+    value := parser_parse_value(p)
+    json_object_set(obj, key_ptr, key_len, value)
+    free(key_value)
+
+    parser_skip_ws(p)
+    c := parser_peek(p)
+    I c == 44 {
+        parser_advance(p)
+        parser_parse_object_items(p, obj)
+    } E I c == 125 {
+        parser_advance(p)
+    }
+    0
+}
+
+# =====================================================
+# Stringify functions (recursive)
+# =====================================================
+
+F json_stringify(v: i64) -> i64 {
+    I v == 0 {
+        make_null_str()
+    } E {
+        tag := load_i64(v)
+        data := load_i64(v + 8)
+        extra := load_i64(v + 16)
+
+        I tag == 0 { make_null_str() }
+        E I tag == 1 { I data == 0 { make_false_str() } E { make_true_str() } }
+        E I tag == 2 { json_stringify_int(data) }
+        E I tag == 3 { json_stringify_scaled(data) }
+        E I tag == 4 { json_stringify_string(data, extra) }
+        E I tag == 5 { json_stringify_array(data) }
+        E I tag == 6 { json_stringify_object(data) }
+        E { make_null_str() }
+    }
+}
+
+# Create "null" string
+F make_null_str() -> i64 {
+    buf := malloc(5)
+    store_byte(buf, 110)      # 'n'
+    store_byte(buf + 1, 117)  # 'u'
+    store_byte(buf + 2, 108)  # 'l'
+    store_byte(buf + 3, 108)  # 'l'
+    store_byte(buf + 4, 0)
+    buf
+}
+
+# Create "true" string
+F make_true_str() -> i64 {
+    buf := malloc(5)
+    store_byte(buf, 116)      # 't'
+    store_byte(buf + 1, 114)  # 'r'
+    store_byte(buf + 2, 117)  # 'u'
+    store_byte(buf + 3, 101)  # 'e'
+    store_byte(buf + 4, 0)
+    buf
+}
+
+# Create "false" string
+F make_false_str() -> i64 {
+    buf := malloc(6)
+    store_byte(buf, 102)      # 'f'
+    store_byte(buf + 1, 97)   # 'a'
+    store_byte(buf + 2, 108)  # 'l'
+    store_byte(buf + 3, 115)  # 's'
+    store_byte(buf + 4, 101)  # 'e'
+    store_byte(buf + 5, 0)
+    buf
+}
+
+F json_stringify_int(n: i64) -> i64 {
+    I n == 0 {
+        buf := malloc(2)
+        store_byte(buf, 48)
+        store_byte(buf + 1, 0)
+        buf
+    } E {
+        buf := malloc(32)
+        val := I n < 0 { 0 - n } E { n }
+        digit_pos := stringify_int_rec(buf, val, 0)
+        final_pos := I n < 0 {
+            # Shift and add minus sign
+            shift_right(buf, digit_pos)
+            store_byte(buf, 45)
+            digit_pos + 1
+        } E { digit_pos }
+        store_byte(buf + final_pos, 0)
+        buf
+    }
+}
+
+F stringify_int_rec(buf: i64, n: i64, pos: i64) -> i64 {
+    I n == 0 { pos } E {
+        new_pos := stringify_int_rec(buf, n / 10, pos)
+        store_byte(buf + new_pos, 48 + (n % 10))
+        new_pos + 1
+    }
+}
+
+F shift_right(buf: i64, len: i64) -> i64 {
+    I len <= 0 { 0 } E {
+        store_byte(buf + len, load_byte(buf + len - 1))
+        shift_right(buf, len - 1)
+    }
+}
+
+F json_stringify_scaled(n: i64) -> i64 {
+    buf := malloc(64)
+    val := I n < 0 { 0 - n } E { n }
+    int_part := val / 1000000
+    frac_part := val % 1000000
+
+    # Handle sign and get starting position
+    start_pos := I n < 0 { store_byte(buf, 45); 1 } E { 0 }
+
+    int_str := json_stringify_int(int_part)
+    int_len := strlen(int_str)
+    memcpy(buf + start_pos, int_str, int_len)
+    free(int_str)
+
+    dot_pos := start_pos + int_len
+    store_byte(buf + dot_pos, 46)
+
+    frac_pos := dot_pos + 1
+    # Write 6 fraction digits
+    store_byte(buf + frac_pos, 48 + (frac_part / 100000) % 10)
+    store_byte(buf + frac_pos + 1, 48 + (frac_part / 10000) % 10)
+    store_byte(buf + frac_pos + 2, 48 + (frac_part / 1000) % 10)
+    store_byte(buf + frac_pos + 3, 48 + (frac_part / 100) % 10)
+    store_byte(buf + frac_pos + 4, 48 + (frac_part / 10) % 10)
+    store_byte(buf + frac_pos + 5, 48 + frac_part % 10)
+
+    store_byte(buf + frac_pos + 6, 0)
+    buf
+}
+
+F json_stringify_string(s: i64, len: i64) -> i64 {
+    buf := malloc(len * 2 + 3)
+    store_byte(buf, 34)
+    pos := stringify_str_rec(buf, s, len, 0, 1)
+    store_byte(buf + pos, 34)
+    store_byte(buf + pos + 1, 0)
+    buf
+}
+
+F stringify_str_rec(buf: i64, s: i64, len: i64, idx: i64, pos: i64) -> i64 {
+    I idx >= len { pos } E {
+        c := load_byte(s + idx)
+        I c == 34 || c == 92 {
+            store_byte(buf + pos, 92)
+            store_byte(buf + pos + 1, c)
+            stringify_str_rec(buf, s, len, idx + 1, pos + 2)
+        } E I c == 10 {
+            store_byte(buf + pos, 92)
+            store_byte(buf + pos + 1, 110)
+            stringify_str_rec(buf, s, len, idx + 1, pos + 2)
+        } E {
+            store_byte(buf + pos, c)
+            stringify_str_rec(buf, s, len, idx + 1, pos + 1)
+        }
+    }
+}
+
+F json_stringify_array(arr: i64) -> i64 {
+    arr_data := load_i64(arr)
+    arr_len := load_i64(arr + 8)
+
+    buf := malloc(4096)
+    store_byte(buf, 91)
+    pos := stringify_arr_rec(buf, arr_data, arr_len, 0, 1)
+    store_byte(buf + pos, 93)
+    store_byte(buf + pos + 1, 0)
+    buf
+}
+
+F stringify_arr_rec(buf: i64, data: i64, len: i64, idx: i64, pos: i64) -> i64 {
+    I idx >= len { pos } E {
+        new_pos := I idx > 0 {
+            store_byte(buf + pos, 44)
+            pos + 1
+        } E { pos }
+        elem := load_i64(data + idx * 8)
+        elem_str := json_stringify(elem)
+        elem_len := strlen(elem_str)
+        memcpy(buf + new_pos, elem_str, elem_len)
+        free(elem_str)
+        stringify_arr_rec(buf, data, len, idx + 1, new_pos + elem_len)
+    }
+}
+
+F json_stringify_object(obj: i64) -> i64 {
+    buckets := load_i64(obj)
+    cap := load_i64(obj + 16)
+
+    buf := malloc(8192)
+    store_byte(buf, 123)
+    pos := stringify_obj_buckets(buf, buckets, cap, 0, 1, 1)
+    store_byte(buf + pos, 125)
+    store_byte(buf + pos + 1, 0)
+    buf
+}
+
+F stringify_obj_buckets(buf: i64, buckets: i64, cap: i64, idx: i64, pos: i64, first: i64) -> i64 {
+    I idx >= cap { pos } E {
+        node := load_i64(buckets + idx * 8)
+        result := stringify_obj_entries(buf, node, pos, first)
+        new_pos := load_i64(result)
+        new_first := load_i64(result + 8)
+        free(result)
+        stringify_obj_buckets(buf, buckets, cap, idx + 1, new_pos, new_first)
+    }
+}
+
+F stringify_obj_entries(buf: i64, node: i64, pos: i64, first: i64) -> i64 {
+    result := malloc(16)
+    I node == 0 {
+        store_i64(result, pos)
+        store_i64(result + 8, first)
+        result
+    } E {
+        comma_pos := I first == 0 {
+            store_byte(buf + pos, 44)
+            pos + 1
+        } E { pos }
+
+        key := load_i64(node)
+        key_len := load_i64(node + 8)
+        key_str := json_stringify_string(key, key_len)
+        key_str_len := strlen(key_str)
+        memcpy(buf + comma_pos, key_str, key_str_len)
+        free(key_str)
+
+        after_key := comma_pos + key_str_len
+        store_byte(buf + after_key, 58)
+
+        colon_pos := after_key + 1
+        value := load_i64(node + 16)
+        value_str := json_stringify(value)
+        value_len := strlen(value_str)
+        memcpy(buf + colon_pos, value_str, value_len)
+        free(value_str)
+
+        after_value := colon_pos + value_len
+        next := load_i64(node + 24)
+        stringify_obj_entries(buf, next, after_value, 0)
+    }
+}
+
+# =====================================================
+# Public API
+# =====================================================
+
+# Note: json_parse accepts i64 pointer to null-terminated string
+# Use json_parse_str for direct string literal parsing
+F json_parse(input: i64) -> i64 {
+    len := strlen(input)
+    p := parser_new(input, len)
+    result := parser_parse(p)
+    free(p)
+    result
+}
+
+F json_to_string(v: i64) -> i64 {
+    json_stringify(v)
+}
+
+F json_free(v: i64) -> i64 {
+    I v != 0 {
+        json_free_value(v)
+        free(v)
+    }
+    0
+}
+
+F json_type(v: i64) -> i64 {
+    I v == 0 { 0 } E { load_i64(v) }
+}
+
+F json_get_int(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 2 || load_i64(v) == 3 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F json_get_bool(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 1 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F json_get_string(v: i64) -> i64 {
+    I v == 0 { 0 }
+    E I load_i64(v) == 4 { load_i64(v + 8) }
+    E { 0 }
+}
+
+F json_array_len(v: i64) -> i64 {
+    I v == 0 || load_i64(v) != 5 { 0 }
+    E { load_i64(load_i64(v + 8) + 8) }
+}
+
+F json_array_get(v: i64, index: i64) -> i64 {
+    I v == 0 || load_i64(v) != 5 {
+        0
+    } E {
+        arr := load_i64(v + 8)
+        arr_data := load_i64(arr)
+        arr_len := load_i64(arr + 8)
+        I index < 0 || index >= arr_len { 0 }
+        E { load_i64(arr_data + index * 8) }
+    }
+}
+
+F json_object_get(v: i64, key: i64) -> i64 {
+    I v == 0 || load_i64(v) != 6 {
+        0
+    } E {
+        obj := load_i64(v + 8)
+        buckets := load_i64(obj)
+        cap := load_i64(obj + 16)
+        I cap == 0 {
+            0
+        } E {
+            key_len := strlen(key)
+            h := json_hash_string(key, key_len) % cap
+            node := load_i64(buckets + h * 8)
+            json_object_get_rec(node, key, key_len)
+        }
+    }
+}
+
+# =====================================================
+# Convenience constructors
+# =====================================================
+
+F json_null() -> i64 {
+    v := malloc(24)
+    store_i64(v, 0)
+    store_i64(v + 8, 0)
+    store_i64(v + 16, 0)
+    v
+}
+
+F json_bool(b: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 1)
+    store_i64(v + 8, b)
+    store_i64(v + 16, 0)
+    v
+}
+
+F json_int(n: i64) -> i64 {
+    v := malloc(24)
+    store_i64(v, 2)
+    store_i64(v + 8, n)
+    store_i64(v + 16, 0)
+    v
+}
+
+F json_string_new(s: i64) -> i64 {
+    len := strlen(s)
+    buf := malloc(len + 1)
+    memcpy(buf, s, len + 1)
+
+    v := malloc(24)
+    store_i64(v, 4)
+    store_i64(v + 8, buf)
+    store_i64(v + 16, len)
+    v
+}
+
+F json_array_create() -> i64 {
+    arr := json_array_new()
+    v := malloc(24)
+    store_i64(v, 5)
+    store_i64(v + 8, arr)
+    store_i64(v + 16, 0)
+    v
+}
+
+F json_array_add(arr_v: i64, value: i64) -> i64 {
+    I load_i64(arr_v) != 5 {
+        0
+    } E {
+        arr := load_i64(arr_v + 8)
+        json_array_push(arr, value)
+        len := load_i64(arr + 8)
+        store_i64(arr_v + 16, len)
+        1
+    }
+}
+
+F json_object_create() -> i64 {
+    obj := json_object_new()
+    v := malloc(24)
+    store_i64(v, 6)
+    store_i64(v + 8, obj)
+    store_i64(v + 16, 0)
+    v
+}
+
+F json_object_put(obj_v: i64, key: i64, value: i64) -> i64 {
+    I load_i64(obj_v) != 6 {
+        0
+    } E {
+        obj := load_i64(obj_v + 8)
+        key_len := strlen(key)
+        json_object_set(obj, key, key_len, value)
+        size := load_i64(obj + 8)
+        store_i64(obj_v + 16, size)
+        1
+    }
+}

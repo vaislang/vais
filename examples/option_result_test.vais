@@ -1,0 +1,255 @@
+# Test Option and Result error handling improvements
+
+# Test Vec with Option
+F test_vec() -> i64 {
+    puts_ptr("=== Testing Vec with Option ===")
+
+    v := vec_new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+
+    # Test get_opt - valid index
+    result := v.get_opt(1)
+    I result.is_some() == 1 {
+        puts_ptr("Vec.get_opt(1) = Some(")
+        print_i64(result.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    # Test get_opt - invalid index
+    result2 := v.get_opt(10)
+    I result2.is_none() == 1 {
+        puts_ptr("Vec.get_opt(10) = None (correct)")
+    }
+
+    # Test pop_opt
+    pop_result := v.pop_opt()
+    I pop_result.is_some() == 1 {
+        puts_ptr("Vec.pop_opt() = Some(")
+        print_i64(pop_result.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    v.drop()
+    puts_ptr("")
+    0
+}
+
+# Test HashMap with Option
+F test_hashmap() -> i64 {
+    puts_ptr("=== Testing HashMap with Option ===")
+
+    map := hashmap_new()
+    map.set(1, 100)
+    map.set(2, 200)
+    map.set(3, 300)
+
+    # Test get_opt - existing key
+    result := map.get_opt(2)
+    I result.is_some() == 1 {
+        puts_ptr("HashMap.get_opt(2) = Some(")
+        print_i64(result.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    # Test get_opt - non-existing key
+    result2 := map.get_opt(999)
+    I result2.is_none() == 1 {
+        puts_ptr("HashMap.get_opt(999) = None (correct)")
+    }
+
+    # Test remove_opt
+    remove_result := map.remove_opt(1)
+    I remove_result.is_some() == 1 {
+        puts_ptr("HashMap.remove_opt(1) = Some(")
+        print_i64(remove_result.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    map.drop()
+    puts_ptr("")
+    0
+}
+
+# Test Deque with Option
+F test_deque() -> i64 {
+    puts_ptr("=== Testing Deque with Option ===")
+
+    dq := deque_new()
+    dq.push_back(10)
+    dq.push_back(20)
+    dq.push_front(5)
+
+    # Test front_opt
+    front := dq.front_opt()
+    I front.is_some() == 1 {
+        puts_ptr("Deque.front_opt() = Some(")
+        print_i64(front.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    # Test back_opt
+    back := dq.back_opt()
+    I back.is_some() == 1 {
+        puts_ptr("Deque.back_opt() = Some(")
+        print_i64(back.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    # Test pop_front_opt
+    pop := dq.pop_front_opt()
+    I pop.is_some() == 1 {
+        puts_ptr("Deque.pop_front_opt() = Some(")
+        print_i64(pop.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    # Test get_opt
+    get_result := dq.get_opt(0)
+    I get_result.is_some() == 1 {
+        puts_ptr("Deque.get_opt(0) = Some(")
+        print_i64(get_result.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    dq.drop()
+    puts_ptr("")
+    0
+}
+
+# Test String with Option
+F test_string() -> i64 {
+    puts_ptr("=== Testing String with Option ===")
+
+    s := str_from("Hello")
+
+    # Test char_at_opt - valid index
+    ch := s.char_at_opt(1)
+    I ch.is_some() == 1 {
+        puts_ptr("String.char_at_opt(1) = Some(")
+        print_i64(ch.unwrap_or(0))
+        puts_ptr(") [ASCII for 'e']")
+    }
+
+    # Test char_at_opt - invalid index
+    ch2 := s.char_at_opt(100)
+    I ch2.is_none() == 1 {
+        puts_ptr("String.char_at_opt(100) = None (correct)")
+    }
+
+    s.drop()
+    puts_ptr("")
+    0
+}
+
+# Test PriorityQueue with Option
+F test_priority_queue() -> i64 {
+    puts_ptr("=== Testing PriorityQueue with Option ===")
+
+    pq := PriorityQueue.with_capacity(8)
+    pq.push(50)
+    pq.push(20)
+    pq.push(30)
+    pq.push(10)
+
+    # Test peek_opt
+    peek := pq.peek_opt()
+    I peek.is_some() == 1 {
+        puts_ptr("PriorityQueue.peek_opt() = Some(")
+        print_i64(peek.unwrap_or(0))
+        puts_ptr(") [minimum element]")
+    }
+
+    # Test pop_opt
+    pop1 := pq.pop_opt()
+    I pop1.is_some() == 1 {
+        puts_ptr("PriorityQueue.pop_opt() = Some(")
+        print_i64(pop1.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    pop2 := pq.pop_opt()
+    I pop2.is_some() == 1 {
+        puts_ptr("PriorityQueue.pop_opt() = Some(")
+        print_i64(pop2.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    pq.drop()
+    puts_ptr("")
+    0
+}
+
+# Test BTreeMap with Option
+F test_btreemap() -> i64 {
+    puts_ptr("=== Testing BTreeMap with Option ===")
+
+    map := btreemap_new()
+    btreemap_set(map, 5, 500)
+    btreemap_set(map, 3, 300)
+    btreemap_set(map, 7, 700)
+
+    # Test btreemap_get_opt - existing key
+    result := btreemap_get_opt(map, 5)
+    I result.is_some() == 1 {
+        puts_ptr("BTreeMap.get_opt(5) = Some(")
+        print_i64(result.unwrap_or(0))
+        puts_ptr(")")
+    }
+
+    # Test btreemap_get_opt - non-existing key
+    result2 := btreemap_get_opt(map, 999)
+    I result2.is_none() == 1 {
+        puts_ptr("BTreeMap.get_opt(999) = None (correct)")
+    }
+
+    btreemap_free(map)
+    puts_ptr("")
+    0
+}
+
+# Test IO with Result
+F test_io_result() -> i64 {
+    puts_ptr("=== Testing IO with Result ===")
+
+    # Test read_i64_result (simulated - would need actual input in real test)
+    puts_ptr("IO Result functions added:")
+    puts_ptr("- read_i64_result() -> Result")
+    puts_ptr("- read_line_opt() -> Option")
+    puts_ptr("- read_word_opt() -> Option")
+    puts_ptr("")
+    0
+}
+
+# Test File with Result
+F test_file_result() -> i64 {
+    puts_ptr("=== Testing File with Result ===")
+
+    puts_ptr("File Result functions added:")
+    puts_ptr("- File.read_byte_opt() -> Option")
+    puts_ptr("- File.read_line_result() -> Result")
+    puts_ptr("- file_read_all_result() -> Result")
+    puts_ptr("")
+    0
+}
+
+# Main
+F main() -> i64 {
+    puts_ptr("===================================")
+    puts_ptr("Option/Result Error Handling Tests")
+    puts_ptr("===================================")
+    puts_ptr("")
+
+    test_vec()
+    test_hashmap()
+    test_deque()
+    test_string()
+    test_priority_queue()
+    test_btreemap()
+    test_io_result()
+    test_file_result()
+
+    puts_ptr("All tests completed!")
+    0
+}

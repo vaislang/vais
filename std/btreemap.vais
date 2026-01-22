@@ -1,0 +1,466 @@
+# BTreeMap - Self-balancing ordered map using B-tree
+# Stores i64 key-value pairs in sorted order
+# Uses recursive approach to avoid mutable loop variables
+# Updated to use Option<T> for error handling
+
+# =====================================================
+# B-Tree Node Structure
+# =====================================================
+# Node layout (B-tree with min degree t=2, so max 3 keys, 4 children):
+# [0]   = num_keys (number of keys in this node)
+# [8]   = is_leaf (1 = leaf, 0 = internal)
+# [16]  = key[0]
+# [24]  = value[0]
+# [32]  = key[1]
+# [40]  = value[1]
+# [48]  = key[2]
+# [56]  = value[2]
+# [64]  = child[0] (pointer to child node)
+# [72]  = child[1]
+# [80]  = child[2]
+# [88]  = child[3]
+# Total: 96 bytes per node
+
+# Constants
+# MIN_DEGREE = 2 (minimum degree t, so each node has at most 2*t-1 = 3 keys)
+# MAX_KEYS = 3
+# MAX_CHILDREN = 4
+
+# =====================================================
+# BTreeMap Structure
+# =====================================================
+# Map layout:
+# [0] = root node pointer
+# [8] = size (number of entries)
+
+# =====================================================
+# Node Creation and Access
+# =====================================================
+
+F btree_node_new(is_leaf: i64) -> i64 {
+    node := malloc(96)
+    store_i64(node, 0)            # num_keys = 0
+    store_i64(node + 8, is_leaf)  # is_leaf
+    # Initialize children to 0
+    store_i64(node + 64, 0)
+    store_i64(node + 72, 0)
+    store_i64(node + 80, 0)
+    store_i64(node + 88, 0)
+    node
+}
+
+F btree_node_num_keys(node: i64) -> i64 {
+    load_i64(node)
+}
+
+F btree_node_is_leaf(node: i64) -> i64 {
+    load_i64(node + 8)
+}
+
+F btree_node_get_key(node: i64, i: i64) -> i64 {
+    load_i64(node + 16 + i * 16)
+}
+
+F btree_node_get_value(node: i64, i: i64) -> i64 {
+    load_i64(node + 24 + i * 16)
+}
+
+F btree_node_set_key(node: i64, i: i64, key: i64) -> i64 {
+    store_i64(node + 16 + i * 16, key)
+    0
+}
+
+F btree_node_set_value(node: i64, i: i64, value: i64) -> i64 {
+    store_i64(node + 24 + i * 16, value)
+    0
+}
+
+F btree_node_get_child(node: i64, i: i64) -> i64 {
+    load_i64(node + 64 + i * 8)
+}
+
+F btree_node_set_child(node: i64, i: i64, child: i64) -> i64 {
+    store_i64(node + 64 + i * 8, child)
+    0
+}
+
+F btree_node_set_num_keys(node: i64, n: i64) -> i64 {
+    store_i64(node, n)
+    0
+}
+
+# =====================================================
+# BTreeMap Creation
+# =====================================================
+
+F btreemap_new() -> i64 {
+    map := malloc(16)
+    root := btree_node_new(1)  # Create empty leaf node as root
+    store_i64(map, root)
+    store_i64(map + 8, 0)      # size = 0
+    map
+}
+
+F btreemap_root(map: i64) -> i64 {
+    load_i64(map)
+}
+
+F btreemap_size(map: i64) -> i64 {
+    load_i64(map + 8)
+}
+
+F btreemap_set_root(map: i64, root: i64) -> i64 {
+    store_i64(map, root)
+    0
+}
+
+F btreemap_inc_size(map: i64) -> i64 {
+    size := load_i64(map + 8)
+    store_i64(map + 8, size + 1)
+    0
+}
+
+# =====================================================
+# Search
+# =====================================================
+
+F btree_search(node: i64, key: i64) -> i64 {
+    I node == 0 { 0 } E {
+        btree_search_rec(node, key, 0)
+    }
+}
+
+F btree_search_rec(node: i64, key: i64, i: i64) -> i64 {
+    n := btree_node_num_keys(node)
+    I i >= n {
+        # Key not found at this level, descend if not leaf
+        I btree_node_is_leaf(node) == 1 {
+            0  # Not found
+        } E {
+            child := btree_node_get_child(node, i)
+            btree_search(child, key)
+        }
+    } E {
+        k := btree_node_get_key(node, i)
+        I key == k {
+            # Found it - return value (as ptr+1 to distinguish from 0)
+            btree_node_get_value(node, i) + 1
+        } E I key < k {
+            # Key would be in child[i]
+            I btree_node_is_leaf(node) == 1 {
+                0  # Not found
+            } E {
+                child := btree_node_get_child(node, i)
+                btree_search(child, key)
+            }
+        } E {
+            # Continue searching
+            btree_search_rec(node, key, i + 1)
+        }
+    }
+}
+
+# =====================================================
+# Get API
+# =====================================================
+
+F btreemap_get(map: i64, key: i64) -> i64 {
+    root := btreemap_root(map)
+    result := btree_search(root, key)
+    I result == 0 { 0 } E { result - 1 }
+}
+
+# Get value for key using Option type
+# Returns Some(value) if found, None if not found
+F btreemap_get_opt(map: i64, key: i64) -> Option {
+    root := btreemap_root(map)
+    result := btree_search(root, key)
+    I result == 0 { None } E { Some(result - 1) }
+}
+
+F btreemap_contains(map: i64, key: i64) -> i64 {
+    root := btreemap_root(map)
+    result := btree_search(root, key)
+    I result == 0 { 0 } E { 1 }
+}
+
+# =====================================================
+# Insertion Helper: Split Child
+# =====================================================
+
+F btree_split_child(parent: i64, i: i64, child: i64) -> i64 {
+    # Split a full child node (3 keys) into two nodes (1 key each)
+    # Move middle key up to parent
+
+    new_node := btree_node_new(btree_node_is_leaf(child))
+
+    # New node gets the last key from child
+    btree_node_set_key(new_node, 0, btree_node_get_key(child, 2))
+    btree_node_set_value(new_node, 0, btree_node_get_value(child, 2))
+    btree_node_set_num_keys(new_node, 1)
+
+    # If not leaf, move last two children to new node
+    I btree_node_is_leaf(child) == 0 {
+        btree_node_set_child(new_node, 0, btree_node_get_child(child, 2))
+        btree_node_set_child(new_node, 1, btree_node_get_child(child, 3))
+    }
+
+    # Child now has only 1 key
+    btree_node_set_num_keys(child, 1)
+
+    # Get middle key/value to promote
+    mid_key := btree_node_get_key(child, 1)
+    mid_value := btree_node_get_value(child, 1)
+
+    # Shift parent's children right to make room
+    parent_n := btree_node_num_keys(parent)
+    btree_shift_children_right(parent, parent_n, i + 1)
+
+    # Insert new child
+    btree_node_set_child(parent, i + 1, new_node)
+
+    # Shift parent's keys right and insert middle key
+    btree_shift_keys_right(parent, parent_n, i)
+    btree_node_set_key(parent, i, mid_key)
+    btree_node_set_value(parent, i, mid_value)
+    btree_node_set_num_keys(parent, parent_n + 1)
+
+    0
+}
+
+F btree_shift_keys_right(node: i64, n: i64, from: i64) -> i64 {
+    I n <= from { 0 } E {
+        btree_node_set_key(node, n, btree_node_get_key(node, n - 1))
+        btree_node_set_value(node, n, btree_node_get_value(node, n - 1))
+        btree_shift_keys_right(node, n - 1, from)
+    }
+}
+
+F btree_shift_children_right(node: i64, n: i64, from: i64) -> i64 {
+    I n < from { 0 } E {
+        btree_node_set_child(node, n + 1, btree_node_get_child(node, n))
+        I n == from { 0 } E { btree_shift_children_right(node, n - 1, from) }
+    }
+}
+
+# =====================================================
+# Insertion: Non-full Insert
+# =====================================================
+
+F btree_insert_nonfull(node: i64, key: i64, value: i64) -> i64 {
+    n := btree_node_num_keys(node)
+    I btree_node_is_leaf(node) == 1 {
+        # Insert into leaf
+        btree_insert_in_leaf(node, key, value, n)
+    } E {
+        # Find child to descend into
+        idx := btree_find_child_index(node, key, n - 1)
+        child := btree_node_get_child(node, idx)
+
+        # Check if child is full (3 keys)
+        I btree_node_num_keys(child) == 3 {
+            btree_split_child(node, idx, child)
+            # After split, decide which child to descend into
+            I key > btree_node_get_key(node, idx) {
+                btree_insert_nonfull(btree_node_get_child(node, idx + 1), key, value)
+            } E {
+                btree_insert_nonfull(child, key, value)
+            }
+        } E {
+            btree_insert_nonfull(child, key, value)
+        }
+    }
+}
+
+F btree_find_child_index(node: i64, key: i64, i: i64) -> i64 {
+    I i < 0 { 0 }
+    E I key > btree_node_get_key(node, i) { i + 1 }
+    E { btree_find_child_index(node, key, i - 1) }
+}
+
+F btree_insert_in_leaf(node: i64, key: i64, value: i64, n: i64) -> i64 {
+    # Find position and shift keys right
+    pos := btree_find_insert_pos(node, key, n - 1)
+    btree_shift_keys_right(node, n, pos)
+    btree_node_set_key(node, pos, key)
+    btree_node_set_value(node, pos, value)
+    btree_node_set_num_keys(node, n + 1)
+    0
+}
+
+F btree_find_insert_pos(node: i64, key: i64, i: i64) -> i64 {
+    I i < 0 { 0 }
+    E I key > btree_node_get_key(node, i) { i + 1 }
+    E { btree_find_insert_pos(node, key, i - 1) }
+}
+
+# =====================================================
+# Put API
+# =====================================================
+
+F btreemap_put(map: i64, key: i64, value: i64) -> i64 {
+    root := btreemap_root(map)
+
+    # Check if key already exists (update case)
+    I btree_update_if_exists(root, key, value) == 1 {
+        1
+    } E {
+        # Key doesn't exist, need to insert
+        I btree_node_num_keys(root) == 3 {
+            # Root is full, need to split
+            new_root := btree_node_new(0)  # New internal node
+            btree_node_set_child(new_root, 0, root)
+            btree_split_child(new_root, 0, root)
+            btreemap_set_root(map, new_root)
+            btree_insert_nonfull(new_root, key, value)
+        } E {
+            btree_insert_nonfull(root, key, value)
+        }
+        btreemap_inc_size(map)
+        1
+    }
+}
+
+F btree_update_if_exists(node: i64, key: i64, value: i64) -> i64 {
+    I node == 0 { 0 } E {
+        btree_update_rec(node, key, value, 0)
+    }
+}
+
+F btree_update_rec(node: i64, key: i64, value: i64, i: i64) -> i64 {
+    n := btree_node_num_keys(node)
+    I i >= n {
+        I btree_node_is_leaf(node) == 1 {
+            0  # Not found
+        } E {
+            child := btree_node_get_child(node, i)
+            btree_update_if_exists(child, key, value)
+        }
+    } E {
+        k := btree_node_get_key(node, i)
+        I key == k {
+            btree_node_set_value(node, i, value)
+            1  # Updated
+        } E I key < k {
+            I btree_node_is_leaf(node) == 1 {
+                0  # Not found
+            } E {
+                child := btree_node_get_child(node, i)
+                btree_update_if_exists(child, key, value)
+            }
+        } E {
+            btree_update_rec(node, key, value, i + 1)
+        }
+    }
+}
+
+# =====================================================
+# Iteration (In-order traversal)
+# =====================================================
+
+# Callback-based iteration
+# callback receives (key, value, context) and returns 0 to continue, 1 to stop
+
+F btreemap_foreach(map: i64, callback: i64, context: i64) -> i64 {
+    root := btreemap_root(map)
+    btree_traverse(root, callback, context)
+}
+
+F btree_traverse(node: i64, callback: i64, context: i64) -> i64 {
+    I node == 0 { 0 } E {
+        btree_traverse_rec(node, callback, context, 0)
+    }
+}
+
+F btree_traverse_rec(node: i64, callback: i64, context: i64, i: i64) -> i64 {
+    n := btree_node_num_keys(node)
+    I i >= n {
+        # Traverse last child if not leaf
+        I btree_node_is_leaf(node) == 0 {
+            child := btree_node_get_child(node, i)
+            btree_traverse(child, callback, context)
+        } E { 0 }
+    } E {
+        # First traverse left child if not leaf
+        stop := I btree_node_is_leaf(node) == 0 {
+            child := btree_node_get_child(node, i)
+            btree_traverse(child, callback, context)
+        } E { 0 }
+
+        I stop == 0 {
+            # Visit this key
+            key := btree_node_get_key(node, i)
+            value := btree_node_get_value(node, i)
+            # Note: callback should be a function pointer, but Vais doesn't support that well
+            # For now, just continue traversal
+            btree_traverse_rec(node, callback, context, i + 1)
+        } E { 1 }
+    }
+}
+
+# =====================================================
+# Min/Max
+# =====================================================
+
+F btreemap_min_key(map: i64) -> i64 {
+    root := btreemap_root(map)
+    I btree_node_num_keys(root) == 0 { 0 } E {
+        btree_find_min(root)
+    }
+}
+
+F btree_find_min(node: i64) -> i64 {
+    I btree_node_is_leaf(node) == 1 {
+        btree_node_get_key(node, 0)
+    } E {
+        child := btree_node_get_child(node, 0)
+        btree_find_min(child)
+    }
+}
+
+F btreemap_max_key(map: i64) -> i64 {
+    root := btreemap_root(map)
+    I btree_node_num_keys(root) == 0 { 0 } E {
+        btree_find_max(root)
+    }
+}
+
+F btree_find_max(node: i64) -> i64 {
+    n := btree_node_num_keys(node)
+    I btree_node_is_leaf(node) == 1 {
+        btree_node_get_key(node, n - 1)
+    } E {
+        child := btree_node_get_child(node, n)
+        btree_find_max(child)
+    }
+}
+
+# =====================================================
+# Free
+# =====================================================
+
+F btreemap_free(map: i64) -> i64 {
+    root := btreemap_root(map)
+    btree_free_node(root)
+    free(map)
+    0
+}
+
+F btree_free_node(node: i64) -> i64 {
+    I node == 0 { 0 } E {
+        I btree_node_is_leaf(node) == 0 {
+            btree_free_children(node, 0)
+        }
+        free(node)
+        0
+    }
+}
+
+F btree_free_children(node: i64, i: i64) -> i64 {
+    n := btree_node_num_keys(node)
+    I i > n { 0 } E {
+        child := btree_node_get_child(node, i)
+        btree_free_node(child)
+        btree_free_children(node, i + 1)
+    }
+}

@@ -1,0 +1,24 @@
+// Code Actions Demo
+// This file demonstrates various code actions available in the Vais LSP
+
+// Example 1: Missing import (sqrt is undefined)
+// Code Action: "Import sqrt from std/math"
+F calculate_distance(x: f64, y: f64) -> f64 = sqrt(x * x + y * y)
+
+// Example 2: Type mismatch (needs cast)
+// Code Action: "Cast to f64"
+F double_number(n: f64) -> f64 = n * 2.0
+F main() {
+    // Select '42' and apply code action to cast to f64
+    L result: f64 = double_number(42)
+
+    // Example 3: Extract to variable
+    // Select '100 + 200 + 300' and apply "Extract to variable"
+    print_i64(100 + 200 + 300)
+
+    // Example 4: Extract to function
+    // Select the following 3 lines and apply "Extract to function"
+    L a: i64 = 10
+    L b: i64 = 20
+    print_i64(a + b)
+}

@@ -1,0 +1,284 @@
+# Regex module test
+
+U std/regex
+
+F print_pass(msg: i64) -> i64 {
+    puts("  PASS: ")
+    puts_ptr(msg)
+    putchar(10)
+    0
+}
+
+F print_fail(msg: i64) -> i64 {
+    puts("  FAIL: ")
+    puts_ptr(msg)
+    putchar(10)
+    0
+}
+
+F main() -> i64 {
+    puts("=== Regex Module Test ===")
+    total := 17
+
+    # Test 1: Literal matching
+    puts("Test 1: Literal matching")
+
+    # Test abc matches abc
+    pat1 := make_str3(97, 98, 99)  # "abc"
+    txt1 := make_str3(97, 98, 99)  # "abc"
+    r1 := regex_test(pat1, txt1)
+    msg1 := make_str_literal()
+    I r1 == 1 { print_pass(msg1) } E { print_fail(msg1) }
+    p1 := r1
+
+    # Test abc does not match def
+    txt2 := make_str3(100, 101, 102)  # "def"
+    r2 := regex_test(pat1, txt2)
+    msg2 := make_str_no_match()
+    I r2 == 0 { print_pass(msg2) } E { print_fail(msg2) }
+    p2 := p1 + I r2 == 0 { 1 } E { 0 }
+
+    # Test abc matches xabc (substring)
+    txt3 := make_str4(120, 97, 98, 99)  # "xabc"
+    r3 := regex_test(pat1, txt3)
+    msg3 := make_str_partial()
+    I r3 == 1 { print_pass(msg3) } E { print_fail(msg3) }
+    p3 := p2 + r3
+
+    free(pat1)
+    free(txt1)
+    free(txt2)
+    free(txt3)
+
+    # Test 2: Dot (.) matching
+    puts("Test 2: Dot (.) matching")
+
+    pat_adot := make_str2(97, 46)   # "a."
+    txt_abc := make_str3(97, 98, 99)  # "abc"
+    r4 := regex_test(pat_adot, txt_abc)
+    msg4 := make_str_dot1()
+    I r4 == 1 { print_pass(msg4) } E { print_fail(msg4) }
+    p4 := p3 + r4
+
+    pat_dotdot := make_str2(46, 46)  # ".."
+    txt_ab := make_str2(97, 98)      # "ab"
+    r5 := regex_test(pat_dotdot, txt_ab)
+    msg5 := make_str_dot2()
+    I r5 == 1 { print_pass(msg5) } E { print_fail(msg5) }
+    p5 := p4 + r5
+
+    free(pat_adot)
+    free(txt_abc)
+    free(pat_dotdot)
+    free(txt_ab)
+
+    # Test 3: Star (*) quantifier
+    puts("Test 3: Star (*) quantifier")
+
+    pat_astar := make_str2(97, 42)   # "a*"
+    txt_b := make_str1(98)           # "b"
+    r6 := regex_test(pat_astar, txt_b)
+    msg6 := make_str_star0()
+    I r6 == 1 { print_pass(msg6) } E { print_fail(msg6) }
+    p6 := p5 + r6
+
+    txt_a := make_str1(97)           # "a"
+    r7 := regex_test(pat_astar, txt_a)
+    msg7 := make_str_star1()
+    I r7 == 1 { print_pass(msg7) } E { print_fail(msg7) }
+    p7 := p6 + r7
+
+    txt_aaaa := make_str4(97, 97, 97, 97)  # "aaaa"
+    r8 := regex_test(pat_astar, txt_aaaa)
+    msg8 := make_str_starn()
+    I r8 == 1 { print_pass(msg8) } E { print_fail(msg8) }
+    p8 := p7 + r8
+
+    free(pat_astar)
+    free(txt_b)
+    free(txt_a)
+    free(txt_aaaa)
+
+    # Test 4: Plus (+) quantifier
+    puts("Test 4: Plus (+) quantifier")
+
+    pat_aplus := make_str2(97, 43)   # "a+"
+    txt_b2 := make_str1(98)          # "b"
+    r9 := regex_test(pat_aplus, txt_b2)
+    msg9 := make_str_plus0()
+    I r9 == 0 { print_pass(msg9) } E { print_fail(msg9) }
+    p9 := p8 + I r9 == 0 { 1 } E { 0 }
+
+    txt_a2 := make_str1(97)          # "a"
+    r10 := regex_test(pat_aplus, txt_a2)
+    msg10 := make_str_plus1()
+    I r10 == 1 { print_pass(msg10) } E { print_fail(msg10) }
+    p10 := p9 + r10
+
+    txt_aaaa2 := make_str4(97, 97, 97, 97)  # "aaaa"
+    r11 := regex_test(pat_aplus, txt_aaaa2)
+    msg11 := make_str_plusn()
+    I r11 == 1 { print_pass(msg11) } E { print_fail(msg11) }
+    p11 := p10 + r11
+
+    free(pat_aplus)
+    free(txt_b2)
+    free(txt_a2)
+    free(txt_aaaa2)
+
+    # Test 5: Question (?) quantifier
+    puts("Test 5: Question (?) quantifier")
+
+    pat_aq := make_str2(97, 63)      # "a?"
+    txt_empty := make_str0()         # ""
+    r12 := regex_test(pat_aq, txt_empty)
+    msg12 := make_str_q0()
+    I r12 == 1 { print_pass(msg12) } E { print_fail(msg12) }
+    p12 := p11 + r12
+
+    txt_a3 := make_str1(97)          # "a"
+    r13 := regex_test(pat_aq, txt_a3)
+    msg13 := make_str_q1()
+    I r13 == 1 { print_pass(msg13) } E { print_fail(msg13) }
+    p13 := p12 + r13
+
+    free(pat_aq)
+    free(txt_empty)
+    free(txt_a3)
+
+    # Test 6: Anchors
+    puts("Test 6: Anchors")
+
+    pat_start_a := make_str2(94, 97)  # "^a"
+    txt_abc2 := make_str3(97, 98, 99)  # "abc"
+    r14 := regex_test(pat_start_a, txt_abc2)
+    msg14 := make_str_anch1()
+    I r14 == 1 { print_pass(msg14) } E { print_fail(msg14) }
+    p14 := p13 + r14
+
+    txt_xabc := make_str4(120, 97, 98, 99)  # "xabc"
+    r15 := regex_test(pat_start_a, txt_xabc)
+    msg15 := make_str_anch2()
+    I r15 == 0 { print_pass(msg15) } E { print_fail(msg15) }
+    p15 := p14 + I r15 == 0 { 1 } E { 0 }
+
+    pat_c_end := make_str2(99, 36)    # "c$"
+    r16 := regex_test(pat_c_end, txt_abc2)
+    msg16 := make_str_anch3()
+    I r16 == 1 { print_pass(msg16) } E { print_fail(msg16) }
+    p16 := p15 + r16
+
+    txt_abcd := make_str4(97, 98, 99, 100)  # "abcd"
+    r17 := regex_test(pat_c_end, txt_abcd)
+    msg17 := make_str_anch4()
+    I r17 == 0 { print_pass(msg17) } E { print_fail(msg17) }
+    p17 := p16 + I r17 == 0 { 1 } E { 0 }
+
+    free(pat_start_a)
+    free(txt_abc2)
+    free(txt_xabc)
+    free(pat_c_end)
+    free(txt_abcd)
+
+    puts("=== Regex Tests Completed ===")
+    puts("Passed: ")
+    print_num(p17)
+    puts(" / ")
+    print_num(total)
+    putchar(10)
+
+    0
+}
+
+# String creation helpers
+F make_str0() -> i64 {
+    buf := malloc(1)
+    store_byte(buf, 0)
+    buf
+}
+
+F make_str1(c1: i64) -> i64 {
+    buf := malloc(2)
+    store_byte(buf, c1)
+    store_byte(buf + 1, 0)
+    buf
+}
+
+F make_str2(c1: i64, c2: i64) -> i64 {
+    buf := malloc(3)
+    store_byte(buf, c1)
+    store_byte(buf + 1, c2)
+    store_byte(buf + 2, 0)
+    buf
+}
+
+F make_str3(c1: i64, c2: i64, c3: i64) -> i64 {
+    buf := malloc(4)
+    store_byte(buf, c1)
+    store_byte(buf + 1, c2)
+    store_byte(buf + 2, c3)
+    store_byte(buf + 3, 0)
+    buf
+}
+
+F make_str4(c1: i64, c2: i64, c3: i64, c4: i64) -> i64 {
+    buf := malloc(5)
+    store_byte(buf, c1)
+    store_byte(buf + 1, c2)
+    store_byte(buf + 2, c3)
+    store_byte(buf + 3, c4)
+    store_byte(buf + 4, 0)
+    buf
+}
+
+# Test message builders
+F make_str_literal() -> i64 { make_str7(108, 105, 116, 101, 114, 97, 108) }  # "literal"
+F make_str_no_match() -> i64 { make_str5(110, 111, 109, 99, 104) }  # "nomch"
+F make_str_partial() -> i64 { make_str4(112, 97, 114, 116) }  # "part"
+F make_str_dot1() -> i64 { make_str4(100, 111, 116, 49) }  # "dot1"
+F make_str_dot2() -> i64 { make_str4(100, 111, 116, 50) }  # "dot2"
+F make_str_star0() -> i64 { make_str5(115, 116, 97, 114, 48) }  # "star0"
+F make_str_star1() -> i64 { make_str5(115, 116, 97, 114, 49) }  # "star1"
+F make_str_starn() -> i64 { make_str5(115, 116, 97, 114, 110) }  # "starn"
+F make_str_plus0() -> i64 { make_str5(112, 108, 117, 115, 48) }  # "plus0"
+F make_str_plus1() -> i64 { make_str5(112, 108, 117, 115, 49) }  # "plus1"
+F make_str_plusn() -> i64 { make_str5(112, 108, 117, 115, 110) }  # "plusn"
+F make_str_q0() -> i64 { make_str2(113, 48) }  # "q0"
+F make_str_q1() -> i64 { make_str2(113, 49) }  # "q1"
+F make_str_anch1() -> i64 { make_str5(97, 110, 99, 104, 49) }  # "anch1"
+F make_str_anch2() -> i64 { make_str5(97, 110, 99, 104, 50) }  # "anch2"
+F make_str_anch3() -> i64 { make_str5(97, 110, 99, 104, 51) }  # "anch3"
+F make_str_anch4() -> i64 { make_str5(97, 110, 99, 104, 52) }  # "anch4"
+
+F make_str5(c1: i64, c2: i64, c3: i64, c4: i64, c5: i64) -> i64 {
+    buf := malloc(6)
+    store_byte(buf, c1)
+    store_byte(buf + 1, c2)
+    store_byte(buf + 2, c3)
+    store_byte(buf + 3, c4)
+    store_byte(buf + 4, c5)
+    store_byte(buf + 5, 0)
+    buf
+}
+
+F make_str7(c1: i64, c2: i64, c3: i64, c4: i64, c5: i64, c6: i64, c7: i64) -> i64 {
+    buf := malloc(8)
+    store_byte(buf, c1)
+    store_byte(buf + 1, c2)
+    store_byte(buf + 2, c3)
+    store_byte(buf + 3, c4)
+    store_byte(buf + 4, c5)
+    store_byte(buf + 5, c6)
+    store_byte(buf + 6, c7)
+    store_byte(buf + 7, 0)
+    buf
+}
+
+F print_num(n: i64) -> i64 {
+    I n >= 10 {
+        putchar((n / 10) % 10 + 48)
+        0
+    } E { 0 }
+    putchar(n % 10 + 48)
+    0
+}

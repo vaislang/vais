@@ -1,0 +1,48 @@
+# Inline optimization test
+
+# Small pure function - should be inlined at O3
+F square(x: i64) -> i64 {
+    x * x
+}
+
+# Another small function
+F add_one(x: i64) -> i64 {
+    x + 1
+}
+
+# Chained small functions
+F square_plus_one(x: i64) -> i64 {
+    y := square(x)
+    add_one(y)
+}
+
+F main() -> i64 {
+    puts("=== Inline Optimization Test ===")
+
+    a := square(5)
+    puts("square(5) = ")
+    print_num(a)
+    putchar(10)
+
+    b := add_one(a)
+    puts("add_one(25) = ")
+    print_num(b)
+    putchar(10)
+
+    c := square_plus_one(3)
+    puts("square_plus_one(3) = ")
+    print_num(c)
+    putchar(10)
+
+    puts("=== Test Complete ===")
+    0
+}
+
+F print_num(n: i64) -> i64 {
+    I n >= 10 {
+        print_num(n / 10)
+        0
+    } E { 0 }
+    putchar(n % 10 + 48)
+    0
+}

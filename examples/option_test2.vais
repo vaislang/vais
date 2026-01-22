@@ -1,0 +1,23 @@
+# Test Option<T> without std/option import - inline definition
+
+E SimpleOption<T> {
+    None,
+    Some(T)
+}
+
+X SimpleOption<T> {
+    F is_some(&self) -> i64 {
+        M self {
+            Some(_) => 1,
+            None => 0
+        }
+    }
+}
+
+F main() -> i64 {
+    x := Some(42)
+    M x {
+        Some(v) => v,
+        None => 0
+    }
+}

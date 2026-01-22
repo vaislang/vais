@@ -1,0 +1,14 @@
+# Test - no impl methods, just enum and main function use
+
+E SimpleOption<T> {
+    None,
+    Some(T)
+}
+
+F main() -> i64 {
+    x := Some(42)
+    M x {
+        Some(v) => v,
+        None => 0
+    }
+}

@@ -1,0 +1,28 @@
+# Absolutely minimal test for generic Vec<T>
+
+S SimpleVec<T> {
+    data: i64,
+    len: i64
+}
+
+X SimpleVec<T> {
+    F new() -> SimpleVec<T> {
+        SimpleVec { data: 0, len: 0 }
+    }
+
+    F push(&self, value: T) -> i64 {
+        self.len = self.len + 1
+        self.len
+    }
+
+    F get(&self, index: i64) -> T {
+        0
+    }
+}
+
+F main() -> i64 {
+    v := SimpleVec.new()
+    v.push(42)
+    x := v.get(0)
+    x
+}

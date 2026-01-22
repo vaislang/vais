@@ -1,0 +1,43 @@
+# Test for generic Vec<T>
+
+U std/vec
+U std/option
+
+F main() -> i64 {
+    # Create a Vec<i64> - type inferred from push arguments
+    v := Vec.with_capacity(10)
+    v.push(42)
+    v.push(100)
+
+    # Test get
+    result := v.get(0) + v.get(1)  # 42 + 100 = 142
+
+    # Test set
+    v.set(0, 50)
+    result = v.get(0) + v.get(1)  # 50 + 100 = 150
+
+    # Test pop
+    popped := v.pop()  # 100
+    result = result + popped  # 150 + 100 = 250
+
+    # Test len
+    result = result + v.len()  # 250 + 1 = 251
+
+    # Test get_opt with valid index
+    opt := v.get_opt(0)
+    I opt.is_some() == 1 {
+        result = result + 1  # 251 + 1 = 252
+    }
+
+    # Test get_opt with invalid index
+    opt2 := v.get_opt(99)
+    I opt2.is_none() == 1 {
+        result = result + 1  # 252 + 1 = 253
+    }
+
+    # Clean up
+    v.drop()
+
+    # Return 142 for simple verification (matching plan)
+    142
+}

@@ -1,0 +1,177 @@
+# JSON module test - Tests builder API and stringify functionality
+# Note: json_parse requires i64 pointer, which cannot be directly created
+# from string literals in user code. Use the builder API instead.
+
+U std/json
+
+F main() -> i64 {
+    puts("=== JSON Module Test ===")
+
+    # Test 1: Create and stringify primitives
+    puts("\n1. Primitive creation and stringify:")
+
+    # Create null
+    null_v := json_null()
+    null_str := json_to_string(null_v)
+    puts("  null -> ")
+    puts_ptr(null_str)
+    free(null_str)
+    json_free(null_v)
+
+    # Create bool true
+    true_v := json_bool(1)
+    true_str := json_to_string(true_v)
+    puts("  bool true -> ")
+    puts_ptr(true_str)
+    free(true_str)
+    json_free(true_v)
+
+    # Create bool false
+    false_v := json_bool(0)
+    false_str := json_to_string(false_v)
+    puts("  bool false -> ")
+    puts_ptr(false_str)
+    free(false_str)
+    json_free(false_v)
+
+    # Create int
+    int_v := json_int(42)
+    int_str := json_to_string(int_v)
+    puts("  int 42 -> ")
+    puts_ptr(int_str)
+    free(int_str)
+    json_free(int_v)
+
+    # Create negative int
+    neg_v := json_int(0 - 123)
+    neg_str := json_to_string(neg_v)
+    puts("  int -123 -> ")
+    puts_ptr(neg_str)
+    free(neg_str)
+    json_free(neg_v)
+
+    # Test 2: Build and stringify array
+    puts("\n2. Array building:")
+    arr := json_array_create()
+    json_array_add(arr, json_int(1))
+    json_array_add(arr, json_int(2))
+    json_array_add(arr, json_int(3))
+    arr_str := json_to_string(arr)
+    puts("  [1,2,3] -> ")
+    puts_ptr(arr_str)
+    free(arr_str)
+
+    # Test array length
+    len := json_array_len(arr)
+    puts("  array length: ")
+    putchar(len + 48)
+    putchar(10)
+    json_free(arr)
+
+    # Test 3: Build empty array
+    puts("\n3. Empty array:")
+    empty_arr := json_array_create()
+    empty_arr_str := json_to_string(empty_arr)
+    puts("  [] -> ")
+    puts_ptr(empty_arr_str)
+    free(empty_arr_str)
+    json_free(empty_arr)
+
+    # Test 4: Build and stringify object
+    puts("\n4. Object building:")
+    obj := json_object_create()
+    json_object_put(obj, build_key_name(), json_int(42))
+    json_object_put(obj, build_key_active(), json_bool(1))
+    obj_str := json_to_string(obj)
+    puts("  object -> ")
+    puts_ptr(obj_str)
+    free(obj_str)
+    json_free(obj)
+
+    # Test 5: Build empty object
+    puts("\n5. Empty object:")
+    empty_obj := json_object_create()
+    empty_obj_str := json_to_string(empty_obj)
+    puts("  {} -> ")
+    puts_ptr(empty_obj_str)
+    free(empty_obj_str)
+    json_free(empty_obj)
+
+    # Test 6: Nested structures
+    puts("\n6. Nested structures:")
+    outer := json_object_create()
+    inner_arr := json_array_create()
+    json_array_add(inner_arr, json_int(1))
+    json_array_add(inner_arr, json_int(2))
+    json_array_add(inner_arr, json_bool(1))
+    json_object_put(outer, build_key_items(), inner_arr)
+    json_object_put(outer, build_key_count(), json_int(3))
+    nested_str := json_to_string(outer)
+    puts("  nested -> ")
+    puts_ptr(nested_str)
+    free(nested_str)
+    json_free(outer)
+
+    # Test 7: Type checking
+    puts("\n7. Type checking:")
+    int_val := json_int(100)
+    puts("  json_type(int) = ")
+    putchar(json_type(int_val) + 48)
+    putchar(10)
+
+    puts("  json_get_int(int) = ")
+    val := json_get_int(int_val)
+    putchar((val / 100) + 48)
+    putchar(((val / 10) % 10) + 48)
+    putchar((val % 10) + 48)
+    putchar(10)
+    json_free(int_val)
+
+    puts("\n=== All JSON tests completed ===")
+    0
+}
+
+# Helper functions to build string keys (since string literals can't be passed to i64 params)
+F build_key_name() -> i64 {
+    buf := malloc(5)
+    store_byte(buf, 110)      # 'n'
+    store_byte(buf + 1, 97)   # 'a'
+    store_byte(buf + 2, 109)  # 'm'
+    store_byte(buf + 3, 101)  # 'e'
+    store_byte(buf + 4, 0)
+    buf
+}
+
+F build_key_active() -> i64 {
+    buf := malloc(7)
+    store_byte(buf, 97)       # 'a'
+    store_byte(buf + 1, 99)   # 'c'
+    store_byte(buf + 2, 116)  # 't'
+    store_byte(buf + 3, 105)  # 'i'
+    store_byte(buf + 4, 118)  # 'v'
+    store_byte(buf + 5, 101)  # 'e'
+    store_byte(buf + 6, 0)
+    buf
+}
+
+F build_key_items() -> i64 {
+    buf := malloc(6)
+    store_byte(buf, 105)      # 'i'
+    store_byte(buf + 1, 116)  # 't'
+    store_byte(buf + 2, 101)  # 'e'
+    store_byte(buf + 3, 109)  # 'm'
+    store_byte(buf + 4, 115)  # 's'
+    store_byte(buf + 5, 0)
+    buf
+}
+
+F build_key_count() -> i64 {
+    buf := malloc(6)
+    store_byte(buf, 99)       # 'c'
+    store_byte(buf + 1, 111)  # 'o'
+    store_byte(buf + 2, 117)  # 'u'
+    store_byte(buf + 3, 110)  # 'n'
+    store_byte(buf + 4, 116)  # 't'
+    store_byte(buf + 5, 0)
+    buf
+}

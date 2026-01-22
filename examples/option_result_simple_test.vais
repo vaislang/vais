@@ -1,0 +1,52 @@
+# Simple test for Option/Result error handling improvements
+
+U std/vec
+U std/hashmap
+U std/option
+
+F main() -> i64 {
+    puts("Testing Option/Result improvements")
+
+    # Test Vec with Option
+    v := vec_new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+
+    result := v.get_opt(1)
+    I result.is_some() == 1 {
+        val := result.unwrap_or(0)
+        print_i64(val)
+    }
+
+    result2 := v.get_opt(99)
+    I result2.is_none() == 1 {
+        puts("Out of bounds returns None")
+    }
+
+    pop_val := v.pop_opt()
+    I pop_val.is_some() == 1 {
+        print_i64(pop_val.unwrap_or(0))
+    }
+
+    v.drop()
+
+    # Test HashMap with Option
+    map := hashmap_new()
+    map.set(5, 500)
+
+    map_result := map.get_opt(5)
+    I map_result.is_some() == 1 {
+        print_i64(map_result.unwrap_or(0))
+    }
+
+    map_result2 := map.get_opt(999)
+    I map_result2.is_none() == 1 {
+        puts("Key not found returns None")
+    }
+
+    map.drop()
+
+    puts("Tests completed")
+    0
+}

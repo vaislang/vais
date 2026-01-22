@@ -1,0 +1,754 @@
+# Vais Self-Hosting Compiler - Module System
+# Handles module resolution, import chains, and circular dependency detection
+
+# Print i64 helper
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+# ============================================================================
+# Module Resolution Status
+# ============================================================================
+
+F MOD_STATUS_UNKNOWN() -> i64 = 0    # Not yet processed
+F MOD_STATUS_LOADING() -> i64 = 1    # Currently being loaded (cycle detection)
+F MOD_STATUS_LOADED() -> i64 = 2     # Successfully loaded
+F MOD_STATUS_ERROR() -> i64 = 3      # Error during loading
+
+# ============================================================================
+# Module Entry - Represents a loaded module
+# ============================================================================
+
+S ModuleEntry {
+    name_idx: i64,       # String index for module name
+    path_idx: i64,       # String index for resolved file path
+    status: i64,         # Loading status (MOD_STATUS_*)
+    source_ptr: i64,     # Pointer to source code (null if not loaded)
+    source_len: i64,     # Length of source code
+    deps_ptr: i64,       # Array of dependency module indices
+    deps_len: i64,       # Number of dependencies
+    deps_cap: i64        # Capacity of deps array
+}
+
+X ModuleEntry {
+    # Create new module entry
+    F new(name_idx: i64, path_idx: i64) -> ModuleEntry = ModuleEntry {
+        name_idx: name_idx,
+        path_idx: path_idx,
+        status: MOD_STATUS_UNKNOWN(),
+        source_ptr: 0,
+        source_len: 0,
+        deps_ptr: malloc(64),  # Space for 8 deps initially
+        deps_len: 0,
+        deps_cap: 8
+    }
+
+    # Add a dependency
+    F add_dep(&self, dep_idx: i64) -> i64 {
+        # Check if already exists
+        i: mut i64 = 0
+        L {
+            I i >= self.deps_len { B } E { 0 }
+            I load_i64(self.deps_ptr + i * 8) == dep_idx {
+                R 0  # Already exists
+            }
+            i = i + 1
+        }
+
+        # Grow if needed
+        I self.deps_len >= self.deps_cap {
+            new_cap := self.deps_cap * 2
+            new_ptr := malloc(new_cap * 8)
+            memcpy(new_ptr, self.deps_ptr, self.deps_len * 8)
+            free(self.deps_ptr)
+            self.deps_ptr = new_ptr
+            self.deps_cap = new_cap
+            0
+        } E { 0 }
+
+        store_i64(self.deps_ptr + self.deps_len * 8, dep_idx)
+        self.deps_len = self.deps_len + 1
+        1
+    }
+
+    # Check if has dependency
+    F has_dep(&self, dep_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L {
+            I i >= self.deps_len { R 0 }
+            I load_i64(self.deps_ptr + i * 8) == dep_idx {
+                R 1
+            }
+            i = i + 1
+        }
+        0
+    }
+
+    # Free resources
+    F drop(&self) -> i64 {
+        I self.deps_ptr != 0 {
+            free(self.deps_ptr)
+            0
+        } E { 0 }
+        I self.source_ptr != 0 {
+            free(self.source_ptr)
+            0
+        } E { 0 }
+        1
+    }
+}
+
+# ============================================================================
+# Module Registry - Tracks all modules and their dependencies
+# ============================================================================
+
+S ModuleRegistry {
+    entries_ptr: i64,    # Array of ModuleEntry
+    entries_len: i64,    # Number of entries
+    entries_cap: i64,    # Capacity
+    base_path_idx: i64,  # Base directory string index (for relative resolution)
+    entry_size: i64      # Size of ModuleEntry struct
+}
+
+# Size of ModuleEntry: 9 fields * 8 bytes = 72 bytes
+F MODULE_ENTRY_SIZE() -> i64 = 72
+
+X ModuleRegistry {
+    # Create new registry with base path
+    F new(base_path_idx: i64, initial_cap: i64) -> ModuleRegistry {
+        entries := malloc(initial_cap * MODULE_ENTRY_SIZE())
+        ModuleRegistry {
+            entries_ptr: entries,
+            entries_len: 0,
+            entries_cap: initial_cap,
+            base_path_idx: base_path_idx,
+            entry_size: MODULE_ENTRY_SIZE()
+        }
+    }
+
+    # Get entry pointer by index
+    F get_entry_ptr(&self, idx: i64) -> i64 {
+        self.entries_ptr + idx * self.entry_size
+    }
+
+    # Register a new module (returns index, or existing index if already registered)
+    F register(&self, name_idx: i64, path_idx: i64) -> i64 {
+        # Check if already registered
+        existing := @.find_by_name(name_idx)
+        I existing >= 0 {
+            R existing
+        }
+
+        # Grow if needed
+        I self.entries_len >= self.entries_cap {
+            new_cap := self.entries_cap * 2
+            new_ptr := malloc(new_cap * self.entry_size)
+            memcpy(new_ptr, self.entries_ptr, self.entries_len * self.entry_size)
+            free(self.entries_ptr)
+            self.entries_ptr = new_ptr
+            self.entries_cap = new_cap
+            0
+        } E { 0 }
+
+        # Create new entry
+        idx := self.entries_len
+        entry_ptr := @.get_entry_ptr(idx)
+
+        # Initialize entry fields
+        store_i64(entry_ptr, name_idx)           # name_idx
+        store_i64(entry_ptr + 8, path_idx)       # path_idx
+        store_i64(entry_ptr + 16, MOD_STATUS_UNKNOWN())  # status
+        store_i64(entry_ptr + 24, 0)             # source_ptr
+        store_i64(entry_ptr + 32, 0)             # source_len
+        store_i64(entry_ptr + 40, malloc(64))   # deps_ptr
+        store_i64(entry_ptr + 48, 0)             # deps_len
+        store_i64(entry_ptr + 56, 8)             # deps_cap
+
+        self.entries_len = self.entries_len + 1
+        idx
+    }
+
+    # Find module by name index
+    F find_by_name(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L {
+            I i >= self.entries_len { R 0 - 1 }
+            entry_ptr := @.get_entry_ptr(i)
+            stored_name := load_i64(entry_ptr)
+            I stored_name == name_idx {
+                R i
+            }
+            i = i + 1
+        }
+        0 - 1
+    }
+
+    # Get module status
+    F get_status(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { R MOD_STATUS_ERROR() }
+        entry_ptr := @.get_entry_ptr(idx)
+        load_i64(entry_ptr + 16)
+    }
+
+    # Set module status
+    F set_status(&self, idx: i64, status: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { R 0 }
+        entry_ptr := @.get_entry_ptr(idx)
+        store_i64(entry_ptr + 16, status)
+        1
+    }
+
+    # Get module name index
+    F get_name(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { R 0 - 1 }
+        entry_ptr := @.get_entry_ptr(idx)
+        load_i64(entry_ptr)
+    }
+
+    # Get module path index
+    F get_path(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { R 0 - 1 }
+        entry_ptr := @.get_entry_ptr(idx)
+        load_i64(entry_ptr + 8)
+    }
+
+    # Add dependency from src_idx to dep_idx
+    F add_dependency(&self, src_idx: i64, dep_idx: i64) -> i64 {
+        I src_idx < 0 || src_idx >= self.entries_len { R 0 }
+        entry_ptr := @.get_entry_ptr(src_idx)
+
+        deps_ptr: mut i64 = load_i64(entry_ptr + 40)
+        deps_len := load_i64(entry_ptr + 48)
+        deps_cap: mut i64 = load_i64(entry_ptr + 56)
+
+        # Check if already exists
+        i: mut i64 = 0
+        L {
+            I i >= deps_len { B } E { 0 }
+            I load_i64(deps_ptr + i * 8) == dep_idx {
+                R 1  # Already exists
+            }
+            i = i + 1
+        }
+
+        # Grow if needed
+        I deps_len >= deps_cap {
+            new_cap := deps_cap * 2
+            new_ptr := malloc(new_cap * 8)
+            memcpy(new_ptr, deps_ptr, deps_len * 8)
+            free(deps_ptr)
+            deps_ptr = new_ptr
+            deps_cap = new_cap
+            store_i64(entry_ptr + 40, new_ptr)
+            store_i64(entry_ptr + 56, new_cap)
+            0
+        } E { 0 }
+
+        store_i64(deps_ptr + deps_len * 8, dep_idx)
+        store_i64(entry_ptr + 48, deps_len + 1)
+        1
+    }
+
+    # Get number of modules
+    F size(&self) -> i64 = self.entries_len
+
+    # Free all resources
+    F drop(&self) -> i64 {
+        i: mut i64 = 0
+        L {
+            I i >= self.entries_len { B } E { 0 }
+            entry_ptr := @.get_entry_ptr(i)
+            deps_ptr := load_i64(entry_ptr + 40)
+            source_ptr := load_i64(entry_ptr + 24)
+            I deps_ptr != 0 {
+                free(deps_ptr)
+                0
+            } E { 0 }
+            I source_ptr != 0 {
+                free(source_ptr)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        free(self.entries_ptr)
+        1
+    }
+}
+
+# ============================================================================
+# Cycle Detector - Detects circular dependencies using DFS
+# ============================================================================
+
+S CycleDetector {
+    visited: i64,        # Bitmap: visited[i] = 1 if visited
+    in_stack: i64,       # Bitmap: in_stack[i] = 1 if in current DFS path
+    cycle_path: i64,     # Array storing cycle path (module indices)
+    cycle_len: i64,      # Length of detected cycle
+    capacity: i64        # Max number of modules
+}
+
+X CycleDetector {
+    F new(capacity: i64) -> CycleDetector {
+        visited := malloc(capacity)
+        in_stack := malloc(capacity)
+        cycle_path := malloc(capacity * 8)
+
+        # Initialize to 0
+        i: mut i64 = 0
+        L {
+            I i >= capacity { B } E { 0 }
+            store_byte(visited + i, 0)
+            store_byte(in_stack + i, 0)
+            i = i + 1
+        }
+
+        CycleDetector {
+            visited: visited,
+            in_stack: in_stack,
+            cycle_path: cycle_path,
+            cycle_len: 0,
+            capacity: capacity
+        }
+    }
+
+    # Reset state for new detection
+    F reset(&self) -> i64 {
+        i: mut i64 = 0
+        L {
+            I i >= self.capacity { B } E { 0 }
+            store_byte(self.visited + i, 0)
+            store_byte(self.in_stack + i, 0)
+            i = i + 1
+        }
+        self.cycle_len = 0
+        1
+    }
+
+    # Check if node is visited
+    F is_visited(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { R 1 }
+        load_byte(self.visited + idx)
+    }
+
+    # Check if node is in current stack
+    F is_in_stack(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { R 0 }
+        load_byte(self.in_stack + idx)
+    }
+
+    # Mark node as visited
+    F mark_visited(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { R 0 }
+        store_byte(self.visited + idx, 1)
+        1
+    }
+
+    # Push node onto stack
+    F push_stack(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { R 0 }
+        store_byte(self.in_stack + idx, 1)
+        1
+    }
+
+    # Pop node from stack
+    F pop_stack(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { R 0 }
+        store_byte(self.in_stack + idx, 0)
+        1
+    }
+
+    # Record cycle path
+    F record_cycle(&self, idx: i64) -> i64 {
+        I self.cycle_len < self.capacity {
+            store_i64(self.cycle_path + self.cycle_len * 8, idx)
+            self.cycle_len = self.cycle_len + 1
+            1
+        } E { 0 }
+    }
+
+    # Get cycle path at position
+    F get_cycle_node(&self, pos: i64) -> i64 {
+        I pos < 0 || pos >= self.cycle_len { R 0 - 1 }
+        load_i64(self.cycle_path + pos * 8)
+    }
+
+    # Clear cycle path
+    F clear_cycle(&self) -> i64 {
+        self.cycle_len = 0
+        1
+    }
+
+    # Free resources
+    F drop(&self) -> i64 {
+        free(self.visited)
+        free(self.in_stack)
+        free(self.cycle_path)
+        1
+    }
+}
+
+# ============================================================================
+# Module Resolver - Main entry point for module loading and resolution
+# ============================================================================
+
+S ModuleResolver {
+    registry: i64,       # Pointer to ModuleRegistry
+    detector: i64,       # Pointer to CycleDetector
+    stringpool: i64,     # Pointer to GlobalStringPool
+    search_paths: i64,   # Array of path string indices
+    search_count: i64,   # Number of search paths
+    error_code: i64,     # Last error code (0 = success)
+    error_msg_idx: i64   # String index of error message
+}
+
+# Error codes
+F ERR_NONE() -> i64 = 0
+F ERR_FILE_NOT_FOUND() -> i64 = 1
+F ERR_CIRCULAR_DEP() -> i64 = 2
+F ERR_PARSE_FAILED() -> i64 = 3
+F ERR_INTERNAL() -> i64 = 4
+
+X ModuleResolver {
+    # Create new resolver
+    # registry_ptr: pointer to ModuleRegistry
+    # stringpool_ptr: pointer to GlobalStringPool
+    F new(registry_ptr: i64, stringpool_ptr: i64) -> ModuleResolver {
+        detector := malloc(40)  # CycleDetector size
+        search_paths := malloc(64)  # 8 paths initially
+
+        # Initialize detector inline
+        det_visited := malloc(256)
+        det_stack := malloc(256)
+        det_cycle := malloc(256 * 8)
+        i: mut i64 = 0
+        L {
+            I i >= 256 { B } E { 0 }
+            store_byte(det_visited + i, 0)
+            store_byte(det_stack + i, 0)
+            i = i + 1
+        }
+        store_i64(detector, det_visited)
+        store_i64(detector + 8, det_stack)
+        store_i64(detector + 16, det_cycle)
+        store_i64(detector + 24, 0)
+        store_i64(detector + 32, 256)
+
+        ModuleResolver {
+            registry: registry_ptr,
+            detector: detector,
+            stringpool: stringpool_ptr,
+            search_paths: search_paths,
+            search_count: 0,
+            error_code: ERR_NONE(),
+            error_msg_idx: 0 - 1
+        }
+    }
+
+    # Add search path for module resolution
+    F add_search_path(&self, path_idx: i64) -> i64 {
+        store_i64(self.search_paths + self.search_count * 8, path_idx)
+        self.search_count = self.search_count + 1
+        1
+    }
+
+    # Check for circular dependencies starting from module idx
+    # Returns 1 if cycle detected, 0 otherwise
+    F check_cycle_from(&self, idx: i64, registry: i64) -> i64 {
+        # Simple DFS cycle detection
+        det_visited := load_i64(self.detector)
+        det_stack := load_i64(self.detector + 8)
+
+        # If already visited and not in stack, no cycle through this node
+        I load_byte(det_visited + idx) == 1 {
+            R 0
+        }
+
+        # If in stack, we found a cycle
+        I load_byte(det_stack + idx) == 1 {
+            R 1
+        }
+
+        # Mark as in stack
+        store_byte(det_stack + idx, 1)
+
+        # Visit all dependencies
+        entry_ptr := registry + idx * MODULE_ENTRY_SIZE()
+        deps_ptr := load_i64(entry_ptr + 40)
+        deps_len := load_i64(entry_ptr + 48)
+
+        i: mut i64 = 0
+        L {
+            I i >= deps_len { B } E { 0 }
+            dep_idx := load_i64(deps_ptr + i * 8)
+            I @.check_cycle_from(dep_idx, registry) == 1 {
+                R 1
+            }
+            i = i + 1
+        }
+
+        # Remove from stack, mark as visited
+        store_byte(det_stack + idx, 0)
+        store_byte(det_visited + idx, 1)
+        0
+    }
+
+    # Check all modules for cycles
+    F check_all_cycles(&self) -> i64 {
+        # Reset detector state
+        det_visited := load_i64(self.detector)
+        det_stack := load_i64(self.detector + 8)
+        det_capacity := load_i64(self.detector + 32)
+
+        i: mut i64 = 0
+        L {
+            I i >= det_capacity { B } E { 0 }
+            store_byte(det_visited + i, 0)
+            store_byte(det_stack + i, 0)
+            i = i + 1
+        }
+
+        # Get registry info by reading the registry struct
+        # Note: registry is pointer to ModuleRegistry
+        reg_entries := load_i64(self.registry)
+        reg_len := load_i64(self.registry + 8)
+
+        i = 0
+        L {
+            I i >= reg_len { B } E { 0 }
+            I load_byte(det_visited + i) == 0 {
+                I @.check_cycle_from(i, reg_entries) == 1 {
+                    self.error_code = ERR_CIRCULAR_DEP()
+                    R 1
+                }
+                0
+            } E { 0 }
+            i = i + 1
+        }
+
+        0  # No cycles
+    }
+
+    # Get last error code
+    F get_error(&self) -> i64 = self.error_code
+
+    # Clear error state
+    F clear_error(&self) -> i64 {
+        self.error_code = ERR_NONE()
+        self.error_msg_idx = -1
+        1
+    }
+
+    # Free resources
+    F drop(&self) -> i64 {
+        # Free detector
+        det_visited := load_i64(self.detector)
+        det_stack := load_i64(self.detector + 8)
+        det_cycle := load_i64(self.detector + 16)
+        free(det_visited)
+        free(det_stack)
+        free(det_cycle)
+        free(self.detector)
+        free(self.search_paths)
+        1
+    }
+}
+
+# ============================================================================
+# Topological Sort - Returns modules in dependency order
+# ============================================================================
+
+S TopologicalSort {
+    result: i64,      # Array of module indices in sorted order
+    result_len: i64,  # Number of modules in result
+    visited: i64,     # Visited bitmap
+    temp: i64,        # Temporary mark bitmap (for cycle detection)
+    capacity: i64     # Max capacity
+}
+
+X TopologicalSort {
+    F new(capacity: i64) -> TopologicalSort {
+        result := malloc(capacity * 8)
+        visited := malloc(capacity)
+        temp := malloc(capacity)
+
+        i: mut i64 = 0
+        L {
+            I i >= capacity { B } E { 0 }
+            store_byte(visited + i, 0)
+            store_byte(temp + i, 0)
+            i = i + 1
+        }
+
+        TopologicalSort {
+            result: result,
+            result_len: 0,
+            visited: visited,
+            temp: temp,
+            capacity: capacity
+        }
+    }
+
+    # Reset for new sort
+    F reset(&self) -> i64 {
+        i: mut i64 = 0
+        L {
+            I i >= self.capacity { B } E { 0 }
+            store_byte(self.visited + i, 0)
+            store_byte(self.temp + i, 0)
+            i = i + 1
+        }
+        self.result_len = 0
+        1
+    }
+
+    # Visit node for topological sort
+    # Returns 0 on success, 1 if cycle detected
+    F visit(&self, idx: i64, registry_entries: i64) -> i64 {
+        # If temp marked, we have a cycle
+        I load_byte(self.temp + idx) == 1 {
+            R 1
+        }
+        # If already visited, done
+        I load_byte(self.visited + idx) == 1 {
+            R 0
+        }
+
+        # Mark temporarily
+        store_byte(self.temp + idx, 1)
+
+        # Visit all dependencies first
+        entry_ptr := registry_entries + idx * MODULE_ENTRY_SIZE()
+        deps_ptr := load_i64(entry_ptr + 40)
+        deps_len := load_i64(entry_ptr + 48)
+
+        i: mut i64 = 0
+        L {
+            I i >= deps_len { B } E { 0 }
+            dep_idx := load_i64(deps_ptr + i * 8)
+            I @.visit(dep_idx, registry_entries) == 1 {
+                R 1  # Cycle detected
+            }
+            i = i + 1
+        }
+
+        # Unmark temp, mark visited
+        store_byte(self.temp + idx, 0)
+        store_byte(self.visited + idx, 1)
+
+        # Add to result
+        store_i64(self.result + self.result_len * 8, idx)
+        self.result_len = self.result_len + 1
+        0
+    }
+
+    # Sort all modules
+    # Returns 0 on success, 1 if cycle detected
+    F sort(&self, registry_entries: i64, module_count: i64) -> i64 {
+        @.reset()
+
+        i: mut i64 = 0
+        L {
+            I i >= module_count { B } E { 0 }
+            I load_byte(self.visited + i) == 0 {
+                I @.visit(i, registry_entries) == 1 {
+                    R 1
+                }
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Get sorted module at position
+    F get(&self, pos: i64) -> i64 {
+        I pos < 0 || pos >= self.result_len { R 0 - 1 }
+        load_i64(self.result + pos * 8)
+    }
+
+    # Get count of sorted modules
+    F len(&self) -> i64 = self.result_len
+
+    # Free resources
+    F drop(&self) -> i64 {
+        free(self.result)
+        free(self.visited)
+        free(self.temp)
+        1
+    }
+}
+
+# ============================================================================
+# Test function
+# ============================================================================
+
+F main() -> i64 {
+    puts("=== Module System Tests ===\n")
+
+    # Test ModuleRegistry
+    reg := ModuleRegistry.new(0, 16)
+
+    idx0 := reg.register(0, 10)  # Module "main" at path idx 10
+    idx1 := reg.register(1, 11)  # Module "lexer" at path idx 11
+    idx2 := reg.register(2, 12)  # Module "token" at path idx 12
+
+    puts("Registered 3 modules: ")
+    print_i64(reg.size())
+    puts("\n")
+
+    # Add dependencies: main -> lexer, lexer -> token
+    reg.add_dependency(idx0, idx1)
+    reg.add_dependency(idx1, idx2)
+
+    puts("Added dependencies: main->lexer, lexer->token\n")
+
+    # Test topological sort
+    sorter := TopologicalSort.new(16)
+    result := sorter.sort(reg.entries_ptr, reg.size())
+
+    I result == 0 {
+        puts("Topological sort succeeded, order: ")
+        i: mut i64 = 0
+        L {
+            I i >= sorter.len() { B } E { 0 }
+            print_i64(sorter.get(i))
+            putchar(32)
+            i = i + 1
+        }
+        putchar(10)
+        puts("PASS: No cycles detected\n")
+    } E {
+        puts("FAIL: Cycle detected\n")
+    }
+
+    # Test cycle detection by adding cycle
+    puts("\nAdding cycle: token -> main\n")
+    reg.add_dependency(idx2, idx0)
+
+    sorter.reset()
+    result2 := sorter.sort(reg.entries_ptr, reg.size())
+
+    I result2 == 1 {
+        puts("PASS: Cycle correctly detected\n")
+    } E {
+        puts("FAIL: Cycle not detected\n")
+    }
+
+    sorter.drop()
+    reg.drop()
+    puts("=== Module System Tests Done ===\n")
+    0
+}

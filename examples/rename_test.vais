@@ -1,0 +1,47 @@
+# Test file for LSP rename functionality
+
+# Structure with fields
+S Point {
+    x: i64,
+    y: i64
+}
+
+# Function using the structure
+F create_point(a: i64, b: i64) -> Point {
+    R Point { x: a, y: b }
+}
+
+# Function with local variables
+F calculate(value: i64) -> i64 {
+    let result = value * 2;
+    let temp = result + 10;
+    R temp
+}
+
+# Enum definition
+E Color {
+    Red,
+    Green,
+    Blue
+}
+
+# Function using enum
+F get_color_value(color: Color) -> i64 {
+    M color {
+        Color::Red => R 1,
+        Color::Green => R 2,
+        Color::Blue => R 3
+    }
+}
+
+# Main function
+F main() -> i64 {
+    let point = create_point(10, 20);
+    let x_val = point.x;
+    let computed = calculate(x_val);
+
+    let my_color = Color::Red;
+    let color_val = get_color_value(my_color);
+
+    R computed + color_val
+}

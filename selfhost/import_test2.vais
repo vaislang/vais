@@ -1,0 +1,27 @@
+U token
+
+F main() -> i64 {
+    # Test free function from token module
+    tk := token_simple(TOK_KW_F(), 0, 1)
+    puts("Token kind: ")
+    print_i64(tk.kind)
+    putchar(10)
+    0
+}
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}

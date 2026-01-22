@@ -1,0 +1,361 @@
+# Regex - Simple Regular Expression Matcher
+# Supports: literal characters, ., *, +, ?, ^, $, character classes [abc], [^abc]
+# Uses recursive descent matching
+
+# =====================================================
+# Regex Pattern Structure
+# =====================================================
+# Pattern node types:
+# 0 = END (end of pattern)
+# 1 = LITERAL (single character match)
+# 2 = ANY (. matches any char)
+# 3 = START (^ anchor)
+# 4 = END_ANCHOR ($ anchor)
+# 5 = CHAR_CLASS ([abc])
+# 6 = NEG_CHAR_CLASS ([^abc])
+# 7 = STAR (*)
+# 8 = PLUS (+)
+# 9 = QUESTION (?)
+
+# Node layout:
+# [0]  = type
+# [8]  = data (char for LITERAL, char_class_ptr for CLASS, sub_pattern for quantifiers)
+# [16] = extra (length for char class)
+# [24] = next (pointer to next node)
+
+# =====================================================
+# Pattern Compilation
+# =====================================================
+
+F regex_compile(pattern: i64) -> i64 {
+    len := strlen(pattern)
+    regex_compile_rec(pattern, 0, len)
+}
+
+F regex_compile_rec(pattern: i64, pos: i64, len: i64) -> i64 {
+    I pos >= len {
+        # Create END node
+        node := malloc(32)
+        store_i64(node, 0)      # type = END
+        store_i64(node + 8, 0)
+        store_i64(node + 16, 0)
+        store_i64(node + 24, 0)
+        node
+    } E {
+        c := load_byte(pattern + pos)
+        regex_compile_char(pattern, pos, len, c)
+    }
+}
+
+F regex_compile_char(pattern: i64, pos: i64, len: i64, c: i64) -> i64 {
+    I c == 94 && pos == 0 {
+        # ^ anchor at start
+        node := malloc(32)
+        store_i64(node, 3)  # START
+        store_i64(node + 8, 0)
+        store_i64(node + 16, 0)
+        next := regex_compile_rec(pattern, pos + 1, len)
+        store_i64(node + 24, next)
+        node
+    } E I c == 36 && pos == len - 1 {
+        # $ anchor at end
+        node := malloc(32)
+        store_i64(node, 4)  # END_ANCHOR
+        store_i64(node + 8, 0)
+        store_i64(node + 16, 0)
+        next := regex_compile_rec(pattern, pos + 1, len)
+        store_i64(node + 24, next)
+        node
+    } E I c == 46 {
+        # . matches any
+        regex_compile_atom(pattern, pos, len, 2, 0, 0)
+    } E I c == 91 {
+        # Character class
+        regex_compile_char_class(pattern, pos, len)
+    } E I c == 92 {
+        # Escape sequence
+        I pos + 1 < len {
+            escaped := load_byte(pattern + pos + 1)
+            regex_compile_atom(pattern, pos + 1, len, 1, escaped, 0)
+        } E {
+            regex_compile_atom(pattern, pos, len, 1, c, 0)
+        }
+    } E {
+        # Literal character
+        regex_compile_atom(pattern, pos, len, 1, c, 0)
+    }
+}
+
+F regex_compile_atom(pattern: i64, pos: i64, len: i64, typ: i64, data: i64, extra: i64) -> i64 {
+    node := malloc(32)
+    store_i64(node, typ)
+    store_i64(node + 8, data)
+    store_i64(node + 16, extra)
+
+    # Check for quantifier
+    next_pos := pos + 1
+    I next_pos < len {
+        next_c := load_byte(pattern + next_pos)
+        I next_c == 42 {
+            # * quantifier
+            wrapper := malloc(32)
+            store_i64(wrapper, 7)  # STAR
+            store_i64(wrapper + 8, node)
+            store_i64(wrapper + 16, 0)
+            rest := regex_compile_rec(pattern, next_pos + 1, len)
+            store_i64(wrapper + 24, rest)
+            store_i64(node + 24, 0)  # atom has no next
+            wrapper
+        } E I next_c == 43 {
+            # + quantifier
+            wrapper := malloc(32)
+            store_i64(wrapper, 8)  # PLUS
+            store_i64(wrapper + 8, node)
+            store_i64(wrapper + 16, 0)
+            rest := regex_compile_rec(pattern, next_pos + 1, len)
+            store_i64(wrapper + 24, rest)
+            store_i64(node + 24, 0)
+            wrapper
+        } E I next_c == 63 {
+            # ? quantifier
+            wrapper := malloc(32)
+            store_i64(wrapper, 9)  # QUESTION
+            store_i64(wrapper + 8, node)
+            store_i64(wrapper + 16, 0)
+            rest := regex_compile_rec(pattern, next_pos + 1, len)
+            store_i64(wrapper + 24, rest)
+            store_i64(node + 24, 0)
+            wrapper
+        } E {
+            # No quantifier
+            next := regex_compile_rec(pattern, next_pos, len)
+            store_i64(node + 24, next)
+            node
+        }
+    } E {
+        next := regex_compile_rec(pattern, next_pos, len)
+        store_i64(node + 24, next)
+        node
+    }
+}
+
+F regex_compile_char_class(pattern: i64, pos: i64, len: i64) -> i64 {
+    # Find closing ]
+    first_char_pos := pos + 1
+    negated := I load_byte(pattern + first_char_pos) == 94 { 1 } E { 0 }
+    start := first_char_pos + negated  # Skip ^ if negated
+    end := regex_find_bracket_end(pattern, start, len)
+
+    class_len := end - start
+    class_chars := malloc(class_len + 1)
+    memcpy(class_chars, pattern + start, class_len)
+    store_byte(class_chars + class_len, 0)
+
+    node := malloc(32)
+    store_i64(node, I negated == 1 { 6 } E { 5 })  # NEG_CHAR_CLASS or CHAR_CLASS
+    store_i64(node + 8, class_chars)
+    store_i64(node + 16, class_len)
+
+    # Check for quantifier after ]
+    next_pos := end + 1
+    I next_pos < len {
+        next_c := load_byte(pattern + next_pos)
+        I next_c == 42 || next_c == 43 || next_c == 63 {
+            wrapper := malloc(32)
+            store_i64(wrapper, I next_c == 42 { 7 } E I next_c == 43 { 8 } E { 9 })
+            store_i64(wrapper + 8, node)
+            store_i64(wrapper + 16, 0)
+            rest := regex_compile_rec(pattern, next_pos + 1, len)
+            store_i64(wrapper + 24, rest)
+            store_i64(node + 24, 0)
+            wrapper
+        } E {
+            next := regex_compile_rec(pattern, next_pos, len)
+            store_i64(node + 24, next)
+            node
+        }
+    } E {
+        next := regex_compile_rec(pattern, next_pos, len)
+        store_i64(node + 24, next)
+        node
+    }
+}
+
+F regex_find_bracket_end(pattern: i64, start: i64, len: i64) -> i64 {
+    I start >= len { len }
+    E I load_byte(pattern + start) == 93 { start }
+    E { regex_find_bracket_end(pattern, start + 1, len) }
+}
+
+# =====================================================
+# Pattern Matching
+# =====================================================
+
+F regex_match(regex: i64, text: i64) -> i64 {
+    text_len := strlen(text)
+
+    # Check for start anchor
+    first_type := load_i64(regex)
+    I first_type == 3 {
+        # Has ^ anchor, must match from start
+        next := load_i64(regex + 24)
+        regex_match_here(next, text, 0, text_len)
+    } E {
+        # Try matching from each position
+        regex_match_any_pos(regex, text, 0, text_len)
+    }
+}
+
+F regex_match_any_pos(regex: i64, text: i64, pos: i64, text_len: i64) -> i64 {
+    I pos > text_len { 0 }
+    E I regex_match_here(regex, text, pos, text_len) == 1 { 1 }
+    E { regex_match_any_pos(regex, text, pos + 1, text_len) }
+}
+
+F regex_match_here(regex: i64, text: i64, pos: i64, text_len: i64) -> i64 {
+    I regex == 0 { 1 }
+    E {
+        typ := load_i64(regex)
+        data := load_i64(regex + 8)
+        next := load_i64(regex + 24)
+
+        I typ == 0 {
+            # END node - success
+            1
+        } E I typ == 4 {
+            # END_ANCHOR - must be at end of text
+            I pos == text_len { regex_match_here(next, text, pos, text_len) }
+            E { 0 }
+        } E I typ == 1 {
+            # LITERAL
+            I pos < text_len && load_byte(text + pos) == data {
+                regex_match_here(next, text, pos + 1, text_len)
+            } E { 0 }
+        } E I typ == 2 {
+            # ANY (.)
+            I pos < text_len {
+                regex_match_here(next, text, pos + 1, text_len)
+            } E { 0 }
+        } E I typ == 5 {
+            # CHAR_CLASS
+            I pos < text_len && regex_char_in_class(data, load_i64(regex + 16), load_byte(text + pos)) == 1 {
+                regex_match_here(next, text, pos + 1, text_len)
+            } E { 0 }
+        } E I typ == 6 {
+            # NEG_CHAR_CLASS
+            I pos < text_len && regex_char_in_class(data, load_i64(regex + 16), load_byte(text + pos)) == 0 {
+                regex_match_here(next, text, pos + 1, text_len)
+            } E { 0 }
+        } E I typ == 7 {
+            # STAR - match zero or more
+            regex_match_star(data, next, text, pos, text_len)
+        } E I typ == 8 {
+            # PLUS - match one or more
+            regex_match_plus(data, next, text, pos, text_len)
+        } E I typ == 9 {
+            # QUESTION - match zero or one
+            regex_match_question(data, next, text, pos, text_len)
+        } E {
+            0
+        }
+    }
+}
+
+F regex_char_in_class(class_chars: i64, class_len: i64, c: i64) -> i64 {
+    regex_char_in_class_rec(class_chars, class_len, c, 0)
+}
+
+F regex_char_in_class_rec(class_chars: i64, class_len: i64, c: i64, i: i64) -> i64 {
+    I i >= class_len { 0 }
+    E {
+        char_at_i := load_byte(class_chars + i)
+        # Check for range a-z
+        I i + 2 < class_len && load_byte(class_chars + i + 1) == 45 {
+            range_end := load_byte(class_chars + i + 2)
+            I c >= char_at_i && c <= range_end { 1 }
+            E { regex_char_in_class_rec(class_chars, class_len, c, i + 3) }
+        } E I c == char_at_i { 1 }
+        E { regex_char_in_class_rec(class_chars, class_len, c, i + 1) }
+    }
+}
+
+F regex_match_star(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> i64 {
+    # Try matching zero occurrences first, then more
+    I regex_match_here(next, text, pos, text_len) == 1 { 1 }
+    E I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
+        regex_match_star(atom, next, text, pos + 1, text_len)
+    } E { 0 }
+}
+
+F regex_match_plus(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> i64 {
+    # Must match at least one
+    I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
+        # After matching one, behave like star
+        regex_match_star(atom, next, text, pos + 1, text_len)
+    } E { 0 }
+}
+
+F regex_match_question(atom: i64, next: i64, text: i64, pos: i64, text_len: i64) -> i64 {
+    # Try without matching
+    I regex_match_here(next, text, pos, text_len) == 1 { 1 }
+    # Try matching one
+    E I pos < text_len && regex_atom_matches(atom, text, pos) == 1 {
+        regex_match_here(next, text, pos + 1, text_len)
+    } E { 0 }
+}
+
+F regex_atom_matches(atom: i64, text: i64, pos: i64) -> i64 {
+    typ := load_i64(atom)
+    data := load_i64(atom + 8)
+
+    I typ == 1 {
+        # LITERAL
+        I load_byte(text + pos) == data { 1 } E { 0 }
+    } E I typ == 2 {
+        # ANY
+        1
+    } E I typ == 5 {
+        # CHAR_CLASS
+        regex_char_in_class(data, load_i64(atom + 16), load_byte(text + pos))
+    } E I typ == 6 {
+        # NEG_CHAR_CLASS
+        I regex_char_in_class(data, load_i64(atom + 16), load_byte(text + pos)) == 0 { 1 } E { 0 }
+    } E { 0 }
+}
+
+# =====================================================
+# Public API
+# =====================================================
+
+F regex_test(pattern: i64, text: i64) -> i64 {
+    regex := regex_compile(pattern)
+    result := regex_match(regex, text)
+    regex_free(regex)
+    result
+}
+
+F regex_free(regex: i64) -> i64 {
+    I regex == 0 { 0 } E {
+        typ := load_i64(regex)
+        next := load_i64(regex + 24)
+
+        # Free char class if present
+        I typ == 5 || typ == 6 {
+            class_ptr := load_i64(regex + 8)
+            I class_ptr != 0 { free(class_ptr) }
+        }
+
+        # Free quantifier sub-pattern
+        I typ == 7 || typ == 8 || typ == 9 {
+            sub := load_i64(regex + 8)
+            I sub != 0 { regex_free(sub) }
+        }
+
+        # Free next node
+        regex_free(next)
+
+        # Free this node
+        free(regex)
+        0
+    }
+}

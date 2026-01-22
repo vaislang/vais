@@ -1,0 +1,11 @@
+# Test Range type errors
+
+F test_invalid_range() -> i64 {
+    # This should cause a type error - can't use string in range
+    r := "hello"..10
+    0
+}
+
+F main() -> i64 {
+    test_invalid_range()
+}
