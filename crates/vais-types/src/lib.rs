@@ -956,6 +956,10 @@ impl TypeChecker {
                     // Register impl methods to the target type
                     self.register_impl(impl_block)?;
                 }
+                Item::Macro(_) => {
+                    // Macro definitions are handled at the expansion phase
+                    // before type checking
+                }
             }
         }
 
@@ -2533,6 +2537,16 @@ impl TypeChecker {
                     comptime::ComptimeValue::Bool(_) => Ok(ResolvedType::Bool),
                     comptime::ComptimeValue::Unit => Ok(ResolvedType::Unit),
                 }
+            }
+
+            Expr::MacroInvoke(invoke) => {
+                // Macro invocations should be expanded before type checking.
+                // If we reach here, the macro was not expanded - this is an error.
+                Err(TypeError::UndefinedFunction {
+                    name: format!("{}!", invoke.name.node),
+                    span: Some(invoke.name.span),
+                    suggestion: Some("Macro invocations must be expanded before type checking".to_string()),
+                })
             }
         }
     }

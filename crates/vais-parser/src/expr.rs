@@ -662,12 +662,38 @@ impl Parser {
                     expr = Spanned::new(Expr::Try(Box::new(expr)), Span::new(start, end));
                 }
             } else if self.check(&Token::Bang) {
-                self.advance();
-                let end = self.prev_span().end;
-                expr = Spanned::new(
-                    Expr::Unwrap(Box::new(expr)),
-                    Span::new(start, end),
-                );
+                // Check if this is a macro invocation: ident!(...)
+                // Macro invocation requires: Ident followed by ! followed by (, [, or {
+                let is_macro = if let Expr::Ident(_) = &expr.node {
+                    if let Some(next) = self.peek_next() {
+                        matches!(next.token, Token::LParen | Token::LBracket | Token::LBrace)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if is_macro {
+                    if let Expr::Ident(name) = expr.node.clone() {
+                        self.advance(); // consume !
+                        let name_spanned = Spanned::new(name, expr.span);
+                        let invoke = self.parse_macro_invoke(name_spanned)?;
+                        let end = self.prev_span().end;
+                        expr = Spanned::new(
+                            Expr::MacroInvoke(invoke),
+                            Span::new(start, end),
+                        );
+                    }
+                } else {
+                    // Postfix unwrap: expr!
+                    self.advance();
+                    let end = self.prev_span().end;
+                    expr = Spanned::new(
+                        Expr::Unwrap(Box::new(expr)),
+                        Span::new(start, end),
+                    );
+                }
             } else {
                 break;
             }

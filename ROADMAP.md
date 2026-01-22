@@ -894,7 +894,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 9: 언어 완성도 및 생산성 향상
 
-> **상태**: 🔄 진행 중 (70%)
+> **상태**: 🔄 진행 중 (80%)
 > **추가일**: 2026-01-22
 > **예상 기간**: 12주 (약 3개월)
 
@@ -914,10 +914,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - Note: 실제 vtable 런타임 생성은 미구현 (타입 시스템 기반만 완료)
 
 ### P1 - 중요 (3-4주)
-- [ ] **Macro System** - 선언적 매크로 지원
-  - `macro!` 키워드로 매크로 정의
-  - 토큰 패턴 매칭 및 치환
-  - 반복 패턴 ($(...),+) 지원
+- [x] **Macro System** - 선언적 매크로 지원 (완료일: 2026-01-22)
+  - `macro!` 키워드로 매크로 정의 (Token::Macro, Token::Dollar)
+  - MacroDef, MacroRule, MacroPattern AST 타입
+  - 토큰 패턴 매칭 및 치환 (MetaVarKind: expr, ty, ident, pat, stmt, block, item, lit, tt)
+  - 반복 패턴 지원 ($(...),*, $(...),+, $(...),?)
+  - MacroExpander: 패턴 매칭, 바인딩 추출, 템플릿 치환
+  - vais-macro 크레이트 신규 추가
 - [x] **Thread 모듈** - 멀티스레딩 지원 (`std/thread.vais`) (완료일: 2026-01-22)
   - JoinHandle<T>: 스레드 조인 및 결과 수신
   - ThreadBuilder: 스레드 이름, 스택 크기 설정
@@ -993,7 +996,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
-| Phase 9: 언어 완성도 | 🔄 진행 중 | 70% |
+| Phase 9: 언어 완성도 | 🔄 진행 중 | 80% |
 
 ---
 

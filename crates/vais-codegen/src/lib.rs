@@ -514,6 +514,10 @@ impl CodeGenerator {
                 Item::Trait(_) | Item::TypeAlias(_) => {
                     // Traits and type aliases don't generate code
                 }
+                Item::Macro(_) => {
+                    // Macro definitions are expanded at compile time
+                    // No runtime code generation needed
+                }
             }
         }
 
@@ -574,7 +578,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) => {
                     // Already handled in first pass or no code generation needed
                 }
             }
@@ -691,7 +695,7 @@ impl CodeGenerator {
                         self.register_method(&type_name, &method.node)?;
                     }
                 }
-                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {}
+                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) => {}
             }
         }
 
@@ -772,7 +776,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {}
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) => {}
             }
         }
 
@@ -3099,6 +3103,14 @@ impl CodeGenerator {
                 }
             }
 
+            // Macro invocation (should be expanded before codegen)
+            Expr::MacroInvoke(invoke) => {
+                Err(CodegenError::TypeError(format!(
+                    "Unexpanded macro invocation: {}! - macros must be expanded before code generation",
+                    invoke.name.node
+                )))
+            }
+
             // Lambda expression with captures
             Expr::Lambda { params, body, captures: _ } => {
                 // Generate a unique function name for this lambda
@@ -4379,6 +4391,10 @@ impl CodeGenerator {
                 // For now, we'll evaluate it and determine the type
                 self.infer_expr_type(body)
             }
+            Expr::MacroInvoke(_) => {
+                // Macro invocations should be expanded before type inference
+                ResolvedType::Unknown
+            }
             _ => ResolvedType::I64, // Default fallback
         }
     }
@@ -4615,6 +4631,10 @@ impl CodeGenerator {
             Expr::Try(inner) | Expr::Unwrap(inner) | Expr::Await(inner) |
             Expr::Spawn(inner) | Expr::Comptime { body: inner } => {
                 self.collect_free_vars_in_expr(&inner.node, bound, free);
+            }
+            Expr::MacroInvoke(_) => {
+                // Macro invocations should be expanded before this analysis
+                // No free variables to collect from unexpanded macros
             }
             Expr::Ternary { cond, then, else_ } => {
                 self.collect_free_vars_in_expr(&cond.node, bound, free);

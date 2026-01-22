@@ -85,6 +85,8 @@ pub enum Token {
     Comptime,
     #[token("dyn")]
     Dyn,
+    #[token("macro")]
+    Macro,
 
     // === Primitive Types ===
     #[token("i8")]
@@ -220,6 +222,8 @@ pub enum Token {
     Question,
     #[token("@")]
     At,
+    #[token("$")]
+    Dollar,
 
     // === Delimiters ===
     #[token("(")]
@@ -283,6 +287,7 @@ impl fmt::Display for Token {
             Token::Const => write!(f, "const"),
             Token::Comptime => write!(f, "comptime"),
             Token::Dyn => write!(f, "dyn"),
+            Token::Macro => write!(f, "macro"),
             Token::I8 => write!(f, "i8"),
             Token::I16 => write!(f, "i16"),
             Token::I32 => write!(f, "i32"),
@@ -340,6 +345,7 @@ impl fmt::Display for Token {
             Token::DotDotEq => write!(f, "..="),
             Token::Question => write!(f, "?"),
             Token::At => write!(f, "@"),
+            Token::Dollar => write!(f, "$"),
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
             Token::LBrace => write!(f, "{{"),
@@ -1062,5 +1068,48 @@ F add(a:i64,
         assert!(tokens.iter().any(|t| t.token == Token::MinusEq));
         assert!(tokens.iter().any(|t| t.token == Token::StarEq));
         assert!(tokens.iter().any(|t| t.token == Token::SlashEq));
+    }
+
+    // ==================== Macro System Tests ====================
+
+    #[test]
+    fn test_macro_keyword() {
+        let source = "macro vec! { () => { [] } }";
+        let tokens = tokenize(source).unwrap();
+
+        assert!(tokens.iter().any(|t| t.token == Token::Macro));
+        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
+        assert!(tokens.iter().any(|t| t.token == Token::Bang));
+    }
+
+    #[test]
+    fn test_dollar_token() {
+        let source = "macro test! { ($x:expr) => { $x } }";
+        let tokens = tokenize(source).unwrap();
+
+        assert!(tokens.iter().any(|t| t.token == Token::Dollar));
+        let dollar_count = tokens.iter().filter(|t| t.token == Token::Dollar).count();
+        assert_eq!(dollar_count, 2); // $x in pattern and $x in template
+    }
+
+    #[test]
+    fn test_macro_invocation() {
+        let source = "vec!(1, 2, 3)";
+        let tokens = tokenize(source).unwrap();
+
+        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
+        assert!(tokens.iter().any(|t| t.token == Token::Bang));
+        assert!(tokens.iter().any(|t| t.token == Token::LParen));
+    }
+
+    #[test]
+    fn test_macro_with_repetition() {
+        let source = "macro vec! { ($($item:expr),*) => { [$($item),*] } }";
+        let tokens = tokenize(source).unwrap();
+
+        assert!(tokens.iter().any(|t| t.token == Token::Macro));
+        assert!(tokens.iter().any(|t| t.token == Token::Star));
+        let dollar_count = tokens.iter().filter(|t| t.token == Token::Dollar).count();
+        assert!(dollar_count >= 2);
     }
 }

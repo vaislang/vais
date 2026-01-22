@@ -208,6 +208,11 @@ pub trait ExprVisitor {
 
     /// Visit a comptime expression (comptime { ... })
     fn visit_comptime(&mut self, body: &Spanned<Expr>, counter: &mut usize) -> GenResult;
+
+    /// Visit a macro invocation (name!(...))
+    /// Note: Macro invocations should be expanded before codegen, so this should
+    /// never be called in practice. If it is, it indicates a compiler bug.
+    fn visit_macro_invoke(&mut self, invoke: &vais_ast::MacroInvoke) -> GenResult;
 }
 
 /// Visitor trait for statement code generation

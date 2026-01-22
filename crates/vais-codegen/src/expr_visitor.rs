@@ -80,6 +80,7 @@ impl ExprVisitor for CodeGenerator {
             Expr::Try(inner) => self.visit_try(inner, counter),
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
             Expr::Comptime { body } => self.visit_comptime(body, counter),
+            Expr::MacroInvoke(invoke) => self.visit_macro_invoke(invoke),
         }
     }
 
@@ -374,5 +375,14 @@ impl ExprVisitor for CodeGenerator {
             vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
             vais_types::ComptimeValue::Unit => Ok(("void".to_string(), String::new())),
         }
+    }
+
+    fn visit_macro_invoke(&mut self, invoke: &vais_ast::MacroInvoke) -> GenResult {
+        // Macro invocations should be expanded before codegen reaches this point.
+        // If we get here, it means the macro was not expanded - this is a compiler bug.
+        Err(crate::CodegenError::TypeError(format!(
+            "Unexpanded macro invocation: {}! - macros must be expanded before code generation",
+            invoke.name.node
+        )))
     }
 }

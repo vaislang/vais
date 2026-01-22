@@ -1,0 +1,13 @@
+[package]
+name = "vais-macro"
+version = "0.0.1"
+edition = "2021"
+description = "Declarative macro system for Vais language"
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-lexer = { path = "../vais-lexer" }
+vais-parser = { path = "../vais-parser" }
+thiserror = "1.0"
+
+[dev-dependencies]
