@@ -12,6 +12,9 @@ pub mod comptime;
 mod traits;
 mod inference;
 
+// Re-export bidirectional type checking support
+pub use inference::CheckMode;
+
 use std::collections::HashMap;
 use std::cell::{Cell, RefCell};
 use vais_ast::*;

@@ -894,15 +894,18 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 9: 언어 완성도 및 생산성 향상
 
-> **상태**: 🔄 진행 중 (0%)
+> **상태**: 🔄 진행 중 (10%)
 > **추가일**: 2026-01-22
 > **예상 기간**: 12주 (약 3개월)
 
 ### P0 - 핵심 (1-2주)
-- [ ] **Bidirectional Type Checking** - 재귀 함수 자동 타입 추론 개선
-  - 현재: 재귀 함수는 반환 타입 어노테이션 필수
-  - 목표: 양방향 타입 체크로 어노테이션 최소화
-  - 참조: Hindley-Milner + bidirectional checking
+- [x] **Bidirectional Type Checking** - 양방향 타입 체크 기반 구조 구현 (완료일: 2026-01-22)
+  - CheckMode enum (Infer/Check) 추가
+  - check_expr_bidirectional() 메서드 구현
+  - 람다 파라미터 타입 추론 (check_lambda_with_expected)
+  - 배열 요소 타입 전파 (check_array_with_expected)
+  - 제네릭 함수 호출 양방향 추론 (check_generic_function_call_bidirectional)
+  - 13개 단위 테스트 추가
 - [ ] **Dynamic Dispatch (dyn Trait)** - Rust 스타일 vtable 기반 동적 디스패치
   - `dyn Trait` 문법 추가
   - 런타임 vtable 생성 및 메서드 호출

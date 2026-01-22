@@ -1,7 +1,18 @@
 //! Type inference logic for the Vais type system
 //!
 //! This module contains the type inference algorithms including unification,
-//! substitution, and fresh type variable generation.
+//! substitution, fresh type variable generation, and bidirectional type checking.
+//!
+//! ## Bidirectional Type Checking
+//!
+//! The type checker supports two modes:
+//! - `Infer`: Bottom-up inference where the type is computed from the expression
+//! - `Check`: Top-down checking where the expression is verified against an expected type
+//!
+//! This allows for better type inference in cases like:
+//! - Lambda parameters: `|x| x + 1` can infer `x: i64` from context
+//! - Generic instantiation: Type arguments can be inferred from expected return type
+//! - Better error messages with more precise location information
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
@@ -9,6 +20,35 @@ use std::hash::{Hash, Hasher};
 use vais_ast::{Expr, Spanned};
 use crate::types::{ResolvedType, TypeError, TypeResult, FunctionSig, GenericInstantiation};
 use crate::TypeChecker;
+
+/// Mode for bidirectional type checking
+#[derive(Debug, Clone)]
+pub enum CheckMode {
+    /// Infer the type of the expression (bottom-up)
+    Infer,
+    /// Check the expression against an expected type (top-down)
+    Check(ResolvedType),
+}
+
+impl CheckMode {
+    /// Create a Check mode with the given expected type
+    pub fn check(expected: ResolvedType) -> Self {
+        CheckMode::Check(expected)
+    }
+
+    /// Check if this is Infer mode
+    pub fn is_infer(&self) -> bool {
+        matches!(self, CheckMode::Infer)
+    }
+
+    /// Get the expected type if in Check mode
+    pub fn expected(&self) -> Option<&ResolvedType> {
+        match self {
+            CheckMode::Infer => None,
+            CheckMode::Check(ty) => Some(ty),
+        }
+    }
+}
 
 impl TypeChecker {
     /// Unify two types
@@ -360,6 +400,247 @@ impl TypeChecker {
             }
             // Non-generic types don't contribute to type argument inference
             _ => Ok(()),
+        }
+    }
+
+    // ===== Bidirectional Type Checking Methods =====
+
+    /// Check an expression with bidirectional type checking.
+    /// This is the main entry point for bidirectional type checking.
+    ///
+    /// In `Infer` mode, the type is computed bottom-up from the expression.
+    /// In `Check` mode, the expression is verified against the expected type,
+    /// and the expected type information can propagate down to sub-expressions.
+    pub fn check_expr_bidirectional(
+        &mut self,
+        expr: &Spanned<Expr>,
+        mode: CheckMode,
+    ) -> TypeResult<ResolvedType> {
+        match &mode {
+            CheckMode::Infer => self.check_expr(expr),
+            CheckMode::Check(expected) => {
+                // For most expressions, we infer then check
+                // But some expressions can benefit from the expected type
+                match &expr.node {
+                    // Lambda expressions can use expected type to infer parameter types
+                    Expr::Lambda { params, body, captures: _ } => {
+                        self.check_lambda_with_expected(params, body, expected, &expr.span)
+                    }
+                    // Array literals can propagate element type
+                    Expr::Array(elements) => {
+                        self.check_array_with_expected(elements, expected, &expr.span)
+                    }
+                    // For other expressions, infer then unify
+                    _ => {
+                        let inferred = self.check_expr(expr)?;
+                        self.unify(expected, &inferred).map_err(|e| {
+                            // Enhance error with span information
+                            match e {
+                                TypeError::Mismatch { expected: exp, found, span: _ } => {
+                                    TypeError::Mismatch {
+                                        expected: exp,
+                                        found,
+                                        span: Some(expr.span.clone()),
+                                    }
+                                }
+                                _ => e,
+                            }
+                        })?;
+                        Ok(inferred)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check a lambda expression with an expected function type.
+    /// This allows inferring parameter types from the expected type.
+    fn check_lambda_with_expected(
+        &mut self,
+        params: &[vais_ast::Param],
+        body: &Spanned<Expr>,
+        expected: &ResolvedType,
+        span: &vais_ast::Span,
+    ) -> TypeResult<ResolvedType> {
+        // Extract expected parameter and return types
+        let (expected_params, expected_ret) = match expected {
+            ResolvedType::Fn { params, ret } => (Some(params.clone()), Some(ret.as_ref().clone())),
+            _ => (None, None),
+        };
+
+        // Check parameter count matches if we have expected params
+        if let Some(ref exp_params) = expected_params {
+            if exp_params.len() != params.len() {
+                return Err(TypeError::ArgCount {
+                    expected: exp_params.len(),
+                    got: params.len(),
+                    span: Some(span.clone()),
+                });
+            }
+        }
+
+        // Push a new scope for lambda parameters
+        self.push_scope();
+
+        // Determine parameter types: use expected if available, otherwise infer
+        let param_types: Vec<ResolvedType> = params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let ty = if let Some(ref exp_params) = expected_params {
+                    // Use expected parameter type
+                    exp_params[i].clone()
+                } else {
+                    // Use declared type or fresh type variable
+                    self.resolve_type(&p.ty.node)
+                };
+                self.define_var(&p.name.node, ty.clone(), p.is_mut);
+                ty
+            })
+            .collect();
+
+        // Check body with expected return type if available
+        let body_type = if let Some(ref exp_ret) = expected_ret {
+            self.check_expr_bidirectional(body, CheckMode::Check(exp_ret.clone()))?
+        } else {
+            self.check_expr(body)?
+        };
+
+        // Pop the lambda scope
+        self.pop_scope();
+
+        // Apply substitutions to finalize types
+        let final_params: Vec<ResolvedType> = param_types
+            .into_iter()
+            .map(|t| self.apply_substitutions(&t))
+            .collect();
+        let final_ret = self.apply_substitutions(&body_type);
+
+        Ok(ResolvedType::Fn {
+            params: final_params,
+            ret: Box::new(final_ret),
+        })
+    }
+
+    /// Check an array literal with an expected array type.
+    /// This propagates the element type to each element.
+    fn check_array_with_expected(
+        &mut self,
+        elements: &[Spanned<Expr>],
+        expected: &ResolvedType,
+        _span: &vais_ast::Span,
+    ) -> TypeResult<ResolvedType> {
+        let expected_elem = match expected {
+            ResolvedType::Array(inner) => Some(inner.as_ref().clone()),
+            _ => None,
+        };
+
+        if elements.is_empty() {
+            // Empty array: use expected element type or fresh variable
+            let elem_type = expected_elem.unwrap_or_else(|| self.fresh_type_var());
+            return Ok(ResolvedType::Array(Box::new(elem_type)));
+        }
+
+        // Check each element with expected type if available
+        let mut elem_types = Vec::new();
+        for elem in elements {
+            let ty = if let Some(ref exp_elem) = expected_elem {
+                self.check_expr_bidirectional(elem, CheckMode::Check(exp_elem.clone()))?
+            } else {
+                self.check_expr(elem)?
+            };
+            elem_types.push(ty);
+        }
+
+        // Unify all element types
+        let first_type = elem_types[0].clone();
+        for (i, ty) in elem_types.iter().enumerate().skip(1) {
+            self.unify(&first_type, ty).map_err(|_| {
+                TypeError::Mismatch {
+                    expected: first_type.to_string(),
+                    found: ty.to_string(),
+                    span: Some(elements[i].span.clone()),
+                }
+            })?;
+        }
+
+        Ok(ResolvedType::Array(Box::new(self.apply_substitutions(&first_type))))
+    }
+
+    /// Check a generic function call with bidirectional type checking.
+    /// Uses both argument types and expected return type to infer type arguments.
+    pub(crate) fn check_generic_function_call_bidirectional(
+        &mut self,
+        sig: &FunctionSig,
+        args: &[Spanned<Expr>],
+        expected_ret: Option<&ResolvedType>,
+    ) -> TypeResult<ResolvedType> {
+        // Check argument count
+        if sig.params.len() != args.len() {
+            return Err(TypeError::ArgCount {
+                expected: sig.params.len(),
+                got: args.len(),
+                span: None,
+            });
+        }
+
+        // Create fresh type variables for each generic parameter
+        let generic_substitutions: HashMap<String, ResolvedType> = sig
+            .generics
+            .iter()
+            .map(|param| (param.clone(), self.fresh_type_var()))
+            .collect();
+
+        // If we have an expected return type, try to infer type arguments from it first
+        if let Some(exp_ret) = expected_ret {
+            let sig_ret = self.substitute_generics(&sig.ret, &generic_substitutions);
+            // Try to unify expected return with signature return
+            // This may constrain some type variables
+            let _ = self.unify(exp_ret, &sig_ret);
+        }
+
+        // Check each argument and unify with parameter type
+        for ((_, param_type, _), arg) in sig.params.iter().zip(args) {
+            let expected_type = self.substitute_generics(param_type, &generic_substitutions);
+            let expected_applied = self.apply_substitutions(&expected_type);
+
+            // Use bidirectional checking if we have a concrete expected type
+            let arg_type = if !matches!(expected_applied, ResolvedType::Var(_)) {
+                self.check_expr_bidirectional(arg, CheckMode::Check(expected_applied.clone()))?
+            } else {
+                self.check_expr(arg)?
+            };
+
+            self.unify(&expected_applied, &arg_type)?;
+        }
+
+        // Apply substitutions to infer concrete generic types
+        let inferred_type_args: Vec<_> = sig
+            .generics
+            .iter()
+            .map(|param| {
+                let ty = generic_substitutions.get(param)
+                    .expect("Internal compiler error: generic parameter should exist");
+                self.apply_substitutions(ty)
+            })
+            .collect();
+
+        // Record the generic instantiation if all type arguments are concrete
+        let all_concrete = inferred_type_args.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+        if all_concrete {
+            let inst = GenericInstantiation::function(&sig.name, inferred_type_args);
+            self.add_instantiation(inst);
+        }
+
+        // Substitute generics in the return type and apply substitutions
+        let return_type = self.substitute_generics(&sig.ret, &generic_substitutions);
+        let resolved_return = self.apply_substitutions(&return_type);
+
+        // For async functions, wrap the return type in Future
+        if sig.is_async {
+            Ok(ResolvedType::Future(Box::new(resolved_return)))
+        } else {
+            Ok(resolved_return)
         }
     }
 }
