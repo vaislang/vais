@@ -90,7 +90,11 @@ impl ComptimeEvaluator {
             Expr::Ident(name) => {
                 self.vars.get(name)
                     .cloned()
-                    .ok_or_else(|| TypeError::UndefinedVar(name.clone(), Some(expr.span)))
+                    .ok_or_else(|| TypeError::UndefinedVar {
+                        name: name.clone(),
+                        span: Some(expr.span),
+                        suggestion: None,
+                    })
             }
 
             Expr::Binary { op, left, right } => {

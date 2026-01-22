@@ -7,6 +7,71 @@ use std::collections::HashMap;
 use thiserror::Error;
 use vais_ast::*;
 
+/// Calculate Levenshtein distance between two strings
+pub fn levenshtein_distance(a: &str, b: &str) -> usize {
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+    let a_len = a_chars.len();
+    let b_len = b_chars.len();
+
+    if a_len == 0 {
+        return b_len;
+    }
+    if b_len == 0 {
+        return a_len;
+    }
+
+    let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
+
+    for i in 0..=a_len {
+        matrix[i][0] = i;
+    }
+    for j in 0..=b_len {
+        matrix[0][j] = j;
+    }
+
+    for i in 1..=a_len {
+        for j in 1..=b_len {
+            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+            matrix[i][j] = std::cmp::min(
+                std::cmp::min(
+                    matrix[i - 1][j] + 1,      // deletion
+                    matrix[i][j - 1] + 1,      // insertion
+                ),
+                matrix[i - 1][j - 1] + cost,   // substitution
+            );
+        }
+    }
+
+    matrix[a_len][b_len]
+}
+
+/// Find the most similar name from a list of candidates
+/// Returns None if no name is similar enough (distance > threshold)
+pub fn find_similar_name<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<String> {
+    let name_lower = name.to_lowercase();
+    let max_distance = std::cmp::max(2, name.len() / 3); // Allow ~1/3 of chars to be different
+
+    let mut best_match: Option<(String, usize)> = None;
+
+    for candidate in candidates {
+        let candidate_lower = candidate.to_lowercase();
+        let distance = levenshtein_distance(&name_lower, &candidate_lower);
+
+        if distance <= max_distance {
+            if let Some((_, best_dist)) = &best_match {
+                if distance < *best_dist {
+                    best_match = Some((candidate.to_string(), distance));
+                }
+            } else {
+                best_match = Some((candidate.to_string(), distance));
+            }
+        }
+    }
+
+    best_match.map(|(name, _)| name)
+}
+
 /// Type checking error
 #[derive(Debug, Error)]
 pub enum TypeError {
@@ -17,14 +82,26 @@ pub enum TypeError {
         span: Option<Span>,
     },
 
-    #[error("Undefined variable: {0}")]
-    UndefinedVar(String, Option<Span>),
+    #[error("Undefined variable: {name}")]
+    UndefinedVar {
+        name: String,
+        span: Option<Span>,
+        suggestion: Option<String>,
+    },
 
-    #[error("Undefined type: {0}")]
-    UndefinedType(String, Option<Span>),
+    #[error("Undefined type: {name}")]
+    UndefinedType {
+        name: String,
+        span: Option<Span>,
+        suggestion: Option<String>,
+    },
 
-    #[error("Undefined function: {0}")]
-    UndefinedFunction(String, Option<Span>),
+    #[error("Undefined function: {name}")]
+    UndefinedFunction {
+        name: String,
+        span: Option<Span>,
+        suggestion: Option<String>,
+    },
 
     #[error("Cannot call non-function type: {0}")]
     NotCallable(String, Option<Span>),
@@ -57,9 +134,9 @@ impl TypeError {
     pub fn span(&self) -> Option<Span> {
         match self {
             TypeError::Mismatch { span, .. } => *span,
-            TypeError::UndefinedVar(_, span) => *span,
-            TypeError::UndefinedType(_, span) => *span,
-            TypeError::UndefinedFunction(_, span) => *span,
+            TypeError::UndefinedVar { span, .. } => *span,
+            TypeError::UndefinedType { span, .. } => *span,
+            TypeError::UndefinedFunction { span, .. } => *span,
             TypeError::NotCallable(_, span) => *span,
             TypeError::ArgCount { span, .. } => *span,
             TypeError::CannotInfer => None,
@@ -74,9 +151,9 @@ impl TypeError {
     pub fn error_code(&self) -> &str {
         match self {
             TypeError::Mismatch { .. } => "E001",
-            TypeError::UndefinedVar(..) => "E002",
-            TypeError::UndefinedType(..) => "E003",
-            TypeError::UndefinedFunction(..) => "E004",
+            TypeError::UndefinedVar { .. } => "E002",
+            TypeError::UndefinedType { .. } => "E003",
+            TypeError::UndefinedFunction { .. } => "E004",
             TypeError::NotCallable(..) => "E005",
             TypeError::ArgCount { .. } => "E006",
             TypeError::CannotInfer => "E007",
@@ -94,16 +171,31 @@ impl TypeError {
                 if expected == "i64" && found == "Str" {
                     Some("consider converting the string to a number".to_string())
                 } else if expected.starts_with('i') || expected.starts_with('u') || expected.starts_with('f') {
-                    Some(format!("try using a type cast or conversion function"))
+                    Some("try using a type cast or conversion function".to_string())
                 } else {
                     None
                 }
             }
-            TypeError::UndefinedVar(name, _) => {
-                Some(format!("variable '{}' not found in this scope", name))
+            TypeError::UndefinedVar { name, suggestion, .. } => {
+                if let Some(sug) = suggestion {
+                    Some(format!("did you mean '{}'?", sug))
+                } else {
+                    Some(format!("variable '{}' not found in this scope", name))
+                }
             }
-            TypeError::UndefinedFunction(name, _) => {
-                Some(format!("function '{}' not found in this scope", name))
+            TypeError::UndefinedType { name, suggestion, .. } => {
+                if let Some(sug) = suggestion {
+                    Some(format!("did you mean '{}'?", sug))
+                } else {
+                    Some(format!("type '{}' not found in this scope", name))
+                }
+            }
+            TypeError::UndefinedFunction { name, suggestion, .. } => {
+                if let Some(sug) = suggestion {
+                    Some(format!("did you mean '{}'?", sug))
+                } else {
+                    Some(format!("function '{}' not found in this scope", name))
+                }
             }
             TypeError::ImmutableAssign(name, _) => {
                 Some(format!("consider declaring '{}' as mutable: '{}: mut Type'", name, name))
@@ -125,13 +217,13 @@ impl TypeError {
             TypeError::Mismatch { expected, found, .. } => {
                 vais_i18n::get(&key, &[("expected", expected), ("found", found)])
             }
-            TypeError::UndefinedVar(name, _) => {
+            TypeError::UndefinedVar { name, .. } => {
                 vais_i18n::get(&key, &[("name", name)])
             }
-            TypeError::UndefinedType(name, _) => {
+            TypeError::UndefinedType { name, .. } => {
                 vais_i18n::get(&key, &[("name", name)])
             }
-            TypeError::UndefinedFunction(name, _) => {
+            TypeError::UndefinedFunction { name, .. } => {
                 vais_i18n::get(&key, &[("name", name)])
             }
             TypeError::NotCallable(type_name, _) => {
@@ -166,10 +258,10 @@ impl TypeError {
         let key = format!("type.{}.help", self.error_code());
         if vais_i18n::has_key(&key) {
             Some(match self {
-                TypeError::UndefinedVar(name, _) => {
+                TypeError::UndefinedVar { name, .. } => {
                     vais_i18n::get(&key, &[("name", name)])
                 }
-                TypeError::UndefinedFunction(name, _) => {
+                TypeError::UndefinedFunction { name, .. } => {
                     vais_i18n::get(&key, &[("name", name)])
                 }
                 TypeError::ImmutableAssign(name, _) => {

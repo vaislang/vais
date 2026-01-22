@@ -25,6 +25,8 @@ pub use types::{
     mangle_name, mangle_type, substitute_type,
     // Const generics support
     ResolvedConst, ConstBinOp,
+    // Did-you-mean support
+    levenshtein_distance, find_similar_name,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
@@ -1249,7 +1251,13 @@ impl TypeChecker {
 
             // Check trait exists
             if !self.traits.contains_key(&trait_name_str) {
-                return Err(TypeError::UndefinedType(format!("trait {}", trait_name_str), None));
+                let suggestion = types::find_similar_name(&trait_name_str,
+                    self.traits.keys().map(|s| s.as_str()));
+                return Err(TypeError::UndefinedType {
+                    name: format!("trait {}", trait_name_str),
+                    span: None,
+                    suggestion,
+                });
             }
 
             // Record that this type implements this trait
@@ -1626,7 +1634,11 @@ impl TypeChecker {
                         });
                     }
                 }
-                Err(TypeError::UndefinedFunction("@".to_string(), None))
+                Err(TypeError::UndefinedFunction {
+                    name: "@".to_string(),
+                    span: None,
+                    suggestion: None,
+                })
             }
 
             Expr::Binary { op, left, right } => {
@@ -1952,7 +1964,14 @@ impl TypeChecker {
                     return Ok(ret_type);
                 }
 
-                Err(TypeError::UndefinedFunction(method.node.clone(), None))
+                // Try to find similar method names for suggestion
+                let suggestion = types::find_similar_name(&method.node,
+                    self.functions.keys().map(|s| s.as_str()));
+                Err(TypeError::UndefinedFunction {
+                    name: method.node.clone(),
+                    span: None,
+                    suggestion,
+                })
             }
 
             Expr::StaticMethodCall {
@@ -2029,7 +2048,18 @@ impl TypeChecker {
                     }
                 }
 
-                Err(TypeError::UndefinedFunction(format!("{}::{}", type_name.node, method.node), None))
+                // Get struct methods for suggestion if available
+                let suggestion = if let Some(struct_def) = self.structs.get(&type_name.node) {
+                    types::find_similar_name(&method.node,
+                        struct_def.methods.keys().map(|s| s.as_str()))
+                } else {
+                    None
+                };
+                Err(TypeError::UndefinedFunction {
+                    name: format!("{}::{}", type_name.node, method.node),
+                    span: None,
+                    suggestion,
+                })
             }
 
             Expr::Field { expr: inner, field } => {
@@ -2048,7 +2078,7 @@ impl TypeChecker {
                     _ => None,
                 };
 
-                if let Some(name) = type_name {
+                if let Some(name) = type_name.clone() {
                     // Check struct fields
                     if let Some(struct_def) = self.structs.get(&name) {
                         if let Some(field_type) = struct_def.fields.get(&field.node) {
@@ -2063,7 +2093,26 @@ impl TypeChecker {
                     }
                 }
 
-                Err(TypeError::UndefinedVar(field.node.clone(), None))
+                // Get field names for did-you-mean suggestion
+                let suggestion = if let Some(name) = type_name {
+                    if let Some(struct_def) = self.structs.get(&name) {
+                        types::find_similar_name(&field.node,
+                            struct_def.fields.keys().map(|s| s.as_str()))
+                    } else if let Some(union_def) = self.unions.get(&name) {
+                        types::find_similar_name(&field.node,
+                            union_def.fields.keys().map(|s| s.as_str()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                Err(TypeError::UndefinedVar {
+                    name: field.node.clone(),
+                    span: None,
+                    suggestion,
+                })
             }
 
             Expr::Index { expr: inner, index } => {
@@ -2155,7 +2204,13 @@ impl TypeChecker {
                             let expected_type = self.substitute_generics(&expected_type, &generic_substitutions);
                             self.unify(&expected_type, &value_type)?;
                         } else {
-                            return Err(TypeError::UndefinedVar(field_name.node.clone(), None));
+                            let suggestion = types::find_similar_name(&field_name.node,
+                                struct_def.fields.keys().map(|s| s.as_str()));
+                            return Err(TypeError::UndefinedVar {
+                                name: field_name.node.clone(),
+                                span: None,
+                                suggestion,
+                            });
                         }
                     }
 
@@ -2209,7 +2264,13 @@ impl TypeChecker {
                         let expected_type = self.substitute_generics(&expected_type, &generic_substitutions);
                         self.unify(&expected_type, &value_type)?;
                     } else {
-                        return Err(TypeError::UndefinedVar(field_name.node.clone(), None));
+                        let suggestion = types::find_similar_name(&field_name.node,
+                            union_def.fields.keys().map(|s| s.as_str()));
+                        return Err(TypeError::UndefinedVar {
+                            name: field_name.node.clone(),
+                            span: None,
+                            suggestion,
+                        });
                     }
 
                     // Apply substitutions to infer concrete generic types
@@ -2228,7 +2289,19 @@ impl TypeChecker {
                         generics: inferred_generics,
                     })
                 } else {
-                    Err(TypeError::UndefinedType(name.node.clone(), None))
+                    // Get all type names for suggestion
+                    let mut type_candidates: Vec<&str> = Vec::new();
+                    type_candidates.extend(self.structs.keys().map(|s| s.as_str()));
+                    type_candidates.extend(self.enums.keys().map(|s| s.as_str()));
+                    type_candidates.extend(self.unions.keys().map(|s| s.as_str()));
+                    type_candidates.extend(self.type_aliases.keys().map(|s| s.as_str()));
+
+                    let suggestion = types::find_similar_name(&name.node, type_candidates.into_iter());
+                    Err(TypeError::UndefinedType {
+                        name: name.node.clone(),
+                        span: None,
+                        suggestion,
+                    })
                 }
             }
 
@@ -2388,7 +2461,19 @@ impl TypeChecker {
                 // Verify all captured variables exist in current scope
                 for var in &free_vars {
                     if self.lookup_var(var).is_none() {
-                        return Err(TypeError::UndefinedVar(var.clone(), None));
+                        // Collect all available names for did-you-mean suggestion
+                        let mut candidates: Vec<&str> = Vec::new();
+                        for scope in &self.scopes {
+                            candidates.extend(scope.keys().map(|s| s.as_str()));
+                        }
+                        candidates.extend(self.functions.keys().map(|s| s.as_str()));
+                        let suggestion = types::find_similar_name(var, candidates.into_iter());
+
+                        return Err(TypeError::UndefinedVar {
+                            name: var.clone(),
+                            span: None,
+                            suggestion,
+                        });
                     }
                 }
 
@@ -2876,7 +2961,23 @@ impl TypeChecker {
             }
         }
 
-        Err(TypeError::UndefinedVar(name.to_string(), None))
+        // Collect all available names for did-you-mean suggestion
+        let mut candidates: Vec<&str> = Vec::new();
+        for scope in &self.scopes {
+            candidates.extend(scope.keys().map(|s| s.as_str()));
+        }
+        candidates.extend(self.functions.keys().map(|s| s.as_str()));
+        for enum_def in self.enums.values() {
+            candidates.extend(enum_def.variants.keys().map(|s| s.as_str()));
+        }
+
+        let suggestion = types::find_similar_name(name, candidates.into_iter());
+
+        Err(TypeError::UndefinedVar {
+            name: name.to_string(),
+            span: None,
+            suggestion,
+        })
     }
 
     /// Find a method from trait implementations for a given type
@@ -3289,6 +3390,56 @@ mod tests {
         let mut checker = TypeChecker::new();
         let _result = checker.check_module(&module);
         // Some type checkers allow undefined types, some don't - just ensure no panic
+    }
+
+    #[test]
+    fn test_did_you_mean_variable() {
+        // Test that did-you-mean suggestions work for typos in variable names
+        let source = "F test()->i64{count:=42;coutn}";
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        let result = checker.check_module(&module);
+        assert!(result.is_err());
+        if let Err(TypeError::UndefinedVar { name, suggestion, .. }) = result {
+            assert_eq!(name, "coutn");
+            assert_eq!(suggestion, Some("count".to_string()));
+        } else {
+            panic!("Expected UndefinedVar error with suggestion");
+        }
+    }
+
+    #[test]
+    fn test_did_you_mean_no_match() {
+        // Test that no suggestion is given when names are too different
+        let source = "F test()->i64{count:=42;xyz}";
+        let module = parse(source).unwrap();
+        let mut checker = TypeChecker::new();
+        let result = checker.check_module(&module);
+        assert!(result.is_err());
+        if let Err(TypeError::UndefinedVar { name, suggestion, .. }) = result {
+            assert_eq!(name, "xyz");
+            assert_eq!(suggestion, None);
+        } else {
+            panic!("Expected UndefinedVar error without suggestion");
+        }
+    }
+
+    #[test]
+    fn test_levenshtein_distance() {
+        use crate::types::levenshtein_distance;
+        // Same strings
+        assert_eq!(levenshtein_distance("hello", "hello"), 0);
+        // One character difference
+        assert_eq!(levenshtein_distance("hello", "hallo"), 1);
+        // Insertion
+        assert_eq!(levenshtein_distance("hello", "helloo"), 1);
+        // Deletion
+        assert_eq!(levenshtein_distance("hello", "helo"), 1);
+        // Multiple differences
+        assert_eq!(levenshtein_distance("kitten", "sitting"), 3);
+        // Empty strings
+        assert_eq!(levenshtein_distance("", "abc"), 3);
+        assert_eq!(levenshtein_distance("abc", ""), 3);
     }
 
     #[test]
