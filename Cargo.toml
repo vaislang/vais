@@ -11,6 +11,7 @@ members = [
     "crates/vais-plugin",
     "crates/vais-jit",
     "crates/vais-gc",
+    "crates/vais-gpu",
     "crates/vais-hotreload",
     # "crates/vais-python",  # Requires Python <= 3.13 (PyO3 limitation)
     "crates/vais-node",

@@ -1,0 +1,14 @@
+[package]
+name = "vais-gpu"
+version = "0.0.1"
+edition = "2021"
+description = "GPU code generation for Vais programming language"
+license = "MIT"
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.8"

@@ -1,0 +1,93 @@
+# GPU Vector Addition Example
+# Compile with: vaisc build gpu_vector_add.vais --gpu cuda
+
+U std/gpu
+
+# GPU kernel for vector addition
+# Each thread computes one element: c[i] = a[i] + b[i]
+#[gpu]
+F vector_add(a: *f64, b: *f64, c: *f64, n: i64) -> i64 {
+    # Get global thread index
+    idx := global_idx()
+
+    # Bounds check
+    I idx < n {
+        c[idx] = a[idx] + b[idx]
+    }
+    0
+}
+
+# GPU kernel for scalar multiplication
+# c[i] = a[i] * scalar
+#[gpu]
+F scalar_mul(a: *f64, c: *f64, scalar: f64, n: i64) -> i64 {
+    idx := global_idx()
+    I idx < n {
+        c[idx] = a[idx] * scalar
+    }
+    0
+}
+
+# GPU kernel for dot product (partial reduction)
+#[gpu]
+F dot_product_kernel(a: *f64, b: *f64, partial: *f64, n: i64) -> i64 {
+    idx := global_idx()
+    tid := thread_idx_x()
+
+    # Compute partial product
+    prod := 0.0
+    I idx < n {
+        prod = a[idx] * b[idx]
+    }
+
+    # Use atomic add to accumulate
+    atomic_add(partial, prod)
+    0
+}
+
+# GPU kernel for element-wise operations
+#[gpu]
+F elementwise_ops(a: *f64, b: *f64,
+                   add_result: *f64,
+                   sub_result: *f64,
+                   mul_result: *f64,
+                   n: i64) -> i64 {
+    idx := global_idx()
+    I idx < n {
+        add_result[idx] = a[idx] + b[idx]
+        sub_result[idx] = a[idx] - b[idx]
+        mul_result[idx] = a[idx] * b[idx]
+    }
+    0
+}
+
+# Helper function (device function, not kernel)
+F clamp_value(x: f64, lo: f64, hi: f64) -> f64 {
+    I x < lo { lo }
+    E I x > hi { hi }
+    E { x }
+}
+
+# GPU kernel using helper function
+#[gpu]
+F clamp_array(data: *f64, lo: f64, hi: f64, n: i64) -> i64 {
+    idx := global_idx()
+    I idx < n {
+        data[idx] = clamp_value(data[idx], lo, hi)
+    }
+    0
+}
+
+# Main function for testing (CPU side)
+F main() -> i64 {
+    puts("GPU Vector Add Example")
+    puts("Compile with: vaisc build gpu_vector_add.vais --gpu cuda")
+    puts("")
+    puts("Generated kernels:")
+    puts("  - vector_add: Element-wise addition")
+    puts("  - scalar_mul: Scalar multiplication")
+    puts("  - dot_product_kernel: Dot product (partial)")
+    puts("  - elementwise_ops: Multiple element-wise ops")
+    puts("  - clamp_array: Clamp values to range")
+    0
+}

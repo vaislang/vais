@@ -881,7 +881,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - std/hot.vais 런타임 모듈 (hot_init, hot_check, hot_reload)
   - CLI: `vaisc watch <file>`, `vaisc build --hot`
   - 16개 테스트 통과
-- [ ] **GPU 타겟** - CUDA/OpenCL/WebGPU 코드 생성
+- [x] **GPU 타겟** - CUDA/OpenCL/WebGPU 코드 생성 (완료일: 2026-01-22)
+  - vais-gpu 크레이트 (CUDA, OpenCL, WebGPU 코드 생성기)
+  - GpuTarget enum (Cuda, OpenCL, WebGPU)
+  - GpuType (GPU 호환 타입)
+  - GpuBuiltins (각 백엔드별 빌트인 함수 매핑)
+  - CLI: `vaisc build --gpu cuda|opencl|webgpu`
+  - std/gpu.vais 런타임 모듈
+  - 예제: examples/gpu_vector_add.vais
 
 ---
 

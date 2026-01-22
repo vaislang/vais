@@ -115,6 +115,11 @@ enum Commands {
         /// Enable hot reload mode (generate dylib)
         #[arg(long)]
         hot: bool,
+
+        /// Generate GPU code instead of LLVM IR
+        /// Targets: cuda, opencl, webgpu
+        #[arg(long, value_name = "GPU_TARGET")]
+        gpu: Option<String>,
     },
 
     /// Run a Vais source file
@@ -302,11 +307,17 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu }) => {
+            // Check if GPU target is specified
+            if let Some(gpu_target_str) = &gpu {
+                cmd_build_gpu(&input, output, gpu_target_str, cli.verbose)
+            } else {
+
             let target_triple = target.as_ref()
                 .and_then(|s| TargetTriple::from_str(s))
                 .unwrap_or(TargetTriple::Native);
             cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot)
+            }
         }
         Some(Commands::Run { input, args }) => {
             cmd_run(&input, &args, cli.verbose, &plugins)
@@ -350,6 +361,66 @@ fn main() {
         eprintln!("{}: {}", "error".red().bold(), e);
         exit(1);
     }
+}
+
+/// Build GPU code (CUDA, OpenCL, or WebGPU)
+fn cmd_build_gpu(
+    input: &PathBuf,
+    output: Option<PathBuf>,
+    gpu_target: &str,
+    verbose: bool,
+) -> Result<(), String> {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+
+    // Parse GPU target
+    let target = GpuTarget::from_str(gpu_target)
+        .ok_or_else(|| format!("Unknown GPU target: '{}'. Valid targets: cuda, opencl, webgpu", gpu_target))?;
+
+    if verbose {
+        println!("{} Compiling for GPU target: {}", "info:".blue().bold(), target.name());
+    }
+
+    // Read source
+    let source = fs::read_to_string(input)
+        .map_err(|e| format!("Failed to read {}: {}", input.display(), e))?;
+
+    // Parse
+    let module = parse(&source)
+        .map_err(|e| format!("Parse error: {:?}", e))?;
+
+    // Generate GPU code
+    let mut generator = GpuCodeGenerator::new(target);
+    let gpu_code = generator.generate(&module)
+        .map_err(|e| format!("GPU codegen error: {}", e))?;
+
+    // Determine output file
+    let out_path = output.unwrap_or_else(|| {
+        let stem = input.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("output");
+        PathBuf::from(format!("{}.{}", stem, target.extension()))
+    });
+
+    // Write output
+    fs::write(&out_path, &gpu_code)
+        .map_err(|e| format!("Failed to write {}: {}", out_path.display(), e))?;
+
+    println!("{} Generated {} ({})", "✓".green().bold(), out_path.display(), target.name());
+
+    // Print kernel information
+    let kernels = generator.kernels();
+    if !kernels.is_empty() {
+        println!("\n{} {} kernel(s) generated:", "info:".blue().bold(), kernels.len());
+        for kernel in kernels {
+            println!("  - {} ({} params, block size: {:?})",
+                kernel.name,
+                kernel.params.len(),
+                kernel.block_size
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn cmd_build(

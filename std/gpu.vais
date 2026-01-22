@@ -1,0 +1,230 @@
+# GPU Runtime Module for Vais
+# Provides GPU kernel definition and execution support
+#
+# Usage:
+#   U std/gpu
+#
+#   #[gpu]
+#   F vector_add(a: *f64, b: *f64, c: *f64, n: i64) -> i64 {
+#       idx := thread_idx_x() + block_idx_x() * block_dim_x()
+#       I idx < n {
+#           c[idx] = a[idx] + b[idx]
+#       }
+#       0
+#   }
+
+# ============================================================================
+# Thread Indexing Functions
+# ============================================================================
+
+# Get thread index within block (x dimension)
+F thread_idx_x() -> i64 = 0  # Replaced by GPU compiler
+
+# Get thread index within block (y dimension)
+F thread_idx_y() -> i64 = 0
+
+# Get thread index within block (z dimension)
+F thread_idx_z() -> i64 = 0
+
+# Get block index within grid (x dimension)
+F block_idx_x() -> i64 = 0
+
+# Get block index within grid (y dimension)
+F block_idx_y() -> i64 = 0
+
+# Get block index within grid (z dimension)
+F block_idx_z() -> i64 = 0
+
+# Get block dimension (threads per block, x dimension)
+F block_dim_x() -> i64 = 256
+
+# Get block dimension (threads per block, y dimension)
+F block_dim_y() -> i64 = 1
+
+# Get block dimension (threads per block, z dimension)
+F block_dim_z() -> i64 = 1
+
+# Get grid dimension (blocks per grid, x dimension)
+F grid_dim_x() -> i64 = 1
+
+# Get grid dimension (blocks per grid, y dimension)
+F grid_dim_y() -> i64 = 1
+
+# Get grid dimension (blocks per grid, z dimension)
+F grid_dim_z() -> i64 = 1
+
+# Get global thread index (1D linearized)
+F global_idx() -> i64 = thread_idx_x() + block_idx_x() * block_dim_x()
+
+# Get global thread index in 2D (x)
+F global_idx_x() -> i64 = thread_idx_x() + block_idx_x() * block_dim_x()
+
+# Get global thread index in 2D (y)
+F global_idx_y() -> i64 = thread_idx_y() + block_idx_y() * block_dim_y()
+
+# ============================================================================
+# Synchronization Functions
+# ============================================================================
+
+# Synchronize all threads within a block
+F sync_threads() -> i64 = 0  # Replaced by GPU compiler
+
+# Memory fence for global memory
+F thread_fence() -> i64 = 0
+
+# Memory fence for shared (local) memory
+F thread_fence_block() -> i64 = 0
+
+# ============================================================================
+# Atomic Operations
+# ============================================================================
+
+# Atomic add: *addr += val, returns old value
+F atomic_add(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic subtract: *addr -= val, returns old value
+F atomic_sub(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic minimum: *addr = min(*addr, val), returns old value
+F atomic_min(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic maximum: *addr = max(*addr, val), returns old value
+F atomic_max(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic AND: *addr &= val, returns old value
+F atomic_and(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic OR: *addr |= val, returns old value
+F atomic_or(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic XOR: *addr ^= val, returns old value
+F atomic_xor(addr: *i64, val: i64) -> i64 = 0
+
+# Atomic compare-and-swap: if *addr == compare then *addr = val
+# Returns old value
+F atomic_cas(addr: *i64, compare: i64, val: i64) -> i64 = 0
+
+# Atomic exchange: swap *addr with val, returns old value
+F atomic_exch(addr: *i64, val: i64) -> i64 = 0
+
+# ============================================================================
+# Math Functions (GPU-optimized versions)
+# ============================================================================
+
+# Fast square root (may be less precise than CPU version)
+F gpu_sqrt(x: f64) -> f64 = sqrt(x)
+
+# Fast reciprocal square root (1/sqrt(x))
+F gpu_rsqrt(x: f64) -> f64 = 1.0 / sqrt(x)
+
+# Fast sine
+F gpu_sin(x: f64) -> f64 = sin(x)
+
+# Fast cosine
+F gpu_cos(x: f64) -> f64 = cos(x)
+
+# Fast exponential
+F gpu_exp(x: f64) -> f64 = exp(x)
+
+# Fast logarithm
+F gpu_log(x: f64) -> f64 = log(x)
+
+# Fused multiply-add: a * b + c (single rounding)
+F gpu_fma(a: f64, b: f64, c: f64) -> f64 = a * b + c
+
+# ============================================================================
+# Shared Memory
+# ============================================================================
+
+# Allocate shared memory (per-block, fast access)
+# Returns pointer to shared memory region
+# Note: size must be known at compile time
+F shared_alloc(size: i64) -> *i64 = malloc(size)
+
+# ============================================================================
+# Memory Operations
+# ============================================================================
+
+# Coalesced load from global memory
+F gpu_load(addr: *f64) -> f64 = *addr
+
+# Coalesced store to global memory
+F gpu_store(addr: *f64, val: f64) -> i64 {
+    *addr = val
+    0
+}
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Clamp value to range [lo, hi]
+F gpu_clamp(x: f64, lo: f64, hi: f64) -> f64 {
+    I x < lo { lo }
+    E I x > hi { hi }
+    E { x }
+}
+
+# Linear interpolation
+F gpu_lerp(a: f64, b: f64, t: f64) -> f64 = a + t * (b - a)
+
+# Step function: 0.0 if x < edge, else 1.0
+F gpu_step(edge: f64, x: f64) -> f64 = I x < edge { 0.0 } E { 1.0 }
+
+# Smooth step (Hermite interpolation)
+F gpu_smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    t := gpu_clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0)
+    t * t * (3.0 - 2.0 * t)
+}
+
+# ============================================================================
+# Warp/Wavefront Operations (CUDA: warp, AMD: wavefront)
+# ============================================================================
+
+# Get lane index within warp (0-31 for NVIDIA, 0-63 for AMD)
+F lane_id() -> i64 = thread_idx_x() % 32
+
+# Warp vote: true if all threads have condition true
+F warp_all(condition: i64) -> i64 = condition
+
+# Warp vote: true if any thread has condition true
+F warp_any(condition: i64) -> i64 = condition
+
+# Warp ballot: returns bitmask of threads with condition true
+F warp_ballot(condition: i64) -> i64 = condition
+
+# Warp shuffle: get value from another lane
+F warp_shuffle(val: i64, src_lane: i64) -> i64 = val
+
+# Warp shuffle down: get value from lane + delta
+F warp_shuffle_down(val: i64, delta: i64) -> i64 = val
+
+# Warp shuffle up: get value from lane - delta
+F warp_shuffle_up(val: i64, delta: i64) -> i64 = val
+
+# Warp shuffle xor: get value from lane ^ mask
+F warp_shuffle_xor(val: i64, mask: i64) -> i64 = val
+
+# ============================================================================
+# Reduction Operations
+# ============================================================================
+
+# Block-level sum reduction
+# All threads contribute their value, result available to all
+F block_reduce_sum(val: f64) -> f64 = val
+
+# Block-level max reduction
+F block_reduce_max(val: f64) -> f64 = val
+
+# Block-level min reduction
+F block_reduce_min(val: f64) -> f64 = val
+
+# ============================================================================
+# Grid Configuration Helpers
+# ============================================================================
+
+# Calculate number of blocks needed for n elements
+F calc_blocks(n: i64, block_size: i64) -> i64 = (n + block_size - 1) / block_size
+
+# Calculate total threads for n elements
+F calc_threads(n: i64, block_size: i64) -> i64 = calc_blocks(n, block_size) * block_size
