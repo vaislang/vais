@@ -248,6 +248,21 @@ impl CodeGenerator {
             if Self::is_simd_intrinsic(name) {
                 return self.generate_simd_intrinsic(name, args, counter);
             }
+
+            // Handle str_to_ptr builtin: convert string pointer to i64
+            if name == "str_to_ptr" {
+                if args.len() != 1 {
+                    return Err(CodegenError::TypeError("str_to_ptr expects 1 argument".to_string()));
+                }
+                let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
+                let mut ir = str_ir;
+                let result = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = ptrtoint i8* {} to i64\n",
+                    result, str_val
+                ));
+                return Ok((result, ir));
+            }
         }
 
         // Check if this is a direct function call or indirect (lambda) call
@@ -906,9 +921,23 @@ impl CodeGenerator {
 
                 let field_ty = &struct_info.fields[field_idx].1;
                 let llvm_ty = self.type_to_llvm(field_ty);
+
+                // For struct-typed fields, val might be a pointer that needs to be loaded
+                let val_to_store = if matches!(field_ty, ResolvedType::Named { .. }) && !self.is_expr_value(field_expr) {
+                    // Field value is a pointer to struct, need to load the value
+                    let loaded = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        loaded, llvm_ty, llvm_ty, val
+                    ));
+                    loaded
+                } else {
+                    val
+                };
+
                 ir.push_str(&format!(
                     "  store {} {}, {}* {}\n",
-                    llvm_ty, val, llvm_ty, field_ptr
+                    llvm_ty, val_to_store, llvm_ty, field_ptr
                 ));
             }
 

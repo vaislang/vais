@@ -1,246 +1,8 @@
 # Vais Self-Hosting Compiler - Lexer Module
 # Tokenizer for Vais source code
-# Includes token definitions (merged to avoid import issues)
+# Imports token definitions from token module
 
-# ===== Token Definitions =====
-
-# Token type constants (using i64 since Vais enum support is limited)
-# We use integer constants to represent token types
-
-# Keyword tokens (1-30)
-F TOK_KW_F() -> i64 = 1        # function
-F TOK_KW_S() -> i64 = 2        # struct
-F TOK_KW_E() -> i64 = 3        # enum
-F TOK_KW_I() -> i64 = 4        # if
-F TOK_KW_L() -> i64 = 5        # loop
-F TOK_KW_M() -> i64 = 6        # match
-F TOK_KW_W() -> i64 = 7        # trait (With)
-F TOK_KW_X() -> i64 = 8        # impl (eXtend)
-F TOK_KW_T() -> i64 = 9        # type
-F TOK_KW_U() -> i64 = 10       # use
-F TOK_KW_P() -> i64 = 11       # pub
-F TOK_KW_A() -> i64 = 12       # async
-F TOK_KW_R() -> i64 = 13       # return
-F TOK_KW_B() -> i64 = 14       # break
-F TOK_KW_C() -> i64 = 15       # continue
-F TOK_KW_TRUE() -> i64 = 16
-F TOK_KW_FALSE() -> i64 = 17
-F TOK_KW_MUT() -> i64 = 18
-F TOK_KW_ELSE() -> i64 = 19
-
-# Type keyword tokens (31-50)
-F TOK_TY_I8() -> i64 = 31
-F TOK_TY_I16() -> i64 = 32
-F TOK_TY_I32() -> i64 = 33
-F TOK_TY_I64() -> i64 = 34
-F TOK_TY_I128() -> i64 = 35
-F TOK_TY_U8() -> i64 = 36
-F TOK_TY_U16() -> i64 = 37
-F TOK_TY_U32() -> i64 = 38
-F TOK_TY_U64() -> i64 = 39
-F TOK_TY_U128() -> i64 = 40
-F TOK_TY_F32() -> i64 = 41
-F TOK_TY_F64() -> i64 = 42
-F TOK_TY_BOOL() -> i64 = 43
-F TOK_TY_STR() -> i64 = 44
-
-# Literal tokens (51-60)
-F TOK_INT() -> i64 = 51        # Integer literal
-F TOK_FLOAT() -> i64 = 52      # Float literal
-F TOK_STRING() -> i64 = 53     # String literal
-F TOK_IDENT() -> i64 = 54      # Identifier
-
-# Operator tokens (61-100)
-F TOK_PLUS() -> i64 = 61       # +
-F TOK_MINUS() -> i64 = 62      # -
-F TOK_STAR() -> i64 = 63       # *
-F TOK_SLASH() -> i64 = 64      # /
-F TOK_PERCENT() -> i64 = 65    # %
-F TOK_LT() -> i64 = 66         # <
-F TOK_GT() -> i64 = 67         # >
-F TOK_LT_EQ() -> i64 = 68      # <=
-F TOK_GT_EQ() -> i64 = 69      # >=
-F TOK_EQ_EQ() -> i64 = 70      # ==
-F TOK_NOT_EQ() -> i64 = 71     # !=
-F TOK_AMP() -> i64 = 72        # &
-F TOK_PIPE() -> i64 = 73       # |
-F TOK_CARET() -> i64 = 74      # ^
-F TOK_TILDE() -> i64 = 75      # ~
-F TOK_SHL() -> i64 = 76        # <<
-F TOK_SHR() -> i64 = 77        # >>
-F TOK_BANG() -> i64 = 78       # !
-F TOK_AND() -> i64 = 79        # &&
-F TOK_OR() -> i64 = 80         # ||
-
-# Assignment tokens (81-90)
-F TOK_EQ() -> i64 = 81         # =
-F TOK_COLON_EQ() -> i64 = 82   # :=
-F TOK_PLUS_EQ() -> i64 = 83    # +=
-F TOK_MINUS_EQ() -> i64 = 84   # -=
-F TOK_STAR_EQ() -> i64 = 85    # *=
-F TOK_SLASH_EQ() -> i64 = 86   # /=
-
-# Delimiter tokens (91-100)
-F TOK_LPAREN() -> i64 = 91     # (
-F TOK_RPAREN() -> i64 = 92     # )
-F TOK_LBRACE() -> i64 = 93     # {
-F TOK_RBRACE() -> i64 = 94     # }
-F TOK_LBRACKET() -> i64 = 95   # [
-F TOK_RBRACKET() -> i64 = 96   # ]
-
-# Punctuation tokens (101-120)
-F TOK_COMMA() -> i64 = 101     # ,
-F TOK_COLON() -> i64 = 102     # :
-F TOK_SEMI() -> i64 = 103      # ;
-F TOK_DOT() -> i64 = 104       # .
-F TOK_DOT_DOT() -> i64 = 105   # ..
-F TOK_DOT_DOT_EQ() -> i64 = 106 # ..=
-F TOK_ARROW() -> i64 = 107     # ->
-F TOK_FAT_ARROW() -> i64 = 108 # =>
-F TOK_COLON_COLON() -> i64 = 109 # ::
-F TOK_QUESTION() -> i64 = 110  # ?
-F TOK_AT() -> i64 = 111        # @
-F TOK_HASH() -> i64 = 112      # #
-
-# Special tokens
-F TOK_EOF() -> i64 = 200
-F TOK_ERROR() -> i64 = 201
-
-# Token structure - stores token type and associated data
-S Token {
-    kind: i64,           # Token type constant
-    value: i64,          # For integer/float literals
-    str_ptr: i64,        # Pointer to string data
-    str_len: i64,        # Length of string data
-    span_start: i64,     # Source start position
-    span_end: i64        # Source end position
-}
-
-X Token {
-    # Create a simple token (no value)
-    F simple(kind: i64, start: i64, end: i64) -> Token = Token {
-        kind: kind,
-        value: 0,
-        str_ptr: 0,
-        str_len: 0,
-        span_start: start,
-        span_end: end
-    }
-
-    # Create an integer literal token
-    F int_lit(val: i64, start: i64, end: i64) -> Token = Token {
-        kind: TOK_INT(),
-        value: val,
-        str_ptr: 0,
-        str_len: 0,
-        span_start: start,
-        span_end: end
-    }
-
-    # Create a float literal token
-    F float_lit(val: i64, start: i64, end: i64) -> Token = Token {
-        kind: TOK_FLOAT(),
-        value: val,
-        str_ptr: 0,
-        str_len: 0,
-        span_start: start,
-        span_end: end
-    }
-
-    # Create a string/identifier token
-    F string_token(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = Token {
-        kind: kind,
-        value: 0,
-        str_ptr: ptr,
-        str_len: len,
-        span_start: start,
-        span_end: end
-    }
-}
-
-# Token list for lexer output
-S TokenList {
-    data: i64,    # Pointer to Token array
-    len: i64,     # Current number of tokens
-    cap: i64      # Capacity
-}
-
-X TokenList {
-    # Create a new token list
-    F new(capacity: i64) -> TokenList {
-        data := malloc(capacity * 48)
-        TokenList { data: data, len: 0, cap: capacity }
-    }
-
-    # Add a token to the list (pass fields directly to avoid struct parameter bug)
-    F push_fields(&self, kind: i64, value: i64, str_ptr: i64, str_len: i64, span_start: i64, span_end: i64) -> i64 {
-        I self.len >= self.cap {
-            @.grow()
-            0
-        } E {
-            0
-        }
-        ptr := self.data + self.len * 48
-        store_token_fields(ptr, kind, value, str_ptr, str_len, span_start, span_end)
-        self.len = self.len + 1
-        self.len
-    }
-
-    # Get token at index
-    F get(&self, index: i64) -> Token {
-        ptr := self.data + index * 48
-        Token {
-            kind: load_i64(ptr + 0),
-            value: load_i64(ptr + 8),
-            str_ptr: load_i64(ptr + 16),
-            str_len: load_i64(ptr + 24),
-            span_start: load_i64(ptr + 32),
-            span_end: load_i64(ptr + 40)
-        }
-    }
-
-    # Grow the list using 64-bit copies
-    F grow(&self) -> i64 {
-        new_cap := self.cap * 2
-        new_data := malloc(new_cap * 48)
-        # Copy data in 8-byte chunks (each token is 48 bytes = 6 i64 fields)
-        src := self.data
-        dst := new_data
-        total_bytes := self.len * 48
-        i: mut i64 = 0
-        L {
-            I i >= total_bytes { B }
-            v := load_i64(src + i)
-            store_i64(dst + i, v)
-            i = i + 8
-        }
-        old_data := self.data
-        self.data = new_data
-        self.cap = new_cap
-        # Note: leaking old memory for now - will fix after compiler supports void
-        1
-    }
-
-    # Get length
-    F len(&self) -> i64 = self.len
-
-    # Free the list
-    F drop(&self) -> i64 {
-        # Note: leaking memory for now - will fix after compiler supports void
-        1
-    }
-}
-
-# store_token_fields: store token fields to dst pointer
-F store_token_fields(dst: i64, kind: i64, value: i64, str_ptr: i64, str_len: i64, span_start: i64, span_end: i64) -> i64 {
-    store_i64(dst + 0, kind)
-    store_i64(dst + 8, value)
-    store_i64(dst + 16, str_ptr)
-    store_i64(dst + 24, str_len)
-    store_i64(dst + 32, span_start)
-    store_i64(dst + 40, span_end)
-    1
-}
+U token
 
 # ===== Lexer Helper Functions =====
 
@@ -297,7 +59,7 @@ S Lexer {
 }
 
 X Lexer {
-    # Create a new lexer for the given source code
+    # Create a new lexer for the given source code (pointer version)
     F new(source: i64, len: i64) -> Lexer = Lexer {
         source: source,
         source_len: len,
@@ -348,25 +110,35 @@ X Lexer {
         }
     }
 
+    # Skip a single-line comment (from # to end of line)
+    F skip_comment(&self) -> i64 {
+        L {
+            I @.is_eof() == 1 { B }
+            I @.peek() == 10 { B }
+            @.advance()
+        }
+        0
+    }
+
+    # Check if current char is whitespace or comment start
+    F is_skip_char(&self) -> i64 {
+        I @.is_eof() == 1 { R 0 }
+        c := @.peek()
+        I is_whitespace(c) == 1 { R 1 }
+        I c == 35 { R 1 }
+        0
+    }
+
     # Skip whitespace and comments
     F skip_whitespace(&self) -> i64 {
         L {
-            I @.is_eof() == 1 { B }
+            I @.is_skip_char() == 0 { B }
             c := @.peek()
-
             I is_whitespace(c) == 1 {
                 @.advance()
-                0
-            } E I c == 35 {
-                # '#' starts a comment - skip until end of line
-                L {
-                    I @.is_eof() == 1 { B }
-                    I @.peek() == 10 { B }
-                    @.advance()
-                }
-                0
             } E {
-                R 1
+                # Must be '#' (comment)
+                @.skip_comment()
             }
         }
         1
@@ -389,7 +161,7 @@ X Lexer {
                 value = value * 16 + hex_digit_value(c)
                 @.advance()
             }
-            R Token.int_lit(value, start, self.pos)
+            R token_int_lit(value, start, self.pos)
         }
 
         # Regular decimal number
@@ -436,9 +208,9 @@ X Lexer {
         }
 
         I is_float == 1 {
-            Token.float_lit(value, start, self.pos)
+            token_float_lit(value, start, self.pos)
         } E {
-            Token.int_lit(value, start, self.pos)
+            token_int_lit(value, start, self.pos)
         }
     }
 
@@ -458,21 +230,21 @@ X Lexer {
         # Check for single-letter keywords
         I len == 1 {
             c := load_byte(str_start)
-            I c == 70 { R Token.simple(TOK_KW_F(), start, self.pos) }
-            I c == 83 { R Token.simple(TOK_KW_S(), start, self.pos) }
-            I c == 69 { R Token.simple(TOK_KW_E(), start, self.pos) }
-            I c == 73 { R Token.simple(TOK_KW_I(), start, self.pos) }
-            I c == 76 { R Token.simple(TOK_KW_L(), start, self.pos) }
-            I c == 77 { R Token.simple(TOK_KW_M(), start, self.pos) }
-            I c == 87 { R Token.simple(TOK_KW_W(), start, self.pos) }
-            I c == 88 { R Token.simple(TOK_KW_X(), start, self.pos) }
-            I c == 84 { R Token.simple(TOK_KW_T(), start, self.pos) }
-            I c == 85 { R Token.simple(TOK_KW_U(), start, self.pos) }
-            I c == 80 { R Token.simple(TOK_KW_P(), start, self.pos) }
-            I c == 65 { R Token.simple(TOK_KW_A(), start, self.pos) }
-            I c == 82 { R Token.simple(TOK_KW_R(), start, self.pos) }
-            I c == 66 { R Token.simple(TOK_KW_B(), start, self.pos) }
-            I c == 67 { R Token.simple(TOK_KW_C(), start, self.pos) }
+            I c == 70 { R token_simple(TOK_KW_F(), start, self.pos) }
+            I c == 83 { R token_simple(TOK_KW_S(), start, self.pos) }
+            I c == 69 { R token_simple(TOK_KW_E(), start, self.pos) }
+            I c == 73 { R token_simple(TOK_KW_I(), start, self.pos) }
+            I c == 76 { R token_simple(TOK_KW_L(), start, self.pos) }
+            I c == 77 { R token_simple(TOK_KW_M(), start, self.pos) }
+            I c == 87 { R token_simple(TOK_KW_W(), start, self.pos) }
+            I c == 88 { R token_simple(TOK_KW_X(), start, self.pos) }
+            I c == 84 { R token_simple(TOK_KW_T(), start, self.pos) }
+            I c == 85 { R token_simple(TOK_KW_U(), start, self.pos) }
+            I c == 80 { R token_simple(TOK_KW_P(), start, self.pos) }
+            I c == 65 { R token_simple(TOK_KW_A(), start, self.pos) }
+            I c == 82 { R token_simple(TOK_KW_R(), start, self.pos) }
+            I c == 66 { R token_simple(TOK_KW_B(), start, self.pos) }
+            I c == 67 { R token_simple(TOK_KW_C(), start, self.pos) }
             0
         } E {
             0
@@ -482,8 +254,8 @@ X Lexer {
         I len == 2 {
             c0 := load_byte(str_start)
             c1 := load_byte(str_start + 1)
-            I c0 == 105 && c1 == 56 { R Token.simple(TOK_TY_I8(), start, self.pos) }
-            I c0 == 117 && c1 == 56 { R Token.simple(TOK_TY_U8(), start, self.pos) }
+            I c0 == 105 && c1 == 56 { R token_simple(TOK_TY_I8(), start, self.pos) }
+            I c0 == 117 && c1 == 56 { R token_simple(TOK_TY_U8(), start, self.pos) }
             0
         } E {
             0
@@ -493,16 +265,16 @@ X Lexer {
             c0 := load_byte(str_start)
             c1 := load_byte(str_start + 1)
             c2 := load_byte(str_start + 2)
-            I c0 == 105 && c1 == 54 && c2 == 52 { R Token.simple(TOK_TY_I64(), start, self.pos) }
-            I c0 == 105 && c1 == 51 && c2 == 50 { R Token.simple(TOK_TY_I32(), start, self.pos) }
-            I c0 == 105 && c1 == 49 && c2 == 54 { R Token.simple(TOK_TY_I16(), start, self.pos) }
-            I c0 == 117 && c1 == 54 && c2 == 52 { R Token.simple(TOK_TY_U64(), start, self.pos) }
-            I c0 == 117 && c1 == 51 && c2 == 50 { R Token.simple(TOK_TY_U32(), start, self.pos) }
-            I c0 == 117 && c1 == 49 && c2 == 54 { R Token.simple(TOK_TY_U16(), start, self.pos) }
-            I c0 == 102 && c1 == 54 && c2 == 52 { R Token.simple(TOK_TY_F64(), start, self.pos) }
-            I c0 == 102 && c1 == 51 && c2 == 50 { R Token.simple(TOK_TY_F32(), start, self.pos) }
-            I c0 == 115 && c1 == 116 && c2 == 114 { R Token.simple(TOK_TY_STR(), start, self.pos) }
-            I c0 == 109 && c1 == 117 && c2 == 116 { R Token.simple(TOK_KW_MUT(), start, self.pos) }
+            I c0 == 105 && c1 == 54 && c2 == 52 { R token_simple(TOK_TY_I64(), start, self.pos) }
+            I c0 == 105 && c1 == 51 && c2 == 50 { R token_simple(TOK_TY_I32(), start, self.pos) }
+            I c0 == 105 && c1 == 49 && c2 == 54 { R token_simple(TOK_TY_I16(), start, self.pos) }
+            I c0 == 117 && c1 == 54 && c2 == 52 { R token_simple(TOK_TY_U64(), start, self.pos) }
+            I c0 == 117 && c1 == 51 && c2 == 50 { R token_simple(TOK_TY_U32(), start, self.pos) }
+            I c0 == 117 && c1 == 49 && c2 == 54 { R token_simple(TOK_TY_U16(), start, self.pos) }
+            I c0 == 102 && c1 == 54 && c2 == 52 { R token_simple(TOK_TY_F64(), start, self.pos) }
+            I c0 == 102 && c1 == 51 && c2 == 50 { R token_simple(TOK_TY_F32(), start, self.pos) }
+            I c0 == 115 && c1 == 116 && c2 == 114 { R token_simple(TOK_TY_STR(), start, self.pos) }
+            I c0 == 109 && c1 == 117 && c2 == 116 { R token_simple(TOK_KW_MUT(), start, self.pos) }
             0
         } E {
             0
@@ -513,11 +285,11 @@ X Lexer {
             c1 := load_byte(str_start + 1)
             c2 := load_byte(str_start + 2)
             c3 := load_byte(str_start + 3)
-            I c0 == 116 && c1 == 114 && c2 == 117 && c3 == 101 { R Token.simple(TOK_KW_TRUE(), start, self.pos) }
-            I c0 == 98 && c1 == 111 && c2 == 111 && c3 == 108 { R Token.simple(TOK_TY_BOOL(), start, self.pos) }
-            I c0 == 105 && c1 == 49 && c2 == 50 && c3 == 56 { R Token.simple(TOK_TY_I128(), start, self.pos) }
-            I c0 == 117 && c1 == 49 && c2 == 50 && c3 == 56 { R Token.simple(TOK_TY_U128(), start, self.pos) }
-            I c0 == 101 && c1 == 108 && c2 == 115 && c3 == 101 { R Token.simple(TOK_KW_ELSE(), start, self.pos) }
+            I c0 == 116 && c1 == 114 && c2 == 117 && c3 == 101 { R token_simple(TOK_KW_TRUE(), start, self.pos) }
+            I c0 == 98 && c1 == 111 && c2 == 111 && c3 == 108 { R token_simple(TOK_TY_BOOL(), start, self.pos) }
+            I c0 == 105 && c1 == 49 && c2 == 50 && c3 == 56 { R token_simple(TOK_TY_I128(), start, self.pos) }
+            I c0 == 117 && c1 == 49 && c2 == 50 && c3 == 56 { R token_simple(TOK_TY_U128(), start, self.pos) }
+            I c0 == 101 && c1 == 108 && c2 == 115 && c3 == 101 { R token_simple(TOK_KW_ELSE(), start, self.pos) }
             0
         } E {
             0
@@ -529,14 +301,14 @@ X Lexer {
             c2 := load_byte(str_start + 2)
             c3 := load_byte(str_start + 3)
             c4 := load_byte(str_start + 4)
-            I c0 == 102 && c1 == 97 && c2 == 108 && c3 == 115 && c4 == 101 { R Token.simple(TOK_KW_FALSE(), start, self.pos) }
+            I c0 == 102 && c1 == 97 && c2 == 108 && c3 == 115 && c4 == 101 { R token_simple(TOK_KW_FALSE(), start, self.pos) }
             0
         } E {
             0
         }
 
         # Not a keyword, return as identifier
-        Token.string_token(TOK_IDENT(), str_start, len, start, self.pos)
+        token_string(TOK_IDENT(), str_start, len, start, self.pos)
     }
 
     # Scan a string literal
@@ -572,7 +344,7 @@ X Lexer {
             0
         }
 
-        Token.string_token(TOK_STRING(), str_start, len, start, self.pos)
+        token_string(TOK_STRING(), str_start, len, start, self.pos)
     }
 
     # Scan an operator or punctuation
@@ -581,131 +353,131 @@ X Lexer {
         c := @.advance()
 
         # Single-character tokens
-        I c == 40 { R Token.simple(TOK_LPAREN(), start, self.pos) }
-        I c == 41 { R Token.simple(TOK_RPAREN(), start, self.pos) }
-        I c == 123 { R Token.simple(TOK_LBRACE(), start, self.pos) }
-        I c == 125 { R Token.simple(TOK_RBRACE(), start, self.pos) }
-        I c == 91 { R Token.simple(TOK_LBRACKET(), start, self.pos) }
-        I c == 93 { R Token.simple(TOK_RBRACKET(), start, self.pos) }
-        I c == 44 { R Token.simple(TOK_COMMA(), start, self.pos) }
-        I c == 59 { R Token.simple(TOK_SEMI(), start, self.pos) }
-        I c == 63 { R Token.simple(TOK_QUESTION(), start, self.pos) }
-        I c == 64 { R Token.simple(TOK_AT(), start, self.pos) }
-        I c == 126 { R Token.simple(TOK_TILDE(), start, self.pos) }
-        I c == 37 { R Token.simple(TOK_PERCENT(), start, self.pos) }
-        I c == 94 { R Token.simple(TOK_CARET(), start, self.pos) }
+        I c == 40 { R token_simple(TOK_LPAREN(), start, self.pos) }
+        I c == 41 { R token_simple(TOK_RPAREN(), start, self.pos) }
+        I c == 123 { R token_simple(TOK_LBRACE(), start, self.pos) }
+        I c == 125 { R token_simple(TOK_RBRACE(), start, self.pos) }
+        I c == 91 { R token_simple(TOK_LBRACKET(), start, self.pos) }
+        I c == 93 { R token_simple(TOK_RBRACKET(), start, self.pos) }
+        I c == 44 { R token_simple(TOK_COMMA(), start, self.pos) }
+        I c == 59 { R token_simple(TOK_SEMI(), start, self.pos) }
+        I c == 63 { R token_simple(TOK_QUESTION(), start, self.pos) }
+        I c == 64 { R token_simple(TOK_AT(), start, self.pos) }
+        I c == 126 { R token_simple(TOK_TILDE(), start, self.pos) }
+        I c == 37 { R token_simple(TOK_PERCENT(), start, self.pos) }
+        I c == 94 { R token_simple(TOK_CARET(), start, self.pos) }
 
         # Two-character operators
         I c == 43 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_PLUS_EQ(), start, self.pos)
+                R token_simple(TOK_PLUS_EQ(), start, self.pos)
             }
-            R Token.simple(TOK_PLUS(), start, self.pos)
+            R token_simple(TOK_PLUS(), start, self.pos)
         }
         I c == 45 {
             I @.peek() == 62 {
                 @.advance()
-                R Token.simple(TOK_ARROW(), start, self.pos)
+                R token_simple(TOK_ARROW(), start, self.pos)
             }
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_MINUS_EQ(), start, self.pos)
+                R token_simple(TOK_MINUS_EQ(), start, self.pos)
             }
-            R Token.simple(TOK_MINUS(), start, self.pos)
+            R token_simple(TOK_MINUS(), start, self.pos)
         }
         I c == 42 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_STAR_EQ(), start, self.pos)
+                R token_simple(TOK_STAR_EQ(), start, self.pos)
             }
-            R Token.simple(TOK_STAR(), start, self.pos)
+            R token_simple(TOK_STAR(), start, self.pos)
         }
         I c == 47 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_SLASH_EQ(), start, self.pos)
+                R token_simple(TOK_SLASH_EQ(), start, self.pos)
             }
-            R Token.simple(TOK_SLASH(), start, self.pos)
+            R token_simple(TOK_SLASH(), start, self.pos)
         }
         I c == 60 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_LT_EQ(), start, self.pos)
+                R token_simple(TOK_LT_EQ(), start, self.pos)
             }
             I @.peek() == 60 {
                 @.advance()
-                R Token.simple(TOK_SHL(), start, self.pos)
+                R token_simple(TOK_SHL(), start, self.pos)
             }
-            R Token.simple(TOK_LT(), start, self.pos)
+            R token_simple(TOK_LT(), start, self.pos)
         }
         I c == 62 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_GT_EQ(), start, self.pos)
+                R token_simple(TOK_GT_EQ(), start, self.pos)
             }
             I @.peek() == 62 {
                 @.advance()
-                R Token.simple(TOK_SHR(), start, self.pos)
+                R token_simple(TOK_SHR(), start, self.pos)
             }
-            R Token.simple(TOK_GT(), start, self.pos)
+            R token_simple(TOK_GT(), start, self.pos)
         }
         I c == 61 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_EQ_EQ(), start, self.pos)
+                R token_simple(TOK_EQ_EQ(), start, self.pos)
             }
             I @.peek() == 62 {
                 @.advance()
-                R Token.simple(TOK_FAT_ARROW(), start, self.pos)
+                R token_simple(TOK_FAT_ARROW(), start, self.pos)
             }
-            R Token.simple(TOK_EQ(), start, self.pos)
+            R token_simple(TOK_EQ(), start, self.pos)
         }
         I c == 33 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_NOT_EQ(), start, self.pos)
+                R token_simple(TOK_NOT_EQ(), start, self.pos)
             }
-            R Token.simple(TOK_BANG(), start, self.pos)
+            R token_simple(TOK_BANG(), start, self.pos)
         }
         I c == 38 {
             I @.peek() == 38 {
                 @.advance()
-                R Token.simple(TOK_AND(), start, self.pos)
+                R token_simple(TOK_AND(), start, self.pos)
             }
-            R Token.simple(TOK_AMP(), start, self.pos)
+            R token_simple(TOK_AMP(), start, self.pos)
         }
         I c == 124 {
             I @.peek() == 124 {
                 @.advance()
-                R Token.simple(TOK_OR(), start, self.pos)
+                R token_simple(TOK_OR(), start, self.pos)
             }
-            R Token.simple(TOK_PIPE(), start, self.pos)
+            R token_simple(TOK_PIPE(), start, self.pos)
         }
         I c == 58 {
             I @.peek() == 61 {
                 @.advance()
-                R Token.simple(TOK_COLON_EQ(), start, self.pos)
+                R token_simple(TOK_COLON_EQ(), start, self.pos)
             }
             I @.peek() == 58 {
                 @.advance()
-                R Token.simple(TOK_COLON_COLON(), start, self.pos)
+                R token_simple(TOK_COLON_COLON(), start, self.pos)
             }
-            R Token.simple(TOK_COLON(), start, self.pos)
+            R token_simple(TOK_COLON(), start, self.pos)
         }
         I c == 46 {
             I @.peek() == 46 {
                 @.advance()
                 I @.peek() == 61 {
                     @.advance()
-                    R Token.simple(TOK_DOT_DOT_EQ(), start, self.pos)
+                    R token_simple(TOK_DOT_DOT_EQ(), start, self.pos)
                 }
-                R Token.simple(TOK_DOT_DOT(), start, self.pos)
+                R token_simple(TOK_DOT_DOT(), start, self.pos)
             }
-            R Token.simple(TOK_DOT(), start, self.pos)
+            R token_simple(TOK_DOT(), start, self.pos)
         }
 
-        Token.simple(TOK_ERROR(), start, self.pos)
+        token_simple(TOK_ERROR(), start, self.pos)
     }
 
     # Get the next token
@@ -713,7 +485,7 @@ X Lexer {
         @.skip_whitespace()
 
         I @.is_eof() == 1 {
-            R Token.simple(TOK_EOF(), self.pos, self.pos)
+            R token_simple(TOK_EOF(), self.pos, self.pos)
         }
 
         c := @.peek()
@@ -735,7 +507,7 @@ X Lexer {
 
     # Tokenize the entire source and return a TokenList
     F tokenize(&self) -> TokenList {
-        tokens := TokenList.new(256)
+        tokens := tokenlist_new(256)
 
         L {
             tok := @.next_token()

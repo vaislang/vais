@@ -55,9 +55,9 @@ X Spanned<T> {
     }
 
     # Create a spanned value with a range
-    F with_range(node: T, start: i64, end: i64) -> Spanned<T> = Spanned {
-        node: node,
-        span: Span { start: start, end: end }
+    F with_range(node: T, start: i64, end: i64) -> Spanned<T> {
+        s := Span { start: start, end: end }
+        Spanned { node: node, span: s }
     }
 }
 

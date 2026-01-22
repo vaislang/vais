@@ -104,6 +104,8 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Union => "Union",
         Token::Comptime => "Comptime",
         Token::Dyn => "Dyn",
+        Token::Macro => "Macro",
+        Token::Dollar => "Dollar",
     }.to_string()
 }
 

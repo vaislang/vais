@@ -1762,8 +1762,8 @@ entry:
 }
 "#;
         let analysis = interprocedural_analysis(ir);
-        assert!(analysis.pure_functions.contains("@pure_func"));
-        assert!(!analysis.pure_functions.contains("@impure_func"));
+        assert!(analysis.pure_functions.contains("pure_func"));
+        assert!(!analysis.pure_functions.contains("impure_func"));
     }
 }
 

@@ -22,12 +22,7 @@ impl StmtVisitor for CodeGenerator {
             }
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
-                if let Some(expr) = expr {
-                    let (val, ir) = self.generate_expr(expr, counter)?;
-                    Ok((val, ir))
-                } else {
-                    Ok(("void".to_string(), String::new()))
-                }
+                self.generate_return_stmt(expr.as_ref().map(|e| &**e), counter)
             }
             Stmt::Break(value) => {
                 self.generate_break_stmt(value.as_ref().map(|v| &**v), counter)
@@ -188,5 +183,41 @@ impl CodeGenerator {
         } else {
             Err(CodegenError::Unsupported("continue outside of loop".to_string()))
         }
+    }
+
+    /// Generate return statement with actual ret instruction
+    fn generate_return_stmt(
+        &mut self,
+        expr: Option<&Spanned<Expr>>,
+        counter: &mut usize,
+    ) -> GenResult {
+        let mut ir = String::new();
+
+        // Execute deferred expressions before return (LIFO order)
+        let defer_ir = self.generate_defer_cleanup(counter)?;
+        ir.push_str(&defer_ir);
+
+        if let Some(expr) = expr {
+            let (val, expr_ir) = self.generate_expr(expr, counter)?;
+            ir.push_str(&expr_ir);
+
+            // Get return type from current function context
+            let ret_type = self.current_return_type.clone().unwrap_or(ResolvedType::I64);
+            let llvm_ty = self.type_to_llvm(&ret_type);
+
+            // For struct types, may need to load from pointer
+            if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
+                let loaded = format!("%ret.{}", counter);
+                *counter += 1;
+                ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, llvm_ty, llvm_ty, val));
+                ir.push_str(&format!("  ret {} {}\n", llvm_ty, loaded));
+            } else {
+                ir.push_str(&format!("  ret {} {}\n", llvm_ty, val));
+            }
+        } else {
+            ir.push_str("  ret void\n");
+        }
+
+        Ok(("void".to_string(), ir))
     }
 }

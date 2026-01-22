@@ -174,6 +174,9 @@ pub struct CodeGenerator {
     // Current function being compiled
     current_function: Option<String>,
 
+    // Current function's return type (for generating ret instructions in nested contexts)
+    current_return_type: Option<ResolvedType>,
+
     // Local variables in current function
     locals: HashMap<String, LocalVar>,
 
@@ -263,6 +266,7 @@ impl CodeGenerator {
             enums: HashMap::new(),
             unions: HashMap::new(),
             current_function: None,
+            current_return_type: None,
             locals: HashMap::new(),
             label_counter: 0,
             loop_stack: Vec::new(),
@@ -1264,6 +1268,9 @@ impl CodeGenerator {
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(ResolvedType::Unit);
 
+        // Store current return type for nested return statements
+        self.current_return_type = Some(ret_type.clone());
+
         let ret_llvm = self.type_to_llvm(&ret_type);
 
         // Build function definition with optional debug info reference
@@ -1345,6 +1352,7 @@ impl CodeGenerator {
         ir.push_str("}\n");
 
         self.current_function = None;
+        self.current_return_type = None;
         Ok(ir)
     }
 
@@ -1586,6 +1594,9 @@ impl CodeGenerator {
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(ResolvedType::Unit);
 
+        // Store current return type for nested return statements
+        self.current_return_type = Some(ret_type.clone());
+
         let ret_llvm = self.type_to_llvm(&ret_type);
 
         // Build method definition with optional debug info reference
@@ -1656,6 +1667,7 @@ impl CodeGenerator {
         ir.push_str("}\n");
 
         self.current_function = None;
+        self.current_return_type = None;
         Ok(ir)
     }
 
@@ -1921,8 +1933,23 @@ impl CodeGenerator {
             }
 
             Expr::Call { func, args } => {
-                // Check if this is an enum variant constructor (e.g., Some(42))
+                // Check if this is an enum variant constructor or builtin
                 if let Expr::Ident(name) = &func.node {
+                    // Handle str_to_ptr builtin: convert string pointer to i64
+                    if name == "str_to_ptr" {
+                        if args.len() != 1 {
+                            return Err(CodegenError::TypeError("str_to_ptr expects 1 argument".to_string()));
+                        }
+                        let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
+                        let mut ir = str_ir;
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = ptrtoint i8* {} to i64\n",
+                            result, str_val
+                        ));
+                        return Ok((result, ir));
+                    }
+
                     if let Some((enum_name, tag)) = self.get_tuple_variant_info(name) {
                         // This is a tuple enum variant constructor
                         let mut ir = String::new();
@@ -2709,9 +2736,23 @@ impl CodeGenerator {
 
                         let field_ty = &struct_info.fields[field_idx].1;
                         let llvm_ty = self.type_to_llvm(field_ty);
+
+                        // For struct-typed fields, val might be a pointer that needs to be loaded
+                        let val_to_store = if matches!(field_ty, ResolvedType::Named { .. }) && !self.is_expr_value(field_expr) {
+                            // Field value is a pointer to struct, need to load the value
+                            let loaded = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* {}\n",
+                                loaded, llvm_ty, llvm_ty, val
+                            ));
+                            loaded
+                        } else {
+                            val
+                        };
+
                         ir.push_str(&format!(
                             "  store {} {}, {}* {}\n",
-                            llvm_ty, val, llvm_ty, field_ptr
+                            llvm_ty, val_to_store, llvm_ty, field_ptr
                         ));
                     }
 
@@ -4246,10 +4287,13 @@ impl CodeGenerator {
                     return false;
                 }
                 if let Some(local) = self.locals.get(name) {
-                    // Struct/enum types are always pointers:
-                    // - Parameters: passed as pointers (%Struct* %param)
-                    // - Locals: stored as double-pointers (%Struct** %var)
-                    // Either way, generate_expr returns a pointer, not a value
+                    // Parameters are passed by value (even struct types)
+                    // so they produce values directly
+                    if local.is_param {
+                        return true;
+                    }
+                    // Struct/enum local variables are stored as double-pointers (%Struct** %var)
+                    // so generate_expr returns a pointer, not a value
                     !matches!(local.ty, ResolvedType::Named { .. })
                 } else {
                     true
