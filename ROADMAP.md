@@ -1006,6 +1006,97 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
+| Phase 10: Self-hosting | 🔄 진행 중 | 0% |
+
+---
+
+## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
+
+> **상태**: 🔄 진행 중 (0%)
+> **추가일**: 2026-01-22
+> **예상 기간**: 14-16주 (약 4개월)
+> **목표**: 완전한 self-hosting 달성 및 프로덕션 준비 생태계
+
+### Self-hosting 현황 (selfhost/)
+- ast.vais (1,191줄), parser.vais (2,189줄), type_checker.vais (1,762줄)
+- codegen.vais (1,785줄), lexer.vais (754줄), token.vais (309줄)
+- bootstrap_test.vais: 57개 테스트 통과
+- **누락**: main.vais (CLI 진입점)
+
+### P0 - 핵심 (1-2주) [Self-hosting 필수]
+- [ ] **Self-hosting CLI 구현** - selfhost/main.vais
+  - 명령줄 인자 파싱 (build, check, run, fmt)
+  - 파일 읽기/쓰기 통합
+  - 에러 출력 포맷팅
+- [ ] **Selfhost 모듈 시스템 개선**
+  - import 체인 구현 (상수 복사 → 실제 모듈 참조)
+  - StringPool 공유 메커니즘
+  - 순환 의존성 탐지
+- [ ] **Stage 1 부트스트래핑**
+  - Rust vaisc로 selfhost/*.vais 컴파일 → vaisc-stage1
+  - vaisc-stage1으로 examples/ 컴파일 검증
+
+### P1 - 높은 우선순위 (3-4주)
+- [ ] **Stage 2 부트스트래핑 검증**
+  - vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
+  - Stage 1 vs Stage 2 바이너리 출력 비교
+  - 3-way 검증 (Rust, Stage1, Stage2)
+- [ ] **에러 복구 개선**
+  - Panic-free 파싱 (파싱 에러 후 복구)
+  - Synchronization point 탐지
+  - ErrorNode AST 타입 추가
+- [ ] **Macro Runtime 통합**
+  - Parser → MacroExpander → TypeChecker 흐름
+  - 위생적 매크로 기본 지원
+  - `#[derive(...)]` 속성 매크로 프레임워크
+- [ ] **LSP 고도화**
+  - Inlay hints, Call hierarchy, Type hierarchy
+  - Folding ranges, Document links
+
+### P2 - 중간 우선순위 (4-6주)
+- [ ] **패키지 레지스트리 서버**
+  - REST API (/api/v1/packages, /api/v1/search)
+  - SQLite 기반 메타데이터 저장소
+  - 패키지 버전 관리 및 yanking
+- [ ] **문서 자동 생성 (vais doc)**
+  - Rustdoc 스타일 문서 생성기
+  - Markdown → HTML 변환
+  - std 라이브러리 API 문서화
+- [ ] **FFI 고도화**
+  - `extern "C"` 블록 문법
+  - 구조체 패딩/정렬 (repr(C))
+  - 가변 인자 함수, 콜백 포인터
+  - C 헤더 생성기 (cbindgen 스타일)
+- [ ] **컴파일러 성능 최적화**
+  - 병렬 타입 체킹 (rayon)
+  - 증분 컴파일 캐시 hit rate 개선
+  - 컴파일 시간 50% 단축 목표
+
+### P3 - 낮은 우선순위 (4-6주)
+- [ ] **퍼징 및 보안 테스트**
+  - AFL/libFuzzer 통합
+  - ASAN/MSAN/UBSAN 빌드 옵션
+  - OSS-Fuzz 통합 준비
+- [ ] **Trait Object 런타임 구현**
+  - dyn Trait vtable 생성
+  - 동적 디스패치 LLVM IR
+  - 트레이트 업캐스팅/다운캐스팅
+- [ ] **Async Runtime 개선**
+  - async trait 메서드
+  - select!/join! 매크로
+  - Cancellation token
+- [ ] **크로스 컴파일 완성**
+  - Linux ARM64, Windows MSVC
+  - iOS, Android, WASI preview2
+
+### P4 - 미래 (장기 목표)
+- [ ] **에디터 통합 확장** - Neovim/Helix/Emacs
+- [ ] **DAP 서버** - 디버그 어댑터 프로토콜
+- [ ] **Formal Verification** - requires/ensures 계약
+- [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API
+
+### 남은 작업
+- Self-hosting CLI (P0) 부터 시작
 
 ---
 
