@@ -1,9 +1,10 @@
 # HashMap - hash table with generic keys and values
 # Uses separate chaining for collision resolution
 # Updated to use Option<T> for error handling
-# Note: Currently hash() only supports i64 keys (all values stored as i64)
+# Supports generic key types via the Hash trait
 
 U std/option
+U std/hash
 
 # Helper function to initialize bucket array
 F hashmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
@@ -39,10 +40,9 @@ F hashmap_rehash_entries(self_ptr: i64, entry_ptr: i64) -> i64 {
         buckets := load_i64(self_ptr)      # offset 0
         cap := load_i64(self_ptr + 16)     # offset 16
 
-        # Hash and insert
-        h := key * 2654435769
-        h_abs := I h < 0 { 0 - h } E { h }
-        hash_idx := h_abs % cap
+        # Hash and insert using mult_hash for consistency
+        h := mult_hash(key)
+        hash_idx := h % cap
 
         # Get current head and insert at head
         old_head := load_i64(buckets + hash_idx * 8)
@@ -146,12 +146,13 @@ X HashMap<K, V> {
         I self.size == 0 { 1 } E { 0 }
     }
 
-    # Hash function for key (assumes i64-compatible key)
+    # Hash function for key
+    # Uses the mult_hash function from std/hash for i64 keys
+    # For other key types, the key value is treated as i64 (pointer or raw value)
     F hash(&self, key: K) -> i64 {
-        # Simple hash: multiply by golden ratio prime and take modulo
-        h := key * 2654435769
-        h_abs := I h < 0 { 0 - h } E { h }
-        h_abs % self.cap
+        # Use the generic mult_hash function for good distribution
+        h := mult_hash(key)
+        h % self.cap
     }
 
     # Get value for key, returns 0 if not found
@@ -347,10 +348,9 @@ F hashmap_rehash_entries_raw(m_buckets: i64, m_cap: i64, entry_ptr: i64) -> i64 
         value := load_i64(entry_ptr + 8)
         next := load_i64(entry_ptr + 16)
 
-        # Hash the key
-        h := key * 2654435769
-        h_abs := I h < 0 { 0 - h } E { h }
-        hash_idx := h_abs % m_cap
+        # Hash the key using mult_hash for consistency
+        h := mult_hash(key)
+        hash_idx := h % m_cap
 
         # Insert at head of bucket
         old_head := load_i64(m_buckets + hash_idx * 8)

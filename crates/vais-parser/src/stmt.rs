@@ -43,6 +43,10 @@ impl Parser {
         } else if self.check(&Token::Continue) {
             self.advance();
             Stmt::Continue
+        } else if self.check(&Token::Defer) {
+            self.advance();
+            let expr = Box::new(self.parse_expr()?);
+            Stmt::Defer(expr)
         } else if self.is_let_stmt() {
             self.parse_let_stmt()?
         } else {

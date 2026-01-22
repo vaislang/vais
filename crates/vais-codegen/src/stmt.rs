@@ -176,11 +176,20 @@ impl CodeGenerator {
                         val
                     };
 
+                    // Execute deferred expressions before return (LIFO order)
+                    let defer_ir = self.generate_defer_cleanup(counter)?;
+                    ir.push_str(&defer_ir);
+
                     // Emit the ret instruction
                     ir.push_str(&format!("  ret {} {}\n", ret_type, final_val));
                     Ok((final_val, ir))
                 } else {
-                    Ok(("void".to_string(), "  ret void\n".to_string()))
+                    // Execute deferred expressions before return (LIFO order)
+                    let mut ir = String::new();
+                    let defer_ir = self.generate_defer_cleanup(counter)?;
+                    ir.push_str(&defer_ir);
+                    ir.push_str("  ret void\n");
+                    Ok(("void".to_string(), ir))
                 }
             }
             Stmt::Break(value) => {
@@ -210,6 +219,35 @@ impl CodeGenerator {
                     Err(CodegenError::Unsupported("continue outside of loop".to_string()))
                 }
             }
+
+            Stmt::Defer(expr) => {
+                // Add the deferred expression to the stack
+                // It will be executed when the function exits (in LIFO order)
+                self.defer_stack.push(expr.as_ref().clone());
+                // No IR generated here - defer is processed at function exit
+                Ok(("void".to_string(), String::new()))
+            }
         }
+    }
+
+    /// Generate IR for all deferred expressions in LIFO order
+    /// Called before function exit points (return, end of function)
+    pub(crate) fn generate_defer_cleanup(&mut self, counter: &mut usize) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        // Process deferred expressions in reverse order (LIFO)
+        let defers: Vec<_> = self.defer_stack.iter().rev().cloned().collect();
+        for defer_expr in defers {
+            ir.push_str("  ; defer cleanup\n");
+            let (_, defer_ir) = self.generate_expr(&defer_expr, counter)?;
+            ir.push_str(&defer_ir);
+        }
+
+        Ok(ir)
+    }
+
+    /// Clear the defer stack (called when entering a new function)
+    pub(crate) fn clear_defer_stack(&mut self) {
+        self.defer_stack.clear();
     }
 }
