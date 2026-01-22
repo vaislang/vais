@@ -483,6 +483,16 @@ pub struct EnumDef {
     pub variants: HashMap<String, VariantFieldTypes>,
 }
 
+/// Union definition (untagged, C-style)
+/// All fields share the same memory location (offset 0).
+/// No runtime tag - caller is responsible for knowing which field is active.
+#[derive(Debug, Clone)]
+pub struct UnionDef {
+    pub name: String,
+    pub generics: Vec<String>,
+    pub fields: HashMap<String, ResolvedType>,
+}
+
 /// Variable info (internal to type checker)
 #[derive(Debug, Clone)]
 pub(crate) struct VarInfo {

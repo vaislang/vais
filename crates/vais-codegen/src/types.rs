@@ -32,6 +32,13 @@ pub(crate) struct EnumInfo {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct UnionInfo {
+    #[allow(dead_code)]
+    pub name: String,
+    pub fields: Vec<(String, ResolvedType)>,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct EnumVariantInfo {
     #[allow(dead_code)]
     pub name: String,
@@ -156,9 +163,9 @@ impl CodeGenerator {
                 if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                     "i64".to_string()
                 } else if !generics.is_empty() {
-                    // In Vais, all values are i64-sized, so struct/enum layout is the same
-                    // regardless of type arguments. Use base name for both enums and structs.
-                    if self.enums.contains_key(name) || self.structs.contains_key(name) {
+                    // In Vais, all values are i64-sized, so struct/enum/union layout is the same
+                    // regardless of type arguments. Use base name for enums, structs, and unions.
+                    if self.enums.contains_key(name) || self.structs.contains_key(name) || self.unions.contains_key(name) {
                         return format!("%{}", name);
                     }
 
@@ -178,7 +185,7 @@ impl CodeGenerator {
                         format!("%{}", name)
                     }
                 } else {
-                    // Non-generic struct - return struct type without pointer
+                    // Non-generic struct/enum/union - return type without pointer
                     format!("%{}", name)
                 }
             }
@@ -334,6 +341,49 @@ impl CodeGenerator {
                 name,
                 payload_types.join(", ")
             )
+        }
+    }
+
+    /// Generate LLVM union type definition (untagged, C-style)
+    /// All fields share the same memory location (offset 0).
+    /// The type is sized to the largest field.
+    pub(crate) fn generate_union_type(&self, name: &str, info: &UnionInfo) -> String {
+        // Find the largest field type (by estimated size)
+        let largest_type = info
+            .fields
+            .iter()
+            .map(|(_, ty)| self.type_to_llvm(ty))
+            .max_by_key(|s| self.estimate_type_size(s))
+            .unwrap_or_else(|| "i64".to_string());
+
+        format!("%{} = type {{ {} }}", name, largest_type)
+    }
+
+    /// Estimate the size of an LLVM type (for union layout)
+    fn estimate_type_size(&self, llvm_type: &str) -> usize {
+        match llvm_type {
+            "i1" => 1,
+            "i8" => 1,
+            "i16" => 2,
+            "i32" | "float" => 4,
+            "i64" | "double" | "i8*" => 8,
+            "i128" => 16,
+            s if s.ends_with('*') => 8, // pointers are 8 bytes on 64-bit
+            s if s.starts_with('<') => {
+                // SIMD vector type: <N x T>
+                // Parse and calculate
+                if let Some(rest) = s.strip_prefix('<') {
+                    if let Some(idx) = rest.find(" x ") {
+                        if let Ok(lanes) = rest[..idx].trim().parse::<usize>() {
+                            let elem_type = &rest[idx + 3..rest.len() - 1];
+                            return lanes * self.estimate_type_size(elem_type);
+                        }
+                    }
+                }
+                8 // fallback
+            }
+            s if s.starts_with('%') => 8, // Named types default to 8
+            _ => 8, // Default fallback
         }
     }
 }

@@ -85,6 +85,7 @@ impl Formatter {
             Item::Function(f) => self.format_function(f),
             Item::Struct(s) => self.format_struct(s),
             Item::Enum(e) => self.format_enum(e),
+            Item::Union(u) => self.format_union(u),
             Item::TypeAlias(t) => self.format_type_alias(t),
             Item::Use(u) => self.format_use(u),
             Item::Trait(t) => self.format_trait(t),
@@ -300,6 +301,47 @@ impl Formatter {
 
         self.pop_indent();
         self.output.push_str(&self.indent());
+        self.output.push_str("}\n");
+    }
+
+    /// Format a union (untagged, C-style)
+    fn format_union(&mut self, u: &Union) {
+        let indent = self.indent();
+
+        self.output.push_str(&indent);
+        if u.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("O ");
+        self.output.push_str(&u.name.node);
+
+        // Generics
+        if !u.generics.is_empty() {
+            self.output.push('<');
+            let mut first = true;
+            for g in &u.generics {
+                if !first {
+                    self.output.push_str(", ");
+                }
+                first = false;
+                self.output.push_str(&g.name.node);
+            }
+            self.output.push('>');
+        }
+
+        self.output.push_str(" {\n");
+        self.push_indent();
+
+        for field in &u.fields {
+            self.output.push_str(&self.indent());
+            self.output.push_str(&field.name.node);
+            self.output.push_str(": ");
+            self.output.push_str(&self.format_type(&field.ty.node));
+            self.output.push_str(",\n");
+        }
+
+        self.pop_indent();
+        self.output.push_str(&indent);
         self.output.push_str("}\n");
     }
 

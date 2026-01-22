@@ -57,6 +57,8 @@ pub enum Token {
     Impl,
     #[token("D", priority = 3)]
     Defer,
+    #[token("O", priority = 3)]
+    Union,
 
     // === Type Keywords ===
     #[token("mut")]
@@ -264,6 +266,7 @@ impl fmt::Display for Token {
             Token::Trait => write!(f, "W"),
             Token::Impl => write!(f, "X"),
             Token::Defer => write!(f, "D"),
+            Token::Union => write!(f, "O"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
             Token::SelfUpper => write!(f, "Self"),

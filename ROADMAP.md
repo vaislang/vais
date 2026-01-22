@@ -843,7 +843,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 17개 통합 테스트 추가
 
 ### P3 - 낮은 우선순위 (3-6개월)
-- [ ] **Union types** - Tagged union 외 untagged union 지원
+- [x] **Union types** - Tagged union 외 untagged union 지원 (완료일: 2026-01-22)
+  - `O` 키워드로 union 정의 (O = One-of/Overlay)
+  - 모든 필드 offset 0 (C union 스타일)
+  - 제네릭 union 지원 (O Either<L, R> { left: L, right: R })
+  - 메모리 레이아웃: 가장 큰 필드 타입 기준
+  - 필드 접근은 호출자 책임 (unsafe, 컴파일러가 활성 필드 추적 안함)
 - [ ] **Compile-time evaluation** - comptime 블록으로 컴파일 타임 계산
 - [ ] **Playground** - 웹 기반 Vais 실행 환경
 - [ ] **표준 라이브러리 확장** - Time, Random, UUID, Base64, URL 파서

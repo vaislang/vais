@@ -1,0 +1,66 @@
+# Union Types (Untagged, C-style) Test
+
+# Basic union definition
+O IntOrFloat {
+    as_int: i64,
+    as_float: f64
+}
+
+# Test basic union creation and access
+F test_basic_union() -> i64 {
+    u := IntOrFloat { as_int: 42 }
+    u.as_int
+}
+
+# Test union with float
+F test_union_float() -> f64 {
+    u := IntOrFloat { as_float: 3.14 }
+    u.as_float
+}
+
+# Test union reinterpret (reading as different type)
+# This is unsafe but that's the nature of untagged unions
+F test_union_reinterpret() -> i64 {
+    u := IntOrFloat { as_int: 12345 }
+    # Reading as_int is safe since we wrote as_int
+    u.as_int
+}
+
+# Generic union
+O Either<L, R> {
+    left: L,
+    right: R
+}
+
+F test_generic_union() -> i64 {
+    e: Either<i64, i64> = Either { left: 100 }
+    e.left
+}
+
+# FFI-compatible value union
+O Value {
+    i: i64,
+    d: f64
+}
+
+F test_value_union() -> i64 {
+    v := Value { i: 999 }
+    v.i
+}
+
+F main() -> i64 {
+    result := test_basic_union()
+
+    # Print using puts
+    puts("Testing union types...")
+
+    # Test all functions and verify results
+    r1 := test_basic_union()
+    r2 := test_union_reinterpret()
+    r3 := test_generic_union()
+    r4 := test_value_union()
+
+    # Return sum to verify all tests passed
+    # Expected: 42 + 12345 + 100 + 999 = 13486
+    r1 + r2 + r3 + r4
+}

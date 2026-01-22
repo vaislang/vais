@@ -85,6 +85,8 @@ pub enum Item {
     Struct(Struct),
     /// Enum definition: `E Name{variants}`
     Enum(Enum),
+    /// Union definition: `O Name{fields}` (untagged, C-style)
+    Union(Union),
     /// Type alias: `T Name=Type`
     TypeAlias(TypeAlias),
     /// Import statement: `U module` or `U module::{items}`
@@ -229,6 +231,18 @@ pub struct TypeAlias {
     pub name: Spanned<String>,
     pub generics: Vec<GenericParam>,
     pub ty: Spanned<Type>,
+    pub is_pub: bool,
+}
+
+/// Union definition (untagged, C-style)
+/// All fields share the same memory location (offset 0).
+/// Unlike tagged enums, there is no runtime tag - the caller is responsible
+/// for knowing which field is active.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Union {
+    pub name: Spanned<String>,
+    pub generics: Vec<GenericParam>,
+    pub fields: Vec<Field>,  // Reuse existing Field struct
     pub is_pub: bool,
 }
 

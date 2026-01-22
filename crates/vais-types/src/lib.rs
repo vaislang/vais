@@ -18,7 +18,7 @@ use vais_ast::*;
 // Re-export core types
 pub use types::{
     TypeError, TypeResult, ResolvedType, FunctionSig,
-    StructDef, EnumDef, VariantFieldTypes,
+    StructDef, EnumDef, VariantFieldTypes, UnionDef,
     // Monomorphization support
     GenericInstantiation, InstantiationKind,
     mangle_name, mangle_type, substitute_type,
@@ -53,6 +53,7 @@ pub struct TypeChecker {
     // Type environment
     structs: HashMap<String, StructDef>,
     enums: HashMap<String, EnumDef>,
+    unions: HashMap<String, UnionDef>,
     functions: HashMap<String, FunctionSig>,
     type_aliases: HashMap<String, ResolvedType>,
     traits: HashMap<String, TraitDef>,
@@ -97,6 +98,7 @@ impl TypeChecker {
         let mut checker = Self {
             structs: HashMap::new(),
             enums: HashMap::new(),
+            unions: HashMap::new(),
             functions: HashMap::new(),
             type_aliases: HashMap::new(),
             traits: HashMap::new(),
@@ -173,6 +175,11 @@ impl TypeChecker {
     /// Get the enum definition (for codegen)
     pub fn get_enum(&self, name: &str) -> Option<&EnumDef> {
         self.enums.get(name)
+    }
+
+    /// Get the union definition (for codegen)
+    pub fn get_union(&self, name: &str) -> Option<&UnionDef> {
+        self.unions.get(name)
     }
 
     /// Register built-in functions (libc wrappers)
@@ -931,6 +938,7 @@ impl TypeChecker {
                 Item::Function(f) => self.register_function(f)?,
                 Item::Struct(s) => self.register_struct(s)?,
                 Item::Enum(e) => self.register_enum(e)?,
+                Item::Union(u) => self.register_union(u)?,
                 Item::TypeAlias(t) => self.register_type_alias(t)?,
                 Item::Use(_use_stmt) => {
                     // Use statements are handled at the compiler level (AST merging)
@@ -1169,6 +1177,36 @@ impl TypeChecker {
                 name,
                 generics: e.generics.iter().map(|g| g.name.node.clone()).collect(),
                 variants,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Register a union (untagged, C-style)
+    fn register_union(&mut self, u: &Union) -> TypeResult<()> {
+        let name = u.name.node.clone();
+        if self.unions.contains_key(&name) {
+            return Err(TypeError::Duplicate(name, None));
+        }
+
+        // Set current generics for type resolution
+        let (prev_generics, prev_bounds) = self.set_generics(&u.generics);
+
+        let mut fields = HashMap::new();
+        for field in &u.fields {
+            fields.insert(field.name.node.clone(), self.resolve_type(&field.ty.node));
+        }
+
+        // Restore previous generics
+        self.restore_generics(prev_generics, prev_bounds);
+
+        self.unions.insert(
+            name.clone(),
+            UnionDef {
+                name,
+                generics: u.generics.iter().map(|g| g.name.node.clone()).collect(),
+                fields,
             },
         );
 
@@ -2009,8 +2047,15 @@ impl TypeChecker {
                 };
 
                 if let Some(name) = type_name {
+                    // Check struct fields
                     if let Some(struct_def) = self.structs.get(&name) {
                         if let Some(field_type) = struct_def.fields.get(&field.node) {
+                            return Ok(field_type.clone());
+                        }
+                    }
+                    // Check union fields
+                    if let Some(union_def) = self.unions.get(&name) {
+                        if let Some(field_type) = union_def.fields.get(&field.node) {
                             return Ok(field_type.clone());
                         }
                     }
@@ -2091,6 +2136,7 @@ impl TypeChecker {
             }
 
             Expr::StructLit { name, fields } => {
+                // First check for struct
                 if let Some(struct_def) = self.structs.get(&name.node).cloned() {
                     // Create fresh type variables for generic parameters
                     let generic_substitutions: HashMap<String, ResolvedType> = struct_def
@@ -2131,6 +2177,49 @@ impl TypeChecker {
                             self.add_instantiation(inst);
                         }
                     }
+
+                    Ok(ResolvedType::Named {
+                        name: name.node.clone(),
+                        generics: inferred_generics,
+                    })
+                // Then check for union (uses same syntax: `UnionName { field: value }`)
+                } else if let Some(union_def) = self.unions.get(&name.node).cloned() {
+                    // Create fresh type variables for generic parameters
+                    let generic_substitutions: HashMap<String, ResolvedType> = union_def
+                        .generics
+                        .iter()
+                        .map(|param| (param.clone(), self.fresh_type_var()))
+                        .collect();
+
+                    // Union literal should have exactly one field
+                    if fields.len() != 1 {
+                        return Err(TypeError::Mismatch {
+                            expected: "exactly one field for union initialization".to_string(),
+                            found: format!("{} fields", fields.len()),
+                            span: None,
+                        });
+                    }
+
+                    // Check the field
+                    let (field_name, value) = &fields[0];
+                    let value_type = self.check_expr(value)?;
+                    if let Some(expected_type) = union_def.fields.get(&field_name.node).cloned() {
+                        let expected_type = self.substitute_generics(&expected_type, &generic_substitutions);
+                        self.unify(&expected_type, &value_type)?;
+                    } else {
+                        return Err(TypeError::UndefinedVar(field_name.node.clone(), None));
+                    }
+
+                    // Apply substitutions to infer concrete generic types
+                    let inferred_generics: Vec<_> = union_def
+                        .generics
+                        .iter()
+                        .map(|param| {
+                            let ty = generic_substitutions.get(param)
+                                .expect("Internal compiler error: generic parameter should exist in substitutions map");
+                            self.apply_substitutions(ty)
+                        })
+                        .collect();
 
                     Ok(ResolvedType::Named {
                         name: name.node.clone(),

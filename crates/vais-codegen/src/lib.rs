@@ -168,6 +168,9 @@ pub struct CodeGenerator {
     // Enum definitions
     enums: HashMap<String, EnumInfo>,
 
+    // Union definitions (untagged, C-style)
+    unions: HashMap<String, UnionInfo>,
+
     // Current function being compiled
     current_function: Option<String>,
 
@@ -254,6 +257,7 @@ impl CodeGenerator {
             functions: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
+            unions: HashMap::new(),
             current_function: None,
             locals: HashMap::new(),
             label_counter: 0,
@@ -431,6 +435,7 @@ impl CodeGenerator {
                     }
                 }
                 Item::Enum(e) => self.register_enum(e)?,
+                Item::Union(u) => self.register_union(u)?,
                 Item::Impl(impl_block) => {
                     // Register impl methods
                     let type_name = match &impl_block.target_type.node {
@@ -460,6 +465,12 @@ impl CodeGenerator {
         // Generate enum types
         for (name, info) in &self.enums.clone() {
             ir.push_str(&self.generate_enum_type(&name, &info));
+            ir.push('\n');
+        }
+
+        // Generate union types
+        for (name, info) in &self.unions.clone() {
+            ir.push_str(&self.generate_union_type(&name, &info));
             ir.push('\n');
         }
 
@@ -502,7 +513,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {
                     // Already handled in first pass or no code generation needed
                 }
             }
@@ -609,6 +620,7 @@ impl CodeGenerator {
                     }
                 }
                 Item::Enum(e) => self.register_enum(e)?,
+                Item::Union(u) => self.register_union(u)?,
                 Item::Impl(impl_block) => {
                     let type_name = match &impl_block.target_type.node {
                         Type::Named { name, .. } => name.clone(),
@@ -640,6 +652,12 @@ impl CodeGenerator {
         // Generate enum types
         for (name, info) in &self.enums.clone() {
             ir.push_str(&self.generate_enum_type(&name, &info));
+            ir.push('\n');
+        }
+
+        // Generate union types
+        for (name, info) in &self.unions.clone() {
+            ir.push_str(&self.generate_union_type(&name, &info));
             ir.push('\n');
         }
 
@@ -693,7 +711,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {}
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) => {}
             }
         }
 
@@ -1093,6 +1111,27 @@ impl CodeGenerator {
             EnumInfo {
                 name: e.name.node.to_string(),
                 variants,
+            },
+        );
+
+        Ok(())
+    }
+
+    fn register_union(&mut self, u: &vais_ast::Union) -> CodegenResult<()> {
+        let fields: Vec<_> = u
+            .fields
+            .iter()
+            .map(|f| {
+                let ty = self.ast_type_to_resolved(&f.ty.node);
+                (f.name.node.to_string(), ty)
+            })
+            .collect();
+
+        self.unions.insert(
+            u.name.node.to_string(),
+            UnionInfo {
+                name: u.name.node.to_string(),
+                fields,
             },
         );
 
@@ -2404,11 +2443,12 @@ impl CodeGenerator {
                     let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
                     ir.push_str(&obj_ir);
 
-                    // Get struct info
+                    // Get struct or union info
                     if let Expr::Ident(var_name) = &obj_expr.node {
                         if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
-                            if let ResolvedType::Named { name: struct_name, .. } = &local.ty {
-                                if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                            if let ResolvedType::Named { name: type_name, .. } = &local.ty {
+                                // First check struct
+                                if let Some(struct_info) = self.structs.get(type_name).cloned() {
                                     if let Some(field_idx) = struct_info.fields.iter()
                                         .position(|(n, _)| n == &field.node)
                                     {
@@ -2418,7 +2458,26 @@ impl CodeGenerator {
                                         let field_ptr = self.next_temp(counter);
                                         ir.push_str(&format!(
                                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                                            field_ptr, struct_name, struct_name, obj_val, field_idx
+                                            field_ptr, type_name, type_name, obj_val, field_idx
+                                        ));
+                                        ir.push_str(&format!(
+                                            "  store {} {}, {}* {}\n",
+                                            llvm_ty, val, llvm_ty, field_ptr
+                                        ));
+                                    }
+                                }
+                                // Then check union
+                                else if let Some(union_info) = self.unions.get(type_name).cloned() {
+                                    if let Some((_, field_ty)) = union_info.fields.iter()
+                                        .find(|(n, _)| n == &field.node)
+                                    {
+                                        let llvm_ty = self.type_to_llvm(field_ty);
+
+                                        // For union, bitcast to field type pointer
+                                        let field_ptr = self.next_temp(counter);
+                                        ir.push_str(&format!(
+                                            "  {} = bitcast %{}* {} to {}*\n",
+                                            field_ptr, type_name, obj_val, llvm_ty
                                         ));
                                         ir.push_str(&format!(
                                             "  store {} {}, {}* {}\n",
@@ -2553,48 +2612,93 @@ impl CodeGenerator {
             }
 
             // Struct literal: Point{x:1, y:2}
+            // Also handles union literal: IntOrFloat{as_int: 42}
             Expr::StructLit { name, fields } => {
-                let struct_name = &name.node;
+                let type_name = &name.node;
 
-                // Look up struct info
-                let struct_info = self.structs.get(struct_name)
-                    .ok_or_else(|| CodegenError::TypeError(format!("Unknown struct: {}", struct_name)))?
-                    .clone();
+                // First check if it's a struct
+                if let Some(struct_info) = self.structs.get(type_name).cloned() {
+                    let mut ir = String::new();
 
-                let mut ir = String::new();
+                    // Allocate struct on stack
+                    let struct_ptr = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, type_name));
 
-                // Allocate struct on stack
-                let struct_ptr = self.next_temp(counter);
-                ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, struct_name));
+                    // Store each field
+                    for (field_name, field_expr) in fields {
+                        // Find field index
+                        let field_idx = struct_info.fields.iter()
+                            .position(|(n, _)| n == &field_name.node)
+                            .ok_or_else(|| CodegenError::TypeError(format!(
+                                "Unknown field '{}' in struct '{}'", field_name.node, type_name
+                            )))?;
 
-                // Store each field
-                for (field_name, field_expr) in fields {
-                    // Find field index
-                    let field_idx = struct_info.fields.iter()
-                        .position(|(n, _)| n == &field_name.node)
+                        let (val, field_ir) = self.generate_expr(field_expr, counter)?;
+                        ir.push_str(&field_ir);
+
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                            field_ptr, type_name, type_name, struct_ptr, field_idx
+                        ));
+
+                        let field_ty = &struct_info.fields[field_idx].1;
+                        let llvm_ty = self.type_to_llvm(field_ty);
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* {}\n",
+                            llvm_ty, val, llvm_ty, field_ptr
+                        ));
+                    }
+
+                    // Return pointer to struct
+                    Ok((struct_ptr, ir))
+                // Then check if it's a union
+                } else if let Some(union_info) = self.unions.get(type_name).cloned() {
+                    let mut ir = String::new();
+
+                    // Allocate union on stack
+                    let union_ptr = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = alloca %{}\n", union_ptr, type_name));
+
+                    // Union should have exactly one field in the literal
+                    if fields.len() != 1 {
+                        return Err(CodegenError::TypeError(format!(
+                            "Union literal should have exactly one field, got {}", fields.len()
+                        )));
+                    }
+
+                    let (field_name, field_expr) = &fields[0];
+
+                    // Find field type
+                    let field_ty = union_info.fields.iter()
+                        .find(|(n, _)| n == &field_name.node)
+                        .map(|(_, ty)| ty.clone())
                         .ok_or_else(|| CodegenError::TypeError(format!(
-                            "Unknown field '{}' in struct '{}'", field_name.node, struct_name
+                            "Unknown field '{}' in union '{}'", field_name.node, type_name
                         )))?;
 
                     let (val, field_ir) = self.generate_expr(field_expr, counter)?;
                     ir.push_str(&field_ir);
 
+                    // Bitcast union pointer to field type pointer (all fields at offset 0)
+                    let field_llvm_ty = self.type_to_llvm(&field_ty);
                     let field_ptr = self.next_temp(counter);
                     ir.push_str(&format!(
-                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                        field_ptr, struct_name, struct_name, struct_ptr, field_idx
+                        "  {} = bitcast %{}* {} to {}*\n",
+                        field_ptr, type_name, union_ptr, field_llvm_ty
                     ));
 
-                    let field_ty = &struct_info.fields[field_idx].1;
-                    let llvm_ty = self.type_to_llvm(field_ty);
+                    // Store the value
                     ir.push_str(&format!(
                         "  store {} {}, {}* {}\n",
-                        llvm_ty, val, llvm_ty, field_ptr
+                        field_llvm_ty, val, field_llvm_ty, field_ptr
                     ));
-                }
 
-                // Return pointer to struct
-                Ok((struct_ptr, ir))
+                    // Return pointer to union
+                    Ok((union_ptr, ir))
+                } else {
+                    Err(CodegenError::TypeError(format!("Unknown struct or union: {}", type_name)))
+                }
             }
 
             // Index: arr[idx] or slice: arr[start..end]
@@ -2632,15 +2736,16 @@ impl CodeGenerator {
                 let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
                 let mut ir = obj_ir;
 
-                // Try to find struct info based on variable name
+                // Try to find struct or union info based on variable name
                 if let Expr::Ident(var_name) = &obj_expr.node {
                     if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
-                        if let ResolvedType::Named { name: struct_name, .. } = &local.ty {
-                            if let Some(struct_info) = self.structs.get(struct_name).cloned() {
+                        if let ResolvedType::Named { name: type_name, .. } = &local.ty {
+                            // First check if it's a struct
+                            if let Some(struct_info) = self.structs.get(type_name).cloned() {
                                 let field_idx = struct_info.fields.iter()
                                     .position(|(n, _)| n == &field.node)
                                     .ok_or_else(|| CodegenError::TypeError(format!(
-                                        "Unknown field '{}' in struct '{}'", field.node, struct_name
+                                        "Unknown field '{}' in struct '{}'", field.node, type_name
                                     )))?;
 
                                 let field_ty = &struct_info.fields[field_idx].1;
@@ -2650,7 +2755,34 @@ impl CodeGenerator {
                                 let field_ptr = self.next_temp(counter);
                                 ir.push_str(&format!(
                                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                                    field_ptr, struct_name, struct_name, obj_val, field_idx
+                                    field_ptr, type_name, type_name, obj_val, field_idx
+                                ));
+
+                                let result = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = load {}, {}* {}\n",
+                                    result, llvm_ty, llvm_ty, field_ptr
+                                ));
+
+                                return Ok((result, ir));
+                            }
+                            // Then check if it's a union
+                            else if let Some(union_info) = self.unions.get(type_name).cloned() {
+                                let field_ty = union_info.fields.iter()
+                                    .find(|(n, _)| n == &field.node)
+                                    .map(|(_, ty)| ty.clone())
+                                    .ok_or_else(|| CodegenError::TypeError(format!(
+                                        "Unknown field '{}' in union '{}'", field.node, type_name
+                                    )))?;
+
+                                let llvm_ty = self.type_to_llvm(&field_ty);
+
+                                // For union field access, bitcast union pointer to field type pointer
+                                // All fields share offset 0
+                                let field_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = bitcast %{}* {} to {}*\n",
+                                    field_ptr, type_name, obj_val, llvm_ty
                                 ));
 
                                 let result = self.next_temp(counter);
@@ -2665,7 +2797,7 @@ impl CodeGenerator {
                     }
                 }
 
-                Err(CodegenError::Unsupported("field access requires known struct type".to_string()))
+                Err(CodegenError::Unsupported("field access requires known struct or union type".to_string()))
             }
 
             // Method call: obj.method(args)

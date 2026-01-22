@@ -139,6 +139,9 @@ impl Parser {
         } else if self.check(&Token::Enum) {
             self.advance();
             Item::Enum(self.parse_enum(is_pub)?)
+        } else if self.check(&Token::Union) {
+            self.advance();
+            Item::Union(self.parse_union(is_pub)?)
         } else if self.check(&Token::TypeKeyword) {
             self.advance();
             Item::TypeAlias(self.parse_type_alias(is_pub)?)
@@ -155,7 +158,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
-                expected: "F, S, E, T, U, W, or X".into(),
+                expected: "F, S, E, O, T, U, W, or X".into(),
             });
         };
 
@@ -348,6 +351,31 @@ impl Parser {
         };
 
         Ok(Variant { name, fields })
+    }
+
+    /// Parse union: `Name{fields}` (untagged union, C-style)
+    fn parse_union(&mut self, is_pub: bool) -> ParseResult<Union> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+
+        self.expect(&Token::LBrace)?;
+        let mut fields = Vec::new();
+
+        while !self.check(&Token::RBrace) && !self.is_at_end() {
+            fields.push(self.parse_field()?);
+            if !self.check(&Token::RBrace) {
+                self.expect(&Token::Comma)?;
+            }
+        }
+
+        self.expect(&Token::RBrace)?;
+
+        Ok(Union {
+            name,
+            generics,
+            fields,
+            is_pub,
+        })
     }
 
     /// Parse type alias: `Name=Type`
