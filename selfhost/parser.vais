@@ -881,10 +881,12 @@ X Parser {
             # Block body: { stmts }
             @.advance()
             body_stmts := @.parse_block_contents()
+            # Length is stored at body_stmts - 8
+            body_stmts_len := load_i64(body_stmts - 8)
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
             store_i64(func_ptr + 48, 1)  # body_kind = block
             store_i64(func_ptr + 64, body_stmts)  # body_stmts_ptr
-            # body_stmts_len is stored during parse_block_contents
+            store_i64(func_ptr + 72, body_stmts_len)  # body_stmts_len
             0
         } E {
             @.set_error_expected(TOK_EQ())
@@ -1063,9 +1065,11 @@ X Parser {
                 } E I @.check(TOK_LBRACE()) == 1 {
                     @.advance()
                     body_stmts := @.parse_block_contents()
+                    body_stmts_len := load_i64(body_stmts - 8)
                     I @.expect(TOK_RBRACE()) == 0 { B }
                     store_i64(method_ptr + 48, 1)
                     store_i64(method_ptr + 64, body_stmts)
+                    store_i64(method_ptr + 72, body_stmts_len)
                     0
                 } E {
                     @.set_error_expected(TOK_EQ())
@@ -1256,7 +1260,10 @@ X Parser {
     # =========== Parse Block Contents ===========
 
     F parse_block_contents(&self) -> i64 {
-        stmts_ptr := malloc(64 * StmtNode.size())
+        # Allocate: 8 bytes for length + array data
+        # Layout: [len (8 bytes)][stmt0 (56 bytes)][stmt1 (56 bytes)]...
+        buffer := malloc(8 + 64 * StmtNode.size())
+        stmts_ptr := buffer + 8
         stmts_len: mut i64 = 0
 
         L {
@@ -1273,6 +1280,8 @@ X Parser {
             } E { 0 }
         }
 
+        # Store length at buffer start (stmts_ptr - 8)
+        store_i64(buffer, stmts_len)
         stmts_ptr
     }
 
@@ -1913,6 +1922,7 @@ X Parser {
 
             I @.expect(TOK_LBRACE()) == 0 { R 0 }
             then_stmts := @.parse_block_contents()
+            then_len := load_i64(then_stmts - 8)
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
 
             else_ptr: mut i64 = 0
@@ -1921,12 +1931,12 @@ X Parser {
                 I @.check(TOK_KW_I()) == 1 {
                     # else if
                     else_if_expr := @.parse_primary()  # Recursive if
-                    # TODO: properly handle else-if chain
                     else_ptr = else_if_expr
                     0
                 } E I @.check(TOK_LBRACE()) == 1 {
                     @.advance()
                     else_stmts := @.parse_block_contents()
+                    else_len := load_i64(else_stmts - 8)
                     I @.expect(TOK_RBRACE()) == 0 { R 0 }
 
                     # Create IfElse for else block
@@ -1934,7 +1944,7 @@ X Parser {
                     store_i64(else_node + 0, 0)  # kind = else
                     store_i64(else_node + 8, 0)
                     store_i64(else_node + 16, else_stmts)
-                    store_i64(else_node + 24, 0)  # stmts_len TODO
+                    store_i64(else_node + 24, else_len)
                     store_i64(else_node + 32, 0)
                     else_ptr = else_node
                     0
@@ -1947,7 +1957,7 @@ X Parser {
             store_i64(expr_ptr + 16, @.current_span_start())
             store_i64(expr_ptr + 24, cond)
             store_i64(expr_ptr + 32, then_stmts)
-            store_i64(expr_ptr + 40, 0)  # then_len TODO
+            store_i64(expr_ptr + 40, then_len)
             store_i64(expr_ptr + 48, else_ptr)
             store_i64(expr_ptr + 56, 0)
             store_i64(expr_ptr + 64, 0)
@@ -1960,6 +1970,7 @@ X Parser {
 
             I @.expect(TOK_LBRACE()) == 0 { R 0 }
             body_stmts := @.parse_block_contents()
+            body_len := load_i64(body_stmts - 8)
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
 
             expr_ptr := malloc(ExprNode.size())
@@ -1969,7 +1980,7 @@ X Parser {
             store_i64(expr_ptr + 24, 0)  # pattern
             store_i64(expr_ptr + 32, 0)  # iter
             store_i64(expr_ptr + 40, body_stmts)
-            store_i64(expr_ptr + 48, 0)  # body_len
+            store_i64(expr_ptr + 48, body_len)
             store_i64(expr_ptr + 56, 0)
             store_i64(expr_ptr + 64, 0)
             R expr_ptr
@@ -1987,6 +1998,7 @@ X Parser {
         I @.check(TOK_LBRACE()) == 1 {
             @.advance()
             stmts := @.parse_block_contents()
+            stmts_len := load_i64(stmts - 8)
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
 
             expr_ptr := malloc(ExprNode.size())
@@ -1994,7 +2006,7 @@ X Parser {
             store_i64(expr_ptr + 8, start)
             store_i64(expr_ptr + 16, @.current_span_start())
             store_i64(expr_ptr + 24, stmts)
-            store_i64(expr_ptr + 32, 0)  # stmts_len
+            store_i64(expr_ptr + 32, stmts_len)
             store_i64(expr_ptr + 40, 0)
             store_i64(expr_ptr + 48, 0)
             store_i64(expr_ptr + 56, 0)
