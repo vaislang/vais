@@ -892,6 +892,68 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ---
 
+## 🚀 Phase 9: 언어 완성도 및 생산성 향상
+
+> **상태**: 🔄 진행 중 (0%)
+> **추가일**: 2026-01-22
+> **예상 기간**: 12주 (약 3개월)
+
+### P0 - 핵심 (1-2주)
+- [ ] **Bidirectional Type Checking** - 재귀 함수 자동 타입 추론 개선
+  - 현재: 재귀 함수는 반환 타입 어노테이션 필수
+  - 목표: 양방향 타입 체크로 어노테이션 최소화
+  - 참조: Hindley-Milner + bidirectional checking
+- [ ] **Dynamic Dispatch (dyn Trait)** - Rust 스타일 vtable 기반 동적 디스패치
+  - `dyn Trait` 문법 추가
+  - 런타임 vtable 생성 및 메서드 호출
+  - trait object 지원
+
+### P1 - 중요 (3-4주)
+- [ ] **Macro System** - 선언적 매크로 지원
+  - `macro!` 키워드로 매크로 정의
+  - 토큰 패턴 매칭 및 치환
+  - 반복 패턴 ($(...),+) 지원
+- [ ] **Thread 모듈** - 멀티스레딩 지원 (`std/thread.vais`)
+  - thread_spawn, thread_join
+  - thread_sleep, thread_yield
+  - 스레드 로컬 스토리지
+- [ ] **Sync 모듈** - 동기화 프리미티브 (`std/sync.vais`)
+  - Mutex<T>, RwLock<T>
+  - Channel<T> (MPSC)
+  - AtomicI64, AtomicBool
+- [ ] **Http 모듈** - HTTP 클라이언트/서버 (`std/http.vais`)
+  - HttpClient: get, post, put, delete
+  - HttpServer: 간단한 라우터, 요청 핸들러
+  - JSON 바디 자동 파싱
+
+### P2 - 개선 (2-3주)
+- [ ] **LTO (Link-Time Optimization)** - LLVM LTO 플래그 통합
+  - CLI `--lto` 옵션 추가
+  - ThinLTO / FullLTO 지원
+  - 크로스 모듈 인라이닝
+- [ ] **Profile-Guided Optimization** - PGO 지원
+  - 프로파일 데이터 수집 (`--profile-generate`)
+  - 프로파일 기반 최적화 (`--profile-use`)
+- [ ] **Incremental Build 고도화** - 의존성 캐싱 개선
+  - 모듈별 해시 캐싱
+  - 변경된 함수만 재컴파일
+
+### P3 - 경험 (1-2주)
+- [ ] **Profiler 통합** - 성능 프로파일링 도구
+  - flame graph 생성
+  - CPU/메모리 사용량 추적
+  - CLI `vaisc profile <binary>` 명령어
+- [ ] **Test Framework 개선** - 테스트 작성 편의성 향상
+  - `#[test]` 속성으로 테스트 함수 표시
+  - `#[should_panic]` 속성
+  - 파라미터화된 테스트 지원
+  - `assert_eq!`, `assert_ne!` 매크로
+
+### 남은 작업
+- (P0-P3 모두 미완료)
+
+---
+
 ## 📊 진행률 요약
 
 | Phase | 상태 | 진행률 |
@@ -903,7 +965,8 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 5: 품질 개선 | ✅ 완료 | 100% |
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
-| Phase 8: 생산성 향상 | ✅ 완료 | 100% (P0-P3 완료) |
+| Phase 8: 생산성 향상 | ✅ 완료 | 100% |
+| Phase 9: 언어 완성도 | 🔄 진행 중 | 0% |
 
 ---
 
