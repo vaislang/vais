@@ -1,0 +1,827 @@
+# Test Framework - Built-in testing support for Vais
+# Provides assertions, test discovery, and test running
+
+# ============================================
+# Constants
+# ============================================
+
+C TEST_PASSED: i64 = 0
+C TEST_FAILED: i64 = 1
+C TEST_SKIPPED: i64 = 2
+C TEST_TIMEOUT: i64 = 3
+
+C MAX_TESTS: i64 = 1024
+C DEFAULT_TIMEOUT_MS: i64 = 30000
+
+# ANSI color codes
+C COLOR_RESET: str = "\x1b[0m"
+C COLOR_GREEN: str = "\x1b[32m"
+C COLOR_RED: str = "\x1b[31m"
+C COLOR_YELLOW: str = "\x1b[33m"
+C COLOR_BLUE: str = "\x1b[34m"
+C COLOR_GRAY: str = "\x1b[90m"
+
+# ============================================
+# Test Result
+# ============================================
+
+S TestResult {
+    name: str,
+    status: i64,
+    message: str,
+    duration_ns: i64,
+    file: str,
+    line: i64
+}
+
+X TestResult {
+    F new(name: str, status: i64, message: str, duration_ns: i64) -> TestResult {
+        TestResult {
+            name: name,
+            status: status,
+            message: message,
+            duration_ns: duration_ns,
+            file: "",
+            line: 0
+        }
+    }
+
+    F passed(name: str, duration_ns: i64) -> TestResult {
+        TestResult::new(name, TEST_PASSED, "", duration_ns)
+    }
+
+    F failed(name: str, message: str, duration_ns: i64) -> TestResult {
+        TestResult::new(name, TEST_FAILED, message, duration_ns)
+    }
+
+    F skipped(name: str, reason: str) -> TestResult {
+        TestResult::new(name, TEST_SKIPPED, reason, 0)
+    }
+
+    F is_passed(&self) -> i64 {
+        self.status == TEST_PASSED
+    }
+
+    F is_failed(&self) -> i64 {
+        self.status == TEST_FAILED
+    }
+
+    F is_skipped(&self) -> i64 {
+        self.status == TEST_SKIPPED
+    }
+
+    F with_location(&self, file: str, line: i64) -> TestResult {
+        self.file = file
+        self.line = line
+        self
+    }
+}
+
+# ============================================
+# Test Case
+# ============================================
+
+S TestCase {
+    name: str,
+    fn_ptr: i64,       # Test function pointer
+    setup_fn: i64,     # Optional setup function
+    teardown_fn: i64,  # Optional teardown function
+    timeout_ms: i64,
+    should_panic: i64, # Expected to panic?
+    skip: i64,         # Skip this test?
+    skip_reason: str,
+    tags: i64,         # Pointer to tags array
+    tag_count: i64
+}
+
+X TestCase {
+    F new(name: str, fn_ptr: i64) -> TestCase {
+        TestCase {
+            name: name,
+            fn_ptr: fn_ptr,
+            setup_fn: 0,
+            teardown_fn: 0,
+            timeout_ms: DEFAULT_TIMEOUT_MS,
+            should_panic: 0,
+            skip: 0,
+            skip_reason: "",
+            tags: 0,
+            tag_count: 0
+        }
+    }
+
+    # Set setup function
+    F with_setup(&self, setup_fn: i64) -> TestCase {
+        self.setup_fn = setup_fn
+        self
+    }
+
+    # Set teardown function
+    F with_teardown(&self, teardown_fn: i64) -> TestCase {
+        self.teardown_fn = teardown_fn
+        self
+    }
+
+    # Set timeout
+    F with_timeout(&self, timeout_ms: i64) -> TestCase {
+        self.timeout_ms = timeout_ms
+        self
+    }
+
+    # Mark as should_panic test
+    F should_panic(&self) -> TestCase {
+        self.should_panic = 1
+        self
+    }
+
+    # Skip this test
+    F skip(&self, reason: str) -> TestCase {
+        self.skip = 1
+        self.skip_reason = reason
+        self
+    }
+
+    # Add a tag
+    F tag(&self, tag: str) -> TestCase {
+        L self.tags == 0 {
+            self.tags = __malloc(64 * 8)  # 64 tags max
+        }
+        L self.tag_count < 64 {
+            __store_ptr(self.tags + self.tag_count * 8, tag as i64)
+            self.tag_count = self.tag_count + 1
+        }
+        self
+    }
+
+    # Check if test has a specific tag
+    F has_tag(&self, tag: str) -> i64 {
+        i := 0
+        L i < self.tag_count {
+            t := __load_ptr(self.tags + i * 8) as str
+            L __str_eq(t, tag) == 1 {
+                R 1
+            }
+            i = i + 1
+        }
+        0
+    }
+
+    # Run the test
+    F run(&self) -> TestResult {
+        L self.skip == 1 {
+            R TestResult::skipped(self.name, self.skip_reason)
+        }
+
+        # Run setup
+        L self.setup_fn != 0 {
+            __call_fn(self.setup_fn)
+        }
+
+        start_time := __time_now_ns()
+        result := 0
+        message := ""
+        panicked := 0
+
+        # Run test with panic handling
+        panicked = __try_call_fn(self.fn_ptr, &result as i64)
+
+        duration := __time_now_ns() - start_time
+
+        # Run teardown (even if test failed)
+        L self.teardown_fn != 0 {
+            __call_fn(self.teardown_fn)
+        }
+
+        # Check result
+        L self.should_panic == 1 {
+            # Expected to panic
+            L panicked == 1 {
+                TestResult::passed(self.name, duration)
+            } ! {
+                TestResult::failed(self.name, "Expected panic but test completed normally", duration)
+            }
+        } ! {
+            # Normal test
+            L panicked == 1 {
+                TestResult::failed(self.name, "Test panicked", duration)
+            } EL result != 0 {
+                TestResult::failed(self.name, "Assertion failed", duration)
+            } ! {
+                TestResult::passed(self.name, duration)
+            }
+        }
+    }
+}
+
+# ============================================
+# Test Suite
+# ============================================
+
+S TestSuite {
+    name: str,
+    tests: i64,        # Array of TestCase
+    test_count: i64,
+    capacity: i64,
+    before_all_fn: i64,
+    after_all_fn: i64,
+    before_each_fn: i64,
+    after_each_fn: i64
+}
+
+X TestSuite {
+    F new(name: str) -> TestSuite {
+        capacity := 64
+        TestSuite {
+            name: name,
+            tests: __malloc(capacity * 88),  # Approx TestCase size
+            test_count: 0,
+            capacity: capacity,
+            before_all_fn: 0,
+            after_all_fn: 0,
+            before_each_fn: 0,
+            after_each_fn: 0
+        }
+    }
+
+    # Add a test case
+    F add(&self, test: TestCase) -> TestSuite {
+        L self.test_count >= self.capacity {
+            new_capacity := self.capacity * 2
+            new_tests := __malloc(new_capacity * 88)
+            __memcpy(new_tests, self.tests, self.test_count * 88)
+            __free(self.tests)
+            self.tests = new_tests
+            self.capacity = new_capacity
+        }
+
+        __store_test_case(self.tests + self.test_count * 88, &test)
+        self.test_count = self.test_count + 1
+        self
+    }
+
+    # Add a simple test
+    F test(&self, name: str, fn_ptr: i64) -> TestSuite {
+        self.add(TestCase::new(name, fn_ptr))
+    }
+
+    # Set before_all hook
+    F before_all(&self, fn_ptr: i64) -> TestSuite {
+        self.before_all_fn = fn_ptr
+        self
+    }
+
+    # Set after_all hook
+    F after_all(&self, fn_ptr: i64) -> TestSuite {
+        self.after_all_fn = fn_ptr
+        self
+    }
+
+    # Set before_each hook
+    F before_each(&self, fn_ptr: i64) -> TestSuite {
+        self.before_each_fn = fn_ptr
+        self
+    }
+
+    # Set after_each hook
+    F after_each(&self, fn_ptr: i64) -> TestSuite {
+        self.after_each_fn = fn_ptr
+        self
+    }
+
+    # Run all tests in the suite
+    F run(&self) -> TestSuiteResult {
+        results := TestSuiteResult::new(self.name)
+
+        # before_all
+        L self.before_all_fn != 0 {
+            __call_fn(self.before_all_fn)
+        }
+
+        i := 0
+        L i < self.test_count {
+            test := __load_test_case(self.tests + i * 88)
+
+            # before_each
+            L self.before_each_fn != 0 {
+                __call_fn(self.before_each_fn)
+            }
+
+            result := test.run()
+            results.add(result)
+
+            # after_each
+            L self.after_each_fn != 0 {
+                __call_fn(self.after_each_fn)
+            }
+
+            i = i + 1
+        }
+
+        # after_all
+        L self.after_all_fn != 0 {
+            __call_fn(self.after_all_fn)
+        }
+
+        results
+    }
+
+    # Run tests matching a filter
+    F run_filtered(&self, filter: str) -> TestSuiteResult {
+        results := TestSuiteResult::new(self.name)
+
+        L self.before_all_fn != 0 {
+            __call_fn(self.before_all_fn)
+        }
+
+        i := 0
+        L i < self.test_count {
+            test := __load_test_case(self.tests + i * 88)
+
+            # Check if test name contains filter
+            L __str_contains(test.name, filter) == 1 {
+                L self.before_each_fn != 0 {
+                    __call_fn(self.before_each_fn)
+                }
+
+                result := test.run()
+                results.add(result)
+
+                L self.after_each_fn != 0 {
+                    __call_fn(self.after_each_fn)
+                }
+            }
+
+            i = i + 1
+        }
+
+        L self.after_all_fn != 0 {
+            __call_fn(self.after_all_fn)
+        }
+
+        results
+    }
+
+    # Run tests with specific tag
+    F run_tagged(&self, tag: str) -> TestSuiteResult {
+        results := TestSuiteResult::new(self.name)
+
+        i := 0
+        L i < self.test_count {
+            test := __load_test_case(self.tests + i * 88)
+
+            L test.has_tag(tag) == 1 {
+                result := test.run()
+                results.add(result)
+            }
+
+            i = i + 1
+        }
+
+        results
+    }
+}
+
+# ============================================
+# Test Suite Result
+# ============================================
+
+S TestSuiteResult {
+    suite_name: str,
+    results: i64,      # Array of TestResult
+    result_count: i64,
+    capacity: i64,
+    passed: i64,
+    failed: i64,
+    skipped: i64,
+    total_duration_ns: i64
+}
+
+X TestSuiteResult {
+    F new(suite_name: str) -> TestSuiteResult {
+        capacity := 256
+        TestSuiteResult {
+            suite_name: suite_name,
+            results: __malloc(capacity * 48),  # Approx TestResult size
+            result_count: 0,
+            capacity: capacity,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+            total_duration_ns: 0
+        }
+    }
+
+    # Add a result
+    F add(&self, result: TestResult) -> i64 {
+        L self.result_count >= self.capacity {
+            new_capacity := self.capacity * 2
+            new_results := __malloc(new_capacity * 48)
+            __memcpy(new_results, self.results, self.result_count * 48)
+            __free(self.results)
+            self.results = new_results
+            self.capacity = new_capacity
+        }
+
+        __store_test_result(self.results + self.result_count * 48, &result)
+        self.result_count = self.result_count + 1
+
+        M result.status {
+            0 => { self.passed = self.passed + 1 },
+            1 => { self.failed = self.failed + 1 },
+            2 => { self.skipped = self.skipped + 1 },
+            _ => {}
+        }
+
+        self.total_duration_ns = self.total_duration_ns + result.duration_ns
+        0
+    }
+
+    # Get total test count
+    F total(&self) -> i64 {
+        self.result_count
+    }
+
+    # Check if all tests passed
+    F all_passed(&self) -> i64 {
+        self.failed == 0
+    }
+
+    # Print summary
+    F print_summary(&self) -> i64 {
+        __print_str("\n")
+        __print_str(COLOR_BLUE)
+        __print_str("Test Suite: ")
+        __print_str(self.suite_name)
+        __print_str(COLOR_RESET)
+        __print_str("\n")
+        __print_str("─────────────────────────────────────\n")
+
+        i := 0
+        L i < self.result_count {
+            result := __load_test_result(self.results + i * 48)
+
+            M result.status {
+                0 => {
+                    __print_str(COLOR_GREEN)
+                    __print_str("✓ ")
+                    __print_str(COLOR_RESET)
+                },
+                1 => {
+                    __print_str(COLOR_RED)
+                    __print_str("✗ ")
+                    __print_str(COLOR_RESET)
+                },
+                2 => {
+                    __print_str(COLOR_YELLOW)
+                    __print_str("○ ")
+                    __print_str(COLOR_RESET)
+                },
+                _ => {
+                    __print_str("? ")
+                }
+            }
+
+            __print_str(result.name)
+
+            L result.status == TEST_PASSED {
+                __print_str(COLOR_GRAY)
+                __print_str(" (")
+                __print_i64(result.duration_ns / 1000)
+                __print_str("μs)")
+                __print_str(COLOR_RESET)
+            }
+
+            L result.status == TEST_FAILED {
+                __print_str(COLOR_RED)
+                __print_str(" - ")
+                __print_str(result.message)
+                __print_str(COLOR_RESET)
+            }
+
+            L result.status == TEST_SKIPPED {
+                __print_str(COLOR_YELLOW)
+                __print_str(" - ")
+                __print_str(result.message)
+                __print_str(COLOR_RESET)
+            }
+
+            __print_str("\n")
+            i = i + 1
+        }
+
+        __print_str("─────────────────────────────────────\n")
+        __print_str("Results: ")
+
+        L self.passed > 0 {
+            __print_str(COLOR_GREEN)
+            __print_i64(self.passed)
+            __print_str(" passed")
+            __print_str(COLOR_RESET)
+        }
+
+        L self.failed > 0 {
+            __print_str(", ")
+            __print_str(COLOR_RED)
+            __print_i64(self.failed)
+            __print_str(" failed")
+            __print_str(COLOR_RESET)
+        }
+
+        L self.skipped > 0 {
+            __print_str(", ")
+            __print_str(COLOR_YELLOW)
+            __print_i64(self.skipped)
+            __print_str(" skipped")
+            __print_str(COLOR_RESET)
+        }
+
+        __print_str("\n")
+        __print_str("Total time: ")
+        __print_i64(self.total_duration_ns / 1000000)
+        __print_str("ms\n\n")
+
+        0
+    }
+}
+
+# ============================================
+# Assertion Functions
+# ============================================
+
+# Assert that a condition is true
+F assert(condition: i64) -> i64 {
+    L condition == 0 {
+        __panic("Assertion failed")
+    }
+    0
+}
+
+# Assert that a condition is true with message
+F assert_msg(condition: i64, message: str) -> i64 {
+    L condition == 0 {
+        __panic(message)
+    }
+    0
+}
+
+# Assert two values are equal
+F assert_eq(actual: i64, expected: i64) -> i64 {
+    L actual != expected {
+        __panic_with_values("Assertion failed: values not equal", actual, expected)
+    }
+    0
+}
+
+# Assert two values are not equal
+F assert_ne(actual: i64, expected: i64) -> i64 {
+    L actual == expected {
+        __panic_with_value("Assertion failed: values should not be equal", actual)
+    }
+    0
+}
+
+# Assert value is greater than
+F assert_gt(actual: i64, expected: i64) -> i64 {
+    L actual <= expected {
+        __panic_with_values("Assertion failed: expected greater than", actual, expected)
+    }
+    0
+}
+
+# Assert value is less than
+F assert_lt(actual: i64, expected: i64) -> i64 {
+    L actual >= expected {
+        __panic_with_values("Assertion failed: expected less than", actual, expected)
+    }
+    0
+}
+
+# Assert value is greater than or equal
+F assert_ge(actual: i64, expected: i64) -> i64 {
+    L actual < expected {
+        __panic_with_values("Assertion failed: expected greater or equal", actual, expected)
+    }
+    0
+}
+
+# Assert value is less than or equal
+F assert_le(actual: i64, expected: i64) -> i64 {
+    L actual > expected {
+        __panic_with_values("Assertion failed: expected less or equal", actual, expected)
+    }
+    0
+}
+
+# Assert value is true (non-zero)
+F assert_true(value: i64) -> i64 {
+    L value == 0 {
+        __panic("Assertion failed: expected true")
+    }
+    0
+}
+
+# Assert value is false (zero)
+F assert_false(value: i64) -> i64 {
+    L value != 0 {
+        __panic("Assertion failed: expected false")
+    }
+    0
+}
+
+# Assert strings are equal
+F assert_str_eq(actual: str, expected: str) -> i64 {
+    L __str_eq(actual, expected) == 0 {
+        __panic_str_mismatch(actual, expected)
+    }
+    0
+}
+
+# Assert value is within range [min, max]
+F assert_in_range(value: i64, min: i64, max: i64) -> i64 {
+    L value < min | value > max {
+        __panic("Assertion failed: value not in range")
+    }
+    0
+}
+
+# Assert pointer is not null
+F assert_not_null(ptr: i64) -> i64 {
+    L ptr == 0 {
+        __panic("Assertion failed: pointer is null")
+    }
+    0
+}
+
+# Assert with approximate equality for floats
+F assert_approx(actual: f64, expected: f64, epsilon: f64) -> i64 {
+    diff := L actual > expected { actual - expected } ! { expected - actual }
+    L diff > epsilon {
+        __panic("Assertion failed: values not approximately equal")
+    }
+    0
+}
+
+# ============================================
+# Test Runner
+# ============================================
+
+S TestRunner {
+    suites: i64,       # Array of TestSuite
+    suite_count: i64,
+    capacity: i64,
+    verbose: i64,
+    filter: str,
+    fail_fast: i64
+}
+
+X TestRunner {
+    F new() -> TestRunner {
+        capacity := 32
+        TestRunner {
+            suites: __malloc(capacity * 8),  # Pointers to suites
+            suite_count: 0,
+            capacity: capacity,
+            verbose: 0,
+            filter: "",
+            fail_fast: 0
+        }
+    }
+
+    # Add a test suite
+    F add_suite(&self, suite: &TestSuite) -> TestRunner {
+        L self.suite_count >= self.capacity {
+            new_capacity := self.capacity * 2
+            new_suites := __malloc(new_capacity * 8)
+            __memcpy(new_suites, self.suites, self.suite_count * 8)
+            __free(self.suites)
+            self.suites = new_suites
+            self.capacity = new_capacity
+        }
+
+        __store_ptr(self.suites + self.suite_count * 8, suite as i64)
+        self.suite_count = self.suite_count + 1
+        self
+    }
+
+    # Set verbose mode
+    F verbose(&self) -> TestRunner {
+        self.verbose = 1
+        self
+    }
+
+    # Set filter
+    F filter(&self, filter: str) -> TestRunner {
+        self.filter = filter
+        self
+    }
+
+    # Enable fail-fast mode
+    F fail_fast(&self) -> TestRunner {
+        self.fail_fast = 1
+        self
+    }
+
+    # Run all tests
+    F run(&self) -> i64 {
+        total_passed := 0
+        total_failed := 0
+        total_skipped := 0
+
+        __print_str("\n")
+        __print_str(COLOR_BLUE)
+        __print_str("Running tests...")
+        __print_str(COLOR_RESET)
+        __print_str("\n\n")
+
+        i := 0
+        L i < self.suite_count {
+            suite_ptr := __load_ptr(self.suites + i * 8)
+            suite := suite_ptr as &TestSuite
+
+            result := L __strlen(self.filter) > 0 {
+                suite.run_filtered(self.filter)
+            } ! {
+                suite.run()
+            }
+
+            result.print_summary()
+
+            total_passed = total_passed + result.passed
+            total_failed = total_failed + result.failed
+            total_skipped = total_skipped + result.skipped
+
+            L self.fail_fast == 1 & result.failed > 0 {
+                B
+            }
+
+            i = i + 1
+        }
+
+        # Print final summary
+        __print_str("═══════════════════════════════════════\n")
+        __print_str("Final Results: ")
+        __print_str(COLOR_GREEN)
+        __print_i64(total_passed)
+        __print_str(" passed")
+        __print_str(COLOR_RESET)
+        __print_str(", ")
+        __print_str(COLOR_RED)
+        __print_i64(total_failed)
+        __print_str(" failed")
+        __print_str(COLOR_RESET)
+        __print_str(", ")
+        __print_str(COLOR_YELLOW)
+        __print_i64(total_skipped)
+        __print_str(" skipped")
+        __print_str(COLOR_RESET)
+        __print_str("\n═══════════════════════════════════════\n\n")
+
+        # Return 0 if all passed, 1 if any failed
+        L total_failed > 0 { 1 } ! { 0 }
+    }
+}
+
+# ============================================
+# Convenience Functions
+# ============================================
+
+# Create a new test suite
+F suite(name: str) -> TestSuite {
+    TestSuite::new(name)
+}
+
+# Create a new test runner
+F runner() -> TestRunner {
+    TestRunner::new()
+}
+
+# Create a test case
+F test(name: str, fn_ptr: i64) -> TestCase {
+    TestCase::new(name, fn_ptr)
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+X F __time_now_ns() -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __memcpy(dst: i64, src: i64, len: i64) -> i64
+X F __store_ptr(ptr: i64, value: i64) -> i64
+X F __load_ptr(ptr: i64) -> i64
+X F __store_test_case(ptr: i64, test: &TestCase) -> i64
+X F __load_test_case(ptr: i64) -> TestCase
+X F __store_test_result(ptr: i64, result: &TestResult) -> i64
+X F __load_test_result(ptr: i64) -> TestResult
+X F __str_eq(a: str, b: str) -> i64
+X F __str_contains(haystack: str, needle: str) -> i64
+X F __strlen(s: str) -> i64
+X F __print_str(s: str) -> i64
+X F __print_i64(n: i64) -> i64
+X F __call_fn(fn_ptr: i64) -> i64
+X F __try_call_fn(fn_ptr: i64, result_ptr: i64) -> i64
+X F __panic(message: str) -> i64
+X F __panic_with_value(message: str, value: i64) -> i64
+X F __panic_with_values(message: str, actual: i64, expected: i64) -> i64
+X F __panic_str_mismatch(actual: str, expected: str) -> i64

@@ -1,0 +1,679 @@
+# Profiler - Runtime performance profiling support
+# Provides instrumentation for measuring execution time, memory, and call counts
+
+# ============================================
+# Constants
+# ============================================
+
+C PROFILER_DISABLED: i64 = 0
+C PROFILER_ENABLED: i64 = 1
+C PROFILER_SAMPLING: i64 = 2
+
+C MAX_PROFILE_ENTRIES: i64 = 4096
+C SAMPLE_INTERVAL_MS: i64 = 10
+
+# ============================================
+# Timer - High-resolution timing
+# ============================================
+
+S Timer {
+    start_ns: i64,
+    end_ns: i64,
+    running: i64
+}
+
+X Timer {
+    F new() -> Timer {
+        Timer {
+            start_ns: 0,
+            end_ns: 0,
+            running: 0
+        }
+    }
+
+    # Start the timer
+    F start(&self) -> Timer {
+        self.start_ns = __time_now_ns()
+        self.running = 1
+        self
+    }
+
+    # Stop the timer
+    F stop(&self) -> Timer {
+        L self.running == 1 {
+            self.end_ns = __time_now_ns()
+            self.running = 0
+        }
+        self
+    }
+
+    # Get elapsed time in nanoseconds
+    F elapsed_ns(&self) -> i64 {
+        L self.running == 1 {
+            __time_now_ns() - self.start_ns
+        } ! {
+            self.end_ns - self.start_ns
+        }
+    }
+
+    # Get elapsed time in microseconds
+    F elapsed_us(&self) -> i64 {
+        self.elapsed_ns() / 1000
+    }
+
+    # Get elapsed time in milliseconds
+    F elapsed_ms(&self) -> i64 {
+        self.elapsed_ns() / 1000000
+    }
+
+    # Reset the timer
+    F reset(&self) -> Timer {
+        self.start_ns = 0
+        self.end_ns = 0
+        self.running = 0
+        self
+    }
+}
+
+# ============================================
+# Profile Entry - Single profiling record
+# ============================================
+
+S ProfileEntry {
+    name: str,
+    call_count: i64,
+    total_time_ns: i64,
+    min_time_ns: i64,
+    max_time_ns: i64,
+    start_time: i64,      # For nested timing
+    depth: i64            # Call depth for recursion tracking
+}
+
+X ProfileEntry {
+    F new(name: str) -> ProfileEntry {
+        ProfileEntry {
+            name: name,
+            call_count: 0,
+            total_time_ns: 0,
+            min_time_ns: 9223372036854775807,  # i64::MAX
+            max_time_ns: 0,
+            start_time: 0,
+            depth: 0
+        }
+    }
+
+    # Enter the profiled region
+    F enter(&self) -> i64 {
+        L self.depth == 0 {
+            self.start_time = __time_now_ns()
+        }
+        self.depth = self.depth + 1
+        0
+    }
+
+    # Exit the profiled region
+    F exit(&self) -> i64 {
+        self.depth = self.depth - 1
+        L self.depth == 0 {
+            elapsed := __time_now_ns() - self.start_time
+            self.call_count = self.call_count + 1
+            self.total_time_ns = self.total_time_ns + elapsed
+
+            L elapsed < self.min_time_ns {
+                self.min_time_ns = elapsed
+            }
+            L elapsed > self.max_time_ns {
+                self.max_time_ns = elapsed
+            }
+        }
+        0
+    }
+
+    # Get average time per call
+    F avg_time_ns(&self) -> i64 {
+        L self.call_count > 0 {
+            self.total_time_ns / self.call_count
+        } ! {
+            0
+        }
+    }
+
+    # Reset the entry
+    F reset(&self) -> i64 {
+        self.call_count = 0
+        self.total_time_ns = 0
+        self.min_time_ns = 9223372036854775807
+        self.max_time_ns = 0
+        self.start_time = 0
+        self.depth = 0
+        0
+    }
+}
+
+# ============================================
+# Profiler - Main profiling interface
+# ============================================
+
+S Profiler {
+    entries: i64,         # Pointer to array of ProfileEntry
+    entry_count: i64,
+    capacity: i64,
+    enabled: i64,
+    start_time: i64,      # Global start time
+    sample_interval: i64  # For sampling mode
+}
+
+X Profiler {
+    F new() -> Profiler {
+        capacity := 256
+        entries := __malloc(capacity * 64)  # Approx size per entry
+        Profiler {
+            entries: entries,
+            entry_count: 0,
+            capacity: capacity,
+            enabled: PROFILER_DISABLED,
+            start_time: 0,
+            sample_interval: SAMPLE_INTERVAL_MS
+        }
+    }
+
+    # Enable profiling
+    F enable(&self) -> Profiler {
+        self.enabled = PROFILER_ENABLED
+        self.start_time = __time_now_ns()
+        self
+    }
+
+    # Disable profiling
+    F disable(&self) -> Profiler {
+        self.enabled = PROFILER_DISABLED
+        self
+    }
+
+    # Enable sampling mode
+    F enable_sampling(&self, interval_ms: i64) -> Profiler {
+        self.enabled = PROFILER_SAMPLING
+        self.sample_interval = interval_ms
+        self.start_time = __time_now_ns()
+        self
+    }
+
+    # Check if profiling is enabled
+    F is_enabled(&self) -> i64 {
+        self.enabled != PROFILER_DISABLED
+    }
+
+    # Find or create a profile entry by name
+    F get_entry(&self, name: str) -> i64 {
+        # Search for existing entry
+        i := 0
+        L i < self.entry_count {
+            offset := i * 64
+            entry_name := __load_str(self.entries + offset)
+            L __str_eq(entry_name, name) == 1 {
+                R self.entries + offset
+            }
+            i = i + 1
+        }
+
+        # Create new entry if not found
+        L self.entry_count >= self.capacity {
+            # Grow capacity
+            new_capacity := self.capacity * 2
+            new_entries := __malloc(new_capacity * 64)
+            __memcpy(new_entries, self.entries, self.entry_count * 64)
+            __free(self.entries)
+            self.entries = new_entries
+            self.capacity = new_capacity
+        }
+
+        # Initialize new entry
+        offset := self.entry_count * 64
+        __store_str(self.entries + offset, name)
+        __store_i64(self.entries + offset + 8, 0)   # call_count
+        __store_i64(self.entries + offset + 16, 0)  # total_time_ns
+        __store_i64(self.entries + offset + 24, 9223372036854775807)  # min_time_ns
+        __store_i64(self.entries + offset + 32, 0)  # max_time_ns
+        __store_i64(self.entries + offset + 40, 0)  # start_time
+        __store_i64(self.entries + offset + 48, 0)  # depth
+        self.entry_count = self.entry_count + 1
+
+        self.entries + offset
+    }
+
+    # Enter a profiled region
+    F enter(&self, name: str) -> i64 {
+        L self.enabled == PROFILER_DISABLED {
+            R 0
+        }
+
+        entry_ptr := self.get_entry(name)
+
+        # Update entry: enter
+        depth := __load_i64(entry_ptr + 48)
+        L depth == 0 {
+            __store_i64(entry_ptr + 40, __time_now_ns())  # start_time
+        }
+        __store_i64(entry_ptr + 48, depth + 1)
+
+        0
+    }
+
+    # Exit a profiled region
+    F exit(&self, name: str) -> i64 {
+        L self.enabled == PROFILER_DISABLED {
+            R 0
+        }
+
+        entry_ptr := self.get_entry(name)
+
+        # Update entry: exit
+        depth := __load_i64(entry_ptr + 48)
+        __store_i64(entry_ptr + 48, depth - 1)
+
+        L depth == 1 {
+            start_time := __load_i64(entry_ptr + 40)
+            elapsed := __time_now_ns() - start_time
+
+            call_count := __load_i64(entry_ptr + 8) + 1
+            total_time := __load_i64(entry_ptr + 16) + elapsed
+            min_time := __load_i64(entry_ptr + 24)
+            max_time := __load_i64(entry_ptr + 32)
+
+            __store_i64(entry_ptr + 8, call_count)
+            __store_i64(entry_ptr + 16, total_time)
+
+            L elapsed < min_time {
+                __store_i64(entry_ptr + 24, elapsed)
+            }
+            L elapsed > max_time {
+                __store_i64(entry_ptr + 32, elapsed)
+            }
+        }
+
+        0
+    }
+
+    # Get total elapsed time since profiling started
+    F total_time_ns(&self) -> i64 {
+        __time_now_ns() - self.start_time
+    }
+
+    # Get number of entries
+    F entry_count(&self) -> i64 {
+        self.entry_count
+    }
+
+    # Reset all entries
+    F reset(&self) -> i64 {
+        i := 0
+        L i < self.entry_count {
+            offset := i * 64
+            __store_i64(self.entries + offset + 8, 0)   # call_count
+            __store_i64(self.entries + offset + 16, 0)  # total_time_ns
+            __store_i64(self.entries + offset + 24, 9223372036854775807)  # min_time_ns
+            __store_i64(self.entries + offset + 32, 0)  # max_time_ns
+            __store_i64(self.entries + offset + 40, 0)  # start_time
+            __store_i64(self.entries + offset + 48, 0)  # depth
+            i = i + 1
+        }
+        self.start_time = __time_now_ns()
+        0
+    }
+
+    # Print a report to stdout
+    F report(&self) -> i64 {
+        __print_str("=== Profiling Report ===\n")
+
+        total := self.total_time_ns()
+        __print_str("Total time: ")
+        __print_i64(total / 1000000)
+        __print_str(" ms\n\n")
+
+        __print_str("Name                          Calls      Total(ms)  Avg(us)   Min(us)   Max(us)\n")
+        __print_str("--------------------------------------------------------------------------------\n")
+
+        i := 0
+        L i < self.entry_count {
+            offset := i * 64
+            name := __load_str(self.entries + offset)
+            calls := __load_i64(self.entries + offset + 8)
+            total_ns := __load_i64(self.entries + offset + 16)
+            min_ns := __load_i64(self.entries + offset + 24)
+            max_ns := __load_i64(self.entries + offset + 32)
+
+            avg_ns := L calls > 0 { total_ns / calls } ! { 0 }
+
+            __print_padded_str(name, 30)
+            __print_padded_i64(calls, 10)
+            __print_padded_i64(total_ns / 1000000, 10)
+            __print_padded_i64(avg_ns / 1000, 10)
+            __print_padded_i64(min_ns / 1000, 10)
+            __print_padded_i64(max_ns / 1000, 10)
+            __print_str("\n")
+
+            i = i + 1
+        }
+
+        0
+    }
+}
+
+# ============================================
+# Memory Profiler
+# ============================================
+
+S MemoryProfiler {
+    allocations: i64,      # Total allocations
+    deallocations: i64,    # Total deallocations
+    bytes_allocated: i64,  # Current allocated bytes
+    peak_bytes: i64,       # Peak allocated bytes
+    total_allocated: i64,  # Total bytes ever allocated
+    enabled: i64
+}
+
+X MemoryProfiler {
+    F new() -> MemoryProfiler {
+        MemoryProfiler {
+            allocations: 0,
+            deallocations: 0,
+            bytes_allocated: 0,
+            peak_bytes: 0,
+            total_allocated: 0,
+            enabled: 0
+        }
+    }
+
+    F enable(&self) -> MemoryProfiler {
+        self.enabled = 1
+        self
+    }
+
+    F disable(&self) -> MemoryProfiler {
+        self.enabled = 0
+        self
+    }
+
+    # Track an allocation
+    F track_alloc(&self, size: i64) -> i64 {
+        L self.enabled == 1 {
+            self.allocations = self.allocations + 1
+            self.bytes_allocated = self.bytes_allocated + size
+            self.total_allocated = self.total_allocated + size
+
+            L self.bytes_allocated > self.peak_bytes {
+                self.peak_bytes = self.bytes_allocated
+            }
+        }
+        0
+    }
+
+    # Track a deallocation
+    F track_dealloc(&self, size: i64) -> i64 {
+        L self.enabled == 1 {
+            self.deallocations = self.deallocations + 1
+            self.bytes_allocated = self.bytes_allocated - size
+        }
+        0
+    }
+
+    # Get current allocated bytes
+    F current_bytes(&self) -> i64 {
+        self.bytes_allocated
+    }
+
+    # Get peak allocated bytes
+    F peak_bytes(&self) -> i64 {
+        self.peak_bytes
+    }
+
+    # Print memory report
+    F report(&self) -> i64 {
+        __print_str("=== Memory Report ===\n")
+        __print_str("Allocations:     ")
+        __print_i64(self.allocations)
+        __print_str("\n")
+        __print_str("Deallocations:   ")
+        __print_i64(self.deallocations)
+        __print_str("\n")
+        __print_str("Current bytes:   ")
+        __print_i64(self.bytes_allocated)
+        __print_str("\n")
+        __print_str("Peak bytes:      ")
+        __print_i64(self.peak_bytes)
+        __print_str("\n")
+        __print_str("Total allocated: ")
+        __print_i64(self.total_allocated)
+        __print_str("\n")
+        0
+    }
+
+    # Reset the profiler
+    F reset(&self) -> i64 {
+        self.allocations = 0
+        self.deallocations = 0
+        self.bytes_allocated = 0
+        self.peak_bytes = 0
+        self.total_allocated = 0
+        0
+    }
+}
+
+# ============================================
+# Sampling Profiler
+# ============================================
+
+S SampleProfiler {
+    samples: i64,          # Pointer to sample buffer
+    sample_count: i64,
+    capacity: i64,
+    interval_ms: i64,
+    running: i64,
+    thread_handle: i64
+}
+
+X SampleProfiler {
+    F new(interval_ms: i64) -> SampleProfiler {
+        capacity := 10000
+        samples := __malloc(capacity * 16)  # func_ptr, timestamp
+        SampleProfiler {
+            samples: samples,
+            sample_count: 0,
+            capacity: capacity,
+            interval_ms: interval_ms,
+            running: 0,
+            thread_handle: 0
+        }
+    }
+
+    # Start sampling
+    F start(&self) -> i64 {
+        self.running = 1
+        self.thread_handle = __start_sampler_thread(self as i64, self.interval_ms)
+        0
+    }
+
+    # Stop sampling
+    F stop(&self) -> i64 {
+        self.running = 0
+        L self.thread_handle != 0 {
+            __stop_sampler_thread(self.thread_handle)
+        }
+        0
+    }
+
+    # Record a sample (called by sampler thread)
+    F record_sample(&self, func_ptr: i64) -> i64 {
+        L self.sample_count < self.capacity {
+            offset := self.sample_count * 16
+            __store_i64(self.samples + offset, func_ptr)
+            __store_i64(self.samples + offset + 8, __time_now_ns())
+            self.sample_count = self.sample_count + 1
+        }
+        0
+    }
+
+    # Get sample count
+    F count(&self) -> i64 {
+        self.sample_count
+    }
+
+    # Analyze and print results
+    F analyze(&self) -> i64 {
+        # Count samples per function
+        __print_str("=== Sampling Profile ===\n")
+        __print_str("Total samples: ")
+        __print_i64(self.sample_count)
+        __print_str("\n\n")
+
+        # In a real implementation, we would:
+        # 1. Group samples by function
+        # 2. Symbolize addresses to function names
+        # 3. Calculate percentages
+        # 4. Sort by sample count
+
+        0
+    }
+
+    # Reset samples
+    F reset(&self) -> i64 {
+        self.sample_count = 0
+        0
+    }
+}
+
+# ============================================
+# Flame Graph Builder
+# ============================================
+
+S FlameGraphBuilder {
+    stack_samples: i64,    # Array of stack samples
+    sample_count: i64,
+    capacity: i64
+}
+
+X FlameGraphBuilder {
+    F new() -> FlameGraphBuilder {
+        capacity := 10000
+        FlameGraphBuilder {
+            stack_samples: __malloc(capacity * 64),  # Room for stack info
+            sample_count: 0,
+            capacity: capacity
+        }
+    }
+
+    # Record a stack sample
+    F record_stack(&self, stack_ptr: i64, depth: i64) -> i64 {
+        L self.sample_count < self.capacity {
+            offset := self.sample_count * 64
+            # Copy stack frames
+            __memcpy(self.stack_samples + offset, stack_ptr, depth * 8)
+            self.sample_count = self.sample_count + 1
+        }
+        0
+    }
+
+    # Generate flame graph data (folded format)
+    F generate_folded(&self, output_buffer: i64) -> i64 {
+        # Output format: "func1;func2;func3 count\n"
+        # This can be fed to flamegraph.pl or similar tools
+        __print_str("FlameGraph generation not fully implemented\n")
+        0
+    }
+}
+
+# ============================================
+# Global Profiler Instance
+# ============================================
+
+V __GLOBAL_PROFILER: i64 = 0
+V __GLOBAL_MEM_PROFILER: i64 = 0
+
+# Initialize global profiler
+F profiler_init() -> i64 {
+    L __GLOBAL_PROFILER == 0 {
+        p := Profiler::new()
+        __GLOBAL_PROFILER = &p as i64
+    }
+    __GLOBAL_PROFILER
+}
+
+# Get global profiler
+F get_profiler() -> &Profiler {
+    L __GLOBAL_PROFILER == 0 {
+        profiler_init()
+    }
+    __GLOBAL_PROFILER as &Profiler
+}
+
+# Initialize global memory profiler
+F mem_profiler_init() -> i64 {
+    L __GLOBAL_MEM_PROFILER == 0 {
+        p := MemoryProfiler::new()
+        __GLOBAL_MEM_PROFILER = &p as i64
+    }
+    __GLOBAL_MEM_PROFILER
+}
+
+# Get global memory profiler
+F get_mem_profiler() -> &MemoryProfiler {
+    L __GLOBAL_MEM_PROFILER == 0 {
+        mem_profiler_init()
+    }
+    __GLOBAL_MEM_PROFILER as &MemoryProfiler
+}
+
+# ============================================
+# Convenience Macros (as functions)
+# ============================================
+
+# Profile a block by name
+F profile_begin(name: str) -> i64 {
+    get_profiler().enter(name)
+}
+
+F profile_end(name: str) -> i64 {
+    get_profiler().exit(name)
+}
+
+# Profile a function call
+F profile_fn(name: str, fn_ptr: i64, arg: i64) -> i64 {
+    profile_begin(name)
+    result := __call_fn_with_arg(fn_ptr, arg)
+    profile_end(name)
+    result
+}
+
+# Create a timer
+F timer() -> Timer {
+    Timer::new()
+}
+
+# Time a function call and return (result, elapsed_ns)
+F time_fn(fn_ptr: i64, arg: i64) -> (i64, i64) {
+    start := __time_now_ns()
+    result := __call_fn_with_arg(fn_ptr, arg)
+    elapsed := __time_now_ns() - start
+    (result, elapsed)
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+X F __time_now_ns() -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __memcpy(dst: i64, src: i64, len: i64) -> i64
+X F __store_i64(ptr: i64, value: i64) -> i64
+X F __load_i64(ptr: i64) -> i64
+X F __store_str(ptr: i64, s: str) -> i64
+X F __load_str(ptr: i64) -> str
+X F __str_eq(a: str, b: str) -> i64
+X F __print_str(s: str) -> i64
+X F __print_i64(n: i64) -> i64
+X F __print_padded_str(s: str, width: i64) -> i64
+X F __print_padded_i64(n: i64, width: i64) -> i64
+X F __call_fn_with_arg(fn_ptr: i64, arg: i64) -> i64
+X F __start_sampler_thread(profiler_ptr: i64, interval_ms: i64) -> i64
+X F __stop_sampler_thread(thread_handle: i64) -> i64
