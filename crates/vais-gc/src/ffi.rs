@@ -22,7 +22,7 @@ pub extern "C" fn vais_gc_init() {
 #[no_mangle]
 pub extern "C" fn vais_gc_alloc(size: usize, type_id: u32) -> *mut c_void {
     let gc = get_gc();
-    let mut heap = gc.lock().unwrap();
+    let mut heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_alloc");
     heap.alloc(size, type_id) as *mut c_void
 }
 
@@ -35,7 +35,7 @@ pub extern "C" fn vais_gc_add_root(ptr: usize) {
         return;
     }
     let gc = get_gc();
-    let mut heap = gc.lock().unwrap();
+    let mut heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_add_root");
     heap.add_root(ptr);
 }
 
@@ -48,7 +48,7 @@ pub extern "C" fn vais_gc_remove_root(ptr: usize) {
         return;
     }
     let gc = get_gc();
-    let mut heap = gc.lock().unwrap();
+    let mut heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_remove_root");
     heap.remove_root(ptr);
 }
 
@@ -56,7 +56,7 @@ pub extern "C" fn vais_gc_remove_root(ptr: usize) {
 #[no_mangle]
 pub extern "C" fn vais_gc_collect() {
     let gc = get_gc();
-    let mut heap = gc.lock().unwrap();
+    let mut heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_collect");
     heap.collect();
 }
 
@@ -64,7 +64,7 @@ pub extern "C" fn vais_gc_collect() {
 #[no_mangle]
 pub extern "C" fn vais_gc_bytes_allocated() -> usize {
     let gc = get_gc();
-    let heap = gc.lock().unwrap();
+    let heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_bytes_allocated");
     heap.stats().bytes_allocated
 }
 
@@ -72,7 +72,7 @@ pub extern "C" fn vais_gc_bytes_allocated() -> usize {
 #[no_mangle]
 pub extern "C" fn vais_gc_objects_count() -> usize {
     let gc = get_gc();
-    let heap = gc.lock().unwrap();
+    let heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_objects_count");
     heap.stats().objects_count
 }
 
@@ -80,7 +80,7 @@ pub extern "C" fn vais_gc_objects_count() -> usize {
 #[no_mangle]
 pub extern "C" fn vais_gc_collections() -> usize {
     let gc = get_gc();
-    let heap = gc.lock().unwrap();
+    let heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_collections");
     heap.stats().collections
 }
 
@@ -88,7 +88,7 @@ pub extern "C" fn vais_gc_collections() -> usize {
 #[no_mangle]
 pub extern "C" fn vais_gc_set_threshold(threshold: usize) {
     let gc = get_gc();
-    let mut heap = gc.lock().unwrap();
+    let mut heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_set_threshold");
     heap.set_threshold(threshold);
 }
 
@@ -96,7 +96,7 @@ pub extern "C" fn vais_gc_set_threshold(threshold: usize) {
 #[no_mangle]
 pub extern "C" fn vais_gc_print_stats() {
     let gc = get_gc();
-    let heap = gc.lock().unwrap();
+    let heap = gc.lock().expect("GC heap mutex poisoned in vais_gc_print_stats");
     let stats = heap.stats();
 
     println!("GC Statistics:");

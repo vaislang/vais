@@ -1027,14 +1027,98 @@ impl Parser {
             self.advance().ok_or_else(|| ParseError::UnexpectedToken {
                 found: Token::Ident("EOF".into()),
                 span: self.current_span(),
-                expected: format!("{:?}", expected),
+                expected: Self::token_to_friendly_name(expected),
             })
         } else {
             Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
-                expected: format!("{:?}", expected),
+                expected: Self::token_to_friendly_name(expected),
             })
+        }
+    }
+
+    /// Convert a token to a user-friendly name for error messages
+    fn token_to_friendly_name(token: &Token) -> String {
+        match token {
+            // Delimiters
+            Token::LParen => "'('".to_string(),
+            Token::RParen => "')'".to_string(),
+            Token::LBrace => "'{'".to_string(),
+            Token::RBrace => "'}'".to_string(),
+            Token::LBracket => "'['".to_string(),
+            Token::RBracket => "']'".to_string(),
+            Token::Comma => "','".to_string(),
+            Token::Colon => "':'".to_string(),
+            Token::ColonColon => "'::'".to_string(),
+            Token::Semi => "';'".to_string(),
+            Token::Dot => "'.'".to_string(),
+            Token::DotDot => "'..'".to_string(),
+            Token::DotDotEq => "'..='".to_string(),
+            Token::Arrow => "'->'".to_string(),
+            Token::FatArrow => "'=>'".to_string(),
+            // Operators
+            Token::Eq => "'='".to_string(),
+            Token::ColonEq => "':=' (let binding)".to_string(),
+            Token::EqEq => "'=='".to_string(),
+            Token::Neq => "'!='".to_string(),
+            Token::Lt => "'<'".to_string(),
+            Token::Lte => "'<='".to_string(),
+            Token::Gt => "'>'".to_string(),
+            Token::Gte => "'>='".to_string(),
+            Token::Plus => "'+'".to_string(),
+            Token::PlusEq => "'+='".to_string(),
+            Token::Minus => "'-'".to_string(),
+            Token::MinusEq => "'-='".to_string(),
+            Token::Star => "'*'".to_string(),
+            Token::StarEq => "'*='".to_string(),
+            Token::Slash => "'/'".to_string(),
+            Token::SlashEq => "'/='".to_string(),
+            Token::Percent => "'%'".to_string(),
+            Token::Amp => "'&'".to_string(),
+            Token::Pipe => "'|'".to_string(),
+            Token::Bang => "'!'".to_string(),
+            Token::Tilde => "'~'".to_string(),
+            Token::Caret => "'^'".to_string(),
+            Token::Shl => "'<<'".to_string(),
+            Token::Shr => "'>>'".to_string(),
+            Token::Question => "'?'".to_string(),
+            Token::At => "'@' (self-recursion)".to_string(),
+            Token::HashBracket => "'#[' (attribute)".to_string(),
+            // Keywords
+            Token::Function => "function keyword 'F'".to_string(),
+            Token::Struct => "struct keyword 'S'".to_string(),
+            Token::Enum => "enum keyword 'E'".to_string(),
+            Token::Trait => "trait keyword 'W'".to_string(),
+            Token::Impl => "impl keyword 'X'".to_string(),
+            Token::If => "if keyword 'I'".to_string(),
+            Token::Loop => "loop keyword 'L'".to_string(),
+            Token::Match => "match keyword 'M'".to_string(),
+            Token::Return => "return keyword 'R'".to_string(),
+            Token::Break => "break keyword 'B'".to_string(),
+            Token::Continue => "continue keyword 'C'".to_string(),
+            Token::Use => "use keyword 'U'".to_string(),
+            Token::Pub => "pub keyword 'P'".to_string(),
+            Token::Async => "async keyword 'A'".to_string(),
+            Token::Await => "'await' keyword".to_string(),
+            Token::Spawn => "'spawn' keyword".to_string(),
+            Token::True => "'true'".to_string(),
+            Token::False => "'false'".to_string(),
+            Token::Defer => "defer keyword 'D'".to_string(),
+            Token::Union => "union keyword 'O'".to_string(),
+            Token::Comptime => "'comptime' keyword".to_string(),
+            Token::Const => "'const' keyword".to_string(),
+            Token::Mut => "'mut' keyword".to_string(),
+            Token::SelfLower => "'self'".to_string(),
+            Token::SelfUpper => "'Self'".to_string(),
+            Token::TypeKeyword => "type keyword 'T'".to_string(),
+            // Literals
+            Token::Ident(name) => format!("identifier '{}'", name),
+            Token::Int(_) => "integer literal".to_string(),
+            Token::Float(_) => "float literal".to_string(),
+            Token::String(_) => "string literal".to_string(),
+            // Default for any other token
+            _ => format!("{:?}", token),
         }
     }
 

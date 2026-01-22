@@ -30,26 +30,26 @@ pub use allocator::{GcAllocator, GcStats};
 pub use gc::{GcObject, GcHeap, GcRoot};
 pub use ffi::*;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
-/// Global GC instance (lazy initialization)
-static mut GLOBAL_GC: Option<Arc<Mutex<GcHeap>>> = None;
+/// Global GC instance (thread-safe lazy initialization using OnceLock)
+static GLOBAL_GC: OnceLock<Arc<Mutex<GcHeap>>> = OnceLock::new();
 
 /// Initialize the global GC
+///
+/// This function is thread-safe and idempotent - it can be called multiple times
+/// but the GC will only be initialized once.
 pub fn init_gc() {
-    unsafe {
-        if GLOBAL_GC.is_none() {
-            GLOBAL_GC = Some(Arc::new(Mutex::new(GcHeap::new())));
-        }
-    }
+    // OnceLock::get_or_init is thread-safe and ensures single initialization
+    GLOBAL_GC.get_or_init(|| Arc::new(Mutex::new(GcHeap::new())));
 }
 
 /// Get the global GC instance
+///
+/// This function will initialize the GC if it hasn't been initialized yet.
+/// It is thread-safe and will never panic.
 pub fn get_gc() -> Arc<Mutex<GcHeap>> {
-    unsafe {
-        if GLOBAL_GC.is_none() {
-            init_gc();
-        }
-        GLOBAL_GC.as_ref().unwrap().clone()
-    }
+    GLOBAL_GC
+        .get_or_init(|| Arc::new(Mutex::new(GcHeap::new())))
+        .clone()
 }
