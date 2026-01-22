@@ -120,6 +120,22 @@ enum Commands {
         /// Targets: cuda, opencl, webgpu
         #[arg(long, value_name = "GPU_TARGET")]
         gpu: Option<String>,
+
+        /// Enable Link-Time Optimization
+        /// Values: thin, full (default: none)
+        #[arg(long, value_name = "MODE")]
+        lto: Option<String>,
+
+        /// Generate profile instrumentation for PGO
+        /// Creates instrumented binary that writes profiling data to the specified directory
+        /// After running the binary, use llvm-profdata to merge the .profraw files
+        #[arg(long, value_name = "DIR")]
+        profile_generate: Option<String>,
+
+        /// Use profile data for Profile-Guided Optimization
+        /// Provide path to merged .profdata file created by llvm-profdata
+        #[arg(long, value_name = "FILE")]
+        profile_use: Option<String>,
     },
 
     /// Run a Vais source file
@@ -307,7 +323,7 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, profile_generate, profile_use }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(&input, output, gpu_target_str, cli.verbose)
@@ -316,7 +332,22 @@ fn main() {
             let target_triple = target.as_ref()
                 .and_then(|s| TargetTriple::from_str(s))
                 .unwrap_or(TargetTriple::Native);
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot)
+
+            // Parse LTO mode
+            let lto_mode = lto.as_deref()
+                .map(vais_codegen::optimize::LtoMode::from_str)
+                .unwrap_or(vais_codegen::optimize::LtoMode::None);
+
+            // Parse PGO mode (mutually exclusive: generate vs use)
+            let pgo_mode = if let Some(dir) = profile_generate.as_deref() {
+                vais_codegen::optimize::PgoMode::Generate(dir.to_string())
+            } else if let Some(path) = profile_use.as_deref() {
+                vais_codegen::optimize::PgoMode::Use(path.to_string())
+            } else {
+                vais_codegen::optimize::PgoMode::None
+            };
+
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode)
             }
         }
         Some(Commands::Run { input, args }) => {
@@ -348,7 +379,22 @@ fn main() {
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native, false, cli.gc, cli.gc_threshold, false)
+                cmd_build(
+                    &input,
+                    cli.output,
+                    cli.emit_ir,
+                    0,
+                    false,
+                    cli.verbose,
+                    &plugins,
+                    TargetTriple::Native,
+                    false,
+                    cli.gc,
+                    cli.gc_threshold,
+                    false,
+                    vais_codegen::optimize::LtoMode::None,
+                    vais_codegen::optimize::PgoMode::None,
+                )
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -436,6 +482,8 @@ fn cmd_build(
     gc: bool,
     gc_threshold: Option<usize>,
     hot: bool,
+    lto_mode: vais_codegen::optimize::LtoMode,
+    pgo_mode: vais_codegen::optimize::PgoMode,
 ) -> Result<(), String> {
     use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
 
@@ -685,7 +733,7 @@ fn cmd_build(
             }
         });
 
-        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target, hot)?;
+        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target, hot, &lto_mode, &pgo_mode)?;
     }
 
     // Update incremental compilation cache after successful build
@@ -947,11 +995,13 @@ fn compile_ir_to_binary(
     verbose: bool,
     target: &TargetTriple,
     hot: bool,
+    lto_mode: &vais_codegen::optimize::LtoMode,
+    pgo_mode: &vais_codegen::optimize::PgoMode,
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
         TargetTriple::Wasi => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
-        _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose, hot),
+        _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode),
     }
 }
 
@@ -962,6 +1012,8 @@ fn compile_to_native(
     debug: bool,
     verbose: bool,
     hot: bool,
+    lto_mode: &vais_codegen::optimize::LtoMode,
+    pgo_mode: &vais_codegen::optimize::PgoMode,
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
@@ -981,6 +1033,38 @@ fn compile_to_native(
         args.push("-fPIC".to_string());    // Position-independent code
     }
 
+    // Add LTO flags
+    for flag in lto_mode.clang_flags() {
+        args.push(flag.to_string());
+    }
+
+    // Add PGO flags
+    for flag in pgo_mode.clang_flags() {
+        args.push(flag);
+    }
+
+    // Create profile directory if using profile-generate
+    if let Some(dir) = pgo_mode.profile_dir() {
+        let profile_path = Path::new(dir);
+        if !profile_path.exists() {
+            std::fs::create_dir_all(profile_path)
+                .map_err(|e| format!("Failed to create profile directory '{}': {}", dir, e))?;
+        }
+        if verbose {
+            println!("{} Profile data will be written to: {}/", "info:".blue().bold(), dir);
+        }
+    }
+
+    // Show PGO info
+    if let Some(path) = pgo_mode.profile_file() {
+        if !Path::new(path).exists() {
+            return Err(format!("Profile data file not found: '{}'. Run the instrumented binary first.", path));
+        }
+        if verbose {
+            println!("{} Using profile data from: {}", "info:".blue().bold(), path);
+        }
+    }
+
     args.push("-o".to_string());
     args.push(bin_path.to_str()
         .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
@@ -988,6 +1072,19 @@ fn compile_to_native(
     args.push(ir_path.to_str()
         .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
         .to_string());
+
+    if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled()) {
+        let mut features = vec![];
+        if lto_mode.is_enabled() {
+            features.push(format!("LTO={:?}", lto_mode));
+        }
+        if pgo_mode.is_generate() {
+            features.push("PGO=generate".to_string());
+        } else if pgo_mode.is_use() {
+            features.push("PGO=use".to_string());
+        }
+        println!("{} Compiling with: {}", "info:".blue().bold(), features.join(", "));
+    }
 
     let status = Command::new("clang")
         .args(&args)
@@ -1106,9 +1203,24 @@ fn compile_to_wasi(
 }
 
 fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
-    // Build first (no debug for run command by default, native target only, use incremental cache, no hot reload)
+    // Build first (no debug for run command by default, native target only, use incremental cache, no hot reload, no LTO/PGO)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None, false)?;
+    cmd_build(
+        input,
+        Some(bin_path.clone()),
+        false,
+        0,
+        false,
+        verbose,
+        plugins,
+        TargetTriple::Native,
+        false,
+        false,
+        None,
+        false,
+        vais_codegen::optimize::LtoMode::None,
+        vais_codegen::optimize::PgoMode::None,
+    )?;
 
     // Run the binary
     if verbose {
@@ -1285,7 +1397,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             // Load empty plugin registry for build
             let plugins = PluginRegistry::new();
 
-            // Build using existing infrastructure
+            // Build using existing infrastructure (no LTO/PGO for pkg build, can be added later)
             cmd_build(
                 &entry,
                 Some(output.clone()),
@@ -1299,6 +1411,8 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 false,
                 None,
                 hot,
+                vais_codegen::optimize::LtoMode::None,
+                vais_codegen::optimize::PgoMode::None,
             )?;
 
             if hot {
@@ -1808,7 +1922,22 @@ fn cmd_watch(
 
     // Perform initial build
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None, false)?;
+    cmd_build(
+        input,
+        Some(bin_path.clone()),
+        false,
+        0,
+        false,
+        verbose,
+        plugins,
+        TargetTriple::Native,
+        false,
+        false,
+        None,
+        false,
+        vais_codegen::optimize::LtoMode::None,
+        vais_codegen::optimize::PgoMode::None,
+    )?;
 
     // Execute initial run if requested
     if let Some(cmd) = exec {
@@ -1855,7 +1984,22 @@ fn cmd_watch(
                     last_compile = std::time::SystemTime::now();
 
                     // Rebuild
-                    match cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None, false) {
+                    match cmd_build(
+                        input,
+                        Some(bin_path.clone()),
+                        false,
+                        0,
+                        false,
+                        verbose,
+                        plugins,
+                        TargetTriple::Native,
+                        false,
+                        false,
+                        None,
+                        false,
+                        vais_codegen::optimize::LtoMode::None,
+                        vais_codegen::optimize::PgoMode::None,
+                    ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());
 

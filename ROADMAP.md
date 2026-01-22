@@ -894,7 +894,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 9: 언어 완성도 및 생산성 향상
 
-> **상태**: 🔄 진행 중 (80%)
+> **상태**: 🔄 진행 중 (90%)
 > **추가일**: 2026-01-22
 > **예상 기간**: 12주 (약 3개월)
 
@@ -954,9 +954,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - interprocedural_analysis(): 순수 함수 감지, 호출 그래프 분석
   - cross_module_dce(): 크로스 모듈 데드 코드 제거
   - 4개 테스트 추가
-- [ ] **Profile-Guided Optimization** - PGO 지원
-  - 프로파일 데이터 수집 (`--profile-generate`)
-  - 프로파일 기반 최적화 (`--profile-use`)
+- [x] **Profile-Guided Optimization** - PGO 지원 (완료일: 2026-01-22)
+  - PgoMode enum (None, Generate, Use) 추가
+  - `--profile-generate=<dir>`: 프로파일 데이터 수집용 instrumented 바이너리 생성
+  - `--profile-use=<file>`: 프로파일 데이터 기반 최적화 빌드
+  - `--lto=<mode>`: LTO 플래그 (thin, full) CLI 지원 추가
+  - PgoConfig: 브랜치 가중치, 간접 호출 프로모션, hot/cold 임계값 설정
+  - instrument_ir_for_pgo(), annotate_function_hotness() 헬퍼 함수
+  - 9개 PGO 테스트 추가
 - [ ] **Incremental Build 고도화** - 의존성 캐싱 개선
   - 모듈별 해시 캐싱
   - 변경된 함수만 재컴파일
@@ -978,8 +983,6 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - ANSI 컬러 출력, 테스트 시간 측정
 
 ### 남은 작업
-- Macro System (P1)
-- PGO (P2)
 - Incremental Build 고도화 (P2)
 
 ---
@@ -996,7 +999,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 6: 후속 개선 | ✅ 완료 | 100% |
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
-| Phase 9: 언어 완성도 | 🔄 진행 중 | 80% |
+| Phase 9: 언어 완성도 | 🔄 진행 중 | 90% |
 
 ---
 
