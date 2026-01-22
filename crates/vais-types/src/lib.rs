@@ -316,6 +316,19 @@ impl TypeChecker {
             },
         );
 
+        // str_to_ptr: (s) -> i64 (convert str to raw pointer)
+        self.functions.insert(
+            "str_to_ptr".to_string(),
+            FunctionSig {
+                name: "str_to_ptr".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
         // puts_ptr: (s) -> i32
         self.functions.insert(
             "puts_ptr".to_string(),

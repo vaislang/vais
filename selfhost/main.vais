@@ -15,7 +15,7 @@ F main() -> i64 {
     puts("=================================\n\n")
 
     # For initial testing, use a hardcoded path
-    input_path := "selfhost/bootstrap_test.vais"
+    input_path := "selfhost/test2.vais"
 
     puts("Compiling: ")
     puts(input_path)

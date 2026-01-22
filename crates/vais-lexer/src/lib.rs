@@ -148,7 +148,50 @@ pub enum Token {
 
     #[regex(r#""([^"\\]|\\.)*""#, |lex| {
         let s = lex.slice();
-        Some(s[1..s.len()-1].to_string())
+        let inner = &s[1..s.len()-1];
+        // Process escape sequences
+        let mut result = std::string::String::new();
+        let mut chars = inner.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    chars.next();
+                    match next {
+                        'n' => result.push('\n'),
+                        't' => result.push('\t'),
+                        'r' => result.push('\r'),
+                        '\\' => result.push('\\'),
+                        '"' => result.push('"'),
+                        '0' => result.push('\0'),
+                        'x' => {
+                            // Hex escape: \xHH
+                            let mut hex = std::string::String::new();
+                            for _ in 0..2 {
+                                if let Some(&h) = chars.peek() {
+                                    if h.is_ascii_hexdigit() {
+                                        hex.push(h);
+                                        chars.next();
+                                    }
+                                }
+                            }
+                            if let Ok(code) = u8::from_str_radix(&hex, 16) {
+                                result.push(code as char);
+                            }
+                        }
+                        _ => {
+                            // Unknown escape, keep as-is
+                            result.push('\\');
+                            result.push(next);
+                        }
+                    }
+                } else {
+                    result.push('\\');
+                }
+            } else {
+                result.push(c);
+            }
+        }
+        Some(result)
     })]
     String(String),
 
