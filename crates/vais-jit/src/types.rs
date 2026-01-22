@@ -51,6 +51,28 @@ impl TypeMapper {
             ResolvedType::ConstGeneric(_) => {
                 panic!("Unsubstituted const generic in JIT")
             }
+            ResolvedType::Vector { element, lanes } => {
+                // Map SIMD vector types to Cranelift vector types
+                let elem_type = self.map_type(element);
+                // Cranelift supports vector types like I8X16, I16X8, I32X4, I64X2, F32X4, F64X2
+                match (elem_type, *lanes) {
+                    (types::I8, 16) => types::I8X16,
+                    (types::I16, 8) => types::I16X8,
+                    (types::I32, 4) => types::I32X4,
+                    (types::I32, 8) => types::I32X4, // Use I32X4 for 8-lane (two operations)
+                    (types::I64, 2) => types::I64X2,
+                    (types::I64, 4) => types::I64X2, // Use I64X2 for 4-lane
+                    (types::F32, 2) => types::F32X4, // Use F32X4 for 2-lane
+                    (types::F32, 4) => types::F32X4,
+                    (types::F32, 8) => types::F32X4, // Use F32X4 for 8-lane (two operations)
+                    (types::F64, 2) => types::F64X2,
+                    (types::F64, 4) => types::F64X2, // Use F64X2 for 4-lane
+                    _ => {
+                        // Fallback: treat as pointer to array
+                        self.pointer_type
+                    }
+                }
+            }
         }
     }
 
@@ -70,6 +92,10 @@ impl TypeMapper {
                 }
             }
             ResolvedType::Unit => 0,
+            ResolvedType::Vector { element, lanes } => {
+                // Vector size = element size * lane count
+                self.size_of(element) * (*lanes as u32)
+            }
             _ => {
                 if self.pointer_type == types::I64 {
                     8

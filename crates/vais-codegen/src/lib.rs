@@ -3341,30 +3341,9 @@ impl CodeGenerator {
         stmts: &[Spanned<Stmt>],
         counter: &mut usize,
     ) -> CodegenResult<(String, String, bool)> {
-        let mut ir = String::new();
-        let mut last_value = "0".to_string();
-        let mut terminated = false;
-
-        for stmt in stmts {
-            // Skip generating code after a terminator
-            if terminated {
-                break;
-            }
-
-            let (value, stmt_ir) = self.generate_stmt(stmt, counter)?;
-            ir.push_str(&stmt_ir);
-            last_value = value;
-
-            // Check if this statement is a terminator
-            match &stmt.node {
-                Stmt::Break(_) | Stmt::Continue | Stmt::Return(_) => {
-                    terminated = true;
-                }
-                _ => {}
-            }
-        }
-
-        Ok((last_value, ir, terminated))
+        // Use StmtVisitor trait for statement code generation
+        use crate::visitor::StmtVisitor;
+        self.visit_block_stmts(stmts, counter)
     }
 
     /// Helper to convert BlockResult to simple (String, String) for backward compatibility

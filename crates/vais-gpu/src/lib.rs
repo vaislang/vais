@@ -147,6 +147,10 @@ impl GpuType {
                     Err(GpuError::UnsupportedType("Dynamic array size".to_string()))
                 }
             }
+            ResolvedType::Vector { element, lanes } => {
+                let elem = GpuType::from_resolved(element)?;
+                Ok(GpuType::Vec(Box::new(elem), *lanes as usize))
+            }
             _ => Err(GpuError::UnsupportedType(format!("{:?}", ty))),
         }
     }

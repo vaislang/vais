@@ -101,6 +101,8 @@ pub fn token_to_string(token: &Token) -> String {
         Token::ColonColon => "ColonColon",
         Token::HashBracket => "HashBracket",
         Token::Defer => "Defer",
+        Token::Union => "Union",
+        Token::Comptime => "Comptime",
     }.to_string()
 }
 

@@ -968,3 +968,642 @@ F test_reduce(v: Vec2i64) -> i64 {
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("@llvm.vector.reduce.add.v2i64"));
 }
+
+// ==================== Standard Library Tests ====================
+
+#[test]
+fn test_std_option_type() {
+    // Test Option<T> enum definition and usage
+    let source = r#"
+E Option<T> {
+    None,
+    Some(T)
+}
+
+F is_some(opt: Option<i64>) -> i64 {
+    M opt {
+        Some(_) => 1,
+        None => 0
+    }
+}
+
+F is_none(opt: Option<i64>) -> i64 {
+    M opt {
+        Some(_) => 0,
+        None => 1
+    }
+}
+
+F unwrap_or(opt: Option<i64>, default: i64) -> i64 {
+    M opt {
+        Some(v) => v,
+        None => default
+    }
+}
+
+F test_option() -> i64 {
+    some_val := Some(42)
+    none_val: Option<i64> = None
+    result := unwrap_or(some_val, 0)
+    result
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_result_type() {
+    // Test Result<T, E> enum definition
+    let source = r#"
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F is_ok(r: Result<i64, str>) -> i64 {
+    M r {
+        Ok(_) => 1,
+        Err(_) => 0
+    }
+}
+
+F is_err(r: Result<i64, str>) -> i64 {
+    M r {
+        Ok(_) => 0,
+        Err(_) => 1
+    }
+}
+
+F test_result() -> i64 {
+    success: Result<i64, str> = Ok(42)
+    failure: Result<i64, str> = Err("error")
+    is_ok(success)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_vec_struct() {
+    // Test Vec<T> struct definition and basic operations
+    let source = r#"
+S Vec<T> {
+    data: i64,
+    len: i64,
+    cap: i64
+}
+
+X Vec<T> {
+    F with_capacity(capacity: i64) -> Vec<T> {
+        data := malloc(capacity * 8)
+        Vec { data: data, len: 0, cap: capacity }
+    }
+
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    F capacity(&self) -> i64 {
+        self.cap
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    F get(&self, index: i64) -> T {
+        I index >= 0 && index < self.len {
+            ptr := self.data + index * 8
+            load_i64(ptr)
+        } E {
+            0
+        }
+    }
+
+    F push(&self, value: T) -> i64 {
+        I self.len < self.cap {
+            ptr := self.data + self.len * 8
+            store_i64(ptr, value)
+            self.len = self.len + 1
+            self.len
+        } E {
+            0
+        }
+    }
+
+    F pop(&self) -> T {
+        I self.len > 0 {
+            self.len = self.len - 1
+            ptr := self.data + self.len * 8
+            load_i64(ptr)
+        } E {
+            0
+        }
+    }
+
+    F drop(&self) -> i64 {
+        free(self.data)
+        0
+    }
+}
+
+F test_vec() -> i64 {
+    v := Vec.with_capacity(8)
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    len := v.len()
+    val := v.get(1)
+    v.drop()
+    val
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_box_struct() {
+    // Test Box<T> heap allocation
+    let source = r#"
+S Box<T> {
+    ptr: i64
+}
+
+X Box<T> {
+    F new(value: T) -> Box<T> {
+        ptr := malloc(8)
+        store_i64(ptr, value)
+        Box { ptr: ptr }
+    }
+
+    F get(&self) -> T {
+        load_i64(self.ptr)
+    }
+
+    F set(&self, value: T) -> () {
+        store_i64(self.ptr, value)
+    }
+
+    F drop(&self) -> () {
+        free(self.ptr)
+    }
+}
+
+F test_box() -> i64 {
+    b := Box.new(42)
+    val := b.get()
+    b.set(100)
+    new_val := b.get()
+    b.drop()
+    new_val
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_rc_struct() {
+    // Test Rc<T> reference counting
+    let source = r#"
+S Rc<T> {
+    ptr: i64,
+    count: i64
+}
+
+X Rc<T> {
+    F new(value: T) -> Rc<T> {
+        ptr := malloc(16)
+        store_i64(ptr, value)
+        store_i64(ptr + 8, 1)
+        Rc { ptr: ptr, count: ptr + 8 }
+    }
+
+    F get(&self) -> T {
+        load_i64(self.ptr)
+    }
+
+    F strong_count(&self) -> i64 {
+        load_i64(self.count)
+    }
+}
+
+F test_rc() -> i64 {
+    rc := Rc.new(42)
+    count := rc.strong_count()
+    val := rc.get()
+    val
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_deque_struct() {
+    // Test Deque<T> double-ended queue
+    let source = r#"
+S Deque<T> {
+    data: i64,
+    head: i64,
+    tail: i64,
+    cap: i64
+}
+
+X Deque<T> {
+    F with_capacity(capacity: i64) -> Deque<T> {
+        data := malloc(capacity * 8)
+        Deque { data: data, head: 0, tail: 0, cap: capacity }
+    }
+
+    F len(&self) -> i64 {
+        I self.tail >= self.head {
+            self.tail - self.head
+        } E {
+            self.cap - self.head + self.tail
+        }
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.head == self.tail { 1 } E { 0 }
+    }
+
+    F push_back(&self, value: T) -> i64 {
+        ptr := self.data + self.tail * 8
+        store_i64(ptr, value)
+        self.tail = (self.tail + 1) % self.cap
+        1
+    }
+
+    F pop_front(&self) -> T {
+        I self.head != self.tail {
+            ptr := self.data + self.head * 8
+            value := load_i64(ptr)
+            self.head = (self.head + 1) % self.cap
+            value
+        } E {
+            0
+        }
+    }
+
+    F drop(&self) -> () {
+        free(self.data)
+    }
+}
+
+F test_deque() -> i64 {
+    d := Deque.with_capacity(8)
+    d.push_back(1)
+    d.push_back(2)
+    d.push_back(3)
+    first := d.pop_front()
+    d.drop()
+    first
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_hashmap_basic() {
+    // Test HashMap basic structure
+    let source = r#"
+S HashMap<K, V> {
+    buckets: i64,
+    count: i64,
+    capacity: i64
+}
+
+X HashMap<K, V> {
+    F new() -> HashMap<K, V> {
+        cap := 16
+        buckets := malloc(cap * 8)
+        L i: 0..cap {
+            store_i64(buckets + i * 8, 0)
+        }
+        HashMap { buckets: buckets, count: 0, capacity: cap }
+    }
+
+    F len(&self) -> i64 {
+        self.count
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.count == 0 { 1 } E { 0 }
+    }
+
+    F drop(&self) -> () {
+        free(self.buckets)
+    }
+}
+
+F test_hashmap() -> i64 {
+    m := HashMap.new()
+    empty := m.is_empty()
+    m.drop()
+    empty
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_iterator_trait() {
+    // Test Iterator trait definition (simple version)
+    let source = r#"
+W Iterator {
+    F next(&self) -> i64 = 0
+    F has_next(&self) -> i64 = 0
+}
+
+S RangeIter {
+    current: i64,
+    end: i64
+}
+
+X RangeIter : Iterator {
+    F next(&self) -> i64 {
+        val := self.current
+        self.current = self.current + 1
+        val
+    }
+
+    F has_next(&self) -> i64 {
+        I self.current < self.end { 1 } E { 0 }
+    }
+}
+
+# Test that the trait and impl compile
+F make_iter() -> RangeIter {
+    RangeIter { current: 0, end: 10 }
+}
+
+F sum_range(n: i64) -> i64 {
+    n * (n - 1) / 2
+}
+
+F test_iter() -> i64 {
+    iter := make_iter()
+    sum_range(10)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_string_operations() {
+    // Test string operations
+    let source = r#"
+S String {
+    data: i64,
+    len: i64,
+    cap: i64
+}
+
+X String {
+    F from_raw(ptr: i64, len: i64) -> String {
+        cap := len + 1
+        data := malloc(cap)
+        memcpy(data, ptr, len)
+        store_byte(data + len, 0)
+        String { data: data, len: len, cap: cap }
+    }
+
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    F as_ptr(&self) -> i64 {
+        self.data
+    }
+
+    F drop(&self) -> () {
+        free(self.data)
+    }
+}
+
+F test_string() -> i64 {
+    s := String.from_raw(0, 0)
+    len := s.len()
+    s.drop()
+    len
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_math_functions() {
+    // Test math function signatures (without top-level const which isn't supported)
+    let source = r#"
+# Basic math operations
+F abs_f64(x: f64) -> f64 = I x < 0.0 { 0.0 - x } E { x }
+F abs_i64(x: i64) -> i64 = I x < 0 { 0 - x } E { x }
+F min_f64(a: f64, b: f64) -> f64 = I a < b { a } E { b }
+F max_f64(a: f64, b: f64) -> f64 = I a > b { a } E { b }
+F min_i64(a: i64, b: i64) -> i64 = I a < b { a } E { b }
+F max_i64(a: i64, b: i64) -> i64 = I a > b { a } E { b }
+F clamp_f64(x: f64, lo: f64, hi: f64) -> f64 = max_f64(lo, min_f64(x, hi))
+F clamp_i64(x: i64, lo: i64, hi: i64) -> i64 = max_i64(lo, min_i64(x, hi))
+
+F test_math() -> i64 {
+    pi := 3.14159265358979323846
+    a := abs_i64(0 - 5)
+    b := min_i64(3, 7)
+    c := max_i64(3, 7)
+    d := clamp_i64(10, 0, 5)
+    a + b + c + d
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_arena_allocator() {
+    // Test arena allocator pattern
+    let source = r#"
+S Arena {
+    base: i64,
+    offset: i64,
+    capacity: i64
+}
+
+X Arena {
+    F new(size: i64) -> Arena {
+        base := malloc(size)
+        Arena { base: base, offset: 0, capacity: size }
+    }
+
+    F alloc(&self, size: i64) -> i64 {
+        I self.offset + size <= self.capacity {
+            ptr := self.base + self.offset
+            self.offset = self.offset + size
+            ptr
+        } E {
+            0
+        }
+    }
+
+    F reset(&self) -> () {
+        self.offset = 0
+    }
+
+    F drop(&self) -> () {
+        free(self.base)
+    }
+}
+
+F test_arena() -> i64 {
+    arena := Arena.new(1024)
+    ptr1 := arena.alloc(64)
+    ptr2 := arena.alloc(128)
+    arena.reset()
+    ptr3 := arena.alloc(64)
+    arena.drop()
+    I ptr3 == ptr1 { 1 } E { 0 }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_priority_queue() {
+    // Test priority queue (min-heap) structure
+    let source = r#"
+S PriorityQueue<T> {
+    data: i64,
+    len: i64,
+    cap: i64
+}
+
+X PriorityQueue<T> {
+    F new() -> PriorityQueue<T> {
+        cap := 16
+        data := malloc(cap * 8)
+        PriorityQueue { data: data, len: 0, cap: cap }
+    }
+
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    F peek(&self) -> T {
+        I self.len > 0 {
+            load_i64(self.data)
+        } E {
+            0
+        }
+    }
+
+    F drop(&self) -> () {
+        free(self.data)
+    }
+}
+
+F test_pq() -> i64 {
+    pq := PriorityQueue.new()
+    empty := pq.is_empty()
+    pq.drop()
+    empty
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_set_structure() {
+    // Test Set structure (HashSet-like)
+    let source = r#"
+S Set<T> {
+    buckets: i64,
+    count: i64,
+    capacity: i64
+}
+
+X Set<T> {
+    F new() -> Set<T> {
+        cap := 16
+        buckets := malloc(cap * 8)
+        L i: 0..cap {
+            store_i64(buckets + i * 8, 0)
+        }
+        Set { buckets: buckets, count: 0, capacity: cap }
+    }
+
+    F len(&self) -> i64 {
+        self.count
+    }
+
+    F is_empty(&self) -> i64 {
+        I self.count == 0 { 1 } E { 0 }
+    }
+
+    F drop(&self) -> () {
+        free(self.buckets)
+    }
+}
+
+F test_set() -> i64 {
+    s := Set.new()
+    empty := s.is_empty()
+    s.drop()
+    empty
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_std_future_type() {
+    // Test Future type for async operations
+    let source = r#"
+E FutureState<T> {
+    Pending,
+    Ready(T)
+}
+
+S Future<T> {
+    state: FutureState<T>
+}
+
+X Future<T> {
+    F pending() -> Future<T> {
+        Future { state: Pending }
+    }
+
+    F ready(value: T) -> Future<T> {
+        Future { state: Ready(value) }
+    }
+
+    F is_ready(&self) -> i64 {
+        M self.state {
+            Ready(_) => 1,
+            Pending => 0
+        }
+    }
+
+    F get(&self) -> T {
+        M self.state {
+            Ready(v) => v,
+            Pending => 0
+        }
+    }
+}
+
+F test_future() -> i64 {
+    f := Future.ready(42)
+    I f.is_ready() == 1 {
+        f.get()
+    } E {
+        0
+    }
+}
+"#;
+    assert!(compiles(source));
+}

@@ -35,6 +35,13 @@ impl StmtVisitor for CodeGenerator {
             Stmt::Continue => {
                 self.generate_continue_stmt()
             }
+            Stmt::Defer(expr) => {
+                // Add the deferred expression to the stack
+                // It will be executed when the function exits (in LIFO order)
+                self.defer_stack.push(expr.as_ref().clone());
+                // No IR generated here - defer is processed at function exit
+                Ok(("void".to_string(), String::new()))
+            }
         }
     }
 
