@@ -2667,6 +2667,14 @@ impl TypeChecker {
             },
             Type::Unit => ResolvedType::Unit,
             Type::Infer => self.fresh_type_var(),
+            Type::DynTrait { trait_name, generics } => {
+                let resolved_generics: Vec<_> =
+                    generics.iter().map(|g| self.resolve_type(&g.node)).collect();
+                ResolvedType::DynTrait {
+                    trait_name: trait_name.clone(),
+                    generics: resolved_generics,
+                }
+            }
         }
     }
 

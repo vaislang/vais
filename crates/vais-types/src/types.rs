@@ -419,6 +419,14 @@ pub enum ResolvedType {
         element: Box<ResolvedType>,
         lanes: u32,
     },
+
+    /// Dynamic trait object: `dyn Trait` or `dyn Trait<T>`
+    /// Stored as a fat pointer: (vtable*, data*)
+    /// Used for runtime polymorphism via vtable-based dispatch.
+    DynTrait {
+        trait_name: String,
+        generics: Vec<ResolvedType>,
+    },
 }
 
 impl ResolvedType {
@@ -532,6 +540,20 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Unknown => write!(f, "?"),
             ResolvedType::Never => write!(f, "!"),
             ResolvedType::Vector { element, lanes } => write!(f, "Vec{}x{}", lanes, element),
+            ResolvedType::DynTrait { trait_name, generics } => {
+                write!(f, "dyn {}", trait_name)?;
+                if !generics.is_empty() {
+                    write!(f, "<")?;
+                    for (i, g) in generics.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ",")?;
+                        }
+                        write!(f, "{}", g)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
+            }
         }
     }
 }

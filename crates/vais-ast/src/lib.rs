@@ -374,6 +374,12 @@ pub enum Type {
     Unit,
     /// Inferred type (for internal use)
     Infer,
+    /// Dynamic trait object: `dyn Trait` or `dyn Trait<T>`
+    /// Used for runtime polymorphism via vtable dispatch.
+    DynTrait {
+        trait_name: String,
+        generics: Vec<Spanned<Type>>,
+    },
 }
 
 /// Statements
@@ -689,6 +695,20 @@ impl std::fmt::Display for Type {
             }
             Type::Unit => write!(f, "()"),
             Type::Infer => write!(f, "_"),
+            Type::DynTrait { trait_name, generics } => {
+                write!(f, "dyn {}", trait_name)?;
+                if !generics.is_empty() {
+                    write!(f, "<")?;
+                    for (i, g) in generics.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", g.node)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
+            }
         }
     }
 }

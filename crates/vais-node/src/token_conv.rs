@@ -103,6 +103,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Defer => "Defer",
         Token::Union => "Union",
         Token::Comptime => "Comptime",
+        Token::Dyn => "Dyn",
     }.to_string()
 }
 

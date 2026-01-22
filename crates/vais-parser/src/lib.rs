@@ -775,6 +775,25 @@ impl Parser {
             } else {
                 Type::Ref(Box::new(inner))
             }
+        } else if self.check(&Token::Dyn) {
+            // dyn Trait or dyn Trait<T>
+            self.advance();
+            let trait_name = self.parse_type_name()?;
+            let generics = if self.check(&Token::Lt) {
+                self.advance();
+                let mut generics = Vec::new();
+                while !self.check(&Token::Gt) && !self.is_at_end() {
+                    generics.push(self.parse_type()?);
+                    if !self.check(&Token::Gt) {
+                        self.expect(&Token::Comma)?;
+                    }
+                }
+                self.expect(&Token::Gt)?;
+                generics
+            } else {
+                Vec::new()
+            };
+            Type::DynTrait { trait_name, generics }
         } else {
             let name = self.parse_type_name()?;
             let generics = if self.check(&Token::Lt) {

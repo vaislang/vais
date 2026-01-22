@@ -542,6 +542,14 @@ impl Formatter {
             }
             Type::Unit => "()".to_string(),
             Type::Infer => "_".to_string(),
+            Type::DynTrait { trait_name, generics } => {
+                if generics.is_empty() {
+                    format!("dyn {}", trait_name)
+                } else {
+                    let gens: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
+                    format!("dyn {}<{}>", trait_name, gens.join(", "))
+                }
+            }
         }
     }
 

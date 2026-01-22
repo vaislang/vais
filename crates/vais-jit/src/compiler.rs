@@ -329,6 +329,16 @@ impl JitCompiler {
                 }
             }
             Type::Infer => ResolvedType::Unknown,
+            Type::DynTrait { trait_name, generics } => {
+                let resolved_generics: Vec<_> = generics
+                    .iter()
+                    .map(|g| self.resolve_type(&g.node))
+                    .collect();
+                ResolvedType::DynTrait {
+                    trait_name: trait_name.clone(),
+                    generics: resolved_generics,
+                }
+            }
         }
     }
 
