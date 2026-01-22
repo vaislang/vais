@@ -747,8 +747,8 @@ X Lexer {
     }
 }
 
-# Test main function
-F main() -> i64 {
+# Test function (renamed from main to allow module import)
+F test_lexer_main() -> i64 {
     puts("Lexer test")
     0
 }

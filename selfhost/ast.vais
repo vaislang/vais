@@ -1087,10 +1087,10 @@ F binop_precedence(op: i64) -> i64 {
 }
 
 # ============================================================================
-# Test main
+# Test function (renamed from main to allow module import)
 # ============================================================================
 
-F main() -> i64 {
+F test_ast_main() -> i64 {
     puts("AST module loaded")
 
     # Test Module creation

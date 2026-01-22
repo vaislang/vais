@@ -1645,10 +1645,10 @@ X TypeChecker {
 }
 
 # ============================================================================
-# Test main
+# Test function (renamed from main to allow module import)
 # ============================================================================
 
-F main() -> i64 {
+F test_type_checker_main() -> i64 {
     puts("Type checker module loaded")
 
     # Test ResolvedType creation

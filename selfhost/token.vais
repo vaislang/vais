@@ -278,8 +278,8 @@ F store_token_fields(dst: i64, kind: i64, value: i64, str_ptr: i64, str_len: i64
     1
 }
 
-# Test main function
-F main() -> i64 {
+# Test function (renamed from main to allow module import)
+F test_token_main() -> i64 {
     puts("Token module loaded")
 
     # Test token creation

@@ -2017,10 +2017,10 @@ X Parser {
 }
 
 # ============================================================================
-# Test Main
+# Test function (renamed from main to allow module import)
 # ============================================================================
 
-F main() -> i64 {
+F test_parser_main() -> i64 {
     puts("Parser module loaded")
 
     # Create a simple token stream for: F add(a: i64) -> i64 = a + 1

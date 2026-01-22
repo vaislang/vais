@@ -1705,10 +1705,10 @@ X CodeGenerator {
 }
 
 # ============================================================================
-# Test main
+# Test function (renamed from main to allow module import)
 # ============================================================================
 
-F main() -> i64 {
+F test_codegen_main() -> i64 {
     puts("Code generator module loaded")
 
     # Test StringBuffer
