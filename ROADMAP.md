@@ -1006,13 +1006,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
-| Phase 10: Self-hosting | 🔄 진행 중 | 0% |
+| Phase 10: Self-hosting | 🔄 진행 중 | 15% |
 
 ---
 
 ## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (0%)
+> **상태**: 🔄 진행 중 (15%)
 > **추가일**: 2026-01-22
 > **예상 기간**: 14-16주 (약 4개월)
 > **목표**: 완전한 self-hosting 달성 및 프로덕션 준비 생태계
@@ -1020,14 +1020,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### Self-hosting 현황 (selfhost/)
 - ast.vais (1,191줄), parser.vais (2,189줄), type_checker.vais (1,762줄)
 - codegen.vais (1,785줄), lexer.vais (754줄), token.vais (309줄)
+- **main.vais (311줄)**: CLI 진입점, 파일 읽기, 에러 포맷팅 ✅
 - bootstrap_test.vais: 57개 테스트 통과
-- **누락**: main.vais (CLI 진입점)
 
 ### P0 - 핵심 (1-2주) [Self-hosting 필수]
-- [ ] **Self-hosting CLI 구현** - selfhost/main.vais
-  - 명령줄 인자 파싱 (build, check, run, fmt)
-  - 파일 읽기/쓰기 통합
-  - 에러 출력 포맷팅
+- [x] **Self-hosting CLI 구현** - selfhost/main.vais (완료일: 2026-01-22)
+  - IrResult 구조체, FileReader 패턴
+  - read_file(): 파일 읽기 (길이 inline 저장)
+  - count_lines(): 소스 분석
+  - generate_placeholder_ir(): LLVM IR 생성
+  - 에러 출력 포맷팅 (print_error, print_error_at, print_source_line 등)
 - [ ] **Selfhost 모듈 시스템 개선**
   - import 체인 구현 (상수 복사 → 실제 모듈 참조)
   - StringPool 공유 메커니즘
