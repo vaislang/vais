@@ -485,6 +485,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_numbers() {
         let source = "42 3.14 1_000_000";
         let tokens = tokenize(source).unwrap();
