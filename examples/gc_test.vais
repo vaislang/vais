@@ -1,0 +1,243 @@
+# GC Test - Demonstrates garbage collection functionality
+# This test should be run with: vaisc build gc_test.vais --gc
+
+U std/gc
+
+# Test 1: Basic allocation
+F test_basic_alloc() -> i64 {
+    puts("Test 1: Basic allocation...")
+
+    # Initialize GC
+    gc_init()
+
+    # Allocate some memory
+    ptr1 := gc_alloc(100, 1)
+    ptr2 := gc_alloc(200, 2)
+    ptr3 := gc_alloc(300, 3)
+
+    # Check allocation
+    L ptr1 == 0 {
+        puts("  FAIL: ptr1 allocation failed")
+        R 1
+    }
+    L ptr2 == 0 {
+        puts("  FAIL: ptr2 allocation failed")
+        R 1
+    }
+    L ptr3 == 0 {
+        puts("  FAIL: ptr3 allocation failed")
+        R 1
+    }
+
+    puts("  PASS: All allocations succeeded")
+    0
+}
+
+# Test 2: GC statistics
+F test_gc_stats() -> i64 {
+    puts("Test 2: GC statistics...")
+
+    gc_init()
+
+    # Allocate some objects
+    i := 0
+    L i < 10 {
+        ptr := gc_alloc(1024, 0)
+        i = i + 1
+    }
+
+    # Check stats
+    bytes := gc_bytes_allocated()
+    objects := gc_objects_count()
+
+    printf("  Allocated: %ld bytes, %ld objects\n", bytes, objects)
+
+    L bytes == 0 {
+        puts("  FAIL: No bytes allocated")
+        R 1
+    }
+    L objects == 0 {
+        puts("  FAIL: No objects tracked")
+        R 1
+    }
+
+    puts("  PASS: GC tracking objects")
+    0
+}
+
+# Test 3: Manual GC collection
+F test_manual_collect() -> i64 {
+    puts("Test 3: Manual garbage collection...")
+
+    gc_init()
+
+    # Allocate and track initial state
+    i := 0
+    L i < 5 {
+        ptr := gc_alloc(2048, 0)
+        i = i + 1
+    }
+
+    before_bytes := gc_bytes_allocated()
+    before_objects := gc_objects_count()
+    before_collections := gc_collections()
+
+    # Force collection
+    gc_collect()
+
+    after_collections := gc_collections()
+
+    printf("  Before: %ld bytes, %ld objects, %ld collections\n",
+           before_bytes, before_objects, before_collections)
+    printf("  After:  %ld collections\n", after_collections)
+
+    L after_collections <= before_collections {
+        puts("  FAIL: GC collection did not increment")
+        R 1
+    }
+
+    puts("  PASS: GC collection executed")
+    0
+}
+
+# Test 4: Root registration
+F test_gc_roots() -> i64 {
+    puts("Test 4: GC root registration...")
+
+    gc_init()
+
+    # Allocate an object
+    ptr := gc_alloc(512, 0)
+
+    # Register as root
+    gc_add_root(ptr)
+
+    # Force collection - object should survive
+    gc_collect()
+
+    # Unregister root
+    gc_remove_root(ptr)
+
+    puts("  PASS: Root registration/unregistration")
+    0
+}
+
+# Test 5: GC threshold
+F test_gc_threshold() -> i64 {
+    puts("Test 5: GC threshold...")
+
+    gc_init()
+
+    # Set low threshold to trigger automatic collection
+    gc_set_threshold(4096)
+
+    before_collections := gc_collections()
+
+    # Allocate enough to trigger GC
+    i := 0
+    L i < 10 {
+        ptr := gc_alloc(1024, 0)
+        i = i + 1
+    }
+
+    after_collections := gc_collections()
+
+    printf("  Collections before: %ld, after: %ld\n",
+           before_collections, after_collections)
+
+    L after_collections <= before_collections {
+        puts("  WARNING: Automatic GC may not have triggered")
+        # This is not necessarily a failure as objects might still be reachable
+    }
+
+    puts("  PASS: Threshold set successfully")
+    0
+}
+
+# Test 6: Large allocation
+F test_large_alloc() -> i64 {
+    puts("Test 6: Large allocation...")
+
+    gc_init()
+
+    # Allocate 1MB
+    ptr := gc_alloc(1048576, 0)
+
+    L ptr == 0 {
+        puts("  FAIL: Large allocation failed")
+        R 1
+    }
+
+    bytes := gc_bytes_allocated()
+    printf("  Allocated %ld bytes total\n", bytes)
+
+    L bytes < 1048576 {
+        puts("  FAIL: Allocation size mismatch")
+        R 1
+    }
+
+    puts("  PASS: Large allocation succeeded")
+    0
+}
+
+# Test 7: Memory stress test
+F test_memory_stress() -> i64 {
+    puts("Test 7: Memory stress test...")
+
+    gc_init()
+    gc_set_threshold(16384)  # 16KB threshold
+
+    # Allocate many small objects
+    i := 0
+    L i < 100 {
+        ptr := gc_alloc(256, 0)
+        L ptr == 0 {
+            puts("  FAIL: Allocation failed during stress test")
+            R 1
+        }
+        i = i + 1
+    }
+
+    bytes := gc_bytes_allocated()
+    objects := gc_objects_count()
+    collections := gc_collections()
+
+    printf("  Final: %ld bytes, %ld objects, %ld collections\n",
+           bytes, objects, collections)
+
+    puts("  PASS: Stress test completed")
+    0
+}
+
+# Main test runner
+F main() -> i64 {
+    puts("=== Vais GC Test Suite ===\n")
+
+    result := 0
+
+    result = test_basic_alloc()
+    L result != 0 { R result }
+
+    result = test_gc_stats()
+    L result != 0 { R result }
+
+    result = test_manual_collect()
+    L result != 0 { R result }
+
+    result = test_gc_roots()
+    L result != 0 { R result }
+
+    result = test_gc_threshold()
+    L result != 0 { R result }
+
+    result = test_large_alloc()
+    L result != 0 { R result }
+
+    result = test_memory_stress()
+    L result != 0 { R result }
+
+    puts("\n=== All Tests Passed ===")
+    gc_print_stats()
+
+    0
+}

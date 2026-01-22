@@ -1,0 +1,14 @@
+[package]
+name = "vais-gc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Optional garbage collector for Vais language"
+
+[dependencies]
+thiserror.workspace = true
+
+[lib]
+crate-type = ["rlib", "cdylib", "staticlib"]

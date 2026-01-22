@@ -1,0 +1,44 @@
+# Simple GC Demo - Minimal example showing GC functionality
+# Compile with: vaisc build gc_simple_demo.vais --gc
+
+U std/gc
+
+F main() -> i64 {
+    puts("=== Simple GC Demo ===\n")
+
+    # Initialize GC
+    puts("1. Initializing GC...")
+    gc_init()
+    puts("   Done!\n")
+
+    # Allocate some memory
+    puts("2. Allocating 10 objects (1KB each)...")
+    i := 0
+    L i < 10 {
+        ptr := gc_alloc(1024, 0)
+        i = i + 1
+    }
+    puts("   Done!\n")
+
+    # Show statistics
+    puts("3. Current statistics:")
+    bytes := gc_bytes_allocated()
+    objects := gc_objects_count()
+    printf("   - Allocated: %ld bytes\n", bytes)
+    printf("   - Objects: %ld\n", objects)
+    puts("")
+
+    # Force collection
+    puts("4. Running garbage collection...")
+    gc_collect()
+    collections := gc_collections()
+    printf("   Collections performed: %ld\n", collections)
+    puts("")
+
+    # Final statistics
+    puts("5. Final statistics:")
+    gc_print_stats()
+
+    puts("\n=== Demo Complete ===")
+    0
+}

@@ -228,6 +228,10 @@ pub struct CodeGenerator {
     // Cache for type_to_llvm conversions to avoid repeated computations
     // Uses interior mutability to allow caching through immutable references
     type_to_llvm_cache: std::cell::RefCell<HashMap<String, String>>,
+
+    // GC mode configuration
+    gc_enabled: bool,
+    gc_threshold: usize,
 }
 
 impl CodeGenerator {
@@ -278,6 +282,8 @@ impl CodeGenerator {
             generated_structs: HashMap::new(),
             generated_functions: HashMap::new(),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::new()),
+            gc_enabled: false,
+            gc_threshold: 1048576, // 1 MB default
         };
 
         // Register built-in extern functions
@@ -308,6 +314,26 @@ impl CodeGenerator {
     /// Check if debug info generation is enabled
     pub fn is_debug_enabled(&self) -> bool {
         self.debug_info.is_enabled()
+    }
+
+    /// Enable GC mode for automatic memory management
+    pub fn enable_gc(&mut self) {
+        self.gc_enabled = true;
+    }
+
+    /// Set GC threshold (bytes allocated before triggering collection)
+    pub fn set_gc_threshold(&mut self, threshold: usize) {
+        self.gc_threshold = threshold;
+    }
+
+    /// Check if GC mode is enabled
+    pub fn is_gc_enabled(&self) -> bool {
+        self.gc_enabled
+    }
+
+    /// Check if a function has the #[gc] attribute
+    fn has_gc_attribute(attributes: &[Attribute]) -> bool {
+        attributes.iter().any(|attr| attr.name == "gc")
     }
 
     /// Get current generic substitution for a type parameter
@@ -373,6 +399,41 @@ impl CodeGenerator {
         let label = format!("{}{}", prefix, self.label_counter);
         self.label_counter += 1;
         label
+    }
+
+    /// Generate allocation call (malloc or gc_alloc depending on GC mode)
+    ///
+    /// Returns: (result_register, IR code)
+    fn generate_alloc(&self, size_arg: &str, counter: &mut usize, type_id: u32) -> (String, String) {
+        let mut ir = String::new();
+
+        if self.gc_enabled {
+            // Use GC allocation
+            let ptr_tmp = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = call i8* @vais_gc_alloc(i64 {}, i32 {})\n",
+                ptr_tmp, size_arg, type_id
+            ));
+            let result = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = ptrtoint i8* {} to i64\n",
+                result, ptr_tmp
+            ));
+            (result, ir)
+        } else {
+            // Use manual malloc
+            let ptr_tmp = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = call i8* @malloc(i64 {})\n",
+                ptr_tmp, size_arg
+            ));
+            let result = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = ptrtoint i8* {} to i64\n",
+                result, ptr_tmp
+            ));
+            (result, ir)
+        }
     }
 
     /// Generates LLVM IR code for a complete module.
@@ -3021,6 +3082,23 @@ impl CodeGenerator {
                 Ok((future_ptr, ir))
             }
 
+            // Comptime expression: evaluate at compile time and emit constant
+            Expr::Comptime { body } => {
+                // Evaluate at compile time
+                let mut evaluator = vais_types::ComptimeEvaluator::new();
+                let value = evaluator.eval(body).map_err(|e| {
+                    CodegenError::TypeError(format!("Comptime evaluation failed: {}", e))
+                })?;
+
+                // Return the evaluated constant
+                match value {
+                    vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
+                    vais_types::ComptimeValue::Float(f) => Ok((format!("{:e}", f), String::new())),
+                    vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
+                    vais_types::ComptimeValue::Unit => Ok(("void".to_string(), String::new())),
+                }
+            }
+
             // Lambda expression with captures
             Expr::Lambda { params, body, captures: _ } => {
                 // Generate a unique function name for this lambda
@@ -4317,6 +4395,11 @@ impl CodeGenerator {
                 }
                 ResolvedType::I64
             }
+            Expr::Comptime { body } => {
+                // Infer type from the comptime expression result
+                // For now, we'll evaluate it and determine the type
+                self.infer_expr_type(body)
+            }
             _ => ResolvedType::I64, // Default fallback
         }
     }
@@ -4551,7 +4634,7 @@ impl CodeGenerator {
             }
             Expr::Ref(inner) | Expr::Deref(inner) |
             Expr::Try(inner) | Expr::Unwrap(inner) | Expr::Await(inner) |
-            Expr::Spawn(inner) => {
+            Expr::Spawn(inner) | Expr::Comptime { body: inner } => {
                 self.collect_free_vars_in_expr(&inner.node, bound, free);
             }
             Expr::Ternary { cond, then, else_ } => {

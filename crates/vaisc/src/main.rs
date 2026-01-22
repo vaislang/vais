@@ -6,6 +6,8 @@ mod doc_gen;
 mod repl;
 mod error_formatter;
 mod incremental;
+mod package;
+mod registry;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
@@ -68,6 +70,14 @@ struct Cli {
     /// Load additional plugin from file
     #[arg(long, value_name = "PATH", global = true)]
     plugin: Vec<PathBuf>,
+
+    /// Enable garbage collection mode
+    #[arg(long, global = true)]
+    gc: bool,
+
+    /// Set GC threshold in bytes (default: 1048576 = 1MB)
+    #[arg(long, value_name = "BYTES", global = true)]
+    gc_threshold: Option<usize>,
 }
 
 #[derive(Subcommand)]
@@ -152,6 +162,105 @@ enum Commands {
         #[arg(long, default_value = "4")]
         indent: usize,
     },
+
+    /// Package management commands
+    #[command(subcommand)]
+    Pkg(PkgCommands),
+}
+
+#[derive(Subcommand)]
+enum PkgCommands {
+    /// Initialize a new package in the current directory
+    Init {
+        /// Package name (defaults to directory name)
+        #[arg(long)]
+        name: Option<String>,
+    },
+
+    /// Build the package and its dependencies
+    Build {
+        /// Build with optimizations
+        #[arg(long)]
+        release: bool,
+
+        /// Include debug information
+        #[arg(short = 'g', long)]
+        debug: bool,
+    },
+
+    /// Type-check the package without compiling
+    Check,
+
+    /// Add a dependency
+    Add {
+        /// Dependency name
+        name: String,
+
+        /// Path to local dependency
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Version specification (for future registry support)
+        #[arg(long)]
+        version: Option<String>,
+    },
+
+    /// Remove a dependency
+    Remove {
+        /// Dependency name
+        name: String,
+    },
+
+    /// Remove build artifacts
+    Clean,
+
+    /// Install packages from registry
+    Install {
+        /// Package name with optional version (e.g., json-parser@1.0)
+        packages: Vec<String>,
+
+        /// Update the lock file
+        #[arg(long)]
+        update: bool,
+    },
+
+    /// Update dependencies to latest compatible versions
+    Update {
+        /// Specific packages to update (or all if not specified)
+        packages: Vec<String>,
+    },
+
+    /// Search for packages in the registry
+    Search {
+        /// Search query
+        query: String,
+
+        /// Maximum results to show
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Show information about a package
+    Info {
+        /// Package name
+        name: String,
+    },
+
+    /// Show cache statistics and manage cache
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum CacheAction {
+    /// Show cache statistics
+    Stats,
+    /// Clear the package cache
+    Clear,
+    /// List cached packages
+    List,
 }
 
 fn main() {
@@ -175,7 +284,7 @@ fn main() {
             let target_triple = target.as_ref()
                 .and_then(|s| TargetTriple::from_str(s))
                 .unwrap_or(TargetTriple::Native);
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild)
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold)
         }
         Some(Commands::Run { input, args }) => {
             cmd_run(&input, &args, cli.verbose, &plugins)
@@ -197,10 +306,13 @@ fn main() {
         Some(Commands::Fmt { input, check, indent }) => {
             cmd_fmt(&input, check, indent)
         }
+        Some(Commands::Pkg(pkg_cmd)) => {
+            cmd_pkg(pkg_cmd, cli.verbose)
+        }
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native, false)
+                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native, false, cli.gc, cli.gc_threshold)
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -225,6 +337,8 @@ fn cmd_build(
     plugins: &PluginRegistry,
     target: TargetTriple,
     force_rebuild: bool,
+    gc: bool,
+    gc_threshold: Option<usize>,
 ) -> Result<(), String> {
     use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
 
@@ -346,6 +460,19 @@ fn cmd_build(
 
     if verbose && !matches!(target, TargetTriple::Native) {
         println!("  {} {}", "Target:".cyan(), target.triple_str());
+    }
+
+    // Enable GC if requested
+    if gc {
+        codegen.enable_gc();
+        if let Some(threshold) = gc_threshold {
+            codegen.set_gc_threshold(threshold);
+        }
+        if verbose {
+            println!("  {} (threshold: {} bytes)",
+                "GC enabled".cyan(),
+                gc_threshold.unwrap_or(1048576));
+        }
     }
 
     // Enable debug info if requested
@@ -857,7 +984,7 @@ fn compile_to_wasi(
 fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
     // Build first (no debug for run command by default, native target only, use incremental cache)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false)?;
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None)?;
 
     // Run the binary
     if verbose {
@@ -971,6 +1098,496 @@ fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Package management commands
+fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
+    use package::*;
+    use std::env;
+
+    let cwd = env::current_dir()
+        .map_err(|e| format!("failed to get current directory: {}", e))?;
+
+    match cmd {
+        PkgCommands::Init { name } => {
+            init_package(&cwd, name.as_deref())
+                .map_err(|e| e.to_string())?;
+            println!("{} Created package in {}", "✓".green(), cwd.display());
+            Ok(())
+        }
+
+        PkgCommands::Build { release, debug } => {
+            // Find manifest
+            let pkg_dir = find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml in current directory or parents".to_string())?;
+
+            let manifest = load_manifest(&pkg_dir)
+                .map_err(|e| e.to_string())?;
+
+            if verbose {
+                println!("{} {}", "Building".cyan(), manifest.package.name);
+            }
+
+            // Resolve dependencies
+            let deps = resolve_dependencies(&manifest, &pkg_dir)
+                .map_err(|e| e.to_string())?;
+
+            if verbose && !deps.is_empty() {
+                println!("{} dependencies:", "Resolved".cyan());
+                for dep in &deps {
+                    println!("  {} -> {}", dep.name, dep.path.display());
+                }
+            }
+
+            // Determine entry point
+            let src_dir = pkg_dir.join("src");
+            let entry = if src_dir.join("main.vais").exists() {
+                src_dir.join("main.vais")
+            } else if src_dir.join("lib.vais").exists() {
+                src_dir.join("lib.vais")
+            } else {
+                return Err("no main.vais or lib.vais found in src/".to_string());
+            };
+
+            // Build options
+            let opt_level = if release { 2 } else { 0 };
+            let output = pkg_dir.join("target").join(&manifest.package.name);
+
+            // Create target directory
+            let target_dir = pkg_dir.join("target");
+            fs::create_dir_all(&target_dir)
+                .map_err(|e| format!("failed to create target directory: {}", e))?;
+
+            // Load empty plugin registry for build
+            let plugins = PluginRegistry::new();
+
+            // Build using existing infrastructure
+            cmd_build(
+                &entry,
+                Some(output.clone()),
+                false,
+                opt_level,
+                debug,
+                verbose,
+                &plugins,
+                TargetTriple::Native,
+                false,
+                false,
+                None,
+            )?;
+
+            println!("{} Built {}", "✓".green(), output.display());
+            Ok(())
+        }
+
+        PkgCommands::Check => {
+            let pkg_dir = find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
+
+            let manifest = load_manifest(&pkg_dir)
+                .map_err(|e| e.to_string())?;
+
+            let src_dir = pkg_dir.join("src");
+            let entry = if src_dir.join("main.vais").exists() {
+                src_dir.join("main.vais")
+            } else if src_dir.join("lib.vais").exists() {
+                src_dir.join("lib.vais")
+            } else {
+                return Err("no main.vais or lib.vais found in src/".to_string());
+            };
+
+            let plugins = PluginRegistry::new();
+            cmd_check(&entry, verbose, &plugins)?;
+
+            println!("{} {} type-checks correctly", "✓".green(), manifest.package.name);
+            Ok(())
+        }
+
+        PkgCommands::Add { name, path, version } => {
+            let pkg_dir = find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
+
+            let manifest_path = pkg_dir.join("vais.toml");
+            add_dependency(&manifest_path, &name, path.as_deref(), version.as_deref())
+                .map_err(|e| e.to_string())?;
+
+            println!("{} Added dependency '{}'", "✓".green(), name);
+            Ok(())
+        }
+
+        PkgCommands::Remove { name } => {
+            let pkg_dir = find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
+
+            let manifest_path = pkg_dir.join("vais.toml");
+            remove_dependency(&manifest_path, &name)
+                .map_err(|e| e.to_string())?;
+
+            println!("{} Removed dependency '{}'", "✓".green(), name);
+            Ok(())
+        }
+
+        PkgCommands::Clean => {
+            let pkg_dir = find_manifest(&cwd)
+                .ok_or_else(|| "could not find vais.toml".to_string())?;
+
+            let target_dir = pkg_dir.join("target");
+            let cache_dir = pkg_dir.join(".vais-cache");
+
+            if target_dir.exists() {
+                fs::remove_dir_all(&target_dir)
+                    .map_err(|e| format!("failed to remove target/: {}", e))?;
+            }
+
+            if cache_dir.exists() {
+                fs::remove_dir_all(&cache_dir)
+                    .map_err(|e| format!("failed to remove .vais-cache/: {}", e))?;
+            }
+
+            println!("{} Cleaned build artifacts", "✓".green());
+            Ok(())
+        }
+
+        PkgCommands::Install { packages, update } => {
+            cmd_pkg_install(&cwd, packages, update, verbose)
+        }
+
+        PkgCommands::Update { packages } => {
+            cmd_pkg_update(&cwd, packages, verbose)
+        }
+
+        PkgCommands::Search { query, limit } => {
+            cmd_pkg_search(&query, limit, verbose)
+        }
+
+        PkgCommands::Info { name } => {
+            cmd_pkg_info(&name, verbose)
+        }
+
+        PkgCommands::Cache { action } => {
+            cmd_pkg_cache(action, verbose)
+        }
+    }
+}
+
+/// Install packages from registry
+fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, verbose: bool) -> Result<(), String> {
+    use registry::{PackageCache, RegistryClient, RegistrySource, VersionReq, LockFile, DependencyResolver};
+    use package::{find_manifest, load_manifest};
+
+    // Initialize registry client
+    let source = RegistrySource::default();
+    let mut client = RegistryClient::new(source)
+        .map_err(|e| format!("failed to initialize registry client: {}", e))?;
+
+    // Try to load cached index, or update if needed
+    if !client.load_cached_index().map_err(|e| e.to_string())? {
+        println!("{} Updating package index...", "Info".cyan());
+        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+    }
+
+    // Load lock file if exists
+    let lock_path = cwd.join("vais.lock");
+    let lock = if lock_path.exists() && !update {
+        Some(LockFile::load(&lock_path).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+
+    // Parse package specs
+    let mut resolver = DependencyResolver::new(&client);
+    if let Some(ref l) = lock {
+        resolver = resolver.with_lock(l);
+    }
+
+    for spec in &packages {
+        let (name, version_req) = parse_package_spec(spec);
+        resolver.add(&name, &version_req)
+            .map_err(|e| format!("invalid version requirement '{}': {}", version_req, e))?;
+    }
+
+    // Resolve dependencies
+    if verbose {
+        println!("{} Resolving dependencies...", "Info".cyan());
+    }
+
+    let resolved = resolver.resolve()
+        .map_err(|e| format!("dependency resolution failed: {}", e))?;
+
+    if resolved.is_empty() {
+        println!("{} No packages to install", "Info".cyan());
+        return Ok(());
+    }
+
+    // Install packages
+    for pkg in &resolved {
+        if client.is_installed(&pkg.name, &pkg.version) {
+            if verbose {
+                println!("{} {} {} (cached)", "Skipping".yellow(), pkg.name, pkg.version);
+            }
+        } else {
+            println!("{} {} {}...", "Installing".green(), pkg.name, pkg.version);
+            client.download(&pkg.name, &pkg.version)
+                .map_err(|e| format!("failed to install {} {}: {}", pkg.name, pkg.version, e))?;
+        }
+    }
+
+    // Save lock file
+    let new_lock = resolver.generate_lock();
+    new_lock.save(&lock_path)
+        .map_err(|e| format!("failed to save lock file: {}", e))?;
+
+    println!("{} Installed {} package(s)", "✓".green(), resolved.len());
+    Ok(())
+}
+
+/// Update dependencies
+fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, verbose: bool) -> Result<(), String> {
+    use registry::{RegistryClient, RegistrySource, VersionReq, LockFile, DependencyResolver};
+    use package::{find_manifest, load_manifest};
+
+    // Find and load manifest
+    let pkg_dir = find_manifest(cwd)
+        .ok_or_else(|| "could not find vais.toml".to_string())?;
+    let manifest = load_manifest(&pkg_dir)
+        .map_err(|e| e.to_string())?;
+
+    // Initialize registry client
+    let source = RegistrySource::default();
+    let mut client = RegistryClient::new(source)
+        .map_err(|e| format!("failed to initialize registry client: {}", e))?;
+
+    println!("{} Updating package index...", "Info".cyan());
+    client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+
+    // Determine which packages to update
+    let deps_to_update: Vec<(String, String)> = if packages.is_empty() {
+        // Update all dependencies from manifest
+        manifest.dependencies.iter()
+            .filter_map(|(name, dep)| {
+                match dep {
+                    package::Dependency::Version(v) => Some((name.clone(), v.clone())),
+                    package::Dependency::Detailed(d) if d.version.is_some() => {
+                        Some((name.clone(), d.version.clone().unwrap()))
+                    }
+                    _ => None
+                }
+            })
+            .collect()
+    } else {
+        // Update only specified packages
+        packages.iter()
+            .filter_map(|name| {
+                manifest.dependencies.get(name).and_then(|dep| {
+                    match dep {
+                        package::Dependency::Version(v) => Some((name.clone(), v.clone())),
+                        package::Dependency::Detailed(d) if d.version.is_some() => {
+                            Some((name.clone(), d.version.clone().unwrap()))
+                        }
+                        _ => None
+                    }
+                })
+            })
+            .collect()
+    };
+
+    if deps_to_update.is_empty() {
+        println!("{} No registry dependencies to update", "Info".cyan());
+        return Ok(());
+    }
+
+    // Resolve with fresh versions (no lock file)
+    let mut resolver = DependencyResolver::new(&client);
+    for (name, req) in &deps_to_update {
+        resolver.add(name, req)
+            .map_err(|e| format!("invalid version requirement '{}': {}", req, e))?;
+    }
+
+    let resolved = resolver.resolve()
+        .map_err(|e| format!("dependency resolution failed: {}", e))?;
+
+    // Install/update packages
+    for pkg in &resolved {
+        if client.is_installed(&pkg.name, &pkg.version) {
+            if verbose {
+                println!("{} {} {} (up to date)", "Skipping".yellow(), pkg.name, pkg.version);
+            }
+        } else {
+            println!("{} {} {}...", "Updating".green(), pkg.name, pkg.version);
+            client.download(&pkg.name, &pkg.version)
+                .map_err(|e| format!("failed to update {} {}: {}", pkg.name, pkg.version, e))?;
+        }
+    }
+
+    // Save new lock file
+    let lock_path = pkg_dir.join("vais.lock");
+    let new_lock = resolver.generate_lock();
+    new_lock.save(&lock_path)
+        .map_err(|e| format!("failed to save lock file: {}", e))?;
+
+    println!("{} Updated {} package(s)", "✓".green(), resolved.len());
+    Ok(())
+}
+
+/// Search for packages
+fn cmd_pkg_search(query: &str, limit: usize, verbose: bool) -> Result<(), String> {
+    use registry::{RegistryClient, RegistrySource};
+
+    let source = RegistrySource::default();
+    let mut client = RegistryClient::new(source)
+        .map_err(|e| format!("failed to initialize registry client: {}", e))?;
+
+    // Try cached index first, update if not available
+    if !client.load_cached_index().map_err(|e| e.to_string())? {
+        println!("{} Updating package index...", "Info".cyan());
+        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+    }
+
+    let results = client.search(query)
+        .map_err(|e| format!("search failed: {}", e))?;
+
+    if results.is_empty() {
+        println!("{} No packages found matching '{}'", "Info".cyan(), query);
+        return Ok(());
+    }
+
+    println!("{} packages found:\n", results.len().min(limit));
+
+    for pkg in results.iter().take(limit) {
+        let latest = pkg.latest_version()
+            .map(|v| v.version.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        println!("  {} {}", pkg.name.bold(), format!("v{}", latest).cyan());
+        if let Some(ref desc) = pkg.description {
+            println!("    {}", desc);
+        }
+        if verbose && !pkg.keywords.is_empty() {
+            println!("    {}: {}", "keywords".dimmed(), pkg.keywords.join(", "));
+        }
+        println!();
+    }
+
+    if results.len() > limit {
+        println!("  ... and {} more", results.len() - limit);
+    }
+
+    Ok(())
+}
+
+/// Show package info
+fn cmd_pkg_info(name: &str, verbose: bool) -> Result<(), String> {
+    use registry::{RegistryClient, RegistrySource};
+
+    let source = RegistrySource::default();
+    let mut client = RegistryClient::new(source)
+        .map_err(|e| format!("failed to initialize registry client: {}", e))?;
+
+    if !client.load_cached_index().map_err(|e| e.to_string())? {
+        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+    }
+
+    let pkg = client.get_package(name)
+        .map_err(|e| format!("package not found: {}", e))?;
+
+    println!("{} {}", pkg.name.bold(), "package info".dimmed());
+    println!();
+
+    if let Some(ref desc) = pkg.description {
+        println!("  {}: {}", "description".cyan(), desc);
+    }
+
+    if let Some(ref license) = pkg.license {
+        println!("  {}: {}", "license".cyan(), license);
+    }
+
+    if !pkg.authors.is_empty() {
+        println!("  {}: {}", "authors".cyan(), pkg.authors.join(", "));
+    }
+
+    if let Some(ref homepage) = pkg.homepage {
+        println!("  {}: {}", "homepage".cyan(), homepage);
+    }
+
+    if let Some(ref repo) = pkg.repository {
+        println!("  {}: {}", "repository".cyan(), repo);
+    }
+
+    if !pkg.keywords.is_empty() {
+        println!("  {}: {}", "keywords".cyan(), pkg.keywords.join(", "));
+    }
+
+    println!();
+    println!("  {}:", "versions".cyan());
+    let versions = pkg.available_versions();
+    for (i, v) in versions.iter().take(10).enumerate() {
+        let marker = if i == 0 { " (latest)" } else { "" };
+        println!("    {}{}", v.version, marker.green());
+        if verbose && !v.dependencies.is_empty() {
+            println!("      deps: {}", v.dependencies.keys().cloned().collect::<Vec<_>>().join(", "));
+        }
+    }
+    if versions.len() > 10 {
+        println!("    ... and {} more", versions.len() - 10);
+    }
+
+    Ok(())
+}
+
+/// Cache management
+fn cmd_pkg_cache(action: CacheAction, _verbose: bool) -> Result<(), String> {
+    use registry::PackageCache;
+
+    let cache = PackageCache::new()
+        .map_err(|e| format!("failed to access cache: {}", e))?;
+
+    match action {
+        CacheAction::Stats => {
+            let stats = cache.stats()
+                .map_err(|e| format!("failed to get cache stats: {}", e))?;
+
+            println!("{}", "Cache Statistics".bold());
+            println!("  {}: {}", "location".cyan(), cache.root().display());
+            println!("  {}: {}", "packages".cyan(), stats.packages);
+            println!("  {}: {}", "versions".cyan(), stats.versions);
+            println!("  {}: {}", "size".cyan(), stats.size_display());
+        }
+        CacheAction::Clear => {
+            cache.clear()
+                .map_err(|e| format!("failed to clear cache: {}", e))?;
+            println!("{} Cache cleared", "✓".green());
+        }
+        CacheAction::List => {
+            let packages = cache.list_packages()
+                .map_err(|e| format!("failed to list packages: {}", e))?;
+
+            if packages.is_empty() {
+                println!("{} Cache is empty", "Info".cyan());
+                return Ok(());
+            }
+
+            println!("{}", "Cached packages:".bold());
+            for name in packages {
+                let versions = cache.list_versions(&name)
+                    .map_err(|e| format!("failed to list versions: {}", e))?;
+                let version_strs: Vec<String> = versions.iter().map(|v| v.to_string()).collect();
+                println!("  {} [{}]", name.bold(), version_strs.join(", "));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse package spec (name or name@version)
+fn parse_package_spec(spec: &str) -> (String, String) {
+    if let Some(idx) = spec.find('@') {
+        let name = &spec[..idx];
+        let version = &spec[idx + 1..];
+        (name.to_string(), version.to_string())
+    } else {
+        (spec.to_string(), "*".to_string())
+    }
 }
 
 /// Walk directory recursively to find files with given extension

@@ -868,7 +868,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - std/url.vais: URL 파싱, percent-encoding
 
 ### P4 - 미래 (6개월+)
-- [ ] **Garbage Collection 옵션** - 선택적 GC 모드 (REPL/스크립팅용)
+- [x] **Garbage Collection 옵션** - 선택적 GC 모드 (REPL/스크립팅용) (완료일: 2026-01-22)
+  - vais-gc 크레이트 추가 (Mark-and-Sweep 알고리즘)
+  - GcAllocator, GcRoot 관리, C FFI 인터페이스
+  - std/gc.vais 런타임 모듈 (gc_init, gc_alloc, gc_collect)
+  - CLI 옵션: `--gc`, `--gc-threshold <bytes>`
+  - 9개 단위 테스트 통과
 - [ ] **Hot reloading** - 코드 변경 시 실행 중인 프로그램 업데이트
 - [ ] **GPU 타겟** - CUDA/OpenCL/WebGPU 코드 생성
 

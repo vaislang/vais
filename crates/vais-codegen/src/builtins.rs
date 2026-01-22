@@ -55,6 +55,7 @@ impl CodeGenerator {
         self.register_string_functions();
         self.register_async_functions();
         self.register_simd_functions();
+        self.register_gc_functions();
     }
 
     fn register_io_functions(&mut self) {
@@ -586,6 +587,62 @@ impl CodeGenerator {
                 ret_type: ResolvedType::I64,
                 is_extern: false,
             },
+        );
+    }
+
+    fn register_gc_functions(&mut self) {
+        // GC runtime functions
+        register_extern!(self, "vais_gc_init",
+            vec![],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_alloc",
+            vec![
+                ("size".to_string(), ResolvedType::I64),
+                ("type_id".to_string(), ResolvedType::I32),
+            ],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_add_root",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_remove_root",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_collect",
+            vec![],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_bytes_allocated",
+            vec![],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_objects_count",
+            vec![],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_collections",
+            vec![],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_set_threshold",
+            vec![("threshold".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        register_extern!(self, "vais_gc_print_stats",
+            vec![],
+            ResolvedType::I64
         );
     }
 }

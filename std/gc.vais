@@ -1,0 +1,135 @@
+# Garbage Collector Runtime Module
+# Provides optional automatic memory management for Vais
+
+# External C FFI declarations for GC runtime
+X F vais_gc_init() -> i64
+X F vais_gc_alloc(size: i64, type_id: i64) -> i64
+X F vais_gc_add_root(ptr: i64) -> i64
+X F vais_gc_remove_root(ptr: i64) -> i64
+X F vais_gc_collect() -> i64
+X F vais_gc_bytes_allocated() -> i64
+X F vais_gc_objects_count() -> i64
+X F vais_gc_collections() -> i64
+X F vais_gc_set_threshold(threshold: i64) -> i64
+X F vais_gc_print_stats() -> i64
+
+# Initialize the GC system
+# Call this once at program start when using GC mode
+F gc_init() -> i64 {
+    vais_gc_init()
+}
+
+# Allocate GC-managed memory
+# Returns pointer to allocated memory
+# Arguments:
+#   size - bytes to allocate
+#   type_id - optional type identifier for debugging (default 0)
+F gc_alloc(size: i64, type_id: i64) -> i64 {
+    vais_gc_alloc(size, type_id)
+}
+
+# Allocate with default type_id
+F gc_alloc_simple(size: i64) -> i64 {
+    vais_gc_alloc(size, 0)
+}
+
+# Register a root pointer
+# Call this to tell the GC about pointers on the stack or in globals
+F gc_add_root(ptr: i64) -> i64 {
+    vais_gc_add_root(ptr)
+}
+
+# Unregister a root pointer
+# Call this when a local variable goes out of scope
+F gc_remove_root(ptr: i64) -> i64 {
+    vais_gc_remove_root(ptr)
+}
+
+# Force garbage collection
+# Runs mark-and-sweep to free unreachable objects
+F gc_collect() -> i64 {
+    vais_gc_collect()
+}
+
+# Get current bytes allocated
+F gc_bytes_allocated() -> i64 {
+    vais_gc_bytes_allocated()
+}
+
+# Get number of live GC objects
+F gc_objects_count() -> i64 {
+    vais_gc_objects_count()
+}
+
+# Get number of GC collections performed
+F gc_collections() -> i64 {
+    vais_gc_collections()
+}
+
+# Set GC threshold (bytes allocated before auto-collection)
+# Default is 1MB (1048576 bytes)
+F gc_set_threshold(threshold: i64) -> i64 {
+    vais_gc_set_threshold(threshold)
+}
+
+# Print GC statistics to stdout
+F gc_print_stats() -> i64 {
+    vais_gc_print_stats()
+}
+
+# GC Statistics struct
+S GcStats {
+    bytes_allocated: i64,
+    objects_count: i64,
+    collections: i64,
+    threshold: i64
+}
+
+# Get GC statistics as a struct
+F gc_stats() -> GcStats {
+    GcStats {
+        bytes_allocated: gc_bytes_allocated(),
+        objects_count: gc_objects_count(),
+        collections: gc_collections(),
+        threshold: 0  # Not exposed via FFI yet
+    }
+}
+
+# RAII-style GC Root Guard
+# Automatically registers/unregisters a root
+S GcRootGuard {
+    ptr: i64
+}
+
+X GcRootGuard {
+    # Create a new root guard and register the pointer
+    F new(ptr: i64) -> GcRootGuard {
+        gc_add_root(ptr)
+        GcRootGuard { ptr: ptr }
+    }
+
+    # Unregister the root
+    F drop(&self) -> i64 {
+        gc_remove_root(self.ptr)
+    }
+}
+
+# Scoped GC block helper
+# Usage:
+#   gc_scope {
+#       data := gc_alloc(100, 0)
+#       # use data
+#   }  # data automatically freed if unreachable
+#
+# Note: This is a conceptual helper - actual scoping
+# would require compiler support for defer/RAII
+F gc_scope_begin() -> i64 {
+    # Mark current allocation count
+    gc_bytes_allocated()
+}
+
+F gc_scope_end(start_bytes: i64) -> i64 {
+    # Force collection at scope exit
+    gc_collect()
+    0
+}
