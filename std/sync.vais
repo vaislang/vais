@@ -1,0 +1,753 @@
+# Sync - Synchronization primitives for concurrent programming
+# Provides Mutex, RwLock, Condvar, Barrier, Channel, and atomics
+
+# ============================================
+# Mutex - Mutual Exclusion Lock
+# ============================================
+
+S Mutex<T> {
+    inner: T,
+    lock_state: i64,   # 0 = unlocked, 1 = locked
+    os_mutex: i64      # OS mutex handle
+}
+
+X Mutex<T> {
+    F new(value: T) -> Mutex<T> {
+        os_mutex := __mutex_create()
+        Mutex {
+            inner: value,
+            lock_state: 0,
+            os_mutex: os_mutex
+        }
+    }
+
+    # Acquire the lock and return a guard
+    F lock(&self) -> MutexGuard<T> {
+        __mutex_lock(self.os_mutex)
+        self.lock_state = 1
+        MutexGuard::new(&self)
+    }
+
+    # Try to acquire the lock without blocking
+    F try_lock(&self) -> MutexGuard<T>? {
+        result := __mutex_try_lock(self.os_mutex)
+        L result == 1 {
+            self.lock_state = 1
+            Some(MutexGuard::new(&self))
+        } ! {
+            None
+        }
+    }
+
+    # Check if the mutex is locked
+    F is_locked(&self) -> i64 {
+        self.lock_state
+    }
+
+    # Get the inner value (unsafe, should only be called with lock held)
+    F get_inner(&self) -> &T {
+        &self.inner
+    }
+
+    # Set the inner value (unsafe, should only be called with lock held)
+    F set_inner(&self, value: T) -> i64 {
+        self.inner = value
+        0
+    }
+}
+
+# MutexGuard - RAII guard for Mutex
+S MutexGuard<T> {
+    mutex_ptr: i64
+}
+
+X MutexGuard<T> {
+    F new(mutex: &Mutex<T>) -> MutexGuard<T> {
+        MutexGuard {
+            mutex_ptr: mutex as i64
+        }
+    }
+
+    # Access the protected value
+    F get(&self) -> &T {
+        mutex := self.mutex_ptr as *Mutex<T>
+        mutex.get_inner()
+    }
+
+    # Modify the protected value
+    F set(&self, value: T) -> i64 {
+        mutex := self.mutex_ptr as *Mutex<T>
+        mutex.set_inner(value)
+    }
+
+    # Explicitly release the lock
+    F unlock(&self) -> i64 {
+        mutex := self.mutex_ptr as *Mutex<T>
+        mutex.lock_state = 0
+        __mutex_unlock(mutex.os_mutex)
+        0
+    }
+}
+
+# ============================================
+# RwLock - Read-Write Lock
+# ============================================
+
+S RwLock<T> {
+    inner: T,
+    readers: i64,      # Number of active readers
+    writer: i64,       # 1 if writer holds lock
+    os_rwlock: i64
+}
+
+X RwLock<T> {
+    F new(value: T) -> RwLock<T> {
+        os_rwlock := __rwlock_create()
+        RwLock {
+            inner: value,
+            readers: 0,
+            writer: 0,
+            os_rwlock: os_rwlock
+        }
+    }
+
+    # Acquire a read lock
+    F read(&self) -> RwLockReadGuard<T> {
+        __rwlock_read_lock(self.os_rwlock)
+        self.readers = self.readers + 1
+        RwLockReadGuard::new(&self)
+    }
+
+    # Acquire a write lock
+    F write(&self) -> RwLockWriteGuard<T> {
+        __rwlock_write_lock(self.os_rwlock)
+        self.writer = 1
+        RwLockWriteGuard::new(&self)
+    }
+
+    # Try to acquire read lock
+    F try_read(&self) -> RwLockReadGuard<T>? {
+        result := __rwlock_try_read_lock(self.os_rwlock)
+        L result == 1 {
+            self.readers = self.readers + 1
+            Some(RwLockReadGuard::new(&self))
+        } ! {
+            None
+        }
+    }
+
+    # Try to acquire write lock
+    F try_write(&self) -> RwLockWriteGuard<T>? {
+        result := __rwlock_try_write_lock(self.os_rwlock)
+        L result == 1 {
+            self.writer = 1
+            Some(RwLockWriteGuard::new(&self))
+        } ! {
+            None
+        }
+    }
+
+    F get_inner(&self) -> &T {
+        &self.inner
+    }
+
+    F set_inner(&self, value: T) -> i64 {
+        self.inner = value
+        0
+    }
+}
+
+# Read guard
+S RwLockReadGuard<T> {
+    lock_ptr: i64
+}
+
+X RwLockReadGuard<T> {
+    F new(lock: &RwLock<T>) -> RwLockReadGuard<T> {
+        RwLockReadGuard { lock_ptr: lock as i64 }
+    }
+
+    F get(&self) -> &T {
+        lock := self.lock_ptr as *RwLock<T>
+        lock.get_inner()
+    }
+
+    F unlock(&self) -> i64 {
+        lock := self.lock_ptr as *RwLock<T>
+        lock.readers = lock.readers - 1
+        __rwlock_read_unlock(lock.os_rwlock)
+        0
+    }
+}
+
+# Write guard
+S RwLockWriteGuard<T> {
+    lock_ptr: i64
+}
+
+X RwLockWriteGuard<T> {
+    F new(lock: &RwLock<T>) -> RwLockWriteGuard<T> {
+        RwLockWriteGuard { lock_ptr: lock as i64 }
+    }
+
+    F get(&self) -> &T {
+        lock := self.lock_ptr as *RwLock<T>
+        lock.get_inner()
+    }
+
+    F set(&self, value: T) -> i64 {
+        lock := self.lock_ptr as *RwLock<T>
+        lock.set_inner(value)
+    }
+
+    F unlock(&self) -> i64 {
+        lock := self.lock_ptr as *RwLock<T>
+        lock.writer = 0
+        __rwlock_write_unlock(lock.os_rwlock)
+        0
+    }
+}
+
+# ============================================
+# Condvar - Condition Variable
+# ============================================
+
+S Condvar {
+    os_condvar: i64
+}
+
+X Condvar {
+    F new() -> Condvar {
+        os_condvar := __condvar_create()
+        Condvar { os_condvar: os_condvar }
+    }
+
+    # Wait on the condition variable
+    # Must be called while holding the mutex lock
+    F wait(&self, mutex_guard: &MutexGuard<i64>) -> i64 {
+        mutex := mutex_guard.mutex_ptr as *Mutex<i64>
+        __condvar_wait(self.os_condvar, mutex.os_mutex)
+        0
+    }
+
+    # Wait with timeout (milliseconds)
+    F wait_timeout(&self, mutex_guard: &MutexGuard<i64>, timeout_ms: i64) -> i64 {
+        mutex := mutex_guard.mutex_ptr as *Mutex<i64>
+        __condvar_wait_timeout(self.os_condvar, mutex.os_mutex, timeout_ms)
+    }
+
+    # Wake one waiting thread
+    F notify_one(&self) -> i64 {
+        __condvar_signal(self.os_condvar)
+    }
+
+    # Wake all waiting threads
+    F notify_all(&self) -> i64 {
+        __condvar_broadcast(self.os_condvar)
+    }
+}
+
+# ============================================
+# Barrier - Synchronization barrier
+# ============================================
+
+S Barrier {
+    threshold: i64,    # Number of threads to wait for
+    count: i64,        # Current number of waiting threads
+    generation: i64,   # Barrier generation (resets after all threads pass)
+    os_barrier: i64
+}
+
+X Barrier {
+    F new(n: i64) -> Barrier {
+        os_barrier := __barrier_create(n)
+        Barrier {
+            threshold: n,
+            count: 0,
+            generation: 0,
+            os_barrier: os_barrier
+        }
+    }
+
+    # Wait at the barrier until all threads arrive
+    # Returns 1 for the leader thread, 0 for others
+    F wait(&self) -> i64 {
+        __barrier_wait(self.os_barrier)
+    }
+}
+
+# ============================================
+# Once - One-time initialization
+# ============================================
+
+S Once {
+    state: i64,       # 0 = not run, 1 = running, 2 = completed
+    os_once: i64
+}
+
+X Once {
+    F new() -> Once {
+        os_once := __once_create()
+        Once {
+            state: 0,
+            os_once: os_once
+        }
+    }
+
+    # Call the function exactly once
+    F call_once(&self, fn_ptr: i64) -> i64 {
+        L self.state == 2 {
+            0  # Already completed
+        } ! {
+            __once_call(self.os_once, fn_ptr)
+            self.state = 2
+            0
+        }
+    }
+
+    # Check if initialization is complete
+    F is_completed(&self) -> i64 {
+        self.state == 2
+    }
+}
+
+# ============================================
+# Semaphore
+# ============================================
+
+S Semaphore {
+    permits: i64,
+    os_semaphore: i64
+}
+
+X Semaphore {
+    F new(permits: i64) -> Semaphore {
+        os_semaphore := __semaphore_create(permits)
+        Semaphore {
+            permits: permits,
+            os_semaphore: os_semaphore
+        }
+    }
+
+    # Acquire a permit (blocks if none available)
+    F acquire(&self) -> i64 {
+        __semaphore_wait(self.os_semaphore)
+        self.permits = self.permits - 1
+        0
+    }
+
+    # Try to acquire without blocking
+    F try_acquire(&self) -> i64 {
+        result := __semaphore_try_wait(self.os_semaphore)
+        L result == 1 {
+            self.permits = self.permits - 1
+            1
+        } ! {
+            0
+        }
+    }
+
+    # Release a permit
+    F release(&self) -> i64 {
+        __semaphore_post(self.os_semaphore)
+        self.permits = self.permits + 1
+        0
+    }
+
+    # Get available permits
+    F available(&self) -> i64 {
+        self.permits
+    }
+}
+
+# ============================================
+# Channel - MPSC message passing
+# ============================================
+
+S Sender<T> {
+    channel_ptr: i64
+}
+
+S Receiver<T> {
+    channel_ptr: i64
+}
+
+S Channel<T> {
+    buffer: i64,       # Ring buffer for messages
+    capacity: i64,
+    head: i64,
+    tail: i64,
+    mutex: i64,
+    not_empty: i64,    # Condvar
+    not_full: i64,     # Condvar
+    closed: i64
+}
+
+X Channel<T> {
+    F new(capacity: i64) -> Channel<T> {
+        buffer := __malloc(capacity * 8)  # Assume 8 bytes per message
+        mutex := __mutex_create()
+        not_empty := __condvar_create()
+        not_full := __condvar_create()
+
+        Channel {
+            buffer: buffer,
+            capacity: capacity,
+            head: 0,
+            tail: 0,
+            mutex: mutex,
+            not_empty: not_empty,
+            not_full: not_full,
+            closed: 0
+        }
+    }
+
+    # Send a message (blocks if buffer is full)
+    F send(&self, value: T) -> i64 {
+        __mutex_lock(self.mutex)
+
+        # Wait until there's space
+        L (self.tail - self.head) >= self.capacity {
+            L self.closed == 1 {
+                __mutex_unlock(self.mutex)
+                R -1  # Channel closed
+            }
+            __condvar_wait(self.not_full, self.mutex)
+        }
+
+        # Add message to buffer
+        offset := (self.tail % self.capacity) * 8
+        __store_i64(self.buffer + offset, value as i64)
+        self.tail = self.tail + 1
+
+        __condvar_signal(self.not_empty)
+        __mutex_unlock(self.mutex)
+        0
+    }
+
+    # Receive a message (blocks if buffer is empty)
+    F recv(&self) -> T? {
+        __mutex_lock(self.mutex)
+
+        # Wait until there's a message
+        L self.head >= self.tail {
+            L self.closed == 1 {
+                __mutex_unlock(self.mutex)
+                R None
+            }
+            __condvar_wait(self.not_empty, self.mutex)
+        }
+
+        # Get message from buffer
+        offset := (self.head % self.capacity) * 8
+        value := __load_i64(self.buffer + offset)
+        self.head = self.head + 1
+
+        __condvar_signal(self.not_full)
+        __mutex_unlock(self.mutex)
+        Some(value as T)
+    }
+
+    # Try to send without blocking
+    F try_send(&self, value: T) -> i64 {
+        result := __mutex_try_lock(self.mutex)
+        L result == 0 {
+            R -1  # Could not acquire lock
+        }
+
+        L (self.tail - self.head) >= self.capacity {
+            __mutex_unlock(self.mutex)
+            R -1  # Buffer full
+        }
+
+        offset := (self.tail % self.capacity) * 8
+        __store_i64(self.buffer + offset, value as i64)
+        self.tail = self.tail + 1
+
+        __condvar_signal(self.not_empty)
+        __mutex_unlock(self.mutex)
+        0
+    }
+
+    # Try to receive without blocking
+    F try_recv(&self) -> T? {
+        result := __mutex_try_lock(self.mutex)
+        L result == 0 {
+            R None
+        }
+
+        L self.head >= self.tail {
+            __mutex_unlock(self.mutex)
+            R None
+        }
+
+        offset := (self.head % self.capacity) * 8
+        value := __load_i64(self.buffer + offset)
+        self.head = self.head + 1
+
+        __condvar_signal(self.not_full)
+        __mutex_unlock(self.mutex)
+        Some(value as T)
+    }
+
+    # Close the channel
+    F close(&self) -> i64 {
+        __mutex_lock(self.mutex)
+        self.closed = 1
+        __condvar_broadcast(self.not_empty)
+        __condvar_broadcast(self.not_full)
+        __mutex_unlock(self.mutex)
+        0
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        self.head >= self.tail
+    }
+
+    # Get length
+    F len(&self) -> i64 {
+        self.tail - self.head
+    }
+}
+
+X Sender<T> {
+    F new(channel: &Channel<T>) -> Sender<T> {
+        Sender { channel_ptr: channel as i64 }
+    }
+
+    F send(&self, value: T) -> i64 {
+        channel := self.channel_ptr as *Channel<T>
+        channel.send(value)
+    }
+
+    F try_send(&self, value: T) -> i64 {
+        channel := self.channel_ptr as *Channel<T>
+        channel.try_send(value)
+    }
+}
+
+X Receiver<T> {
+    F new(channel: &Channel<T>) -> Receiver<T> {
+        Receiver { channel_ptr: channel as i64 }
+    }
+
+    F recv(&self) -> T? {
+        channel := self.channel_ptr as *Channel<T>
+        channel.recv()
+    }
+
+    F try_recv(&self) -> T? {
+        channel := self.channel_ptr as *Channel<T>
+        channel.try_recv()
+    }
+}
+
+# Create a channel and return (Sender, Receiver) pair
+F channel<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
+    ch := Channel::new(capacity)
+    ch_ptr := &ch as i64
+    (Sender::new(&ch), Receiver::new(&ch))
+}
+
+# ============================================
+# Atomic Types
+# ============================================
+
+S AtomicI64 {
+    value: i64
+}
+
+X AtomicI64 {
+    F new(value: i64) -> AtomicI64 {
+        AtomicI64 { value: value }
+    }
+
+    # Load atomically
+    F load(&self) -> i64 {
+        __atomic_load_i64(&self.value as i64)
+    }
+
+    # Store atomically
+    F store(&self, value: i64) -> i64 {
+        __atomic_store_i64(&self.value as i64, value)
+    }
+
+    # Swap and return old value
+    F swap(&self, value: i64) -> i64 {
+        __atomic_exchange_i64(&self.value as i64, value)
+    }
+
+    # Compare and swap
+    F compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
+        __atomic_compare_exchange_i64(&self.value as i64, expected, new_value)
+    }
+
+    # Fetch and add
+    F fetch_add(&self, value: i64) -> i64 {
+        __atomic_fetch_add_i64(&self.value as i64, value)
+    }
+
+    # Fetch and subtract
+    F fetch_sub(&self, value: i64) -> i64 {
+        __atomic_fetch_sub_i64(&self.value as i64, value)
+    }
+
+    # Fetch and AND
+    F fetch_and(&self, value: i64) -> i64 {
+        __atomic_fetch_and_i64(&self.value as i64, value)
+    }
+
+    # Fetch and OR
+    F fetch_or(&self, value: i64) -> i64 {
+        __atomic_fetch_or_i64(&self.value as i64, value)
+    }
+
+    # Fetch and XOR
+    F fetch_xor(&self, value: i64) -> i64 {
+        __atomic_fetch_xor_i64(&self.value as i64, value)
+    }
+}
+
+S AtomicBool {
+    value: i64  # 0 = false, 1 = true
+}
+
+X AtomicBool {
+    F new(value: i64) -> AtomicBool {
+        AtomicBool { value: value }
+    }
+
+    F load(&self) -> i64 {
+        __atomic_load_i64(&self.value as i64)
+    }
+
+    F store(&self, value: i64) -> i64 {
+        __atomic_store_i64(&self.value as i64, value)
+    }
+
+    F swap(&self, value: i64) -> i64 {
+        __atomic_exchange_i64(&self.value as i64, value)
+    }
+
+    F compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
+        __atomic_compare_exchange_i64(&self.value as i64, expected, new_value)
+    }
+}
+
+# ============================================
+# SpinLock - busy-wait lock for short critical sections
+# ============================================
+
+S SpinLock {
+    locked: AtomicI64
+}
+
+X SpinLock {
+    F new() -> SpinLock {
+        SpinLock {
+            locked: AtomicI64::new(0)
+        }
+    }
+
+    F lock(&self) -> SpinLockGuard {
+        # Spin until we acquire the lock
+        L self.locked.compare_exchange(0, 1) != 0 {
+            # Hint to CPU that we're spinning
+            __cpu_pause()
+        }
+        SpinLockGuard::new(&self)
+    }
+
+    F try_lock(&self) -> SpinLockGuard? {
+        L self.locked.compare_exchange(0, 1) == 0 {
+            Some(SpinLockGuard::new(&self))
+        } ! {
+            None
+        }
+    }
+
+    F unlock(&self) -> i64 {
+        self.locked.store(0)
+    }
+}
+
+S SpinLockGuard {
+    lock_ptr: i64
+}
+
+X SpinLockGuard {
+    F new(lock: &SpinLock) -> SpinLockGuard {
+        SpinLockGuard { lock_ptr: lock as i64 }
+    }
+
+    F unlock(&self) -> i64 {
+        lock := self.lock_ptr as *SpinLock
+        lock.unlock()
+    }
+}
+
+# ============================================
+# External functions (runtime/OS bindings)
+# ============================================
+
+# Mutex
+X F __mutex_create() -> i64
+X F __mutex_destroy(handle: i64) -> i64
+X F __mutex_lock(handle: i64) -> i64
+X F __mutex_try_lock(handle: i64) -> i64
+X F __mutex_unlock(handle: i64) -> i64
+
+# RwLock
+X F __rwlock_create() -> i64
+X F __rwlock_destroy(handle: i64) -> i64
+X F __rwlock_read_lock(handle: i64) -> i64
+X F __rwlock_try_read_lock(handle: i64) -> i64
+X F __rwlock_read_unlock(handle: i64) -> i64
+X F __rwlock_write_lock(handle: i64) -> i64
+X F __rwlock_try_write_lock(handle: i64) -> i64
+X F __rwlock_write_unlock(handle: i64) -> i64
+
+# Condvar
+X F __condvar_create() -> i64
+X F __condvar_destroy(handle: i64) -> i64
+X F __condvar_wait(condvar: i64, mutex: i64) -> i64
+X F __condvar_wait_timeout(condvar: i64, mutex: i64, timeout_ms: i64) -> i64
+X F __condvar_signal(handle: i64) -> i64
+X F __condvar_broadcast(handle: i64) -> i64
+
+# Barrier
+X F __barrier_create(count: i64) -> i64
+X F __barrier_destroy(handle: i64) -> i64
+X F __barrier_wait(handle: i64) -> i64
+
+# Once
+X F __once_create() -> i64
+X F __once_call(handle: i64, fn_ptr: i64) -> i64
+
+# Semaphore
+X F __semaphore_create(permits: i64) -> i64
+X F __semaphore_destroy(handle: i64) -> i64
+X F __semaphore_wait(handle: i64) -> i64
+X F __semaphore_try_wait(handle: i64) -> i64
+X F __semaphore_post(handle: i64) -> i64
+
+# Atomics
+X F __atomic_load_i64(ptr: i64) -> i64
+X F __atomic_store_i64(ptr: i64, value: i64) -> i64
+X F __atomic_exchange_i64(ptr: i64, value: i64) -> i64
+X F __atomic_compare_exchange_i64(ptr: i64, expected: i64, desired: i64) -> i64
+X F __atomic_fetch_add_i64(ptr: i64, value: i64) -> i64
+X F __atomic_fetch_sub_i64(ptr: i64, value: i64) -> i64
+X F __atomic_fetch_and_i64(ptr: i64, value: i64) -> i64
+X F __atomic_fetch_or_i64(ptr: i64, value: i64) -> i64
+X F __atomic_fetch_xor_i64(ptr: i64, value: i64) -> i64
+
+# CPU hints
+X F __cpu_pause() -> i64
+
+# Memory
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __store_i64(ptr: i64, value: i64) -> i64
+X F __load_i64(ptr: i64) -> i64

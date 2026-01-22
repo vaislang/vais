@@ -1,0 +1,478 @@
+# Thread - OS-level threading support
+# Provides spawn, join, and thread-local storage
+
+# Thread state constants
+C THREAD_NEW: i64 = 0
+C THREAD_RUNNING: i64 = 1
+C THREAD_FINISHED: i64 = 2
+C THREAD_DETACHED: i64 = 3
+
+# ============================================
+# Thread Handle
+# ============================================
+
+# JoinHandle - returned when spawning a thread
+# Can be joined to wait for completion and get the result
+S JoinHandle<T> {
+    thread_id: i64,
+    handle: i64,       # OS thread handle
+    result_ptr: i64,   # Pointer to result storage
+    status: i64
+}
+
+X JoinHandle<T> {
+    F new(thread_id: i64, handle: i64, result_ptr: i64) -> JoinHandle<T> {
+        JoinHandle {
+            thread_id: thread_id,
+            handle: handle,
+            result_ptr: result_ptr,
+            status: THREAD_RUNNING
+        }
+    }
+
+    # Wait for the thread to finish and get its result
+    F join(&self) -> T? {
+        L self.status == THREAD_RUNNING {
+            # Call OS join function
+            __thread_join(self.handle)
+            self.status = THREAD_FINISHED
+        }
+
+        L self.status == THREAD_FINISHED {
+            # Read result from result_ptr
+            result := __load_result(self.result_ptr)
+            Some(result as T)
+        } ! {
+            None
+        }
+    }
+
+    # Check if thread has finished
+    F is_finished(&self) -> i64 {
+        L self.status == THREAD_FINISHED {
+            1
+        } ! {
+            __thread_try_join(self.handle)
+        }
+    }
+
+    # Get thread ID
+    F id(&self) -> i64 {
+        self.thread_id
+    }
+}
+
+# ============================================
+# Thread - represents a spawned thread
+# ============================================
+
+S Thread {
+    id: i64,
+    name: str,
+    handle: i64
+}
+
+X Thread {
+    F new(id: i64, handle: i64) -> Thread {
+        Thread {
+            id: id,
+            name: "",
+            handle: handle
+        }
+    }
+
+    F with_name(id: i64, handle: i64, name: str) -> Thread {
+        Thread {
+            id: id,
+            name: name,
+            handle: handle
+        }
+    }
+
+    # Get thread ID
+    F id(&self) -> i64 {
+        self.id
+    }
+
+    # Get thread name
+    F name(&self) -> str {
+        self.name
+    }
+
+    # Unpark the thread (wake from sleep)
+    F unpark(&self) -> i64 {
+        __thread_unpark(self.handle)
+    }
+}
+
+# ============================================
+# Thread Builder - for customizing thread creation
+# ============================================
+
+S ThreadBuilder {
+    name: str,
+    stack_size: i64
+}
+
+X ThreadBuilder {
+    F new() -> ThreadBuilder {
+        ThreadBuilder {
+            name: "",
+            stack_size: 0  # Use default stack size
+        }
+    }
+
+    # Set thread name
+    F name(&self, name: str) -> ThreadBuilder {
+        ThreadBuilder {
+            name: name,
+            stack_size: self.stack_size
+        }
+    }
+
+    # Set stack size in bytes
+    F stack_size(&self, size: i64) -> ThreadBuilder {
+        ThreadBuilder {
+            name: self.name,
+            stack_size: size
+        }
+    }
+
+    # Spawn a thread with the configured options
+    F spawn(&self, fn_ptr: i64, arg: i64) -> JoinHandle<i64> {
+        # Allocate result storage
+        result_ptr := __malloc(8)
+        __store_i64(result_ptr, 0)
+
+        # Create thread with options
+        handle := __thread_spawn_with_options(
+            fn_ptr,
+            arg,
+            result_ptr,
+            self.stack_size
+        )
+
+        thread_id := __next_thread_id()
+        JoinHandle::new(thread_id, handle, result_ptr)
+    }
+}
+
+# ============================================
+# Thread Local Storage
+# ============================================
+
+S ThreadLocal<T> {
+    key: i64,
+    init_fn: i64  # Function pointer to initializer
+}
+
+X ThreadLocal<T> {
+    F new(init_fn: i64) -> ThreadLocal<T> {
+        key := __tls_create()
+        ThreadLocal {
+            key: key,
+            init_fn: init_fn
+        }
+    }
+
+    # Get the thread-local value, initializing if needed
+    F get(&self) -> &T {
+        ptr := __tls_get(self.key)
+        L ptr == 0 {
+            # Initialize for this thread
+            init_value := __call_fn(self.init_fn)
+            storage := __malloc(8)
+            __store_i64(storage, init_value)
+            __tls_set(self.key, storage)
+            storage as &T
+        } ! {
+            ptr as &T
+        }
+    }
+
+    # Set the thread-local value
+    F set(&self, value: T) -> i64 {
+        ptr := __tls_get(self.key)
+        L ptr == 0 {
+            storage := __malloc(8)
+            __store_i64(storage, value as i64)
+            __tls_set(self.key, storage)
+        } ! {
+            __store_i64(ptr, value as i64)
+        }
+        0
+    }
+}
+
+# ============================================
+# Current Thread API
+# ============================================
+
+# Get the current thread
+F current() -> Thread {
+    handle := __thread_current()
+    id := __thread_current_id()
+    Thread::new(id, handle)
+}
+
+# Yield execution to other threads
+F yield_now() -> i64 {
+    __thread_yield()
+}
+
+# Sleep for specified milliseconds
+F sleep_ms(ms: i64) -> i64 {
+    __thread_sleep_ms(ms)
+}
+
+# Sleep for specified seconds
+F sleep(secs: i64) -> i64 {
+    __thread_sleep_ms(secs * 1000)
+}
+
+# Park the current thread (block until unparked)
+F park() -> i64 {
+    __thread_park()
+}
+
+# Park with timeout (milliseconds)
+F park_timeout(ms: i64) -> i64 {
+    __thread_park_timeout(ms)
+}
+
+# ============================================
+# Spawn API
+# ============================================
+
+# Global thread ID counter
+V __NEXT_THREAD_ID: i64 = 1
+
+# Get next thread ID (atomic increment)
+F __next_thread_id() -> i64 {
+    id := __NEXT_THREAD_ID
+    __NEXT_THREAD_ID = __NEXT_THREAD_ID + 1
+    id
+}
+
+# Spawn a new thread with a function
+F spawn(fn_ptr: i64, arg: i64) -> JoinHandle<i64> {
+    # Allocate result storage
+    result_ptr := __malloc(8)
+    __store_i64(result_ptr, 0)
+
+    # Create thread
+    handle := __thread_spawn(fn_ptr, arg, result_ptr)
+    thread_id := __next_thread_id()
+
+    JoinHandle::new(thread_id, handle, result_ptr)
+}
+
+# Spawn with a closure/captured environment
+F spawn_closure(closure_ptr: i64, env_ptr: i64) -> JoinHandle<i64> {
+    result_ptr := __malloc(8)
+    __store_i64(result_ptr, 0)
+
+    handle := __thread_spawn_closure(closure_ptr, env_ptr, result_ptr)
+    thread_id := __next_thread_id()
+
+    JoinHandle::new(thread_id, handle, result_ptr)
+}
+
+# Create a thread builder
+F builder() -> ThreadBuilder {
+    ThreadBuilder::new()
+}
+
+# ============================================
+# Scoped Threads
+# ============================================
+
+# Scope for scoped threads - ensures all spawned threads
+# complete before the scope exits
+S Scope {
+    threads: i64,      # Vec of JoinHandles (pointer)
+    thread_count: i64
+}
+
+X Scope {
+    F new() -> Scope {
+        threads := __malloc(8 * 64)  # Space for 64 thread handles
+        Scope {
+            threads: threads,
+            thread_count: 0
+        }
+    }
+
+    # Spawn a scoped thread
+    F spawn(&self, fn_ptr: i64, arg: i64) -> i64 {
+        handle := spawn(fn_ptr, arg)
+
+        # Store handle in our list
+        offset := self.thread_count * 24  # Size of JoinHandle
+        __store_i64(self.threads + offset, handle.thread_id)
+        __store_i64(self.threads + offset + 8, handle.handle)
+        __store_i64(self.threads + offset + 16, handle.result_ptr)
+
+        self.thread_count = self.thread_count + 1
+        handle.thread_id
+    }
+
+    # Wait for all threads to complete
+    F join_all(&self) -> i64 {
+        i := 0
+        L i < self.thread_count {
+            offset := i * 24
+            handle := __load_i64(self.threads + offset + 8)
+            __thread_join(handle)
+            i = i + 1
+        }
+        0
+    }
+}
+
+# Run a function with a thread scope
+# All threads spawned in the scope are joined before returning
+F scope(scope_fn: i64) -> i64 {
+    s := Scope::new()
+    __call_scope_fn(scope_fn, &s as i64)
+    s.join_all()
+    __free(s.threads)
+    0
+}
+
+# ============================================
+# Thread Pool (basic implementation)
+# ============================================
+
+S ThreadPool {
+    workers: i64,       # Array of worker thread handles
+    worker_count: i64,
+    task_queue: i64,    # Pointer to task queue
+    queue_size: i64,
+    queue_head: i64,
+    queue_tail: i64,
+    shutdown: i64
+}
+
+X ThreadPool {
+    F new(num_threads: i64) -> ThreadPool {
+        workers := __malloc(num_threads * 8)
+        task_queue := __malloc(256 * 16)  # 256 tasks, 16 bytes each
+
+        pool := ThreadPool {
+            workers: workers,
+            worker_count: num_threads,
+            task_queue: task_queue,
+            queue_size: 256,
+            queue_head: 0,
+            queue_tail: 0,
+            shutdown: 0
+        }
+
+        # Spawn worker threads
+        i := 0
+        L i < num_threads {
+            handle := __thread_spawn(__worker_fn as i64, &pool as i64, 0)
+            __store_i64(workers + i * 8, handle)
+            i = i + 1
+        }
+
+        pool
+    }
+
+    # Submit a task to the pool
+    F submit(&self, fn_ptr: i64, arg: i64) -> i64 {
+        # Add task to queue
+        offset := (self.queue_tail % self.queue_size) * 16
+        __store_i64(self.task_queue + offset, fn_ptr)
+        __store_i64(self.task_queue + offset + 8, arg)
+        self.queue_tail = self.queue_tail + 1
+        0
+    }
+
+    # Shutdown the thread pool
+    F shutdown(&self) -> i64 {
+        self.shutdown = 1
+
+        # Wait for all workers
+        i := 0
+        L i < self.worker_count {
+            handle := __load_i64(self.workers + i * 8)
+            __thread_join(handle)
+            i = i + 1
+        }
+
+        __free(self.workers)
+        __free(self.task_queue)
+        0
+    }
+}
+
+# Worker function for thread pool
+F __worker_fn(pool_ptr: i64) -> i64 {
+    pool := pool_ptr as *ThreadPool
+
+    L pool.shutdown == 0 {
+        # Try to get a task
+        L pool.queue_head < pool.queue_tail {
+            offset := (pool.queue_head % pool.queue_size) * 16
+            fn_ptr := __load_i64(pool.task_queue + offset)
+            arg := __load_i64(pool.task_queue + offset + 8)
+            pool.queue_head = pool.queue_head + 1
+
+            # Execute task
+            __call_fn_with_arg(fn_ptr, arg)
+        } ! {
+            # No tasks, yield
+            yield_now()
+        }
+    }
+    0
+}
+
+# Create a new thread pool
+F create_pool(num_threads: i64) -> ThreadPool {
+    ThreadPool::new(num_threads)
+}
+
+# ============================================
+# Hardware info
+# ============================================
+
+# Get number of available CPUs/cores
+F available_parallelism() -> i64 {
+    __cpu_count()
+}
+
+# ============================================
+# External functions (runtime/OS bindings)
+# ============================================
+
+X F __thread_spawn(fn_ptr: i64, arg: i64, result_ptr: i64) -> i64
+X F __thread_spawn_closure(closure_ptr: i64, env_ptr: i64, result_ptr: i64) -> i64
+X F __thread_spawn_with_options(fn_ptr: i64, arg: i64, result_ptr: i64, stack_size: i64) -> i64
+X F __thread_join(handle: i64) -> i64
+X F __thread_try_join(handle: i64) -> i64
+X F __thread_detach(handle: i64) -> i64
+X F __thread_current() -> i64
+X F __thread_current_id() -> i64
+X F __thread_yield() -> i64
+X F __thread_sleep_ms(ms: i64) -> i64
+X F __thread_park() -> i64
+X F __thread_park_timeout(ms: i64) -> i64
+X F __thread_unpark(handle: i64) -> i64
+
+X F __tls_create() -> i64
+X F __tls_get(key: i64) -> i64
+X F __tls_set(key: i64, value: i64) -> i64
+
+X F __cpu_count() -> i64
+
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __store_i64(ptr: i64, value: i64) -> i64
+X F __load_i64(ptr: i64) -> i64
+X F __load_result(ptr: i64) -> i64
+X F __call_fn(fn_ptr: i64) -> i64
+X F __call_fn_with_arg(fn_ptr: i64, arg: i64) -> i64
+X F __call_scope_fn(fn_ptr: i64, scope_ptr: i64) -> i64
