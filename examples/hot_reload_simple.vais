@@ -1,0 +1,62 @@
+# Simple hot reload example
+#
+# To run this example:
+# 1. Build with hot reload: vaisc build --hot hot_reload_simple.vais
+# 2. In another terminal, watch for changes: vaisc watch hot_reload_simple.vais
+# 3. Modify the game_update function below and save
+# 4. The running program will automatically reload the new code
+
+# Game state structure
+S GameState {
+    frame: i64,
+    x: i64,
+    y: i64,
+}
+
+# Hot-reloadable game update function
+# Try changing the logic here while the program runs!
+#[hot]
+F game_update(state: *GameState) -> i64 {
+    # Increment frame counter
+    state.frame = state.frame + 1
+
+    # Update position - try changing these values!
+    state.x = state.x + 1
+    state.y = state.y + 2
+
+    # Print current state
+    printf("Frame %d: x=%d, y=%d\n", state.frame, state.x, state.y)
+
+    0
+}
+
+# External C functions
+@[extern "C"]
+F printf(fmt: *i8, ...) -> i64
+
+@[extern "C"]
+F usleep(usec: i64) -> i64
+
+# Main function (not hot-reloadable as it holds state)
+F main() -> i64 {
+    # Initialize game state
+    state := GameState { frame: 0, x: 0, y: 0 }
+
+    printf("Hot Reload Example - Press Ctrl+C to exit\n")
+    printf("Try modifying game_update() while this runs!\n\n")
+
+    # Main game loop
+    frame_count := 0
+    L frame_count < 1000 {
+        # Update game
+        game_update(&state)
+
+        # Sleep for ~60 FPS (16666 microseconds)
+        usleep(16666)
+
+        frame_count = frame_count + 1
+    }
+
+    printf("\nExiting after %d frames\n", frame_count)
+    0
+}

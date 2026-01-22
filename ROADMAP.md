@@ -874,7 +874,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - std/gc.vais 런타임 모듈 (gc_init, gc_alloc, gc_collect)
   - CLI 옵션: `--gc`, `--gc-threshold <bytes>`
   - 9개 단위 테스트 통과
-- [ ] **Hot reloading** - 코드 변경 시 실행 중인 프로그램 업데이트
+- [x] **Hot reloading** - 코드 변경 시 실행 중인 프로그램 업데이트 (완료일: 2026-01-22)
+  - vais-hotreload 크레이트 추가 (FileWatcher + DylibLoader)
+  - notify 크레이트로 파일 변경 감시
+  - libloading으로 동적 라이브러리 로드/언로드
+  - std/hot.vais 런타임 모듈 (hot_init, hot_check, hot_reload)
+  - CLI: `vaisc watch <file>`, `vaisc build --hot`
+  - 16개 테스트 통과
 - [ ] **GPU 타겟** - CUDA/OpenCL/WebGPU 코드 생성
 
 ---

@@ -1,0 +1,151 @@
+# Hot Reload Runtime Module
+#
+# Provides runtime support for hot reloading Vais programs.
+# Functions marked with #[hot] can be reloaded at runtime.
+#
+# Usage:
+#   #[hot]
+#   F game_update(state: *GameState) -> i64 { ... }
+#
+#   F main() -> i64 {
+#       state := GameState { x: 0, y: 0 }
+#       hot_init("./game.vais")
+#       L true {
+#           hot_check()
+#           game_update(&state)
+#       }
+#       0
+#   }
+
+# Hot reload context (opaque pointer to internal state)
+S HotReloadContext {
+    internal: i64,  # Pointer to internal C++ state
+}
+
+# Global hot reload context
+G hot_ctx: *HotReloadContext = 0 as *HotReloadContext
+
+# Initialize hot reload system
+# path: Source file path to watch
+# Returns: 0 on success, error code otherwise
+@[extern "C"]
+F hot_init(path: *i8) -> i64 {
+    # This is implemented in the runtime
+    # It will:
+    # 1. Create a file watcher for the source file
+    # 2. Set up the dylib loader
+    # 3. Perform initial compilation if needed
+    # 4. Load the dylib
+
+    # For now, return 0 (will be linked to actual implementation)
+    0
+}
+
+# Check for source changes and reload if necessary
+# Returns: 1 if code was reloaded, 0 if no changes, negative on error
+@[extern "C"]
+F hot_check() -> i64 {
+    # This is implemented in the runtime
+    # It will:
+    # 1. Check file watcher for changes
+    # 2. If changed, recompile the source
+    # 3. Reload the dylib
+    # 4. Update function pointers
+
+    # For now, return 0 (will be linked to actual implementation)
+    0
+}
+
+# Manually trigger a reload
+# Returns: 1 if successful, 0 if no changes, negative on error
+@[extern "C"]
+F hot_reload() -> i64 {
+    # Force a reload regardless of file changes
+    # Useful for testing or manual control
+
+    # For now, return 0 (will be linked to actual implementation)
+    0
+}
+
+# Get the current version number of loaded code
+# Returns: Version number (increments with each reload)
+@[extern "C"]
+F hot_version() -> i64 {
+    # Returns the current version of the loaded dylib
+    # Starts at 1, increments with each reload
+
+    # For now, return 1 (will be linked to actual implementation)
+    1
+}
+
+# Set a callback to be called when code is reloaded
+# callback: Function pointer to call on reload (signature: F(version: i64) -> void)
+@[extern "C"]
+F hot_on_reload(callback: fn(i64) -> void) -> i64 {
+    # Register a callback function to be called when code is reloaded
+    # The callback receives the new version number
+
+    # For now, return 0 (will be linked to actual implementation)
+    0
+}
+
+# Cleanup hot reload system
+# Should be called before program exit
+@[extern "C"]
+F hot_cleanup() -> i64 {
+    # Clean up resources:
+    # 1. Stop file watcher
+    # 2. Unload dylib
+    # 3. Free memory
+
+    # For now, return 0 (will be linked to actual implementation)
+    0
+}
+
+# Higher-level API for easier usage
+
+# Start hot reload with default configuration
+F hot_start(source_path: *i8) -> i64 {
+    result := hot_init(source_path)
+    I result != 0 {
+        result
+    } E {
+        0
+    }
+}
+
+# Main hot reload loop helper
+# Runs the provided function continuously, checking for reloads
+# F: Function to run each iteration (should be marked #[hot])
+# Returns: Never (runs forever until program exit)
+F hot_loop(update_fn: fn() -> i64) -> i64 {
+    L true {
+        # Check for reload
+        reload_status := hot_check()
+        I reload_status < 0 {
+            # Error during reload, but continue
+            # (in production, might want to handle this differently)
+            0
+        }
+
+        # Run the update function
+        update_fn()
+    }
+    0
+}
+
+# Example usage pattern:
+#
+# #[hot]
+# F game_update() -> i64 {
+#     # Game logic here
+#     # This function can be modified and reloaded
+#     0
+# }
+#
+# F main() -> i64 {
+#     hot_start("./game.vais")
+#     hot_loop(game_update)
+#     hot_cleanup()
+#     0
+# }

@@ -1,0 +1,144 @@
+# Advanced hot reload example with multiple hot functions
+#
+# Demonstrates:
+# - Multiple hot-reloadable functions
+# - Shared state across reloads
+# - Dynamic behavior changes
+
+U std/option
+
+S Vec2 {
+    x: f64,
+    y: f64,
+}
+
+S Particle {
+    pos: Vec2,
+    vel: Vec2,
+    life: f64,
+}
+
+S ParticleSystem {
+    particles: [Particle; 100],
+    count: i64,
+}
+
+# Hot-reloadable physics update
+# Try changing the physics simulation!
+#[hot]
+F update_physics(p: *Particle, dt: f64) -> i64 {
+    # Update position
+    p.pos.x = p.pos.x + p.vel.x * dt
+    p.pos.y = p.pos.y + p.vel.y * dt
+
+    # Apply gravity - try changing this value!
+    p.vel.y = p.vel.y + 9.8 * dt
+
+    # Apply drag - try changing this!
+    p.vel.x = p.vel.x * 0.99
+    p.vel.y = p.vel.y * 0.99
+
+    # Decrease life
+    p.life = p.life - dt
+
+    0
+}
+
+# Hot-reloadable rendering function
+# Try changing how particles are displayed!
+#[hot]
+F render_particle(p: *Particle, index: i64) -> i64 {
+    # Print particle state - customize this!
+    printf("  P%02d: pos=(%.1f, %.1f) vel=(%.1f, %.1f) life=%.1f\n",
+           index,
+           p.pos.x, p.pos.y,
+           p.vel.x, p.vel.y,
+           p.life)
+    0
+}
+
+# Hot-reloadable spawn logic
+# Try different initial conditions!
+#[hot]
+F spawn_particle(p: *Particle, index: i64) -> i64 {
+    # Initial position - try changing this!
+    p.pos.x = 0.0
+    p.pos.y = 10.0
+
+    # Initial velocity - randomize based on index
+    p.vel.x = (index % 10 - 5) as f64 * 0.5
+    p.vel.y = -2.0
+
+    # Initial life
+    p.life = 5.0
+
+    0
+}
+
+@[extern "C"]
+F printf(fmt: *i8, ...) -> i64
+
+@[extern "C"]
+F usleep(usec: i64) -> i64
+
+F main() -> i64 {
+    system := ParticleSystem {
+        particles: [Particle {
+            pos: Vec2 { x: 0.0, y: 0.0 },
+            vel: Vec2 { x: 0.0, y: 0.0 },
+            life: 0.0
+        }; 100],
+        count: 5,
+    }
+
+    printf("Advanced Hot Reload Example\n")
+    printf("Try modifying the hot functions while running!\n\n")
+
+    # Initialize particles
+    i := 0
+    L i < system.count {
+        spawn_particle(&system.particles[i], i)
+        i = i + 1
+    }
+
+    # Main simulation loop
+    frame := 0
+    dt := 0.016  # ~60 FPS
+
+    L frame < 300 {
+        printf("=== Frame %d ===\n", frame)
+
+        # Update all particles
+        i = 0
+        L i < system.count {
+            p := &system.particles[i]
+
+            # Respawn if dead
+            I p.life <= 0.0 {
+                spawn_particle(p, i)
+            }
+
+            # Update physics
+            update_physics(p, dt)
+
+            i = i + 1
+        }
+
+        # Render particles
+        i = 0
+        L i < system.count {
+            render_particle(&system.particles[i], i)
+            i = i + 1
+        }
+
+        printf("\n")
+
+        # Sleep for frame time
+        usleep(16666)
+
+        frame = frame + 1
+    }
+
+    printf("Simulation complete!\n")
+    0
+}

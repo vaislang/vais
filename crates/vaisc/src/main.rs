@@ -111,6 +111,10 @@ enum Commands {
         /// Force full rebuild, ignoring incremental cache
         #[arg(long)]
         force_rebuild: bool,
+
+        /// Enable hot reload mode (generate dylib)
+        #[arg(long)]
+        hot: bool,
     },
 
     /// Run a Vais source file
@@ -166,6 +170,20 @@ enum Commands {
     /// Package management commands
     #[command(subcommand)]
     Pkg(PkgCommands),
+
+    /// Watch source file and recompile on changes
+    Watch {
+        /// Input source file
+        input: PathBuf,
+
+        /// Command to run after successful compilation
+        #[arg(long)]
+        exec: Option<String>,
+
+        /// Arguments to pass to the executed command
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -186,6 +204,10 @@ enum PkgCommands {
         /// Include debug information
         #[arg(short = 'g', long)]
         debug: bool,
+
+        /// Enable hot reload mode (generate dylib)
+        #[arg(long)]
+        hot: bool,
     },
 
     /// Type-check the package without compiling
@@ -280,11 +302,11 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot }) => {
             let target_triple = target.as_ref()
                 .and_then(|s| TargetTriple::from_str(s))
                 .unwrap_or(TargetTriple::Native);
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold)
+            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot)
         }
         Some(Commands::Run { input, args }) => {
             cmd_run(&input, &args, cli.verbose, &plugins)
@@ -309,10 +331,13 @@ fn main() {
         Some(Commands::Pkg(pkg_cmd)) => {
             cmd_pkg(pkg_cmd, cli.verbose)
         }
+        Some(Commands::Watch { input, exec, args }) => {
+            cmd_watch(&input, exec.as_deref(), &args, cli.verbose, &plugins)
+        }
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native, false, cli.gc, cli.gc_threshold)
+                cmd_build(&input, cli.output, cli.emit_ir, 0, false, cli.verbose, &plugins, TargetTriple::Native, false, cli.gc, cli.gc_threshold, false)
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
                 println!("Run 'vaisc --help' for more information.");
@@ -339,6 +364,7 @@ fn cmd_build(
     force_rebuild: bool,
     gc: bool,
     gc_threshold: Option<usize>,
+    hot: bool,
 ) -> Result<(), String> {
     use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
 
@@ -560,16 +586,35 @@ fn cmd_build(
 
     // If not emit_ir only, compile to binary
     if !emit_ir {
-        // Determine output extension based on target
-        let default_ext = match target {
-            TargetTriple::Wasm32Unknown | TargetTriple::Wasi => "wasm",
-            _ => "",
+        // Determine output extension based on target and hot mode
+        let default_ext = if hot {
+            // Generate dylib for hot reload
+            #[cfg(target_os = "macos")]
+            let ext = "dylib";
+            #[cfg(target_os = "linux")]
+            let ext = "so";
+            #[cfg(target_os = "windows")]
+            let ext = "dll";
+            ext
+        } else {
+            match target {
+                TargetTriple::Wasm32Unknown | TargetTriple::Wasi => "wasm",
+                _ => "",
+            }
         };
+
         let bin_path = output.unwrap_or_else(|| {
-            input.with_extension(default_ext)
+            if hot {
+                // For hot reload, prefix with 'lib' and use dylib extension
+                let parent = input.parent().unwrap_or(Path::new("."));
+                let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+                parent.join(format!("lib{}.{}", stem, default_ext))
+            } else {
+                input.with_extension(default_ext)
+            }
         });
 
-        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target)?;
+        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target, hot)?;
     }
 
     // Update incremental compilation cache after successful build
@@ -830,11 +875,12 @@ fn compile_ir_to_binary(
     debug: bool,
     verbose: bool,
     target: &TargetTriple,
+    hot: bool,
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
         TargetTriple::Wasi => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
-        _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose),
+        _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose, hot),
     }
 }
 
@@ -844,6 +890,7 @@ fn compile_to_native(
     opt_level: u8,
     debug: bool,
     verbose: bool,
+    hot: bool,
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
@@ -855,6 +902,12 @@ fn compile_to_native(
     // Add debug flag if requested
     if debug {
         args.push("-g".to_string());  // Generate debug symbols
+    }
+
+    // Add dylib flags if hot reload mode
+    if hot {
+        args.push("-shared".to_string());  // Generate shared library
+        args.push("-fPIC".to_string());    // Position-independent code
     }
 
     args.push("-o".to_string());
@@ -982,9 +1035,9 @@ fn compile_to_wasi(
 }
 
 fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
-    // Build first (no debug for run command by default, native target only, use incremental cache)
+    // Build first (no debug for run command by default, native target only, use incremental cache, no hot reload)
     let bin_path = input.with_extension("");
-    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None)?;
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None, false)?;
 
     // Run the binary
     if verbose {
@@ -1116,7 +1169,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             Ok(())
         }
 
-        PkgCommands::Build { release, debug } => {
+        PkgCommands::Build { release, debug, hot } => {
             // Find manifest
             let pkg_dir = find_manifest(&cwd)
                 .ok_or_else(|| "could not find vais.toml in current directory or parents".to_string())?;
@@ -1174,9 +1227,14 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 false,
                 false,
                 None,
+                hot,
             )?;
 
-            println!("{} Built {}", "✓".green(), output.display());
+            if hot {
+                println!("{} Built hot-reload dylib {}", "✓".green(), output.display());
+            } else {
+                println!("{} Built {}", "✓".green(), output.display());
+            }
             Ok(())
         }
 
@@ -1662,6 +1720,96 @@ fn load_plugins(extra_plugins: &[PathBuf], verbose: bool) -> PluginRegistry {
     }
 
     registry
+}
+
+/// Watch for file changes and recompile
+fn cmd_watch(
+    input: &PathBuf,
+    exec: Option<&str>,
+    args: &[String],
+    verbose: bool,
+    plugins: &PluginRegistry,
+) -> Result<(), String> {
+    use std::time::Duration;
+    use std::thread;
+
+    println!("{} {}", "Watching".cyan().bold(), input.display());
+
+    // Perform initial build
+    let bin_path = input.with_extension("");
+    cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None, false)?;
+
+    // Execute initial run if requested
+    if let Some(cmd) = exec {
+        if verbose {
+            println!("{} {}", "Running".green().bold(), cmd);
+        }
+        let _ = Command::new(cmd)
+            .args(args)
+            .status();
+    }
+
+    // Create file watcher using notify crate
+    use notify::{Watcher, RecursiveMode, RecommendedWatcher};
+    use std::sync::mpsc::channel;
+
+    let (tx, rx) = channel();
+    let mut watcher = RecommendedWatcher::new(
+        move |res| {
+            let _ = tx.send(res);
+        },
+        notify::Config::default(),
+    ).map_err(|e| format!("Failed to create watcher: {}", e))?;
+
+    watcher.watch(input, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("Failed to watch file: {}", e))?;
+
+    println!("{} Press Ctrl+C to stop", "Ready".green().bold());
+
+    // Watch for changes
+    let mut last_compile = std::time::SystemTime::now();
+    loop {
+        match rx.recv() {
+            Ok(Ok(event)) => {
+                // Debounce: ignore events within 100ms of last compile
+                if let Ok(elapsed) = last_compile.elapsed() {
+                    if elapsed < Duration::from_millis(100) {
+                        continue;
+                    }
+                }
+
+                // Only recompile on modify events
+                if matches!(event.kind, notify::EventKind::Modify(_)) {
+                    println!("\n{} Change detected, recompiling...", "⟳".cyan().bold());
+                    last_compile = std::time::SystemTime::now();
+
+                    // Rebuild
+                    match cmd_build(input, Some(bin_path.clone()), false, 0, false, verbose, plugins, TargetTriple::Native, false, false, None, false) {
+                        Ok(_) => {
+                            println!("{} Compilation successful", "✓".green().bold());
+
+                            // Execute if requested
+                            if let Some(cmd) = exec {
+                                println!("{} {}", "Running".green().bold(), cmd);
+                                let _ = Command::new(cmd)
+                                    .args(args)
+                                    .status();
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("{} {}", "✗".red().bold(), e);
+                        }
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                eprintln!("{}: {}", "Watch error".yellow(), e);
+            }
+            Err(_) => {
+                return Err("Watcher channel closed".to_string());
+            }
+        }
+    }
 }
 
 /// Print plugin diagnostics
