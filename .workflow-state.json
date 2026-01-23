@@ -1,5 +1,5 @@
 {
-  "phase": "completed",
+  "phase": 5,
   "request": "Stage 2 부트스트래핑 완성",
   "tasks": [
     { "id": 1, "name": "토큰 확장 (X, 연산자 등)", "status": "completed", "model": "Opus" },
@@ -7,23 +7,33 @@
     { "id": 3, "name": "코드젠 확장 (S/X/블록/if/loop)", "status": "completed", "model": "Opus" },
     { "id": 4, "name": "SSA 최적화 (alloca 94% 감소)", "status": "completed", "model": "Opus" },
     { "id": 5, "name": "다중 함수 컴파일 지원", "status": "completed", "model": "Opus" },
-    { "id": 6, "name": "Stage 2 부트스트래핑 검증", "status": "pending", "model": "Opus" }
+    { "id": 6, "name": "추가 연산자 구현 (-, *, /, %, 비교)", "status": "completed", "model": "Opus" },
+    { "id": 7, "name": "if-else 표현식 코드젠", "status": "completed", "model": "Opus" }
   ],
   "currentTask": null,
-  "lastCompleted": "다중 함수 컴파일 지원",
+  "lastCompleted": "if-else 표현식 코드젠",
   "progress": {
-    "main.vais": "2200+ 줄",
+    "main.vais": "2500+ 줄",
     "features": {
       "multi_function": true,
       "function_calls": true,
       "nested_calls": true,
       "user_main": true,
-      "auto_main_fallback": true
+      "auto_main_fallback": true,
+      "arithmetic_ops": true,
+      "comparison_ops": true,
+      "if_else_simple": true,
+      "if_else_nested": true,
+      "block_expr": true
     },
     "test_results": {
-      "test_simple_call": "PASS",
-      "test_multi": "PASS - calc(5)=20"
+      "test_ops_simple": "PASS - 모든 산술 연산자 (+ - * / %) 동작",
+      "test_compare": "PASS - 비교 연산자 합계 = 4",
+      "test_multi": "PASS - calc(5)=20",
+      "test_if_simple": "PASS - abs(-42)=42",
+      "test_nested_if": "PASS - classify 합계 = 0",
+      "test_grade2": "PASS - 4단계 중첩 if-else, 합계 = 14"
     }
   },
-  "summary": "Task 5 완료. 다중 함수 파싱, 함수 호출 코드젠, 중첩 호출, 사용자 정의 main 지원 구현됨."
+  "summary": "Task 6-7 완료. 모든 연산자 및 중첩 if-else 완전 지원. phi predecessor 버그 수정됨."
 }

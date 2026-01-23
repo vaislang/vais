@@ -1,0 +1,19 @@
+# Triple nested if-else test
+
+F grade(score: i64) -> i64 {
+    I score >= 90 {
+        65  # A
+    } E I score >= 80 {
+        66  # B
+    } E I score >= 70 {
+        67  # C
+    } E I score >= 60 {
+        68  # D
+    } E {
+        70  # F
+    }
+}
+
+# grade(95)=A(65), grade(85)=B(66), grade(75)=C(67), grade(65)=D(68), grade(55)=F(70)
+# Sum = 65+66+67+68+70 = 336
+F main() -> i64 = grade(95) + grade(85) + grade(75) + grade(65) + grade(55)

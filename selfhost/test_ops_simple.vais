@@ -1,0 +1,15 @@
+# Test arithmetic operators with simple expressions
+
+F test_add(x: i64) -> i64 = x + 10
+F test_sub(x: i64) -> i64 = x - 5
+F test_mul(x: i64) -> i64 = x * 3
+F test_div(x: i64) -> i64 = x / 2
+F test_mod(x: i64) -> i64 = x % 7
+
+# Nested calls: test_mod(test_div(test_mul(test_sub(test_add(10)))))
+# = test_mod(test_div(test_mul(test_sub(20))))
+# = test_mod(test_div(test_mul(15)))
+# = test_mod(test_div(45))
+# = test_mod(22)
+# = 1
+F main() -> i64 = test_mod(test_div(test_mul(test_sub(test_add(10)))))

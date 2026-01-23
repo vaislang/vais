@@ -1,0 +1,9 @@
+# Test comparison operators
+
+F test_lt(x: i64) -> i64 = x < 10     # 5 < 10 = 1
+F test_gt(x: i64) -> i64 = x > 3      # 5 > 3 = 1
+F test_eq(x: i64) -> i64 = x == 5     # 5 == 5 = 1
+F test_ne(x: i64) -> i64 = x != 6     # 5 != 6 = 1
+
+# Sum of comparisons: 1 + 1 + 1 + 1 = 4
+F main() -> i64 = test_lt(5) + test_gt(5) + test_eq(5) + test_ne(5)

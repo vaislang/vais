@@ -1607,12 +1607,30 @@ F parser_free(p: i64) -> i64 {
 # ============================================================================
 
 F cg_new() -> i64 {
-    cg := malloc(16)
+    cg := malloc(40)
     sb := sb_new(4096)
     store_i64(cg + 0, sb)
-    store_i64(cg + 8, 0)  # reg_counter
+    store_i64(cg + 8, 0)    # reg_counter
+    store_i64(cg + 16, 0)   # label_counter
+    store_i64(cg + 24, 0)   # current_block_type: 0=entry, 1=then, 2=else, 3=merge
+    store_i64(cg + 32, 0)   # current_block_id
     cg
 }
+
+# Block type constants
+F BLOCK_ENTRY() -> i64 = 0
+F BLOCK_THEN() -> i64 = 1
+F BLOCK_ELSE() -> i64 = 2
+F BLOCK_MERGE() -> i64 = 3
+
+F cg_set_current_block(cg: i64, block_type: i64, block_id: i64) -> i64 {
+    store_i64(cg + 24, block_type)
+    store_i64(cg + 32, block_id)
+    0
+}
+
+F cg_get_current_block_type(cg: i64) -> i64 = load_i64(cg + 24)
+F cg_get_current_block_id(cg: i64) -> i64 = load_i64(cg + 32)
 
 F cg_get_sb(cg: i64) -> i64 = load_i64(cg + 0)
 
@@ -1622,8 +1640,15 @@ F cg_fresh_reg(cg: i64) -> i64 {
     r
 }
 
+F cg_fresh_label(cg: i64) -> i64 {
+    l := load_i64(cg + 16)
+    store_i64(cg + 16, l + 1)
+    l
+}
+
 F cg_reset_regs(cg: i64) -> i64 {
     store_i64(cg + 8, 0)
+    store_i64(cg + 16, 0)
     0
 }
 
@@ -1746,8 +1771,9 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
 
 # Generate binary expression
 F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
-    left := load_i64(expr + 16)
-    right := load_i64(expr + 24)
+    op := expr_get_field0(expr)
+    left := expr_get_field1(expr)
+    right := expr_get_field2(expr)
 
     left_reg := cg_gen_expr(cg, left, param_name_ptr, param_name_len)
     right_reg := cg_gen_expr(cg, right, param_name_ptr, param_name_len)
@@ -1755,12 +1781,210 @@ F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i6
     result_reg := cg_fresh_reg(cg)
     cg_emit(cg, "  %")
     cg_emit_i64(cg, result_reg)
-    cg_emit(cg, " = add i64 ")
+
+    # Emit instruction based on operator
+    I op == BINOP_ADD() {
+        cg_emit(cg, " = add i64 ")
+        0
+    } E I op == BINOP_SUB() {
+        cg_emit(cg, " = sub i64 ")
+        0
+    } E I op == BINOP_MUL() {
+        cg_emit(cg, " = mul i64 ")
+        0
+    } E I op == BINOP_DIV() {
+        cg_emit(cg, " = sdiv i64 ")
+        0
+    } E I op == BINOP_MOD() {
+        cg_emit(cg, " = srem i64 ")
+        0
+    } E I op == BINOP_LT() {
+        cg_emit(cg, " = icmp slt i64 ")
+        0
+    } E I op == BINOP_LTE() {
+        cg_emit(cg, " = icmp sle i64 ")
+        0
+    } E I op == BINOP_GT() {
+        cg_emit(cg, " = icmp sgt i64 ")
+        0
+    } E I op == BINOP_GTE() {
+        cg_emit(cg, " = icmp sge i64 ")
+        0
+    } E I op == BINOP_EQ() {
+        cg_emit(cg, " = icmp eq i64 ")
+        0
+    } E I op == BINOP_NEQ() {
+        cg_emit(cg, " = icmp ne i64 ")
+        0
+    } E I op == BINOP_AND() {
+        cg_emit(cg, " = and i64 ")
+        0
+    } E I op == BINOP_OR() {
+        cg_emit(cg, " = or i64 ")
+        0
+    } E {
+        # Default to add for unknown ops
+        cg_emit(cg, " = add i64 ")
+        0
+    }
+
     cg_emit_operand(cg, left_reg, param_name_ptr, param_name_len)
     cg_emit(cg, ", ")
     cg_emit_operand(cg, right_reg, param_name_ptr, param_name_len)
     cg_emit_newline(cg)
+
+    # For comparison ops, extend i1 to i64
+    I op >= BINOP_LT() && op <= BINOP_NEQ() {
+        ext_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ext_reg)
+        cg_emit(cg, " = zext i1 %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        ext_reg
+    } E {
+        result_reg
+    }
+}
+
+# Generate if-else expression
+# Returns result register number
+# Updates current block info after execution
+F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    cond := expr_get_field0(expr)
+    then_expr := expr_get_field1(expr)
+    else_expr := expr_get_field2(expr)
+
+    # Generate unique labels
+    label_id := cg_fresh_label(cg)
+
+    # Generate condition
+    cond_reg := cg_gen_expr(cg, cond, param_name_ptr, param_name_len)
+
+    # Convert to i1 if needed (non-zero = true)
+    cmp_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, " = icmp ne i64 ")
+    cg_emit_operand(cg, cond_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", 0")
+    cg_emit_newline(cg)
+
+    # Conditional branch
+    cg_emit(cg, "  br i1 %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, ", label %then")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ", label %else")
+    cg_emit_i64(cg, label_id)
+    cg_emit_newline(cg)
+
+    # Then block
+    cg_emit(cg, "then")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_THEN(), label_id)
+    then_reg := cg_gen_expr(cg, then_expr, param_name_ptr, param_name_len)
+    # After then_expr, check what the current block is now (might have changed due to nesting)
+    then_final_type := cg_get_current_block_type(cg)
+    then_final_id := cg_get_current_block_id(cg)
+    cg_emit(cg, "  br label %merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit_newline(cg)
+
+    # Else block
+    cg_emit(cg, "else")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_ELSE(), label_id)
+    else_reg: mut i64 = 0
+    I else_expr != 0 {
+        else_reg = cg_gen_expr(cg, else_expr, param_name_ptr, param_name_len)
+        0
+    } E {
+        # No else branch - use 0
+        else_reg = cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, else_reg)
+        cg_emit(cg, " = add i64 0, 0")
+        cg_emit_newline(cg)
+        0
+    }
+    # After else_expr, check what the current block is now
+    else_final_type := cg_get_current_block_type(cg)
+    else_final_id := cg_get_current_block_id(cg)
+    cg_emit(cg, "  br label %merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit_newline(cg)
+
+    # Merge block with phi - use actual final blocks as predecessors
+    cg_emit(cg, "merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+    cg_emit(cg, " = phi i64 [ ")
+    cg_emit_operand(cg, then_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", %")
+    # Use final block name for then branch
+    I then_final_type == BLOCK_MERGE() {
+        cg_emit(cg, "merge")
+        cg_emit_i64(cg, then_final_id)
+        0
+    } E {
+        cg_emit(cg, "then")
+        cg_emit_i64(cg, label_id)
+        0
+    }
+    cg_emit(cg, " ], [ ")
+    cg_emit_operand(cg, else_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", %")
+    # Use final block name for else branch
+    I else_final_type == BLOCK_MERGE() {
+        cg_emit(cg, "merge")
+        cg_emit_i64(cg, else_final_id)
+        0
+    } E {
+        cg_emit(cg, "else")
+        cg_emit_i64(cg, label_id)
+        0
+    }
+    cg_emit(cg, " ]")
+    cg_emit_newline(cg)
+
+    # Update current block to this merge block
+    cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+
     result_reg
+}
+
+# Generate block expression
+F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    stmts := expr_get_field0(expr)
+    stmts_len := expr_get_field1(expr)
+    final_expr := expr_get_field2(expr)
+
+    # Generate statements (skip for now, just handle final expr)
+    # TODO: generate let statements and store to alloca
+
+    # Generate final expression
+    I final_expr != 0 {
+        cg_gen_expr(cg, final_expr, param_name_ptr, param_name_len)
+    } E {
+        # No final expression, return 0
+        result_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = add i64 0, 0")
+        cg_emit_newline(cg)
+        result_reg
+    }
 }
 
 # Generate expression, returns register number
@@ -1781,6 +2005,12 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         0
     } E I kind == EXPR_BINARY() {
         result = cg_gen_binary_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_IF() {
+        result = cg_gen_if_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_BLOCK() {
+        result = cg_gen_block_expr(cg, expr, param_name_ptr, param_name_len)
         0
     } E { 0 }
 
