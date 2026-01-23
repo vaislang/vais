@@ -738,6 +738,105 @@ F expr_get_field4(e: i64) -> i64 = load_i64(e + 40)
 # Forward declarations for recursive parsing
 # parser_parse_expr is the main entry point
 
+# Parse function call expression
+F parser_parse_call_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
+    parser_advance(p)  # consume (
+
+    args := malloc(16 * 8)
+    arg_count: mut i64 = 0
+
+    L {
+        I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+
+        arg := parser_parse_expr(p)
+        I arg != 0 {
+            store_i64(args + arg_count * 8, arg)
+            arg_count = arg_count + 1
+            0
+        } E { B }
+
+        I parser_current_kind(p) == TOK_COMMA() {
+            parser_advance(p)
+            0
+        } E { 0 }
+    }
+
+    parser_expect(p, TOK_RPAREN())
+
+    e := expr_new(EXPR_CALL())
+    expr_set_field0(e, str_ptr)
+    expr_set_field1(e, str_len)
+    expr_set_field2(e, args)
+    expr_set_field3(e, arg_count)
+    e
+}
+
+# Parse struct literal expression
+F parser_parse_struct_lit_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
+    parser_advance(p)  # consume {
+
+    fields := malloc(32 * 8)
+    field_count: mut i64 = 0
+
+    L {
+        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+
+        I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+        fname_ptr := parser_current_str_ptr(p)
+        fname_len := parser_current_str_len(p)
+        parser_advance(p)
+
+        I parser_expect(p, TOK_COLON()) == 0 { B } E { 0 }
+
+        fvalue := parser_parse_expr(p)
+
+        store_i64(fields + field_count * 24 + 0, fname_ptr)
+        store_i64(fields + field_count * 24 + 8, fname_len)
+        store_i64(fields + field_count * 24 + 16, fvalue)
+        field_count = field_count + 1
+
+        I parser_current_kind(p) == TOK_COMMA() {
+            parser_advance(p)
+            0
+        } E { 0 }
+    }
+
+    parser_expect(p, TOK_RBRACE())
+
+    e := expr_new(EXPR_STRUCT_LIT())
+    expr_set_field0(e, str_ptr)
+    expr_set_field1(e, str_len)
+    expr_set_field2(e, fields)
+    expr_set_field3(e, field_count)
+    e
+}
+
+# Parse identifier-based expression: call, struct literal, or plain ident
+F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
+    next_kind := parser_current_kind(p)
+
+    result: mut i64 = 0
+
+    I next_kind == TOK_LBRACE() {
+        result = parser_parse_struct_lit_expr(p, str_ptr, str_len)
+        0
+    } E I next_kind == TOK_LPAREN() {
+        result = parser_parse_call_expr(p, str_ptr, str_len)
+        0
+    } E {
+        # Simple identifier
+        e := expr_new(EXPR_IDENT())
+        expr_set_field0(e, str_ptr)
+        expr_set_field1(e, str_len)
+        result = e
+        0
+    }
+
+    result
+}
+
 # Parse primary expression: int, bool, ident, ( expr ), block, struct literal
 # Forward declaration marker for block parsing
 # parser_parse_block_expr is defined after parser_parse_expr
@@ -756,89 +855,8 @@ F parser_parse_primary(p: i64) -> i64 {
         str_len := parser_current_str_len(p)
         parser_advance(p)
 
-        # Check for struct literal: Name { ... }
-        I parser_current_kind(p) == TOK_LBRACE() {
-            # This is a struct literal
-            parser_advance(p)  # consume {
-
-            # Parse field initializers: field: value, ...
-            fields := malloc(32 * 8)  # up to 32 fields
-            field_count: mut i64 = 0
-
-            L {
-                I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
-                I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
-
-                # Parse field_name: value
-                I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
-                fname_ptr := parser_current_str_ptr(p)
-                fname_len := parser_current_str_len(p)
-                parser_advance(p)
-
-                I parser_expect(p, TOK_COLON()) == 0 { B } E { 0 }
-
-                fvalue := parser_parse_expr(p)
-
-                # Store field: (name_ptr, name_len, value_expr)
-                store_i64(fields + field_count * 24 + 0, fname_ptr)
-                store_i64(fields + field_count * 24 + 8, fname_len)
-                store_i64(fields + field_count * 24 + 16, fvalue)
-                field_count = field_count + 1
-
-                # Check for comma
-                I parser_current_kind(p) == TOK_COMMA() {
-                    parser_advance(p)
-                    0
-                } E { 0 }
-            }
-
-            parser_expect(p, TOK_RBRACE())
-
-            e := expr_new(EXPR_STRUCT_LIT())
-            expr_set_field0(e, str_ptr)   # struct name ptr
-            expr_set_field1(e, str_len)   # struct name len
-            expr_set_field2(e, fields)    # fields array
-            expr_set_field3(e, field_count)
-            e
-        } E I parser_current_kind(p) == TOK_LPAREN() {
-            # Function call: name(args...)
-            parser_advance(p)  # consume (
-
-            args := malloc(16 * 8)  # up to 16 args
-            arg_count: mut i64 = 0
-
-            L {
-                I parser_current_kind(p) == TOK_RPAREN() { B } E { 0 }
-                I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
-
-                arg := parser_parse_expr(p)
-                I arg != 0 {
-                    store_i64(args + arg_count * 8, arg)
-                    arg_count = arg_count + 1
-                    0
-                } E { B }
-
-                I parser_current_kind(p) == TOK_COMMA() {
-                    parser_advance(p)
-                    0
-                } E { 0 }
-            }
-
-            parser_expect(p, TOK_RPAREN())
-
-            e := expr_new(EXPR_CALL())
-            expr_set_field0(e, str_ptr)   # func name ptr
-            expr_set_field1(e, str_len)   # func name len
-            expr_set_field2(e, args)      # args array
-            expr_set_field3(e, arg_count)
-            e
-        } E {
-            # Simple identifier
-            e := expr_new(EXPR_IDENT())
-            expr_set_field0(e, str_ptr)
-            expr_set_field1(e, str_len)
-            e
-        }
+        # Use helper function to handle ident-based expressions
+        parser_parse_ident_expr(p, str_ptr, str_len)
     } E I kind == TOK_LBRACE() {
         # Block expression: { stmts... expr }
         parser_parse_block_expr(p)
@@ -1604,6 +1622,11 @@ F cg_fresh_reg(cg: i64) -> i64 {
     r
 }
 
+F cg_reset_regs(cg: i64) -> i64 {
+    store_i64(cg + 8, 0)
+    0
+}
+
 F cg_emit(cg: i64, s: str) -> i64 {
     sb := cg_get_sb(cg)
     sb_append_cstr(sb, s)
@@ -1652,63 +1675,116 @@ F cg_emit_header(cg: i64) -> i64 {
     1
 }
 
+# Emit operand (either register or parameter name)
+F cg_emit_operand(cg: i64, reg: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    I reg == 0 - 1 {
+        cg_emit(cg, "%")
+        cg_emit_str(cg, param_name_ptr, param_name_len)
+        0
+    } E {
+        cg_emit(cg, "%")
+        cg_emit_i64(cg, reg)
+        0
+    }
+}
+
+# Generate integer expression
+F cg_gen_int_expr(cg: i64, expr: i64) -> i64 {
+    value := load_i64(expr + 8)
+    reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, reg)
+    cg_emit(cg, " = add i64 ")
+    cg_emit_i64(cg, value)
+    cg_emit(cg, ", 0")
+    cg_emit_newline(cg)
+    reg
+}
+
+# Generate call expression
+F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    func_name_ptr := expr_get_field0(expr)
+    func_name_len := expr_get_field1(expr)
+    args := expr_get_field2(expr)
+    arg_count := expr_get_field3(expr)
+
+    # Generate arguments first
+    arg_regs := malloc(16 * 8)
+    i: mut i64 = 0
+    L {
+        I i >= arg_count { B } E { 0 }
+        arg := load_i64(args + i * 8)
+        arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
+        store_i64(arg_regs + i * 8, arg_reg)
+        i = i + 1
+    }
+
+    # Emit call
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+    cg_emit(cg, " = call i64 @")
+    cg_emit_str(cg, func_name_ptr, func_name_len)
+    cg_emit(cg, "(")
+
+    # Emit arguments
+    i = 0
+    L {
+        I i >= arg_count { B } E { 0 }
+        I i > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+        cg_emit(cg, "i64 ")
+        arg_reg := load_i64(arg_regs + i * 8)
+        cg_emit_operand(cg, arg_reg, param_name_ptr, param_name_len)
+        i = i + 1
+    }
+
+    cg_emit(cg, ")")
+    cg_emit_newline(cg)
+    free(arg_regs)
+    result_reg
+}
+
+# Generate binary expression
+F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    left := load_i64(expr + 16)
+    right := load_i64(expr + 24)
+
+    left_reg := cg_gen_expr(cg, left, param_name_ptr, param_name_len)
+    right_reg := cg_gen_expr(cg, right, param_name_ptr, param_name_len)
+
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+    cg_emit(cg, " = add i64 ")
+    cg_emit_operand(cg, left_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", ")
+    cg_emit_operand(cg, right_reg, param_name_ptr, param_name_len)
+    cg_emit_newline(cg)
+    result_reg
+}
+
 # Generate expression, returns register number
 F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    I expr == 0 { R 0 }
     kind := load_i64(expr + 0)
 
+    result: mut i64 = 0
+
     I kind == EXPR_INT() {
-        value := load_i64(expr + 8)
-        reg := cg_fresh_reg(cg)
-        cg_emit(cg, "  %")
-        cg_emit_i64(cg, reg)
-        cg_emit(cg, " = add i64 ")
-        cg_emit_i64(cg, value)
-        cg_emit(cg, ", 0")
-        cg_emit_newline(cg)
-        reg
+        result = cg_gen_int_expr(cg, expr)
+        0
     } E I kind == EXPR_IDENT() {
-        # Return param directly
-        0 - 1  # Special marker for parameter
+        result = 0 - 1  # Special marker for parameter
+        0
+    } E I kind == EXPR_CALL() {
+        result = cg_gen_call_expr(cg, expr, param_name_ptr, param_name_len)
+        0
     } E I kind == EXPR_BINARY() {
-        op := load_i64(expr + 8)
-        left := load_i64(expr + 16)
-        right := load_i64(expr + 24)
-
-        left_reg := cg_gen_expr(cg, left, param_name_ptr, param_name_len)
-        right_reg := cg_gen_expr(cg, right, param_name_ptr, param_name_len)
-
-        result_reg := cg_fresh_reg(cg)
-        cg_emit(cg, "  %")
-        cg_emit_i64(cg, result_reg)
-        cg_emit(cg, " = add i64 ")
-
-        # Left operand
-        I left_reg == 0 - 1 {
-            cg_emit(cg, "%")
-            cg_emit_str(cg, param_name_ptr, param_name_len)
-            0
-        } E {
-            cg_emit(cg, "%")
-            cg_emit_i64(cg, left_reg)
-            0
-        }
-
-        cg_emit(cg, ", ")
-
-        # Right operand
-        I right_reg == 0 - 1 {
-            cg_emit(cg, "%")
-            cg_emit_str(cg, param_name_ptr, param_name_len)
-            0
-        } E {
-            cg_emit(cg, "%")
-            cg_emit_i64(cg, right_reg)
-            0
-        }
-
-        cg_emit_newline(cg)
-        result_reg
+        result = cg_gen_binary_expr(cg, expr, param_name_ptr, param_name_len)
+        0
     } E { 0 }
+
+    result
 }
 
 F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
@@ -1854,17 +1930,191 @@ F read_file(path: str) -> i64 {
 }
 
 # ============================================================================
+# Debug helpers
+# ============================================================================
+
+F debug_print_expr(expr: i64, depth: i64) -> i64 {
+    I expr == 0 {
+        puts("    NULL")
+        putchar(10)
+        R 0
+    }
+    kind := expr_get_kind(expr)
+    # Indent
+    i: mut i64 = 0
+    L {
+        I i >= depth { B } E { 0 }
+        puts("  ")
+        i = i + 1
+    }
+    I kind == EXPR_INT() {
+        puts("INT: ")
+        print_i64(expr_get_field0(expr))
+        putchar(10)
+        0
+    } E I kind == EXPR_IDENT() {
+        puts("IDENT: ")
+        print_str(expr_get_field0(expr), expr_get_field1(expr))
+        putchar(10)
+        0
+    } E I kind == EXPR_CALL() {
+        puts("CALL: ")
+        print_str(expr_get_field0(expr), expr_get_field1(expr))
+        puts(" (")
+        print_i64(expr_get_field3(expr))
+        puts(" args)")
+        putchar(10)
+        # Print arguments
+        args := expr_get_field2(expr)
+        arg_count := expr_get_field3(expr)
+        j: mut i64 = 0
+        L {
+            I j >= arg_count { B } E { 0 }
+            arg := load_i64(args + j * 8)
+            debug_print_expr(arg, depth + 1)
+            j = j + 1
+        }
+        0
+    } E I kind == EXPR_BINARY() {
+        puts("BINARY op=")
+        print_i64(expr_get_field0(expr))
+        putchar(10)
+        debug_print_expr(expr_get_field1(expr), depth + 1)
+        debug_print_expr(expr_get_field2(expr), depth + 1)
+        0
+    } E {
+        puts("EXPR kind=")
+        print_i64(kind)
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Multi-Function Code Generation Helper
+# ============================================================================
+
+# Check if a function name is "main" (4 bytes: m=109, a=97, i=105, n=110)
+F is_main_function(name_ptr: i64, name_len: i64) -> i64 {
+    I name_len != 4 { R 0 }
+    I load_byte(name_ptr) != 109 { R 0 }      # m
+    I load_byte(name_ptr + 1) != 97 { R 0 }   # a
+    I load_byte(name_ptr + 2) != 105 { R 0 }  # i
+    I load_byte(name_ptr + 3) != 110 { R 0 }  # n
+    1
+}
+
+# Generate code for a single function item
+F cg_gen_function_item(cg: i64, item: i64) -> i64 {
+    I item_get_kind(item) != ITEM_FUNCTION() { R 0 }
+
+    # Reset register counter for each function
+    cg_reset_regs(cg)
+
+    name_ptr := item_get_name_ptr(item)
+    name_len := item_get_name_len(item)
+    params := item_get_data0(item)
+    param_count := item_get_data1(item)
+    body := item_get_data3(item)
+
+    I body == 0 { R 0 }
+
+    # Check if this is the main function (no params, returns i64)
+    I is_main_function(name_ptr, name_len) == 1 && param_count == 0 {
+        # Generate main with special handling (no params)
+        cg_emit(cg, "define i64 @main() {\n")
+        cg_emit(cg, "entry:\n")
+        result_reg := cg_gen_expr(cg, body, 0, 0)
+        cg_emit(cg, "  ret i64 ")
+        I result_reg == 0 - 1 {
+            cg_emit(cg, "0")
+            0
+        } E {
+            cg_emit(cg, "%")
+            cg_emit_i64(cg, result_reg)
+            0
+        }
+        cg_emit_newline(cg)
+        cg_emit(cg, "}\n\n")
+        R 1
+    }
+
+    # Get first param info (for simple functions)
+    param_name_ptr: mut i64 = 0
+    param_name_len: mut i64 = 0
+    I param_count > 0 {
+        param := load_i64(params)
+        param_name_ptr = param_get_name_ptr(param)
+        param_name_len = param_get_name_len(param)
+        0
+    } E { 0 }
+
+    # Generate regular function
+    cg_gen_function(cg, name_ptr, name_len, param_name_ptr, param_name_len, body)
+}
+
+# Generate code for all function items in the parser
+F cg_gen_all_functions(cg: i64, parser: i64) -> i64 {
+    items := parser_get_items(parser)
+    count := parser_get_item_count(parser)
+    has_main: mut i64 = 0
+    first_func_name_ptr: mut i64 = 0
+    first_func_name_len: mut i64 = 0
+
+    # First pass: generate all functions and check for main
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        item := load_i64(items + i * 8)
+        kind := item_get_kind(item)
+
+        I kind == ITEM_FUNCTION() {
+            name_ptr := item_get_name_ptr(item)
+            name_len := item_get_name_len(item)
+            params := item_get_data0(item)
+            param_count := item_get_data1(item)
+
+            # Remember first function for fallback main generation
+            I first_func_name_ptr == 0 && param_count > 0 {
+                first_func_name_ptr = name_ptr
+                first_func_name_len = name_len
+                0
+            } E { 0 }
+
+            # Check if this is main
+            I is_main_function(name_ptr, name_len) == 1 && param_count == 0 {
+                has_main = 1
+                0
+            } E { 0 }
+
+            cg_gen_function_item(cg, item)
+            0
+        } E { 0 }
+
+        i = i + 1
+    }
+
+    # If no main function, generate one that calls the first function
+    I has_main == 0 && first_func_name_ptr != 0 {
+        cg_gen_main_that_calls(cg, first_func_name_ptr, first_func_name_len)
+        0
+    } E { 0 }
+
+    count
+}
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
 F main() -> i64 {
     puts("=======================================\n")
     puts("  Vais Self-Hosting Compiler (Stage 1)\n")
-    puts("  Version: 0.2.0\n")
+    puts("  Version: 0.3.0 (Multi-Function)\n")
     puts("=======================================\n\n")
 
     # Hardcoded path for bootstrapping
-    input_path := "selfhost/test2.vais"
+    input_path := "selfhost/test_multi.vais"
 
     puts("[INFO] Compiling: ")
     puts(input_path)
@@ -1885,39 +2135,63 @@ F main() -> i64 {
     # Step 1: Lexer
     puts("[1] Lexer...\n")
     lex := lexer_new(source_data, source_len)
-    tokens := malloc(64 * 48)
+    tokens := malloc(256 * 48)  # Increased for multi-function files
     token_count := lexer_tokenize(lex, tokens)
     puts("    Tokens: ")
     print_i64(token_count)
     putchar(10)
 
-    # Step 2: Parser
-    puts("[2] Parser...\n")
+    # Step 2: Parser (using module parsing for multiple functions)
+    puts("[2] Parser (module mode)...\n")
     parser := parser_new(tokens, token_count)
-    result := parser_parse_function(parser)
-    I result == 1 {
-        puts("    Parse: OK\n")
-        puts("    Function: ")
-        print_str(parser_get_func_name_ptr(parser), parser_get_func_name_len(parser))
-        putchar(10)
-        puts("    Param: ")
-        print_str(parser_get_param_name_ptr(parser), parser_get_param_name_len(parser))
-        putchar(10)
-        0
-    } E {
-        puts("    Parse: FAILED\n")
+    parser_parse_module(parser)  # Parse all items in the module
+
+    item_count := parser_get_item_count(parser)
+    puts("    Items parsed: ")
+    print_i64(item_count)
+    putchar(10)
+
+    I item_count == 0 {
+        puts("    Parse: FAILED (no items found)\n")
         R 1
     }
 
-    # Step 3: Codegen
-    puts("[3] Codegen...\n")
+    # Print parsed functions
+    items := parser_get_items(parser)
+    func_count: mut i64 = 0
+    i: mut i64 = 0
+    L {
+        I i >= item_count { B } E { 0 }
+        item := load_i64(items + i * 8)
+        kind := item_get_kind(item)
+        I kind == ITEM_FUNCTION() {
+            puts("    Function: ")
+            print_str(item_get_name_ptr(item), item_get_name_len(item))
+            putchar(10)
+            func_count = func_count + 1
+            0
+        } E I kind == ITEM_STRUCT() {
+            puts("    Struct: ")
+            print_str(item_get_name_ptr(item), item_get_name_len(item))
+            putchar(10)
+            0
+        } E I kind == ITEM_IMPL() {
+            puts("    Impl: ")
+            print_str(item_get_name_ptr(item), item_get_name_len(item))
+            putchar(10)
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    puts("    Total functions: ")
+    print_i64(func_count)
+    putchar(10)
+
+    # Step 3: Codegen (multi-function)
+    puts("[3] Codegen (multi-function)...\n")
     cg := cg_new()
     cg_emit_header(cg)
-    cg_gen_function(cg,
-        parser_get_func_name_ptr(parser), parser_get_func_name_len(parser),
-        parser_get_param_name_ptr(parser), parser_get_param_name_len(parser),
-        parser_get_body_expr(parser))
-    cg_gen_main_that_calls(cg, parser_get_func_name_ptr(parser), parser_get_func_name_len(parser))
+    cg_gen_all_functions(cg, parser)
 
     # Print generated IR
     puts("\n--- Generated LLVM IR ---\n")
