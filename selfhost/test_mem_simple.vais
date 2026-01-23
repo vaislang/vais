@@ -1,0 +1,18 @@
+# Simple memory test
+F test(x: i64) -> i64 {
+    buf := malloc(16)
+    store_byte(buf, 65)
+    store_byte(buf + 1, 66)
+    a := load_byte(buf)
+    b := load_byte(buf + 1)
+    
+    store_i64(buf + 8, 100)
+    v := load_i64(buf + 8)
+    
+    free(buf)
+    a + b + v
+}
+
+F main(n: i64) -> i64 {
+    test(0)
+}

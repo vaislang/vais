@@ -510,6 +510,37 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
     token_store(tokens, count, kind, 0, 0, 0, start, end)
 }
 
+# Scan a string literal (double-quoted)
+F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
+    lexer_advance(lex)  # consume opening quote
+    start := lexer_get_pos(lex)
+    src := lexer_get_source(lex)
+    str_start := src + start
+
+    L {
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        c := lexer_peek(lex)
+        I c == 34 { B } E { 0 }  # closing quote
+        I c == 92 {
+            # escape sequence: skip backslash and next char
+            lexer_advance(lex)
+            I lexer_is_eof(lex) == 0 {
+                lexer_advance(lex)
+                0
+            } E { 0 }
+        } E {
+            lexer_advance(lex)
+            0
+        }
+    }
+
+    end := lexer_get_pos(lex)
+    len := end - start
+    lexer_advance(lex)  # consume closing quote
+
+    token_store(tokens, count, TOK_STRING(), 0, str_start, len, start, end)
+}
+
 F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
     count: mut i64 = 0
     L {
@@ -524,6 +555,11 @@ F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
             0
         } E I is_ident_start(c) == 1 {
             lexer_scan_ident(lex, tokens, count)
+            count = count + 1
+            0
+        } E I c == 34 {
+            # String literal (double quote)
+            lexer_scan_string(lex, tokens, count)
             count = count + 1
             0
         } E {
@@ -857,6 +893,15 @@ F parser_parse_primary(p: i64) -> i64 {
 
         # Use helper function to handle ident-based expressions
         parser_parse_ident_expr(p, str_ptr, str_len)
+    } E I kind == TOK_STRING() {
+        # String literal
+        str_ptr := parser_current_str_ptr(p)
+        str_len := parser_current_str_len(p)
+        parser_advance(p)
+        e := expr_new(EXPR_STRING())
+        expr_set_field0(e, str_ptr)
+        expr_set_field1(e, str_len)
+        e
     } E I kind == TOK_LBRACE() {
         # Block expression: { stmts... expr }
         parser_parse_block_expr(p)
@@ -1607,13 +1652,28 @@ F parser_free(p: i64) -> i64 {
 # ============================================================================
 
 F cg_new() -> i64 {
-    cg := malloc(40)
+    cg := malloc(120)
     sb := sb_new(4096)
     store_i64(cg + 0, sb)
     store_i64(cg + 8, 0)    # reg_counter
     store_i64(cg + 16, 0)   # label_counter
     store_i64(cg + 24, 0)   # current_block_type: 0=entry, 1=then, 2=else, 3=merge
     store_i64(cg + 32, 0)   # current_block_id
+    store_i64(cg + 40, 0)   # loop_header_label (for continue)
+    store_i64(cg + 48, 0)   # loop_end_label (for break)
+    store_i64(cg + 56, 0)   # block_terminated: 1 if break/continue/return was emitted
+    # Variable storage: array of (name_ptr, name_len, alloca_reg) triples
+    vars := malloc(64 * 24)  # up to 64 variables per function
+    store_i64(cg + 64, vars)
+    store_i64(cg + 72, 0)   # var_count
+    store_i64(cg + 80, 0)   # param_name_ptr (current function's parameter)
+    store_i64(cg + 88, 0)   # param_name_len
+    # String constant storage: array of (str_ptr, str_len, global_id) triples
+    strings := malloc(64 * 24)  # up to 64 strings per module
+    store_i64(cg + 96, strings)
+    store_i64(cg + 104, 0)  # string_count
+    strings_sb := sb_new(2048)  # StringBuilder for string constant declarations
+    store_i64(cg + 112, strings_sb)
     cg
 }
 
@@ -1622,6 +1682,9 @@ F BLOCK_ENTRY() -> i64 = 0
 F BLOCK_THEN() -> i64 = 1
 F BLOCK_ELSE() -> i64 = 2
 F BLOCK_MERGE() -> i64 = 3
+F BLOCK_LOOP_HEADER() -> i64 = 4
+F BLOCK_LOOP_BODY() -> i64 = 5
+F BLOCK_LOOP_END() -> i64 = 6
 
 F cg_set_current_block(cg: i64, block_type: i64, block_id: i64) -> i64 {
     store_i64(cg + 24, block_type)
@@ -1631,6 +1694,167 @@ F cg_set_current_block(cg: i64, block_type: i64, block_id: i64) -> i64 {
 
 F cg_get_current_block_type(cg: i64) -> i64 = load_i64(cg + 24)
 F cg_get_current_block_id(cg: i64) -> i64 = load_i64(cg + 32)
+
+# Loop label management (for break/continue)
+F cg_set_loop_labels(cg: i64, header: i64, end: i64) -> i64 {
+    store_i64(cg + 40, header)
+    store_i64(cg + 48, end)
+    0
+}
+
+F cg_get_loop_header(cg: i64) -> i64 = load_i64(cg + 40)
+F cg_get_loop_end(cg: i64) -> i64 = load_i64(cg + 48)
+
+# Block termination tracking (break/continue/return)
+F cg_set_terminated(cg: i64, v: i64) -> i64 { store_i64(cg + 56, v); 0 }
+F cg_get_terminated(cg: i64) -> i64 = load_i64(cg + 56)
+F cg_clear_terminated(cg: i64) -> i64 { store_i64(cg + 56, 0); 0 }
+
+# Variable management
+F cg_get_vars(cg: i64) -> i64 = load_i64(cg + 64)
+F cg_get_var_count(cg: i64) -> i64 = load_i64(cg + 72)
+F cg_set_var_count(cg: i64, c: i64) -> i64 { store_i64(cg + 72, c); 0 }
+
+# Set current function's parameter info
+F cg_set_param(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
+    store_i64(cg + 80, name_ptr)
+    store_i64(cg + 88, name_len)
+    0
+}
+
+F cg_get_param_ptr(cg: i64) -> i64 = load_i64(cg + 80)
+F cg_get_param_len(cg: i64) -> i64 = load_i64(cg + 88)
+
+# Compare two strings by pointer and length
+F str_eq(ptr1: i64, len1: i64, ptr2: i64, len2: i64) -> i64 {
+    I len1 != len2 { R 0 }
+    i: mut i64 = 0
+    L {
+        I i >= len1 { B } E { 0 }
+        I load_byte(ptr1 + i) != load_byte(ptr2 + i) { R 0 }
+        i = i + 1
+    }
+    1
+}
+
+# Add a variable binding (name -> alloca register)
+F cg_add_var(cg: i64, name_ptr: i64, name_len: i64, alloca_reg: i64) -> i64 {
+    vars := cg_get_vars(cg)
+    count := cg_get_var_count(cg)
+    offset := count * 24
+    store_i64(vars + offset + 0, name_ptr)
+    store_i64(vars + offset + 8, name_len)
+    store_i64(vars + offset + 16, alloca_reg)
+    cg_set_var_count(cg, count + 1)
+    1
+}
+
+# Find a variable by name, returns alloca register or -1 if not found
+F cg_find_var(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
+    vars := cg_get_vars(cg)
+    count := cg_get_var_count(cg)
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        offset := i * 24
+        var_ptr := load_i64(vars + offset + 0)
+        var_len := load_i64(vars + offset + 8)
+        I str_eq(name_ptr, name_len, var_ptr, var_len) == 1 {
+            R load_i64(vars + offset + 16)
+        }
+        i = i + 1
+    }
+    0 - 1  # Not found
+}
+
+# Clear all variables (call when starting a new function)
+F cg_clear_vars(cg: i64) -> i64 {
+    cg_set_var_count(cg, 0)
+    0
+}
+
+# String constant management
+F cg_get_strings(cg: i64) -> i64 = load_i64(cg + 96)
+F cg_get_string_count(cg: i64) -> i64 = load_i64(cg + 104)
+F cg_set_string_count(cg: i64, c: i64) -> i64 { store_i64(cg + 104, c); 0 }
+F cg_get_strings_sb(cg: i64) -> i64 = load_i64(cg + 112)
+
+# Add a string constant, returns the global id (@.str.N)
+# Also emits the global declaration to strings_sb
+F cg_add_string(cg: i64, str_ptr: i64, str_len: i64) -> i64 {
+    strings := cg_get_strings(cg)
+    count := cg_get_string_count(cg)
+
+    # Check if string already exists
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        offset := i * 24
+        existing_ptr := load_i64(strings + offset + 0)
+        existing_len := load_i64(strings + offset + 8)
+        I str_eq(str_ptr, str_len, existing_ptr, existing_len) == 1 {
+            # Already exists, return its id
+            R load_i64(strings + offset + 16)
+        }
+        i = i + 1
+    }
+
+    # Add new string
+    offset := count * 24
+    store_i64(strings + offset + 0, str_ptr)
+    store_i64(strings + offset + 8, str_len)
+    store_i64(strings + offset + 16, count)
+    cg_set_string_count(cg, count + 1)
+
+    # Emit global declaration: @.str.N = private constant [len+1 x i8] c"...\00"
+    strings_sb := cg_get_strings_sb(cg)
+    sb_append_cstr(strings_sb, "@.str.")
+    sb_append_i64(strings_sb, count)
+    sb_append_cstr(strings_sb, " = private constant [")
+    sb_append_i64(strings_sb, str_len + 1)
+    sb_append_cstr(strings_sb, " x i8] c\"")
+
+    # Emit string contents with escaping
+    j: mut i64 = 0
+    L {
+        I j >= str_len { B } E { 0 }
+        ch := load_byte(str_ptr + j)
+        I ch == 10 {
+            # newline -> \0A
+            sb_append_byte(strings_sb, 92)  # backslash
+            sb_append_byte(strings_sb, 48)  # 0
+            sb_append_byte(strings_sb, 65)  # A
+        } E I ch == 13 {
+            # carriage return -> \0D
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 48)
+            sb_append_byte(strings_sb, 68)  # D
+        } E I ch == 9 {
+            # tab -> \09
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 48)
+            sb_append_byte(strings_sb, 57)  # 9
+        } E I ch == 34 {
+            # double quote -> \22
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 50)  # 2
+            sb_append_byte(strings_sb, 50)  # 2
+        } E I ch == 92 {
+            # backslash -> \5C
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 53)  # 5
+            sb_append_byte(strings_sb, 67)  # C
+        } E {
+            sb_append_byte(strings_sb, ch)
+        }
+        j = j + 1
+    }
+
+    sb_append_cstr(strings_sb, "\\00\"")
+    sb_append_byte(strings_sb, 10)  # newline
+
+    count
+}
 
 F cg_get_sb(cg: i64) -> i64 = load_i64(cg + 0)
 
@@ -1697,6 +1921,104 @@ F cg_emit_header(cg: i64) -> i64 {
     cg_emit_quote(cg)
     cg_emit_newline(cg)
     cg_emit_newline(cg)
+
+    # Extern declarations for runtime functions
+    cg_emit(cg, "; External declarations")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i32 @puts(ptr)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i32 @putchar(i32)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare ptr @malloc(i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare void @free(ptr)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fopen(ptr, ptr)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fclose(i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fread(ptr, i64, i64, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fwrite(ptr, i64, i64, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fseek(i64, i64, i32)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @ftell(i64)")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper function: load byte from memory
+    cg_emit(cg, "; Helper function: load byte from memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define i64 @__load_byte(i64 %ptr) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i8*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = load i8, i8* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %2 = zext i8 %1 to i64")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret i64 %2")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper function: store byte to memory
+    cg_emit(cg, "; Helper function: store byte to memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define void @__store_byte(i64 %ptr, i64 %val) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i8*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = trunc i64 %val to i8")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  store i8 %1, i8* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret void")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper function: load i64 from memory
+    cg_emit(cg, "; Helper function: load i64 from memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define i64 @__load_i64(i64 %ptr) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i64*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = load i64, i64* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret i64 %1")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper function: store i64 to memory
+    cg_emit(cg, "; Helper function: store i64 to memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define void @__store_i64(i64 %ptr, i64 %val) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i64*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  store i64 %val, i64* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret void")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
     1
 }
 
@@ -1727,11 +2049,135 @@ F cg_gen_int_expr(cg: i64, expr: i64) -> i64 {
 }
 
 # Generate call expression
+# Check if an expression is a string literal
+F expr_is_string(expr: i64) -> i64 {
+    kind := load_i64(expr + 0)
+    I kind == EXPR_STRING() { 1 } E { 0 }
+}
+
+# Check if function name matches "puts" (4 chars)
+F is_puts_func(ptr: i64, len: i64) -> i64 {
+    I len != 4 { R 0 }
+    I load_byte(ptr) != 112 { R 0 }       # p
+    I load_byte(ptr + 1) != 117 { R 0 }   # u
+    I load_byte(ptr + 2) != 116 { R 0 }   # t
+    I load_byte(ptr + 3) != 115 { R 0 }   # s
+    1
+}
+
+# Check if function name matches "putchar" (7 chars)
+F is_putchar_func(ptr: i64, len: i64) -> i64 {
+    I len != 7 { R 0 }
+    I load_byte(ptr) != 112 { R 0 }       # p
+    I load_byte(ptr + 1) != 117 { R 0 }   # u
+    I load_byte(ptr + 2) != 116 { R 0 }   # t
+    I load_byte(ptr + 3) != 99 { R 0 }    # c
+    I load_byte(ptr + 4) != 104 { R 0 }   # h
+    I load_byte(ptr + 5) != 97 { R 0 }    # a
+    I load_byte(ptr + 6) != 114 { R 0 }   # r
+    1
+}
+
+# Check if function name matches "malloc" (6 chars)
+F is_malloc_func(ptr: i64, len: i64) -> i64 {
+    I len != 6 { R 0 }
+    I load_byte(ptr) != 109 { R 0 }       # m
+    I load_byte(ptr + 1) != 97 { R 0 }    # a
+    I load_byte(ptr + 2) != 108 { R 0 }   # l
+    I load_byte(ptr + 3) != 108 { R 0 }   # l
+    I load_byte(ptr + 4) != 111 { R 0 }   # o
+    I load_byte(ptr + 5) != 99 { R 0 }    # c
+    1
+}
+
+# Check if function name matches "free" (4 chars)
+F is_free_func(ptr: i64, len: i64) -> i64 {
+    I len != 4 { R 0 }
+    I load_byte(ptr) != 102 { R 0 }       # f
+    I load_byte(ptr + 1) != 114 { R 0 }   # r
+    I load_byte(ptr + 2) != 101 { R 0 }   # e
+    I load_byte(ptr + 3) != 101 { R 0 }   # e
+    1
+}
+
+# Check if function name matches "load_byte" (9 chars)
+F is_load_byte_func(ptr: i64, len: i64) -> i64 {
+    I len != 9 { R 0 }
+    I load_byte(ptr) != 108 { R 0 }       # l
+    I load_byte(ptr + 1) != 111 { R 0 }   # o
+    I load_byte(ptr + 2) != 97 { R 0 }    # a
+    I load_byte(ptr + 3) != 100 { R 0 }   # d
+    I load_byte(ptr + 4) != 95 { R 0 }    # _
+    I load_byte(ptr + 5) != 98 { R 0 }    # b
+    I load_byte(ptr + 6) != 121 { R 0 }   # y
+    I load_byte(ptr + 7) != 116 { R 0 }   # t
+    I load_byte(ptr + 8) != 101 { R 0 }   # e
+    1
+}
+
+# Check if function name matches "store_byte" (10 chars)
+F is_store_byte_func(ptr: i64, len: i64) -> i64 {
+    I len != 10 { R 0 }
+    I load_byte(ptr) != 115 { R 0 }       # s
+    I load_byte(ptr + 1) != 116 { R 0 }   # t
+    I load_byte(ptr + 2) != 111 { R 0 }   # o
+    I load_byte(ptr + 3) != 114 { R 0 }   # r
+    I load_byte(ptr + 4) != 101 { R 0 }   # e
+    I load_byte(ptr + 5) != 95 { R 0 }    # _
+    I load_byte(ptr + 6) != 98 { R 0 }    # b
+    I load_byte(ptr + 7) != 121 { R 0 }   # y
+    I load_byte(ptr + 8) != 116 { R 0 }   # t
+    I load_byte(ptr + 9) != 101 { R 0 }   # e
+    1
+}
+
+# Check if function name matches "load_i64" (8 chars)
+F is_load_i64_func(ptr: i64, len: i64) -> i64 {
+    I len != 8 { R 0 }
+    I load_byte(ptr) != 108 { R 0 }       # l
+    I load_byte(ptr + 1) != 111 { R 0 }   # o
+    I load_byte(ptr + 2) != 97 { R 0 }    # a
+    I load_byte(ptr + 3) != 100 { R 0 }   # d
+    I load_byte(ptr + 4) != 95 { R 0 }    # _
+    I load_byte(ptr + 5) != 105 { R 0 }   # i
+    I load_byte(ptr + 6) != 54 { R 0 }    # 6
+    I load_byte(ptr + 7) != 52 { R 0 }    # 4
+    1
+}
+
+# Check if function name matches "store_i64" (9 chars)
+F is_store_i64_func(ptr: i64, len: i64) -> i64 {
+    I len != 9 { R 0 }
+    I load_byte(ptr) != 115 { R 0 }       # s
+    I load_byte(ptr + 1) != 116 { R 0 }   # t
+    I load_byte(ptr + 2) != 111 { R 0 }   # o
+    I load_byte(ptr + 3) != 114 { R 0 }   # r
+    I load_byte(ptr + 4) != 101 { R 0 }   # e
+    I load_byte(ptr + 5) != 95 { R 0 }    # _
+    I load_byte(ptr + 6) != 105 { R 0 }   # i
+    I load_byte(ptr + 7) != 54 { R 0 }    # 6
+    I load_byte(ptr + 8) != 52 { R 0 }    # 4
+    1
+}
+
 F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
     func_name_ptr := expr_get_field0(expr)
     func_name_len := expr_get_field1(expr)
     args := expr_get_field2(expr)
     arg_count := expr_get_field3(expr)
+
+    # Check for known runtime functions
+    is_puts := is_puts_func(func_name_ptr, func_name_len)
+    is_putchar := is_putchar_func(func_name_ptr, func_name_len)
+    is_malloc := is_malloc_func(func_name_ptr, func_name_len)
+    is_free := is_free_func(func_name_ptr, func_name_len)
+    is_load_byte := is_load_byte_func(func_name_ptr, func_name_len)
+    is_store_byte := is_store_byte_func(func_name_ptr, func_name_len)
+    is_load_i64 := is_load_i64_func(func_name_ptr, func_name_len)
+    is_store_i64 := is_store_i64_func(func_name_ptr, func_name_len)
+
+    # Track which args are strings (for ptr type)
+    arg_is_string := malloc(16)
 
     # Generate arguments first
     arg_regs := malloc(16 * 8)
@@ -1739,33 +2185,142 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
     L {
         I i >= arg_count { B } E { 0 }
         arg := load_i64(args + i * 8)
+        store_byte(arg_is_string + i, expr_is_string(arg))
         arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
         store_i64(arg_regs + i * 8, arg_reg)
         i = i + 1
     }
 
-    # Emit call
     result_reg := cg_fresh_reg(cg)
-    cg_emit(cg, "  %")
-    cg_emit_i64(cg, result_reg)
-    cg_emit(cg, " = call i64 @")
-    cg_emit_str(cg, func_name_ptr, func_name_len)
-    cg_emit(cg, "(")
 
-    # Emit arguments
-    i = 0
-    L {
-        I i >= arg_count { B } E { 0 }
-        I i > 0 { cg_emit(cg, ", "); 0 } E { 0 }
-        cg_emit(cg, "i64 ")
-        arg_reg := load_i64(arg_regs + i * 8)
-        cg_emit_operand(cg, arg_reg, param_name_ptr, param_name_len)
-        i = i + 1
+    # Handle puts: i32 @puts(ptr)
+    I is_puts == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i32 @puts(ptr %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        0
+    # Handle putchar: i32 @putchar(i32)
+    } E I is_putchar == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i32 @putchar(i32 ")
+        # Truncate i64 to i32 if needed
+        arg_reg := load_i64(arg_regs + 0)
+        trunc_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "trunc (i64 %")
+        cg_emit_i64(cg, arg_reg)
+        cg_emit(cg, " to i32))")
+        cg_emit_newline(cg)
+        0
+    # Handle malloc: ptr @malloc(i64)
+    } E I is_malloc == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call ptr @malloc(i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        # Convert ptr to i64
+        conv_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, conv_reg)
+        cg_emit(cg, " = ptrtoint ptr %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R conv_reg
+    # Handle free: void @free(ptr)
+    } E I is_free == 1 {
+        # Convert i64 to ptr
+        ptr_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ptr_reg)
+        cg_emit(cg, " = inttoptr i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        cg_emit(cg, "  call void @free(ptr %")
+        cg_emit_i64(cg, ptr_reg)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R 0
+    # Handle load_byte: i64 @__load_byte(i64)
+    } E I is_load_byte == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i64 @__load_byte(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R result_reg
+    # Handle store_byte: void @__store_byte(i64, i64)
+    } E I is_store_byte == 1 {
+        cg_emit(cg, "  call void @__store_byte(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 8), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R 0
+    # Handle load_i64: i64 @__load_i64(i64)
+    } E I is_load_i64 == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i64 @__load_i64(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R result_reg
+    # Handle store_i64: void @__store_i64(i64, i64)
+    } E I is_store_i64 == 1 {
+        cg_emit(cg, "  call void @__store_i64(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 8), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R 0
+    # Default: user-defined function with i64 args
+    } E {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i64 @")
+        cg_emit_str(cg, func_name_ptr, func_name_len)
+        cg_emit(cg, "(")
+
+        # Emit arguments
+        i = 0
+        L {
+            I i >= arg_count { B } E { 0 }
+            I i > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+            cg_emit(cg, "i64 ")
+            arg_reg := load_i64(arg_regs + i * 8)
+            cg_emit_operand(cg, arg_reg, param_name_ptr, param_name_len)
+            i = i + 1
+        }
+
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        0
     }
 
-    cg_emit(cg, ")")
-    cg_emit_newline(cg)
     free(arg_regs)
+    free(arg_is_string)
     result_reg
 }
 
@@ -1848,6 +2403,70 @@ F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i6
     }
 }
 
+# Generate loop expression: L { body }
+# Structure: br loop_header -> body -> br loop_header, with break -> loop_end
+F cg_gen_loop_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    body := expr_get_field0(expr)
+
+    # Generate unique labels for loop
+    loop_id := cg_fresh_label(cg)
+
+    # Save previous loop labels and terminated state (for nested loops)
+    prev_header := cg_get_loop_header(cg)
+    prev_end := cg_get_loop_end(cg)
+    prev_terminated := cg_get_terminated(cg)
+
+    # Set current loop labels and clear terminated
+    cg_set_loop_labels(cg, loop_id, loop_id)
+    cg_clear_terminated(cg)
+
+    # Jump to loop header
+    cg_emit(cg, "  br label %loop_header")
+    cg_emit_i64(cg, loop_id)
+    cg_emit_newline(cg)
+
+    # Loop header block
+    cg_emit(cg, "loop_header")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_LOOP_HEADER(), loop_id)
+
+    # Generate body (the body expression handles break statements)
+    body_reg := cg_gen_expr(cg, body, param_name_ptr, param_name_len)
+
+    # After body, check if terminated (all paths in body led to break/return)
+    body_terminated := cg_get_terminated(cg)
+
+    # If body was NOT fully terminated, emit back edge to loop header
+    # (some path through the body reached the end without break)
+    I body_terminated == 0 {
+        cg_emit(cg, "  br label %loop_header")
+        cg_emit_i64(cg, loop_id)
+        cg_emit_newline(cg)
+        0
+    } E { 0 }
+
+    # Loop end block (break target) - this is where break jumps to
+    cg_emit(cg, "loop_end")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_LOOP_END(), loop_id)
+
+    # Restore previous loop labels and clear terminated (loop exit is normal flow)
+    cg_set_loop_labels(cg, prev_header, prev_end)
+    cg_set_terminated(cg, prev_terminated)
+
+    # Loop expression returns 0
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+    cg_emit(cg, " = add i64 0, 0")
+    cg_emit_newline(cg)
+    result_reg
+}
+
 # Generate if-else expression
 # Returns result register number
 # Updates current block info after execution
@@ -1886,13 +2505,19 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
     cg_emit(cg, ":")
     cg_emit_newline(cg)
     cg_set_current_block(cg, BLOCK_THEN(), label_id)
+    cg_clear_terminated(cg)  # Clear before then
     then_reg := cg_gen_expr(cg, then_expr, param_name_ptr, param_name_len)
+    then_terminated := cg_get_terminated(cg)
     # After then_expr, check what the current block is now (might have changed due to nesting)
     then_final_type := cg_get_current_block_type(cg)
     then_final_id := cg_get_current_block_id(cg)
-    cg_emit(cg, "  br label %merge")
-    cg_emit_i64(cg, label_id)
-    cg_emit_newline(cg)
+    # Only emit br if not terminated by break/continue/return
+    I then_terminated == 0 {
+        cg_emit(cg, "  br label %merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
+        0
+    } E { 0 }
 
     # Else block
     cg_emit(cg, "else")
@@ -1900,6 +2525,7 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
     cg_emit(cg, ":")
     cg_emit_newline(cg)
     cg_set_current_block(cg, BLOCK_ELSE(), label_id)
+    cg_clear_terminated(cg)  # Clear before else
     else_reg: mut i64 = 0
     I else_expr != 0 {
         else_reg = cg_gen_expr(cg, else_expr, param_name_ptr, param_name_len)
@@ -1913,55 +2539,123 @@ F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -
         cg_emit_newline(cg)
         0
     }
+    else_terminated := cg_get_terminated(cg)
     # After else_expr, check what the current block is now
     else_final_type := cg_get_current_block_type(cg)
     else_final_id := cg_get_current_block_id(cg)
-    cg_emit(cg, "  br label %merge")
-    cg_emit_i64(cg, label_id)
-    cg_emit_newline(cg)
-
-    # Merge block with phi - use actual final blocks as predecessors
-    cg_emit(cg, "merge")
-    cg_emit_i64(cg, label_id)
-    cg_emit(cg, ":")
-    cg_emit_newline(cg)
-
-    result_reg := cg_fresh_reg(cg)
-    cg_emit(cg, "  %")
-    cg_emit_i64(cg, result_reg)
-    cg_emit(cg, " = phi i64 [ ")
-    cg_emit_operand(cg, then_reg, param_name_ptr, param_name_len)
-    cg_emit(cg, ", %")
-    # Use final block name for then branch
-    I then_final_type == BLOCK_MERGE() {
-        cg_emit(cg, "merge")
-        cg_emit_i64(cg, then_final_id)
-        0
-    } E {
-        cg_emit(cg, "then")
+    # Only emit br if not terminated
+    I else_terminated == 0 {
+        cg_emit(cg, "  br label %merge")
         cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
         0
-    }
-    cg_emit(cg, " ], [ ")
-    cg_emit_operand(cg, else_reg, param_name_ptr, param_name_len)
-    cg_emit(cg, ", %")
-    # Use final block name for else branch
-    I else_final_type == BLOCK_MERGE() {
-        cg_emit(cg, "merge")
-        cg_emit_i64(cg, else_final_id)
-        0
+    } E { 0 }
+
+    # Merge block - only generate if at least one branch reaches it
+    I then_terminated == 1 && else_terminated == 1 {
+        # Both branches terminated - no merge needed, propagate termination
+        cg_set_terminated(cg, 1)
+        0 - 2  # No merge block, return special value
     } E {
-        cg_emit(cg, "else")
+        # At least one branch reaches merge
+        cg_emit(cg, "merge")
         cg_emit_i64(cg, label_id)
-        0
+        cg_emit(cg, ":")
+        cg_emit_newline(cg)
+        cg_clear_terminated(cg)  # We're now in merge, not terminated
+
+        # Generate phi only with non-terminated predecessors
+        I then_terminated == 0 && else_terminated == 0 {
+            # Both branches reach merge - normal phi
+            result_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, result_reg)
+            cg_emit(cg, " = phi i64 [ ")
+            cg_emit_operand(cg, then_reg, param_name_ptr, param_name_len)
+            cg_emit(cg, ", %")
+            I then_final_type == BLOCK_MERGE() {
+                cg_emit(cg, "merge")
+                cg_emit_i64(cg, then_final_id)
+                0
+            } E {
+                cg_emit(cg, "then")
+                cg_emit_i64(cg, label_id)
+                0
+            }
+            cg_emit(cg, " ], [ ")
+            cg_emit_operand(cg, else_reg, param_name_ptr, param_name_len)
+            cg_emit(cg, ", %")
+            I else_final_type == BLOCK_MERGE() {
+                cg_emit(cg, "merge")
+                cg_emit_i64(cg, else_final_id)
+                0
+            } E {
+                cg_emit(cg, "else")
+                cg_emit_i64(cg, label_id)
+                0
+            }
+            cg_emit(cg, " ]")
+            cg_emit_newline(cg)
+            cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+            result_reg
+        } E I then_terminated == 1 {
+            # Only else reaches merge - use else value directly
+            cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+            else_reg
+        } E {
+            # Only then reaches merge - use then value directly
+            cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+            then_reg
+        }
     }
-    cg_emit(cg, " ]")
-    cg_emit_newline(cg)
+}
 
-    # Update current block to this merge block
-    cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+# Generate single statement, returns 1 if control flow was terminated (break/continue/return)
+F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    stmt_kind := load_i64(stmt + 0)
 
-    result_reg
+    I stmt_kind == STMT_LET() {
+        # Let binding: name := value
+        # Layout: kind(8) + name_ptr(8) + name_len(8) + value(8)
+        name_ptr := load_i64(stmt + 8)
+        name_len := load_i64(stmt + 16)
+        value := load_i64(stmt + 24)
+
+        # Generate alloca in entry block (simplified: emit here)
+        alloca_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, alloca_reg)
+        cg_emit(cg, " = alloca i64")
+        cg_emit_newline(cg)
+
+        # Generate value expression
+        value_reg := cg_gen_expr(cg, value, param_name_ptr, param_name_len)
+
+        # Store value to alloca
+        cg_emit(cg, "  store i64 ")
+        cg_emit_operand(cg, value_reg, param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64* %")
+        cg_emit_i64(cg, alloca_reg)
+        cg_emit_newline(cg)
+
+        # Register variable in symbol table
+        cg_add_var(cg, name_ptr, name_len, alloca_reg)
+
+        R 0
+    } E I stmt_kind == STMT_BREAK() {
+        # Break: jump to loop_end
+        loop_end := cg_get_loop_end(cg)
+        cg_emit(cg, "  br label %loop_end")
+        cg_emit_i64(cg, loop_end)
+        cg_emit_newline(cg)
+        cg_set_terminated(cg, 1)
+        R 1  # control flow terminated
+    } E I stmt_kind == STMT_EXPR() {
+        # Expression statement: evaluate and discard
+        stmt_expr := load_i64(stmt + 8)  # expr field
+        cg_gen_expr(cg, stmt_expr, param_name_ptr, param_name_len)
+        R 0
+    } E { 0 }
 }
 
 # Generate block expression
@@ -1970,11 +2664,30 @@ F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
     stmts_len := expr_get_field1(expr)
     final_expr := expr_get_field2(expr)
 
-    # Generate statements (skip for now, just handle final expr)
-    # TODO: generate let statements and store to alloca
+    # Generate statements
+    terminated: mut i64 = 0
+    i: mut i64 = 0
+    L {
+        I i >= stmts_len { B } E { 0 }
+        I terminated == 1 { B } E { 0 }  # Skip after break/continue/return
+        I cg_get_terminated(cg) == 1 { B } E { 0 }  # Also check global terminated
+        stmt := load_i64(stmts + i * 8)
+        terminated = cg_gen_stmt(cg, stmt, param_name_ptr, param_name_len)
+        i = i + 1
+    }
 
-    # Generate final expression
-    I final_expr != 0 {
+    # Check global terminated (from nested blocks)
+    I cg_get_terminated(cg) == 1 {
+        terminated = 1
+        0
+    } E { 0 }
+
+    # Generate final expression (only if not terminated by break etc)
+    I terminated == 1 {
+        # Block was terminated by break/return, don't emit any code
+        # Return a dummy register number (won't be used)
+        0 - 2  # Special marker for terminated block
+    } E I final_expr != 0 {
         cg_gen_expr(cg, final_expr, param_name_ptr, param_name_len)
     } E {
         # No final expression, return 0
@@ -1997,9 +2710,54 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
     I kind == EXPR_INT() {
         result = cg_gen_int_expr(cg, expr)
         0
-    } E I kind == EXPR_IDENT() {
-        result = 0 - 1  # Special marker for parameter
+    } E I kind == EXPR_STRING() {
+        # String literal: add to string constants and return pointer
+        str_ptr := expr_get_field0(expr)
+        str_len := expr_get_field1(expr)
+        str_id := cg_add_string(cg, str_ptr, str_len)
+
+        # Emit: %N = getelementptr [len+1 x i8], [len+1 x i8]* @.str.ID, i64 0, i64 0
+        reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, reg)
+        cg_emit(cg, " = getelementptr [")
+        cg_emit_i64(cg, str_len + 1)
+        cg_emit(cg, " x i8], [")
+        cg_emit_i64(cg, str_len + 1)
+        cg_emit(cg, " x i8]* @.str.")
+        cg_emit_i64(cg, str_id)
+        cg_emit(cg, ", i64 0, i64 0")
+        cg_emit_newline(cg)
+        result = reg
         0
+    } E I kind == EXPR_IDENT() {
+        # Identifier: could be a parameter or a local variable
+        ident_ptr := expr_get_field0(expr)
+        ident_len := expr_get_field1(expr)
+
+        # Check if it's the parameter
+        I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
+            result = 0 - 1  # Special marker for parameter
+            0
+        } E {
+            # Look up in local variables
+            var_alloca := cg_find_var(cg, ident_ptr, ident_len)
+            I var_alloca != 0 - 1 {
+                # Found: load from alloca
+                load_reg := cg_fresh_reg(cg)
+                cg_emit(cg, "  %")
+                cg_emit_i64(cg, load_reg)
+                cg_emit(cg, " = load i64, i64* %")
+                cg_emit_i64(cg, var_alloca)
+                cg_emit_newline(cg)
+                result = load_reg
+                0
+            } E {
+                # Not found - assume it's a parameter (fallback)
+                result = 0 - 1
+                0
+            }
+        }
     } E I kind == EXPR_CALL() {
         result = cg_gen_call_expr(cg, expr, param_name_ptr, param_name_len)
         0
@@ -2012,6 +2770,45 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
     } E I kind == EXPR_BLOCK() {
         result = cg_gen_block_expr(cg, expr, param_name_ptr, param_name_len)
         0
+    } E I kind == EXPR_LOOP() {
+        result = cg_gen_loop_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_ASSIGN() {
+        # Assignment: target = value
+        target := expr_get_field0(expr)
+        value := expr_get_field1(expr)
+
+        # Target should be an identifier
+        target_kind := load_i64(target + 0)
+        I target_kind == EXPR_IDENT() {
+            target_ptr := expr_get_field0(target)
+            target_len := expr_get_field1(target)
+
+            # Find the variable's alloca
+            var_alloca := cg_find_var(cg, target_ptr, target_len)
+            I var_alloca != 0 - 1 {
+                # Generate value
+                value_reg := cg_gen_expr(cg, value, param_name_ptr, param_name_len)
+
+                # Store to alloca
+                cg_emit(cg, "  store i64 ")
+                cg_emit_operand(cg, value_reg, param_name_ptr, param_name_len)
+                cg_emit(cg, ", i64* %")
+                cg_emit_i64(cg, var_alloca)
+                cg_emit_newline(cg)
+
+                # Assignment returns the value
+                result = value_reg
+                0
+            } E {
+                # Variable not found - error
+                result = 0
+                0
+            }
+        } E {
+            result = 0
+            0
+        }
     } E { 0 }
 
     result
@@ -2019,6 +2816,10 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
 
 F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
                    param_name_ptr: i64, param_name_len: i64, body_expr: i64) -> i64 {
+    # Clear variables for this function
+    cg_clear_vars(cg)
+    cg_set_param(cg, param_name_ptr, param_name_len)
+
     cg_emit(cg, "define i64 @")
     cg_emit_str(cg, func_name_ptr, func_name_len)
     cg_emit(cg, "(i64 %")
@@ -2088,6 +2889,77 @@ F cg_gen_main_that_calls(cg: i64, func_name_ptr: i64, func_name_len: i64) -> i64
     1
 }
 
+# Finalize code generation: merge strings into main buffer after header
+F cg_finalize(cg: i64) -> i64 {
+    strings_sb := cg_get_strings_sb(cg)
+    strings_len := sb_get_len(strings_sb)
+
+    I strings_len > 0 {
+        # We need to insert strings after header and before functions
+        # For now, append strings at current position
+        # This works because strings are declared before they're referenced
+        main_sb := cg_get_sb(cg)
+
+        # Get header position (find first "define")
+        main_data := sb_get_data(main_sb)
+        main_len := sb_get_len(main_sb)
+
+        # Find where "define" starts (after header)
+        define_pos: mut i64 = 0
+        i: mut i64 = 0
+        L {
+            I i >= main_len - 6 { B } E { 0 }
+            I load_byte(main_data + i) == 100 {  # 'd'
+                I load_byte(main_data + i + 1) == 101 {  # 'e'
+                    I load_byte(main_data + i + 2) == 102 {  # 'f'
+                        define_pos = i
+                        B
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        I define_pos > 0 {
+            # Create new buffer: header + strings + functions
+            strings_data := sb_get_data(strings_sb)
+            new_sb := sb_new(main_len + strings_len + 256)
+
+            # Copy header (up to define_pos)
+            j: mut i64 = 0
+            L {
+                I j >= define_pos { B } E { 0 }
+                sb_append_byte(new_sb, load_byte(main_data + j))
+                j = j + 1
+            }
+
+            # Add string constants
+            sb_append_byte(new_sb, 10)  # extra newline
+            j = 0
+            L {
+                I j >= strings_len { B } E { 0 }
+                sb_append_byte(new_sb, load_byte(strings_data + j))
+                j = j + 1
+            }
+            sb_append_byte(new_sb, 10)  # extra newline
+
+            # Copy rest of code (functions)
+            j = define_pos
+            L {
+                I j >= main_len { B } E { 0 }
+                sb_append_byte(new_sb, load_byte(main_data + j))
+                j = j + 1
+            }
+
+            # Replace main sb with new sb
+            sb_free(main_sb)
+            store_i64(cg + 0, new_sb)
+            0
+        } E { 0 }
+    } E { 0 }
+    1
+}
+
 F cg_get_output(cg: i64) -> i64 {
     sb := cg_get_sb(cg)
     sb_get_data(sb)
@@ -2101,6 +2973,12 @@ F cg_get_output_len(cg: i64) -> i64 {
 F cg_free(cg: i64) -> i64 {
     sb := cg_get_sb(cg)
     sb_free(sb)
+    strings_sb := cg_get_strings_sb(cg)
+    sb_free(strings_sb)
+    vars := cg_get_vars(cg)
+    free(vars)
+    strings := cg_get_strings(cg)
+    free(strings)
     free(cg)
     1
 }
@@ -2344,7 +3222,7 @@ F main() -> i64 {
     puts("=======================================\n\n")
 
     # Hardcoded path for bootstrapping
-    input_path := "selfhost/test_multi.vais"
+    input_path := "selfhost/test_struct.vais"
 
     puts("[INFO] Compiling: ")
     puts(input_path)
@@ -2422,6 +3300,7 @@ F main() -> i64 {
     cg := cg_new()
     cg_emit_header(cg)
     cg_gen_all_functions(cg, parser)
+    cg_finalize(cg)
 
     # Print generated IR
     puts("\n--- Generated LLVM IR ---\n")
