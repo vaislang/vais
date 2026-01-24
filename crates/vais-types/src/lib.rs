@@ -418,6 +418,22 @@ impl TypeChecker {
             },
         );
 
+        // fopen_ptr: same as fopen but accepts i64 pointer (for selfhost)
+        self.functions.insert(
+            "fopen_ptr".to_string(),
+            FunctionSig {
+                name: "fopen_ptr".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("path".to_string(), ResolvedType::I64, false),
+                    ("mode".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+            },
+        );
+
         // fclose: (stream) -> i32
         self.functions.insert(
             "fclose".to_string(),

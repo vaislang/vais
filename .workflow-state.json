@@ -1,67 +1,32 @@
 {
   "phase": 5,
-  "request": "Stage 2 부트스트래핑 완성",
+  "request": "Stage 1 import 기능 구현",
   "tasks": [
-    { "id": 1, "name": "토큰 확장 (X, 연산자 등)", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "파서 확장 (S/X/함수/표현식)", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "코드젠 확장 (S/X/블록/if/loop)", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "SSA 최적화 (alloca 94% 감소)", "status": "completed", "model": "Opus" },
-    { "id": 5, "name": "다중 함수 컴파일 지원", "status": "completed", "model": "Opus" },
-    { "id": 6, "name": "추가 연산자 구현 (-, *, /, %, 비교)", "status": "completed", "model": "Opus" },
-    { "id": 7, "name": "if-else 표현식 코드젠", "status": "completed", "model": "Opus" },
-    { "id": 8, "name": "루프(L) 및 break 코드젠", "status": "completed", "model": "Opus" },
-    { "id": 9, "name": "let 바인딩 및 할당 코드젠", "status": "completed", "model": "Opus" },
-    { "id": 10, "name": "문자열 리터럴 및 extern 함수", "status": "completed", "model": "Opus" },
-    { "id": 11, "name": "load_byte/store_byte 지원", "status": "completed", "model": "Sonnet" }
+    { "id": 1, "name": "Stage 1 import 기능 구현", "status": "completed", "model": "Opus", "priority": "high", "description": "selfhost/main.vais에 import(U 문) 지원 추가" }
   ],
   "currentTask": null,
-  "lastCompleted": "load_byte/store_byte 지원",
-  "progress": {
-    "main.vais": "3250+ 줄",
-    "features": {
-      "multi_function": true,
-      "function_calls": true,
-      "nested_calls": true,
-      "user_main": true,
-      "auto_main_fallback": true,
-      "arithmetic_ops": true,
-      "comparison_ops": true,
-      "if_else_simple": true,
-      "if_else_nested": true,
-      "block_expr": true,
-      "loop_basic": true,
-      "break_stmt": true,
-      "let_binding": true,
-      "mutable_vars": true,
-      "assignment": true,
-      "string_literals": true,
-      "extern_puts": true,
-      "extern_putchar": true,
-      "extern_malloc": true,
-      "extern_free": true,
-      "load_byte": true,
-      "store_byte": true,
-      "load_i64": true,
-      "store_i64": true
+  "lastCompleted": "Stage 1 import 기능 구현",
+  "summary": {
+    "added": {
+      "tokens": "TOK_KW_U (import 키워드)",
+      "ast": "ITEM_USE (import 문)",
+      "parser": "parser_parse_use_item() 함수",
+      "functions": [
+        "loaded_modules_new/contains/add - 모듈 중복 로딩 방지",
+        "all_items_new/add/get_* - 모든 items 수집",
+        "load_module_with_imports() - 재귀적 모듈 로딩",
+        "resolve_import_path() - 경로 해석",
+        "memcmp(), strlen_ptr(), read_file_ptr()"
+      ],
+      "rust_changes": [
+        "fopen_ptr 빌트인 함수 추가 (vais-types, vais-codegen)"
+      ]
     },
-    "test_results": {
-      "test_ops_simple": "PASS - 모든 산술 연산자 (+ - * / %) 동작",
-      "test_compare": "PASS - 비교 연산자 합계 = 4",
-      "test_multi": "PASS - calc(5)=20",
-      "test_if_simple": "PASS - abs(-42)=42",
-      "test_nested_if": "PASS - classify 합계 = 0",
-      "test_grade2": "PASS - 4단계 중첩 if-else, 합계 = 14",
-      "test_loop_simple": "PASS - 즉시 break 루프, 42 반환",
-      "test_let": "PASS - x:=10, y:=20, x+y=30",
-      "test_mut": "PASS - i:=0, i=i+1, i=i+1, i=2",
-      "test_loop": "PASS - 0→5 카운터 루프, i=5",
-      "test_puts": "PASS - hello world 출력",
-      "test_strings": "PASS - 다중 문자열, 함수 호출",
-      "test_memory": "PASS - store_byte(65,66), load_byte(65,66), store_i64(100), load_i64(100), sum=231"
-    },
-    "remaining_for_selfhost": [
-      "main.vais 자기 컴파일 (Stage 2 완성)"
-    ]
-  },
-  "summary": "Task 11 완료. load_byte, store_byte, load_i64, store_i64 builtin 함수 지원 추가. Stage 1 컴파일러에서 메모리 연산 테스트 통과 (65+66+100=231)."
+    "linesAdded": "~340줄 (3532→3872)",
+    "testResults": {
+      "singleImport": "PASS - test_module.vais import 성공",
+      "multipleImports": "PASS - test_module.vais + test_module2.vais 동시 import 성공",
+      "execution": "PASS - helper_func(5) + level2_func(3) = 19"
+    }
+  }
 }

@@ -164,6 +164,15 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
+        // fopen_ptr: same as fopen but accepts i64 pointers (for selfhost)
+        register_extern!(self, "fopen_ptr",
+            vec![
+                ("path".to_string(), ResolvedType::I64),
+                ("mode".to_string(), ResolvedType::Str),
+            ],
+            ResolvedType::I64
+        );
+
         // fclose: (FILE*) -> int
         register_extern!(self, "fclose",
             vec![("stream".to_string(), ResolvedType::I64)],

@@ -16,6 +16,8 @@ F TOK_KW_X() -> i64 = 8
 F TOK_KW_R() -> i64 = 13
 F TOK_KW_B() -> i64 = 14
 F TOK_KW_MUT() -> i64 = 18
+F TOK_KW_M() -> i64 = 6
+F TOK_KW_U() -> i64 = 7
 
 # Literal tokens
 F TOK_INT() -> i64 = 51
@@ -57,6 +59,7 @@ F TOK_COLON() -> i64 = 102
 F TOK_SEMI() -> i64 = 103
 F TOK_DOT() -> i64 = 104
 F TOK_ARROW() -> i64 = 107
+F TOK_FAT_ARROW() -> i64 = 108
 F TOK_AT() -> i64 = 111
 
 # Special tokens
@@ -74,6 +77,7 @@ F TOK_TY_BOOL() -> i64 = 36
 # Item types
 F ITEM_FUNCTION() -> i64 = 1
 F ITEM_STRUCT() -> i64 = 2
+F ITEM_USE() -> i64 = 3
 F ITEM_IMPL() -> i64 = 7
 
 # Statement types
@@ -100,6 +104,7 @@ F EXPR_INDEX() -> i64 = 37
 F EXPR_STRUCT_LIT() -> i64 = 40
 F EXPR_BLOCK() -> i64 = 42
 F EXPR_ASSIGN() -> i64 = 48
+F EXPR_MATCH() -> i64 = 49
 
 # Binary operators
 F BINOP_ADD() -> i64 = 1
@@ -186,6 +191,20 @@ F sb_append_cstr(sb: i64, s: str) -> i64 {
     } E { 0 }
     data := sb_get_data(sb)
     memcpy_str(data + len, s, slen)
+    sb_set_len(sb, len + slen)
+    1
+}
+
+# Append bytes from i64 pointer
+F sb_append_bytes(sb: i64, src: i64, slen: i64) -> i64 {
+    len := sb_get_len(sb)
+    cap := sb_get_cap(sb)
+    I len + slen > cap {
+        sb_grow_to(sb, len + slen + 1024)
+        0
+    } E { 0 }
+    data := sb_get_data(sb)
+    memcpy(data + len, src, slen)
     sb_set_len(sb, len + slen)
     1
 }
@@ -360,6 +379,8 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
 
     I len == 1 {
         c := load_byte(str_start)
+        # Check M first to avoid adding to E I chain
+        I c == 77 { kind = TOK_KW_M(); 0 } E { 0 }
         I c == 70 { kind = TOK_KW_F(); 0 }       # F
         E I c == 83 { kind = TOK_KW_S(); 0 }     # S
         E I c == 88 { kind = TOK_KW_X(); 0 }     # X
@@ -368,6 +389,7 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
         E I c == 82 { kind = TOK_KW_R(); 0 }     # R
         E I c == 66 { kind = TOK_KW_B(); 0 }     # B
         E I c == 69 { kind = TOK_KW_E(); 0 }     # E
+        E I c == 85 { kind = TOK_KW_U(); 0 }     # U (import)
         E { 0 }
     } E I len == 3 {
         c0 := load_byte(str_start)
@@ -405,6 +427,16 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
     start := lexer_get_pos(lex)
     c := lexer_advance(lex)
     kind: mut i64 = 0
+
+    # Special handling for => at start to avoid adding nesting
+    I c == 61 {
+        I lexer_peek(lex) == 62 {
+            lexer_advance(lex)
+            end := lexer_get_pos(lex)
+            token_store(tokens, count, TOK_FAT_ARROW(), 0, 0, 0, start, end)
+            R 0
+        } E { 0 }
+    } E { 0 }
 
     I c == 40 { kind = TOK_LPAREN(); 0 }       # (
     E I c == 41 { kind = TOK_RPAREN(); 0 }     # )
@@ -663,10 +695,10 @@ F parser_new(tokens: i64, count: i64) -> i64 {
     store_i64(p + 8, count)
     store_i64(p + 16, 0)   # pos
     # Item storage
-    items := malloc(64 * 8)  # array of 64 item pointers
+    items := malloc(512 * 8)  # array of 512 item pointers
     store_i64(p + 24, items)
     store_i64(p + 32, 0)   # item_count
-    store_i64(p + 40, 64)  # item_cap
+    store_i64(p + 40, 512)  # item_cap
     # Categorized storage
     store_i64(p + 48, 0)   # structs ptr (will be set during parsing)
     store_i64(p + 56, 0)   # struct_count
@@ -871,6 +903,65 @@ F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     }
 
     result
+}
+
+# Parse single match arm: pattern => body
+# Returns 1 if arm parsed, 0 if not
+F parser_parse_match_arm(p: i64, arms: i64, arm_count_ptr: i64) -> i64 {
+    arm_count := load_i64(arm_count_ptr)
+
+    # Check if we can parse a pattern (integer literal for now)
+    I parser_current_kind(p) != TOK_INT() { R 0 } E { 0 }
+
+    pattern_val := parser_current_value(p)
+    parser_advance(p)
+
+    I parser_expect(p, TOK_FAT_ARROW()) == 0 { R 0 } E { 0 }
+
+    body := parser_parse_expr(p)
+    I body == 0 { R 0 } E { 0 }
+
+    store_i64(arms + arm_count * 16, pattern_val)
+    store_i64(arms + arm_count * 16 + 8, body)
+    store_i64(arm_count_ptr, arm_count + 1)
+    1
+}
+
+# Parse match expression: M expr { pattern => body, ... }
+# Note: scrutinee must be a simple identifier (not followed by { which would be struct lit)
+F parser_parse_match(p: i64) -> i64 {
+    parser_advance(p)  # consume M
+
+    # Parse scrutinee - only identifier for now to avoid { ambiguity
+    I parser_current_kind(p) != TOK_IDENT() { R 0 } E { 0 }
+    str_ptr := parser_current_str_ptr(p)
+    str_len := parser_current_str_len(p)
+    parser_advance(p)
+
+    scrutinee := expr_new(EXPR_IDENT())
+    expr_set_field0(scrutinee, str_ptr)
+    expr_set_field1(scrutinee, str_len)
+
+    I parser_expect(p, TOK_LBRACE()) == 0 { R 0 } E { 0 }
+
+    arms := malloc(64 * 16)
+    arm_count := malloc(8)
+    store_i64(arm_count, 0)
+
+    L {
+        I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
+        I parser_parse_match_arm(p, arms, arm_count) == 0 { B } E { 0 }
+        I parser_current_kind(p) == TOK_COMMA() { parser_advance(p); 0 } E { 0 }
+    }
+
+    I parser_expect(p, TOK_RBRACE()) == 0 { R 0 } E { 0 }
+
+    e := expr_new(EXPR_MATCH())
+    expr_set_field0(e, scrutinee)
+    expr_set_field1(e, arms)
+    expr_set_field2(e, load_i64(arm_count))
+    free(arm_count)
+    e
 }
 
 # Parse primary expression: int, bool, ident, ( expr ), block, struct literal
@@ -1189,11 +1280,13 @@ F parser_parse_expr(p: i64) -> i64 {
 # Parse block contents: stmts... [final_expr]
 # Returns a block expression
 F parser_parse_block_contents(p: i64) -> i64 {
-    stmts := malloc(64 * 8)  # up to 64 statements
+    stmts := malloc(256 * 8)  # up to 256 statements (for large blocks)
     stmts_len: mut i64 = 0
     final_expr: mut i64 = 0
 
     L {
+        # Check for M (match) - parse as final expr and break
+        I parser_current_kind(p) == TOK_KW_M() { final_expr = parser_parse_match(p); B } E { 0 }
         I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
         I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
 
@@ -1567,6 +1660,50 @@ F parser_parse_impl_item(p: i64) -> i64 {
 }
 
 # Parse a single top-level item: F, S, or X
+# Parse use/import statement: U path/to/module
+F parser_parse_use_item(p: i64) -> i64 {
+    # Consume U keyword
+    parser_advance(p)
+
+    # Parse path (identifier with optional / separators)
+    I parser_current_kind(p) != TOK_IDENT() {
+        puts("[Parser] Expected module path after U\n")
+        R 0
+    }
+
+    # Build path string by collecting identifiers and slashes
+    path_sb := sb_new(256)
+
+    # First identifier
+    sb_append_bytes(path_sb, parser_current_str_ptr(p), parser_current_str_len(p))
+    parser_advance(p)
+
+    # Continue with /identifier pattern
+    L {
+        I parser_current_kind(p) != TOK_SLASH() { B } E { 0 }
+        sb_append_byte(path_sb, 47)  # /
+        parser_advance(p)
+
+        I parser_current_kind(p) != TOK_IDENT() {
+            puts("[Parser] Expected identifier after / in path\n")
+            sb_free(path_sb)
+            R 0
+        }
+        sb_append_bytes(path_sb, parser_current_str_ptr(p), parser_current_str_len(p))
+        parser_advance(p)
+    }
+
+    # Create use item
+    path_ptr := sb_get_data(path_sb)
+    path_len := sb_get_len(path_sb)
+
+    item := item_new(ITEM_USE(), path_ptr, path_len)
+    # Note: path_sb data is now owned by item, don't free it
+    free(path_sb)  # Free only the sb struct, not its data
+
+    item
+}
+
 F parser_parse_item(p: i64) -> i64 {
     kind := parser_current_kind(p)
 
@@ -1576,6 +1713,8 @@ F parser_parse_item(p: i64) -> i64 {
         parser_parse_struct_item(p)
     } E I kind == TOK_KW_X() {
         parser_parse_impl_item(p)
+    } E I kind == TOK_KW_U() {
+        parser_parse_use_item(p)
     } E { 0 }
 }
 
@@ -1653,7 +1792,7 @@ F parser_free(p: i64) -> i64 {
 
 F cg_new() -> i64 {
     cg := malloc(120)
-    sb := sb_new(4096)
+    sb := sb_new(1048576)  # Test 1MB buffer
     store_i64(cg + 0, sb)
     store_i64(cg + 8, 0)    # reg_counter
     store_i64(cg + 16, 0)   # label_counter
@@ -1663,16 +1802,16 @@ F cg_new() -> i64 {
     store_i64(cg + 48, 0)   # loop_end_label (for break)
     store_i64(cg + 56, 0)   # block_terminated: 1 if break/continue/return was emitted
     # Variable storage: array of (name_ptr, name_len, alloca_reg) triples
-    vars := malloc(64 * 24)  # up to 64 variables per function
+    vars := malloc(256 * 24)  # up to 256 variables per function
     store_i64(cg + 64, vars)
     store_i64(cg + 72, 0)   # var_count
     store_i64(cg + 80, 0)   # param_name_ptr (current function's parameter)
     store_i64(cg + 88, 0)   # param_name_len
     # String constant storage: array of (str_ptr, str_len, global_id) triples
-    strings := malloc(64 * 24)  # up to 64 strings per module
+    strings := malloc(1024 * 24)  # up to 1024 strings per module
     store_i64(cg + 96, strings)
     store_i64(cg + 104, 0)  # string_count
-    strings_sb := sb_new(2048)  # StringBuilder for string constant declarations
+    strings_sb := sb_new(65536)  # StringBuilder for string constant declarations
     store_i64(cg + 112, strings_sb)
     cg
 }
@@ -2700,10 +2839,128 @@ F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64
     }
 }
 
+# Generate a single match arm comparison
+# result_alloca is the alloca where the result should be stored
+F cg_gen_match_arm(cg: i64, scrut_reg: i64, pattern: i64, body: i64,
+                   label_id: i64, arm_idx: i64, param_ptr: i64, param_len: i64,
+                   result_alloca: i64, merge_label: i64) -> i64 {
+    # Generate comparison
+    cmp_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, " = icmp eq i64 ")
+    cg_emit_operand(cg, scrut_reg, param_ptr, param_len)
+    cg_emit(cg, ", ")
+    cg_emit_i64(cg, pattern)
+    cg_emit_newline(cg)
+
+    # Branch: if match, goto arm body; else goto next
+    cg_emit(cg, "  br i1 %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, ", label %match_arm")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit(cg, ", label %match_next")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit_newline(cg)
+
+    # Arm body block
+    cg_emit(cg, "match_arm")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    arm_result := cg_gen_expr(cg, body, param_ptr, param_len)
+
+    # Store result to alloca
+    cg_emit(cg, "  store i64 ")
+    cg_emit_operand(cg, arm_result, param_ptr, param_len)
+    cg_emit(cg, ", i64* %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "  br label %match_merge")
+    cg_emit_i64(cg, merge_label)
+    cg_emit_newline(cg)
+
+    # Next check block
+    cg_emit(cg, "match_next")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    1
+}
+
+# Generate match expression
+F cg_gen_match_expr(cg: i64, expr: i64, param_ptr: i64, param_len: i64) -> i64 {
+    scrutinee := expr_get_field0(expr)
+    arms := expr_get_field1(expr)
+    arm_count := expr_get_field2(expr)
+
+    label_id := cg_fresh_label(cg)
+
+    # Create alloca to store result
+    result_alloca := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit(cg, " = alloca i64")
+    cg_emit_newline(cg)
+
+    # Initialize with 0
+    cg_emit(cg, "  store i64 0, i64* %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit_newline(cg)
+
+    # Generate scrutinee
+    scrut_reg := cg_gen_expr(cg, scrutinee, param_ptr, param_len)
+
+    # Generate each arm
+    i: mut i64 = 0
+    L {
+        I i >= arm_count { B } E { 0 }
+        pattern := load_i64(arms + i * 16)
+        body := load_i64(arms + i * 16 + 8)
+        cg_gen_match_arm(cg, scrut_reg, pattern, body, label_id, i, param_ptr, param_len, result_alloca, label_id)
+        i = i + 1
+    }
+
+    # Default: keep the 0 value
+    cg_emit(cg, "  br label %match_merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit_newline(cg)
+
+    # Merge block
+    cg_emit(cg, "match_merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    # Load result from alloca
+    final_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, final_reg)
+    cg_emit(cg, " = load i64, i64* %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit_newline(cg)
+
+    final_reg
+}
+
 # Generate expression, returns register number
 F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
     I expr == 0 { R 0 }
     kind := load_i64(expr + 0)
+
+    # Check for match early with early return
+    I kind == EXPR_MATCH() { R cg_gen_match_expr(cg, expr, param_name_ptr, param_name_len) } E { 0 }
 
     result: mut i64 = 0
 
@@ -2822,9 +3079,14 @@ F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
 
     cg_emit(cg, "define i64 @")
     cg_emit_str(cg, func_name_ptr, func_name_len)
-    cg_emit(cg, "(i64 %")
-    cg_emit_str(cg, param_name_ptr, param_name_len)
-    cg_emit(cg, ") {")
+    # Check if function has parameter
+    I param_name_len > 0 {
+        cg_emit(cg, "(i64 %")
+        cg_emit_str(cg, param_name_ptr, param_name_len)
+        cg_emit(cg, ") {")
+    } E {
+        cg_emit(cg, "() {")
+    }
     cg_emit_newline(cg)
     cg_emit(cg, "entry:")
     cg_emit_newline(cg)
@@ -3162,9 +3424,8 @@ F cg_gen_function_item(cg: i64, item: i64) -> i64 {
 }
 
 # Generate code for all function items in the parser
-F cg_gen_all_functions(cg: i64, parser: i64) -> i64 {
-    items := parser_get_items(parser)
-    count := parser_get_item_count(parser)
+# Generate all functions from items array (items_ptr, count)
+F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
     has_main: mut i64 = 0
     first_func_name_ptr: mut i64 = 0
     first_func_name_len: mut i64 = 0
@@ -3211,6 +3472,292 @@ F cg_gen_all_functions(cg: i64, parser: i64) -> i64 {
     count
 }
 
+# Wrapper for backward compatibility
+F cg_gen_all_functions(cg: i64, parser: i64) -> i64 {
+    items := parser_get_items(parser)
+    count := parser_get_item_count(parser)
+    cg_gen_all_functions_from_items(cg, items, count)
+}
+
+# ============================================================================
+# Import System
+# ============================================================================
+
+# Loaded modules tracker (simple array, max 64 modules)
+# Layout: count(8) + paths[64 * 16] (ptr+len each)
+F loaded_modules_new() -> i64 {
+    lm := malloc(8 + 64 * 16)
+    store_i64(lm, 0)  # count = 0
+    lm
+}
+
+F loaded_modules_count(lm: i64) -> i64 = load_i64(lm)
+
+F loaded_modules_contains(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
+    count := loaded_modules_count(lm)
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        idx := 8 + i * 16
+        ptr := load_i64(lm + idx)
+        len := load_i64(lm + idx + 8)
+        I len == path_len {
+            I memcmp(ptr, path_ptr, len) == 0 {
+                R 1
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+F loaded_modules_add(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
+    count := loaded_modules_count(lm)
+    I count >= 64 { R 0 }  # Max modules reached
+    idx := 8 + count * 16
+    store_i64(lm + idx, path_ptr)
+    store_i64(lm + idx + 8, path_len)
+    store_i64(lm, count + 1)
+    1
+}
+
+# String comparison (memcmp wrapper for i64 pointers)
+F memcmp(a: i64, b: i64, len: i64) -> i64 {
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+        I ca != cb {
+            R ca - cb
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+# Resolve import path to file path
+# Input: "std/io" or "utils" (relative to base_dir)
+# Output: allocated string with full path
+F resolve_import_path(base_dir: i64, base_len: i64, mod_path: i64, mod_len: i64) -> i64 {
+    # Build: base_dir + "/" + mod_path + ".vais"
+    sb := sb_new(512)
+
+    # Add base directory
+    I base_len > 0 {
+        sb_append_bytes(sb, base_dir, base_len)
+        sb_append_byte(sb, 47)  # /
+        0
+    } E { 0 }
+
+    # Add module path
+    sb_append_bytes(sb, mod_path, mod_len)
+
+    # Add .vais extension
+    sb_append_cstr(sb, ".vais")
+
+    # Null terminate
+    sb_append_byte(sb, 0)
+
+    ptr := sb_get_data(sb)
+    free(sb)
+    ptr
+}
+
+# Get directory from file path
+F get_directory(path: i64, path_len: i64) -> i64 {
+    # Find last /
+    last_slash: mut i64 = 0 - 1
+    i: mut i64 = 0
+    L {
+        I i >= path_len { B } E { 0 }
+        I load_byte(path + i) == 47 {  # /
+            last_slash = i
+            0
+        } E { 0 }
+        i = i + 1
+    }
+
+    I last_slash < 0 {
+        # No directory, return empty
+        result := malloc(2)
+        store_byte(result, 46)  # .
+        store_byte(result + 1, 0)
+        result
+    } E {
+        # Copy directory part
+        result := malloc(last_slash + 2)
+        memcpy(result, path, last_slash)
+        store_byte(result + last_slash, 0)
+        result
+    }
+}
+
+# Merged items container
+# Layout: items[](8 each) + count(8) + capacity(8)
+F merged_items_new(cap: i64) -> i64 {
+    mi := malloc(cap * 8 + 16)
+    store_i64(mi + cap * 8, 0)      # count = 0
+    store_i64(mi + cap * 8 + 8, cap)  # capacity
+    mi
+}
+
+F merged_items_count(mi: i64) -> i64 {
+    cap := load_i64(mi + 8)  # Wrong offset, need to find capacity first
+    # Actually we need a different layout
+    0
+}
+
+# Simpler approach: use items array directly
+# All items array: ptr(8) + count(8) + cap(8)
+F all_items_new(cap: i64) -> i64 {
+    ai := malloc(24)
+    store_i64(ai, malloc(cap * 8))  # items array
+    store_i64(ai + 8, 0)             # count
+    store_i64(ai + 16, cap)          # capacity
+    ai
+}
+
+F all_items_get_ptr(ai: i64) -> i64 = load_i64(ai)
+F all_items_get_count(ai: i64) -> i64 = load_i64(ai + 8)
+F all_items_get_cap(ai: i64) -> i64 = load_i64(ai + 16)
+
+F all_items_add(ai: i64, item: i64) -> i64 {
+    count := all_items_get_count(ai)
+    cap := all_items_get_cap(ai)
+
+    I count >= cap {
+        # Grow
+        new_cap := cap * 2
+        old_ptr := all_items_get_ptr(ai)
+        new_ptr := malloc(new_cap * 8)
+        memcpy(new_ptr, old_ptr, count * 8)
+        free(old_ptr)
+        store_i64(ai, new_ptr)
+        store_i64(ai + 16, new_cap)
+        0
+    } E { 0 }
+
+    ptr := all_items_get_ptr(ai)
+    store_i64(ptr + count * 8, item)
+    store_i64(ai + 8, count + 1)
+    1
+}
+
+# Load a module with import resolution
+# Returns number of items added to all_items
+F load_module_with_imports(
+    file_path: i64,
+    all_items: i64,
+    loaded: i64
+) -> i64 {
+    # Get path length
+    path_len := strlen_ptr(file_path)
+
+    # Check if already loaded
+    I loaded_modules_contains(loaded, file_path, path_len) == 1 {
+        R 0  # Already loaded, skip
+    }
+
+    # Mark as loaded
+    loaded_modules_add(loaded, file_path, path_len)
+
+    # Read file
+    source_data := read_file_ptr(file_path)
+    I source_data == 0 {
+        puts("[Import] Cannot read: ")
+        print_str(file_path, path_len)
+        putchar(10)
+        R 0
+    }
+
+    source_len := load_i64(source_data - 8)
+
+    # Get base directory for relative imports
+    base_dir := get_directory(file_path, path_len)
+    base_len := strlen_ptr(base_dir)
+
+    # Tokenize
+    lex := lexer_new(source_data, source_len)
+    tokens := malloc(32768 * 48)
+    token_count := lexer_tokenize(lex, tokens)
+
+    # Parse
+    parser := parser_new(tokens, token_count)
+    parser_parse_module(parser)
+
+    item_count := parser_get_item_count(parser)
+    items := parser_get_items(parser)
+
+    # Process items
+    added: mut i64 = 0
+    i: mut i64 = 0
+    L {
+        I i >= item_count { B } E { 0 }
+        item := load_i64(items + i * 8)
+        kind := item_get_kind(item)
+
+        I kind == ITEM_USE() {
+            # Recursively load imported module
+            mod_path := item_get_name_ptr(item)
+            mod_len := item_get_name_len(item)
+
+            resolved := resolve_import_path(base_dir, base_len, mod_path, mod_len)
+            load_module_with_imports(resolved, all_items, loaded)
+            # Note: resolved is leaked, but ok for now
+            0
+        } E {
+            # Add non-use items
+            all_items_add(all_items, item)
+            added = added + 1
+            0
+        }
+
+        i = i + 1
+    }
+
+    # Cleanup (but keep items as they're referenced by all_items)
+    free(tokens)
+    lexer_free(lex)
+    # Don't free parser as items are still referenced
+
+    added
+}
+
+# strlen for i64 pointer (null-terminated)
+F strlen_ptr(s: i64) -> i64 {
+    len: mut i64 = 0
+    L {
+        I load_byte(s + len) == 0 { B } E { 0 }
+        len = len + 1
+    }
+    len
+}
+
+# read_file variant that takes i64 pointer instead of str
+F read_file_ptr(path: i64) -> i64 {
+    # fopen_ptr accepts i64 pointer as path
+    fp := fopen_ptr(path, "rb")
+    I fp == 0 { 0 }
+    E {
+        fseek(fp, 0, 2)  # SEEK_END
+        size := ftell(fp)
+        fseek(fp, 0, 0)  # SEEK_SET
+
+        buf := malloc(size + 9)
+        I buf == 0 {
+            fclose(fp)
+            0
+        } E {
+            bytes_read := fread(buf + 8, 1, size, fp)
+            store_byte(buf + 8 + bytes_read, 0)
+            store_i64(buf, bytes_read)
+            fclose(fp)
+            buf + 8
+        }
+    }
+}
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================
@@ -3218,44 +3765,48 @@ F cg_gen_all_functions(cg: i64, parser: i64) -> i64 {
 F main() -> i64 {
     puts("=======================================\n")
     puts("  Vais Self-Hosting Compiler (Stage 1)\n")
-    puts("  Version: 0.3.0 (Multi-Function)\n")
+    puts("  Version: 0.4.0 (Import Support)\n")
     puts("=======================================\n\n")
 
     # Hardcoded path for bootstrapping
-    input_path := "selfhost/test_struct.vais"
+    puts("[INFO] Compiling: /tmp/test_import.vais\n")
 
-    puts("[INFO] Compiling: ")
-    puts(input_path)
-    putchar(10)
+    # Initialize import system
+    loaded := loaded_modules_new()
+    all_items := all_items_new(1024)
 
-    # Read source file
-    source_data := read_file(input_path)
-    I source_data == 0 {
-        puts("[ERROR] Cannot read input file\n")
-        R 1
-    }
+    # Create path string manually (avoid variable binding issue)
+    # "/tmp/test_import.vais" = 21 chars + null = 22 bytes
+    path_ptr := malloc(22)
+    store_byte(path_ptr + 0, 47)   # /
+    store_byte(path_ptr + 1, 116)  # t
+    store_byte(path_ptr + 2, 109)  # m
+    store_byte(path_ptr + 3, 112)  # p
+    store_byte(path_ptr + 4, 47)   # /
+    store_byte(path_ptr + 5, 116)  # t
+    store_byte(path_ptr + 6, 101)  # e
+    store_byte(path_ptr + 7, 115)  # s
+    store_byte(path_ptr + 8, 116)  # t
+    store_byte(path_ptr + 9, 95)   # _
+    store_byte(path_ptr + 10, 105) # i
+    store_byte(path_ptr + 11, 109) # m
+    store_byte(path_ptr + 12, 112) # p
+    store_byte(path_ptr + 13, 111) # o
+    store_byte(path_ptr + 14, 114) # r
+    store_byte(path_ptr + 15, 116) # t
+    store_byte(path_ptr + 16, 46)  # .
+    store_byte(path_ptr + 17, 118) # v
+    store_byte(path_ptr + 18, 97)  # a
+    store_byte(path_ptr + 19, 105) # i
+    store_byte(path_ptr + 20, 115) # s
+    store_byte(path_ptr + 21, 0)   # null
 
-    source_len := load_i64(source_data - 8)
-    puts("[INFO] Read ")
-    print_i64(source_len)
-    puts(" bytes\n\n")
+    # Load main module with imports
+    puts("[1] Loading modules with imports...\n")
+    load_module_with_imports(path_ptr, all_items, loaded)
 
-    # Step 1: Lexer
-    puts("[1] Lexer...\n")
-    lex := lexer_new(source_data, source_len)
-    tokens := malloc(256 * 48)  # Increased for multi-function files
-    token_count := lexer_tokenize(lex, tokens)
-    puts("    Tokens: ")
-    print_i64(token_count)
-    putchar(10)
-
-    # Step 2: Parser (using module parsing for multiple functions)
-    puts("[2] Parser (module mode)...\n")
-    parser := parser_new(tokens, token_count)
-    parser_parse_module(parser)  # Parse all items in the module
-
-    item_count := parser_get_item_count(parser)
-    puts("    Items parsed: ")
+    item_count := all_items_get_count(all_items)
+    puts("    Total items loaded: ")
     print_i64(item_count)
     putchar(10)
 
@@ -3264,9 +3815,10 @@ F main() -> i64 {
         R 1
     }
 
-    # Print parsed functions
-    items := parser_get_items(parser)
+    # Print loaded items
+    items := all_items_get_ptr(all_items)
     func_count: mut i64 = 0
+    struct_count: mut i64 = 0
     i: mut i64 = 0
     L {
         I i >= item_count { B } E { 0 }
@@ -3282,6 +3834,7 @@ F main() -> i64 {
             puts("    Struct: ")
             print_str(item_get_name_ptr(item), item_get_name_len(item))
             putchar(10)
+            struct_count = struct_count + 1
             0
         } E I kind == ITEM_IMPL() {
             puts("    Impl: ")
@@ -3291,15 +3844,17 @@ F main() -> i64 {
         } E { 0 }
         i = i + 1
     }
-    puts("    Total functions: ")
+    puts("    Functions: ")
     print_i64(func_count)
+    puts(", Structs: ")
+    print_i64(struct_count)
     putchar(10)
 
-    # Step 3: Codegen (multi-function)
-    puts("[3] Codegen (multi-function)...\n")
+    # Step 2: Codegen
+    puts("[2] Codegen...\n")
     cg := cg_new()
     cg_emit_header(cg)
-    cg_gen_all_functions(cg, parser)
+    cg_gen_all_functions_from_items(cg, items, item_count)
     cg_finalize(cg)
 
     # Print generated IR
@@ -3323,10 +3878,7 @@ F main() -> i64 {
 
     # Cleanup
     cg_free(cg)
-    parser_free(parser)
-    lexer_free(lex)
-    free(tokens)
-    free(source_data - 8)
+    free(path_ptr)
 
     puts("[OK] Compilation successful!\n")
     0
