@@ -1,0 +1,1406 @@
+# Vais Self-Hosting Compiler - Code Generator Module (Stage 1)
+# LLVM IR generation
+
+U constants
+U stringbuffer_s1
+U helpers_s1
+
+# ============================================================================
+# Code Generator Structure (120 bytes)
+# ============================================================================
+
+F cg_new() -> i64 {
+    cg := malloc(120)
+    sb := sb_new(1048576)  # 1MB buffer
+    store_i64(cg + 0, sb)
+    store_i64(cg + 8, 0)    # reg_counter
+    store_i64(cg + 16, 0)   # label_counter
+    store_i64(cg + 24, 0)   # current_block_type
+    store_i64(cg + 32, 0)   # current_block_id
+    store_i64(cg + 40, 0)   # loop_header_label
+    store_i64(cg + 48, 0)   # loop_end_label
+    store_i64(cg + 56, 0)   # block_terminated
+    vars := malloc(256 * 24)
+    store_i64(cg + 64, vars)
+    store_i64(cg + 72, 0)   # var_count
+    store_i64(cg + 80, 0)   # param_name_ptr
+    store_i64(cg + 88, 0)   # param_name_len
+    strings := malloc(1024 * 24)
+    store_i64(cg + 96, strings)
+    store_i64(cg + 104, 0)  # string_count
+    strings_sb := sb_new(65536)
+    store_i64(cg + 112, strings_sb)
+    cg
+}
+
+# Block type constants
+F BLOCK_ENTRY() -> i64 = 0
+F BLOCK_THEN() -> i64 = 1
+F BLOCK_ELSE() -> i64 = 2
+F BLOCK_MERGE() -> i64 = 3
+F BLOCK_LOOP_HEADER() -> i64 = 4
+F BLOCK_LOOP_BODY() -> i64 = 5
+F BLOCK_LOOP_END() -> i64 = 6
+
+F cg_set_current_block(cg: i64, block_type: i64, block_id: i64) -> i64 {
+    store_i64(cg + 24, block_type)
+    store_i64(cg + 32, block_id)
+    0
+}
+
+F cg_get_current_block_type(cg: i64) -> i64 = load_i64(cg + 24)
+F cg_get_current_block_id(cg: i64) -> i64 = load_i64(cg + 32)
+
+F cg_set_loop_labels(cg: i64, header: i64, end: i64) -> i64 {
+    store_i64(cg + 40, header)
+    store_i64(cg + 48, end)
+    0
+}
+
+F cg_get_loop_header(cg: i64) -> i64 = load_i64(cg + 40)
+F cg_get_loop_end(cg: i64) -> i64 = load_i64(cg + 48)
+
+F cg_set_terminated(cg: i64, v: i64) -> i64 { store_i64(cg + 56, v); 0 }
+F cg_get_terminated(cg: i64) -> i64 = load_i64(cg + 56)
+F cg_clear_terminated(cg: i64) -> i64 { store_i64(cg + 56, 0); 0 }
+
+F cg_get_vars(cg: i64) -> i64 = load_i64(cg + 64)
+F cg_get_var_count(cg: i64) -> i64 = load_i64(cg + 72)
+F cg_set_var_count(cg: i64, c: i64) -> i64 { store_i64(cg + 72, c); 0 }
+
+F cg_set_param(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
+    store_i64(cg + 80, name_ptr)
+    store_i64(cg + 88, name_len)
+    0
+}
+
+F cg_get_param_ptr(cg: i64) -> i64 = load_i64(cg + 80)
+F cg_get_param_len(cg: i64) -> i64 = load_i64(cg + 88)
+
+F str_eq(ptr1: i64, len1: i64, ptr2: i64, len2: i64) -> i64 {
+    I len1 != len2 { R 0 }
+    i: mut i64 = 0
+    L {
+        I i >= len1 { B } E { 0 }
+        I load_byte(ptr1 + i) != load_byte(ptr2 + i) { R 0 }
+        i = i + 1
+    }
+    1
+}
+
+F cg_add_var(cg: i64, name_ptr: i64, name_len: i64, alloca_reg: i64) -> i64 {
+    vars := cg_get_vars(cg)
+    count := cg_get_var_count(cg)
+    offset := count * 24
+    store_i64(vars + offset + 0, name_ptr)
+    store_i64(vars + offset + 8, name_len)
+    store_i64(vars + offset + 16, alloca_reg)
+    cg_set_var_count(cg, count + 1)
+    1
+}
+
+F cg_find_var(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
+    vars := cg_get_vars(cg)
+    count := cg_get_var_count(cg)
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        offset := i * 24
+        var_ptr := load_i64(vars + offset + 0)
+        var_len := load_i64(vars + offset + 8)
+        I str_eq(name_ptr, name_len, var_ptr, var_len) == 1 {
+            R load_i64(vars + offset + 16)
+        }
+        i = i + 1
+    }
+    0 - 1
+}
+
+F cg_clear_vars(cg: i64) -> i64 {
+    cg_set_var_count(cg, 0)
+    0
+}
+
+F cg_get_strings(cg: i64) -> i64 = load_i64(cg + 96)
+F cg_get_string_count(cg: i64) -> i64 = load_i64(cg + 104)
+F cg_set_string_count(cg: i64, c: i64) -> i64 { store_i64(cg + 104, c); 0 }
+F cg_get_strings_sb(cg: i64) -> i64 = load_i64(cg + 112)
+
+F cg_add_string(cg: i64, str_ptr: i64, str_len: i64) -> i64 {
+    strings := cg_get_strings(cg)
+    count := cg_get_string_count(cg)
+
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        offset := i * 24
+        existing_ptr := load_i64(strings + offset + 0)
+        existing_len := load_i64(strings + offset + 8)
+        I str_eq(str_ptr, str_len, existing_ptr, existing_len) == 1 {
+            R load_i64(strings + offset + 16)
+        }
+        i = i + 1
+    }
+
+    offset := count * 24
+    store_i64(strings + offset + 0, str_ptr)
+    store_i64(strings + offset + 8, str_len)
+    store_i64(strings + offset + 16, count)
+    cg_set_string_count(cg, count + 1)
+
+    strings_sb := cg_get_strings_sb(cg)
+    sb_append_cstr(strings_sb, "@.str.")
+    sb_append_i64(strings_sb, count)
+    sb_append_cstr(strings_sb, " = private constant [")
+    sb_append_i64(strings_sb, str_len + 1)
+    sb_append_cstr(strings_sb, " x i8] c\"")
+
+    j: mut i64 = 0
+    L {
+        I j >= str_len { B } E { 0 }
+        ch := load_byte(str_ptr + j)
+        I ch == 10 {
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 48)
+            sb_append_byte(strings_sb, 65)
+        } E I ch == 13 {
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 48)
+            sb_append_byte(strings_sb, 68)
+        } E I ch == 9 {
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 48)
+            sb_append_byte(strings_sb, 57)
+        } E I ch == 34 {
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 50)
+            sb_append_byte(strings_sb, 50)
+        } E I ch == 92 {
+            sb_append_byte(strings_sb, 92)
+            sb_append_byte(strings_sb, 53)
+            sb_append_byte(strings_sb, 67)
+        } E {
+            sb_append_byte(strings_sb, ch)
+        }
+        j = j + 1
+    }
+
+    sb_append_cstr(strings_sb, "\\00\"")
+    sb_append_byte(strings_sb, 10)
+
+    count
+}
+
+F cg_get_sb(cg: i64) -> i64 = load_i64(cg + 0)
+
+F cg_fresh_reg(cg: i64) -> i64 {
+    r := load_i64(cg + 8)
+    store_i64(cg + 8, r + 1)
+    r
+}
+
+F cg_fresh_label(cg: i64) -> i64 {
+    l := load_i64(cg + 16)
+    store_i64(cg + 16, l + 1)
+    l
+}
+
+F cg_reset_regs(cg: i64) -> i64 {
+    store_i64(cg + 8, 0)
+    store_i64(cg + 16, 0)
+    0
+}
+
+F cg_emit(cg: i64, s: str) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_append_cstr(sb, s)
+}
+
+F cg_emit_i64(cg: i64, v: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_append_i64(sb, v)
+}
+
+F cg_emit_newline(cg: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_append_newline(sb)
+}
+
+F cg_emit_quote(cg: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_append_byte(sb, 34)
+}
+
+F cg_emit_str(cg: i64, ptr: i64, len: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        sb_append_byte(sb, load_byte(ptr + i))
+        i = i + 1
+    }
+    1
+}
+
+F cg_emit_header(cg: i64) -> i64 {
+    cg_emit(cg, "; Generated by Vais Self-Hosting Compiler (vaisc-stage1)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "source_filename = ")
+    cg_emit_quote(cg)
+    cg_emit(cg, "main")
+    cg_emit_quote(cg)
+    cg_emit_newline(cg)
+    cg_emit(cg, "target triple = ")
+    cg_emit_quote(cg)
+    cg_emit(cg, "arm64-apple-macosx")
+    cg_emit_quote(cg)
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "; External declarations")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i32 @puts(ptr)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i32 @putchar(i32)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare ptr @malloc(i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare void @free(ptr)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fopen(ptr, ptr)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fclose(i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fread(ptr, i64, i64, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fwrite(ptr, i64, i64, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @fseek(i64, i64, i32)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @ftell(i64)")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper: load_byte
+    cg_emit(cg, "; Helper function: load byte from memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define i64 @__load_byte(i64 %ptr) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i8*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = load i8, i8* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %2 = zext i8 %1 to i64")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret i64 %2")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper: store_byte
+    cg_emit(cg, "; Helper function: store byte to memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define void @__store_byte(i64 %ptr, i64 %val) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i8*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = trunc i64 %val to i8")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  store i8 %1, i8* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret void")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper: load_i64
+    cg_emit(cg, "; Helper function: load i64 from memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define i64 @__load_i64(i64 %ptr) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i64*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = load i64, i64* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret i64 %1")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # Helper: store_i64
+    cg_emit(cg, "; Helper function: store i64 to memory")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define void @__store_i64(i64 %ptr, i64 %val) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %ptr to i64*")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  store i64 %val, i64* %0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret void")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    1
+}
+
+F cg_emit_operand(cg: i64, reg: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    I reg == 0 - 1 {
+        cg_emit(cg, "%")
+        cg_emit_str(cg, param_name_ptr, param_name_len)
+        0
+    } E {
+        cg_emit(cg, "%")
+        cg_emit_i64(cg, reg)
+        0
+    }
+}
+
+F cg_gen_int_expr(cg: i64, expr: i64) -> i64 {
+    value := load_i64(expr + 8)
+    reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, reg)
+    cg_emit(cg, " = add i64 ")
+    cg_emit_i64(cg, value)
+    cg_emit(cg, ", 0")
+    cg_emit_newline(cg)
+    reg
+}
+
+# Runtime function checks
+F expr_is_string(expr: i64) -> i64 {
+    kind := load_i64(expr + 0)
+    I kind == EXPR_STRING() { 1 } E { 0 }
+}
+
+F is_puts_func(ptr: i64, len: i64) -> i64 {
+    I len != 4 { R 0 }
+    I load_byte(ptr) != 112 { R 0 }
+    I load_byte(ptr + 1) != 117 { R 0 }
+    I load_byte(ptr + 2) != 116 { R 0 }
+    I load_byte(ptr + 3) != 115 { R 0 }
+    1
+}
+
+F is_putchar_func(ptr: i64, len: i64) -> i64 {
+    I len != 7 { R 0 }
+    I load_byte(ptr) != 112 { R 0 }
+    I load_byte(ptr + 1) != 117 { R 0 }
+    I load_byte(ptr + 2) != 116 { R 0 }
+    I load_byte(ptr + 3) != 99 { R 0 }
+    I load_byte(ptr + 4) != 104 { R 0 }
+    I load_byte(ptr + 5) != 97 { R 0 }
+    I load_byte(ptr + 6) != 114 { R 0 }
+    1
+}
+
+F is_malloc_func(ptr: i64, len: i64) -> i64 {
+    I len != 6 { R 0 }
+    I load_byte(ptr) != 109 { R 0 }
+    I load_byte(ptr + 1) != 97 { R 0 }
+    I load_byte(ptr + 2) != 108 { R 0 }
+    I load_byte(ptr + 3) != 108 { R 0 }
+    I load_byte(ptr + 4) != 111 { R 0 }
+    I load_byte(ptr + 5) != 99 { R 0 }
+    1
+}
+
+F is_free_func(ptr: i64, len: i64) -> i64 {
+    I len != 4 { R 0 }
+    I load_byte(ptr) != 102 { R 0 }
+    I load_byte(ptr + 1) != 114 { R 0 }
+    I load_byte(ptr + 2) != 101 { R 0 }
+    I load_byte(ptr + 3) != 101 { R 0 }
+    1
+}
+
+F is_load_byte_func(ptr: i64, len: i64) -> i64 {
+    I len != 9 { R 0 }
+    I load_byte(ptr) != 108 { R 0 }
+    I load_byte(ptr + 1) != 111 { R 0 }
+    I load_byte(ptr + 2) != 97 { R 0 }
+    I load_byte(ptr + 3) != 100 { R 0 }
+    I load_byte(ptr + 4) != 95 { R 0 }
+    I load_byte(ptr + 5) != 98 { R 0 }
+    I load_byte(ptr + 6) != 121 { R 0 }
+    I load_byte(ptr + 7) != 116 { R 0 }
+    I load_byte(ptr + 8) != 101 { R 0 }
+    1
+}
+
+F is_store_byte_func(ptr: i64, len: i64) -> i64 {
+    I len != 10 { R 0 }
+    I load_byte(ptr) != 115 { R 0 }
+    I load_byte(ptr + 1) != 116 { R 0 }
+    I load_byte(ptr + 2) != 111 { R 0 }
+    I load_byte(ptr + 3) != 114 { R 0 }
+    I load_byte(ptr + 4) != 101 { R 0 }
+    I load_byte(ptr + 5) != 95 { R 0 }
+    I load_byte(ptr + 6) != 98 { R 0 }
+    I load_byte(ptr + 7) != 121 { R 0 }
+    I load_byte(ptr + 8) != 116 { R 0 }
+    I load_byte(ptr + 9) != 101 { R 0 }
+    1
+}
+
+F is_load_i64_func(ptr: i64, len: i64) -> i64 {
+    I len != 8 { R 0 }
+    I load_byte(ptr) != 108 { R 0 }
+    I load_byte(ptr + 1) != 111 { R 0 }
+    I load_byte(ptr + 2) != 97 { R 0 }
+    I load_byte(ptr + 3) != 100 { R 0 }
+    I load_byte(ptr + 4) != 95 { R 0 }
+    I load_byte(ptr + 5) != 105 { R 0 }
+    I load_byte(ptr + 6) != 54 { R 0 }
+    I load_byte(ptr + 7) != 52 { R 0 }
+    1
+}
+
+F is_store_i64_func(ptr: i64, len: i64) -> i64 {
+    I len != 9 { R 0 }
+    I load_byte(ptr) != 115 { R 0 }
+    I load_byte(ptr + 1) != 116 { R 0 }
+    I load_byte(ptr + 2) != 111 { R 0 }
+    I load_byte(ptr + 3) != 114 { R 0 }
+    I load_byte(ptr + 4) != 101 { R 0 }
+    I load_byte(ptr + 5) != 95 { R 0 }
+    I load_byte(ptr + 6) != 105 { R 0 }
+    I load_byte(ptr + 7) != 54 { R 0 }
+    I load_byte(ptr + 8) != 52 { R 0 }
+    1
+}
+
+# Forward declaration for cg_gen_expr
+F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64
+
+F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    func_name_ptr := expr_get_field0(expr)
+    func_name_len := expr_get_field1(expr)
+    args := expr_get_field2(expr)
+    arg_count := expr_get_field3(expr)
+
+    is_puts := is_puts_func(func_name_ptr, func_name_len)
+    is_putchar := is_putchar_func(func_name_ptr, func_name_len)
+    is_malloc := is_malloc_func(func_name_ptr, func_name_len)
+    is_free := is_free_func(func_name_ptr, func_name_len)
+    is_load_byte := is_load_byte_func(func_name_ptr, func_name_len)
+    is_store_byte := is_store_byte_func(func_name_ptr, func_name_len)
+    is_load_i64 := is_load_i64_func(func_name_ptr, func_name_len)
+    is_store_i64 := is_store_i64_func(func_name_ptr, func_name_len)
+
+    arg_is_string := malloc(16)
+    arg_regs := malloc(16 * 8)
+    i: mut i64 = 0
+    L {
+        I i >= arg_count { B } E { 0 }
+        arg := load_i64(args + i * 8)
+        store_byte(arg_is_string + i, expr_is_string(arg))
+        arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
+        store_i64(arg_regs + i * 8, arg_reg)
+        i = i + 1
+    }
+
+    result_reg := cg_fresh_reg(cg)
+
+    I is_puts == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i32 @puts(ptr %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        0
+    } E I is_putchar == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i32 @putchar(i32 ")
+        arg_reg := load_i64(arg_regs + 0)
+        trunc_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "trunc (i64 %")
+        cg_emit_i64(cg, arg_reg)
+        cg_emit(cg, " to i32))")
+        cg_emit_newline(cg)
+        0
+    } E I is_malloc == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call ptr @malloc(i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        conv_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, conv_reg)
+        cg_emit(cg, " = ptrtoint ptr %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R conv_reg
+    } E I is_free == 1 {
+        ptr_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ptr_reg)
+        cg_emit(cg, " = inttoptr i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        cg_emit(cg, "  call void @free(ptr %")
+        cg_emit_i64(cg, ptr_reg)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R 0
+    } E I is_load_byte == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i64 @__load_byte(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R result_reg
+    } E I is_store_byte == 1 {
+        cg_emit(cg, "  call void @__store_byte(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 8), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R 0
+    } E I is_load_i64 == 1 {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i64 @__load_i64(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R result_reg
+    } E I is_store_i64 == 1 {
+        cg_emit(cg, "  call void @__store_i64(i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 0), param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64 ")
+        cg_emit_operand(cg, load_i64(arg_regs + 8), param_name_ptr, param_name_len)
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R 0
+    } E {
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = call i64 @")
+        cg_emit_str(cg, func_name_ptr, func_name_len)
+        cg_emit(cg, "(")
+
+        i = 0
+        L {
+            I i >= arg_count { B } E { 0 }
+            I i > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+            cg_emit(cg, "i64 ")
+            arg_reg := load_i64(arg_regs + i * 8)
+            cg_emit_operand(cg, arg_reg, param_name_ptr, param_name_len)
+            i = i + 1
+        }
+
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        0
+    }
+
+    free(arg_regs)
+    free(arg_is_string)
+    result_reg
+}
+
+F cg_gen_binary_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    op := expr_get_field0(expr)
+    left := expr_get_field1(expr)
+    right := expr_get_field2(expr)
+
+    left_reg := cg_gen_expr(cg, left, param_name_ptr, param_name_len)
+    right_reg := cg_gen_expr(cg, right, param_name_ptr, param_name_len)
+
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+
+    I op == BINOP_ADD() {
+        cg_emit(cg, " = add i64 ")
+        0
+    } E I op == BINOP_SUB() {
+        cg_emit(cg, " = sub i64 ")
+        0
+    } E I op == BINOP_MUL() {
+        cg_emit(cg, " = mul i64 ")
+        0
+    } E I op == BINOP_DIV() {
+        cg_emit(cg, " = sdiv i64 ")
+        0
+    } E I op == BINOP_MOD() {
+        cg_emit(cg, " = srem i64 ")
+        0
+    } E I op == BINOP_LT() {
+        cg_emit(cg, " = icmp slt i64 ")
+        0
+    } E I op == BINOP_LTE() {
+        cg_emit(cg, " = icmp sle i64 ")
+        0
+    } E I op == BINOP_GT() {
+        cg_emit(cg, " = icmp sgt i64 ")
+        0
+    } E I op == BINOP_GTE() {
+        cg_emit(cg, " = icmp sge i64 ")
+        0
+    } E I op == BINOP_EQ() {
+        cg_emit(cg, " = icmp eq i64 ")
+        0
+    } E I op == BINOP_NEQ() {
+        cg_emit(cg, " = icmp ne i64 ")
+        0
+    } E I op == BINOP_AND() {
+        cg_emit(cg, " = and i64 ")
+        0
+    } E I op == BINOP_OR() {
+        cg_emit(cg, " = or i64 ")
+        0
+    } E {
+        cg_emit(cg, " = add i64 ")
+        0
+    }
+
+    cg_emit_operand(cg, left_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", ")
+    cg_emit_operand(cg, right_reg, param_name_ptr, param_name_len)
+    cg_emit_newline(cg)
+
+    I op >= BINOP_LT() && op <= BINOP_NEQ() {
+        ext_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ext_reg)
+        cg_emit(cg, " = zext i1 %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        ext_reg
+    } E {
+        result_reg
+    }
+}
+
+F cg_gen_loop_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    body := expr_get_field0(expr)
+    loop_id := cg_fresh_label(cg)
+
+    prev_header := cg_get_loop_header(cg)
+    prev_end := cg_get_loop_end(cg)
+    prev_terminated := cg_get_terminated(cg)
+
+    cg_set_loop_labels(cg, loop_id, loop_id)
+    cg_clear_terminated(cg)
+
+    cg_emit(cg, "  br label %loop_header")
+    cg_emit_i64(cg, loop_id)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "loop_header")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_LOOP_HEADER(), loop_id)
+
+    body_reg := cg_gen_expr(cg, body, param_name_ptr, param_name_len)
+    body_terminated := cg_get_terminated(cg)
+
+    I body_terminated == 0 {
+        cg_emit(cg, "  br label %loop_header")
+        cg_emit_i64(cg, loop_id)
+        cg_emit_newline(cg)
+        0
+    } E { 0 }
+
+    cg_emit(cg, "loop_end")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_LOOP_END(), loop_id)
+
+    cg_set_loop_labels(cg, prev_header, prev_end)
+    cg_set_terminated(cg, prev_terminated)
+
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+    cg_emit(cg, " = add i64 0, 0")
+    cg_emit_newline(cg)
+    result_reg
+}
+
+F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    cond := expr_get_field0(expr)
+    then_expr := expr_get_field1(expr)
+    else_expr := expr_get_field2(expr)
+
+    label_id := cg_fresh_label(cg)
+    cond_reg := cg_gen_expr(cg, cond, param_name_ptr, param_name_len)
+
+    cmp_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, " = icmp ne i64 ")
+    cg_emit_operand(cg, cond_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", 0")
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "  br i1 %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, ", label %then")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ", label %else")
+    cg_emit_i64(cg, label_id)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "then")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_THEN(), label_id)
+    cg_clear_terminated(cg)
+    then_reg := cg_gen_expr(cg, then_expr, param_name_ptr, param_name_len)
+    then_terminated := cg_get_terminated(cg)
+    then_final_type := cg_get_current_block_type(cg)
+    then_final_id := cg_get_current_block_id(cg)
+    I then_terminated == 0 {
+        cg_emit(cg, "  br label %merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
+        0
+    } E { 0 }
+
+    cg_emit(cg, "else")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_ELSE(), label_id)
+    cg_clear_terminated(cg)
+    else_reg: mut i64 = 0
+    I else_expr != 0 {
+        else_reg = cg_gen_expr(cg, else_expr, param_name_ptr, param_name_len)
+        0
+    } E {
+        else_reg = cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, else_reg)
+        cg_emit(cg, " = add i64 0, 0")
+        cg_emit_newline(cg)
+        0
+    }
+    else_terminated := cg_get_terminated(cg)
+    else_final_type := cg_get_current_block_type(cg)
+    else_final_id := cg_get_current_block_id(cg)
+    I else_terminated == 0 {
+        cg_emit(cg, "  br label %merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
+        0
+    } E { 0 }
+
+    I then_terminated == 1 && else_terminated == 1 {
+        cg_set_terminated(cg, 1)
+        0 - 2
+    } E {
+        cg_emit(cg, "merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, ":")
+        cg_emit_newline(cg)
+        cg_clear_terminated(cg)
+
+        I then_terminated == 0 && else_terminated == 0 {
+            result_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, result_reg)
+            cg_emit(cg, " = phi i64 [ ")
+            cg_emit_operand(cg, then_reg, param_name_ptr, param_name_len)
+            cg_emit(cg, ", %")
+            I then_final_type == BLOCK_MERGE() {
+                cg_emit(cg, "merge")
+                cg_emit_i64(cg, then_final_id)
+                0
+            } E {
+                cg_emit(cg, "then")
+                cg_emit_i64(cg, label_id)
+                0
+            }
+            cg_emit(cg, " ], [ ")
+            cg_emit_operand(cg, else_reg, param_name_ptr, param_name_len)
+            cg_emit(cg, ", %")
+            I else_final_type == BLOCK_MERGE() {
+                cg_emit(cg, "merge")
+                cg_emit_i64(cg, else_final_id)
+                0
+            } E {
+                cg_emit(cg, "else")
+                cg_emit_i64(cg, label_id)
+                0
+            }
+            cg_emit(cg, " ]")
+            cg_emit_newline(cg)
+            cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+            result_reg
+        } E I then_terminated == 1 {
+            cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+            else_reg
+        } E {
+            cg_set_current_block(cg, BLOCK_MERGE(), label_id)
+            then_reg
+        }
+    }
+}
+
+F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    stmt_kind := load_i64(stmt + 0)
+
+    I stmt_kind == STMT_LET() {
+        name_ptr := load_i64(stmt + 8)
+        name_len := load_i64(stmt + 16)
+        value := load_i64(stmt + 24)
+
+        alloca_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, alloca_reg)
+        cg_emit(cg, " = alloca i64")
+        cg_emit_newline(cg)
+
+        value_reg := cg_gen_expr(cg, value, param_name_ptr, param_name_len)
+
+        cg_emit(cg, "  store i64 ")
+        cg_emit_operand(cg, value_reg, param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64* %")
+        cg_emit_i64(cg, alloca_reg)
+        cg_emit_newline(cg)
+
+        cg_add_var(cg, name_ptr, name_len, alloca_reg)
+
+        R 0
+    } E I stmt_kind == STMT_BREAK() {
+        loop_end := cg_get_loop_end(cg)
+        cg_emit(cg, "  br label %loop_end")
+        cg_emit_i64(cg, loop_end)
+        cg_emit_newline(cg)
+        cg_set_terminated(cg, 1)
+        R 1
+    } E I stmt_kind == STMT_EXPR() {
+        stmt_expr := load_i64(stmt + 8)
+        cg_gen_expr(cg, stmt_expr, param_name_ptr, param_name_len)
+        R 0
+    } E { 0 }
+}
+
+F cg_gen_block_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    stmts := expr_get_field0(expr)
+    stmts_len := expr_get_field1(expr)
+    final_expr := expr_get_field2(expr)
+
+    terminated: mut i64 = 0
+    i: mut i64 = 0
+    L {
+        I i >= stmts_len { B } E { 0 }
+        I terminated == 1 { B } E { 0 }
+        I cg_get_terminated(cg) == 1 { B } E { 0 }
+        stmt := load_i64(stmts + i * 8)
+        terminated = cg_gen_stmt(cg, stmt, param_name_ptr, param_name_len)
+        i = i + 1
+    }
+
+    I cg_get_terminated(cg) == 1 {
+        terminated = 1
+        0
+    } E { 0 }
+
+    I terminated == 1 {
+        0 - 2
+    } E I final_expr != 0 {
+        cg_gen_expr(cg, final_expr, param_name_ptr, param_name_len)
+    } E {
+        result_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, " = add i64 0, 0")
+        cg_emit_newline(cg)
+        result_reg
+    }
+}
+
+F cg_gen_match_arm(cg: i64, scrut_reg: i64, pattern: i64, body: i64,
+                   label_id: i64, arm_idx: i64, param_ptr: i64, param_len: i64,
+                   result_alloca: i64, merge_label: i64) -> i64 {
+    cmp_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, " = icmp eq i64 ")
+    cg_emit_operand(cg, scrut_reg, param_ptr, param_len)
+    cg_emit(cg, ", ")
+    cg_emit_i64(cg, pattern)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "  br i1 %")
+    cg_emit_i64(cg, cmp_reg)
+    cg_emit(cg, ", label %match_arm")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit(cg, ", label %match_next")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "match_arm")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    arm_result := cg_gen_expr(cg, body, param_ptr, param_len)
+
+    cg_emit(cg, "  store i64 ")
+    cg_emit_operand(cg, arm_result, param_ptr, param_len)
+    cg_emit(cg, ", i64* %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "  br label %match_merge")
+    cg_emit_i64(cg, merge_label)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "match_next")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, "_")
+    cg_emit_i64(cg, arm_idx)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    1
+}
+
+F cg_gen_match_expr(cg: i64, expr: i64, param_ptr: i64, param_len: i64) -> i64 {
+    scrutinee := expr_get_field0(expr)
+    arms := expr_get_field1(expr)
+    arm_count := expr_get_field2(expr)
+
+    label_id := cg_fresh_label(cg)
+
+    result_alloca := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit(cg, " = alloca i64")
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "  store i64 0, i64* %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit_newline(cg)
+
+    scrut_reg := cg_gen_expr(cg, scrutinee, param_ptr, param_len)
+
+    i: mut i64 = 0
+    L {
+        I i >= arm_count { B } E { 0 }
+        pattern := load_i64(arms + i * 16)
+        body := load_i64(arms + i * 16 + 8)
+        cg_gen_match_arm(cg, scrut_reg, pattern, body, label_id, i, param_ptr, param_len, result_alloca, label_id)
+        i = i + 1
+    }
+
+    cg_emit(cg, "  br label %match_merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "match_merge")
+    cg_emit_i64(cg, label_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    final_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, final_reg)
+    cg_emit(cg, " = load i64, i64* %")
+    cg_emit_i64(cg, result_alloca)
+    cg_emit_newline(cg)
+
+    final_reg
+}
+
+F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    I expr == 0 { R 0 }
+    kind := load_i64(expr + 0)
+
+    I kind == EXPR_MATCH() { R cg_gen_match_expr(cg, expr, param_name_ptr, param_name_len) } E { 0 }
+
+    result: mut i64 = 0
+
+    I kind == EXPR_INT() {
+        result = cg_gen_int_expr(cg, expr)
+        0
+    } E I kind == EXPR_STRING() {
+        str_ptr := expr_get_field0(expr)
+        str_len := expr_get_field1(expr)
+        str_id := cg_add_string(cg, str_ptr, str_len)
+
+        reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, reg)
+        cg_emit(cg, " = getelementptr [")
+        cg_emit_i64(cg, str_len + 1)
+        cg_emit(cg, " x i8], [")
+        cg_emit_i64(cg, str_len + 1)
+        cg_emit(cg, " x i8]* @.str.")
+        cg_emit_i64(cg, str_id)
+        cg_emit(cg, ", i64 0, i64 0")
+        cg_emit_newline(cg)
+        result = reg
+        0
+    } E I kind == EXPR_IDENT() {
+        ident_ptr := expr_get_field0(expr)
+        ident_len := expr_get_field1(expr)
+
+        I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
+            result = 0 - 1
+            0
+        } E {
+            var_alloca := cg_find_var(cg, ident_ptr, ident_len)
+            I var_alloca != 0 - 1 {
+                load_reg := cg_fresh_reg(cg)
+                cg_emit(cg, "  %")
+                cg_emit_i64(cg, load_reg)
+                cg_emit(cg, " = load i64, i64* %")
+                cg_emit_i64(cg, var_alloca)
+                cg_emit_newline(cg)
+                result = load_reg
+                0
+            } E {
+                result = 0 - 1
+                0
+            }
+        }
+    } E I kind == EXPR_CALL() {
+        result = cg_gen_call_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_BINARY() {
+        result = cg_gen_binary_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_IF() {
+        result = cg_gen_if_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_BLOCK() {
+        result = cg_gen_block_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_LOOP() {
+        result = cg_gen_loop_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_ASSIGN() {
+        target := expr_get_field0(expr)
+        value := expr_get_field1(expr)
+
+        target_kind := load_i64(target + 0)
+        I target_kind == EXPR_IDENT() {
+            target_ptr := expr_get_field0(target)
+            target_len := expr_get_field1(target)
+
+            var_alloca := cg_find_var(cg, target_ptr, target_len)
+            I var_alloca != 0 - 1 {
+                value_reg := cg_gen_expr(cg, value, param_name_ptr, param_name_len)
+
+                cg_emit(cg, "  store i64 ")
+                cg_emit_operand(cg, value_reg, param_name_ptr, param_name_len)
+                cg_emit(cg, ", i64* %")
+                cg_emit_i64(cg, var_alloca)
+                cg_emit_newline(cg)
+
+                result = value_reg
+                0
+            } E {
+                result = 0
+                0
+            }
+        } E {
+            result = 0
+            0
+        }
+    } E { 0 }
+
+    result
+}
+
+F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
+                   param_name_ptr: i64, param_name_len: i64, body_expr: i64) -> i64 {
+    cg_clear_vars(cg)
+    cg_set_param(cg, param_name_ptr, param_name_len)
+
+    cg_emit(cg, "define i64 @")
+    cg_emit_str(cg, func_name_ptr, func_name_len)
+    I param_name_len > 0 {
+        cg_emit(cg, "(i64 %")
+        cg_emit_str(cg, param_name_ptr, param_name_len)
+        cg_emit(cg, ") {")
+    } E {
+        cg_emit(cg, "() {")
+    }
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+
+    result_reg := cg_gen_expr(cg, body_expr, param_name_ptr, param_name_len)
+
+    cg_emit(cg, "  ret i64 ")
+    I result_reg == 0 - 1 {
+        cg_emit(cg, "%")
+        cg_emit_str(cg, param_name_ptr, param_name_len)
+        0
+    } E {
+        cg_emit(cg, "%")
+        cg_emit_i64(cg, result_reg)
+        0
+    }
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+    1
+}
+
+F cg_gen_main_that_calls(cg: i64, func_name_ptr: i64, func_name_len: i64) -> i64 {
+    cg_emit(cg, "declare i32 @printf(i8*, ...)")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "@.str.fmt = private constant [13 x i8] c")
+    cg_emit_quote(cg)
+    cg_emit(cg, "Result: %ld")
+    sb := cg_get_sb(cg)
+    sb_append_byte(sb, 92)
+    sb_append_byte(sb, 48)
+    sb_append_byte(sb, 65)
+    sb_append_byte(sb, 92)
+    sb_append_byte(sb, 48)
+    sb_append_byte(sb, 48)
+    cg_emit_quote(cg)
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "define i64 @main() {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %result = call i64 @")
+    cg_emit_str(cg, func_name_ptr, func_name_len)
+    cg_emit(cg, "(i64 10)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %fmt = getelementptr [13 x i8], [13 x i8]* @.str.fmt, i64 0, i64 0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  call i32 (i8*, ...) @printf(i8* %fmt, i64 %result)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret i64 0")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    1
+}
+
+F cg_finalize(cg: i64) -> i64 {
+    strings_sb := cg_get_strings_sb(cg)
+    strings_len := sb_get_len(strings_sb)
+
+    I strings_len > 0 {
+        main_sb := cg_get_sb(cg)
+        main_data := sb_get_data(main_sb)
+        main_len := sb_get_len(main_sb)
+
+        define_pos: mut i64 = 0
+        i: mut i64 = 0
+        L {
+            I i >= main_len - 6 { B } E { 0 }
+            I load_byte(main_data + i) == 100 {
+                I load_byte(main_data + i + 1) == 101 {
+                    I load_byte(main_data + i + 2) == 102 {
+                        define_pos = i
+                        B
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        I define_pos > 0 {
+            strings_data := sb_get_data(strings_sb)
+            new_sb := sb_new(main_len + strings_len + 256)
+
+            j: mut i64 = 0
+            L {
+                I j >= define_pos { B } E { 0 }
+                sb_append_byte(new_sb, load_byte(main_data + j))
+                j = j + 1
+            }
+
+            sb_append_byte(new_sb, 10)
+            j = 0
+            L {
+                I j >= strings_len { B } E { 0 }
+                sb_append_byte(new_sb, load_byte(strings_data + j))
+                j = j + 1
+            }
+            sb_append_byte(new_sb, 10)
+
+            j = define_pos
+            L {
+                I j >= main_len { B } E { 0 }
+                sb_append_byte(new_sb, load_byte(main_data + j))
+                j = j + 1
+            }
+
+            sb_free(main_sb)
+            store_i64(cg + 0, new_sb)
+            0
+        } E { 0 }
+    } E { 0 }
+    1
+}
+
+F cg_get_output(cg: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_get_data(sb)
+}
+
+F cg_get_output_len(cg: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_get_len(sb)
+}
+
+F cg_free(cg: i64) -> i64 {
+    sb := cg_get_sb(cg)
+    sb_free(sb)
+    strings_sb := cg_get_strings_sb(cg)
+    sb_free(strings_sb)
+    vars := cg_get_vars(cg)
+    free(vars)
+    strings := cg_get_strings(cg)
+    free(strings)
+    free(cg)
+    1
+}
+
+# Check if function name is "main"
+F is_main_function(name_ptr: i64, name_len: i64) -> i64 {
+    I name_len != 4 { R 0 }
+    I load_byte(name_ptr) != 109 { R 0 }
+    I load_byte(name_ptr + 1) != 97 { R 0 }
+    I load_byte(name_ptr + 2) != 105 { R 0 }
+    I load_byte(name_ptr + 3) != 110 { R 0 }
+    1
+}
+
+F cg_gen_function_item(cg: i64, item: i64) -> i64 {
+    I item_get_kind(item) != ITEM_FUNCTION() { R 0 }
+
+    cg_reset_regs(cg)
+
+    name_ptr := item_get_name_ptr(item)
+    name_len := item_get_name_len(item)
+    params := item_get_data0(item)
+    param_count := item_get_data1(item)
+    body := item_get_data3(item)
+
+    I body == 0 { R 0 }
+
+    I is_main_function(name_ptr, name_len) == 1 && param_count == 0 {
+        cg_emit(cg, "define i64 @main() {\n")
+        cg_emit(cg, "entry:\n")
+        result_reg := cg_gen_expr(cg, body, 0, 0)
+        cg_emit(cg, "  ret i64 ")
+        I result_reg == 0 - 1 {
+            cg_emit(cg, "0")
+            0
+        } E {
+            cg_emit(cg, "%")
+            cg_emit_i64(cg, result_reg)
+            0
+        }
+        cg_emit_newline(cg)
+        cg_emit(cg, "}\n\n")
+        R 1
+    }
+
+    param_name_ptr: mut i64 = 0
+    param_name_len: mut i64 = 0
+    I param_count > 0 {
+        param := load_i64(params)
+        param_name_ptr = param_get_name_ptr(param)
+        param_name_len = param_get_name_len(param)
+        0
+    } E { 0 }
+
+    cg_gen_function(cg, name_ptr, name_len, param_name_ptr, param_name_len, body)
+}
+
+F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
+    has_main: mut i64 = 0
+    first_func_name_ptr: mut i64 = 0
+    first_func_name_len: mut i64 = 0
+
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        item := load_i64(items + i * 8)
+        kind := item_get_kind(item)
+
+        I kind == ITEM_FUNCTION() {
+            name_ptr := item_get_name_ptr(item)
+            name_len := item_get_name_len(item)
+            params := item_get_data0(item)
+            param_count := item_get_data1(item)
+
+            I first_func_name_ptr == 0 && param_count > 0 {
+                first_func_name_ptr = name_ptr
+                first_func_name_len = name_len
+                0
+            } E { 0 }
+
+            I is_main_function(name_ptr, name_len) == 1 && param_count == 0 {
+                has_main = 1
+                0
+            } E { 0 }
+
+            cg_gen_function_item(cg, item)
+            0
+        } E { 0 }
+
+        i = i + 1
+    }
+
+    I has_main == 0 && first_func_name_ptr != 0 {
+        cg_gen_main_that_calls(cg, first_func_name_ptr, first_func_name_len)
+        0
+    } E { 0 }
+
+    count
+}

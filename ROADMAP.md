@@ -1006,7 +1006,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
-| Phase 10: Self-hosting | 🔄 진행 중 | 80% |
+| Phase 10: Self-hosting | 🔄 진행 중 | 85% |
 
 ---
 
@@ -1111,7 +1111,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] load_i64/store_i64 지원 (완료일: 2026-01-24)
   - [ ] main.vais 모듈 분리 (stringbuffer, lexer, parser, codegen)
     - [x] 1단계: constants.vais, stringbuffer_s1.vais, lexer_s1.vais 생성 (완료일: 2026-01-24)
-    - [ ] 2단계: parser_s1.vais, codegen_s1.vais 분리
+    - [x] 2단계: helpers_s1.vais, parser_s1.vais, codegen_s1.vais 분리 (완료일: 2026-01-24)
     - [ ] 3단계: main_entry.vais 생성 및 import 연결
   - [ ] vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
   - [ ] Stage 1 vs Stage 2 바이너리 출력 비교

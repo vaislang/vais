@@ -4,7 +4,7 @@
   "tasks": [
     { "id": 1, "name": "Import 시스템 구현", "status": "completed", "model": "Opus", "description": "Stage 1에 U 문 지원 추가" },
     { "id": 2, "name": "main.vais 모듈 분리 1단계", "status": "completed", "model": "Sonnet", "description": "constants, stringbuffer_s1, lexer_s1 모듈 분리" },
-    { "id": 2.1, "name": "main.vais 모듈 분리 2단계", "status": "pending", "model": "Sonnet", "description": "parser_s1, codegen_s1 모듈 분리" },
+    { "id": 2.1, "name": "main.vais 모듈 분리 2단계", "status": "completed", "model": "Sonnet", "description": "parser_s1, codegen_s1, helpers_s1 모듈 분리" },
     { "id": 2.2, "name": "main.vais 모듈 분리 3단계", "status": "pending", "model": "Sonnet", "description": "main_entry.vais 생성 및 import 연결" },
     { "id": 3, "name": "Stage 2 컴파일 테스트", "status": "pending", "model": "Sonnet", "description": "vaisc-stage1으로 분리된 모듈 컴파일" },
     { "id": 4, "name": "단항 NEG 코드젠", "status": "pending", "model": "Sonnet", "description": "EXPR_UNARY - UNOP_NEG() 코드젠 추가" },
@@ -13,5 +13,5 @@
     { "id": 7, "name": "비트 연산자 지원", "status": "pending", "model": "Sonnet", "description": "&, |, ^, <<, >> 토큰/파서/코드젠" }
   ],
   "currentTask": null,
-  "lastCompleted": "main.vais 모듈 분리 1단계"
+  "lastCompleted": "main.vais 모듈 분리 2단계"
 }

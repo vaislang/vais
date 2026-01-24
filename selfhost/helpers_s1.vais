@@ -1,0 +1,102 @@
+# Vais Self-Hosting Compiler - AST Node Helpers (Stage 1)
+# Item, Field, Param structures and utilities
+
+U constants
+
+# ============================================================================
+# Item Node (64 bytes)
+# ============================================================================
+# Layout: kind(8) + name_ptr(8) + name_len(8) + data0(8) + data1(8) + data2(8) + data3(8) + data4(8)
+
+F item_new(kind: i64, name_ptr: i64, name_len: i64) -> i64 {
+    item := malloc(64)
+    store_i64(item + 0, kind)
+    store_i64(item + 8, name_ptr)
+    store_i64(item + 16, name_len)
+    store_i64(item + 24, 0)  # data0
+    store_i64(item + 32, 0)  # data1
+    store_i64(item + 40, 0)  # data2
+    store_i64(item + 48, 0)  # data3
+    store_i64(item + 56, 0)  # data4
+    item
+}
+
+F item_get_kind(item: i64) -> i64 = load_i64(item + 0)
+F item_get_name_ptr(item: i64) -> i64 = load_i64(item + 8)
+F item_get_name_len(item: i64) -> i64 = load_i64(item + 16)
+F item_set_data0(item: i64, v: i64) -> i64 { store_i64(item + 24, v); 0 }
+F item_set_data1(item: i64, v: i64) -> i64 { store_i64(item + 32, v); 0 }
+F item_set_data2(item: i64, v: i64) -> i64 { store_i64(item + 40, v); 0 }
+F item_set_data3(item: i64, v: i64) -> i64 { store_i64(item + 48, v); 0 }
+F item_set_data4(item: i64, v: i64) -> i64 { store_i64(item + 56, v); 0 }
+F item_get_data0(item: i64) -> i64 = load_i64(item + 24)
+F item_get_data1(item: i64) -> i64 = load_i64(item + 32)
+F item_get_data2(item: i64) -> i64 = load_i64(item + 40)
+F item_get_data3(item: i64) -> i64 = load_i64(item + 48)
+F item_get_data4(item: i64) -> i64 = load_i64(item + 56)
+
+# ============================================================================
+# Field Node (32 bytes)
+# ============================================================================
+# Layout: name_ptr(8) + name_len(8) + type_ptr(8) + type_len(8)
+
+F field_new(name_ptr: i64, name_len: i64, type_ptr: i64, type_len: i64) -> i64 {
+    f := malloc(32)
+    store_i64(f + 0, name_ptr)
+    store_i64(f + 8, name_len)
+    store_i64(f + 16, type_ptr)
+    store_i64(f + 24, type_len)
+    f
+}
+
+F field_get_name_ptr(f: i64) -> i64 = load_i64(f + 0)
+F field_get_name_len(f: i64) -> i64 = load_i64(f + 8)
+F field_get_type_ptr(f: i64) -> i64 = load_i64(f + 16)
+F field_get_type_len(f: i64) -> i64 = load_i64(f + 24)
+
+# ============================================================================
+# Param Node (32 bytes)
+# ============================================================================
+# Layout: name_ptr(8) + name_len(8) + type_ptr(8) + type_len(8)
+
+F param_new(name_ptr: i64, name_len: i64, type_ptr: i64, type_len: i64) -> i64 {
+    p := malloc(32)
+    store_i64(p + 0, name_ptr)
+    store_i64(p + 8, name_len)
+    store_i64(p + 16, type_ptr)
+    store_i64(p + 24, type_len)
+    p
+}
+
+F param_get_name_ptr(p: i64) -> i64 = load_i64(p + 0)
+F param_get_name_len(p: i64) -> i64 = load_i64(p + 8)
+F param_get_type_ptr(p: i64) -> i64 = load_i64(p + 16)
+F param_get_type_len(p: i64) -> i64 = load_i64(p + 24)
+
+# ============================================================================
+# Expression Node (48 bytes)
+# ============================================================================
+# Layout: kind(8) + field0(8) + field1(8) + field2(8) + field3(8) + field4(8)
+
+F expr_new(kind: i64) -> i64 {
+    e := malloc(48)
+    store_i64(e + 0, kind)
+    store_i64(e + 8, 0)
+    store_i64(e + 16, 0)
+    store_i64(e + 24, 0)
+    store_i64(e + 32, 0)
+    store_i64(e + 40, 0)
+    e
+}
+
+F expr_get_kind(e: i64) -> i64 = load_i64(e + 0)
+F expr_set_field0(e: i64, v: i64) -> i64 { store_i64(e + 8, v); 0 }
+F expr_set_field1(e: i64, v: i64) -> i64 { store_i64(e + 16, v); 0 }
+F expr_set_field2(e: i64, v: i64) -> i64 { store_i64(e + 24, v); 0 }
+F expr_set_field3(e: i64, v: i64) -> i64 { store_i64(e + 32, v); 0 }
+F expr_set_field4(e: i64, v: i64) -> i64 { store_i64(e + 40, v); 0 }
+F expr_get_field0(e: i64) -> i64 = load_i64(e + 8)
+F expr_get_field1(e: i64) -> i64 = load_i64(e + 16)
+F expr_get_field2(e: i64) -> i64 = load_i64(e + 24)
+F expr_get_field3(e: i64) -> i64 = load_i64(e + 32)
+F expr_get_field4(e: i64) -> i64 = load_i64(e + 40)
