@@ -1,32 +1,15 @@
 {
-  "phase": 5,
-  "request": "Stage 1 import 기능 구현",
+  "phase": 3,
+  "request": "Phase 10 Self-hosting 완성",
   "tasks": [
-    { "id": 1, "name": "Stage 1 import 기능 구현", "status": "completed", "model": "Opus", "priority": "high", "description": "selfhost/main.vais에 import(U 문) 지원 추가" }
+    { "id": 1, "name": "Import 시스템 구현", "status": "completed", "model": "Opus", "description": "Stage 1에 U 문 지원 추가" },
+    { "id": 2, "name": "main.vais 모듈 분리", "status": "pending", "model": "Sonnet", "description": "main.vais를 stringbuffer, lexer, parser, codegen 모듈로 분리" },
+    { "id": 3, "name": "Stage 2 컴파일 테스트", "status": "pending", "model": "Sonnet", "description": "vaisc-stage1으로 분리된 모듈 컴파일" },
+    { "id": 4, "name": "단항 NEG 코드젠", "status": "pending", "model": "Sonnet", "description": "EXPR_UNARY - UNOP_NEG() 코드젠 추가" },
+    { "id": 5, "name": "인덱스 접근 코드젠", "status": "pending", "model": "Sonnet", "description": "EXPR_INDEX 코드젠 추가" },
+    { "id": 6, "name": "Continue 문 지원", "status": "pending", "model": "Sonnet", "description": "파서 + 코드젠 모두 구현" },
+    { "id": 7, "name": "비트 연산자 지원", "status": "pending", "model": "Sonnet", "description": "&, |, ^, <<, >> 토큰/파서/코드젠" }
   ],
   "currentTask": null,
-  "lastCompleted": "Stage 1 import 기능 구현",
-  "summary": {
-    "added": {
-      "tokens": "TOK_KW_U (import 키워드)",
-      "ast": "ITEM_USE (import 문)",
-      "parser": "parser_parse_use_item() 함수",
-      "functions": [
-        "loaded_modules_new/contains/add - 모듈 중복 로딩 방지",
-        "all_items_new/add/get_* - 모든 items 수집",
-        "load_module_with_imports() - 재귀적 모듈 로딩",
-        "resolve_import_path() - 경로 해석",
-        "memcmp(), strlen_ptr(), read_file_ptr()"
-      ],
-      "rust_changes": [
-        "fopen_ptr 빌트인 함수 추가 (vais-types, vais-codegen)"
-      ]
-    },
-    "linesAdded": "~340줄 (3532→3872)",
-    "testResults": {
-      "singleImport": "PASS - test_module.vais import 성공",
-      "multipleImports": "PASS - test_module.vais + test_module2.vais 동시 import 성공",
-      "execution": "PASS - helper_func(5) + level2_func(3) = 19"
-    }
-  }
+  "lastCompleted": "Import 시스템 구현"
 }

@@ -1012,7 +1012,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (80%)
+> **상태**: 🔄 진행 중 (85%)
 > **추가일**: 2026-01-22
 > **최종 업데이트**: 2026-01-24
 > **예상 기간**: 14-16주 (약 4개월)
@@ -1021,7 +1021,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### Self-hosting 현황 (selfhost/)
 - ast.vais (1,191줄), parser.vais (2,189줄), type_checker.vais (1,762줄)
 - codegen.vais (1,785줄), lexer.vais (754줄), token.vais (309줄)
-- **main.vais (3,100+ 줄)**: vaisc-stage1 자체 컴파일러 ✅
+- **main.vais (3,870+ 줄)**: vaisc-stage1 자체 컴파일러 ✅
 - **stringpool.vais**: 공유 StringPool, 중복 제거 (테스트 통과) ✅
 - **module.vais**: 모듈 레지스트리, 순환 의존성 탐지 (테스트 통과) ✅
 - bootstrap_test.vais: 57개 테스트 통과
@@ -1030,7 +1030,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - **integrated_test.vais**: 통합 파이프라인 테스트 (Lexer→Parser→Codegen→실행) ✅
 
 ### Stage 2 부트스트래핑 진행 (2026-01-24)
-- **vaisc-stage1**: main.vais (3,250+ 줄) - 자체 컴파일러 구현
+- **vaisc-stage1**: main.vais (3,870+ 줄) - 자체 컴파일러 구현
 - **완료된 기능**:
   - ✅ 토큰 확장 (X, 연산자, 문자열 리터럴 등)
   - ✅ 파서 확장 (S/X/함수/표현식)
@@ -1043,6 +1043,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - ✅ let 바인딩 및 할당 코드젠 (mut 포함)
   - ✅ 문자열 리터럴 및 extern 함수 (puts, putchar, malloc, free, fopen, fclose, fread, fwrite, fseek, ftell)
   - ✅ 메모리 연산 (load_byte, store_byte, load_i64, store_i64)
+  - ✅ **Import 시스템 (U 문)** - 모듈 import 지원 (완료일: 2026-01-24)
 - **테스트 결과**:
   - test_ops_simple: PASS - 모든 산술 연산자 (+ - * / %) 동작
   - test_compare: PASS - 비교 연산자 합계 = 4
@@ -1057,7 +1058,9 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - test_puts: PASS - hello world 출력
   - test_strings: PASS - 다중 문자열, 함수 호출
   - test_memory: PASS - store_byte(65,66), load_byte, store_i64(100), load_i64, sum=231
+  - test_import: PASS - 다중 모듈 import, helper_func(5) + level2_func(3) = 19
 - **남은 작업**:
+  - main.vais 모듈 분리 (3,870줄 → ~500줄 + 모듈들)
   - main.vais 자기 컴파일 (Stage 2 완성)
 
 ### P0 - 핵심 (1-2주) [Self-hosting 필수]
@@ -1096,11 +1099,19 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] 루프(L) 및 break 코드젠
   - [x] let 바인딩 및 할당
   - [x] 문자열 리터럴 및 extern 함수
+- [x] **Import 시스템 (U 문)** (완료일: 2026-01-24)
+  - [x] TOK_KW_U 토큰, ITEM_USE AST 노드
+  - [x] parser_parse_use_item() - 경로 파싱
+  - [x] load_module_with_imports() - 재귀적 모듈 로딩
+  - [x] resolve_import_path() - 경로 해석
+  - [x] 중복 로딩 방지 (loaded_modules 추적)
+  - [x] Rust vaisc에 fopen_ptr 빌트인 추가
 - [ ] **Stage 2 부트스트래핑 완성**
   - [x] load_byte/store_byte 지원 (완료일: 2026-01-24)
   - [x] load_i64/store_i64 지원 (완료일: 2026-01-24)
-  - vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
-  - Stage 1 vs Stage 2 바이너리 출력 비교
+  - [ ] main.vais 모듈 분리 (stringbuffer, lexer, parser, codegen)
+  - [ ] vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
+  - [ ] Stage 1 vs Stage 2 바이너리 출력 비교
 - [ ] **에러 복구 개선**
   - Panic-free 파싱 (파싱 에러 후 복구)
   - Synchronization point 탐지
