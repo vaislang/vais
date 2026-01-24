@@ -335,6 +335,10 @@ pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
         result = constant_folding(&result);
         result = dead_store_elimination(&result);
         result = branch_optimization(&result);
+        result = conditional_branch_simplification(&result);
+        // Note: basic_block_merging is disabled for now due to phi node complexity
+        // The right fix is to not generate empty blocks in the first place (codegen level)
+        // result = basic_block_merging(&result);
     }
 
     // O2+: More aggressive optimizations
@@ -717,6 +721,191 @@ fn extract_branch_label(line: &str, take_then: bool) -> Option<String> {
             return Some(else_label.to_string());
         }
     }
+    None
+}
+
+/// Conditional branch simplification
+/// Removes redundant zext i1 + icmp ne patterns:
+///   %X = icmp ... (produces i1)
+///   %Y = zext i1 %X to i64
+///   %Z = icmp ne i64 %Y, 0
+///   br i1 %Z, label %then, label %else
+/// Becomes:
+///   %X = icmp ... (produces i1)
+///   br i1 %X, label %then, label %else
+///
+/// IMPORTANT: Only removes zext/icmp if the result is ONLY used in br i1
+fn conditional_branch_simplification(ir: &str) -> String {
+    let lines: Vec<&str> = ir.lines().collect();
+    let mut result = Vec::new();
+
+    // Track i1 sources: zext_dest -> (original_i1_var, line_index)
+    let mut i1_sources: HashMap<String, (String, usize)> = HashMap::new();
+    // Track icmp ne %zext, 0 -> (original_i1_var, line_index, zext_var)
+    let mut icmp_to_i1: HashMap<String, (String, usize, String)> = HashMap::new();
+    // Track variable uses: var_name -> count of uses (excluding its definition)
+    let mut var_uses: HashMap<String, usize> = HashMap::new();
+
+    // First pass: collect zext i1 to i64 patterns
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Pattern: %Y = zext i1 %X to i64
+        if trimmed.contains(" = zext i1 ") && trimmed.contains(" to i64") {
+            if let Some((dest, src)) = parse_zext_i1(trimmed) {
+                i1_sources.insert(dest, (src, i));
+            }
+        }
+    }
+
+    // Second pass: find icmp ne i64 %zext, 0
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Pattern: %Z = icmp ne i64 %Y, 0
+        if trimmed.contains(" = icmp ne i64 ") {
+            if let Some((dest, operand)) = parse_icmp_ne_zero(trimmed) {
+                if let Some((original_i1, _)) = i1_sources.get(&operand) {
+                    icmp_to_i1.insert(dest, (original_i1.clone(), i, operand.clone()));
+                }
+            }
+        }
+    }
+
+    // Third pass: count variable uses
+    for line in lines.iter() {
+        let trimmed = line.trim();
+        // Skip comments
+        if trimmed.starts_with(';') {
+            continue;
+        }
+        // Count all %var references in this line
+        for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '.') {
+            if word.starts_with('%') && !word.is_empty() {
+                // Check if this is a use (not a definition)
+                // Definition pattern: "%var = ..."
+                if !trimmed.starts_with(word) || !trimmed.contains(" = ") {
+                    *var_uses.entry(word.to_string()).or_insert(0) += 1;
+                } else if trimmed.starts_with(word) && trimmed.contains(" = ") {
+                    // This is a definition, but also check for uses in the RHS
+                    let def_end = trimmed.find(" = ").unwrap() + 3;
+                    let rhs = &trimmed[def_end..];
+                    if rhs.contains(word) {
+                        *var_uses.entry(word.to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Determine which lines can be safely removed:
+    // - icmp ne line can be removed if its result is only used once in a br i1
+    // - zext line can be removed if its result is only used once in the icmp ne
+    let mut dead_lines: HashSet<usize> = HashSet::new();
+    let mut safe_icmp_replacements: HashMap<String, String> = HashMap::new();
+
+    for (icmp_var, (original_i1, icmp_line, zext_var)) in &icmp_to_i1 {
+        // Check if icmp result is only used in br i1
+        let icmp_uses = var_uses.get(icmp_var).copied().unwrap_or(0);
+        // Check if zext result is only used in this icmp
+        let zext_uses = var_uses.get(zext_var).copied().unwrap_or(0);
+
+        // icmp should be used exactly once (in br i1)
+        // zext should be used exactly once (in this icmp)
+        if icmp_uses == 1 && zext_uses == 1 {
+            dead_lines.insert(*icmp_line);
+            if let Some((_, zext_line)) = i1_sources.get(zext_var) {
+                dead_lines.insert(*zext_line);
+            }
+            safe_icmp_replacements.insert(icmp_var.clone(), original_i1.clone());
+        }
+    }
+
+    // Fourth pass: generate optimized output
+    for (i, line) in lines.iter().enumerate() {
+        if dead_lines.contains(&i) {
+            // Skip dead zext/icmp lines, add comment for debugging
+            result.push(format!("  ; optimized out: {}", line.trim()));
+            continue;
+        }
+
+        let trimmed = line.trim();
+
+        // Pattern: br i1 %Z, label %then, label %else
+        if trimmed.starts_with("br i1 ") {
+            if let Some(replaced) = try_replace_branch_cond(trimmed, &safe_icmp_replacements) {
+                result.push(format!("  {}", replaced));
+                continue;
+            }
+        }
+
+        result.push(line.to_string());
+    }
+
+    result.join("\n")
+}
+
+/// Parse: %Y = zext i1 %X to i64
+fn parse_zext_i1(line: &str) -> Option<(String, String)> {
+    // Pattern: %dest = zext i1 %src to i64
+    let parts: Vec<&str> = line.split(" = zext i1 ").collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let dest = parts[0].trim().to_string();
+    let rest = parts[1].trim();
+
+    // Extract source variable
+    if let Some(src_end) = rest.find(" to i64") {
+        let src = rest[..src_end].trim().to_string();
+        return Some((dest, src));
+    }
+
+    None
+}
+
+/// Parse: %Z = icmp ne i64 %Y, 0
+fn parse_icmp_ne_zero(line: &str) -> Option<(String, String)> {
+    // Pattern: %dest = icmp ne i64 %operand, 0
+    let parts: Vec<&str> = line.split(" = icmp ne i64 ").collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let dest = parts[0].trim().to_string();
+    let operands = parts[1].trim();
+
+    // Check if second operand is 0
+    if operands.ends_with(", 0") {
+        let operand = operands.trim_end_matches(", 0").trim().to_string();
+        return Some((dest, operand));
+    }
+
+    None
+}
+
+/// Try to replace branch condition with original i1 value
+fn try_replace_branch_cond(line: &str, icmp_to_i1: &HashMap<String, String>) -> Option<String> {
+    // Pattern: br i1 %Z, label %then, label %else
+    let prefix = "br i1 ";
+    if !line.starts_with(prefix) {
+        return None;
+    }
+
+    let rest = &line[prefix.len()..];
+
+    // Extract condition variable
+    if let Some(comma_pos) = rest.find(',') {
+        let cond = rest[..comma_pos].trim();
+        let labels = &rest[comma_pos..];
+
+        // Check if this condition can be replaced
+        if let Some(original_i1) = icmp_to_i1.get(cond) {
+            return Some(format!("br i1 {}{} ; simplified", original_i1, labels));
+        }
+    }
+
     None
 }
 
@@ -2051,6 +2240,243 @@ fn remove_dead_functions(ir: &str, dead: &HashSet<String>) -> String {
     }
 
     result.join("\n")
+}
+
+// =============================================================================
+// Basic Block Merging
+// =============================================================================
+
+/// Basic block merging optimization
+/// 1. Removes empty blocks that only contain an unconditional branch
+/// 2. Redirects branches to empty blocks to their final destination
+///
+/// Before:
+///   br i1 %cond, label %then, label %empty
+///   ...
+///   empty:
+///     br label %merge
+///   merge:
+///     ...
+///
+/// After:
+///   br i1 %cond, label %then, label %merge
+///   ...
+///   merge:
+///     ...
+fn basic_block_merging(ir: &str) -> String {
+    let lines: Vec<&str> = ir.lines().collect();
+
+    // Track empty blocks: block_label -> target_label
+    // An empty block is one that only contains "br label %target"
+    let mut empty_blocks: HashMap<String, String> = HashMap::new();
+    let mut current_block: Option<String> = None;
+    let mut block_is_empty = true;
+    let mut block_target: Option<String> = None;
+
+    // First pass: identify empty blocks
+    for line in &lines {
+        let trimmed = line.trim();
+
+        // New block starts
+        if trimmed.ends_with(':') && !trimmed.starts_with(';') && !trimmed.starts_with("@") {
+            // Save previous block if it was empty
+            if let Some(ref block) = current_block {
+                if block_is_empty {
+                    if let Some(ref target) = block_target {
+                        // Never remove the entry block - it's required by LLVM
+                        if block != "entry" {
+                            empty_blocks.insert(block.clone(), target.clone());
+                        }
+                    }
+                }
+            }
+
+            // Start new block
+            current_block = Some(trimmed.trim_end_matches(':').to_string());
+            block_is_empty = true;
+            block_target = None;
+        } else if trimmed.starts_with("define ") || trimmed == "}" {
+            // Function boundary - reset
+            if let Some(ref block) = current_block {
+                if block_is_empty {
+                    if let Some(ref target) = block_target {
+                        empty_blocks.insert(block.clone(), target.clone());
+                    }
+                }
+            }
+            current_block = None;
+            block_is_empty = true;
+            block_target = None;
+        } else if current_block.is_some() && !trimmed.is_empty() && !trimmed.starts_with(';') {
+            // Check if this is just an unconditional branch
+            if trimmed.starts_with("br label %") {
+                if let Some(target) = extract_uncond_branch_target(trimmed) {
+                    block_target = Some(target);
+                }
+            } else {
+                // Has other instructions - not empty
+                block_is_empty = false;
+            }
+        }
+    }
+
+    // Resolve transitive empty blocks: if A -> B and B -> C, then A -> C
+    let mut resolved = empty_blocks.clone();
+    loop {
+        let mut changed = false;
+        for (src, target) in resolved.clone() {
+            if let Some(final_target) = empty_blocks.get(&target) {
+                if resolved.get(&src) != Some(final_target) {
+                    resolved.insert(src, final_target.clone());
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let empty_blocks = resolved;
+
+    // Second pass: rewrite branches and remove empty blocks
+    let mut result = Vec::new();
+    let mut skip_block = false;
+
+    for line in &lines {
+        let trimmed = line.trim();
+
+        // Check if we're entering an empty block to skip
+        if trimmed.ends_with(':') && !trimmed.starts_with(';') && !trimmed.starts_with("@") {
+            let label = trimmed.trim_end_matches(':');
+            if empty_blocks.contains_key(label) {
+                skip_block = true;
+                result.push(format!("  ; empty block removed: {}", label));
+                continue;
+            } else {
+                skip_block = false;
+            }
+        }
+
+        if skip_block {
+            if trimmed.starts_with("define ") || trimmed == "}" {
+                skip_block = false;
+            } else if trimmed.ends_with(':') && !trimmed.starts_with(';') {
+                skip_block = false;
+            } else {
+                continue; // Skip instructions in empty block
+            }
+        }
+
+        // Rewrite branch targets
+        if trimmed.starts_with("br ") {
+            if let Some(rewritten) = rewrite_branch_targets(trimmed, &empty_blocks) {
+                result.push(format!("  {}", rewritten));
+                continue;
+            }
+        }
+
+        // Rewrite phi node labels
+        if trimmed.contains(" = phi ") {
+            if let Some(rewritten) = rewrite_phi_labels(trimmed, &empty_blocks) {
+                result.push(format!("  {}", rewritten));
+                continue;
+            }
+        }
+
+        result.push(line.to_string());
+    }
+
+    result.join("\n")
+}
+
+/// Rewrite branch targets, replacing references to empty blocks with their final destinations
+fn rewrite_branch_targets(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
+    let mut modified = line.to_string();
+    let mut any_change = false;
+
+    for (empty, target) in empty_blocks {
+        let from = format!("label %{}", empty);
+        let to = format!("label %{}", target);
+        if modified.contains(&from) {
+            modified = modified.replace(&from, &to);
+            any_change = true;
+        }
+    }
+
+    if any_change {
+        Some(modified)
+    } else {
+        None
+    }
+}
+
+/// Rewrite phi node labels, replacing references to empty blocks with their final destinations
+fn rewrite_phi_labels(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
+    let mut modified = line.to_string();
+    let mut any_change = false;
+
+    for (empty, target) in empty_blocks {
+        // Phi format: [ value, %label ]
+        let from = format!(", %{} ]", empty);
+        let to = format!(", %{} ]", target);
+        if modified.contains(&from) {
+            modified = modified.replace(&from, &to);
+            any_change = true;
+        }
+
+        // Also handle: [ %label ] at end
+        let from2 = format!("%{} ]", empty);
+        let to2 = format!("%{} ]", target);
+        if modified.contains(&from2) {
+            modified = modified.replace(&from2, &to2);
+            any_change = true;
+        }
+    }
+
+    if any_change {
+        Some(modified)
+    } else {
+        None
+    }
+}
+
+/// Extract target from unconditional branch: br label %target
+fn extract_uncond_branch_target(line: &str) -> Option<String> {
+    // Pattern: br label %target
+    if !line.starts_with("br label %") {
+        return None;
+    }
+    let rest = &line["br label %".len()..];
+    let label: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
+    if label.is_empty() {
+        None
+    } else {
+        Some(label)
+    }
+}
+
+/// Extract targets from conditional branch: br i1 %cond, label %then, label %else
+fn extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
+    // Pattern: br i1 %cond, label %then, label %else
+    let parts: Vec<&str> = line.split("label %").collect();
+    if parts.len() >= 3 {
+        let then_part = parts[1].split(',').next()?.trim();
+        let else_part = parts[2].trim().trim_end_matches(|c| c == ')' || c == ';' || c == ' ');
+        let then_label: String = then_part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
+        let else_label: String = else_part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
+        return Some((then_label, else_label));
+    }
+    None
+}
+
+/// Check if a string looks like a label name (not an SSA value)
+fn is_likely_label(s: &str) -> bool {
+    // Labels typically start with a letter and don't look like %1, %2, etc.
+    if s.is_empty() {
+        return false;
+    }
+    let first = s.chars().next().unwrap();
+    first.is_alphabetic() || first == '_'
 }
 
 // =============================================================================
