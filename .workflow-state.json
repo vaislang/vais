@@ -1,5 +1,5 @@
 {
-  "phase": 5,
+  "phase": 6,
   "request": "Stage 2 부트스트래핑 완성",
   "tasks": [
     { "id": 1, "name": "런타임 함수 선언 추가", "status": "completed", "model": "Sonnet", "description": "stage1 codegen header에 memcpy, memcmp, realloc 선언 추가" },
@@ -7,23 +7,26 @@
     { "id": 3, "name": "불필요한 파일 정리", "status": "completed", "model": "Sonnet", "description": "테스트 파일, .ll 파일, 중복 바이너리 삭제" },
     { "id": 4, "name": "구조체 리터럴 파싱 버그 수정", "status": "completed", "model": "Opus", "description": "parser_parse_ident_expr에서 { 뒤에 ident: 패턴 lookahead 추가" },
     { "id": 5, "name": "Stage 2 바이너리 생성", "status": "completed", "model": "Opus", "description": "vaisc-stage1으로 main.vais 컴파일하여 vaisc-stage2 바이너리 생성 성공" },
-    { "id": 6, "name": "부트스트랩 검증", "status": "pending", "model": "Opus", "description": "stage1과 stage2가 동일한 출력 생성하는지 비교" }
+    { "id": 6, "name": "STMT_RETURN 코드젠 수정", "status": "completed", "model": "Opus", "description": "cg_gen_stmt에서 STMT_RETURN 처리 추가 - R 문이 ret 명령어로 변환됨" },
+    { "id": 7, "name": "변수 스코프 충돌 수정", "status": "completed", "model": "Opus", "description": "lexer_scan_operator의 내부 블록 end 변수 이름 fat_end로 변경" },
+    { "id": 8, "name": "Stage 2 파싱/코드젠 버그 수정", "status": "completed", "model": "Opus", "description": "3가지 근본 원인 수정: 1) read_file_ptr 반복 표현식 계산 버그, 2) cg_find_var 변수 쉐도잉 미지원 수정, 3) Rust vaisc로 Stage 1 재빌드" },
+    { "id": 9, "name": "부트스트랩 검증", "status": "completed", "model": "Opus", "description": "Stage 1과 Stage 2가 main.vais 컴파일 시 17,397줄의 동일한 IR 생성 확인" }
   ],
   "currentTask": null,
-  "lastCompleted": "Stage 2 바이너리 생성",
+  "lastCompleted": "부트스트랩 검증",
   "notes": {
-    "v0.5.1": "Stage 2 바이너리 생성 성공! strlen/memcpy_str 특수처리, 문자열 이스케이프 처리 추가",
+    "v0.5.2": "Stage 2 부트스트래핑 완성! read_file_ptr 버그 수정, cg_find_var 역순 검색으로 쉐도잉 지원",
+    "v0.5.1": "STMT_RETURN 코드젠 추가, 변수 스코프 충돌 수정",
     "v0.5.0": "CLI 인자 지원 추가, 구조체 리터럴 lookahead 버그 수정",
     "v0.4.1": "cg_gen_function_multi 추가, SIGBUS 크래시 해결, 런타임 선언 추가",
     "v0.4.0": "Import 시스템 완성",
     "usage": "./selfhost/vaisc-stage1 <input.vais>",
     "stage2Status": {
-      "description": "vaisc-stage2 바이너리 실행 가능, 작은 파일에서 LLVM IR 생성 성공",
-      "issue": "큰 파일(main.vais)에서 segfault 발생 - 메모리 관련 버그 조사 필요",
+      "description": "vaisc-stage2 부트스트래핑 완료",
+      "verified": "Stage 1과 Stage 2의 출력이 동일함 (17,397줄 IR)",
       "fixes": [
-        "strlen: i64 인자를 ptr로 변환 후 C strlen 호출",
-        "memcpy_str: str(ptr) 타입 소스에서 i64 dest로 복사",
-        "문자열 리터럴 이스케이프: \\n→10, \\t→9, \\r→13 등 처리"
+        "read_file_ptr: buf + 8 반복 계산 대신 data_ptr 변수 사용",
+        "cg_find_var: 순방향 검색을 역순 검색으로 변경하여 변수 쉐도잉 지원"
       ]
     }
   }

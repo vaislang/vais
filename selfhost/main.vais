@@ -432,8 +432,8 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
     I c == 61 {
         I lexer_peek(lex) == 62 {
             lexer_advance(lex)
-            end := lexer_get_pos(lex)
-            token_store(tokens, count, TOK_FAT_ARROW(), 0, 0, 0, start, end)
+            fat_end := lexer_get_pos(lex)
+            token_store(tokens, count, TOK_FAT_ARROW(), 0, 0, 0, start, fat_end)
             R 0
         } E { 0 }
     } E { 0 }
@@ -613,11 +613,12 @@ F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
 
 F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
     count: mut i64 = 0
+    c: mut i64 = 0
     L {
         lexer_skip_whitespace_and_comments(lex)
         I lexer_is_eof(lex) == 1 { B } E { 0 }
 
-        c := lexer_peek(lex)
+        c = lexer_peek(lex)
 
         I is_digit(c) == 1 {
             lexer_scan_number(lex, tokens, count)
@@ -1789,10 +1790,11 @@ F parser_parse_item(p: i64) -> i64 {
 
 # Parse entire module (multiple items)
 F parser_parse_module(p: i64) -> i64 {
+    item: mut i64 = 0
     L {
         I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
 
-        item := parser_parse_item(p)
+        item = parser_parse_item(p)
         I item != 0 {
             parser_add_item(p, item)
             0
@@ -1958,19 +1960,21 @@ F cg_add_var(cg: i64, name_ptr: i64, name_len: i64, alloca_reg: i64) -> i64 {
 }
 
 # Find a variable by name, returns alloca register or -1 if not found
+# Search in reverse order to support variable shadowing
 F cg_find_var(cg: i64, name_ptr: i64, name_len: i64) -> i64 {
     vars := cg_get_vars(cg)
     count := cg_get_var_count(cg)
-    i: mut i64 = 0
+    # Search from most recent to oldest to support shadowing
+    i: mut i64 = count - 1
     L {
-        I i >= count { B } E { 0 }
+        I i < 0 { B } E { 0 }
         offset := i * 24
         var_ptr := load_i64(vars + offset + 0)
         var_len := load_i64(vars + offset + 8)
         I str_eq(name_ptr, name_len, var_ptr, var_len) == 1 {
             R load_i64(vars + offset + 16)
         }
-        i = i + 1
+        i = i - 1
     }
     0 - 1  # Not found
 }
@@ -3129,6 +3133,15 @@ F cg_gen_stmt(cg: i64, stmt: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_emit_newline(cg)
         cg_set_terminated(cg, 1)
         R 1  # control flow terminated
+    } E I stmt_kind == STMT_RETURN() {
+        # Return statement: R expr
+        ret_value := load_i64(stmt + 8)
+        value_reg := cg_gen_expr(cg, ret_value, param_name_ptr, param_name_len)
+        cg_emit(cg, "  ret i64 ")
+        cg_emit_operand(cg, value_reg, param_name_ptr, param_name_len)
+        cg_emit_newline(cg)
+        cg_set_terminated(cg, 1)
+        R 1  # control flow terminated
     } E I stmt_kind == STMT_EXPR() {
         # Expression statement: evaluate and discard
         stmt_expr := load_i64(stmt + 8)  # expr field
@@ -4183,11 +4196,12 @@ F read_file_ptr(path: i64) -> i64 {
             fclose(fp)
             0
         } E {
-            bytes_read := fread(buf + 8, 1, size, fp)
-            store_byte(buf + 8 + bytes_read, 0)
+            data_ptr := buf + 8
+            bytes_read := fread(data_ptr, 1, size, fp)
+            store_byte(data_ptr + bytes_read, 0)
             store_i64(buf, bytes_read)
             fclose(fp)
-            buf + 8
+            data_ptr
         }
     }
 }

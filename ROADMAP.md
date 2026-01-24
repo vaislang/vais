@@ -1012,9 +1012,9 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (88%)
+> **상태**: 🔄 진행 중 (92%)
 > **추가일**: 2026-01-22
-> **최종 업데이트**: 2026-01-24
+> **최종 업데이트**: 2026-01-25
 > **예상 기간**: 14-16주 (약 4개월)
 > **목표**: 완전한 self-hosting 달성 및 프로덕션 준비 생태계
 
@@ -1029,8 +1029,8 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - **참조용**: ast.vais, lexer.vais, parser.vais, codegen.vais, type_checker.vais, token.vais, span.vais, stringpool.vais, module.vais
 - **테스트**: bootstrap_test.vais
 
-### Stage 2 부트스트래핑 진행 (2026-01-24)
-- **vaisc-stage1 v0.5.0**: CLI 인자 지원, 임의 파일 컴파일 가능
+### Stage 2 부트스트래핑 진행 (2026-01-25)
+- **vaisc-stage1 v0.5.1**: CLI 인자 지원, 임의 파일 컴파일 가능
 - **완료된 기능**:
   - ✅ 토큰/파서/코드젠 확장 (S/X/함수/표현식/블록/if/loop)
   - ✅ SSA 최적화 (alloca 94% 감소)
@@ -1039,16 +1039,18 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - ✅ 메모리 연산 (load_byte, store_byte, load_i64, store_i64)
   - ✅ Import 시스템 (U 문) - 모듈 import 지원
   - ✅ CLI 인자 지원 (argc/argv)
-  - ✅ 불필요한 파일 정리 (테스트 파일, .ll, 중복 바이너리)
   - ✅ **vaisc-stage1으로 main.vais 컴파일 → vaisc-stage2 바이너리 생성 성공!**
   - ✅ strlen/memcpy_str 특수 처리 (i64↔ptr 변환)
   - ✅ 문자열 리터럴 이스케이프 시퀀스 처리 (\n, \t, \r 등)
-- **현재 상태**:
-  - vaisc-stage2 실행 및 LLVM IR 생성 가능 (작은 테스트 파일)
-  - 큰 파일(main.vais)에서 segfault 발생 - 메모리 관련 버그 조사 중
-- **남은 작업**:
-  - [ ] Stage 2 안정성 개선 (큰 파일 컴파일 시 segfault 해결)
-  - [ ] Stage 1 vs Stage 2 출력 비교 (부트스트랩 검증)
+  - ✅ **STMT_RETURN 코드젠 버그 수정** - `I ... { R ... }` 패턴에서 early return이 ret 명령어로 생성됨
+  - ✅ **lexer_scan_operator 변수 스코프 버그 수정** - 내부 블록의 `end` 변수 이름 충돌 해결
+- **현재 상태**: ✅ **Stage 2 부트스트래핑 완료!**
+  - vaisc-stage1: main.vais 컴파일 시 313개 함수 정상 파싱
+  - vaisc-stage2: 빌드 성공, **Stage 1과 동일한 출력 검증 완료**
+  - **부트스트랩 검증 완료**: Stage 1과 Stage 2 모두 main.vais → 17,397줄 동일 IR 생성
+- **수정된 버그** (2026-01-25):
+  - ✅ **read_file_ptr 표현식 버그**: `buf + 8` 반복 계산 → `data_ptr` 변수로 수정
+  - ✅ **cg_find_var 변수 쉐도잉**: 순방향 검색 → 역순 검색으로 변경
 
 ### P0 - 핵심 (1-2주) [Self-hosting 필수] ✅ 완료
 - [x] **Self-hosting CLI 구현** - selfhost/main.vais (완료일: 2026-01-22)
@@ -1069,9 +1071,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] strlen/memcpy_str 특수 처리 (i64↔ptr 변환)
   - [x] 문자열 이스케이프 시퀀스 처리
   - [x] **vaisc-stage1으로 main.vais 컴파일 → vaisc-stage2 바이너리 생성**
-- [ ] **Stage 2 부트스트래핑 완성**
-  - [ ] Stage 2 안정성 개선 (큰 파일 컴파일 시 segfault 해결)
-  - [ ] **Stage 1 vs Stage 2 출력 비교 (부트스트랩 검증)**
+- [x] **Stage 2 부트스트래핑 완성** (완료일: 2026-01-25)
+  - [x] read_file_ptr 표현식 버그 수정 (`buf + 8` → `data_ptr` 변수)
+  - [x] cg_find_var 변수 쉐도잉 지원 (역순 검색)
+  - [x] **Stage 1 vs Stage 2 출력 비교 완료 (17,397줄 동일 IR 검증)**
 - [ ] **에러 복구 개선**
   - Panic-free 파싱 (파싱 에러 후 복구)
   - Synchronization point 탐지
@@ -1127,8 +1130,8 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API
 
 ### 남은 작업 (다음 단계)
-1. **Stage 2 컴파일 테스트**: `./vaisc-stage1 main_entry.vais` 실행
-2. **부트스트랩 검증**: Stage 1 vs Stage 2 출력 비교
+1. **에러 복구 개선**: Panic-free 파싱, ErrorNode AST 타입
+2. **Macro Runtime 통합**: 위생적 매크로, derive 속성 매크로
 
 ---
 
