@@ -542,35 +542,73 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
     token_store(tokens, count, kind, 0, 0, 0, start, end)
 }
 
-# Scan a string literal (double-quoted)
+# Scan a string literal (double-quoted) with escape sequence processing
 F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
     lexer_advance(lex)  # consume opening quote
     start := lexer_get_pos(lex)
-    src := lexer_get_source(lex)
-    str_start := src + start
+
+    # Allocate buffer for processed string (max size = original size)
+    # We'll copy characters with escape processing
+    buf := malloc(4096)
+    buf_len: mut i64 = 0
 
     L {
         I lexer_is_eof(lex) == 1 { B } E { 0 }
         c := lexer_peek(lex)
         I c == 34 { B } E { 0 }  # closing quote
         I c == 92 {
-            # escape sequence: skip backslash and next char
+            # escape sequence
             lexer_advance(lex)
             I lexer_is_eof(lex) == 0 {
+                ec := lexer_peek(lex)
                 lexer_advance(lex)
+                # Process escape character
+                I ec == 110 {
+                    # \n -> newline (10)
+                    store_byte(buf + buf_len, 10)
+                    buf_len = buf_len + 1
+                } E I ec == 116 {
+                    # \t -> tab (9)
+                    store_byte(buf + buf_len, 9)
+                    buf_len = buf_len + 1
+                } E I ec == 114 {
+                    # \r -> carriage return (13)
+                    store_byte(buf + buf_len, 13)
+                    buf_len = buf_len + 1
+                } E I ec == 92 {
+                    # \\ -> backslash
+                    store_byte(buf + buf_len, 92)
+                    buf_len = buf_len + 1
+                } E I ec == 34 {
+                    # \" -> double quote
+                    store_byte(buf + buf_len, 34)
+                    buf_len = buf_len + 1
+                } E I ec == 48 {
+                    # \0 -> null
+                    store_byte(buf + buf_len, 0)
+                    buf_len = buf_len + 1
+                } E {
+                    # Unknown escape: keep both chars
+                    store_byte(buf + buf_len, 92)
+                    buf_len = buf_len + 1
+                    store_byte(buf + buf_len, ec)
+                    buf_len = buf_len + 1
+                }
                 0
             } E { 0 }
         } E {
+            # Normal character
+            store_byte(buf + buf_len, c)
+            buf_len = buf_len + 1
             lexer_advance(lex)
             0
         }
     }
 
     end := lexer_get_pos(lex)
-    len := end - start
     lexer_advance(lex)  # consume closing quote
 
-    token_store(tokens, count, TOK_STRING(), 0, str_start, len, start, end)
+    token_store(tokens, count, TOK_STRING(), 0, buf, buf_len, start, end)
 }
 
 F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
@@ -888,8 +926,33 @@ F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     result: mut i64 = 0
 
     I next_kind == TOK_LBRACE() {
-        result = parser_parse_struct_lit_expr(p, str_ptr, str_len)
-        0
+        # Check if this is a struct literal: { ident : ... } pattern
+        # We need lookahead to distinguish "b { a }" (not struct) from "Point { x: 1 }" (struct)
+        saved_pos := parser_get_pos(p)
+        parser_advance(p)  # consume {
+
+        is_struct_lit: mut i64 = 0
+        I parser_current_kind(p) == TOK_IDENT() {
+            parser_advance(p)  # consume ident
+            I parser_current_kind(p) == TOK_COLON() {
+                is_struct_lit = 1
+                0
+            } E { 0 }
+        } E { 0 }
+
+        parser_set_pos(p, saved_pos)  # restore position
+
+        I is_struct_lit == 1 {
+            result = parser_parse_struct_lit_expr(p, str_ptr, str_len)
+            0
+        } E {
+            # Not a struct literal, just return the identifier
+            e := expr_new(EXPR_IDENT())
+            expr_set_field0(e, str_ptr)
+            expr_set_field1(e, str_len)
+            result = e
+            0
+        }
     } E I next_kind == TOK_LPAREN() {
         result = parser_parse_call_expr(p, str_ptr, str_len)
         0
@@ -1285,6 +1348,12 @@ F parser_parse_block_contents(p: i64) -> i64 {
     final_expr: mut i64 = 0
 
     L {
+        # Skip semicolons (statement separator)
+        L {
+            I parser_current_kind(p) == TOK_SEMI() {
+                parser_advance(p)
+            } E { B }
+        }
         # Check for M (match) - parse as final expr and break
         I parser_current_kind(p) == TOK_KW_M() { final_expr = parser_parse_match(p); B } E { 0 }
         I parser_current_kind(p) == TOK_RBRACE() { B } E { 0 }
@@ -2084,11 +2153,30 @@ F cg_emit_header(cg: i64) -> i64 {
     cg_emit_newline(cg)
     cg_emit(cg, "declare i64 @ftell(i64)")
     cg_emit_newline(cg)
-    cg_emit(cg, "declare i64 @memcpy(i64, i64, i64)")
+    cg_emit(cg, "declare ptr @memcpy(ptr, ptr, i64)")
     cg_emit_newline(cg)
-    cg_emit(cg, "declare i64 @memcmp(i64, i64, i64)")
+    cg_emit(cg, "declare i32 @memcmp(ptr, ptr, i64)")
     cg_emit_newline(cg)
     cg_emit(cg, "declare i64 @realloc(ptr, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @strlen(ptr)")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+
+    # fopen_ptr: wrapper for fopen that takes i64 path
+    cg_emit(cg, "; fopen_ptr wrapper: converts i64 path to ptr")
+    cg_emit_newline(cg)
+    cg_emit(cg, "define i64 @fopen_ptr(i64 %path, ptr %mode) {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %0 = inttoptr i64 %path to ptr")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  %1 = call i64 @fopen(ptr %0, ptr %mode)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "  ret i64 %1")
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
     cg_emit_newline(cg)
     cg_emit_newline(cg)
 
@@ -2305,6 +2393,58 @@ F is_store_i64_func(ptr: i64, len: i64) -> i64 {
     1
 }
 
+# Check if function name matches "memcpy" (6 chars)
+F is_memcpy_func(ptr: i64, len: i64) -> i64 {
+    I len != 6 { R 0 }
+    I load_byte(ptr) != 109 { R 0 }       # m
+    I load_byte(ptr + 1) != 101 { R 0 }   # e
+    I load_byte(ptr + 2) != 109 { R 0 }   # m
+    I load_byte(ptr + 3) != 99 { R 0 }    # c
+    I load_byte(ptr + 4) != 112 { R 0 }   # p
+    I load_byte(ptr + 5) != 121 { R 0 }   # y
+    1
+}
+
+# Check if function name matches "memcmp" (6 chars)
+F is_memcmp_func(ptr: i64, len: i64) -> i64 {
+    I len != 6 { R 0 }
+    I load_byte(ptr) != 109 { R 0 }       # m
+    I load_byte(ptr + 1) != 101 { R 0 }   # e
+    I load_byte(ptr + 2) != 109 { R 0 }   # m
+    I load_byte(ptr + 3) != 99 { R 0 }    # c
+    I load_byte(ptr + 4) != 109 { R 0 }   # m
+    I load_byte(ptr + 5) != 112 { R 0 }   # p
+    1
+}
+
+# Check if function name matches "strlen" (6 chars)
+F is_strlen_func(ptr: i64, len: i64) -> i64 {
+    I len != 6 { R 0 }
+    I load_byte(ptr) != 115 { R 0 }       # s
+    I load_byte(ptr + 1) != 116 { R 0 }   # t
+    I load_byte(ptr + 2) != 114 { R 0 }   # r
+    I load_byte(ptr + 3) != 108 { R 0 }   # l
+    I load_byte(ptr + 4) != 101 { R 0 }   # e
+    I load_byte(ptr + 5) != 110 { R 0 }   # n
+    1
+}
+
+# Check if function name matches "memcpy_str" (10 chars)
+F is_memcpy_str_func(ptr: i64, len: i64) -> i64 {
+    I len != 10 { R 0 }
+    I load_byte(ptr) != 109 { R 0 }       # m
+    I load_byte(ptr + 1) != 101 { R 0 }   # e
+    I load_byte(ptr + 2) != 109 { R 0 }   # m
+    I load_byte(ptr + 3) != 99 { R 0 }    # c
+    I load_byte(ptr + 4) != 112 { R 0 }   # p
+    I load_byte(ptr + 5) != 121 { R 0 }   # y
+    I load_byte(ptr + 6) != 95 { R 0 }    # _
+    I load_byte(ptr + 7) != 115 { R 0 }   # s
+    I load_byte(ptr + 8) != 116 { R 0 }   # t
+    I load_byte(ptr + 9) != 114 { R 0 }   # r
+    1
+}
+
 F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
     func_name_ptr := expr_get_field0(expr)
     func_name_len := expr_get_field1(expr)
@@ -2320,6 +2460,10 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
     is_store_byte := is_store_byte_func(func_name_ptr, func_name_len)
     is_load_i64 := is_load_i64_func(func_name_ptr, func_name_len)
     is_store_i64 := is_store_i64_func(func_name_ptr, func_name_len)
+    is_memcpy := is_memcpy_func(func_name_ptr, func_name_len)
+    is_memcmp := is_memcmp_func(func_name_ptr, func_name_len)
+    is_strlen := is_strlen_func(func_name_ptr, func_name_len)
+    is_memcpy_str := is_memcpy_str_func(func_name_ptr, func_name_len)
 
     # Track which args are strings (for ptr type)
     arg_is_string := malloc(16)
@@ -2340,24 +2484,40 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
 
     # Handle puts: i32 @puts(ptr)
     I is_puts == 1 {
+        # Convert i64 to ptr
+        ptr_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
-        cg_emit_i64(cg, result_reg)
-        cg_emit(cg, " = call i32 @puts(ptr %")
+        cg_emit_i64(cg, ptr_reg)
+        cg_emit(cg, " = inttoptr i64 %")
         cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        # Call puts
+        puts_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, puts_reg)
+        cg_emit(cg, " = call i32 @puts(ptr %")
+        cg_emit_i64(cg, ptr_reg)
         cg_emit(cg, ")")
         cg_emit_newline(cg)
         0
     # Handle putchar: i32 @putchar(i32)
     } E I is_putchar == 1 {
+        # Truncate i64 to i32 first
+        arg_reg := load_i64(arg_regs + 0)
         cg_emit(cg, "  %")
         cg_emit_i64(cg, result_reg)
-        cg_emit(cg, " = call i32 @putchar(i32 ")
-        # Truncate i64 to i32 if needed
-        arg_reg := load_i64(arg_regs + 0)
-        trunc_reg := cg_fresh_reg(cg)
-        cg_emit(cg, "trunc (i64 %")
+        cg_emit(cg, " = trunc i64 %")
         cg_emit_i64(cg, arg_reg)
-        cg_emit(cg, " to i32))")
+        cg_emit(cg, " to i32")
+        cg_emit_newline(cg)
+        # Call putchar with truncated value
+        call_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, call_reg)
+        cg_emit(cg, " = call i32 @putchar(i32 %")
+        cg_emit_i64(cg, result_reg)
+        cg_emit(cg, ")")
         cg_emit_newline(cg)
         0
     # Handle malloc: ptr @malloc(i64)
@@ -2440,6 +2600,180 @@ F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
         free(arg_regs)
         free(arg_is_string)
         R 0
+    # Handle memcpy: ptr @memcpy(ptr, ptr, i64) - convert i64 args to ptr
+    } E I is_memcpy == 1 {
+        # Convert first arg (dest) to ptr
+        ptr1_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ptr1_reg)
+        cg_emit(cg, " = inttoptr i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        # Convert second arg (src) to ptr
+        ptr2_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ptr2_reg)
+        cg_emit(cg, " = inttoptr i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 8))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        # Call memcpy - get new register for result
+        memcpy_result := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, memcpy_result)
+        cg_emit(cg, " = call ptr @memcpy(ptr %")
+        cg_emit_i64(cg, ptr1_reg)
+        cg_emit(cg, ", ptr %")
+        cg_emit_i64(cg, ptr2_reg)
+        cg_emit(cg, ", i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 16))
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        # Convert result ptr to i64
+        conv_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, conv_reg)
+        cg_emit(cg, " = ptrtoint ptr %")
+        cg_emit_i64(cg, memcpy_result)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R conv_reg
+    # Handle memcmp: i32 @memcmp(ptr, ptr, i64) - convert i64 args to ptr
+    } E I is_memcmp == 1 {
+        # Convert first arg to ptr
+        ptr1_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ptr1_reg)
+        cg_emit(cg, " = inttoptr i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 0))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        # Convert second arg to ptr
+        ptr2_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ptr2_reg)
+        cg_emit(cg, " = inttoptr i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 8))
+        cg_emit(cg, " to ptr")
+        cg_emit_newline(cg)
+        # Call memcmp - get new register for result
+        memcmp_result := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, memcmp_result)
+        cg_emit(cg, " = call i32 @memcmp(ptr %")
+        cg_emit_i64(cg, ptr1_reg)
+        cg_emit(cg, ", ptr %")
+        cg_emit_i64(cg, ptr2_reg)
+        cg_emit(cg, ", i64 %")
+        cg_emit_i64(cg, load_i64(arg_regs + 16))
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+        # Extend i32 result to i64
+        ext_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, ext_reg)
+        cg_emit(cg, " = sext i32 %")
+        cg_emit_i64(cg, memcmp_result)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        free(arg_regs)
+        free(arg_is_string)
+        R ext_reg
+    # Handle strlen: i64 @strlen(ptr) - first arg may be string (ptr) or i64
+    } E I is_strlen == 1 {
+        # Check if arg is a string constant (already ptr) or i64
+        I load_byte(arg_is_string + 0) == 1 {
+            # String constant: arg_reg is already ptr-like, use directly
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, result_reg)
+            cg_emit(cg, " = call i64 @strlen(ptr %")
+            cg_emit_i64(cg, load_i64(arg_regs + 0))
+            cg_emit(cg, ")")
+            cg_emit_newline(cg)
+            0
+        } E {
+            # i64 pointer: convert to ptr first
+            # Allocate both regs upfront for sequential numbering
+            ptr_reg := cg_fresh_reg(cg)
+            strlen_result := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, ptr_reg)
+            cg_emit(cg, " = inttoptr i64 %")
+            cg_emit_i64(cg, load_i64(arg_regs + 0))
+            cg_emit(cg, " to ptr")
+            cg_emit_newline(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, strlen_result)
+            cg_emit(cg, " = call i64 @strlen(ptr %")
+            cg_emit_i64(cg, ptr_reg)
+            cg_emit(cg, ")")
+            cg_emit_newline(cg)
+            free(arg_regs)
+            free(arg_is_string)
+            R strlen_result
+        }
+        free(arg_regs)
+        free(arg_is_string)
+        R result_reg
+    # Handle memcpy_str: copies from str (ptr) to i64 dest
+    } E I is_memcpy_str == 1 {
+        # Allocate all regs upfront for sequential numbering
+        dest_ptr := cg_fresh_reg(cg)
+        # Second arg (src) may be string constant or i64
+        I load_byte(arg_is_string + 1) == 1 {
+            # String constant: only need dest_ptr and memcpy_result
+            memcpy_result := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, dest_ptr)
+            cg_emit(cg, " = inttoptr i64 %")
+            cg_emit_i64(cg, load_i64(arg_regs + 0))
+            cg_emit(cg, " to ptr")
+            cg_emit_newline(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, memcpy_result)
+            cg_emit(cg, " = call ptr @memcpy(ptr %")
+            cg_emit_i64(cg, dest_ptr)
+            cg_emit(cg, ", ptr %")
+            cg_emit_i64(cg, load_i64(arg_regs + 8))
+            cg_emit(cg, ", i64 %")
+            cg_emit_i64(cg, load_i64(arg_regs + 16))
+            cg_emit(cg, ")")
+            cg_emit_newline(cg)
+            0
+        } E {
+            # i64 pointer: need dest_ptr, src_ptr, memcpy_result
+            src_ptr := cg_fresh_reg(cg)
+            memcpy_result := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, dest_ptr)
+            cg_emit(cg, " = inttoptr i64 %")
+            cg_emit_i64(cg, load_i64(arg_regs + 0))
+            cg_emit(cg, " to ptr")
+            cg_emit_newline(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, src_ptr)
+            cg_emit(cg, " = inttoptr i64 %")
+            cg_emit_i64(cg, load_i64(arg_regs + 8))
+            cg_emit(cg, " to ptr")
+            cg_emit_newline(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, memcpy_result)
+            cg_emit(cg, " = call ptr @memcpy(ptr %")
+            cg_emit_i64(cg, dest_ptr)
+            cg_emit(cg, ", ptr %")
+            cg_emit_i64(cg, src_ptr)
+            cg_emit(cg, ", i64 %")
+            cg_emit_i64(cg, load_i64(arg_regs + 16))
+            cg_emit(cg, ")")
+            cg_emit_newline(cg)
+            0
+        }
+        free(arg_regs)
+        free(arg_is_string)
+        R 1
     # Default: user-defined function with i64 args
     } E {
         cg_emit(cg, "  %")
@@ -2974,15 +3308,15 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         result = cg_gen_int_expr(cg, expr)
         0
     } E I kind == EXPR_STRING() {
-        # String literal: add to string constants and return pointer
+        # String literal: add to string constants and return pointer as i64
         str_ptr := expr_get_field0(expr)
         str_len := expr_get_field1(expr)
         str_id := cg_add_string(cg, str_ptr, str_len)
 
         # Emit: %N = getelementptr [len+1 x i8], [len+1 x i8]* @.str.ID, i64 0, i64 0
-        reg := cg_fresh_reg(cg)
+        gep_reg := cg_fresh_reg(cg)
         cg_emit(cg, "  %")
-        cg_emit_i64(cg, reg)
+        cg_emit_i64(cg, gep_reg)
         cg_emit(cg, " = getelementptr [")
         cg_emit_i64(cg, str_len + 1)
         cg_emit(cg, " x i8], [")
@@ -2991,7 +3325,15 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         cg_emit_i64(cg, str_id)
         cg_emit(cg, ", i64 0, i64 0")
         cg_emit_newline(cg)
-        result = reg
+        # Convert ptr to i64 for Vais functions
+        conv_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, conv_reg)
+        cg_emit(cg, " = ptrtoint ptr %")
+        cg_emit_i64(cg, gep_reg)
+        cg_emit(cg, " to i64")
+        cg_emit_newline(cg)
+        result = conv_reg
         0
     } E I kind == EXPR_IDENT() {
         # Identifier: could be a local variable or a parameter
@@ -3542,8 +3884,8 @@ F cg_gen_all_functions_from_items(cg: i64, items: i64, count: i64) -> i64 {
                 0
             } E { 0 }
 
-            # Check if this is main
-            I is_main_function(name_ptr, name_len) == 1 && param_count == 0 {
+            # Check if this is main (with any number of params)
+            I is_main_function(name_ptr, name_len) == 1 {
                 has_main = 1
                 0
             } E { 0 }
@@ -3594,7 +3936,7 @@ F loaded_modules_contains(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
         ptr := load_i64(lm + idx)
         len := load_i64(lm + idx + 8)
         I len == path_len {
-            I memcmp(ptr, path_ptr, len) == 0 {
+            I str_cmp(ptr, path_ptr, len) == 0 {
                 R 1
             } E { 0 }
         } E { 0 }
@@ -3613,8 +3955,8 @@ F loaded_modules_add(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
     1
 }
 
-# String comparison (memcmp wrapper for i64 pointers)
-F memcmp(a: i64, b: i64, len: i64) -> i64 {
+# String comparison (byte-by-byte compare for i64 pointers)
+F str_cmp(a: i64, b: i64, len: i64) -> i64 {
     i: mut i64 = 0
     L {
         I i >= len { B } E { 0 }
@@ -3854,44 +4196,34 @@ F read_file_ptr(path: i64) -> i64 {
 # Main Entry Point
 # ============================================================================
 
-F main() -> i64 {
+F main(argc: i64, argv: i64) -> i64 {
     puts("=======================================\n")
     puts("  Vais Self-Hosting Compiler (Stage 1)\n")
-    puts("  Version: 0.4.0 (Import Support)\n")
+    puts("  Version: 0.5.0 (CLI + Import Support)\n")
     puts("=======================================\n\n")
 
-    # Hardcoded path for bootstrapping
-    puts("[INFO] Compiling: /tmp/test_import.vais\n")
+    # Check for input file argument
+    I argc < 2 {
+        puts("Usage: vaisc-stage1 <input.vais>\n")
+        R 1
+    }
+
+    # Get path from argv[1]
+    path_ptr := load_i64(argv + 8)
+
+    puts("[INFO] Compiling: ")
+    i: mut i64 = 0
+    L {
+        c := load_byte(path_ptr + i)
+        I c == 0 { B } E { 0 }
+        putchar(c)
+        i = i + 1
+    }
+    putchar(10)
 
     # Initialize import system
     loaded := loaded_modules_new()
     all_items := all_items_new(1024)
-
-    # Create path string manually (avoid variable binding issue)
-    # "/tmp/test_import.vais" = 21 chars + null = 22 bytes
-    path_ptr := malloc(22)
-    store_byte(path_ptr + 0, 47)   # /
-    store_byte(path_ptr + 1, 116)  # t
-    store_byte(path_ptr + 2, 109)  # m
-    store_byte(path_ptr + 3, 112)  # p
-    store_byte(path_ptr + 4, 47)   # /
-    store_byte(path_ptr + 5, 116)  # t
-    store_byte(path_ptr + 6, 101)  # e
-    store_byte(path_ptr + 7, 115)  # s
-    store_byte(path_ptr + 8, 116)  # t
-    store_byte(path_ptr + 9, 95)   # _
-    store_byte(path_ptr + 10, 105) # i
-    store_byte(path_ptr + 11, 109) # m
-    store_byte(path_ptr + 12, 112) # p
-    store_byte(path_ptr + 13, 111) # o
-    store_byte(path_ptr + 14, 114) # r
-    store_byte(path_ptr + 15, 116) # t
-    store_byte(path_ptr + 16, 46)  # .
-    store_byte(path_ptr + 17, 118) # v
-    store_byte(path_ptr + 18, 97)  # a
-    store_byte(path_ptr + 19, 105) # i
-    store_byte(path_ptr + 20, 115) # s
-    store_byte(path_ptr + 21, 0)   # null
 
     # Load main module with imports
     puts("[1] Loading modules with imports...\n")
@@ -3970,7 +4302,7 @@ F main() -> i64 {
 
     # Cleanup
     cg_free(cg)
-    free(path_ptr)
+    # Note: path_ptr is from argv, don't free it
 
     puts("[OK] Compilation successful!\n")
     0

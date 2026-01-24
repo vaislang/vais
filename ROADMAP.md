@@ -1012,112 +1012,66 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (85%)
+> **상태**: 🔄 진행 중 (88%)
 > **추가일**: 2026-01-22
 > **최종 업데이트**: 2026-01-24
 > **예상 기간**: 14-16주 (약 4개월)
 > **목표**: 완전한 self-hosting 달성 및 프로덕션 준비 생태계
 
-### Self-hosting 현황 (selfhost/)
-- ast.vais (1,191줄), parser.vais (2,189줄), type_checker.vais (1,762줄)
-- codegen.vais (1,785줄), lexer.vais (754줄), token.vais (309줄)
-- **main.vais (3,870+ 줄)**: vaisc-stage1 자체 컴파일러 ✅
-- **stringpool.vais**: 공유 StringPool, 중복 제거 (테스트 통과) ✅
-- **module.vais**: 모듈 레지스트리, 순환 의존성 탐지 (테스트 통과) ✅
-- bootstrap_test.vais: 57개 테스트 통과
-- **pipeline_test.vais**: Lexer 파이프라인 테스트 통과 ✅
-- **codegen_test.vais**: Codegen 테스트 통과 (LLVM IR 생성 → clang 컴파일 → 실행 성공) ✅
-- **integrated_test.vais**: 통합 파이프라인 테스트 (Lexer→Parser→Codegen→실행) ✅
+### Self-hosting 현황 (selfhost/) - 정리 완료
+**디렉토리 크기**: 12MB → 664KB (95% 감소)
+
+**핵심 파일 (18개):**
+- **main.vais** (~3,900줄): Stage 1 monolithic 컴파일러, CLI 지원 (`./vaisc-stage1 <input.vais>`)
+- **main_entry.vais** + 6개 모듈: Stage 2용 분리 버전
+  - constants.vais, stringbuffer_s1.vais, lexer_s1.vais
+  - helpers_s1.vais, parser_s1.vais, codegen_s1.vais
+- **참조용**: ast.vais, lexer.vais, parser.vais, codegen.vais, type_checker.vais, token.vais, span.vais, stringpool.vais, module.vais
+- **테스트**: bootstrap_test.vais
 
 ### Stage 2 부트스트래핑 진행 (2026-01-24)
-- **vaisc-stage1**: main.vais (3,870+ 줄) - 자체 컴파일러 구현
+- **vaisc-stage1 v0.5.0**: CLI 인자 지원, 임의 파일 컴파일 가능
 - **완료된 기능**:
-  - ✅ 토큰 확장 (X, 연산자, 문자열 리터럴 등)
-  - ✅ 파서 확장 (S/X/함수/표현식)
-  - ✅ 코드젠 확장 (S/X/블록/if/loop)
+  - ✅ 토큰/파서/코드젠 확장 (S/X/함수/표현식/블록/if/loop)
   - ✅ SSA 최적화 (alloca 94% 감소)
-  - ✅ 다중 함수 컴파일 지원
-  - ✅ 추가 연산자 구현 (-, *, /, %, 비교)
-  - ✅ if-else 표현식 코드젠 (중첩 지원)
-  - ✅ 루프(L) 및 break 코드젠
-  - ✅ let 바인딩 및 할당 코드젠 (mut 포함)
-  - ✅ 문자열 리터럴 및 extern 함수 (puts, putchar, malloc, free, fopen, fclose, fread, fwrite, fseek, ftell)
+  - ✅ 모든 연산자 (+, -, *, /, %, 비교, 논리)
+  - ✅ 문자열 리터럴 및 extern 함수
   - ✅ 메모리 연산 (load_byte, store_byte, load_i64, store_i64)
-  - ✅ **Import 시스템 (U 문)** - 모듈 import 지원 (완료일: 2026-01-24)
-- **테스트 결과**:
-  - test_ops_simple: PASS - 모든 산술 연산자 (+ - * / %) 동작
-  - test_compare: PASS - 비교 연산자 합계 = 4
-  - test_multi: PASS - calc(5)=20
-  - test_if_simple: PASS - abs(-42)=42
-  - test_nested_if: PASS - classify 합계 = 0
-  - test_grade2: PASS - 4단계 중첩 if-else, 합계 = 14
-  - test_loop_simple: PASS - 즉시 break 루프, 42 반환
-  - test_let: PASS - x:=10, y:=20, x+y=30
-  - test_mut: PASS - i:=0, i=i+1, i=i+1, i=2
-  - test_loop: PASS - 0→5 카운터 루프, i=5
-  - test_puts: PASS - hello world 출력
-  - test_strings: PASS - 다중 문자열, 함수 호출
-  - test_memory: PASS - store_byte(65,66), load_byte, store_i64(100), load_i64, sum=231
-  - test_import: PASS - 다중 모듈 import, helper_func(5) + level2_func(3) = 19
+  - ✅ Import 시스템 (U 문) - 모듈 import 지원
+  - ✅ CLI 인자 지원 (argc/argv)
+  - ✅ 불필요한 파일 정리 (테스트 파일, .ll, 중복 바이너리)
+  - ✅ **vaisc-stage1으로 main.vais 컴파일 → vaisc-stage2 바이너리 생성 성공!**
+  - ✅ strlen/memcpy_str 특수 처리 (i64↔ptr 변환)
+  - ✅ 문자열 리터럴 이스케이프 시퀀스 처리 (\n, \t, \r 등)
+- **현재 상태**:
+  - vaisc-stage2 실행 및 LLVM IR 생성 가능 (작은 테스트 파일)
+  - 큰 파일(main.vais)에서 segfault 발생 - 메모리 관련 버그 조사 중
 - **남은 작업**:
-  - main.vais 모듈 분리 (3,870줄 → ~500줄 + 모듈들)
-  - main.vais 자기 컴파일 (Stage 2 완성)
+  - [ ] Stage 2 안정성 개선 (큰 파일 컴파일 시 segfault 해결)
+  - [ ] Stage 1 vs Stage 2 출력 비교 (부트스트랩 검증)
 
-### P0 - 핵심 (1-2주) [Self-hosting 필수]
+### P0 - 핵심 (1-2주) [Self-hosting 필수] ✅ 완료
 - [x] **Self-hosting CLI 구현** - selfhost/main.vais (완료일: 2026-01-22)
-  - IrResult 구조체, FileReader 패턴
-  - read_file(): 파일 읽기 (길이 inline 저장)
-  - count_lines(): 소스 분석
-  - generate_placeholder_ir(): LLVM IR 생성
-  - 에러 출력 포맷팅 (print_error, print_error_at, print_source_line 등)
 - [x] **Selfhost 모듈 시스템 개선** (완료일: 2026-01-22)
-  - stringpool.vais: GlobalStringPool (deduplication, intern, get, compare)
-  - module.vais: ModuleRegistry (등록, 의존성 추가, 상태 관리)
-  - module.vais: CycleDetector (DFS 기반 순환 의존성 탐지)
-  - module.vais: TopologicalSort (의존성 순서 정렬)
-  - module.vais: ModuleResolver (검색 경로, 에러 처리)
 - [x] **Stage 1 부트스트래핑** (완료일: 2026-01-22)
-  - ✅ 개별 모듈 (parser.vais, codegen.vais) LLVM IR 컴파일 성공
-  - ✅ main.vais 실행 가능 (placeholder IR 생성)
-  - ✅ pipeline_test.vais - Lexer 테스트 (14토큰 정확히 토큰화)
-  - ✅ codegen_test.vais - IR 생성 테스트 (clang 컴파일 및 실행 성공)
-  - ✅ integrated_test.vais - 통합 파이프라인 테스트:
-    - `F add(a: i64) -> i64 = a + 1` → Lexer → Parser → Codegen → `add(10) = 11` ✅
-  - ✅ vaisc-stage1 바이너리 생성 (selfhost/vaisc-stage1)
-  - ✅ examples/ 컴파일 검증: Rust vaisc로 58/88 통과 (30개는 import/std 의존성)
-  - ✅ Rust vaisc → integrated_test.vais 컴파일 → 실행 성공 (3-way 검증)
+- [x] **CLI 인자 지원 추가** (완료일: 2026-01-24)
+  - main.vais에 argc/argv 지원 추가
+  - `./vaisc-stage1 <input.vais>` 형태로 임의 파일 컴파일 가능
+- [x] **불필요한 파일 정리** (완료일: 2026-01-24)
+  - 테스트 파일, .ll 파일, 중복 바이너리 삭제
+  - 12MB → 664KB (95% 감소)
 
 ### P1 - 높은 우선순위 (3-4주)
 - [x] **Stage 2 부트스트래핑 기본 기능** (완료일: 2026-01-24)
-  - [x] 토큰 확장 (X, 연산자, 문자열 리터럴)
-  - [x] 파서 확장 (S/X/함수/표현식)
-  - [x] 코드젠 확장 (S/X/블록/if/loop)
-  - [x] SSA 최적화 (alloca 94% 감소)
-  - [x] 다중 함수 컴파일 지원
-  - [x] 추가 연산자 (-, *, /, %, 비교)
-  - [x] if-else 표현식 코드젠
-  - [x] 루프(L) 및 break 코드젠
-  - [x] let 바인딩 및 할당
-  - [x] 문자열 리터럴 및 extern 함수
 - [x] **Import 시스템 (U 문)** (완료일: 2026-01-24)
-  - [x] TOK_KW_U 토큰, ITEM_USE AST 노드
-  - [x] parser_parse_use_item() - 경로 파싱
-  - [x] load_module_with_imports() - 재귀적 모듈 로딩
-  - [x] resolve_import_path() - 경로 해석
-  - [x] 중복 로딩 방지 (loaded_modules 추적)
-  - [x] Rust vaisc에 fopen_ptr 빌트인 추가
+- [x] **Stage 2 바이너리 생성 성공** (완료일: 2026-01-24)
+  - [x] load_byte/store_byte/load_i64/store_i64 지원
+  - [x] strlen/memcpy_str 특수 처리 (i64↔ptr 변환)
+  - [x] 문자열 이스케이프 시퀀스 처리
+  - [x] **vaisc-stage1으로 main.vais 컴파일 → vaisc-stage2 바이너리 생성**
 - [ ] **Stage 2 부트스트래핑 완성**
-  - [x] load_byte/store_byte 지원 (완료일: 2026-01-24)
-  - [x] load_i64/store_i64 지원 (완료일: 2026-01-24)
-  - [ ] main.vais 모듈 분리 (stringbuffer, lexer, parser, codegen)
-    - [x] 1단계: constants.vais, stringbuffer_s1.vais, lexer_s1.vais 생성 (완료일: 2026-01-24)
-    - [x] 2단계: helpers_s1.vais, parser_s1.vais, codegen_s1.vais 분리 (완료일: 2026-01-24)
-    - [x] 3단계: main_entry.vais 생성 및 import 연결 (완료일: 2026-01-24)
-      - main_entry.vais: 진입점 + Import 시스템 + 유틸리티 (~380줄)
-      - 7개 모듈 분리 완료: constants, stringbuffer_s1, lexer_s1, helpers_s1, parser_s1, codegen_s1, main_entry
-      - Rust vaisc로 컴파일 및 실행 테스트 통과
-  - [ ] vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
-  - [ ] Stage 1 vs Stage 2 바이너리 출력 비교
+  - [ ] Stage 2 안정성 개선 (큰 파일 컴파일 시 segfault 해결)
+  - [ ] **Stage 1 vs Stage 2 출력 비교 (부트스트랩 검증)**
 - [ ] **에러 복구 개선**
   - Panic-free 파싱 (파싱 에러 후 복구)
   - Synchronization point 탐지
@@ -1172,8 +1126,9 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [ ] **Formal Verification** - requires/ensures 계약
 - [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API
 
-### 남은 작업
-- Self-hosting CLI (P0) 부터 시작
+### 남은 작업 (다음 단계)
+1. **Stage 2 컴파일 테스트**: `./vaisc-stage1 main_entry.vais` 실행
+2. **부트스트랩 검증**: Stage 1 vs Stage 2 출력 비교
 
 ---
 

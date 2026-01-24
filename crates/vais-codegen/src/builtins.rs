@@ -289,6 +289,17 @@ impl CodeGenerator {
             ],
             ResolvedType::I32
         );
+
+        // memcpy_str: (dest: i64, src: str, len: i64) -> i64
+        // Copies len bytes from str src to i64 dest pointer
+        register_extern!(self, "memcpy_str",
+            vec![
+                ("dest".to_string(), ResolvedType::I64),
+                ("src".to_string(), ResolvedType::Str),
+                ("len".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
     }
 
     fn register_async_functions(&mut self) {

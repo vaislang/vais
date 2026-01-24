@@ -1,17 +1,30 @@
 {
-  "phase": 4,
+  "phase": 5,
   "request": "Stage 2 부트스트래핑 완성",
   "tasks": [
-    { "id": 1, "name": "런타임 함수 선언 추가", "status": "in_progress", "model": "Sonnet", "description": "stage1 codegen header에 memcpy, memcmp 등 누락된 libc 함수 선언 추가" },
-    { "id": 2, "name": "Stage 2 컴파일 테스트", "status": "pending", "model": "Sonnet", "description": "stage1으로 main.vais 전체 컴파일 시도 및 LLVM IR 검증" },
-    { "id": 3, "name": "부트스트랩 검증", "status": "pending", "model": "Opus", "description": "stage1과 stage2가 동일한 출력 생성하는지 비교, 기능적 동등성 테스트" }
+    { "id": 1, "name": "런타임 함수 선언 추가", "status": "completed", "model": "Sonnet", "description": "stage1 codegen header에 memcpy, memcmp, realloc 선언 추가" },
+    { "id": 2, "name": "CLI 인자 지원 추가", "status": "completed", "model": "Sonnet", "description": "main.vais에 argc/argv 지원 추가" },
+    { "id": 3, "name": "불필요한 파일 정리", "status": "completed", "model": "Sonnet", "description": "테스트 파일, .ll 파일, 중복 바이너리 삭제" },
+    { "id": 4, "name": "구조체 리터럴 파싱 버그 수정", "status": "completed", "model": "Opus", "description": "parser_parse_ident_expr에서 { 뒤에 ident: 패턴 lookahead 추가" },
+    { "id": 5, "name": "Stage 2 바이너리 생성", "status": "completed", "model": "Opus", "description": "vaisc-stage1으로 main.vais 컴파일하여 vaisc-stage2 바이너리 생성 성공" },
+    { "id": 6, "name": "부트스트랩 검증", "status": "pending", "model": "Opus", "description": "stage1과 stage2가 동일한 출력 생성하는지 비교" }
   ],
-  "currentTask": 1,
-  "lastCompleted": "다중 파라미터 함수 버그 수정 (v0.4.1)",
+  "currentTask": null,
+  "lastCompleted": "Stage 2 바이너리 생성",
   "notes": {
-    "v0.4.1": "cg_gen_function_multi 추가, SIGBUS 크래시 해결",
+    "v0.5.1": "Stage 2 바이너리 생성 성공! strlen/memcpy_str 특수처리, 문자열 이스케이프 처리 추가",
+    "v0.5.0": "CLI 인자 지원 추가, 구조체 리터럴 lookahead 버그 수정",
+    "v0.4.1": "cg_gen_function_multi 추가, SIGBUS 크래시 해결, 런타임 선언 추가",
     "v0.4.0": "Import 시스템 완성",
-    "missing-declarations": "memcpy, memcmp 등 런타임 함수 선언이 stage1 output에 누락됨",
-    "test-file": "/tmp/test_import.vais에 테스트 파일 작성 후 ./selfhost/vaisc-stage1 실행"
+    "usage": "./selfhost/vaisc-stage1 <input.vais>",
+    "stage2Status": {
+      "description": "vaisc-stage2 바이너리 실행 가능, 작은 파일에서 LLVM IR 생성 성공",
+      "issue": "큰 파일(main.vais)에서 segfault 발생 - 메모리 관련 버그 조사 필요",
+      "fixes": [
+        "strlen: i64 인자를 ptr로 변환 후 C strlen 호출",
+        "memcpy_str: str(ptr) 타입 소스에서 i64 dest로 복사",
+        "문자열 리터럴 이스케이프: \\n→10, \\t→9, \\r→13 등 처리"
+      ]
+    }
   }
 }
