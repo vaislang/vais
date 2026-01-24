@@ -2084,6 +2084,12 @@ F cg_emit_header(cg: i64) -> i64 {
     cg_emit_newline(cg)
     cg_emit(cg, "declare i64 @ftell(i64)")
     cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @memcpy(i64, i64, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @memcmp(i64, i64, i64)")
+    cg_emit_newline(cg)
+    cg_emit(cg, "declare i64 @realloc(ptr, i64)")
+    cg_emit_newline(cg)
     cg_emit_newline(cg)
 
     # Helper function: load byte from memory
@@ -2988,32 +2994,30 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         result = reg
         0
     } E I kind == EXPR_IDENT() {
-        # Identifier: could be a parameter or a local variable
+        # Identifier: could be a local variable or a parameter
         ident_ptr := expr_get_field0(expr)
         ident_len := expr_get_field1(expr)
 
-        # Check if it's the parameter
-        I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
+        # First, look up in local variables (includes params from cg_gen_function_multi)
+        var_alloca := cg_find_var(cg, ident_ptr, ident_len)
+        I var_alloca != 0 - 1 {
+            # Found in variable table: load from alloca
+            load_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, load_reg)
+            cg_emit(cg, " = load i64, i64* %")
+            cg_emit_i64(cg, var_alloca)
+            cg_emit_newline(cg)
+            result = load_reg
+            0
+        } E I str_eq(ident_ptr, ident_len, param_name_ptr, param_name_len) == 1 {
+            # Legacy single-param check for backward compatibility
             result = 0 - 1  # Special marker for parameter
             0
         } E {
-            # Look up in local variables
-            var_alloca := cg_find_var(cg, ident_ptr, ident_len)
-            I var_alloca != 0 - 1 {
-                # Found: load from alloca
-                load_reg := cg_fresh_reg(cg)
-                cg_emit(cg, "  %")
-                cg_emit_i64(cg, load_reg)
-                cg_emit(cg, " = load i64, i64* %")
-                cg_emit_i64(cg, var_alloca)
-                cg_emit_newline(cg)
-                result = load_reg
-                0
-            } E {
-                # Not found - assume it's a parameter (fallback)
-                result = 0 - 1
-                0
-            }
+            # Not found - assume it's a parameter (fallback)
+            result = 0 - 1
+            0
         }
     } E I kind == EXPR_CALL() {
         result = cg_gen_call_expr(cg, expr, param_name_ptr, param_name_len)
@@ -3071,6 +3075,104 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
     result
 }
 
+# Generate function with multiple parameters
+# params: array of param pointers, param_count: number of parameters
+F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
+                        params: i64, param_count: i64, body_expr: i64) -> i64 {
+    # Clear variables for this function
+    cg_clear_vars(cg)
+
+    # Set first param for backward compat (used by cg_gen_expr for single param)
+    I param_count > 0 {
+        first_param := load_i64(params)
+        cg_set_param(cg, param_get_name_ptr(first_param), param_get_name_len(first_param))
+        0
+    } E {
+        cg_set_param(cg, 0, 0)
+        0
+    }
+
+    cg_emit(cg, "define i64 @")
+    cg_emit_str(cg, func_name_ptr, func_name_len)
+    cg_emit(cg, "(")
+
+    # Emit all parameters in signature
+    i: mut i64 = 0
+    L {
+        I i >= param_count { B } E { 0 }
+        I i > 0 {
+            cg_emit(cg, ", ")
+            0
+        } E { 0 }
+        param := load_i64(params + i * 8)
+        cg_emit(cg, "i64 %")
+        cg_emit_str(cg, param_get_name_ptr(param), param_get_name_len(param))
+        i = i + 1
+    }
+
+    cg_emit(cg, ") {")
+    cg_emit_newline(cg)
+    cg_emit(cg, "entry:")
+    cg_emit_newline(cg)
+
+    # Register all parameters as variables (alloca + store)
+    i = 0
+    L {
+        I i >= param_count { B } E { 0 }
+        param := load_i64(params + i * 8)
+        p_name_ptr := param_get_name_ptr(param)
+        p_name_len := param_get_name_len(param)
+
+        # Allocate stack slot for parameter
+        alloca_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, alloca_reg)
+        cg_emit(cg, " = alloca i64")
+        cg_emit_newline(cg)
+
+        # Store parameter value into slot
+        cg_emit(cg, "  store i64 %")
+        cg_emit_str(cg, p_name_ptr, p_name_len)
+        cg_emit(cg, ", ptr %")
+        cg_emit_i64(cg, alloca_reg)
+        cg_emit_newline(cg)
+
+        # Add to variable table
+        cg_add_var(cg, p_name_ptr, p_name_len, alloca_reg)
+
+        i = i + 1
+    }
+
+    # Generate body (use first param for backward compat)
+    first_param_ptr: mut i64 = 0
+    first_param_len: mut i64 = 0
+    I param_count > 0 {
+        first_p := load_i64(params)
+        first_param_ptr = param_get_name_ptr(first_p)
+        first_param_len = param_get_name_len(first_p)
+        0
+    } E { 0 }
+
+    result_reg := cg_gen_expr(cg, body_expr, first_param_ptr, first_param_len)
+
+    # Return
+    cg_emit(cg, "  ret i64 ")
+    I result_reg == 0 - 1 {
+        cg_emit(cg, "0")
+        0
+    } E {
+        cg_emit(cg, "%")
+        cg_emit_i64(cg, result_reg)
+        0
+    }
+    cg_emit_newline(cg)
+    cg_emit(cg, "}")
+    cg_emit_newline(cg)
+    cg_emit_newline(cg)
+    1
+}
+
+# Legacy single-parameter version for backward compatibility
 F cg_gen_function(cg: i64, func_name_ptr: i64, func_name_len: i64,
                    param_name_ptr: i64, param_name_len: i64, body_expr: i64) -> i64 {
     # Clear variables for this function
@@ -3409,18 +3511,8 @@ F cg_gen_function_item(cg: i64, item: i64) -> i64 {
         R 1
     }
 
-    # Get first param info (for simple functions)
-    param_name_ptr: mut i64 = 0
-    param_name_len: mut i64 = 0
-    I param_count > 0 {
-        param := load_i64(params)
-        param_name_ptr = param_get_name_ptr(param)
-        param_name_len = param_get_name_len(param)
-        0
-    } E { 0 }
-
-    # Generate regular function
-    cg_gen_function(cg, name_ptr, name_len, param_name_ptr, param_name_len, body)
+    # Generate regular function with all parameters
+    cg_gen_function_multi(cg, name_ptr, name_len, params, param_count, body)
 }
 
 # Generate code for all function items in the parser

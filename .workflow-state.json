@@ -1,17 +1,17 @@
 {
-  "phase": 5,
-  "request": "Phase 10 Self-hosting 완성",
+  "phase": 4,
+  "request": "Stage 2 부트스트래핑 완성",
   "tasks": [
-    { "id": 1, "name": "Import 시스템 구현", "status": "completed", "model": "Opus", "description": "Stage 1에 U 문 지원 추가" },
-    { "id": 2, "name": "main.vais 모듈 분리 1단계", "status": "completed", "model": "Sonnet", "description": "constants, stringbuffer_s1, lexer_s1 모듈 분리" },
-    { "id": 2.1, "name": "main.vais 모듈 분리 2단계", "status": "completed", "model": "Sonnet", "description": "parser_s1, codegen_s1, helpers_s1 모듈 분리" },
-    { "id": 2.2, "name": "main.vais 모듈 분리 3단계", "status": "completed", "model": "Sonnet", "description": "main_entry.vais 생성 및 import 연결" },
-    { "id": 3, "name": "Stage 2 컴파일 테스트", "status": "pending", "model": "Sonnet", "description": "vaisc-stage1으로 분리된 모듈 컴파일" },
-    { "id": 4, "name": "단항 NEG 코드젠", "status": "pending", "model": "Sonnet", "description": "EXPR_UNARY - UNOP_NEG() 코드젠 추가" },
-    { "id": 5, "name": "인덱스 접근 코드젠", "status": "pending", "model": "Sonnet", "description": "EXPR_INDEX 코드젠 추가" },
-    { "id": 6, "name": "Continue 문 지원", "status": "pending", "model": "Sonnet", "description": "파서 + 코드젠 모두 구현" },
-    { "id": 7, "name": "비트 연산자 지원", "status": "pending", "model": "Sonnet", "description": "&, |, ^, <<, >> 토큰/파서/코드젠" }
+    { "id": 1, "name": "런타임 함수 선언 추가", "status": "in_progress", "model": "Sonnet", "description": "stage1 codegen header에 memcpy, memcmp 등 누락된 libc 함수 선언 추가" },
+    { "id": 2, "name": "Stage 2 컴파일 테스트", "status": "pending", "model": "Sonnet", "description": "stage1으로 main.vais 전체 컴파일 시도 및 LLVM IR 검증" },
+    { "id": 3, "name": "부트스트랩 검증", "status": "pending", "model": "Opus", "description": "stage1과 stage2가 동일한 출력 생성하는지 비교, 기능적 동등성 테스트" }
   ],
-  "currentTask": null,
-  "lastCompleted": "main.vais 모듈 분리 3단계"
+  "currentTask": 1,
+  "lastCompleted": "다중 파라미터 함수 버그 수정 (v0.4.1)",
+  "notes": {
+    "v0.4.1": "cg_gen_function_multi 추가, SIGBUS 크래시 해결",
+    "v0.4.0": "Import 시스템 완성",
+    "missing-declarations": "memcpy, memcmp 등 런타임 함수 선언이 stage1 output에 누락됨",
+    "test-file": "/tmp/test_import.vais에 테스트 파일 작성 후 ./selfhost/vaisc-stage1 실행"
+  }
 }
