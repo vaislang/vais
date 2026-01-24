@@ -1110,6 +1110,9 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] load_byte/store_byte 지원 (완료일: 2026-01-24)
   - [x] load_i64/store_i64 지원 (완료일: 2026-01-24)
   - [ ] main.vais 모듈 분리 (stringbuffer, lexer, parser, codegen)
+    - [x] 1단계: constants.vais, stringbuffer_s1.vais, lexer_s1.vais 생성 (완료일: 2026-01-24)
+    - [ ] 2단계: parser_s1.vais, codegen_s1.vais 분리
+    - [ ] 3단계: main_entry.vais 생성 및 import 연결
   - [ ] vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
   - [ ] Stage 1 vs Stage 2 바이너리 출력 비교
 - [ ] **에러 복구 개선**

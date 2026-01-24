@@ -1,0 +1,130 @@
+# Vais Self-Hosting Compiler - Shared Constants
+# Token Constants and AST Node Types
+
+# ============================================================================
+# Token Constants
+# ============================================================================
+
+# Keyword tokens
+F TOK_KW_F() -> i64 = 1
+F TOK_KW_S() -> i64 = 2
+F TOK_KW_E() -> i64 = 3
+F TOK_KW_I() -> i64 = 4
+F TOK_KW_L() -> i64 = 5
+F TOK_KW_X() -> i64 = 8
+F TOK_KW_R() -> i64 = 13
+F TOK_KW_B() -> i64 = 14
+F TOK_KW_MUT() -> i64 = 18
+F TOK_KW_M() -> i64 = 6
+F TOK_KW_U() -> i64 = 7
+
+# Literal tokens
+F TOK_INT() -> i64 = 51
+F TOK_IDENT() -> i64 = 54
+F TOK_STRING() -> i64 = 53
+
+# Operator tokens
+F TOK_PLUS() -> i64 = 61
+F TOK_MINUS() -> i64 = 62
+F TOK_STAR() -> i64 = 63
+F TOK_SLASH() -> i64 = 64
+F TOK_PERCENT() -> i64 = 65
+F TOK_LT() -> i64 = 66
+F TOK_GT() -> i64 = 67
+F TOK_LT_EQ() -> i64 = 68
+F TOK_GT_EQ() -> i64 = 69
+F TOK_EQ_EQ() -> i64 = 70
+F TOK_NOT_EQ() -> i64 = 71
+F TOK_AMP() -> i64 = 72
+F TOK_PIPE() -> i64 = 73
+F TOK_AND() -> i64 = 79
+F TOK_OR() -> i64 = 80
+
+# Assignment tokens
+F TOK_EQ() -> i64 = 81
+F TOK_COLON_EQ() -> i64 = 82
+
+# Delimiter tokens
+F TOK_LPAREN() -> i64 = 91
+F TOK_RPAREN() -> i64 = 92
+F TOK_LBRACE() -> i64 = 93
+F TOK_RBRACE() -> i64 = 94
+F TOK_LBRACKET() -> i64 = 95
+F TOK_RBRACKET() -> i64 = 96
+
+# Punctuation tokens
+F TOK_COMMA() -> i64 = 101
+F TOK_COLON() -> i64 = 102
+F TOK_SEMI() -> i64 = 103
+F TOK_DOT() -> i64 = 104
+F TOK_ARROW() -> i64 = 107
+F TOK_FAT_ARROW() -> i64 = 108
+F TOK_AT() -> i64 = 111
+
+# Special tokens
+F TOK_EOF() -> i64 = 200
+
+# Type token constants
+F TOK_TY_I64() -> i64 = 34
+F TOK_TY_STR() -> i64 = 35
+F TOK_TY_BOOL() -> i64 = 36
+
+# ============================================================================
+# AST Node Types
+# ============================================================================
+
+# Item types
+F ITEM_FUNCTION() -> i64 = 1
+F ITEM_STRUCT() -> i64 = 2
+F ITEM_USE() -> i64 = 3
+F ITEM_IMPL() -> i64 = 7
+
+# Statement types
+F STMT_LET() -> i64 = 10
+F STMT_EXPR() -> i64 = 11
+F STMT_RETURN() -> i64 = 12
+F STMT_BREAK() -> i64 = 13
+F STMT_CONTINUE() -> i64 = 14
+
+# Expression types
+F EXPR_INT() -> i64 = 20
+F EXPR_BOOL() -> i64 = 22
+F EXPR_STRING() -> i64 = 23
+F EXPR_IDENT() -> i64 = 25
+F EXPR_SELF_CALL() -> i64 = 26
+F EXPR_BINARY() -> i64 = 27
+F EXPR_UNARY() -> i64 = 28
+F EXPR_IF() -> i64 = 30
+F EXPR_LOOP() -> i64 = 31
+F EXPR_CALL() -> i64 = 33
+F EXPR_METHOD_CALL() -> i64 = 34
+F EXPR_FIELD() -> i64 = 36
+F EXPR_INDEX() -> i64 = 37
+F EXPR_STRUCT_LIT() -> i64 = 40
+F EXPR_BLOCK() -> i64 = 42
+F EXPR_ASSIGN() -> i64 = 48
+F EXPR_MATCH() -> i64 = 49
+
+# Binary operators
+F BINOP_ADD() -> i64 = 1
+F BINOP_SUB() -> i64 = 2
+F BINOP_MUL() -> i64 = 3
+F BINOP_DIV() -> i64 = 4
+F BINOP_MOD() -> i64 = 5
+F BINOP_LT() -> i64 = 6
+F BINOP_LTE() -> i64 = 7
+F BINOP_GT() -> i64 = 8
+F BINOP_GTE() -> i64 = 9
+F BINOP_EQ() -> i64 = 10
+F BINOP_NEQ() -> i64 = 11
+F BINOP_AND() -> i64 = 12
+F BINOP_OR() -> i64 = 13
+
+# Unary operators
+F UNOP_NEG() -> i64 = 1
+F UNOP_NOT() -> i64 = 2
+
+# Node sizes
+F ITEM_SIZE() -> i64 = 64
+F EXPR_SIZE() -> i64 = 64
+F STMT_SIZE() -> i64 = 40

@@ -1,0 +1,384 @@
+# Vais Self-Hosting Compiler - Lexer Module (Stage 1)
+# Procedural lexer implementation
+
+U constants
+
+# ============================================================================
+# Lexer (procedural)
+# ============================================================================
+
+# Lexer struct: source(8) + source_len(8) + pos(8) + line(8) + col(8) = 40 bytes
+F lexer_new(source: i64, len: i64) -> i64 {
+    lex := malloc(40)
+    store_i64(lex + 0, source)
+    store_i64(lex + 8, len)
+    store_i64(lex + 16, 0)   # pos
+    store_i64(lex + 24, 1)   # line
+    store_i64(lex + 32, 1)   # col
+    lex
+}
+
+F lexer_get_source(lex: i64) -> i64 = load_i64(lex + 0)
+F lexer_get_len(lex: i64) -> i64 = load_i64(lex + 8)
+F lexer_get_pos(lex: i64) -> i64 = load_i64(lex + 16)
+F lexer_set_pos(lex: i64, pos: i64) -> i64 {
+    store_i64(lex + 16, pos)
+    0
+}
+
+F lexer_is_eof(lex: i64) -> i64 {
+    pos := lexer_get_pos(lex)
+    len := lexer_get_len(lex)
+    I pos >= len { 1 } E { 0 }
+}
+
+F lexer_peek(lex: i64) -> i64 {
+    I lexer_is_eof(lex) == 1 { 0 }
+    E {
+        src := lexer_get_source(lex)
+        pos := lexer_get_pos(lex)
+        load_byte(src + pos)
+    }
+}
+
+F lexer_advance(lex: i64) -> i64 {
+    I lexer_is_eof(lex) == 1 { 0 }
+    E {
+        c := lexer_peek(lex)
+        pos := lexer_get_pos(lex)
+        lexer_set_pos(lex, pos + 1)
+        c
+    }
+}
+
+F is_digit(c: i64) -> i64 {
+    I c >= 48 && c <= 57 { 1 } E { 0 }
+}
+
+F is_ident_start(c: i64) -> i64 {
+    I (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 { 1 } E { 0 }
+}
+
+F is_ident_char(c: i64) -> i64 {
+    I is_ident_start(c) == 1 || is_digit(c) == 1 { 1 } E { 0 }
+}
+
+F is_whitespace(c: i64) -> i64 {
+    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } E { 0 }
+}
+
+F lexer_skip_whitespace(lex: i64) -> i64 {
+    L {
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        c := lexer_peek(lex)
+        I is_whitespace(c) == 0 { B } E { 0 }
+        lexer_advance(lex)
+    }
+    1
+}
+
+F lexer_skip_comment(lex: i64) -> i64 {
+    L {
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_peek(lex) == 10 { B } E { 0 }
+        lexer_advance(lex)
+    }
+    1
+}
+
+F lexer_skip_whitespace_and_comments(lex: i64) -> i64 {
+    L {
+        lexer_skip_whitespace(lex)
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I lexer_peek(lex) == 35 {
+            lexer_skip_comment(lex)
+            0
+        } E {
+            B
+        }
+    }
+    1
+}
+
+# Token storage: kind(8) + value(8) + str_ptr(8) + str_len(8) + span_start(8) + span_end(8) = 48 bytes
+F token_store(tokens: i64, idx: i64, kind: i64, value: i64, str_ptr: i64, str_len: i64, start: i64, end: i64) -> i64 {
+    ptr := tokens + idx * 48
+    store_i64(ptr + 0, kind)
+    store_i64(ptr + 8, value)
+    store_i64(ptr + 16, str_ptr)
+    store_i64(ptr + 24, str_len)
+    store_i64(ptr + 32, start)
+    store_i64(ptr + 40, end)
+    1
+}
+
+F token_get_kind(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 0)
+F token_get_value(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 8)
+F token_get_str_ptr(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 16)
+F token_get_str_len(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 24)
+
+F lexer_scan_number(lex: i64, tokens: i64, count: i64) -> i64 {
+    start := lexer_get_pos(lex)
+    value: mut i64 = 0
+    L {
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        c := lexer_peek(lex)
+        I is_digit(c) == 0 { B } E { 0 }
+        value = value * 10 + (c - 48)
+        lexer_advance(lex)
+    }
+    end := lexer_get_pos(lex)
+    token_store(tokens, count, TOK_INT(), value, 0, 0, start, end)
+}
+
+F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
+    start := lexer_get_pos(lex)
+    src := lexer_get_source(lex)
+    str_start := src + start
+
+    L {
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        I is_ident_char(lexer_peek(lex)) == 0 { B } E { 0 }
+        lexer_advance(lex)
+    }
+
+    end := lexer_get_pos(lex)
+    len := end - start
+
+    # Check for keywords
+    kind: mut i64 = TOK_IDENT()
+
+    I len == 1 {
+        c := load_byte(str_start)
+        # Check M first to avoid adding to E I chain
+        I c == 77 { kind = TOK_KW_M(); 0 } E { 0 }
+        I c == 70 { kind = TOK_KW_F(); 0 }       # F
+        E I c == 83 { kind = TOK_KW_S(); 0 }     # S
+        E I c == 88 { kind = TOK_KW_X(); 0 }     # X
+        E I c == 73 { kind = TOK_KW_I(); 0 }     # I
+        E I c == 76 { kind = TOK_KW_L(); 0 }     # L
+        E I c == 82 { kind = TOK_KW_R(); 0 }     # R
+        E I c == 66 { kind = TOK_KW_B(); 0 }     # B
+        E I c == 69 { kind = TOK_KW_E(); 0 }     # E
+        E I c == 85 { kind = TOK_KW_U(); 0 }     # U (import)
+        E { 0 }
+    } E I len == 3 {
+        c0 := load_byte(str_start)
+        c1 := load_byte(str_start + 1)
+        c2 := load_byte(str_start + 2)
+        # Check for i64
+        I c0 == 105 && c1 == 54 && c2 == 52 {
+            kind = TOK_TY_I64()
+            0
+        # Check for str
+        } E I c0 == 115 && c1 == 116 && c2 == 114 {
+            kind = TOK_TY_STR()
+            0
+        # Check for mut
+        } E I c0 == 109 && c1 == 117 && c2 == 116 {
+            kind = TOK_KW_MUT()
+            0
+        } E { 0 }
+    } E I len == 4 {
+        c0 := load_byte(str_start)
+        c1 := load_byte(str_start + 1)
+        c2 := load_byte(str_start + 2)
+        c3 := load_byte(str_start + 3)
+        # Check for bool
+        I c0 == 98 && c1 == 111 && c2 == 111 && c3 == 108 {
+            kind = TOK_TY_BOOL()
+            0
+        } E { 0 }
+    } E { 0 }
+
+    token_store(tokens, count, kind, 0, str_start, len, start, end)
+}
+
+F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
+    start := lexer_get_pos(lex)
+    c := lexer_advance(lex)
+    kind: mut i64 = 0
+
+    # Special handling for => at start to avoid adding nesting
+    I c == 61 {
+        I lexer_peek(lex) == 62 {
+            lexer_advance(lex)
+            end := lexer_get_pos(lex)
+            token_store(tokens, count, TOK_FAT_ARROW(), 0, 0, 0, start, end)
+            R 0
+        } E { 0 }
+    } E { 0 }
+
+    I c == 40 { kind = TOK_LPAREN(); 0 }       # (
+    E I c == 41 { kind = TOK_RPAREN(); 0 }     # )
+    E I c == 123 { kind = TOK_LBRACE(); 0 }    # {
+    E I c == 125 { kind = TOK_RBRACE(); 0 }    # }
+    E I c == 91 { kind = TOK_LBRACKET(); 0 }   # [
+    E I c == 93 { kind = TOK_RBRACKET(); 0 }   # ]
+    E I c == 44 { kind = TOK_COMMA(); 0 }      # ,
+    E I c == 59 { kind = TOK_SEMI(); 0 }       # ;
+    E I c == 64 { kind = TOK_AT(); 0 }         # @
+    E I c == 58 {
+        # Check for :=
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_COLON_EQ()
+            0
+        } E {
+            kind = TOK_COLON()
+            0
+        }
+    }
+    E I c == 46 { kind = TOK_DOT(); 0 }        # .
+    E I c == 43 { kind = TOK_PLUS(); 0 }       # +
+    E I c == 45 {
+        I lexer_peek(lex) == 62 {
+            lexer_advance(lex)
+            kind = TOK_ARROW()
+            0
+        } E {
+            kind = TOK_MINUS()
+            0
+        }
+    }
+    E I c == 42 { kind = TOK_STAR(); 0 }       # *
+    E I c == 47 { kind = TOK_SLASH(); 0 }      # /
+    E I c == 37 { kind = TOK_PERCENT(); 0 }    # %
+    E I c == 60 {
+        # < or <= or <<
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_LT_EQ()
+            0
+        } E {
+            kind = TOK_LT()
+            0
+        }
+    }
+    E I c == 62 {
+        # > or >= or >>
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_GT_EQ()
+            0
+        } E {
+            kind = TOK_GT()
+            0
+        }
+    }
+    E I c == 61 {
+        # = or ==
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_EQ_EQ()
+            0
+        } E {
+            kind = TOK_EQ()
+            0
+        }
+    }
+    E I c == 33 {
+        # ! or !=
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_NOT_EQ()
+            0
+        } E { 0 }  # TODO: handle single !
+    }
+    E I c == 38 {
+        # & or &&
+        I lexer_peek(lex) == 38 {
+            lexer_advance(lex)
+            kind = TOK_AND()
+            0
+        } E {
+            kind = TOK_AMP()
+            0
+        }
+    }
+    E I c == 124 {
+        # | or ||
+        I lexer_peek(lex) == 124 {
+            lexer_advance(lex)
+            kind = TOK_OR()
+            0
+        } E {
+            kind = TOK_PIPE()
+            0
+        }
+    }
+    E { 0 }
+
+    end := lexer_get_pos(lex)
+    token_store(tokens, count, kind, 0, 0, 0, start, end)
+}
+
+# Scan a string literal (double-quoted)
+F lexer_scan_string(lex: i64, tokens: i64, count: i64) -> i64 {
+    lexer_advance(lex)  # consume opening quote
+    start := lexer_get_pos(lex)
+    src := lexer_get_source(lex)
+    str_start := src + start
+
+    L {
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+        c := lexer_peek(lex)
+        I c == 34 { B } E { 0 }  # closing quote
+        I c == 92 {
+            # escape sequence: skip backslash and next char
+            lexer_advance(lex)
+            I lexer_is_eof(lex) == 0 {
+                lexer_advance(lex)
+                0
+            } E { 0 }
+        } E {
+            lexer_advance(lex)
+            0
+        }
+    }
+
+    end := lexer_get_pos(lex)
+    len := end - start
+    lexer_advance(lex)  # consume closing quote
+
+    token_store(tokens, count, TOK_STRING(), 0, str_start, len, start, end)
+}
+
+F lexer_tokenize(lex: i64, tokens: i64) -> i64 {
+    count: mut i64 = 0
+    L {
+        lexer_skip_whitespace_and_comments(lex)
+        I lexer_is_eof(lex) == 1 { B } E { 0 }
+
+        c := lexer_peek(lex)
+
+        I is_digit(c) == 1 {
+            lexer_scan_number(lex, tokens, count)
+            count = count + 1
+            0
+        } E I is_ident_start(c) == 1 {
+            lexer_scan_ident(lex, tokens, count)
+            count = count + 1
+            0
+        } E I c == 34 {
+            # String literal (double quote)
+            lexer_scan_string(lex, tokens, count)
+            count = count + 1
+            0
+        } E {
+            lexer_scan_operator(lex, tokens, count)
+            count = count + 1
+            0
+        }
+    }
+
+    # Add EOF
+    pos := lexer_get_pos(lex)
+    token_store(tokens, count, TOK_EOF(), 0, 0, 0, pos, pos)
+    count + 1
+}
+
+F lexer_free(lex: i64) -> i64 {
+    free(lex)
+    1
+}

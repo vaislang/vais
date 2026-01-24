@@ -1,0 +1,112 @@
+# Vais Self-Hosting Compiler - StringBuffer Module
+# Procedural string buffer implementation
+
+U constants
+
+# ============================================================================
+# StringBuffer (procedural)
+# ============================================================================
+
+# StringBuffer layout: data(8) + len(8) + cap(8) = 24 bytes
+F sb_new(initial_cap: i64) -> i64 {
+    sb := malloc(24)
+    data := malloc(initial_cap)
+    store_i64(sb + 0, data)
+    store_i64(sb + 8, 0)
+    store_i64(sb + 16, initial_cap)
+    sb
+}
+
+F sb_get_data(sb: i64) -> i64 = load_i64(sb + 0)
+F sb_get_len(sb: i64) -> i64 = load_i64(sb + 8)
+F sb_get_cap(sb: i64) -> i64 = load_i64(sb + 16)
+
+F sb_set_data(sb: i64, data: i64) -> i64 {
+    store_i64(sb + 0, data)
+    0
+}
+
+F sb_set_len(sb: i64, len: i64) -> i64 {
+    store_i64(sb + 8, len)
+    0
+}
+
+F sb_set_cap(sb: i64, cap: i64) -> i64 {
+    store_i64(sb + 16, cap)
+    0
+}
+
+F sb_grow_to(sb: i64, new_cap: i64) -> i64 {
+    old_data := sb_get_data(sb)
+    old_len := sb_get_len(sb)
+    new_data := malloc(new_cap)
+    memcpy(new_data, old_data, old_len)
+    free(old_data)
+    sb_set_data(sb, new_data)
+    sb_set_cap(sb, new_cap)
+    1
+}
+
+F sb_append_byte(sb: i64, byte: i64) -> i64 {
+    len := sb_get_len(sb)
+    cap := sb_get_cap(sb)
+    I len >= cap {
+        sb_grow_to(sb, cap * 2)
+        0
+    } E { 0 }
+    data := sb_get_data(sb)
+    store_byte(data + len, byte)
+    sb_set_len(sb, len + 1)
+    1
+}
+
+F sb_append_cstr(sb: i64, s: str) -> i64 {
+    slen := strlen(s)
+    len := sb_get_len(sb)
+    cap := sb_get_cap(sb)
+    I len + slen > cap {
+        sb_grow_to(sb, len + slen + 1024)
+        0
+    } E { 0 }
+    data := sb_get_data(sb)
+    memcpy_str(data + len, s, slen)
+    sb_set_len(sb, len + slen)
+    1
+}
+
+# Append bytes from i64 pointer
+F sb_append_bytes(sb: i64, src: i64, slen: i64) -> i64 {
+    len := sb_get_len(sb)
+    cap := sb_get_cap(sb)
+    I len + slen > cap {
+        sb_grow_to(sb, len + slen + 1024)
+        0
+    } E { 0 }
+    data := sb_get_data(sb)
+    memcpy(data + len, src, slen)
+    sb_set_len(sb, len + slen)
+    1
+}
+
+F sb_append_i64(sb: i64, value: i64) -> i64 {
+    I value == 0 {
+        sb_append_byte(sb, 48)
+    } E I value < 0 {
+        sb_append_byte(sb, 45)
+        sb_append_i64(sb, 0 - value)
+    } E {
+        I value >= 10 {
+            sb_append_i64(sb, value / 10)
+            0
+        } E { 0 }
+        sb_append_byte(sb, (value % 10) + 48)
+    }
+}
+
+F sb_append_newline(sb: i64) -> i64 = sb_append_byte(sb, 10)
+
+F sb_free(sb: i64) -> i64 {
+    free(sb_get_data(sb))
+    free(sb)
+    1
+}
