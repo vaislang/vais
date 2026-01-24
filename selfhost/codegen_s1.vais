@@ -483,8 +483,8 @@ F is_store_i64_func(ptr: i64, len: i64) -> i64 {
     1
 }
 
-# Forward declaration for cg_gen_expr
-F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64
+# Note: cg_gen_expr is defined below, called from cg_gen_call_expr etc.
+# Vais supports forward references within the same module.
 
 F cg_gen_call_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
     func_name_ptr := expr_get_field0(expr)

@@ -1112,7 +1112,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [ ] main.vais 모듈 분리 (stringbuffer, lexer, parser, codegen)
     - [x] 1단계: constants.vais, stringbuffer_s1.vais, lexer_s1.vais 생성 (완료일: 2026-01-24)
     - [x] 2단계: helpers_s1.vais, parser_s1.vais, codegen_s1.vais 분리 (완료일: 2026-01-24)
-    - [ ] 3단계: main_entry.vais 생성 및 import 연결
+    - [x] 3단계: main_entry.vais 생성 및 import 연결 (완료일: 2026-01-24)
+      - main_entry.vais: 진입점 + Import 시스템 + 유틸리티 (~380줄)
+      - 7개 모듈 분리 완료: constants, stringbuffer_s1, lexer_s1, helpers_s1, parser_s1, codegen_s1, main_entry
+      - Rust vaisc로 컴파일 및 실행 테스트 통과
   - [ ] vaisc-stage1으로 selfhost/*.vais 컴파일 → vaisc-stage2
   - [ ] Stage 1 vs Stage 2 바이너리 출력 비교
 - [ ] **에러 복구 개선**
