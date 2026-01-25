@@ -1,0 +1,56 @@
+[package]
+name = "vais-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+vais-lexer = { path = "../crates/vais-lexer" }
+vais-parser = { path = "../crates/vais-parser" }
+vais-types = { path = "../crates/vais-types" }
+vais-codegen = { path = "../crates/vais-codegen" }
+
+[[bin]]
+name = "fuzz_lexer"
+path = "fuzz_targets/fuzz_lexer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parser"
+path = "fuzz_targets/fuzz_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_type_checker"
+path = "fuzz_targets/fuzz_type_checker.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_codegen"
+path = "fuzz_targets/fuzz_codegen.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_full_pipeline"
+path = "fuzz_targets/fuzz_full_pipeline.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
+opt-level = 3

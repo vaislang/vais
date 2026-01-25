@@ -1,0 +1,34 @@
+# OSS-Fuzz project configuration for Vais compiler
+# https://google.github.io/oss-fuzz/getting-started/new-project-guide/
+
+homepage: "https://github.com/sswoo88/vais"
+language: rust
+primary_contact: "vais-security@example.com"
+auto_ccs:
+  - "vais-dev@example.com"
+main_repo: "https://github.com/sswoo88/vais.git"
+
+# Fuzzing configurations
+fuzzing_engines:
+  - libfuzzer
+  - afl
+  - honggfuzz
+
+sanitizers:
+  - address
+  - undefined
+
+architectures:
+  - x86_64
+
+# Build frequency - once per day
+builds_per_day: 1
+
+# Vulnerability disclosure delay (90 days standard)
+vulnerability_disclosure: 90
+
+# Coverage reporting
+coverage: true
+
+# File bug reports automatically
+file_github_issue: true

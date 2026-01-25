@@ -1,0 +1,16 @@
+F match_test(x: i64) -> str {
+    M x {
+        0 => "zero",
+        1 | 2 | 3 => "small",
+        n I n < 10 => "medium",
+        _ => "large"
+    }
+}
+
+F destructure(p: Point) -> i64 {
+    M p {
+        Point { x: 0, y } => y,
+        Point { x, y: 0 } => x,
+        Point { x, y } => x + y
+    }
+}

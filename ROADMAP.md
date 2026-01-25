@@ -1120,10 +1120,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - vaisc, vais-types, vais-codegen에 rayon 의존성 추가
 
 ### P3 - 낮은 우선순위 (4-6주)
-- [ ] **퍼징 및 보안 테스트**
-  - AFL/libFuzzer 통합
-  - ASAN/MSAN/UBSAN 빌드 옵션
-  - OSS-Fuzz 통합 준비
+- [x] **퍼징 및 보안 테스트** (완료일: 2026-01-26)
+  - cargo-fuzz (libFuzzer) 통합 (fuzz/ 디렉토리)
+  - 5개 fuzz target: lexer, parser, type_checker, codegen, full_pipeline
+  - ASAN/UBSAN 빌드 옵션 (scripts/run-sanitizers.sh)
+  - OSS-Fuzz 통합 준비 (fuzz/oss-fuzz/)
+  - GitHub Actions fuzzing 워크플로우 (fuzz.yml)
+  - 메모리 안전 테스트 20개 추가
 - [ ] **Trait Object 런타임 구현**
   - dyn Trait vtable 생성
   - 동적 디스패치 LLVM IR

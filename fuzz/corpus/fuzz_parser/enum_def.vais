@@ -1,0 +1,15 @@
+E Color {
+    Red,
+    Green,
+    Blue
+}
+
+E Option<T> {
+    Some(T),
+    None
+}
+
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}

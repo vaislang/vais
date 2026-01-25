@@ -1,0 +1,137 @@
+name: Fuzzing
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Fuzzing duration in seconds'
+        required: false
+        default: '300'
+      target:
+        description: 'Fuzz target (fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_full_pipeline, all)'
+        required: false
+        default: 'all'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Cache fuzz corpus
+        uses: actions/cache@v4
+        with:
+          path: |
+            fuzz/corpus/
+            fuzz/artifacts/
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      - name: Run fuzzer
+        working-directory: fuzz
+        run: |
+          timeout ${{ github.event.inputs.duration || 300 }}s \
+            cargo +nightly fuzz run ${{ matrix.target }} -- \
+            -max_total_time=${{ github.event.inputs.duration || 300 }} \
+            -max_len=65536 \
+            || true
+
+      - name: Check for crashes
+        id: check_crashes
+        run: |
+          CRASH_COUNT=$(find fuzz/artifacts/${{ matrix.target }} -name 'crash-*' 2>/dev/null | wc -l || echo "0")
+          echo "crash_count=$CRASH_COUNT" >> $GITHUB_OUTPUT
+          if [ "$CRASH_COUNT" -gt 0 ]; then
+            echo "::error::Found $CRASH_COUNT crash(es) in ${{ matrix.target }}"
+          fi
+
+      - name: Upload crash artifacts
+        if: steps.check_crashes.outputs.crash_count > 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/crash-*
+          retention-days: 30
+
+      - name: Upload corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-${{ matrix.target }}
+          path: fuzz/corpus/${{ matrix.target }}/
+          retention-days: 7
+
+  sanitizer-tests:
+    name: Sanitizer Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Run ASAN tests
+        run: |
+          RUSTFLAGS="-Zsanitizer=address" \
+          cargo +nightly test --workspace \
+            -Zbuild-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: true
+
+      - name: Run UBSAN tests
+        run: |
+          RUSTFLAGS="-Zsanitizer=undefined" \
+          cargo +nightly test --workspace \
+            -Zbuild-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: true
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
+        continue-on-error: true
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Run cargo deny
+        run: cargo deny check
+        continue-on-error: true

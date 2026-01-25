@@ -1,0 +1,11 @@
+F literals() -> i64 {
+    a := 42
+    b := 3.14
+    c := 0xFF
+    d := 0b1010
+    e := 0o755
+    s := "hello world"
+    t := true
+    f := false
+    0
+}

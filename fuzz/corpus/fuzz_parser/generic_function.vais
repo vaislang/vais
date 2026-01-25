@@ -1,0 +1,14 @@
+F identity<T>(x: T) -> T = x
+
+S Box<T> {
+    value: T
+}
+
+F get_value<T>(b: Box<T>) -> T = b.value
+
+F map<A, B>(opt: Option<A>, f: F(A) -> B) -> Option<B> {
+    M opt {
+        Some(x) => Some(f(x)),
+        None => None
+    }
+}
