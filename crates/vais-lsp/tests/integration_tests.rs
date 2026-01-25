@@ -407,9 +407,14 @@ async fn test_server_capabilities_comprehensive() {
     // Verify newly implemented capabilities
     assert!(caps.code_action_provider.is_some(), "Missing code_action_provider");
 
+    // Verify new advanced capabilities
+    assert!(caps.inlay_hint_provider.is_some(), "Missing inlay_hint_provider");
+    assert!(caps.folding_range_provider.is_some(), "Missing folding_range_provider");
+    assert!(caps.call_hierarchy_provider.is_some(), "Missing call_hierarchy_provider");
+    assert!(caps.document_link_provider.is_some(), "Missing document_link_provider");
+
     // Verify capabilities that should NOT be present (not yet implemented)
     assert!(caps.document_formatting_provider.is_none(), "document_formatting_provider should not be implemented");
-    assert!(caps.folding_range_provider.is_none(), "folding_range_provider should not be implemented");
 }
 
 // ============================================================================
@@ -507,6 +512,80 @@ async fn test_document_symbols_on_nonexistent_document() {
 
     let result = service.inner()
         .document_symbol(DocumentSymbolParams {
+            text_document: TextDocumentIdentifier { uri },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+}
+
+// ============================================================================
+// New Feature Tests (Inlay Hints, Folding Ranges, Call Hierarchy, Document Links)
+// ============================================================================
+
+#[tokio::test]
+async fn test_inlay_hints_on_nonexistent_document() {
+    let service = create_test_service();
+    let uri = test_uri("nonexistent");
+
+    let result = service.inner()
+        .inlay_hint(InlayHintParams {
+            text_document: TextDocumentIdentifier { uri },
+            range: Range::new(pos(0, 0), pos(10, 0)),
+            work_done_progress_params: WorkDoneProgressParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+}
+
+#[tokio::test]
+async fn test_folding_ranges_on_nonexistent_document() {
+    let service = create_test_service();
+    let uri = test_uri("nonexistent");
+
+    let result = service.inner()
+        .folding_range(FoldingRangeParams {
+            text_document: TextDocumentIdentifier { uri },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+}
+
+#[tokio::test]
+async fn test_call_hierarchy_prepare_on_nonexistent_document() {
+    let service = create_test_service();
+    let uri = test_uri("nonexistent");
+
+    let result = service.inner()
+        .prepare_call_hierarchy(CallHierarchyPrepareParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: pos(0, 0),
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+}
+
+#[tokio::test]
+async fn test_document_link_on_nonexistent_document() {
+    let service = create_test_service();
+    let uri = test_uri("nonexistent");
+
+    let result = service.inner()
+        .document_link(DocumentLinkParams {
             text_document: TextDocumentIdentifier { uri },
             work_done_progress_params: WorkDoneProgressParams::default(),
             partial_result_params: PartialResultParams::default(),

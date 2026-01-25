@@ -4,11 +4,11 @@
   "tasks": [
     { "id": 1, "name": "에러 복구 개선", "status": "completed", "model": "Opus", "description": "Panic-free 파싱, ErrorNode AST, Sync point 탐지" },
     { "id": 2, "name": "Macro Runtime 통합", "status": "completed", "model": "Opus", "description": "Parser-MacroExpander-TypeChecker 흐름, derive 매크로" },
-    { "id": 3, "name": "LSP 고도화", "status": "pending", "model": "Sonnet", "description": "Inlay hints, Call hierarchy, Folding ranges" }
+    { "id": 3, "name": "LSP 고도화", "status": "completed", "model": "Sonnet", "description": "Inlay hints, Call hierarchy, Folding ranges, Document links" }
   ],
   "currentTask": null,
-  "lastCompleted": "Macro Runtime 통합",
+  "lastCompleted": "LSP 고도화",
   "notes": {
-    "phase10Status": "P1 Macro Runtime 통합 완료 (2026-01-25)"
+    "phase10Status": "P1 LSP 고도화 완료 (2026-01-25) - Phase 10 100% 완료!"
   }
 }

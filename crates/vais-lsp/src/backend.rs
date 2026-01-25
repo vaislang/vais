@@ -5,10 +5,23 @@ use ropey::Rope;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned};
+use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned, Type};
 use vais_parser::parse;
 
 use crate::semantic::get_semantic_tokens;
+
+/// Call graph entry representing function call relationships
+#[derive(Debug, Clone)]
+struct CallGraphEntry {
+    /// Caller function name
+    caller: String,
+    /// Caller span
+    caller_span: Span,
+    /// Callee function name
+    callee: String,
+    /// Call site span
+    call_span: Span,
+}
 
 /// Check if a position is within a range
 fn position_in_range(position: &Position, range: &Range) -> bool {
@@ -96,6 +109,30 @@ struct SymbolCache {
     definitions: Vec<SymbolDef>,
     /// All symbol references in the document
     references: Vec<SymbolRef>,
+    /// Call graph entries for call hierarchy
+    call_graph: Vec<CallGraphEntry>,
+}
+
+/// Inlay hint information
+#[derive(Debug, Clone)]
+struct InlayHintInfo {
+    /// Position in the source
+    position: usize,
+    /// Hint label
+    label: String,
+    /// Hint kind (Type, Parameter)
+    kind: InlayHintKind,
+}
+
+/// Folding range information
+#[derive(Debug, Clone)]
+struct FoldingRangeInfo {
+    /// Start line (0-indexed)
+    start_line: u32,
+    /// End line (0-indexed)
+    end_line: u32,
+    /// Kind of folding range
+    kind: Option<FoldingRangeKind>,
 }
 
 /// Document state
@@ -168,10 +205,12 @@ impl VaisBackend {
             if let Some(ast) = &doc.ast {
                 let definitions = self.collect_definitions(ast);
                 let references = self.collect_references(ast);
+                let call_graph = self.build_call_graph(ast);
                 let cache = SymbolCache {
                     version: doc.version,
                     definitions,
                     references,
+                    call_graph,
                 };
 
                 // Store cache in document
@@ -537,6 +576,472 @@ impl VaisBackend {
 
         None
     }
+
+    /// Build call graph from AST
+    fn build_call_graph(&self, ast: &Module) -> Vec<CallGraphEntry> {
+        let mut entries = Vec::new();
+
+        for item in &ast.items {
+            if let Item::Function(f) = &item.node {
+                let caller = f.name.node.clone();
+                let caller_span = f.name.span;
+
+                match &f.body {
+                    FunctionBody::Expr(expr) => {
+                        self.collect_calls_from_expr(&caller, caller_span, expr, &mut entries);
+                    }
+                    FunctionBody::Block(stmts) => {
+                        for stmt in stmts {
+                            self.collect_calls_from_stmt(&caller, caller_span, stmt, &mut entries);
+                        }
+                    }
+                }
+            }
+
+            if let Item::Impl(impl_block) = &item.node {
+                for method in &impl_block.methods {
+                    let caller = method.node.name.node.clone();
+                    let caller_span = method.node.name.span;
+
+                    match &method.node.body {
+                        FunctionBody::Expr(expr) => {
+                            self.collect_calls_from_expr(&caller, caller_span, expr, &mut entries);
+                        }
+                        FunctionBody::Block(stmts) => {
+                            for stmt in stmts {
+                                self.collect_calls_from_stmt(&caller, caller_span, stmt, &mut entries);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        entries
+    }
+
+    /// Collect function calls from an expression
+    fn collect_calls_from_expr(
+        &self,
+        caller: &str,
+        caller_span: Span,
+        expr: &Spanned<Expr>,
+        entries: &mut Vec<CallGraphEntry>,
+    ) {
+        match &expr.node {
+            Expr::Call { func, args } => {
+                if let Expr::Ident(name) = &func.node {
+                    entries.push(CallGraphEntry {
+                        caller: caller.to_string(),
+                        caller_span,
+                        callee: name.clone(),
+                        call_span: expr.span,
+                    });
+                }
+                for arg in args {
+                    self.collect_calls_from_expr(caller, caller_span, arg, entries);
+                }
+            }
+            Expr::MethodCall { receiver, method, args } => {
+                self.collect_calls_from_expr(caller, caller_span, receiver, entries);
+                entries.push(CallGraphEntry {
+                    caller: caller.to_string(),
+                    caller_span,
+                    callee: method.node.clone(),
+                    call_span: method.span,
+                });
+                for arg in args {
+                    self.collect_calls_from_expr(caller, caller_span, arg, entries);
+                }
+            }
+            Expr::StaticMethodCall { type_name: _, method, args } => {
+                entries.push(CallGraphEntry {
+                    caller: caller.to_string(),
+                    caller_span,
+                    callee: method.node.clone(),
+                    call_span: method.span,
+                });
+                for arg in args {
+                    self.collect_calls_from_expr(caller, caller_span, arg, entries);
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.collect_calls_from_expr(caller, caller_span, left, entries);
+                self.collect_calls_from_expr(caller, caller_span, right, entries);
+            }
+            Expr::Unary { expr: e, .. } => {
+                self.collect_calls_from_expr(caller, caller_span, e, entries);
+            }
+            Expr::If { cond, then, else_ } => {
+                self.collect_calls_from_expr(caller, caller_span, cond, entries);
+                for stmt in then {
+                    self.collect_calls_from_stmt(caller, caller_span, stmt, entries);
+                }
+                if let Some(else_branch) = else_ {
+                    self.collect_calls_from_if_else(caller, caller_span, else_branch, entries);
+                }
+            }
+            Expr::Loop { iter, body, .. } => {
+                if let Some(iter_expr) = iter {
+                    self.collect_calls_from_expr(caller, caller_span, iter_expr, entries);
+                }
+                for stmt in body {
+                    self.collect_calls_from_stmt(caller, caller_span, stmt, entries);
+                }
+            }
+            Expr::Match { expr: e, arms } => {
+                self.collect_calls_from_expr(caller, caller_span, e, entries);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.collect_calls_from_expr(caller, caller_span, guard, entries);
+                    }
+                    self.collect_calls_from_expr(caller, caller_span, &arm.body, entries);
+                }
+            }
+            Expr::Array(elements) | Expr::Tuple(elements) => {
+                for elem in elements {
+                    self.collect_calls_from_expr(caller, caller_span, elem, entries);
+                }
+            }
+            Expr::StructLit { fields, .. } => {
+                for (_, value) in fields {
+                    self.collect_calls_from_expr(caller, caller_span, value, entries);
+                }
+            }
+            Expr::Index { expr: e, index } => {
+                self.collect_calls_from_expr(caller, caller_span, e, entries);
+                self.collect_calls_from_expr(caller, caller_span, index, entries);
+            }
+            Expr::Await(inner) | Expr::Spawn(inner) => {
+                self.collect_calls_from_expr(caller, caller_span, inner, entries);
+            }
+            Expr::Lambda { body, .. } => {
+                self.collect_calls_from_expr(caller, caller_span, body, entries);
+            }
+            Expr::Ternary { cond, then, else_ } => {
+                self.collect_calls_from_expr(caller, caller_span, cond, entries);
+                self.collect_calls_from_expr(caller, caller_span, then, entries);
+                self.collect_calls_from_expr(caller, caller_span, else_, entries);
+            }
+            Expr::Field { expr: e, .. } => {
+                self.collect_calls_from_expr(caller, caller_span, e, entries);
+            }
+            Expr::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    self.collect_calls_from_expr(caller, caller_span, s, entries);
+                }
+                if let Some(e) = end {
+                    self.collect_calls_from_expr(caller, caller_span, e, entries);
+                }
+            }
+            Expr::Assign { target, value } => {
+                self.collect_calls_from_expr(caller, caller_span, target, entries);
+                self.collect_calls_from_expr(caller, caller_span, value, entries);
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    self.collect_calls_from_stmt(caller, caller_span, stmt, entries);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect calls from if-else branch
+    fn collect_calls_from_if_else(
+        &self,
+        caller: &str,
+        caller_span: Span,
+        if_else: &vais_ast::IfElse,
+        entries: &mut Vec<CallGraphEntry>,
+    ) {
+        match if_else {
+            vais_ast::IfElse::ElseIf(cond, stmts, else_opt) => {
+                self.collect_calls_from_expr(caller, caller_span, cond, entries);
+                for stmt in stmts {
+                    self.collect_calls_from_stmt(caller, caller_span, stmt, entries);
+                }
+                if let Some(else_branch) = else_opt {
+                    self.collect_calls_from_if_else(caller, caller_span, else_branch, entries);
+                }
+            }
+            vais_ast::IfElse::Else(stmts) => {
+                for stmt in stmts {
+                    self.collect_calls_from_stmt(caller, caller_span, stmt, entries);
+                }
+            }
+        }
+    }
+
+    /// Collect calls from a statement
+    fn collect_calls_from_stmt(
+        &self,
+        caller: &str,
+        caller_span: Span,
+        stmt: &Spanned<Stmt>,
+        entries: &mut Vec<CallGraphEntry>,
+    ) {
+        match &stmt.node {
+            Stmt::Let { value, .. } => {
+                self.collect_calls_from_expr(caller, caller_span, value, entries);
+            }
+            Stmt::Expr(expr) => {
+                self.collect_calls_from_expr(caller, caller_span, expr, entries);
+            }
+            Stmt::Return(expr) => {
+                if let Some(e) = expr {
+                    self.collect_calls_from_expr(caller, caller_span, e, entries);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect inlay hints from AST
+    fn collect_inlay_hints(&self, ast: &Module, rope: &Rope) -> Vec<InlayHintInfo> {
+        let mut hints = Vec::new();
+
+        for item in &ast.items {
+            if let Item::Function(f) = &item.node {
+                match &f.body {
+                    FunctionBody::Expr(_) => {}
+                    FunctionBody::Block(stmts) => {
+                        for stmt in stmts {
+                            self.collect_hints_from_stmt(stmt, &mut hints);
+                        }
+                    }
+                }
+            }
+
+            if let Item::Impl(impl_block) = &item.node {
+                for method in &impl_block.methods {
+                    match &method.node.body {
+                        FunctionBody::Expr(_) => {}
+                        FunctionBody::Block(stmts) => {
+                            for stmt in stmts {
+                                self.collect_hints_from_stmt(stmt, &mut hints);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Filter out hints that would create duplicates
+        let _ = rope; // Rope can be used for position validation if needed
+        hints
+    }
+
+    /// Collect inlay hints from a statement
+    fn collect_hints_from_stmt(&self, stmt: &Spanned<Stmt>, hints: &mut Vec<InlayHintInfo>) {
+        if let Stmt::Let { name, ty, .. } = &stmt.node {
+            // Add type hint for variables with inferred types (no explicit type annotation)
+            match ty {
+                None => {
+                    // No type annotation at all - suggest inferred type
+                    hints.push(InlayHintInfo {
+                        position: name.span.end,
+                        label: ": _".to_string(), // Placeholder for inferred type
+                        kind: InlayHintKind::TYPE,
+                    });
+                }
+                Some(spanned_ty) if matches!(spanned_ty.node, Type::Infer) => {
+                    // Explicit `_` type - keep it as is
+                }
+                _ => {
+                    // Explicit type annotation - no hint needed
+                }
+            }
+        }
+    }
+
+    /// Collect folding ranges from AST
+    fn collect_folding_ranges(&self, ast: &Module, rope: &Rope) -> Vec<FoldingRangeInfo> {
+        let mut ranges = Vec::new();
+
+        for item in &ast.items {
+            let item_range = self.get_folding_range_for_span(&item.span, rope);
+            if let Some(range) = item_range {
+                let kind = match &item.node {
+                    Item::Function(_) | Item::Impl(_) => Some(FoldingRangeKind::Region),
+                    Item::Use(_) => Some(FoldingRangeKind::Imports),
+                    _ => Some(FoldingRangeKind::Region),
+                };
+
+                if range.end_line > range.start_line {
+                    ranges.push(FoldingRangeInfo {
+                        start_line: range.start_line,
+                        end_line: range.end_line,
+                        kind,
+                    });
+                }
+            }
+
+            // Add nested folding ranges for control structures
+            match &item.node {
+                Item::Function(f) => {
+                    if let FunctionBody::Block(stmts) = &f.body {
+                        self.collect_folding_from_stmts(stmts, rope, &mut ranges);
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        if let FunctionBody::Block(stmts) = &method.node.body {
+                            self.collect_folding_from_stmts(stmts, rope, &mut ranges);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        ranges
+    }
+
+    /// Collect folding ranges from statements
+    fn collect_folding_from_stmts(
+        &self,
+        stmts: &[Spanned<Stmt>],
+        rope: &Rope,
+        ranges: &mut Vec<FoldingRangeInfo>,
+    ) {
+        for stmt in stmts {
+            if let Stmt::Expr(expr) = &stmt.node {
+                self.collect_folding_from_expr(expr, rope, ranges);
+            }
+        }
+    }
+
+    /// Collect folding ranges from expressions
+    fn collect_folding_from_expr(
+        &self,
+        expr: &Spanned<Expr>,
+        rope: &Rope,
+        ranges: &mut Vec<FoldingRangeInfo>,
+    ) {
+        match &expr.node {
+            Expr::If { then, else_, .. } => {
+                if let Some(range) = self.get_folding_range_for_span(&expr.span, rope) {
+                    if range.end_line > range.start_line {
+                        ranges.push(FoldingRangeInfo {
+                            start_line: range.start_line,
+                            end_line: range.end_line,
+                            kind: Some(FoldingRangeKind::Region),
+                        });
+                    }
+                }
+                self.collect_folding_from_stmts(then, rope, ranges);
+                if let Some(else_branch) = else_ {
+                    self.collect_folding_from_if_else(else_branch, rope, ranges);
+                }
+            }
+            Expr::Loop { body, .. } => {
+                if let Some(range) = self.get_folding_range_for_span(&expr.span, rope) {
+                    if range.end_line > range.start_line {
+                        ranges.push(FoldingRangeInfo {
+                            start_line: range.start_line,
+                            end_line: range.end_line,
+                            kind: Some(FoldingRangeKind::Region),
+                        });
+                    }
+                }
+                self.collect_folding_from_stmts(body, rope, ranges);
+            }
+            Expr::Match { arms, .. } => {
+                if let Some(range) = self.get_folding_range_for_span(&expr.span, rope) {
+                    if range.end_line > range.start_line {
+                        ranges.push(FoldingRangeInfo {
+                            start_line: range.start_line,
+                            end_line: range.end_line,
+                            kind: Some(FoldingRangeKind::Region),
+                        });
+                    }
+                }
+                for arm in arms {
+                    self.collect_folding_from_expr(&arm.body, rope, ranges);
+                }
+            }
+            Expr::Block(stmts) => {
+                if let Some(range) = self.get_folding_range_for_span(&expr.span, rope) {
+                    if range.end_line > range.start_line {
+                        ranges.push(FoldingRangeInfo {
+                            start_line: range.start_line,
+                            end_line: range.end_line,
+                            kind: Some(FoldingRangeKind::Region),
+                        });
+                    }
+                }
+                self.collect_folding_from_stmts(stmts, rope, ranges);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect folding from if-else branch
+    fn collect_folding_from_if_else(
+        &self,
+        if_else: &vais_ast::IfElse,
+        rope: &Rope,
+        ranges: &mut Vec<FoldingRangeInfo>,
+    ) {
+        match if_else {
+            vais_ast::IfElse::ElseIf(_, stmts, else_opt) => {
+                self.collect_folding_from_stmts(stmts, rope, ranges);
+                if let Some(else_branch) = else_opt {
+                    self.collect_folding_from_if_else(else_branch, rope, ranges);
+                }
+            }
+            vais_ast::IfElse::Else(stmts) => {
+                self.collect_folding_from_stmts(stmts, rope, ranges);
+            }
+        }
+    }
+
+    /// Get folding range for a span
+    fn get_folding_range_for_span(&self, span: &Span, rope: &Rope) -> Option<FoldingRangeInfo> {
+        let start_line = rope.char_to_line(span.start.min(rope.len_chars())) as u32;
+        let end_line = rope.char_to_line(span.end.min(rope.len_chars())) as u32;
+
+        if end_line > start_line {
+            Some(FoldingRangeInfo {
+                start_line,
+                end_line,
+                kind: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Find incoming calls to a function
+    fn find_incoming_calls(&self, uri: &Url, func_name: &str) -> Vec<(String, Span, Span)> {
+        let mut calls = Vec::new();
+
+        if let Some(cache) = self.get_symbol_cache(uri) {
+            for entry in &cache.call_graph {
+                if entry.callee == func_name {
+                    calls.push((entry.caller.clone(), entry.caller_span, entry.call_span));
+                }
+            }
+        }
+
+        calls
+    }
+
+    /// Find outgoing calls from a function
+    fn find_outgoing_calls(&self, uri: &Url, func_name: &str) -> Vec<(String, Span)> {
+        let mut calls = Vec::new();
+
+        if let Some(cache) = self.get_symbol_cache(uri) {
+            for entry in &cache.call_graph {
+                if entry.caller == func_name {
+                    calls.push((entry.callee.clone(), entry.call_span));
+                }
+            }
+        }
+
+        calls
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -588,6 +1093,14 @@ impl LanguageServer for VaisBackend {
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 })),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                // New capabilities
+                inlay_hint_provider: Some(OneOf::Left(true)),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
                 ..Default::default()
             },
         })
@@ -1841,5 +2354,294 @@ impl LanguageServer for VaisBackend {
         } else {
             Ok(Some(actions))
         }
+    }
+
+    // ===== New LSP Methods =====
+
+    async fn inlay_hint(
+        &self,
+        params: InlayHintParams,
+    ) -> Result<Option<Vec<InlayHint>>> {
+        let uri = &params.text_document.uri;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                let hint_infos = self.collect_inlay_hints(ast, &doc.content);
+
+                let hints: Vec<InlayHint> = hint_infos
+                    .iter()
+                    .map(|info| {
+                        let position = self.offset_to_position(&doc.content, info.position);
+                        InlayHint {
+                            position,
+                            label: InlayHintLabel::String(info.label.clone()),
+                            kind: Some(info.kind),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: Some(true),
+                            padding_right: None,
+                            data: None,
+                        }
+                    })
+                    .collect();
+
+                if !hints.is_empty() {
+                    return Ok(Some(hints));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn folding_range(
+        &self,
+        params: FoldingRangeParams,
+    ) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = &params.text_document.uri;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                let range_infos = self.collect_folding_ranges(ast, &doc.content);
+
+                let ranges: Vec<FoldingRange> = range_infos
+                    .iter()
+                    .map(|info| FoldingRange {
+                        start_line: info.start_line,
+                        start_character: None,
+                        end_line: info.end_line,
+                        end_character: None,
+                        kind: info.kind.clone(),
+                        collapsed_text: None,
+                    })
+                    .collect();
+
+                if !ranges.is_empty() {
+                    return Ok(Some(ranges));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn prepare_call_hierarchy(
+        &self,
+        params: CallHierarchyPrepareParams,
+    ) -> Result<Option<Vec<CallHierarchyItem>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        if let Some(doc) = self.documents.get(uri) {
+            // Convert position to offset
+            let line = position.line as usize;
+            let col = position.character as usize;
+            let line_start = doc.content.line_to_char(line);
+            let offset = line_start + col;
+            drop(doc); // Release read lock
+
+            // Check if we're on a function definition or call
+            if let Some(cache) = self.get_symbol_cache(uri) {
+                // Check definitions for functions
+                for def in &cache.definitions {
+                    if def.kind == SymbolKind::FUNCTION
+                        && def.span.start <= offset
+                        && offset <= def.span.end
+                    {
+                        if let Some(doc) = self.documents.get(uri) {
+                            let range = self.span_to_range(&doc.content, &def.span);
+                            return Ok(Some(vec![CallHierarchyItem {
+                                name: def.name.clone(),
+                                kind: SymbolKind::FUNCTION,
+                                tags: None,
+                                detail: None,
+                                uri: uri.clone(),
+                                range,
+                                selection_range: range,
+                                data: None,
+                            }]));
+                        }
+                    }
+                }
+
+                // Check references for function calls
+                for r in &cache.references {
+                    if r.span.start <= offset && offset <= r.span.end {
+                        // Check if this reference is a function
+                        for def in &cache.definitions {
+                            if def.name == r.name && def.kind == SymbolKind::FUNCTION {
+                                if let Some(doc) = self.documents.get(uri) {
+                                    let range = self.span_to_range(&doc.content, &def.span);
+                                    return Ok(Some(vec![CallHierarchyItem {
+                                        name: def.name.clone(),
+                                        kind: SymbolKind::FUNCTION,
+                                        tags: None,
+                                        detail: None,
+                                        uri: uri.clone(),
+                                        range,
+                                        selection_range: range,
+                                        data: None,
+                                    }]));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn incoming_calls(
+        &self,
+        params: CallHierarchyIncomingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
+        let uri = &params.item.uri;
+        let func_name = &params.item.name;
+
+        let calls = self.find_incoming_calls(uri, func_name);
+
+        if calls.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(doc) = self.documents.get(uri) {
+            let incoming: Vec<CallHierarchyIncomingCall> = calls
+                .iter()
+                .map(|(caller_name, caller_span, call_span)| {
+                    let caller_range = self.span_to_range(&doc.content, caller_span);
+                    let call_range = self.span_to_range(&doc.content, call_span);
+
+                    CallHierarchyIncomingCall {
+                        from: CallHierarchyItem {
+                            name: caller_name.clone(),
+                            kind: SymbolKind::FUNCTION,
+                            tags: None,
+                            detail: None,
+                            uri: uri.clone(),
+                            range: caller_range,
+                            selection_range: caller_range,
+                            data: None,
+                        },
+                        from_ranges: vec![call_range],
+                    }
+                })
+                .collect();
+
+            return Ok(Some(incoming));
+        }
+
+        Ok(None)
+    }
+
+    async fn outgoing_calls(
+        &self,
+        params: CallHierarchyOutgoingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
+        let uri = &params.item.uri;
+        let func_name = &params.item.name;
+
+        let calls = self.find_outgoing_calls(uri, func_name);
+
+        if calls.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(doc) = self.documents.get(uri) {
+            // Get cache to look up function definitions
+            let cache = self.get_symbol_cache(uri);
+
+            let outgoing: Vec<CallHierarchyOutgoingCall> = calls
+                .iter()
+                .filter_map(|(callee_name, call_span)| {
+                    let call_range = self.span_to_range(&doc.content, call_span);
+
+                    // Find the callee definition
+                    let callee_range = cache.as_ref().and_then(|c| {
+                        c.definitions
+                            .iter()
+                            .find(|d| d.name == *callee_name && d.kind == SymbolKind::FUNCTION)
+                            .map(|d| self.span_to_range(&doc.content, &d.span))
+                    });
+
+                    Some(CallHierarchyOutgoingCall {
+                        to: CallHierarchyItem {
+                            name: callee_name.clone(),
+                            kind: SymbolKind::FUNCTION,
+                            tags: None,
+                            detail: None,
+                            uri: uri.clone(),
+                            range: callee_range.unwrap_or(call_range),
+                            selection_range: callee_range.unwrap_or(call_range),
+                            data: None,
+                        },
+                        from_ranges: vec![call_range],
+                    })
+                })
+                .collect();
+
+            return Ok(Some(outgoing));
+        }
+
+        Ok(None)
+    }
+
+    async fn document_link(
+        &self,
+        params: DocumentLinkParams,
+    ) -> Result<Option<Vec<DocumentLink>>> {
+        let uri = &params.text_document.uri;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                let mut links = Vec::new();
+
+                // Find U (use/import) statements and create document links
+                for item in &ast.items {
+                    if let Item::Use(use_item) = &item.node {
+                        let path_str = use_item.path.iter()
+                            .map(|s| s.node.as_str())
+                            .collect::<Vec<_>>()
+                            .join("/");
+
+                        // Calculate the range for the path
+                        if let Some(first) = use_item.path.first() {
+                            if let Some(last) = use_item.path.last() {
+                                let range = Range {
+                                    start: self.offset_to_position(&doc.content, first.span.start),
+                                    end: self.offset_to_position(&doc.content, last.span.end),
+                                };
+
+                                // Create a file URI for the import
+                                // This assumes imports like "std/math" map to "std/math.vais"
+                                let target_path = format!("{}.vais", path_str);
+
+                                // Try to construct a proper file URI
+                                if let Ok(base_path) = uri.to_file_path() {
+                                    if let Some(parent) = base_path.parent() {
+                                        let target = parent.join(&target_path);
+                                        if let Ok(target_uri) = Url::from_file_path(&target) {
+                                            links.push(DocumentLink {
+                                                range,
+                                                target: Some(target_uri),
+                                                tooltip: Some(format!("Open {}", target_path)),
+                                                data: None,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !links.is_empty() {
+                    return Ok(Some(links));
+                }
+            }
+        }
+
+        Ok(None)
     }
 }

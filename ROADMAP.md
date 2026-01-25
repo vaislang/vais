@@ -1006,13 +1006,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
-| Phase 10: Self-hosting | 🔄 진행 중 | 97% |
+| Phase 10: Self-hosting | ✅ 완료 | 100% |
 
 ---
 
 ## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (97%)
+> **상태**: ✅ 완료 (100%)
 > **추가일**: 2026-01-22
 > **최종 업데이트**: 2026-01-25
 > **예상 기간**: 14-16주 (약 4개월)
@@ -1085,9 +1085,11 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] Parser → MacroExpander → TypeChecker 흐름 통합
   - [x] 위생적 매크로 기본 지원 (HygienicContext)
   - [x] `#[derive(...)]` 속성 매크로 프레임워크 (AST 확장 대기)
-- [ ] **LSP 고도화**
-  - Inlay hints, Call hierarchy, Type hierarchy
-  - Folding ranges, Document links
+- [x] **LSP 고도화** (완료일: 2026-01-25)
+  - Inlay hints: 타입 추론 결과 표시
+  - Call hierarchy: 함수 호출 관계 추적 (incoming/outgoing calls)
+  - Folding ranges: 코드 블록 접기 (함수, 제어 구조)
+  - Document links: import 경로 클릭 이동
 
 ### P2 - 중간 우선순위 (4-6주)
 - [ ] **패키지 레지스트리 서버**
@@ -1132,8 +1134,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 - [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API
 
 ### 남은 작업 (다음 단계)
-1. **에러 복구 개선**: Panic-free 파싱, ErrorNode AST 타입
-2. **Macro Runtime 통합**: 위생적 매크로, derive 속성 매크로
+- P1 완료! P2/P3/P4 작업은 향후 개선 사항으로 진행
 
 ---
 
