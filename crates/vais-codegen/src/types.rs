@@ -267,6 +267,19 @@ impl CodeGenerator {
                 let elem_ty = self.type_to_llvm_impl(element);
                 format!("<{} x {}>", lanes, elem_ty)
             }
+            ResolvedType::DynTrait { .. } => {
+                // Dynamic trait object is a fat pointer: { data_ptr, vtable_ptr }
+                // data_ptr: i8* pointing to the actual object data
+                // vtable_ptr: i8* pointing to the vtable for this trait
+                crate::vtable::TRAIT_OBJECT_TYPE.to_string()
+            }
+            ResolvedType::FnPtr { params, ret, is_vararg } => {
+                // Function pointer type
+                let param_types: Vec<String> = params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
+                let ret_type = self.type_to_llvm_impl(ret);
+                let vararg_suffix = if *is_vararg { ", ..." } else { "" };
+                format!("{}({}{})*", ret_type, param_types.join(", "), vararg_suffix)
+            }
             _ => "i64".to_string(), // Default fallback
         }
     }

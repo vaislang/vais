@@ -27,6 +27,7 @@
 
 pub mod expansion;
 pub mod derive;
+pub mod async_macros;
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -40,6 +41,10 @@ pub use expansion::{
 pub use derive::{
     process_derives, DeriveRegistry, DeriveGenerator,
     DeriveError, DeriveResult,
+};
+pub use async_macros::{
+    register_async_macros, AsyncMacroExpander,
+    SELECT_MACRO, JOIN_MACRO, TIMEOUT_MACRO,
 };
 
 /// Error type for macro expansion failures.

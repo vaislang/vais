@@ -516,7 +516,7 @@ fn cmd_build(
                         // Still need to output the binary path if not emit_ir
                         if !emit_ir {
                             let default_ext = match target {
-                                TargetTriple::Wasm32Unknown | TargetTriple::Wasi => "wasm",
+                                TargetTriple::Wasm32Unknown | TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => "wasm",
                                 _ => "",
                             };
                             let bin_path = output.clone().unwrap_or_else(|| {
@@ -739,7 +739,7 @@ fn cmd_build(
             ext
         } else {
             match target {
-                TargetTriple::Wasm32Unknown | TargetTriple::Wasi => "wasm",
+                TargetTriple::Wasm32Unknown | TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => "wasm",
                 _ => "",
             }
         };
@@ -1022,7 +1022,7 @@ fn compile_ir_to_binary(
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
-        TargetTriple::Wasi => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
+        TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
         _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode),
     }
 }

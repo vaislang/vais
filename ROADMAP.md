@@ -1127,17 +1127,33 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - OSS-Fuzz 통합 준비 (fuzz/oss-fuzz/)
   - GitHub Actions fuzzing 워크플로우 (fuzz.yml)
   - 메모리 안전 테스트 20개 추가
-- [ ] **Trait Object 런타임 구현**
-  - dyn Trait vtable 생성
-  - 동적 디스패치 LLVM IR
-  - 트레이트 업캐스팅/다운캐스팅
-- [ ] **Async Runtime 개선**
-  - async trait 메서드
-  - select!/join! 매크로
-  - Cancellation token
-- [ ] **크로스 컴파일 완성**
-  - Linux ARM64, Windows MSVC
-  - iOS, Android, WASI preview2
+- [x] **Trait Object 런타임 구현** (완료일: 2026-01-26)
+  - VtableGenerator 모듈 추가 (vtable.rs)
+  - VTable 구조: drop, size, align, 메서드 포인터
+  - 동적 디스패치 LLVM IR 생성 (vtable lookup, indirect call)
+  - trait object 생성: fat pointer { data_ptr, vtable_ptr }
+  - CodeGenerator에 vtable 통합 (register_trait, register_trait_impl, get_or_generate_vtable)
+  - 18개 vtable 테스트 추가
+- [x] **Async Runtime 개선** (완료일: 2026-01-26)
+  - select!/join!/timeout! 매크로 추가 (vais-macro/async_macros.rs)
+  - AsyncMacroExpander: 매크로 확장 유틸리티
+  - register_async_macros(): 내장 async 매크로 등록
+  - CancellationTokenSource, CancellationToken (std/sync.vais)
+  - CancellableFuture<T>: 취소 가능한 Future 래퍼
+  - WaitGroup: 작업 그룹 대기 (Go 스타일)
+  - 16개 매크로 테스트 추가
+- [x] **크로스 컴파일 완성** (완료일: 2026-01-26)
+  - TargetTriple 확장: 16개 타겟 지원
+    - Linux: x86_64-gnu/musl, aarch64-gnu/musl, riscv64
+    - Windows: x86_64-msvc, x86_64-gnu(MinGW)
+    - macOS: x86_64-darwin, aarch64-darwin
+    - iOS: aarch64-ios, aarch64-ios-simulator
+    - Android: aarch64-android, armv7-android
+    - WebAssembly: wasm32, wasi-preview1, wasi-preview2
+  - CrossCompileConfig: SDK 자동 감지 (Android NDK, iOS SDK, WASI SDK, MSVC)
+  - RuntimeLibs: 타겟별 런타임 라이브러리 정의
+  - clang_flags(), output_extension(), is_*() 헬퍼 메서드
+  - 10개 크로스 컴파일 테스트 추가
 
 ### P4 - 미래 (장기 목표)
 - [ ] **에디터 통합 확장** - Neovim/Helix/Emacs

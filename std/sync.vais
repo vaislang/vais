@@ -751,3 +751,262 @@ X F __malloc(size: i64) -> i64
 X F __free(ptr: i64) -> i64
 X F __store_i64(ptr: i64, value: i64) -> i64
 X F __load_i64(ptr: i64) -> i64
+
+# ============================================
+# CancellationToken - Cooperative cancellation for async operations
+# ============================================
+
+# CancellationTokenSource - Creates and controls cancellation tokens
+# The source owns the cancellation state and can trigger cancellation.
+S CancellationTokenSource {
+    cancelled: AtomicBool,
+    condvar: i64,       # For waiting on cancellation
+    mutex: i64,
+    child_count: AtomicI64  # Number of active child tokens
+}
+
+X CancellationTokenSource {
+    # Create a new cancellation token source
+    F new() -> CancellationTokenSource {
+        CancellationTokenSource {
+            cancelled: AtomicBool::new(0),
+            condvar: __condvar_create(),
+            mutex: __mutex_create(),
+            child_count: AtomicI64::new(0)
+        }
+    }
+
+    # Get a cancellation token from this source
+    F token(&self) -> CancellationToken {
+        self.child_count.fetch_add(1)
+        CancellationToken {
+            source_ptr: &self as i64
+        }
+    }
+
+    # Cancel all tokens from this source
+    F cancel(&self) -> i64 {
+        self.cancelled.store(1)
+        __mutex_lock(self.mutex)
+        __condvar_broadcast(self.condvar)
+        __mutex_unlock(self.mutex)
+        1
+    }
+
+    # Check if cancellation has been requested
+    F is_cancelled(&self) -> i64 {
+        self.cancelled.load()
+    }
+
+    # Create a linked source that cancels when parent cancels
+    F create_linked_source(&self) -> CancellationTokenSource {
+        child := CancellationTokenSource::new()
+        # If parent is already cancelled, cancel child immediately
+        L self.is_cancelled() == 1 {
+            child.cancel()
+        }
+        child
+    }
+
+    # Get the number of active tokens
+    F token_count(&self) -> i64 {
+        self.child_count.load()
+    }
+
+    # Free resources
+    F free(&self) -> i64 {
+        __condvar_destroy(self.condvar)
+        __mutex_destroy(self.mutex)
+        0
+    }
+}
+
+# CancellationToken - A handle to check for cancellation
+# Tokens are cheap to copy and share.
+S CancellationToken {
+    source_ptr: i64
+}
+
+X CancellationToken {
+    # Check if cancellation has been requested
+    F is_cancelled(&self) -> i64 {
+        L self.source_ptr != 0 {
+            source := self.source_ptr as *CancellationTokenSource
+            source.is_cancelled()
+        } ! {
+            0
+        }
+    }
+
+    # Throw a cancellation exception if cancelled
+    # Returns 0 if not cancelled, -1 if cancelled
+    F throw_if_cancelled(&self) -> i64 {
+        L self.is_cancelled() == 1 {
+            R -1
+        }
+        0
+    }
+
+    # Wait until cancellation is requested
+    # Blocks the current thread
+    F wait_for_cancellation(&self) -> i64 {
+        L self.source_ptr != 0 {
+            source := self.source_ptr as *CancellationTokenSource
+            __mutex_lock(source.mutex)
+            L source.is_cancelled() == 0 {
+                __condvar_wait(source.condvar, source.mutex)
+            }
+            __mutex_unlock(source.mutex)
+        }
+        1
+    }
+
+    # Wait with timeout (returns 1 if cancelled, 0 if timeout)
+    F wait_for_cancellation_timeout(&self, timeout_ms: i64) -> i64 {
+        L self.source_ptr != 0 {
+            source := self.source_ptr as *CancellationTokenSource
+            __mutex_lock(source.mutex)
+            L source.is_cancelled() == 0 {
+                __condvar_wait_timeout(source.condvar, source.mutex, timeout_ms)
+            }
+            result := source.is_cancelled()
+            __mutex_unlock(source.mutex)
+            R result
+        }
+        0
+    }
+
+    # Register a callback to run when cancellation is requested
+    # Returns a registration handle that can be used to unregister
+    F register(&self, callback: i64) -> CancellationRegistration {
+        CancellationRegistration {
+            token_ptr: &self as i64,
+            callback: callback,
+            id: 0
+        }
+    }
+
+    # Create a None token that is never cancelled
+    F none() -> CancellationToken {
+        CancellationToken { source_ptr: 0 }
+    }
+
+    # Drop the token reference
+    F drop(&self) -> i64 {
+        L self.source_ptr != 0 {
+            source := self.source_ptr as *CancellationTokenSource
+            source.child_count.fetch_sub(1)
+        }
+        0
+    }
+}
+
+# CancellationRegistration - Handle for a cancellation callback
+S CancellationRegistration {
+    token_ptr: i64,
+    callback: i64,
+    id: i64
+}
+
+X CancellationRegistration {
+    # Unregister the callback
+    F unregister(&self) -> i64 {
+        # In a full implementation, this would remove the callback
+        # from the cancellation source's callback list
+        0
+    }
+}
+
+# ============================================
+# CancellableFuture - A future that can be cancelled
+# ============================================
+
+S CancellableFuture<T> {
+    inner_future: i64,    # Pointer to inner future
+    token: CancellationToken
+}
+
+X CancellableFuture<T> {
+    F new(future: i64, token: CancellationToken) -> CancellableFuture<T> {
+        CancellableFuture {
+            inner_future: future,
+            token: token
+        }
+    }
+
+    # Poll the future, checking for cancellation
+    # Returns: 0 = Pending, 1 = Ready, -1 = Cancelled
+    F poll(&self, ctx: i64) -> i64 {
+        # Check cancellation first
+        L self.token.is_cancelled() == 1 {
+            R -1  # Cancelled
+        }
+
+        # Poll the inner future
+        # In a real implementation, we'd call inner.poll(ctx)
+        # For now, return pending
+        0
+    }
+}
+
+# Helper function to wrap a future with cancellation
+F cancellable<T>(future: i64, token: CancellationToken) -> CancellableFuture<T> {
+    CancellableFuture::new(future, token)
+}
+
+# ============================================
+# WaitGroup - Wait for a collection of tasks
+# ============================================
+
+S WaitGroup {
+    counter: AtomicI64,
+    condvar: i64,
+    mutex: i64
+}
+
+X WaitGroup {
+    F new() -> WaitGroup {
+        WaitGroup {
+            counter: AtomicI64::new(0),
+            condvar: __condvar_create(),
+            mutex: __mutex_create()
+        }
+    }
+
+    # Add delta to the counter (can be positive or negative)
+    F add(&self, delta: i64) -> i64 {
+        new_count := self.counter.fetch_add(delta) + delta
+        L new_count <= 0 {
+            __mutex_lock(self.mutex)
+            __condvar_broadcast(self.condvar)
+            __mutex_unlock(self.mutex)
+        }
+        new_count
+    }
+
+    # Decrement the counter by 1
+    F done(&self) -> i64 {
+        self.add(-1)
+    }
+
+    # Wait until the counter reaches zero
+    F wait(&self) -> i64 {
+        __mutex_lock(self.mutex)
+        L self.counter.load() > 0 {
+            __condvar_wait(self.condvar, self.mutex)
+        }
+        __mutex_unlock(self.mutex)
+        0
+    }
+
+    # Get current count
+    F count(&self) -> i64 {
+        self.counter.load()
+    }
+
+    F free(&self) -> i64 {
+        __condvar_destroy(self.condvar)
+        __mutex_destroy(self.mutex)
+        0
+    }
+}

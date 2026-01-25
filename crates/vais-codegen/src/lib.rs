@@ -34,8 +34,12 @@ mod stmt;
 mod stmt_visitor;
 mod type_inference;
 mod types;
+pub mod vtable;
+pub mod cross_compile;
 #[cfg(test)]
 mod cache_tests;
+#[cfg(test)]
+mod vtable_tests;
 
 // Inkwell-based code generator (optional)
 #[cfg(feature = "inkwell-codegen")]
@@ -58,14 +62,38 @@ use vais_types::ResolvedType;
 pub enum TargetTriple {
     /// Native target (auto-detect)
     Native,
-    /// x86-64 Linux
-    X86_64,
-    /// ARM64 (Apple Silicon)
-    Aarch64,
+    /// x86-64 Linux (GNU libc)
+    X86_64Linux,
+    /// x86-64 Linux (musl libc - static linking)
+    X86_64LinuxMusl,
+    /// x86-64 Windows (MSVC)
+    X86_64WindowsMsvc,
+    /// x86-64 Windows (GNU/MinGW)
+    X86_64WindowsGnu,
+    /// x86-64 macOS
+    X86_64Darwin,
+    /// ARM64 (Apple Silicon / macOS)
+    Aarch64Darwin,
+    /// ARM64 Linux (GNU libc)
+    Aarch64Linux,
+    /// ARM64 Linux (musl libc)
+    Aarch64LinuxMusl,
+    /// ARM64 Android
+    Aarch64Android,
+    /// ARM64 iOS
+    Aarch64Ios,
+    /// ARM64 iOS Simulator
+    Aarch64IosSimulator,
+    /// ARM32 Android (ARMv7)
+    Armv7Android,
     /// WebAssembly 32-bit (no WASI)
     Wasm32Unknown,
-    /// WebAssembly 32-bit with WASI
-    Wasi,
+    /// WebAssembly 32-bit with WASI (preview1)
+    WasiPreview1,
+    /// WebAssembly 32-bit with WASI (preview2)
+    WasiPreview2,
+    /// RISC-V 64-bit Linux
+    Riscv64Linux,
 }
 
 impl TargetTriple {
@@ -73,11 +101,45 @@ impl TargetTriple {
     pub fn from_str(s: &str) -> Option<Self> {
         let s_lower = s.to_lowercase();
         match s_lower.as_str() {
+            // Native
             "native" | "auto" => Some(Self::Native),
-            "x86_64" | "x86_64-unknown-linux-gnu" | "x86_64-pc-linux-gnu" => Some(Self::X86_64),
-            "aarch64" | "aarch64-apple-darwin" | "arm64" => Some(Self::Aarch64),
+
+            // x86-64 Linux
+            "x86_64-linux" | "x86_64-unknown-linux-gnu" | "x86_64-pc-linux-gnu" => Some(Self::X86_64Linux),
+            "x86_64-linux-musl" | "x86_64-unknown-linux-musl" => Some(Self::X86_64LinuxMusl),
+
+            // x86-64 Windows
+            "x86_64-windows-msvc" | "x86_64-pc-windows-msvc" => Some(Self::X86_64WindowsMsvc),
+            "x86_64-windows-gnu" | "x86_64-pc-windows-gnu" | "x86_64-w64-mingw32" => Some(Self::X86_64WindowsGnu),
+
+            // x86-64 macOS
+            "x86_64-darwin" | "x86_64-apple-darwin" => Some(Self::X86_64Darwin),
+
+            // ARM64 macOS
+            "aarch64" | "aarch64-darwin" | "aarch64-apple-darwin" | "arm64" | "arm64-darwin" => Some(Self::Aarch64Darwin),
+
+            // ARM64 Linux
+            "aarch64-linux" | "aarch64-unknown-linux-gnu" => Some(Self::Aarch64Linux),
+            "aarch64-linux-musl" | "aarch64-unknown-linux-musl" => Some(Self::Aarch64LinuxMusl),
+
+            // ARM64 Android
+            "aarch64-android" | "aarch64-linux-android" => Some(Self::Aarch64Android),
+
+            // ARM64 iOS
+            "aarch64-ios" | "aarch64-apple-ios" => Some(Self::Aarch64Ios),
+            "aarch64-ios-sim" | "aarch64-apple-ios-sim" => Some(Self::Aarch64IosSimulator),
+
+            // ARM32 Android
+            "armv7-android" | "armv7-linux-androideabi" | "arm-android" => Some(Self::Armv7Android),
+
+            // WebAssembly
             "wasm32" | "wasm32-unknown-unknown" => Some(Self::Wasm32Unknown),
-            "wasi" | "wasm32-wasi" => Some(Self::Wasi),
+            "wasi" | "wasm32-wasi" | "wasi-preview1" => Some(Self::WasiPreview1),
+            "wasi-preview2" | "wasm32-wasip2" => Some(Self::WasiPreview2),
+
+            // RISC-V
+            "riscv64" | "riscv64-linux" | "riscv64gc-unknown-linux-gnu" => Some(Self::Riscv64Linux),
+
             _ => None,
         }
     }
@@ -86,10 +148,22 @@ impl TargetTriple {
     pub fn triple_str(&self) -> &'static str {
         match self {
             Self::Native => "",  // Let clang auto-detect
-            Self::X86_64 => "x86_64-unknown-linux-gnu",
-            Self::Aarch64 => "aarch64-apple-darwin",
+            Self::X86_64Linux => "x86_64-unknown-linux-gnu",
+            Self::X86_64LinuxMusl => "x86_64-unknown-linux-musl",
+            Self::X86_64WindowsMsvc => "x86_64-pc-windows-msvc",
+            Self::X86_64WindowsGnu => "x86_64-pc-windows-gnu",
+            Self::X86_64Darwin => "x86_64-apple-darwin",
+            Self::Aarch64Darwin => "aarch64-apple-darwin",
+            Self::Aarch64Linux => "aarch64-unknown-linux-gnu",
+            Self::Aarch64LinuxMusl => "aarch64-unknown-linux-musl",
+            Self::Aarch64Android => "aarch64-linux-android",
+            Self::Aarch64Ios => "aarch64-apple-ios",
+            Self::Aarch64IosSimulator => "aarch64-apple-ios-simulator",
+            Self::Armv7Android => "armv7-linux-androideabi",
             Self::Wasm32Unknown => "wasm32-unknown-unknown",
-            Self::Wasi => "wasm32-wasi",
+            Self::WasiPreview1 => "wasm32-wasi",
+            Self::WasiPreview2 => "wasm32-wasip2",
+            Self::Riscv64Linux => "riscv64gc-unknown-linux-gnu",
         }
     }
 
@@ -97,23 +171,156 @@ impl TargetTriple {
     pub fn data_layout(&self) -> &'static str {
         match self {
             Self::Native => "",  // Let clang auto-detect
-            Self::X86_64 => "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
-            Self::Aarch64 => "e-m:o-i64:64-i128:128-n32:64-S128",
-            Self::Wasm32Unknown | Self::Wasi => "e-m:e-p:32:32-i64:64-n32:64-S128",
+
+            // x86-64 (all platforms have same layout)
+            Self::X86_64Linux | Self::X86_64LinuxMusl | Self::X86_64WindowsMsvc |
+            Self::X86_64WindowsGnu | Self::X86_64Darwin =>
+                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+
+            // ARM64 (macOS uses different mangling)
+            Self::Aarch64Darwin | Self::Aarch64Ios | Self::Aarch64IosSimulator =>
+                "e-m:o-i64:64-i128:128-n32:64-S128",
+            Self::Aarch64Linux | Self::Aarch64LinuxMusl | Self::Aarch64Android =>
+                "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
+
+            // ARM32 Android
+            Self::Armv7Android =>
+                "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64",
+
+            // WebAssembly (32-bit pointers)
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 =>
+                "e-m:e-p:32:32-i64:64-n32:64-S128",
+
+            // RISC-V 64
+            Self::Riscv64Linux =>
+                "e-m:e-p:64:64-i64:64-i128:128-n64-S128",
         }
     }
 
     /// Check if this is a WebAssembly target
     pub fn is_wasm(&self) -> bool {
-        matches!(self, Self::Wasm32Unknown | Self::Wasi)
+        matches!(self, Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2)
+    }
+
+    /// Check if this is a Windows target
+    pub fn is_windows(&self) -> bool {
+        matches!(self, Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu)
+    }
+
+    /// Check if this is an Apple platform (macOS, iOS)
+    pub fn is_apple(&self) -> bool {
+        matches!(
+            self,
+            Self::X86_64Darwin | Self::Aarch64Darwin |
+            Self::Aarch64Ios | Self::Aarch64IosSimulator
+        )
+    }
+
+    /// Check if this is an Android target
+    pub fn is_android(&self) -> bool {
+        matches!(self, Self::Aarch64Android | Self::Armv7Android)
+    }
+
+    /// Check if this is an iOS target
+    pub fn is_ios(&self) -> bool {
+        matches!(self, Self::Aarch64Ios | Self::Aarch64IosSimulator)
+    }
+
+    /// Check if this uses musl libc
+    pub fn is_musl(&self) -> bool {
+        matches!(self, Self::X86_64LinuxMusl | Self::Aarch64LinuxMusl)
     }
 
     /// Get pointer size in bits for this target
     pub fn pointer_bits(&self) -> usize {
         match self {
-            Self::Wasm32Unknown | Self::Wasi => 32,
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 | Self::Armv7Android => 32,
             _ => 64,
         }
+    }
+
+    /// Get clang flags for this target
+    pub fn clang_flags(&self) -> Vec<&'static str> {
+        let mut flags = Vec::new();
+
+        // Target triple
+        if !matches!(self, Self::Native) {
+            flags.push("--target");
+        }
+
+        // Platform-specific flags
+        match self {
+            Self::Native => {}
+
+            // musl requires static linking
+            Self::X86_64LinuxMusl | Self::Aarch64LinuxMusl => {
+                flags.push("-static");
+            }
+
+            // Windows MSVC
+            Self::X86_64WindowsMsvc => {
+                flags.push("-fms-extensions");
+                flags.push("-fms-compatibility");
+            }
+
+            // Windows GNU/MinGW
+            Self::X86_64WindowsGnu => {
+                flags.push("-mconsole");
+            }
+
+            // Android NDK
+            Self::Aarch64Android | Self::Armv7Android => {
+                // Requires ANDROID_NDK_HOME to be set
+                flags.push("-fPIC");
+            }
+
+            // iOS
+            Self::Aarch64Ios => {
+                flags.push("-mios-version-min=12.0");
+            }
+            Self::Aarch64IosSimulator => {
+                flags.push("-mios-simulator-version-min=12.0");
+            }
+
+            // WebAssembly
+            Self::Wasm32Unknown => {
+                flags.push("--no-standard-libraries");
+                flags.push("-Wl,--no-entry");
+                flags.push("-Wl,--export-all");
+            }
+            Self::WasiPreview1 | Self::WasiPreview2 => {
+                // WASI SDK should be installed
+            }
+
+            _ => {}
+        }
+
+        flags
+    }
+
+    /// Get the default output file extension for this target
+    pub fn output_extension(&self) -> &'static str {
+        match self {
+            Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu => "exe",
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => "wasm",
+            Self::Aarch64Ios | Self::Aarch64IosSimulator => "",  // no extension for iOS
+            _ => "",  // no extension for Unix-like systems
+        }
+    }
+
+    /// Get all supported targets as a list
+    pub fn all_targets() -> &'static [&'static str] {
+        &[
+            "native",
+            "x86_64-linux", "x86_64-linux-musl",
+            "x86_64-windows-msvc", "x86_64-windows-gnu",
+            "x86_64-darwin",
+            "aarch64-darwin", "aarch64-linux", "aarch64-linux-musl",
+            "aarch64-android", "aarch64-ios", "aarch64-ios-sim",
+            "armv7-android",
+            "wasm32", "wasi", "wasi-preview2",
+            "riscv64-linux",
+        ]
     }
 }
 
@@ -241,6 +448,15 @@ pub struct CodeGenerator {
     // GC mode configuration
     gc_enabled: bool,
     gc_threshold: usize,
+
+    // VTable generator for trait objects (dyn Trait)
+    vtable_generator: vtable::VtableGenerator,
+
+    // Trait definitions for vtable generation
+    trait_defs: HashMap<String, vais_types::TraitDef>,
+
+    // Trait implementations: (impl_type, trait_name) -> method_impls
+    trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
 }
 
 impl CodeGenerator {
@@ -294,6 +510,9 @@ impl CodeGenerator {
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::new()),
             gc_enabled: false,
             gc_threshold: 1048576, // 1 MB default
+            vtable_generator: vtable::VtableGenerator::new(),
+            trait_defs: HashMap::new(),
+            trait_impl_methods: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -401,8 +620,130 @@ impl CodeGenerator {
                     8 // Default to i64 size
                 }
             }
+            ResolvedType::DynTrait { .. } => 16, // Fat pointer: data + vtable
             _ => 8, // Default
         }
+    }
+
+    /// Register a trait definition for vtable generation
+    pub fn register_trait(&mut self, trait_def: vais_types::TraitDef) {
+        self.trait_defs.insert(trait_def.name.clone(), trait_def);
+    }
+
+    /// Register a trait implementation for vtable generation
+    pub fn register_trait_impl(
+        &mut self,
+        impl_type: &str,
+        trait_name: &str,
+        method_impls: HashMap<String, String>,
+    ) {
+        self.trait_impl_methods.insert(
+            (impl_type.to_string(), trait_name.to_string()),
+            method_impls,
+        );
+    }
+
+    /// Get or generate a vtable for a specific type implementing a trait
+    pub fn get_or_generate_vtable(
+        &mut self,
+        impl_type: &str,
+        trait_name: &str,
+    ) -> Option<vtable::VtableInfo> {
+        let trait_def = self.trait_defs.get(trait_name)?.clone();
+        let method_impls = self.trait_impl_methods
+            .get(&(impl_type.to_string(), trait_name.to_string()))
+            .cloned()
+            .unwrap_or_default();
+
+        Some(self.vtable_generator.generate_vtable(impl_type, &trait_def, &method_impls))
+    }
+
+    /// Generate all vtable globals for the module
+    pub fn generate_vtable_globals(&self) -> String {
+        let mut ir = String::new();
+
+        for vtable_info in self.vtable_generator.get_vtables() {
+            if let Some(trait_def) = self.trait_defs.get(&vtable_info.trait_name) {
+                let type_size = 8; // Default size, could be refined
+                let type_align = 8; // Default alignment
+
+                ir.push_str(&self.vtable_generator.generate_vtable_global(
+                    vtable_info,
+                    trait_def,
+                    type_size,
+                    type_align,
+                ));
+                ir.push('\n');
+            }
+        }
+
+        ir
+    }
+
+    /// Generate code to create a trait object from a concrete value
+    pub fn generate_trait_object_creation(
+        &mut self,
+        concrete_value: &str,
+        concrete_type: &str,
+        impl_type: &str,
+        trait_name: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let vtable_info = self.get_or_generate_vtable(impl_type, trait_name)
+            .ok_or_else(|| CodegenError::Unsupported(
+                format!("No vtable for {} implementing {}", impl_type, trait_name)
+            ))?;
+
+        Ok(self.vtable_generator.create_trait_object(
+            concrete_value,
+            concrete_type,
+            &vtable_info,
+            counter,
+        ))
+    }
+
+    /// Generate code for a dynamic method call on a trait object
+    pub fn generate_dyn_method_call(
+        &self,
+        trait_object: &str,
+        trait_name: &str,
+        method_name: &str,
+        args: &[String],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let trait_def = self.trait_defs.get(trait_name)
+            .ok_or_else(|| CodegenError::Unsupported(
+                format!("Unknown trait: {}", trait_name)
+            ))?;
+
+        // Find method index in trait
+        let method_names: Vec<&String> = trait_def.methods.keys().collect();
+        let method_index = method_names.iter()
+            .position(|&n| n == method_name)
+            .ok_or_else(|| CodegenError::Unsupported(
+                format!("Method {} not found in trait {}", method_name, trait_name)
+            ))?;
+
+        // Get return type
+        let method_sig = trait_def.methods.get(method_name)
+            .ok_or_else(|| CodegenError::Unsupported(
+                format!("Method {} not found in trait {}", method_name, trait_name)
+            ))?;
+
+        let ret_type = if matches!(method_sig.ret, ResolvedType::Unit) {
+            "void"
+        } else {
+            "i64" // Simplified
+        };
+
+        Ok(self.vtable_generator.generate_dynamic_call(
+            trait_object,
+            method_index,
+            args,
+            ret_type,
+            trait_def,
+            counter,
+        ))
     }
 
     fn next_label(&mut self, prefix: &str) -> String {
