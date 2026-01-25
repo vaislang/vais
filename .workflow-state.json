@@ -1,14 +1,14 @@
 {
-  "phase": 4,
+  "phase": 5,
   "request": "Phase 10 잔여 작업 진행",
   "tasks": [
-    { "id": 1, "name": "에러 복구 개선", "status": "in_progress", "model": "Opus", "description": "Panic-free 파싱, ErrorNode AST, Sync point 탐지" },
-    { "id": 2, "name": "Macro Runtime 통합", "status": "pending", "model": "Opus", "description": "Parser-MacroExpander-TypeChecker 흐름, derive 매크로" },
+    { "id": 1, "name": "에러 복구 개선", "status": "completed", "model": "Opus", "description": "Panic-free 파싱, ErrorNode AST, Sync point 탐지" },
+    { "id": 2, "name": "Macro Runtime 통합", "status": "completed", "model": "Opus", "description": "Parser-MacroExpander-TypeChecker 흐름, derive 매크로" },
     { "id": 3, "name": "LSP 고도화", "status": "pending", "model": "Sonnet", "description": "Inlay hints, Call hierarchy, Folding ranges" }
   ],
-  "currentTask": 1,
-  "lastCompleted": null,
+  "currentTask": null,
+  "lastCompleted": "Macro Runtime 통합",
   "notes": {
-    "phase10Status": "P1 에러 복구 개선 진행 중"
+    "phase10Status": "P1 Macro Runtime 통합 완료 (2026-01-25)"
   }
 }

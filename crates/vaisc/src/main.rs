@@ -24,6 +24,7 @@ use vais_parser::parse;
 use vais_types::{TypeChecker};
 use vais_i18n::Locale;
 use vais_plugin::{PluginRegistry, PluginsConfig, find_config, Diagnostic, DiagnosticLevel};
+use vais_macro::{MacroRegistry, expand_macros, collect_macros, process_derives};
 
 #[derive(Parser)]
 #[command(name = "vaisc")]
@@ -585,9 +586,30 @@ fn cmd_build(
         merged_ast
     };
 
+    // Macro expansion phase
+    // 1. Collect macro definitions from the AST
+    let mut macro_registry = MacroRegistry::new();
+    collect_macros(&transformed_ast, &mut macro_registry);
+
+    // 2. Expand all macro invocations
+    let macro_expanded_ast = expand_macros(transformed_ast, &macro_registry)
+        .map_err(|e| format!("Macro expansion error: {}", e))?;
+
+    // 3. Process #[derive(...)] attributes
+    let mut final_ast = macro_expanded_ast;
+    process_derives(&mut final_ast)
+        .map_err(|e| format!("Derive macro error: {}", e))?;
+
+    if verbose {
+        let macro_count = macro_registry.macros_count();
+        if macro_count > 0 {
+            println!("  {} {} macro(s) expanded", "Macros:".cyan(), macro_count);
+        }
+    }
+
     // Type check
     let mut checker = TypeChecker::new();
-    if let Err(e) = checker.check_module(&transformed_ast) {
+    if let Err(e) = checker.check_module(&final_ast) {
         // Format error with source context
         return Err(error_formatter::format_type_error(&e, &main_source, input));
     }
@@ -635,7 +657,7 @@ fn cmd_build(
         }
     }
 
-    let raw_ir = codegen.generate_module(&transformed_ast)
+    let raw_ir = codegen.generate_module(&final_ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
 
     // Apply optimization passes before emitting IR
@@ -689,7 +711,7 @@ fn cmd_build(
     // Run codegen plugins (generate additional files)
     if !plugins.is_empty() {
         let output_dir = ir_path.parent().unwrap_or(Path::new("."));
-        match plugins.run_codegen(&transformed_ast, output_dir) {
+        match plugins.run_codegen(&final_ast, output_dir) {
             Ok(generated_files) => {
                 for file in generated_files {
                     if verbose {

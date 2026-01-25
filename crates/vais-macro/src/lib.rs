@@ -2,10 +2,45 @@
 //!
 //! Declarative macro expansion for the Vais programming language.
 //! Supports pattern matching, repetition, and metavariable substitution.
+//!
+//! # Modules
+//!
+//! - [`expansion`]: AST-level macro expansion with hygienic naming
+//! - [`derive`]: #[derive(...)] attribute macro framework
+//!
+//! # Example
+//!
+//! ```ignore
+//! use vais_macro::{MacroRegistry, expand_macros, process_derives};
+//! use vais_parser::parse;
+//!
+//! let source = r#"
+//!     macro double! { ($x:expr) => { $x + $x } }
+//!     F test() = double!(5)
+//! "#;
+//!
+//! let mut module = parse(source).unwrap();
+//! let mut registry = MacroRegistry::new();
+//! collect_macros(&module, &mut registry);
+//! let expanded = expand_macros(module, &registry).unwrap();
+//! ```
+
+pub mod expansion;
+pub mod derive;
 
 use std::collections::HashMap;
 use thiserror::Error;
 use vais_ast::*;
+
+// Re-export main expansion functions
+pub use expansion::{
+    expand_macros, collect_macros, AstExpander,
+    HygienicContext, ExpansionError, ExpansionResult,
+};
+pub use derive::{
+    process_derives, DeriveRegistry, DeriveGenerator,
+    DeriveError, DeriveResult,
+};
 
 /// Error type for macro expansion failures.
 #[derive(Debug, Error)]
@@ -51,6 +86,11 @@ impl MacroRegistry {
     /// Check if a macro exists
     pub fn contains(&self, name: &str) -> bool {
         self.macros.contains_key(name)
+    }
+
+    /// Get the number of registered macros
+    pub fn macros_count(&self) -> usize {
+        self.macros.len()
     }
 }
 

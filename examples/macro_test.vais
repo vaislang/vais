@@ -1,0 +1,13 @@
+macro answer! {
+    () => { 42 }
+}
+
+macro double! {
+    ($x:expr) => { $x + $x }
+}
+
+F main() -> i64 {
+    ans := answer!()
+    d := double!(5)
+    ans + d
+}

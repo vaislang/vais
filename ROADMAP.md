@@ -1006,13 +1006,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 7: 아키텍처 개선 | ✅ 완료 | 100% |
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
-| Phase 10: Self-hosting | 🔄 진행 중 | 95% |
+| Phase 10: Self-hosting | 🔄 진행 중 | 97% |
 
 ---
 
 ## 🚀 Phase 10: Self-hosting 완성 및 생태계 확장
 
-> **상태**: 🔄 진행 중 (95%)
+> **상태**: 🔄 진행 중 (97%)
 > **추가일**: 2026-01-22
 > **최종 업데이트**: 2026-01-25
 > **예상 기간**: 14-16주 (약 4개월)
@@ -1081,10 +1081,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - ErrorNode AST 타입 추가 (Item::Error, Stmt::Error, Expr::Error)
   - parse_with_recovery() 공개 API
   - 9개 에러 복구 테스트 추가
-- [ ] **Macro Runtime 통합**
-  - Parser → MacroExpander → TypeChecker 흐름
-  - 위생적 매크로 기본 지원
-  - `#[derive(...)]` 속성 매크로 프레임워크
+- [x] **Macro Runtime 통합** (완료일: 2026-01-25)
+  - [x] Parser → MacroExpander → TypeChecker 흐름 통합
+  - [x] 위생적 매크로 기본 지원 (HygienicContext)
+  - [x] `#[derive(...)]` 속성 매크로 프레임워크 (AST 확장 대기)
 - [ ] **LSP 고도화**
   - Inlay hints, Call hierarchy, Type hierarchy
   - Folding ranges, Document links
