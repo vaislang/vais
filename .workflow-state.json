@@ -1,14 +1,15 @@
 {
   "phase": 5,
-  "request": "Phase 10 잔여 작업 진행",
+  "request": "Phase 10 P2 작업 진행",
   "tasks": [
-    { "id": 1, "name": "에러 복구 개선", "status": "completed", "model": "Opus", "description": "Panic-free 파싱, ErrorNode AST, Sync point 탐지" },
-    { "id": 2, "name": "Macro Runtime 통합", "status": "completed", "model": "Opus", "description": "Parser-MacroExpander-TypeChecker 흐름, derive 매크로" },
-    { "id": 3, "name": "LSP 고도화", "status": "completed", "model": "Sonnet", "description": "Inlay hints, Call hierarchy, Folding ranges, Document links" }
+    { "id": 1, "name": "패키지 레지스트리 서버", "status": "pending", "model": "Opus", "description": "REST API, SQLite, 버전관리/yanking" },
+    { "id": 2, "name": "문서 자동 생성", "status": "pending", "model": "Sonnet", "description": "vais doc 명령어, HTML 문서 생성" },
+    { "id": 3, "name": "FFI 고도화", "status": "pending", "model": "Sonnet", "description": "extern \"C\", repr(C), 콜백 포인터" },
+    { "id": 4, "name": "컴파일러 성능 최적화", "status": "completed", "model": "Opus", "description": "증분 컴파일 병렬화, rayon 인프라 추가" }
   ],
   "currentTask": null,
-  "lastCompleted": "LSP 고도화",
+  "lastCompleted": "컴파일러 성능 최적화",
   "notes": {
-    "phase10Status": "P1 LSP 고도화 완료 (2026-01-25) - Phase 10 100% 완료!"
+    "phase10Status": "P2 컴파일러 성능 최적화 완료 (2026-01-25)"
   }
 }

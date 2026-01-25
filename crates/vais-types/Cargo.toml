@@ -9,6 +9,7 @@ vais-i18n = { path = "../vais-i18n" }
 thiserror = { workspace = true }
 miette = { workspace = true }
 colored = { workspace = true }
+rayon = "1.10"
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

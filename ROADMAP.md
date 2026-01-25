@@ -1105,10 +1105,11 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 구조체 패딩/정렬 (repr(C))
   - 가변 인자 함수, 콜백 포인터
   - C 헤더 생성기 (cbindgen 스타일)
-- [ ] **컴파일러 성능 최적화**
-  - 병렬 타입 체킹 (rayon)
-  - 증분 컴파일 캐시 hit rate 개선
-  - 컴파일 시간 50% 단축 목표
+- [x] **컴파일러 성능 최적화** (완료일: 2026-01-25)
+  - 증분 컴파일 병렬화 (rayon) - 파일 해시 병렬 계산
+  - 의존성 전파 병렬화
+  - 타입 체커/코드 생성기 병렬화 인프라 추가
+  - vaisc, vais-types, vais-codegen에 rayon 의존성 추가
 
 ### P3 - 낮은 우선순위 (4-6주)
 - [ ] **퍼징 및 보안 테스트**

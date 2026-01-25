@@ -12,6 +12,7 @@ inkwell-codegen = ["inkwell"]
 vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
 thiserror = { workspace = true }
+rayon = "1.10"
 
 # LLVM (optional - requires LLVM 17 installed)
 inkwell = { workspace = true, optional = true }
