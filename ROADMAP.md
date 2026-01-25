@@ -1092,10 +1092,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - Document links: import 경로 클릭 이동
 
 ### P2 - 중간 우선순위 (4-6주)
-- [ ] **패키지 레지스트리 서버**
-  - REST API (/api/v1/packages, /api/v1/search)
-  - SQLite 기반 메타데이터 저장소
-  - 패키지 버전 관리 및 yanking
+- [x] **패키지 레지스트리 서버** (완료일: 2026-01-26)
+  - vais-registry-server 크레이트 추가 (axum + tokio 기반)
+  - REST API: /api/v1/index.json, /api/v1/packages/:name/:version, /api/v1/search
+  - SQLite 기반 메타데이터 저장소 (sqlx)
+  - 패키지 발행, 검색, 다운로드, yanking 지원
+  - 사용자 인증 (argon2 패스워드 해싱, Bearer 토큰)
+  - 소유자 관리 (다중 소유자 지원)
+  - 아카이브 검증 (SHA256 체크섬, 경로 순회 방지)
 - [x] **문서 자동 생성 (vais doc)** (완료일: 2026-01-26)
   - DocGenerator 구조체 (vaisc/src/doc.rs)
   - Rustdoc 스타일 HTML 문서 생성
