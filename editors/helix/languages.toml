@@ -1,0 +1,18 @@
+[[language]]
+name = "vais"
+scope = "source.vais"
+file-extensions = ["vais"]
+comment-tokens = "#"
+indent = { tab-width = 4, unit = "    " }
+
+# LSP Server configuration
+[language.lsp]
+command = "vais-lsp"
+args = []
+
+# Roots for LSP server detection (look for Cargo.toml or vais.toml)
+roots = ["Cargo.toml", "vais.toml"]
+
+[[grammar]]
+name = "vais"
+source = { git = "https://github.com/vais-lang/tree-sitter-vais", rev = "main" }
