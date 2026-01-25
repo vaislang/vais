@@ -143,6 +143,7 @@ impl<'a> AstExpander<'a> {
             Item::TypeAlias(a) => Item::TypeAlias(a),
             Item::Use(u) => Item::Use(u),
             Item::Macro(m) => Item::Macro(m),
+            Item::ExternBlock(e) => Item::ExternBlock(e),
             Item::Error { message, skipped_tokens } => Item::Error { message, skipped_tokens },
         };
         Ok(Spanned::new(expanded, span))

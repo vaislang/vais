@@ -26,6 +26,7 @@ mod control_flow;
 mod expr;
 mod expr_helpers;
 mod expr_visitor;
+mod ffi;
 mod function_gen;
 mod lambda_closure;
 mod registration;
@@ -531,6 +532,12 @@ impl CodeGenerator {
                     // Error nodes indicate parsing failures
                     // Skip them during code generation - errors were reported during parsing
                 }
+                Item::ExternBlock(extern_block) => {
+                    // Register extern functions
+                    for func in &extern_block.functions {
+                        self.register_extern_function(func, &extern_block.abi)?;
+                    }
+                }
             }
         }
 
@@ -555,10 +562,10 @@ impl CodeGenerator {
         // Generate function declarations (deduplicate by actual function name)
         let mut declared_fns = std::collections::HashSet::new();
         for info in self.functions.values() {
-            if info.is_extern && !declared_fns.contains(&info.name) {
+            if info.is_extern && !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
-                declared_fns.insert(info.name.clone());
+                declared_fns.insert(info.signature.name.clone());
             }
         }
 
@@ -591,7 +598,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) => {
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) => {
                     // Already handled in first pass or no code generation needed
                 }
                 Item::Error { .. } => {
@@ -711,7 +718,7 @@ impl CodeGenerator {
                         self.register_method(&type_name, &method.node)?;
                     }
                 }
-                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::Error { .. } => {}
+                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Error { .. } => {}
             }
         }
 
@@ -745,10 +752,10 @@ impl CodeGenerator {
         // Generate function declarations (extern functions)
         let mut declared_fns = std::collections::HashSet::new();
         for info in self.functions.values() {
-            if info.is_extern && !declared_fns.contains(&info.name) {
+            if info.is_extern && !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
-                declared_fns.insert(info.name.clone());
+                declared_fns.insert(info.signature.name.clone());
             }
         }
 
@@ -792,7 +799,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::Error { .. } => {}
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Error { .. } => {}
             }
         }
 
@@ -1210,8 +1217,8 @@ impl CodeGenerator {
                     // Get parameter type from function info if available
                     let param_ty = fn_info
                         .as_ref()
-                        .and_then(|f| f.params.get(i))
-                        .map(|(_, ty)| ty.clone());
+                        .and_then(|f| f.signature.params.get(i))
+                        .map(|(_, ty, _)| ty.clone());
 
                     let arg_ty = param_ty
                         .as_ref()
@@ -1251,12 +1258,12 @@ impl CodeGenerator {
                 // Get return type and actual function name (may differ for builtins)
                 let ret_ty = fn_info
                     .as_ref()
-                    .map(|f| self.type_to_llvm(&f.ret_type))
+                    .map(|f| self.type_to_llvm(&f.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
 
                 let actual_fn_name = fn_info
                     .as_ref()
-                    .map(|f| f.name.clone())
+                    .map(|f| f.signature.name.clone())
                     .unwrap_or_else(|| fn_name.clone());
 
                 if is_indirect {
@@ -2128,7 +2135,7 @@ impl CodeGenerator {
 
                 // Determine return type from function registry
                 let ret_type = self.functions.get(&full_method_name)
-                    .map(|info| self.type_to_llvm(&info.ret_type))
+                    .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
 
                 let tmp = self.next_temp(counter);
@@ -2163,7 +2170,7 @@ impl CodeGenerator {
 
                 // Get return type from method signature
                 let ret_type = self.functions.get(&full_method_name)
-                    .map(|info| self.type_to_llvm(&info.ret_type))
+                    .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
 
                 let tmp = self.next_temp(counter);

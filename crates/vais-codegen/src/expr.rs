@@ -40,7 +40,7 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         if let Some(local) = self.locals.get(name).cloned() {
-            if local.is_param {
+            if local.is_param() {
                 Ok((format!("%{}", local.llvm_name), String::new()))
             } else if matches!(local.ty, ResolvedType::Named { .. }) {
                 let tmp = self.next_temp(counter);

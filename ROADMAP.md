@@ -1096,15 +1096,19 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - REST API (/api/v1/packages, /api/v1/search)
   - SQLite 기반 메타데이터 저장소
   - 패키지 버전 관리 및 yanking
-- [ ] **문서 자동 생성 (vais doc)**
-  - Rustdoc 스타일 문서 생성기
-  - Markdown → HTML 변환
-  - std 라이브러리 API 문서화
-- [ ] **FFI 고도화**
-  - `extern "C"` 블록 문법
-  - 구조체 패딩/정렬 (repr(C))
-  - 가변 인자 함수, 콜백 포인터
-  - C 헤더 생성기 (cbindgen 스타일)
+- [x] **문서 자동 생성 (vais doc)** (완료일: 2026-01-26)
+  - DocGenerator 구조체 (vaisc/src/doc.rs)
+  - Rustdoc 스타일 HTML 문서 생성
+  - Markdown → HTML 변환 (pulldown-cmark)
+  - /// 문서 주석 파싱 (Token::DocComment)
+  - 검색 인덱스 자동 생성 (search-index.json)
+  - CLI 명령어: `vaisc doc [--output <dir>]`
+- [x] **FFI 고도화** (완료일: 2026-01-26)
+  - `extern "C"` 블록 문법 (ExternBlock, ExternFunction AST)
+  - 구조체 패딩/정렬 (repr(C) 속성, StructInfo.repr_c)
+  - 가변 인자 함수 지원 (Param.is_vararg, FunctionSig.is_vararg, ...)
+  - 함수 포인터 타입 (Type::FnPtr, ResolvedType::FnPtr)
+  - Ellipsis 토큰 (...) 파싱 지원
 - [x] **컴파일러 성능 최적화** (완료일: 2026-01-25)
   - 증분 컴파일 병렬화 (rayon) - 파일 해시 병렬 계산
   - 의존성 전파 병렬화

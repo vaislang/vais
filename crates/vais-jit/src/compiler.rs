@@ -339,6 +339,17 @@ impl JitCompiler {
                     generics: resolved_generics,
                 }
             }
+            Type::FnPtr { params, ret, is_vararg } => {
+                let resolved_params: Vec<_> = params
+                    .iter()
+                    .map(|p| self.resolve_type(&p.node))
+                    .collect();
+                ResolvedType::FnPtr {
+                    params: resolved_params,
+                    ret: Box::new(self.resolve_type(&ret.node)),
+                    is_vararg: *is_vararg,
+                }
+            }
         }
     }
 

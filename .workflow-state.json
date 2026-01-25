@@ -3,13 +3,14 @@
   "request": "Phase 10 P2 작업 진행",
   "tasks": [
     { "id": 1, "name": "패키지 레지스트리 서버", "status": "pending", "model": "Opus", "description": "REST API, SQLite, 버전관리/yanking" },
-    { "id": 2, "name": "문서 자동 생성", "status": "pending", "model": "Sonnet", "description": "vais doc 명령어, HTML 문서 생성" },
-    { "id": 3, "name": "FFI 고도화", "status": "pending", "model": "Sonnet", "description": "extern \"C\", repr(C), 콜백 포인터" },
+    { "id": 2, "name": "문서 자동 생성", "status": "completed", "model": "Sonnet", "description": "vais doc 명령어, HTML 문서 생성" },
+    { "id": 3, "name": "FFI 고도화", "status": "completed", "model": "Sonnet", "description": "extern \"C\", repr(C), 콜백 포인터" },
     { "id": 4, "name": "컴파일러 성능 최적화", "status": "completed", "model": "Opus", "description": "증분 컴파일 병렬화, rayon 인프라 추가" }
   ],
   "currentTask": null,
-  "lastCompleted": "컴파일러 성능 최적화",
+  "lastCompleted": "문서 자동 생성, FFI 고도화 (빌드 충돌 수정)",
   "notes": {
-    "phase10Status": "P2 컴파일러 성능 최적화 완료 (2026-01-25)"
+    "phase10Status": "P2 3/4 작업 완료, 패키지 레지스트리 서버 남음",
+    "buildFix": "병렬 작업 결과 FunctionInfo 구조 변경 충돌 수정 완료 - signature 래퍼 필드 접근, ExternBlock/FnPtr 타입 처리 추가"
   }
 }

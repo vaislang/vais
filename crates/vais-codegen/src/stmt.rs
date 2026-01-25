@@ -176,7 +176,7 @@ impl CodeGenerator {
                     // Get the return type of the current function
                     let (ret_type, ret_resolved) = if let Some(fn_name) = &self.current_function {
                         self.functions.get(fn_name)
-                            .map(|info| (self.type_to_llvm(&info.ret_type), info.ret_type.clone()))
+                            .map(|info| (self.type_to_llvm(&info.signature.ret), info.signature.ret.clone()))
                             .unwrap_or_else(|| ("i64".to_string(), ResolvedType::I64))
                     } else {
                         ("i64".to_string(), ResolvedType::I64)

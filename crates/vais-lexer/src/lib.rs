@@ -21,8 +21,15 @@ use std::fmt;
 /// ```
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n]+")]  // Skip whitespace
-#[logos(skip r"#[^\n]*")]     // Skip comments
 pub enum Token {
+    // === Doc Comments ===
+    #[regex(r"///[^\n]*", |lex| lex.slice()[3..].trim().to_string(), priority = 5)]
+    DocComment(String),
+
+    // === Regular Comments (lower priority than doc comments) ===
+    #[regex(r"#[^/\[\n][^\n]*", logos::skip)]     // Skip regular comments (but not doc comments or #[)
+    #[regex(r"#\n", logos::skip)]                  // Skip empty # lines
+
     // === Keywords (single-letter for token efficiency) ===
     // Higher priority than identifiers
     #[token("F", priority = 3)]
@@ -59,6 +66,8 @@ pub enum Token {
     Defer,
     #[token("O", priority = 3)]
     Union,
+    #[token("N", priority = 3)]
+    Extern,
 
     // === Type Keywords ===
     #[token("mut")]
@@ -261,6 +270,8 @@ pub enum Token {
     DotDot,
     #[token("..=")]
     DotDotEq,
+    #[token("...")]
+    Ellipsis,
     #[token("?")]
     Question,
     #[token("@")]
@@ -301,6 +312,7 @@ pub enum Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Token::DocComment(s) => write!(f, "/// {}", s),
             Token::Function => write!(f, "F"),
             Token::Struct => write!(f, "S"),
             Token::Enum => write!(f, "E"),
@@ -318,6 +330,7 @@ impl fmt::Display for Token {
             Token::Impl => write!(f, "X"),
             Token::Defer => write!(f, "D"),
             Token::Union => write!(f, "O"),
+            Token::Extern => write!(f, "N"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
             Token::SelfUpper => write!(f, "Self"),
@@ -386,6 +399,7 @@ impl fmt::Display for Token {
             Token::FatArrow => write!(f, "=>"),
             Token::DotDot => write!(f, ".."),
             Token::DotDotEq => write!(f, "..="),
+            Token::Ellipsis => write!(f, "..."),
             Token::Question => write!(f, "?"),
             Token::At => write!(f, "@"),
             Token::Dollar => write!(f, "$"),

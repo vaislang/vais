@@ -91,6 +91,7 @@ impl Formatter {
             Item::Trait(t) => self.format_trait(t),
             Item::Impl(i) => self.format_impl(i),
             Item::Macro(m) => self.format_macro(m),
+            Item::ExternBlock(e) => self.format_extern_block(e),
             Item::Error { message, .. } => {
                 // Format error nodes as comments to preserve them in formatted output
                 self.output.push_str(&format!("{}# ERROR: {}\n", self.indent(), message));
@@ -120,6 +121,46 @@ impl Formatter {
             self.format_macro_template(&rule.template);
             self.output.push('\n');
         }
+
+        self.output.push_str(&indent);
+        self.output.push_str("}\n");
+    }
+
+    /// Format an extern block
+    fn format_extern_block(&mut self, e: &ExternBlock) {
+        let indent = self.indent();
+        self.output.push_str(&indent);
+        self.output.push_str("extern \"");
+        self.output.push_str(&e.abi);
+        self.output.push_str("\" {\n");
+
+        self.push_indent();
+        for func in &e.functions {
+            self.output.push_str(&self.indent());
+            self.output.push_str("F ");
+            self.output.push_str(&func.name.node);
+            self.output.push('(');
+
+            let params: Vec<String> = func.params.iter()
+                .map(|p| format!("{}: {}", p.name.node, self.format_type(&p.ty.node)))
+                .collect();
+            self.output.push_str(&params.join(", "));
+
+            if func.is_vararg {
+                if !func.params.is_empty() {
+                    self.output.push_str(", ");
+                }
+                self.output.push_str("...");
+            }
+
+            self.output.push(')');
+            if let Some(ret) = &func.ret_type {
+                self.output.push_str(" -> ");
+                self.output.push_str(&self.format_type(&ret.node));
+            }
+            self.output.push_str(";\n");
+        }
+        self.pop_indent();
 
         self.output.push_str(&indent);
         self.output.push_str("}\n");
@@ -741,6 +782,11 @@ impl Formatter {
                     let gens: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
                     format!("dyn {}<{}>", trait_name, gens.join(", "))
                 }
+            }
+            Type::FnPtr { params, ret, is_vararg } => {
+                let ps: Vec<String> = params.iter().map(|p| self.format_type(&p.node)).collect();
+                let vararg_str = if *is_vararg { ", ..." } else { "" };
+                format!("fn({}{}) -> {}", ps.join(", "), vararg_str, self.format_type(&ret.node))
             }
         }
     }

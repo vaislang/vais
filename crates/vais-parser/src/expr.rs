@@ -998,6 +998,7 @@ impl Parser {
                 name,
                 ty,
                 is_mut: false,
+                is_vararg: false,
             });
             if !self.check(&Token::Pipe) {
                 self.expect(&Token::Comma)?;

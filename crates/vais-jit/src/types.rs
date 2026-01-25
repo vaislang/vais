@@ -75,6 +75,8 @@ impl TypeMapper {
             }
             // Dynamic trait object: fat pointer (vtable ptr, data ptr)
             ResolvedType::DynTrait { .. } => self.pointer_type,
+            // Function pointer: same as regular pointer
+            ResolvedType::FnPtr { .. } => self.pointer_type,
         }
     }
 

@@ -53,13 +53,13 @@ impl<T> Spanned<T> {
 
 /// Attribute for conditional compilation and metadata annotations.
 ///
-/// Attributes like `#[cfg(test)]`, `#\[inline\]`, etc. provide metadata
+/// Attributes like `#[cfg(test)]`, `#\[inline\]`, `#[repr(C)]`, etc. provide metadata
 /// and control compilation behavior.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
-    /// Attribute name (e.g., "cfg", "inline")
+    /// Attribute name (e.g., "cfg", "inline", "repr")
     pub name: String,
-    /// Attribute arguments (e.g., cfg(test) -> ["test"])
+    /// Attribute arguments (e.g., cfg(test) -> ["test"], repr(C) -> ["C"])
     pub args: Vec<String>,
 }
 
@@ -97,6 +97,8 @@ pub enum Item {
     Impl(Impl),
     /// Macro definition: `macro name! { rules }`
     Macro(MacroDef),
+    /// Extern block: `N "C" { declarations }`
+    ExternBlock(ExternBlock),
     /// Error recovery node - represents an item that failed to parse
     /// Used for continuing parsing after errors to report multiple errors at once.
     Error {
@@ -146,6 +148,7 @@ pub struct Param {
     pub name: Spanned<String>,
     pub ty: Spanned<Type>,
     pub is_mut: bool,
+    pub is_vararg: bool, // true for variadic parameters (...)
 }
 
 /// Generic parameter kind - either a type parameter or a const parameter
@@ -202,6 +205,7 @@ pub struct Struct {
     pub fields: Vec<Field>,
     pub methods: Vec<Spanned<Function>>,
     pub is_pub: bool,
+    pub attributes: Vec<Attribute>,
 }
 
 /// Struct field
@@ -534,6 +538,12 @@ pub enum Type {
         name: String,
         generics: Vec<Spanned<Type>>,
     },
+    /// Function pointer type: `fn(A, B) -> C`
+    FnPtr {
+        params: Vec<Spanned<Type>>,
+        ret: Box<Spanned<Type>>,
+        is_vararg: bool,
+    },
     /// Array: `[T]`
     Array(Box<Spanned<Type>>),
     /// Const-sized array: `[T; N]` where N is a const expression
@@ -856,6 +866,24 @@ pub enum UnaryOp {
     BitNot, // ~
 }
 
+/// Extern block: `N "C" { declarations }`
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExternBlock {
+    /// ABI string (e.g., "C", "Rust")
+    pub abi: String,
+    /// Extern function declarations
+    pub functions: Vec<ExternFunction>,
+}
+
+/// Extern function declaration in extern block
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExternFunction {
+    pub name: Spanned<String>,
+    pub params: Vec<Param>,
+    pub ret_type: Option<Spanned<Type>>,
+    pub is_vararg: bool,
+}
+
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -872,6 +900,22 @@ impl std::fmt::Display for Type {
                     write!(f, ">")?;
                 }
                 Ok(())
+            }
+            Type::FnPtr { params, ret, is_vararg } => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", p.node)?;
+                }
+                if *is_vararg {
+                    if !params.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "...")?;
+                }
+                write!(f, ") -> {}", ret.node)
             }
             Type::Array(inner) => write!(f, "[{}]", inner.node),
             Type::ConstArray { element, size } => write!(f, "[{}; {}]", element.node, size),

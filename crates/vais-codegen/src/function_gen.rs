@@ -58,6 +58,7 @@ impl CodeGenerator {
         let struct_info = StructInfo {
             name: inst.mangled_name.to_string(),
             fields,
+            repr_c: false,
         };
         self.structs
             .insert(inst.mangled_name.to_string(), struct_info);
@@ -239,15 +240,16 @@ impl CodeGenerator {
 
     pub(crate) fn generate_extern_decl(&self, info: &FunctionInfo) -> String {
         let params: Vec<_> = info
+            .signature
             .params
             .iter()
-            .map(|(_, ty)| self.type_to_llvm(ty))
+            .map(|(_, ty, _)| self.type_to_llvm(ty))
             .collect();
 
-        let ret = self.type_to_llvm(&info.ret_type);
+        let ret = self.type_to_llvm(&info.signature.ret);
 
         // Special handling for fopen_ptr: generate wrapper that calls fopen
-        if info.name == "fopen_ptr" {
+        if info.signature.name == "fopen_ptr" {
             // Generate a wrapper function that forwards to fopen
             return format!(
                 "define {} @fopen_ptr({} %path, {} %mode) {{\nentry:\n  %0 = call {} @fopen({} %path, {} %mode)\n  ret {} %0\n}}",
@@ -261,7 +263,7 @@ impl CodeGenerator {
             );
         }
 
-        format!("declare {} @{}({})", ret, info.name, params.join(", "))
+        format!("declare {} @{}({})", ret, info.signature.name, params.join(", "))
     }
 
     #[allow(dead_code)]

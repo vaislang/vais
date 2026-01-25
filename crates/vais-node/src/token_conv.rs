@@ -106,6 +106,9 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Dyn => "Dyn",
         Token::Macro => "Macro",
         Token::Dollar => "Dollar",
+        Token::DocComment(_) => "DocComment",
+        Token::Extern => "Extern",
+        Token::Ellipsis => "Ellipsis",
     }.to_string()
 }
 
@@ -116,6 +119,7 @@ pub fn token_text(token: &Token, source: &str, span: &std::ops::Range<usize>) ->
         Token::Int(i) => Some(i.to_string()),
         Token::Float(f) => Some(f.to_string()),
         Token::String(s) => Some(s.clone()),
+        Token::DocComment(s) => Some(s.clone()),
         _ => {
             // For other tokens, extract from source
             if span.start < source.len() && span.end <= source.len() {

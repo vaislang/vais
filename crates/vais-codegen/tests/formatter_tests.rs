@@ -69,11 +69,13 @@ fn test_format_simple_function() {
                 name: ident("a"),
                 ty: spanned(named_type("i64")),
                 is_mut: false,
+                is_vararg: false,
             },
             Param {
                 name: ident("b"),
                 ty: spanned(named_type("i64")),
                 is_mut: false,
+                is_vararg: false,
             },
         ],
         ret_type: Some(spanned(named_type("i64"))),
@@ -130,6 +132,7 @@ fn test_format_function_with_generics() {
             name: ident("x"),
             ty: spanned(named_type("T")),
             is_mut: false,
+            is_vararg: false,
         }],
         ret_type: Some(spanned(named_type("T"))),
         body: FunctionBody::Expr(Box::new(spanned(ident_expr("x")))),
@@ -157,6 +160,7 @@ fn test_format_function_with_bounded_generics() {
             name: ident("value"),
             ty: spanned(named_type("T")),
             is_mut: false,
+            is_vararg: false,
         }],
         ret_type: Some(spanned(Type::Unit)),
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit))),
@@ -206,6 +210,7 @@ fn test_format_function_with_block_body() {
             name: ident("x"),
             ty: spanned(named_type("i64")),
             is_mut: false,
+            is_vararg: false,
         }],
         ret_type: Some(spanned(named_type("i64"))),
         body: FunctionBody::Block(vec![
@@ -281,6 +286,7 @@ fn test_format_function_with_mut_params() {
             name: ident("x"),
             ty: spanned(named_type("i64")),
             is_mut: true,
+            is_vararg: false,
         }],
         ret_type: Some(spanned(Type::Unit)),
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit))),
@@ -323,6 +329,7 @@ fn test_format_simple_struct() {
         methods: vec![],
         is_pub: true,
         generics: vec![],
+        attributes: vec![],
     };
 
     let module = Module {
@@ -350,6 +357,7 @@ fn test_format_generic_struct() {
         }],
         methods: vec![],
         is_pub: true,
+        attributes: vec![],
     };
 
     let module = Module {
@@ -371,6 +379,7 @@ fn test_format_struct_with_methods() {
             name: ident("x"),
             ty: spanned(named_type("i64")),
             is_mut: false,
+            is_vararg: false,
         }],
         ret_type: Some(spanned(named_type("Point"))),
         body: FunctionBody::Expr(Box::new(spanned(Expr::StructLit {
@@ -403,6 +412,7 @@ fn test_format_struct_with_methods() {
         methods: vec![spanned(method)],
         is_pub: true,
         generics: vec![],
+        attributes: vec![],
     };
 
     let module = Module {
@@ -1097,11 +1107,13 @@ fn test_format_multiple_items() {
                         name: ident("a"),
                         ty: spanned(named_type("Int")),
                         is_mut: false,
+                        is_vararg: false,
                     },
                     Param {
                         name: ident("b"),
                         ty: spanned(named_type("Int")),
                         is_mut: false,
+                        is_vararg: false,
                     },
                 ],
                 ret_type: Some(spanned(named_type("Int"))),

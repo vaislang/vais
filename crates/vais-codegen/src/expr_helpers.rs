@@ -296,8 +296,8 @@ impl CodeGenerator {
 
             let param_ty = fn_info
                 .as_ref()
-                .and_then(|f| f.params.get(i))
-                .map(|(_, ty)| ty.clone());
+                .and_then(|f| f.signature.params.get(i))
+                .map(|(_, ty, _)| ty.clone());
 
             let arg_ty = param_ty
                 .as_ref()
@@ -334,12 +334,12 @@ impl CodeGenerator {
 
         let ret_ty = fn_info
             .as_ref()
-            .map(|f| self.type_to_llvm(&f.ret_type))
+            .map(|f| self.type_to_llvm(&f.signature.ret))
             .unwrap_or_else(|| "i64".to_string());
 
         let actual_fn_name = fn_info
             .as_ref()
-            .map(|f| f.name.clone())
+            .map(|f| f.signature.name.clone())
             .unwrap_or_else(|| fn_name.clone());
 
         // Generate the appropriate call based on function type
@@ -729,7 +729,7 @@ impl CodeGenerator {
 
         if let Expr::Ident(name) = &target.node {
             if let Some(local) = self.locals.get(name).cloned() {
-                if !local.is_param {
+                if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
                     ir.push_str(&format!(
                         "  store {} {}, {}* %{}\n",
@@ -806,7 +806,7 @@ impl CodeGenerator {
 
         if let Expr::Ident(name) = &target.node {
             if let Some(local) = self.locals.get(name.as_str()).cloned() {
-                if !local.is_param {
+                if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
                     ir.push_str(&format!(
                         "  store {} {}, {}* %{}\n",
@@ -1179,7 +1179,7 @@ impl CodeGenerator {
         }
 
         let ret_type = self.functions.get(&full_method_name)
-            .map(|info| self.type_to_llvm(&info.ret_type))
+            .map(|info| self.type_to_llvm(&info.signature.ret))
             .unwrap_or_else(|| "i64".to_string());
 
         let tmp = self.next_temp(counter);
@@ -1275,7 +1275,7 @@ impl CodeGenerator {
         for cap_name in &capture_names {
             if let Some(local) = self.locals.get(cap_name) {
                 let ty = local.ty.clone();
-                if local.is_param {
+                if local.is_param() {
                     captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
                 } else {
                     let tmp = self.next_temp(counter);
@@ -1314,11 +1314,7 @@ impl CodeGenerator {
         for (cap_name, cap_ty, _) in &captured_vars {
             self.locals.insert(
                 cap_name.clone(),
-                LocalVar {
-                    ty: cap_ty.clone(),
-                    is_param: true,
-                    llvm_name: format!("__cap_{}", cap_name),
-                },
+                LocalVar::param(cap_ty.clone(), format!("__cap_{}", cap_name)),
             );
         }
 
@@ -1326,11 +1322,7 @@ impl CodeGenerator {
             let ty = self.ast_type_to_resolved(&p.ty.node);
             self.locals.insert(
                 p.name.node.clone(),
-                LocalVar {
-                    ty,
-                    is_param: true,
-                    llvm_name: p.name.node.clone(),
-                },
+                LocalVar::param(ty, p.name.node.clone()),
             );
         }
 

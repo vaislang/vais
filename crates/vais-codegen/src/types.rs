@@ -11,10 +11,9 @@ pub(crate) struct LoopLabels {
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionInfo {
-    pub name: String,
-    pub params: Vec<(String, ResolvedType)>,
-    pub ret_type: ResolvedType,
+    pub signature: vais_types::FunctionSig,
     pub is_extern: bool,
+    pub extern_abi: Option<String>, // ABI for extern functions (e.g., "C")
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +21,7 @@ pub(crate) struct StructInfo {
     #[allow(dead_code)]
     pub name: String,
     pub fields: Vec<(String, ResolvedType)>,
+    pub repr_c: bool, // true if #[repr(C)] attribute is present
 }
 
 #[derive(Debug, Clone)]
@@ -54,13 +54,71 @@ pub(crate) enum EnumVariantFields {
     Struct(Vec<(String, ResolvedType)>),
 }
 
+/// Represents the storage kind of a local variable
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalVarKind {
+    /// Function parameter (SSA value, no alloca)
+    Param,
+    /// Immutable simple binding (SSA style, no alloca, direct register)
+    Ssa,
+    /// Stack-allocated variable (uses alloca)
+    Alloca,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct LocalVar {
     pub ty: ResolvedType,
-    /// True if this is a function parameter (SSA value), false if alloca'd
-    pub is_param: bool,
+    /// The storage kind of this variable
+    pub kind: LocalVarKind,
     /// The actual LLVM IR name for this variable (may differ from source name in loops)
     pub llvm_name: String,
+}
+
+impl LocalVar {
+    /// Create a new parameter variable (SSA value, no alloca)
+    pub fn param(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
+        Self {
+            ty,
+            kind: LocalVarKind::Param,
+            llvm_name: llvm_name.into(),
+        }
+    }
+
+    /// Create a new SSA variable (immutable simple binding, no alloca)
+    pub fn ssa(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
+        Self {
+            ty,
+            kind: LocalVarKind::Ssa,
+            llvm_name: llvm_name.into(),
+        }
+    }
+
+    /// Create a new alloca variable (stack-allocated)
+    pub fn alloca(ty: ResolvedType, llvm_name: impl Into<String>) -> Self {
+        Self {
+            ty,
+            kind: LocalVarKind::Alloca,
+            llvm_name: llvm_name.into(),
+        }
+    }
+
+    /// Returns true if this is a function parameter
+    #[inline]
+    pub fn is_param(&self) -> bool {
+        matches!(self.kind, LocalVarKind::Param)
+    }
+
+    /// Returns true if this variable uses SSA style (no alloca)
+    #[inline]
+    pub fn is_ssa(&self) -> bool {
+        matches!(self.kind, LocalVarKind::Ssa)
+    }
+
+    /// Returns true if this variable uses alloca
+    #[inline]
+    pub fn is_alloca(&self) -> bool {
+        matches!(self.kind, LocalVarKind::Alloca)
+    }
 }
 
 /// Information about a closure (lambda with captures)

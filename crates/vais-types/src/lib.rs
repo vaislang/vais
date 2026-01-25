@@ -201,6 +201,7 @@ impl TypeChecker {
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -214,6 +215,7 @@ impl TypeChecker {
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -227,6 +229,7 @@ impl TypeChecker {
                 params: vec![("c".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -240,6 +243,7 @@ impl TypeChecker {
                 params: vec![("size".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -253,6 +257,7 @@ impl TypeChecker {
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::Unit,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -266,6 +271,7 @@ impl TypeChecker {
                 params: vec![("code".to_string(), ResolvedType::I32, false)],
                 ret: ResolvedType::Unit,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -283,6 +289,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -300,6 +307,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -313,6 +321,7 @@ impl TypeChecker {
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -326,6 +335,7 @@ impl TypeChecker {
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -339,6 +349,7 @@ impl TypeChecker {
                 params: vec![("s".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -352,6 +363,7 @@ impl TypeChecker {
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -368,6 +380,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::Unit,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -381,6 +394,7 @@ impl TypeChecker {
                 params: vec![("ptr".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -397,6 +411,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::Unit,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -415,6 +430,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -431,6 +447,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -444,6 +461,7 @@ impl TypeChecker {
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -462,6 +480,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -480,6 +499,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -493,6 +513,7 @@ impl TypeChecker {
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -509,6 +530,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -526,6 +548,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -542,6 +565,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -559,6 +583,7 @@ impl TypeChecker {
                 ],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -572,6 +597,7 @@ impl TypeChecker {
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -585,6 +611,7 @@ impl TypeChecker {
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -598,6 +625,7 @@ impl TypeChecker {
                 params: vec![("stream".to_string(), ResolvedType::I64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -632,6 +660,7 @@ impl TypeChecker {
                 ],
                 ret: vec2f32.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -650,6 +679,7 @@ impl TypeChecker {
                 ],
                 ret: vec4f32.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -672,6 +702,7 @@ impl TypeChecker {
                 ],
                 ret: vec8f32.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -688,6 +719,7 @@ impl TypeChecker {
                 ],
                 ret: vec2f64.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -706,6 +738,7 @@ impl TypeChecker {
                 ],
                 ret: vec4f64.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -724,6 +757,7 @@ impl TypeChecker {
                 ],
                 ret: vec4i32.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -746,6 +780,7 @@ impl TypeChecker {
                 ],
                 ret: vec8i32.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -762,6 +797,7 @@ impl TypeChecker {
                 ],
                 ret: vec2i64.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -780,6 +816,7 @@ impl TypeChecker {
                 ],
                 ret: vec4i64.clone(),
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -799,6 +836,7 @@ impl TypeChecker {
                         ],
                         ret: $vec_ty.clone(),
                         is_async: false,
+                is_vararg: false,
                     },
                 );
             };
@@ -859,6 +897,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec4f32.clone(), false)],
                 ret: ResolvedType::F32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -872,6 +911,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec8f32, false)],
                 ret: ResolvedType::F32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -885,6 +925,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec2f64, false)],
                 ret: ResolvedType::F64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -898,6 +939,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec4f64, false)],
                 ret: ResolvedType::F64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -911,6 +953,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec4i32, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -924,6 +967,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec8i32, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -937,6 +981,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec2i64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
 
@@ -950,6 +995,7 @@ impl TypeChecker {
                 params: vec![("v".to_string(), vec4i64, false)],
                 ret: ResolvedType::I64,
                 is_async: false,
+                is_vararg: false,
             },
         );
     }
@@ -992,6 +1038,12 @@ impl TypeChecker {
                 Item::Error { .. } => {
                     // Error nodes from recovery mode are skipped during type checking.
                     // They represent parsing failures that have already been reported.
+                }
+                Item::ExternBlock(ext) => {
+                    // Register extern functions
+                    for func in &ext.functions {
+                        self.register_extern_function(func)?;
+                    }
                 }
             }
         }
@@ -1099,6 +1151,45 @@ impl TypeChecker {
                 params,
                 ret,
                 is_async: f.is_async,
+                is_vararg: false,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Register an extern function
+    fn register_extern_function(&mut self, func: &vais_ast::ExternFunction) -> TypeResult<()> {
+        let name = func.name.node.clone();
+        if self.functions.contains_key(&name) {
+            return Err(TypeError::Duplicate(name, None));
+        }
+
+        let params: Vec<_> = func
+            .params
+            .iter()
+            .map(|p| {
+                let ty = self.resolve_type(&p.ty.node);
+                (p.name.node.clone(), ty, p.is_mut)
+            })
+            .collect();
+
+        let ret = func
+            .ret_type
+            .as_ref()
+            .map(|t| self.resolve_type(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        self.functions.insert(
+            name.clone(),
+            FunctionSig {
+                name,
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params,
+                ret,
+                is_async: false,
+                is_vararg: func.is_vararg,
             },
         );
 
@@ -1153,6 +1244,7 @@ impl TypeChecker {
                     params,
                     ret,
                     is_async: method.node.is_async,
+                    is_vararg: false,
                 },
             );
         }
@@ -1167,6 +1259,7 @@ impl TypeChecker {
                 generics: s.generics.iter().map(|g| g.name.node.clone()).collect(),
                 fields,
                 methods,
+                repr_c: s.attributes.iter().any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
             },
         );
 
@@ -1360,6 +1453,7 @@ impl TypeChecker {
                     params,
                     ret,
                     is_async: method.node.is_async,
+                    is_vararg: false,
                 },
             ));
         }
@@ -2725,6 +2819,15 @@ impl TypeChecker {
             },
             Type::Unit => ResolvedType::Unit,
             Type::Infer => self.fresh_type_var(),
+            Type::FnPtr { params, ret, is_vararg } => {
+                let resolved_params: Vec<_> = params.iter().map(|p| self.resolve_type(&p.node)).collect();
+                let resolved_ret = Box::new(self.resolve_type(&ret.node));
+                ResolvedType::FnPtr {
+                    params: resolved_params,
+                    ret: resolved_ret,
+                    is_vararg: *is_vararg,
+                }
+            }
             Type::DynTrait { trait_name, generics } => {
                 let resolved_generics: Vec<_> =
                     generics.iter().map(|g| self.resolve_type(&g.node)).collect();

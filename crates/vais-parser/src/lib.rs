@@ -4,6 +4,7 @@
 
 mod expr;
 mod stmt;
+mod ffi;
 
 use thiserror::Error;
 use vais_ast::*;
@@ -394,11 +395,14 @@ impl Parser {
         } else if self.check(&Token::Macro) {
             self.advance();
             Item::Macro(self.parse_macro_def(is_pub)?)
+        } else if self.check(&Token::Extern) {
+            self.advance();
+            Item::ExternBlock(self.parse_extern_block()?)
         } else {
             return Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
-                expected: "F, S, E, O, T, U, W, X, or macro".into(),
+                expected: "F, S, E, O, T, U, W, X, N (extern), or macro".into(),
             });
         };
 
@@ -496,6 +500,9 @@ impl Parser {
 
     /// Parse struct: `Name{fields}` with optional methods
     fn parse_struct(&mut self, is_pub: bool) -> ParseResult<Struct> {
+        // Get attributes that were parsed before the struct keyword
+        let attributes = Vec::new(); // These will be passed in future refactor
+
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
@@ -532,6 +539,7 @@ impl Parser {
             fields,
             methods,
             is_pub,
+            attributes,
         })
     }
 
@@ -1300,6 +1308,7 @@ impl Parser {
                             Span::default(),
                         ),
                         is_mut: is_self_mut,
+                        is_vararg: false,
                     });
                     if !self.check(&Token::RParen) {
                         self.expect(&Token::Comma)?;
@@ -1312,7 +1321,7 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let ty = self.parse_type()?;
 
-            params.push(Param { name, ty, is_mut });
+            params.push(Param { name, ty, is_mut, is_vararg: false });
 
             if !self.check(&Token::RParen) {
                 self.expect(&Token::Comma)?;

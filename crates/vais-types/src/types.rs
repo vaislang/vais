@@ -391,6 +391,13 @@ pub enum ResolvedType {
         ret: Box<ResolvedType>,
     },
 
+    // Function pointer type (for C FFI callbacks)
+    FnPtr {
+        params: Vec<ResolvedType>,
+        ret: Box<ResolvedType>,
+        is_vararg: bool,
+    },
+
     // Named type (struct/enum)
     Named {
         name: String,
@@ -520,6 +527,22 @@ impl std::fmt::Display for ResolvedType {
                 }
                 write!(f, ")->{}", ret)
             }
+            ResolvedType::FnPtr { params, ret, is_vararg } => {
+                write!(f, "fn(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ",")?;
+                    }
+                    write!(f, "{}", p)?;
+                }
+                if *is_vararg {
+                    if !params.is_empty() {
+                        write!(f, ",")?;
+                    }
+                    write!(f, "...")?;
+                }
+                write!(f, ")->{}", ret)
+            }
             ResolvedType::Named { name, generics } => {
                 write!(f, "{}", name)?;
                 if !generics.is_empty() {
@@ -567,6 +590,7 @@ pub struct FunctionSig {
     pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut)
     pub ret: ResolvedType,
     pub is_async: bool,
+    pub is_vararg: bool, // true for variadic C functions (printf, etc.)
 }
 
 /// Struct definition
@@ -576,6 +600,7 @@ pub struct StructDef {
     pub generics: Vec<String>,
     pub fields: HashMap<String, ResolvedType>,
     pub methods: HashMap<String, FunctionSig>,
+    pub repr_c: bool, // true if #[repr(C)] attribute is present
 }
 
 /// Enum variant field types
