@@ -81,6 +81,13 @@ impl ExprVisitor for CodeGenerator {
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
             Expr::Comptime { body } => self.visit_comptime(body, counter),
             Expr::MacroInvoke(invoke) => self.visit_macro_invoke(invoke),
+            Expr::Error { message, .. } => {
+                // Error nodes should not reach codegen - they indicate parsing failures
+                Err(CodegenError::Unsupported(format!(
+                    "Parse error in expression: {}",
+                    message
+                )))
+            }
         }
     }
 
@@ -114,7 +121,7 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_ident(&mut self, name: &str, counter: &mut usize) -> GenResult {
         if let Some(local) = self.locals.get(name).cloned() {
-            if local.is_param {
+            if local.is_param() {
                 Ok((format!("%{}", local.llvm_name), String::new()))
             } else if matches!(local.ty, ResolvedType::Named { .. }) {
                 let tmp = self.next_temp(counter);

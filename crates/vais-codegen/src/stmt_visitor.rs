@@ -16,9 +16,9 @@ impl StmtVisitor for CodeGenerator {
                 name,
                 ty,
                 value,
-                is_mut: _,
+                is_mut,
             } => {
-                self.generate_let_stmt(name, ty.as_ref(), value, counter)
+                self.generate_let_stmt(name, ty.as_ref(), value, *is_mut, counter)
             }
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
@@ -36,6 +36,13 @@ impl StmtVisitor for CodeGenerator {
                 self.defer_stack.push(expr.as_ref().clone());
                 // No IR generated here - defer is processed at function exit
                 Ok(("void".to_string(), String::new()))
+            }
+            Stmt::Error { message, .. } => {
+                // Error nodes should not reach codegen - they indicate parsing failures
+                Err(CodegenError::Unsupported(format!(
+                    "Parse error in statement: {}",
+                    message
+                )))
             }
         }
     }
@@ -67,12 +74,13 @@ impl StmtVisitor for CodeGenerator {
 }
 
 impl CodeGenerator {
-    /// Generate let statement
+    /// Generate let statement with SSA optimization for immutable simple types
     fn generate_let_stmt(
         &mut self,
         name: &Spanned<String>,
         ty: Option<&Spanned<vais_ast::Type>>,
         value: &Spanned<Expr>,
+        is_mut: bool,
         counter: &mut usize,
     ) -> GenResult {
         // Infer type BEFORE generating code, so we can use function return types
@@ -105,50 +113,80 @@ impl CodeGenerator {
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(inferred_ty);
 
-        // Generate unique LLVM name for this variable (to handle loops)
-        let llvm_name = format!("{}.{}", name.node, counter);
-        *counter += 1;
-
-        self.locals.insert(
-            name.node.clone(),
-            LocalVar {
-                ty: resolved_ty.clone(),
-                is_param: false,
-                llvm_name: llvm_name.clone(),
-            },
+        // Determine if we can use SSA style (no alloca) to reduce stack usage
+        // Conditions for SSA:
+        // 1. Not mutable (is_mut == false)
+        // 2. Not a struct literal (needs pointer semantics)
+        // 3. Not an enum variant (needs pointer semantics)
+        // 4. Not a Named type (struct/enum values need special handling)
+        // 5. Simple primitive types (i64, i32, bool, etc.)
+        let is_simple_type = matches!(
+            resolved_ty,
+            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
+            ResolvedType::I128 | ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 |
+            ResolvedType::U64 | ResolvedType::U128 | ResolvedType::F32 | ResolvedType::F64 |
+            ResolvedType::Bool | ResolvedType::Str | ResolvedType::Pointer(_)
         );
 
-        let mut ir = val_ir;
-        let llvm_ty = self.type_to_llvm(&resolved_ty);
+        let use_ssa = !is_mut
+            && !is_struct_lit
+            && !is_enum_variant_call
+            && !is_unit_variant
+            && !matches!(resolved_ty, ResolvedType::Named { .. })
+            && is_simple_type;
 
-        // For struct literals and enum variant constructors, the value is already an alloca'd pointer
-        if is_struct_lit || is_enum_variant_call || is_unit_variant {
-            ir.push_str(&format!(
-                "  %{} = alloca {}*\n",
-                llvm_name, llvm_ty
-            ));
-            ir.push_str(&format!(
-                "  store {}* {}, {}** %{}\n",
-                llvm_ty, val, llvm_ty, llvm_name
-            ));
-        } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
-            // For struct values (e.g., from function returns)
-            let tmp_ptr = format!("%{}.struct", llvm_name);
-            ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
-            ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_ptr));
-            ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
-            ir.push_str(&format!("  store {}* {}, {}** %{}\n", llvm_ty, tmp_ptr, llvm_ty, llvm_name));
+        if use_ssa {
+            // SSA style: directly alias the value, no alloca needed
+            // This significantly reduces stack usage
+            self.locals.insert(
+                name.node.clone(),
+                LocalVar::ssa(resolved_ty.clone(), val.clone()),
+            );
+            // Return just the expression IR, no alloca/store needed
+            Ok(("void".to_string(), val_ir))
         } else {
-            ir.push_str(&format!("  %{} = alloca {}\n", llvm_name, llvm_ty));
-            ir.push_str(&format!("  store {} {}, {}* %{}\n", llvm_ty, val, llvm_ty, llvm_name));
-        }
+            // Traditional alloca style
+            // Generate unique LLVM name for this variable (to handle loops)
+            let llvm_name = format!("{}.{}", name.node, counter);
+            *counter += 1;
 
-        // If this was a lambda with captures, register the closure info
-        if let Some(closure_info) = self.last_lambda_info.take() {
-            self.closures.insert(name.node.clone(), closure_info);
-        }
+            self.locals.insert(
+                name.node.clone(),
+                LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
+            );
 
-        Ok(("void".to_string(), ir))
+            let mut ir = val_ir;
+            let llvm_ty = self.type_to_llvm(&resolved_ty);
+
+            // For struct literals and enum variant constructors, the value is already an alloca'd pointer
+            if is_struct_lit || is_enum_variant_call || is_unit_variant {
+                ir.push_str(&format!(
+                    "  %{} = alloca {}*\n",
+                    llvm_name, llvm_ty
+                ));
+                ir.push_str(&format!(
+                    "  store {}* {}, {}** %{}\n",
+                    llvm_ty, val, llvm_ty, llvm_name
+                ));
+            } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
+                // For struct values (e.g., from function returns)
+                let tmp_ptr = format!("%{}.struct", llvm_name);
+                ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
+                ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_ptr));
+                ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
+                ir.push_str(&format!("  store {}* {}, {}** %{}\n", llvm_ty, tmp_ptr, llvm_ty, llvm_name));
+            } else {
+                ir.push_str(&format!("  %{} = alloca {}\n", llvm_name, llvm_ty));
+                ir.push_str(&format!("  store {} {}, {}* %{}\n", llvm_ty, val, llvm_ty, llvm_name));
+            }
+
+            // If this was a lambda with captures, register the closure info
+            if let Some(closure_info) = self.last_lambda_info.take() {
+                self.closures.insert(name.node.clone(), closure_info);
+            }
+
+            Ok(("void".to_string(), ir))
+        }
     }
 
     /// Generate break statement

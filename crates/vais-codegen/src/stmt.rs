@@ -37,7 +37,7 @@ impl CodeGenerator {
                 name,
                 ty,
                 value,
-                is_mut: _,
+                is_mut,
             } => {
                 // Infer type BEFORE generating code, so we can use function return types
                 let inferred_ty = self.infer_expr_type(value);
@@ -68,68 +68,97 @@ impl CodeGenerator {
                 let resolved_ty = ty
                     .as_ref()
                     .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(inferred_ty); // Use inferred type if not specified
+                    .unwrap_or(inferred_ty.clone()); // Use inferred type if not specified
 
                 // Generate unique LLVM name for this variable (to handle loops)
                 let llvm_name = format!("{}.{}", name.node, counter);
                 *counter += 1;
 
-                self.locals.insert(
-                    name.node.clone(),
-                    LocalVar {
-                        ty: resolved_ty.clone(),
-                        is_param: false, // alloca'd variable
-                        llvm_name: llvm_name.clone(),
-                    },
-                );
-
                 let mut ir = val_ir;
                 let llvm_ty = self.type_to_llvm(&resolved_ty);
 
-                // For struct literals and enum variant constructors, the value is already an alloca'd pointer
-                // We store the pointer to the struct/enum (i.e., %Point*, %Option*)
-                if is_struct_lit || is_enum_variant_call || is_unit_variant {
-                    // The val is already a pointer to the struct/enum (%1, %2, etc)
-                    // Allocate space for a pointer and store it
-                    ir.push_str(&format!(
-                        "  %{} = alloca {}*\n",
-                        llvm_name, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {}* {}, {}** %{}\n",
-                        llvm_ty, val, llvm_ty, llvm_name
-                    ));
-                } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
-                    // For struct values (e.g., from function returns),
-                    // alloca struct, store value, then store pointer to it
-                    // This keeps all struct variables as pointers for consistency
-                    let tmp_ptr = format!("%{}.struct", llvm_name);
-                    ir.push_str(&format!(
-                        "  {} = alloca {}\n",
-                        tmp_ptr, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* {}\n",
-                        llvm_ty, val, llvm_ty, tmp_ptr
-                    ));
-                    ir.push_str(&format!(
-                        "  %{} = alloca {}*\n",
-                        llvm_name, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {}* {}, {}** %{}\n",
-                        llvm_ty, tmp_ptr, llvm_ty, llvm_name
-                    ));
+                // Determine if we can use SSA style (no alloca)
+                // Conditions for SSA:
+                // 1. Not mutable (is_mut == false)
+                // 2. Not a struct literal (needs pointer semantics)
+                // 3. Not an enum variant (needs pointer semantics)
+                // 4. Not a Named type (struct/enum values need special handling)
+                // 5. Simple primitive types (i64, i32, bool, etc.)
+                let is_simple_type = matches!(
+                    resolved_ty,
+                    ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
+                    ResolvedType::I128 | ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 |
+                    ResolvedType::U64 | ResolvedType::U128 | ResolvedType::F32 | ResolvedType::F64 |
+                    ResolvedType::Bool | ResolvedType::Str | ResolvedType::Pointer(_)
+                );
+
+                let use_ssa = !*is_mut
+                    && !is_struct_lit
+                    && !is_enum_variant_call
+                    && !is_unit_variant
+                    && !matches!(resolved_ty, ResolvedType::Named { .. })
+                    && is_simple_type;
+
+                if use_ssa {
+                    // SSA style: directly alias the value, no alloca needed
+                    // The llvm_name will refer to the computed value directly
+                    self.locals.insert(
+                        name.node.clone(),
+                        LocalVar::ssa(resolved_ty.clone(), val.clone()),
+                    );
+                    // No additional IR needed - we just register the mapping
                 } else {
-                    // Allocate and store
-                    ir.push_str(&format!(
-                        "  %{} = alloca {}\n",
-                        llvm_name, llvm_ty
-                    ));
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* %{}\n",
-                        llvm_ty, val, llvm_ty, llvm_name
-                    ));
+                    // Traditional alloca style
+                    self.locals.insert(
+                        name.node.clone(),
+                        LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
+                    );
+
+                    // For struct literals and enum variant constructors, the value is already an alloca'd pointer
+                    // We store the pointer to the struct/enum (i.e., %Point*, %Option*)
+                    if is_struct_lit || is_enum_variant_call || is_unit_variant {
+                        // The val is already a pointer to the struct/enum (%1, %2, etc)
+                        // Allocate space for a pointer and store it
+                        ir.push_str(&format!(
+                            "  %{} = alloca {}*\n",
+                            llvm_name, llvm_ty
+                        ));
+                        ir.push_str(&format!(
+                            "  store {}* {}, {}** %{}\n",
+                            llvm_ty, val, llvm_ty, llvm_name
+                        ));
+                    } else if matches!(resolved_ty, ResolvedType::Named { .. }) {
+                        // For struct values (e.g., from function returns),
+                        // alloca struct, store value, then store pointer to it
+                        // This keeps all struct variables as pointers for consistency
+                        let tmp_ptr = format!("%{}.struct", llvm_name);
+                        ir.push_str(&format!(
+                            "  {} = alloca {}\n",
+                            tmp_ptr, llvm_ty
+                        ));
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* {}\n",
+                            llvm_ty, val, llvm_ty, tmp_ptr
+                        ));
+                        ir.push_str(&format!(
+                            "  %{} = alloca {}*\n",
+                            llvm_name, llvm_ty
+                        ));
+                        ir.push_str(&format!(
+                            "  store {}* {}, {}** %{}\n",
+                            llvm_ty, tmp_ptr, llvm_ty, llvm_name
+                        ));
+                    } else {
+                        // Allocate and store
+                        ir.push_str(&format!(
+                            "  %{} = alloca {}\n",
+                            llvm_name, llvm_ty
+                        ));
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* %{}\n",
+                            llvm_ty, val, llvm_ty, llvm_name
+                        ));
+                    }
                 }
 
                 // If this was a lambda with captures, register the closure info
@@ -157,7 +186,7 @@ impl CodeGenerator {
                     // but we need to return by value, so dereference the pointer
                     let final_val = if let Expr::Ident(name) = &expr.node {
                         if let Some(local) = self.locals.get(name) {
-                            if !local.is_param && matches!(local.ty, ResolvedType::Named { .. }) && matches!(ret_resolved, ResolvedType::Named { .. }) {
+                            if !local.is_param() && matches!(local.ty, ResolvedType::Named { .. }) && matches!(ret_resolved, ResolvedType::Named { .. }) {
                                 // val is a pointer to the struct, load the actual value
                                 let loaded = format!("%ret.{}", counter);
                                 *counter += 1;
@@ -226,6 +255,15 @@ impl CodeGenerator {
                 self.defer_stack.push(expr.as_ref().clone());
                 // No IR generated here - defer is processed at function exit
                 Ok(("void".to_string(), String::new()))
+            }
+
+            Stmt::Error { message, .. } => {
+                // Error nodes should not reach codegen - they indicate parsing failures
+                // that should have been handled before code generation
+                Err(CodegenError::Unsupported(format!(
+                    "Cannot generate code for parse error: {}",
+                    message
+                )))
             }
         }
     }

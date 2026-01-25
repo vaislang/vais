@@ -97,6 +97,14 @@ pub enum Item {
     Impl(Impl),
     /// Macro definition: `macro name! { rules }`
     Macro(MacroDef),
+    /// Error recovery node - represents an item that failed to parse
+    /// Used for continuing parsing after errors to report multiple errors at once.
+    Error {
+        /// Error message describing what went wrong
+        message: String,
+        /// Tokens that were skipped during recovery
+        skipped_tokens: Vec<String>,
+    },
 }
 
 /// Function definition with signature and body.
@@ -584,6 +592,14 @@ pub enum Stmt {
     Continue,
     /// Defer: `D expr` - Execute expr when scope exits (LIFO order)
     Defer(Box<Spanned<Expr>>),
+    /// Error recovery node - represents a statement that failed to parse
+    /// Used for continuing parsing after errors to report multiple errors at once.
+    Error {
+        /// Error message describing what went wrong
+        message: String,
+        /// Tokens that were skipped during recovery
+        skipped_tokens: Vec<String>,
+    },
 }
 
 /// Expressions
@@ -717,6 +733,14 @@ pub enum Expr {
     },
     /// Macro invocation: `name!(args)`
     MacroInvoke(MacroInvoke),
+    /// Error recovery node - represents an expression that failed to parse
+    /// Used for continuing parsing after errors to report multiple errors at once.
+    Error {
+        /// Error message describing what went wrong
+        message: String,
+        /// Tokens that were skipped during recovery
+        skipped_tokens: Vec<String>,
+    },
 }
 
 /// If-else branch

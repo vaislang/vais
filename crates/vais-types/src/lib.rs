@@ -989,6 +989,10 @@ impl TypeChecker {
                     // Macro definitions are handled at the expansion phase
                     // before type checking
                 }
+                Item::Error { .. } => {
+                    // Error nodes from recovery mode are skipped during type checking.
+                    // They represent parsing failures that have already been reported.
+                }
             }
         }
 
@@ -1628,6 +1632,11 @@ impl TypeChecker {
                 self.check_expr(expr)?;
                 // Defer itself doesn't produce a value in the control flow
                 Ok(ResolvedType::Unit)
+            }
+            Stmt::Error { .. } => {
+                // Error nodes from recovery mode are treated as having Unknown type.
+                // The parsing error has already been reported.
+                Ok(ResolvedType::Unknown)
             }
         }
     }
@@ -2576,6 +2585,12 @@ impl TypeChecker {
                     span: Some(invoke.name.span),
                     suggestion: Some("Macro invocations must be expanded before type checking".to_string()),
                 })
+            }
+
+            Expr::Error { .. } => {
+                // Error nodes from recovery mode are treated as having Unknown type.
+                // The parsing error has already been reported.
+                Ok(ResolvedType::Unknown)
             }
         }
     }

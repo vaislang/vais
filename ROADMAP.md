@@ -1075,10 +1075,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] read_file_ptr 표현식 버그 수정 (`buf + 8` → `data_ptr` 변수)
   - [x] cg_find_var 변수 쉐도잉 지원 (역순 검색)
   - [x] **Stage 1 vs Stage 2 출력 비교 완료 (17,397줄 동일 IR 검증)**
-- [ ] **에러 복구 개선**
+- [x] **에러 복구 개선** (완료일: 2026-01-25)
   - Panic-free 파싱 (파싱 에러 후 복구)
-  - Synchronization point 탐지
-  - ErrorNode AST 타입 추가
+  - Synchronization point 탐지 (synchronize_item, synchronize_statement, synchronize_expression)
+  - ErrorNode AST 타입 추가 (Item::Error, Stmt::Error, Expr::Error)
+  - parse_with_recovery() 공개 API
+  - 9개 에러 복구 테스트 추가
 - [ ] **Macro Runtime 통합**
   - Parser → MacroExpander → TypeChecker 흐름
   - 위생적 매크로 기본 지원

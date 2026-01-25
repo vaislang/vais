@@ -516,6 +516,10 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
                 // Defer is not yet supported in JIT mode
                 Err(JitError::Unsupported("defer not yet supported in JIT mode".to_string()))
             }
+
+            Stmt::Error { message, .. } => {
+                Err(JitError::Unsupported(format!("Parse error in statement: {}", message)))
+            }
         }
     }
 

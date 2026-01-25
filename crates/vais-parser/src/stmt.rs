@@ -2,6 +2,7 @@
 //!
 //! Handles parsing of statements including variable declarations,
 //! control flow statements (return, break, continue), and expressions as statements.
+//! Supports error recovery to continue parsing after syntax errors.
 
 use vais_ast::*;
 use vais_lexer::Token;
@@ -9,12 +10,40 @@ use vais_lexer::Token;
 use crate::{ParseError, ParseResult, Parser};
 
 impl Parser {
-    /// Parse block contents (statements)
+    /// Parse block contents (statements) with error recovery support.
+    ///
+    /// In recovery mode, errors are collected and Error nodes are inserted
+    /// into the AST. Parsing continues to find as many errors as possible.
     pub(crate) fn parse_block_contents(&mut self) -> ParseResult<Vec<Spanned<Stmt>>> {
         let mut stmts = Vec::new();
 
         while !self.check(&Token::RBrace) && !self.is_at_end() {
-            stmts.push(self.parse_stmt()?);
+            match self.parse_stmt() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => {
+                    if self.recovery_mode {
+                        // Record the error and create an Error node
+                        let start = self.current_span().start;
+                        let message = e.to_string();
+                        self.record_error(e);
+
+                        // Synchronize to next statement boundary
+                        let skipped_tokens = self.synchronize_statement();
+
+                        let end = self.prev_span().end;
+                        stmts.push(Spanned::new(
+                            Stmt::Error {
+                                message,
+                                skipped_tokens,
+                            },
+                            Span::new(start, end),
+                        ));
+                    } else {
+                        // Not in recovery mode, propagate the error
+                        return Err(e);
+                    }
+                }
+            }
         }
 
         Ok(stmts)
@@ -60,6 +89,33 @@ impl Parser {
 
         let end = self.prev_span().end;
         Ok(Spanned::new(stmt, Span::new(start, end)))
+    }
+
+    /// Parse statement with error recovery.
+    ///
+    /// If parsing fails and recovery mode is enabled, creates an Error node
+    /// and synchronizes to the next statement boundary.
+    pub(crate) fn parse_stmt_with_recovery(&mut self) -> Spanned<Stmt> {
+        match self.parse_stmt() {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                let start = self.current_span().start;
+                let message = e.to_string();
+                self.record_error(e);
+
+                // Synchronize to next statement boundary
+                let skipped_tokens = self.synchronize_statement();
+
+                let end = self.prev_span().end;
+                Spanned::new(
+                    Stmt::Error {
+                        message,
+                        skipped_tokens,
+                    },
+                    Span::new(start, end),
+                )
+            }
+        }
     }
 
     /// Check if current position is a let statement
@@ -117,5 +173,32 @@ impl Parser {
             value: Box::new(value),
             is_mut,
         })
+    }
+
+    /// Parse expression with error recovery.
+    ///
+    /// If parsing fails and recovery mode is enabled, creates an Error expression
+    /// and synchronizes to the next expression boundary.
+    pub(crate) fn parse_expr_with_recovery(&mut self) -> Spanned<Expr> {
+        match self.parse_expr() {
+            Ok(expr) => expr,
+            Err(e) => {
+                let start = self.current_span().start;
+                let message = e.to_string();
+                self.record_error(e);
+
+                // Synchronize to next expression boundary
+                let skipped_tokens = self.synchronize_expression();
+
+                let end = self.prev_span().end;
+                Spanned::new(
+                    Expr::Error {
+                        message,
+                        skipped_tokens,
+                    },
+                    Span::new(start, end),
+                )
+            }
+        }
     }
 }

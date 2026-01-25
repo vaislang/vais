@@ -91,6 +91,10 @@ impl Formatter {
             Item::Trait(t) => self.format_trait(t),
             Item::Impl(i) => self.format_impl(i),
             Item::Macro(m) => self.format_macro(m),
+            Item::Error { message, .. } => {
+                // Format error nodes as comments to preserve them in formatted output
+                self.output.push_str(&format!("{}# ERROR: {}\n", self.indent(), message));
+            }
         }
     }
 
@@ -820,6 +824,11 @@ impl Formatter {
                 self.output.push_str(&self.format_expr(&expr.node));
                 self.output.push('\n');
             }
+            Stmt::Error { message, .. } => {
+                // Format error nodes as comments
+                self.output.push_str(&indent);
+                self.output.push_str(&format!("# ERROR: {}\n", message));
+            }
         }
     }
 
@@ -1129,6 +1138,11 @@ impl Formatter {
                 let tokens_str = self.format_macro_tokens(&invoke.tokens);
                 format!("{}!{}{}{}", invoke.name.node, delim.0, tokens_str, delim.1)
             }
+
+            Expr::Error { message, .. } => {
+                // Format error expressions as comments
+                format!("/* ERROR: {} */", message)
+            }
         }
     }
 
@@ -1205,6 +1219,9 @@ impl Formatter {
             Stmt::Continue => String::from("C"),
             Stmt::Defer(expr) => {
                 format!("D {}", self.format_expr(&expr.node))
+            }
+            Stmt::Error { message, .. } => {
+                format!("# ERROR: {}", message)
             }
         }
     }

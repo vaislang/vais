@@ -83,35 +83,272 @@ impl ParseError {
 
 type ParseResult<T> = Result<T, ParseError>;
 
+/// Synchronization point tokens for error recovery.
+/// These tokens mark natural boundaries in the source code where parsing can resume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncPoint {
+    /// End of statement (`;` or `}`)
+    Statement,
+    /// End of expression (`,`, `)`, `]`, `}`)
+    Expression,
+    /// End of item (next top-level keyword)
+    Item,
+}
+
 /// Recursive descent parser for Vais source code.
 ///
 /// Converts a token stream into an Abstract Syntax Tree (AST).
 /// Uses predictive parsing with single-token lookahead.
+/// Supports error recovery to report multiple errors at once.
 pub struct Parser {
     /// Token stream to parse
     tokens: Vec<SpannedToken>,
     /// Current position in the token stream
     pos: usize,
+    /// Collected errors during parsing (for error recovery mode)
+    errors: Vec<ParseError>,
+    /// Whether error recovery mode is enabled
+    recovery_mode: bool,
 }
 
 impl Parser {
     /// Creates a new parser from a token stream.
     pub fn new(tokens: Vec<SpannedToken>) -> Self {
-        Self { tokens, pos: 0 }
+        Self {
+            tokens,
+            pos: 0,
+            errors: Vec::new(),
+            recovery_mode: false,
+        }
+    }
+
+    /// Creates a new parser with error recovery enabled.
+    ///
+    /// In recovery mode, the parser will try to continue after errors,
+    /// inserting Error nodes into the AST and collecting all errors.
+    pub fn new_with_recovery(tokens: Vec<SpannedToken>) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            errors: Vec::new(),
+            recovery_mode: true,
+        }
+    }
+
+    /// Returns all errors collected during parsing.
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
+    }
+
+    /// Takes all collected errors, leaving the error list empty.
+    pub fn take_errors(&mut self) -> Vec<ParseError> {
+        std::mem::take(&mut self.errors)
+    }
+
+    /// Returns whether any errors were encountered during parsing.
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    /// Records an error for later reporting (used in recovery mode).
+    fn record_error(&mut self, error: ParseError) {
+        self.errors.push(error);
+    }
+
+    /// Synchronize to the next statement boundary for error recovery.
+    /// Skips tokens until a statement boundary is found.
+    /// Returns the list of skipped tokens (as strings for debugging).
+    fn synchronize_statement(&mut self) -> Vec<String> {
+        let mut skipped = Vec::new();
+
+        while !self.is_at_end() {
+            // Check if we're at a statement boundary
+            if let Some(tok) = self.peek() {
+                match &tok.token {
+                    // Statement-ending tokens
+                    Token::Semi | Token::RBrace => {
+                        // Consume the boundary token if it's a semicolon
+                        if tok.token == Token::Semi {
+                            skipped.push(";".to_string());
+                            self.advance();
+                        }
+                        break;
+                    }
+                    // Statement-starting tokens (keywords)
+                    Token::Return | Token::Break | Token::Continue | Token::Defer |
+                    Token::If | Token::Loop | Token::Match => {
+                        break;
+                    }
+                    _ => {
+                        // Check for let statement (ident followed by := or :)
+                        if let Token::Ident(_) = &tok.token {
+                            if let Some(next) = self.peek_next() {
+                                if matches!(next.token, Token::ColonEq | Token::Colon) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Skip this token
+            if let Some(tok) = self.advance() {
+                skipped.push(format!("{:?}", tok.token));
+            }
+        }
+
+        skipped
+    }
+
+    /// Synchronize to the next item boundary for error recovery.
+    /// Skips tokens until a top-level item keyword is found.
+    /// Returns the list of skipped tokens (as strings for debugging).
+    fn synchronize_item(&mut self) -> Vec<String> {
+        let mut skipped = Vec::new();
+
+        while !self.is_at_end() {
+            if let Some(tok) = self.peek() {
+                match &tok.token {
+                    // Top-level item keywords
+                    Token::Function | Token::Struct | Token::Enum | Token::Union |
+                    Token::TypeKeyword | Token::Use | Token::Trait | Token::Impl |
+                    Token::Macro | Token::Pub | Token::Async => {
+                        break;
+                    }
+                    // Attributes can also start items
+                    Token::HashBracket => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+
+            // Skip this token
+            if let Some(tok) = self.advance() {
+                skipped.push(format!("{:?}", tok.token));
+            }
+        }
+
+        skipped
+    }
+
+    /// Synchronize to the next expression boundary for error recovery.
+    /// Skips tokens until an expression delimiter is found.
+    /// Returns the list of skipped tokens (as strings for debugging).
+    fn synchronize_expression(&mut self) -> Vec<String> {
+        let mut skipped = Vec::new();
+        let mut brace_depth = 0;
+        let mut paren_depth = 0;
+        let mut bracket_depth = 0;
+
+        while !self.is_at_end() {
+            if let Some(tok) = self.peek() {
+                match &tok.token {
+                    // Track nesting
+                    Token::LBrace => brace_depth += 1,
+                    Token::RBrace => {
+                        if brace_depth > 0 {
+                            brace_depth -= 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Token::LParen => paren_depth += 1,
+                    Token::RParen => {
+                        if paren_depth > 0 {
+                            paren_depth -= 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Token::LBracket => bracket_depth += 1,
+                    Token::RBracket => {
+                        if bracket_depth > 0 {
+                            bracket_depth -= 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    // At top level (not nested), these are boundaries
+                    Token::Comma | Token::Semi if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+
+            // Skip this token
+            if let Some(tok) = self.advance() {
+                skipped.push(format!("{:?}", tok.token));
+            }
+        }
+
+        skipped
     }
 
     /// Parses a complete module (top-level items).
     ///
     /// This is the main entry point for parsing. It consumes all tokens
     /// and produces a Module containing all top-level definitions.
+    ///
+    /// In recovery mode, parsing errors are collected and Error nodes are
+    /// inserted into the AST. Use `errors()` to retrieve all collected errors.
     pub fn parse_module(&mut self) -> ParseResult<Module> {
         let mut items = Vec::new();
 
         while !self.is_at_end() {
-            items.push(self.parse_item()?);
+            match self.parse_item() {
+                Ok(item) => items.push(item),
+                Err(e) => {
+                    if self.recovery_mode {
+                        // Record the error and create an Error node
+                        let start = self.current_span().start;
+                        let message = e.to_string();
+                        self.record_error(e);
+
+                        // Synchronize to next item boundary
+                        let skipped_tokens = self.synchronize_item();
+
+                        let end = self.prev_span().end;
+                        items.push(Spanned::new(
+                            Item::Error {
+                                message,
+                                skipped_tokens,
+                            },
+                            Span::new(start, end),
+                        ));
+                    } else {
+                        // Not in recovery mode, propagate the error
+                        return Err(e);
+                    }
+                }
+            }
         }
 
         Ok(Module { items })
+    }
+
+    /// Parses a complete module with error recovery enabled.
+    ///
+    /// This is a convenience method that enables recovery mode and returns
+    /// both the AST and any collected errors. Unlike `parse_module()`, this
+    /// method always succeeds (unless there's an unrecoverable internal error),
+    /// returning an AST with Error nodes for problematic sections.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (Module, Vec<ParseError>) containing the parsed module
+    /// and all errors encountered during parsing.
+    pub fn parse_module_with_recovery(&mut self) -> (Module, Vec<ParseError>) {
+        self.recovery_mode = true;
+        let module = self.parse_module().unwrap_or_else(|e| {
+            // This shouldn't happen in recovery mode, but just in case
+            self.record_error(e);
+            Module { items: Vec::new() }
+        });
+        let errors = self.take_errors();
+        (module, errors)
     }
 
     /// Parse a top-level item
@@ -1606,6 +1843,55 @@ pub fn parse(source: &str) -> Result<Module, ParseError> {
     parser.parse_module()
 }
 
+/// Parses Vais source code with error recovery enabled.
+///
+/// Unlike `parse()`, this function continues parsing after encountering errors,
+/// inserting Error nodes into the AST. This is useful for IDE features and
+/// error reporting when you want to see all errors at once.
+///
+/// # Arguments
+///
+/// * `source` - The Vais source code to parse
+///
+/// # Returns
+///
+/// A tuple of (Module, Vec<ParseError>) containing the parsed AST
+/// (with Error nodes for problematic sections) and all collected errors.
+///
+/// # Examples
+///
+/// ```
+/// use vais_parser::parse_with_recovery;
+/// use vais_ast::Item;
+///
+/// // Source with a broken function followed by a valid struct
+/// let source = "F broken(; S Valid{x:i64}";
+/// let (module, errors) = parse_with_recovery(source);
+/// assert!(!errors.is_empty());
+/// // The module still contains the valid struct after recovery
+/// assert!(module.items.iter().any(|item| {
+///     matches!(&item.node, Item::Struct(s) if s.name.node == "Valid")
+/// }));
+/// ```
+pub fn parse_with_recovery(source: &str) -> (Module, Vec<ParseError>) {
+    let tokens = match vais_lexer::tokenize(source) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            return (
+                Module { items: Vec::new() },
+                vec![ParseError::UnexpectedToken {
+                    found: Token::Ident(format!("LexError: {}", e)),
+                    span: 0..0,
+                    expected: "valid token".into(),
+                }],
+            );
+        }
+    };
+
+    let mut parser = Parser::new_with_recovery(tokens);
+    parser.parse_module_with_recovery()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2756,5 +3042,227 @@ F process(a:i64,b:i64)->i64=M (a,b){
         };
         assert_eq!(f.name.node, "gcd");
         assert_eq!(f.params.len(), 2);
+    }
+
+    // ==================== Error Recovery Tests ====================
+
+    #[test]
+    fn test_error_recovery_multiple_items() {
+        // Test that parser recovers and continues parsing after an error
+        // The broken function has an incomplete parameter list followed by a semicolon,
+        // which allows the parser to recover and continue.
+        let source = r#"
+F good1()->i64=1
+F broken(;
+F good2()->i64=2
+S ValidStruct{x:i64}
+"#;
+        let (module, errors) = parse_with_recovery(source);
+
+        // Should have collected at least one error
+        assert!(!errors.is_empty(), "Expected at least one error");
+
+        // Count valid items (good1, good2, ValidStruct) and errors
+        let mut valid_function_count = 0;
+        let mut valid_struct_count = 0;
+        let mut error_count = 0;
+
+        for item in &module.items {
+            match &item.node {
+                Item::Function(f) if f.name.node == "good1" || f.name.node == "good2" => {
+                    valid_function_count += 1;
+                }
+                Item::Struct(s) if s.name.node == "ValidStruct" => {
+                    valid_struct_count += 1;
+                }
+                Item::Error { .. } => {
+                    error_count += 1;
+                }
+                _ => {}
+            }
+        }
+
+        // The parser should recover after the error and parse remaining valid items
+        assert!(valid_function_count >= 1, "Should have parsed at least 1 valid function");
+        assert_eq!(valid_struct_count, 1, "Should have parsed 1 valid struct");
+        assert!(error_count >= 1, "Should have at least 1 error node");
+    }
+
+    #[test]
+    fn test_error_recovery_block_statements() {
+        // Test error recovery within block statements
+        let source = r#"
+F test_block()->i64{
+    x := 1
+    y :=
+    z := 3
+    z
+}
+"#;
+        let (module, errors) = parse_with_recovery(source);
+
+        // Should have errors for the incomplete let statement
+        assert!(!errors.is_empty(), "Expected errors");
+
+        // Should still have parsed the function
+        assert_eq!(module.items.len(), 1);
+        let Item::Function(f) = &module.items[0].node else {
+            panic!("Expected function");
+        };
+        assert_eq!(f.name.node, "test_block");
+
+        // The function body should have statements (some may be error nodes)
+        let FunctionBody::Block(stmts) = &f.body else {
+            panic!("Expected block body");
+        };
+        assert!(!stmts.is_empty());
+
+        // Check that we have both valid statements and error statements
+        let mut has_error_stmt = false;
+        let mut has_valid_let = false;
+        for stmt in stmts {
+            match &stmt.node {
+                Stmt::Error { .. } => has_error_stmt = true,
+                Stmt::Let { name, .. } if name.node == "x" || name.node == "z" => {
+                    has_valid_let = true
+                }
+                _ => {}
+            }
+        }
+        assert!(has_valid_let, "Should have valid let statements");
+        assert!(has_error_stmt, "Should have error statements");
+    }
+
+    #[test]
+    fn test_error_recovery_preserves_span() {
+        // Test that error recovery preserves span information
+        let source = "F broken( F good()->i64=42";
+        let (module, errors) = parse_with_recovery(source);
+
+        // Check that errors have span information
+        for error in &errors {
+            let span = error.span();
+            assert!(span.is_some(), "Error should have span information");
+        }
+
+        // Check that error nodes in AST have valid spans
+        for item in &module.items {
+            assert!(item.span.start <= item.span.end, "Span should be valid");
+        }
+    }
+
+    #[test]
+    fn test_error_recovery_synchronize_to_next_function() {
+        // Test that parser synchronizes correctly to next function keyword
+        let source = r#"
+F broken(x:i64 y:i64)->i64
+F good(a:i64,b:i64)->i64=a+b
+"#;
+        let (module, errors) = parse_with_recovery(source);
+
+        // Should have errors
+        assert!(!errors.is_empty(), "Expected errors for broken function");
+
+        // Should have recovered and parsed the good function
+        let has_good_function = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Function(f) if f.name.node == "good")
+        });
+        assert!(has_good_function, "Should have parsed 'good' function after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_synchronize_to_struct() {
+        // Test synchronization to struct keyword
+        // Use semicolon to help parser recognize the error boundary
+        let source = r#"
+F broken(;
+S Point{x:f64,y:f64}
+"#;
+        let (module, errors) = parse_with_recovery(source);
+
+        assert!(!errors.is_empty());
+
+        let has_struct = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Struct(s) if s.name.node == "Point")
+        });
+        assert!(has_struct, "Should have parsed Point struct after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_empty_after_errors() {
+        // Test that errors() returns collected errors
+        let tokens = vais_lexer::tokenize("F broken(").unwrap();
+        let mut parser = Parser::new_with_recovery(tokens);
+        let _ = parser.parse_module();
+
+        let errors = parser.errors();
+        assert!(!errors.is_empty(), "Should have collected errors");
+    }
+
+    #[test]
+    fn test_error_recovery_take_errors() {
+        // Test that take_errors() returns and clears errors
+        let tokens = vais_lexer::tokenize("F broken(").unwrap();
+        let mut parser = Parser::new_with_recovery(tokens);
+        let _ = parser.parse_module();
+
+        let errors = parser.take_errors();
+        assert!(!errors.is_empty(), "take_errors should return errors");
+        assert!(parser.errors().is_empty(), "errors should be empty after take");
+    }
+
+    #[test]
+    fn test_no_recovery_mode_fails_fast() {
+        // Test that without recovery mode, parsing fails on first error
+        let source = "F broken( F good()->i64=42";
+        let result = parse(source);
+        assert!(result.is_err(), "Without recovery, should fail immediately");
+    }
+
+    #[test]
+    fn test_error_recovery_enum_with_error() {
+        // Test error recovery when enum has errors
+        let source = r#"
+E Broken{A(i64,B}
+E Good{X,Y}
+"#;
+        let (module, errors) = parse_with_recovery(source);
+
+        assert!(!errors.is_empty());
+
+        let has_good_enum = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Enum(e) if e.name.node == "Good")
+        });
+        assert!(has_good_enum, "Should have parsed Good enum after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_mixed_items() {
+        // Test recovery with various item types
+        let source = r#"
+F func1()->i64=1
+S Broken{x
+E MyEnum{A,B}
+F func2()->i64=2
+W MyTrait{F method()->i64}
+"#;
+        let (module, errors) = parse_with_recovery(source);
+
+        assert!(!errors.is_empty(), "Should have errors for broken struct");
+
+        // Count valid items
+        let valid_functions = module.items.iter().filter(|item| {
+            matches!(&item.node, Item::Function(_))
+        }).count();
+        let valid_enums = module.items.iter().filter(|item| {
+            matches!(&item.node, Item::Enum(_))
+        }).count();
+        let valid_traits = module.items.iter().filter(|item| {
+            matches!(&item.node, Item::Trait(_))
+        }).count();
+
+        assert!(valid_functions >= 2, "Should have at least 2 valid functions");
+        assert!(valid_enums >= 1, "Should have at least 1 valid enum");
+        assert!(valid_traits >= 1, "Should have at least 1 valid trait");
     }
 }
