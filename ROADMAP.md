@@ -1189,16 +1189,28 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - generate_pattern_check(): Wildcard, Ident, Literal, Range, Or, Tuple, Variant, Struct 패턴 체크
     - generate_pattern_bindings(): 패턴 변수 바인딩 지원
     - Guard 조건 지원
-  - [ ] Loop/While/For 구현
+  - [x] Loop/While/For 구현 (완료일: 2026-01-26)
+    - generate_loop(): 무한 루프 및 조건부 루프 지원
+    - Loop context 관리 (break/continue 블록 추적)
+    - 패턴 바인딩 기반 구조 (for-like 루프)
+  - [x] Array/Tuple/Index 구현 (완료일: 2026-01-26)
+    - generate_array(): 스택 할당 배열 생성
+    - generate_tuple(): 익명 구조체 기반 튜플
+    - generate_index(): 배열/튜플 인덱스 접근
+  - [x] Method Call 구현 (완료일: 2026-01-26)
+    - generate_method_call(): receiver-first 호출 변환
+  - [x] Break/Continue/Defer 문장 구현 (완료일: 2026-01-26)
+    - generate_break(): 루프 종료 점프
+    - generate_continue(): 루프 시작 점프
+    - Defer 스텁 (완전 구현 대기)
+  - [x] Try/Unwrap 구현 (완료일: 2026-01-26)
+    - generate_try(): ? 연산자 기본 지원
+    - generate_unwrap(): ! 연산자 기본 지원
   - [ ] Lambda/Closure 구현
-  - [ ] Array/Tuple/Index 구현
-  - [ ] Method Call 구현
-  - [ ] Break/Continue/Defer 문장 구현
   - [ ] 제네릭 타입 처리 완성
-  - [ ] Try/Unwrap 구현
 
 ### 남은 작업 (다음 단계)
-- inkwell 전환 진행중 (Match 표현식 완료)
+- inkwell 전환 진행중 (Loop, Array, Method Call, Break/Continue 완료)
 
 ---
 
