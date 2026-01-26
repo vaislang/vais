@@ -1,0 +1,29 @@
+# Test for #[contract] attribute macro - no external contract runtime needed
+
+# Test 1: safe_div - automatic division by zero check
+#[contract(safe_div)]
+F safe_divide(a: i64, b: i64) -> i64 = a / b
+
+# Test 2: division with modulo
+#[contract(safe_div)]
+F safe_modulo(a: i64, b: i64) -> i64 = a % b
+
+# Test 3: All auto-inference (default)
+#[contract]
+F auto_infer(divisor: i64, modulo: i64) -> i64 {
+    result := 100 / divisor
+    result % modulo
+}
+
+# Test 4: Multiple parameters with division
+#[contract(safe_div)]
+F complex_div(a: i64, b: i64, c: i64) -> i64 = (a / b) + (a / c)
+
+# Main entry point - all valid inputs
+F main() -> i64 {
+    result := safe_divide(10, 2)
+    mod_result := safe_modulo(10, 3)
+    auto_result := auto_infer(5, 3)
+    complex_result := complex_div(100, 5, 10)
+    result + mod_result + auto_result + complex_result
+}

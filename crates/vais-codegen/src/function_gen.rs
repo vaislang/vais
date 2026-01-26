@@ -347,6 +347,10 @@ impl CodeGenerator {
         let requires_ir = self.generate_requires_checks(f, &mut counter)?;
         ir.push_str(&requires_ir);
 
+        // Generate automatic contract checks from #[contract] attribute
+        let auto_contract_ir = self.generate_auto_contract_checks(f, &mut counter)?;
+        ir.push_str(&auto_contract_ir);
+
         match &f.body {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;

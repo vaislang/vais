@@ -1228,7 +1228,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 11: 프로덕션 준비 및 고급 기능
 
-> **상태**: 🔄 진행 중 (75%)
+> **상태**: 🔄 진행 중 (80%)
 > **추가일**: 2026-01-26
 > **예상 기간**: 12-16주 (약 3-4개월)
 > **목표**: 프로덕션 레벨 안정성 및 고급 언어 기능 완성
@@ -1289,11 +1289,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - musl libc: ✅ X86_64LinuxMusl, Aarch64LinuxMusl 정적 링크 지원
   - wasi-preview2: ✅ WasiPreview2 정의, SDK 자동 감지
 
-### P3 - 낮은 우선순위 (2-3개월)
-- [ ] **형식 검증 고도화**
-  - #[contract] 속성 매크로 (requires/ensures/invariant)
-  - 재귀 함수 종료성 증명 (decreases)
-  - 속성 기반 테스트 (proptest 스타일)
+### P3 - 낮은 우선순위 (2-3개월) 🔄 진행 중
+- [ ] **형식 검증 고도화** (부분 완료)
+  - [x] #[contract] 속성 매크로 (완료일: 2026-01-27)
+    - `#[contract]`: 기본 계약 자동 추론 (nonnull, safe_div)
+    - `#[contract(safe_div)]`: 나눗셈/나머지 연산의 0 검사 자동 생성
+    - `#[contract(nonnull)]`: 포인터/문자열 파라미터 null 검사
+    - `#[contract(all)]`: 모든 검사 활성화
+    - 함수 본문 분석으로 divisor 파라미터 자동 감지
+  - [ ] 재귀 함수 종료성 증명 강화 (decreases)
+  - [ ] 속성 기반 테스트 (proptest 스타일)
 - [ ] **GPU 백엔드 확장**
   - CUDA 커널 생성 (thread_block_size, shared memory)
   - Metal (Apple GPU) 지원
@@ -1348,7 +1353,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
-| Phase 11: 프로덕션 준비 | 🔄 진행 중 | 0% |
+| Phase 11: 프로덕션 준비 | 🔄 진행 중 | 80% |
 
 ---
 

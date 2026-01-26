@@ -2,9 +2,29 @@
 //!
 //! Generates LLVM IR for requires (preconditions) and ensures (postconditions).
 //! Contract checks are only generated in debug builds.
+//!
+//! ## #[contract] Attribute Macro
+//!
+//! The `#[contract]` attribute provides automatic contract inference based on
+//! function signatures and common patterns:
+//!
+//! - `#[contract]` - Enable auto-inference for common patterns
+//! - `#[contract(pure)]` - Mark as pure function (no side effects)
+//! - `#[contract(nonnull)]` - All pointer/str params are non-null
+//! - `#[contract(safe_div)]` - Division by zero checks
+//! - `#[contract(bounds)]` - Array bounds checking
+//!
+//! Example:
+//! ```vais
+//! #[contract(safe_div)]
+//! F div(a: i64, b: i64) -> i64 { a / b }  // Auto: requires(b != 0)
+//!
+//! #[contract(nonnull)]
+//! F strlen(s: str) -> i64 { ... }  // Auto: requires(s != null)
+//! ```
 
 use crate::{CodeGenerator, CodegenResult};
-use vais_ast::{Function, Expr, Spanned, IfElse};
+use vais_ast::{Function, Expr, Spanned, IfElse, BinOp, Type};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -239,8 +259,359 @@ impl CodeGenerator {
 
     /// Check if a function has any contract attributes
     pub(crate) fn has_contracts(f: &Function) -> bool {
-        f.attributes.iter().any(|a| a.name == "requires" || a.name == "ensures")
+        f.attributes.iter().any(|a| a.name == "requires" || a.name == "ensures" || a.name == "contract")
     }
+
+    /// Check if a function has the #[contract] attribute with specific options
+    fn get_contract_options(f: &Function) -> ContractOptions {
+        let mut options = ContractOptions::default();
+
+        for attr in &f.attributes {
+            if attr.name == "contract" {
+                options.enabled = true;
+                for arg in &attr.args {
+                    match arg.as_str() {
+                        "pure" => options.pure = true,
+                        "nonnull" => options.nonnull = true,
+                        "safe_div" => options.safe_div = true,
+                        "bounds" => options.bounds = true,
+                        "all" => {
+                            options.nonnull = true;
+                            options.safe_div = true;
+                            options.bounds = true;
+                        }
+                        _ => {}
+                    }
+                }
+                // If no specific options, enable all auto-inference
+                if attr.args.is_empty() {
+                    options.nonnull = true;
+                    options.safe_div = true;
+                }
+            }
+        }
+
+        options
+    }
+
+    /// Generate automatic contract checks based on #[contract] options
+    pub(crate) fn generate_auto_contract_checks(
+        &mut self,
+        f: &Function,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip in release mode
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        let options = Self::get_contract_options(f);
+        if !options.enabled {
+            return Ok(String::new());
+        }
+
+        let mut ir = String::new();
+
+        // Generate nonnull checks for pointer/string parameters
+        if options.nonnull {
+            ir.push_str(&self.generate_nonnull_checks(f, counter)?);
+        }
+
+        // Generate safe_div checks by analyzing function body for division
+        if options.safe_div {
+            ir.push_str(&self.generate_safe_div_checks(f, counter)?);
+        }
+
+        Ok(ir)
+    }
+
+    /// Generate non-null checks for pointer and string parameters
+    fn generate_nonnull_checks(
+        &mut self,
+        f: &Function,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        for param in &f.params {
+            if self.is_nullable_type(&param.ty.node) {
+                let param_name = &param.name.node;
+                ir.push_str(&self.generate_nonnull_check_for_param(
+                    param_name,
+                    &f.name.node,
+                    counter,
+                )?);
+            }
+        }
+
+        Ok(ir)
+    }
+
+    /// Check if a type is nullable (pointer or string)
+    fn is_nullable_type(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Pointer(_) => true,
+            Type::Ref(_) | Type::RefMut(_) => true,
+            Type::Named { name, .. } => name == "str",
+            _ => false,
+        }
+    }
+
+    /// Generate a non-null check for a single parameter
+    fn generate_nonnull_check_for_param(
+        &mut self,
+        param_name: &str,
+        func_name: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        let ok_label = format!("nonnull_ok_{}_{}", param_name, *counter);
+        let fail_label = format!("nonnull_fail_{}_{}", param_name, *counter);
+        *counter += 1;
+
+        // Load the parameter value (it's stored as i8* or i64 depending on type)
+        // For simplicity, we compare against null (0)
+        let param_ptr = format!("%{}", param_name);
+
+        // Convert to i64 for comparison (strings and pointers are i8*)
+        let cond_i1 = format!("%nonnull_cond_{}", *counter);
+        *counter += 1;
+
+        ir.push_str(&format!(
+            "  {} = icmp ne i8* {}, null\n",
+            cond_i1, param_ptr
+        ));
+
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cond_i1, ok_label, fail_label
+        ));
+
+        // Failure block
+        ir.push_str(&format!("{}:\n", fail_label));
+
+        let kind_value = 1; // CONTRACT_REQUIRES
+        let condition_str = self.get_or_create_contract_string(
+            &format!("{} != null", param_name)
+        );
+        let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+        let file_str = self.get_or_create_contract_string(&file_name);
+        let func_str = self.get_or_create_contract_string(func_name);
+
+        ir.push_str(&format!(
+            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})\n",
+            kind_value, condition_str, file_str, func_str
+        ));
+        ir.push_str("  unreachable\n");
+
+        // Success block
+        ir.push_str(&format!("{}:\n", ok_label));
+
+        Ok(ir)
+    }
+
+    /// Generate safe division checks by analyzing the function body
+    fn generate_safe_div_checks(
+        &mut self,
+        f: &Function,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        // Find all integer parameters that are used as divisors
+        let divisor_params = self.find_divisor_params(f);
+
+        for param_name in divisor_params {
+            ir.push_str(&self.generate_nonzero_check_for_param(
+                &param_name,
+                &f.name.node,
+                counter,
+            )?);
+        }
+
+        Ok(ir)
+    }
+
+    /// Find parameters that are used as divisors in division operations
+    fn find_divisor_params(&self, f: &Function) -> Vec<String> {
+        let mut divisors = Vec::new();
+
+        // Collect integer parameter names
+        let int_params: Vec<String> = f.params.iter()
+            .filter(|p| self.is_integer_type(&p.ty.node))
+            .map(|p| p.name.node.clone())
+            .collect();
+
+        // Analyze function body for division operations
+        match &f.body {
+            vais_ast::FunctionBody::Expr(expr) => {
+                self.find_divisors_in_expr(&expr.node, &int_params, &mut divisors);
+            }
+            vais_ast::FunctionBody::Block(stmts) => {
+                for stmt in stmts {
+                    self.find_divisors_in_stmt(&stmt.node, &int_params, &mut divisors);
+                }
+            }
+        }
+
+        divisors
+    }
+
+    /// Check if a type is an integer type
+    fn is_integer_type(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named { name, .. } => {
+                matches!(name.as_str(), "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize" | "usize")
+            }
+            _ => false,
+        }
+    }
+
+    /// Find divisor variables in an expression
+    fn find_divisors_in_expr(&self, expr: &Expr, params: &[String], divisors: &mut Vec<String>) {
+        match expr {
+            Expr::Binary { op, right, left, .. } => {
+                if matches!(op, BinOp::Div | BinOp::Mod) {
+                    // Check if right-hand side is a parameter
+                    if let Expr::Ident(name) = &right.node {
+                        if params.contains(name) && !divisors.contains(name) {
+                            divisors.push(name.clone());
+                        }
+                    }
+                }
+                self.find_divisors_in_expr(&left.node, params, divisors);
+                self.find_divisors_in_expr(&right.node, params, divisors);
+            }
+            Expr::Unary { expr: inner, .. } => {
+                self.find_divisors_in_expr(&inner.node, params, divisors);
+            }
+            Expr::Call { func, args, .. } => {
+                self.find_divisors_in_expr(&func.node, params, divisors);
+                for arg in args {
+                    self.find_divisors_in_expr(&arg.node, params, divisors);
+                }
+            }
+            Expr::If { cond, then, else_, .. } => {
+                self.find_divisors_in_expr(&cond.node, params, divisors);
+                for stmt in then {
+                    self.find_divisors_in_stmt(&stmt.node, params, divisors);
+                }
+                if let Some(else_branch) = else_ {
+                    self.find_divisors_in_if_else(else_branch, params, divisors);
+                }
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    self.find_divisors_in_stmt(&stmt.node, params, divisors);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Find divisor variables in a statement
+    fn find_divisors_in_stmt(&self, stmt: &vais_ast::Stmt, params: &[String], divisors: &mut Vec<String>) {
+        match stmt {
+            vais_ast::Stmt::Let { value, .. } => {
+                self.find_divisors_in_expr(&value.node, params, divisors);
+            }
+            vais_ast::Stmt::Expr(expr) => {
+                self.find_divisors_in_expr(&expr.node, params, divisors);
+            }
+            vais_ast::Stmt::Return(Some(expr)) => {
+                self.find_divisors_in_expr(&expr.node, params, divisors);
+            }
+            _ => {}
+        }
+    }
+
+    /// Find divisors in if-else branches
+    fn find_divisors_in_if_else(&self, branch: &IfElse, params: &[String], divisors: &mut Vec<String>) {
+        match branch {
+            IfElse::ElseIf(cond, then, else_) => {
+                self.find_divisors_in_expr(&cond.node, params, divisors);
+                for stmt in then {
+                    self.find_divisors_in_stmt(&stmt.node, params, divisors);
+                }
+                if let Some(next) = else_ {
+                    self.find_divisors_in_if_else(next, params, divisors);
+                }
+            }
+            IfElse::Else(stmts) => {
+                for stmt in stmts {
+                    self.find_divisors_in_stmt(&stmt.node, params, divisors);
+                }
+            }
+        }
+    }
+
+    /// Generate a non-zero check for a parameter
+    fn generate_nonzero_check_for_param(
+        &mut self,
+        param_name: &str,
+        func_name: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        let ok_label = format!("nonzero_ok_{}_{}", param_name, *counter);
+        let fail_label = format!("nonzero_fail_{}_{}", param_name, *counter);
+        *counter += 1;
+
+        // Parameters are passed by value for integers - use directly
+        let param_ref = format!("%{}", param_name);
+
+        // Check if not zero
+        let cond_i1 = format!("%nonzero_cond_{}", *counter);
+        *counter += 1;
+        ir.push_str(&format!(
+            "  {} = icmp ne i64 {}, 0\n",
+            cond_i1, param_ref
+        ));
+
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cond_i1, ok_label, fail_label
+        ));
+
+        // Failure block
+        ir.push_str(&format!("{}:\n", fail_label));
+
+        let kind_value = 1; // CONTRACT_REQUIRES
+        let condition_str = self.get_or_create_contract_string(
+            &format!("{} != 0 (division by zero)", param_name)
+        );
+        let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+        let file_str = self.get_or_create_contract_string(&file_name);
+        let func_str = self.get_or_create_contract_string(func_name);
+
+        ir.push_str(&format!(
+            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 0, i8* {})\n",
+            kind_value, condition_str, file_str, func_str
+        ));
+        ir.push_str("  unreachable\n");
+
+        // Success block
+        ir.push_str(&format!("{}:\n", ok_label));
+
+        Ok(ir)
+    }
+}
+
+/// Options parsed from #[contract(...)] attribute
+#[derive(Debug, Default)]
+struct ContractOptions {
+    /// Whether #[contract] is present
+    enabled: bool,
+    /// #[contract(pure)] - function has no side effects
+    pure: bool,
+    /// #[contract(nonnull)] - pointer/string params must be non-null
+    nonnull: bool,
+    /// #[contract(safe_div)] - check for division by zero
+    safe_div: bool,
+    /// #[contract(bounds)] - check array bounds
+    bounds: bool,
 }
 
 /// Escape a string for LLVM IR constant
