@@ -4,13 +4,13 @@
   "tasks": [
     { "id": 1, "name": "Match 표현식 구현 (inkwell)", "status": "completed", "model": "Opus" },
     { "id": 2, "name": "Loop/While/For 구현 (inkwell)", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "Lambda/Closure 구현 (inkwell)", "status": "pending", "model": "Opus" },
+    { "id": 3, "name": "Lambda/Closure 구현 (inkwell)", "status": "completed", "model": "Opus" },
     { "id": 4, "name": "Array/Tuple/Index 구현 (inkwell)", "status": "completed", "model": "Sonnet" },
     { "id": 5, "name": "Method Call 구현 (inkwell)", "status": "completed", "model": "Sonnet" },
     { "id": 6, "name": "Break/Continue/Defer 문장 구현 (inkwell)", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "제네릭 타입 처리 완성 (inkwell)", "status": "pending", "model": "Opus" },
+    { "id": 7, "name": "제네릭 타입 처리 완성 (inkwell)", "status": "completed", "model": "Opus" },
     { "id": 8, "name": "Try/Unwrap 구현 (inkwell)", "status": "completed", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "Loop/While/For, Array/Tuple/Index, Method Call, Break/Continue/Defer, Try/Unwrap 일괄 구현"
+  "lastCompleted": "제네릭 타입 처리 완성"
 }

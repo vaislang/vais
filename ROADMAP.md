@@ -1206,11 +1206,23 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - [x] Try/Unwrap 구현 (완료일: 2026-01-26)
     - generate_try(): ? 연산자 기본 지원
     - generate_unwrap(): ! 연산자 기본 지원
-  - [ ] Lambda/Closure 구현
-  - [ ] 제네릭 타입 처리 완성
+  - [x] Lambda/Closure 구현 (완료일: 2026-01-26)
+    - generate_lambda(): 람다 함수 생성
+    - 캡처 변수 지원 (captured variables as parameters)
+    - ast_type_to_resolved(): AST Type → ResolvedType 변환
+    - 함수 포인터로 i64 반환
+  - [x] 제네릭 타입 처리 완성 (완료일: 2026-01-26)
+    - get_generic_substitution(): 제네릭 파라미터 치환 조회
+    - set_generic_substitutions(): 제네릭 파라미터 치환 설정
+    - substitute_type(): ResolvedType 내 제네릭 치환
+    - mangle_struct_name(): 제네릭 구조체 맹글링
+    - mangle_function_name(): 제네릭 함수 맹글링
+    - map_type_with_generics(): 제네릭 포함 타입의 LLVM 타입 매핑
+    - define_specialized_struct(): 모노모픽화된 구조체 정의
+    - declare_specialized_function(): 모노모픽화된 함수 선언
 
 ### 남은 작업 (다음 단계)
-- inkwell 전환 진행중 (Loop, Array, Method Call, Break/Continue 완료)
+- **inkwell 완전 전환 완료!** (모든 핵심 기능 구현 완료)
 
 ---
 

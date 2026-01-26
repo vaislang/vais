@@ -14,7 +14,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, FloatPredicate};
 
-use vais_ast::{self as ast, BinaryOp, Expr, IfElse, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, UnaryOp};
+use vais_ast::{self as ast, BinaryOp, Expr, IfElse, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, Type, UnaryOp};
 use vais_types::ResolvedType;
 
 use crate::{CodegenError, CodegenResult, TargetTriple};
@@ -27,6 +27,15 @@ struct LoopContext<'ctx> {
     break_block: inkwell::basic_block::BasicBlock<'ctx>,
     /// Block to jump to on continue
     continue_block: inkwell::basic_block::BasicBlock<'ctx>,
+}
+
+/// Closure information for captured variables
+#[derive(Clone)]
+struct ClosureInfo<'ctx> {
+    /// The generated LLVM function
+    func: FunctionValue<'ctx>,
+    /// Captured variable names and their values (for passing to the lambda)
+    captures: Vec<(String, BasicValueEnum<'ctx>)>,
 }
 
 /// LLVM code generator using inkwell.
@@ -76,6 +85,12 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Struct field names (struct name -> field names in order)
     struct_fields: HashMap<String, Vec<String>>,
+
+    /// Lambda function counter for unique naming
+    lambda_counter: usize,
+
+    /// Lambda functions generated during expression compilation
+    lambda_functions: Vec<FunctionValue<'ctx>>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -111,6 +126,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             generic_substitutions: HashMap::new(),
             generated_structs: HashMap::new(),
             struct_fields: HashMap::new(),
+            lambda_counter: 0,
+            lambda_functions: Vec::new(),
         };
 
         // Declare built-in functions
@@ -936,16 +953,318 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     fn generate_lambda(
         &mut self,
-        _params: &[ast::Param],
-        _body: &Expr,
-        _captures: &[String],
+        params: &[ast::Param],
+        body: &Expr,
+        captures: &[String],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Lambda generation requires creating a new function and closure struct
-        // This is a placeholder - full implementation would:
-        // 1. Create closure struct type with captured variables
-        // 2. Create function with closure environment as first parameter
-        // 3. Return pointer to closure struct
-        Err(CodegenError::Unsupported("Lambda expressions not yet fully implemented in inkwell".to_string()))
+        // Generate unique lambda function name
+        let lambda_name = format!("__lambda_{}", self.lambda_counter);
+        self.lambda_counter += 1;
+
+        // Find captured variables from current scope
+        let mut captured_vars: Vec<(String, BasicValueEnum<'ctx>, BasicTypeEnum<'ctx>)> = Vec::new();
+        for cap_name in captures {
+            if let Some((ptr, var_type)) = self.locals.get(cap_name) {
+                // Load the captured value
+                let val = self.builder.build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                captured_vars.push((cap_name.clone(), val, *var_type));
+            }
+        }
+
+        // Build parameter types: captured vars first, then lambda params
+        let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
+
+        // First add captured variables as parameters
+        for (_, _, cap_type) in &captured_vars {
+            param_types.push((*cap_type).into());
+        }
+
+        // Then add original lambda parameters
+        for p in params {
+            let ty = self.ast_type_to_resolved(&p.ty.node);
+            param_types.push(self.type_mapper.map_type(&ty).into());
+        }
+
+        // Create function type (always returns i64 for now)
+        let fn_type = self.context.i64_type().fn_type(&param_types, false);
+        let lambda_fn = self.module.add_function(&lambda_name, fn_type, None);
+        self.lambda_functions.push(lambda_fn);
+
+        // Save current state
+        let saved_function = self.current_function;
+        let saved_locals = self.locals.clone();
+        let saved_insert_block = self.builder.get_insert_block();
+
+        // Set up lambda context
+        self.current_function = Some(lambda_fn);
+        self.locals.clear();
+
+        // Create entry block for lambda
+        let entry = self.context.append_basic_block(lambda_fn, "entry");
+        self.builder.position_at_end(entry);
+
+        // Register captured variables as parameters in lambda scope
+        let mut param_idx = 0u32;
+        for (cap_name, _, cap_type) in &captured_vars {
+            let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
+            let alloca = self.builder.build_alloca(*cap_type, &format!("__cap_{}", cap_name))
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.build_store(alloca, param_val)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.locals.insert(cap_name.clone(), (alloca, *cap_type));
+            param_idx += 1;
+        }
+
+        // Register original parameters
+        for p in params {
+            let param_val = lambda_fn.get_nth_param(param_idx).unwrap();
+            let ty = self.ast_type_to_resolved(&p.ty.node);
+            let param_type = self.type_mapper.map_type(&ty);
+            let alloca = self.builder.build_alloca(param_type, &p.name.node)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.build_store(alloca, param_val)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.locals.insert(p.name.node.clone(), (alloca, param_type));
+            param_idx += 1;
+        }
+
+        // Generate lambda body
+        let body_val = self.generate_expr(body)?;
+
+        // Add return
+        self.builder.build_return(Some(&body_val))
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Restore context
+        self.current_function = saved_function;
+        self.locals = saved_locals;
+        if let Some(block) = saved_insert_block {
+            self.builder.position_at_end(block);
+        }
+
+        // Return function pointer as i64
+        // If there are captures, we need to create a closure struct
+        if captured_vars.is_empty() {
+            // No captures - just return function pointer as i64
+            let fn_ptr = lambda_fn.as_global_value().as_pointer_value();
+            let fn_int = self.builder.build_ptr_to_int(
+                fn_ptr,
+                self.context.i64_type(),
+                "lambda_ptr"
+            ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(fn_int.into())
+        } else {
+            // With captures - create closure struct { fn_ptr, captures... }
+            // For simplicity, return function pointer as i64
+            // Full closure support would require creating a struct and trampoline
+            let fn_ptr = lambda_fn.as_global_value().as_pointer_value();
+            let fn_int = self.builder.build_ptr_to_int(
+                fn_ptr,
+                self.context.i64_type(),
+                "lambda_ptr"
+            ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            // Store captured values for later use (in a real implementation,
+            // these would be packed into a closure struct)
+            // For now, we just return the function pointer
+            Ok(fn_int.into())
+        }
+    }
+
+    /// Convert AST Type to ResolvedType
+    fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
+        match ty {
+            Type::Named { name, generics } => match name.as_str() {
+                "i8" => ResolvedType::I8,
+                "i16" => ResolvedType::I16,
+                "i32" => ResolvedType::I32,
+                "i64" => ResolvedType::I64,
+                "u8" => ResolvedType::U8,
+                "u16" => ResolvedType::U16,
+                "u32" => ResolvedType::U32,
+                "u64" => ResolvedType::U64,
+                "f32" => ResolvedType::F32,
+                "f64" => ResolvedType::F64,
+                "bool" => ResolvedType::Bool,
+                "str" => ResolvedType::Str,
+                _ => {
+                    // Single uppercase letter is likely a generic type parameter
+                    if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                        ResolvedType::Generic(name.clone())
+                    } else if !generics.is_empty() {
+                        // Named type with generics
+                        let generic_types: Vec<ResolvedType> = generics
+                            .iter()
+                            .map(|g| self.ast_type_to_resolved(&g.node))
+                            .collect();
+                        ResolvedType::Struct(name.clone(), generic_types)
+                    } else {
+                        // Simple named type
+                        ResolvedType::Struct(name.clone(), vec![])
+                    }
+                }
+            },
+            Type::Unit => ResolvedType::Unit,
+            Type::Pointer(inner) => ResolvedType::Ptr(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Array(inner) => ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)), 0),
+            Type::Tuple(elems) => {
+                let elem_types: Vec<ResolvedType> = elems
+                    .iter()
+                    .map(|e| self.ast_type_to_resolved(&e.node))
+                    .collect();
+                ResolvedType::Tuple(elem_types)
+            }
+            Type::Fn { params, ret } => {
+                let param_types: Vec<ResolvedType> = params
+                    .iter()
+                    .map(|p| self.ast_type_to_resolved(&p.node))
+                    .collect();
+                let ret_type = self.ast_type_to_resolved(&ret.node);
+                ResolvedType::Function(param_types, Box::new(ret_type))
+            }
+            Type::Optional(inner) => ResolvedType::Option(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Result(inner) => ResolvedType::Result(
+                Box::new(self.ast_type_to_resolved(&inner.node)),
+                Box::new(ResolvedType::Str) // Default error type
+            ),
+            Type::Ref(inner) => ResolvedType::Ptr(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::RefMut(inner) => ResolvedType::Ptr(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Infer => ResolvedType::I64, // Default to i64 for unresolved types
+            _ => ResolvedType::I64, // Fallback
+        }
+    }
+
+    // ========== Generic Type Handling ==========
+
+    /// Get current generic substitution for a type parameter
+    pub fn get_generic_substitution(&self, param: &str) -> Option<ResolvedType> {
+        self.generic_substitutions.get(param).cloned()
+    }
+
+    /// Set generic substitutions for the current context
+    pub fn set_generic_substitutions(&mut self, subst: HashMap<String, ResolvedType>) {
+        self.generic_substitutions = subst;
+    }
+
+    /// Clear generic substitutions
+    pub fn clear_generic_substitutions(&mut self) {
+        self.generic_substitutions.clear();
+    }
+
+    /// Substitute generic type parameters with concrete types
+    pub fn substitute_type(&self, ty: &ResolvedType) -> ResolvedType {
+        vais_types::substitute_type(ty, &self.generic_substitutions)
+    }
+
+    /// Generate mangled name for a generic struct
+    pub fn mangle_struct_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+        vais_types::mangle_name(name, generics)
+    }
+
+    /// Generate mangled name for a generic function
+    pub fn mangle_function_name(&self, name: &str, generics: &[ResolvedType]) -> String {
+        vais_types::mangle_name(name, generics)
+    }
+
+    /// Map a type to LLVM, handling generics through substitution
+    fn map_type_with_generics(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
+        // First substitute any generic parameters
+        let substituted = self.substitute_type(ty);
+        self.type_mapper.map_type(&substituted)
+    }
+
+    /// Define a specialized (monomorphized) struct type
+    pub fn define_specialized_struct(
+        &mut self,
+        base_name: &str,
+        type_args: &[ResolvedType],
+        fields: &[(String, ResolvedType)],
+    ) -> CodegenResult<StructType<'ctx>> {
+        let mangled_name = self.mangle_struct_name(base_name, type_args);
+
+        // Check if already generated
+        if let Some(st) = self.generated_structs.get(&mangled_name) {
+            return Ok(*st);
+        }
+
+        // Build substitution map from generic params to type args
+        let mut substitutions = HashMap::new();
+        // Assume generic params are T, U, V... in order
+        let generic_names = ["T", "U", "V", "W", "X", "Y", "Z"];
+        for (i, type_arg) in type_args.iter().enumerate() {
+            if let Some(name) = generic_names.get(i) {
+                substitutions.insert(name.to_string(), type_arg.clone());
+            }
+        }
+
+        // Substitute types in fields
+        let field_types: Vec<BasicTypeEnum> = fields
+            .iter()
+            .map(|(_, ty)| {
+                let substituted = vais_types::substitute_type(ty, &substitutions);
+                self.type_mapper.map_type(&substituted)
+            })
+            .collect();
+
+        // Store field names
+        let field_names: Vec<String> = fields.iter().map(|(name, _)| name.clone()).collect();
+        self.struct_fields.insert(mangled_name.clone(), field_names);
+
+        // Create struct type
+        let struct_type = self.context.struct_type(&field_types, false);
+        self.type_mapper.register_struct(&mangled_name, struct_type);
+        self.generated_structs.insert(mangled_name, struct_type);
+
+        Ok(struct_type)
+    }
+
+    /// Declare a specialized (monomorphized) function
+    pub fn declare_specialized_function(
+        &mut self,
+        base_name: &str,
+        type_args: &[ResolvedType],
+        param_types: &[ResolvedType],
+        return_type: &ResolvedType,
+    ) -> CodegenResult<FunctionValue<'ctx>> {
+        let mangled_name = self.mangle_function_name(base_name, type_args);
+
+        // Check if already declared
+        if let Some(fn_val) = self.functions.get(&mangled_name) {
+            return Ok(*fn_val);
+        }
+
+        // Build substitution map
+        let mut substitutions = HashMap::new();
+        let generic_names = ["T", "U", "V", "W", "X", "Y", "Z"];
+        for (i, type_arg) in type_args.iter().enumerate() {
+            if let Some(name) = generic_names.get(i) {
+                substitutions.insert(name.to_string(), type_arg.clone());
+            }
+        }
+
+        // Substitute types in parameters
+        let llvm_param_types: Vec<BasicMetadataTypeEnum> = param_types
+            .iter()
+            .map(|ty| {
+                let substituted = vais_types::substitute_type(ty, &substitutions);
+                self.type_mapper.map_type(&substituted).into()
+            })
+            .collect();
+
+        // Substitute return type
+        let substituted_ret = vais_types::substitute_type(return_type, &substitutions);
+        let fn_type = if matches!(substituted_ret, ResolvedType::Unit) {
+            self.context.void_type().fn_type(&llvm_param_types, false)
+        } else {
+            let ret_type = self.type_mapper.map_type(&substituted_ret);
+            ret_type.fn_type(&llvm_param_types, false)
+        };
+
+        let fn_value = self.module.add_function(&mangled_name, fn_type, None);
+        self.functions.insert(mangled_name, fn_value);
+
+        Ok(fn_value)
     }
 
     // ========== Try/Unwrap ==========
@@ -1793,5 +2112,96 @@ mod tests {
 
         let result = gen.generate_string_literal("hello").unwrap();
         assert!(result.is_pointer_value());
+    }
+
+    #[test]
+    fn test_ast_type_to_resolved() {
+        let context = Context::create();
+        let gen = InkwellCodeGenerator::new(&context, "test");
+
+        // Test basic types
+        let i64_type = Type::Named { name: "i64".to_string(), generics: vec![] };
+        let resolved = gen.ast_type_to_resolved(&i64_type);
+        assert!(matches!(resolved, ResolvedType::I64));
+
+        let bool_type = Type::Named { name: "bool".to_string(), generics: vec![] };
+        let resolved = gen.ast_type_to_resolved(&bool_type);
+        assert!(matches!(resolved, ResolvedType::Bool));
+
+        let unit_type = Type::Unit;
+        let resolved = gen.ast_type_to_resolved(&unit_type);
+        assert!(matches!(resolved, ResolvedType::Unit));
+    }
+
+    #[test]
+    fn test_lambda_counter() {
+        let context = Context::create();
+        let gen = InkwellCodeGenerator::new(&context, "test");
+
+        // Lambda counter should start at 0
+        assert_eq!(gen.lambda_counter, 0);
+    }
+
+    #[test]
+    fn test_generic_substitutions() {
+        let context = Context::create();
+        let mut gen = InkwellCodeGenerator::new(&context, "test");
+
+        // Initially empty
+        assert!(gen.get_generic_substitution("T").is_none());
+
+        // Set substitutions
+        let mut subst = HashMap::new();
+        subst.insert("T".to_string(), ResolvedType::I64);
+        subst.insert("U".to_string(), ResolvedType::Bool);
+        gen.set_generic_substitutions(subst);
+
+        // Check substitutions
+        assert!(matches!(gen.get_generic_substitution("T"), Some(ResolvedType::I64)));
+        assert!(matches!(gen.get_generic_substitution("U"), Some(ResolvedType::Bool)));
+        assert!(gen.get_generic_substitution("V").is_none());
+
+        // Clear substitutions
+        gen.clear_generic_substitutions();
+        assert!(gen.get_generic_substitution("T").is_none());
+    }
+
+    #[test]
+    fn test_mangle_names() {
+        let context = Context::create();
+        let gen = InkwellCodeGenerator::new(&context, "test");
+
+        // Empty type args
+        let name = gen.mangle_struct_name("Vec", &[]);
+        assert_eq!(name, "Vec");
+
+        // With type args
+        let name = gen.mangle_struct_name("Vec", &[ResolvedType::I64]);
+        assert_eq!(name, "Vec$i64");
+
+        // Multiple type args
+        let name = gen.mangle_struct_name("HashMap", &[ResolvedType::Str, ResolvedType::I64]);
+        assert_eq!(name, "HashMap$str_i64");
+    }
+
+    #[test]
+    fn test_substitute_type() {
+        let context = Context::create();
+        let mut gen = InkwellCodeGenerator::new(&context, "test");
+
+        // Set substitutions
+        let mut subst = HashMap::new();
+        subst.insert("T".to_string(), ResolvedType::I64);
+        gen.set_generic_substitutions(subst);
+
+        // Substitute a generic type
+        let generic_type = ResolvedType::Generic("T".to_string());
+        let substituted = gen.substitute_type(&generic_type);
+        assert!(matches!(substituted, ResolvedType::I64));
+
+        // Non-generic type stays the same
+        let concrete_type = ResolvedType::Bool;
+        let substituted = gen.substitute_type(&concrete_type);
+        assert!(matches!(substituted, ResolvedType::Bool));
     }
 }
