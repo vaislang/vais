@@ -1,0 +1,250 @@
+{
+  "Function Definition": {
+    "prefix": ["F", "func", "function"],
+    "body": [
+      "F ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Define a new function"
+  },
+  "Function Expression": {
+    "prefix": ["Fe", "funce"],
+    "body": "F ${1:name}(${2:params}) -> ${3:ReturnType} = ${0:expression}",
+    "description": "Define a function with expression body"
+  },
+  "Struct Definition": {
+    "prefix": ["S", "struct"],
+    "body": [
+      "S ${1:Name} {",
+      "\t${2:field}: ${3:Type},$0",
+      "}"
+    ],
+    "description": "Define a new struct"
+  },
+  "Generic Struct": {
+    "prefix": ["Sg", "gstruct"],
+    "body": [
+      "S ${1:Name}<${2:T}> {",
+      "\t${3:field}: ${4:T},$0",
+      "}"
+    ],
+    "description": "Define a generic struct"
+  },
+  "Enum Definition": {
+    "prefix": ["E", "enum"],
+    "body": [
+      "E ${1:Name} {",
+      "\t${2:Variant1},",
+      "\t${3:Variant2},$0",
+      "}"
+    ],
+    "description": "Define a new enum"
+  },
+  "Enum with Data": {
+    "prefix": ["Ed", "enumd"],
+    "body": [
+      "E ${1:Name} {",
+      "\t${2:Variant}(${3:Type}),$0",
+      "}"
+    ],
+    "description": "Define an enum with data variants"
+  },
+  "Trait Definition": {
+    "prefix": ["T", "trait"],
+    "body": [
+      "T ${1:TraitName} {",
+      "\tF ${2:method}(${3:&self}) -> ${4:ReturnType};$0",
+      "}"
+    ],
+    "description": "Define a new trait"
+  },
+  "Impl Block": {
+    "prefix": ["X", "impl"],
+    "body": [
+      "X ${1:Type} {",
+      "\tF ${2:method}(&self) -> ${3:ReturnType} {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Implement methods for a type"
+  },
+  "Trait Impl": {
+    "prefix": ["Xt", "implt"],
+    "body": [
+      "X ${1:Trait} for ${2:Type} {",
+      "\tF ${3:method}(&self) -> ${4:ReturnType} {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Implement a trait for a type"
+  },
+  "Match Expression": {
+    "prefix": ["M", "match"],
+    "body": [
+      "M ${1:expr} {",
+      "\t${2:pattern} => ${3:result},",
+      "\t_ => ${0:default},",
+      "}"
+    ],
+    "description": "Match expression"
+  },
+  "If Expression": {
+    "prefix": ["I", "if"],
+    "body": [
+      "I ${1:condition} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If expression"
+  },
+  "If-Else Expression": {
+    "prefix": ["Ie", "ifelse"],
+    "body": [
+      "I ${1:condition} {",
+      "\t$2",
+      "} else {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If-else expression"
+  },
+  "Loop": {
+    "prefix": ["L", "loop"],
+    "body": [
+      "L {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Infinite loop"
+  },
+  "While Loop": {
+    "prefix": ["W", "while"],
+    "body": [
+      "W ${1:condition} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "While loop"
+  },
+  "For Loop": {
+    "prefix": ["for"],
+    "body": [
+      "for ${1:item} in ${2:iter} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "For loop over iterator"
+  },
+  "Main Function": {
+    "prefix": ["main", "Fmain"],
+    "body": [
+      "F main() -> i64 {",
+      "\t$0",
+      "\t0",
+      "}"
+    ],
+    "description": "Main entry point function"
+  },
+  "Print": {
+    "prefix": ["print", "printf"],
+    "body": "printf(\"${1:%s}\\n\", ${2:args})",
+    "description": "Print formatted string"
+  },
+  "Let Binding": {
+    "prefix": ["let"],
+    "body": "let ${1:name}: ${2:Type} = ${0:value}",
+    "description": "Let binding with type annotation"
+  },
+  "Mutable Binding": {
+    "prefix": ["letm", "mut"],
+    "body": "let mut ${1:name}: ${2:Type} = ${0:value}",
+    "description": "Mutable let binding"
+  },
+  "Import": {
+    "prefix": ["I", "import"],
+    "body": "I \"${1:path}\"",
+    "description": "Import a module"
+  },
+  "Return": {
+    "prefix": ["R", "return"],
+    "body": "R ${0:value}",
+    "description": "Return statement"
+  },
+  "Break": {
+    "prefix": ["B", "break"],
+    "body": "B",
+    "description": "Break from loop"
+  },
+  "Continue": {
+    "prefix": ["C", "continue"],
+    "body": "C",
+    "description": "Continue to next iteration"
+  },
+  "Assert": {
+    "prefix": ["A", "assert"],
+    "body": "A ${1:condition}, \"${2:message}\"",
+    "description": "Assert condition"
+  },
+  "Async Function": {
+    "prefix": ["async", "Fasync"],
+    "body": [
+      "async F ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Async function definition"
+  },
+  "Await": {
+    "prefix": ["await"],
+    "body": "await ${0:future}",
+    "description": "Await a future"
+  },
+  "Spawn": {
+    "prefix": ["spawn"],
+    "body": "spawn ${0:async_fn}()",
+    "description": "Spawn an async task"
+  },
+  "Defer": {
+    "prefix": ["defer"],
+    "body": "defer ${0:cleanup_expr}",
+    "description": "Defer expression until scope exit"
+  },
+  "Test Function": {
+    "prefix": ["test", "Ftest"],
+    "body": [
+      "#[test]",
+      "F test_${1:name}() {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Test function"
+  },
+  "Derive": {
+    "prefix": ["derive"],
+    "body": "#[derive(${1:Debug, Clone})]",
+    "description": "Derive attribute"
+  },
+  "Option Some": {
+    "prefix": ["Some"],
+    "body": "Some(${0:value})",
+    "description": "Some variant of Option"
+  },
+  "Option None": {
+    "prefix": ["None"],
+    "body": "None",
+    "description": "None variant of Option"
+  },
+  "Result Ok": {
+    "prefix": ["Ok"],
+    "body": "Ok(${0:value})",
+    "description": "Ok variant of Result"
+  },
+  "Result Err": {
+    "prefix": ["Err"],
+    "body": "Err(${0:error})",
+    "description": "Err variant of Result"
+  }
+}

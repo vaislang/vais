@@ -64,6 +64,12 @@
         "path": "./syntaxes/vais.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "vais",
+        "path": "./snippets/vais.json"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "Vais Language Server",

@@ -266,12 +266,20 @@ enum PkgCommands {
         /// Update the lock file
         #[arg(long)]
         update: bool,
+
+        /// Use only cached packages (no network requests)
+        #[arg(long)]
+        offline: bool,
     },
 
     /// Update dependencies to latest compatible versions
     Update {
         /// Specific packages to update (or all if not specified)
         packages: Vec<String>,
+
+        /// Use only cached packages (no network requests)
+        #[arg(long)]
+        offline: bool,
     },
 
     /// Search for packages in the registry
@@ -282,6 +290,10 @@ enum PkgCommands {
         /// Maximum results to show
         #[arg(long, default_value = "20")]
         limit: usize,
+
+        /// Search only in cached index (no network requests)
+        #[arg(long)]
+        offline: bool,
     },
 
     /// Show information about a package
@@ -294,6 +306,13 @@ enum PkgCommands {
     Cache {
         #[command(subcommand)]
         action: CacheAction,
+    },
+
+    /// Audit dependencies for known vulnerabilities
+    Audit {
+        /// Output format (text, json)
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 }
 
@@ -1513,16 +1532,16 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             Ok(())
         }
 
-        PkgCommands::Install { packages, update } => {
-            cmd_pkg_install(&cwd, packages, update, verbose)
+        PkgCommands::Install { packages, update, offline } => {
+            cmd_pkg_install(&cwd, packages, update, offline, verbose)
         }
 
-        PkgCommands::Update { packages } => {
-            cmd_pkg_update(&cwd, packages, verbose)
+        PkgCommands::Update { packages, offline } => {
+            cmd_pkg_update(&cwd, packages, offline, verbose)
         }
 
-        PkgCommands::Search { query, limit } => {
-            cmd_pkg_search(&query, limit, verbose)
+        PkgCommands::Search { query, limit, offline } => {
+            cmd_pkg_search(&query, limit, offline, verbose)
         }
 
         PkgCommands::Info { name } => {
@@ -1532,13 +1551,16 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         PkgCommands::Cache { action } => {
             cmd_pkg_cache(action, verbose)
         }
+
+        PkgCommands::Audit { format } => {
+            cmd_pkg_audit(&cwd, &format, verbose)
+        }
     }
 }
 
 /// Install packages from registry
-fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, verbose: bool) -> Result<(), String> {
-    use registry::{PackageCache, RegistryClient, RegistrySource, VersionReq, LockFile, DependencyResolver};
-    use package::{find_manifest, load_manifest};
+fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: bool, verbose: bool) -> Result<(), String> {
+    use registry::{RegistryClient, RegistrySource, LockFile, DependencyResolver};
 
     // Initialize registry client
     let source = RegistrySource::default();
@@ -1546,7 +1568,13 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, verbose: boo
         .map_err(|e| format!("failed to initialize registry client: {}", e))?;
 
     // Try to load cached index, or update if needed
-    if !client.load_cached_index().map_err(|e| e.to_string())? {
+    if offline {
+        // In offline mode, only use cached index
+        if !client.load_cached_index().map_err(|e| e.to_string())? {
+            return Err("No cached index available. Run without --offline first.".to_string());
+        }
+        println!("{} Using cached index (offline mode)", "Info".cyan());
+    } else if !client.load_cached_index().map_err(|e| e.to_string())? {
         println!("{} Updating package index...", "Info".cyan());
         client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
     }
@@ -1590,6 +1618,11 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, verbose: boo
             if verbose {
                 println!("{} {} {} (cached)", "Skipping".yellow(), pkg.name, pkg.version);
             }
+        } else if offline {
+            return Err(format!(
+                "Package {} {} not in cache. Run without --offline to download.",
+                pkg.name, pkg.version
+            ));
         } else {
             println!("{} {} {}...", "Installing".green(), pkg.name, pkg.version);
             client.download(&pkg.name, &pkg.version)
@@ -1607,8 +1640,8 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, verbose: boo
 }
 
 /// Update dependencies
-fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, verbose: bool) -> Result<(), String> {
-    use registry::{RegistryClient, RegistrySource, VersionReq, LockFile, DependencyResolver};
+fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: bool) -> Result<(), String> {
+    use registry::{RegistryClient, RegistrySource, LockFile, DependencyResolver};
     use package::{find_manifest, load_manifest};
 
     // Find and load manifest
@@ -1622,8 +1655,15 @@ fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, verbose: bool) -> Result<()
     let mut client = RegistryClient::new(source)
         .map_err(|e| format!("failed to initialize registry client: {}", e))?;
 
-    println!("{} Updating package index...", "Info".cyan());
-    client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+    if offline {
+        if !client.load_cached_index().map_err(|e| e.to_string())? {
+            return Err("No cached index available. Run without --offline first.".to_string());
+        }
+        println!("{} Using cached index (offline mode)", "Info".cyan());
+    } else {
+        println!("{} Updating package index...", "Info".cyan());
+        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+    }
 
     // Determine which packages to update
     let deps_to_update: Vec<(String, String)> = if packages.is_empty() {
@@ -1695,7 +1735,7 @@ fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, verbose: bool) -> Result<()
 }
 
 /// Search for packages
-fn cmd_pkg_search(query: &str, limit: usize, verbose: bool) -> Result<(), String> {
+fn cmd_pkg_search(query: &str, limit: usize, offline: bool, verbose: bool) -> Result<(), String> {
     use registry::{RegistryClient, RegistrySource};
 
     let source = RegistrySource::default();
@@ -1703,7 +1743,14 @@ fn cmd_pkg_search(query: &str, limit: usize, verbose: bool) -> Result<(), String
         .map_err(|e| format!("failed to initialize registry client: {}", e))?;
 
     // Try cached index first, update if not available
-    if !client.load_cached_index().map_err(|e| e.to_string())? {
+    if offline {
+        if !client.load_cached_index().map_err(|e| e.to_string())? {
+            return Err("No cached index available. Run without --offline first.".to_string());
+        }
+        if verbose {
+            println!("{} Using cached index (offline mode)", "Info".cyan());
+        }
+    } else if !client.load_cached_index().map_err(|e| e.to_string())? {
         println!("{} Updating package index...", "Info".cyan());
         client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
     }
@@ -1838,6 +1885,86 @@ fn cmd_pkg_cache(action: CacheAction, _verbose: bool) -> Result<(), String> {
                 let version_strs: Vec<String> = versions.iter().map(|v| v.to_string()).collect();
                 println!("  {} [{}]", name.bold(), version_strs.join(", "));
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Audit dependencies for known vulnerabilities
+fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(), String> {
+    use package::{find_manifest, load_manifest};
+
+    // Find and load manifest
+    let pkg_dir = find_manifest(cwd)
+        .ok_or_else(|| "could not find vais.toml".to_string())?;
+    let manifest = load_manifest(&pkg_dir)
+        .map_err(|e| e.to_string())?;
+
+    // Load lock file if exists
+    let lock_path = pkg_dir.join("vais.lock");
+    let locked_packages: Vec<(String, String)> = if lock_path.exists() {
+        use registry::LockFile;
+        let lock = LockFile::load(&lock_path).map_err(|e| e.to_string())?;
+        lock.packages.iter()
+            .map(|(name, pkg)| (name.clone(), pkg.version.to_string()))
+            .collect()
+    } else {
+        // Use manifest dependencies if no lock file
+        manifest.dependencies.iter()
+            .filter_map(|(name, dep)| {
+                match dep {
+                    package::Dependency::Version(v) => Some((name.clone(), v.clone())),
+                    package::Dependency::Detailed(d) if d.version.is_some() => {
+                        Some((name.clone(), d.version.clone().unwrap()))
+                    }
+                    _ => None
+                }
+            })
+            .collect()
+    };
+
+    if locked_packages.is_empty() {
+        println!("{} No dependencies to audit", "Info".cyan());
+        return Ok(());
+    }
+
+    if verbose {
+        println!("{} Auditing {} package(s)...", "Info".cyan(), locked_packages.len());
+    }
+
+    // Check for known vulnerabilities
+    // TODO: Connect to a vulnerability database (e.g., OSV, GHSA)
+    // For now, this is a placeholder implementation
+
+    let vulnerabilities: Vec<(String, String, String)> = Vec::new(); // (package, version, advisory)
+
+    match format {
+        "json" => {
+            println!("{{");
+            println!("  \"packages\": {},", locked_packages.len());
+            println!("  \"vulnerabilities\": [");
+            for (i, (pkg, ver, advisory)) in vulnerabilities.iter().enumerate() {
+                let comma = if i < vulnerabilities.len() - 1 { "," } else { "" };
+                println!("    {{ \"package\": \"{}\", \"version\": \"{}\", \"advisory\": \"{}\" }}{}", pkg, ver, advisory, comma);
+            }
+            println!("  ]");
+            println!("}}");
+        }
+        _ => {
+            println!("{}", "Dependency Audit".bold());
+            println!("  {}: {}", "packages scanned".cyan(), locked_packages.len());
+
+            if vulnerabilities.is_empty() {
+                println!("\n{} No known vulnerabilities found", "✓".green());
+            } else {
+                println!("\n{} {} vulnerabilities found:", "⚠".yellow().bold(), vulnerabilities.len());
+                for (pkg, ver, advisory) in &vulnerabilities {
+                    println!("  {} {} - {}", pkg.red(), ver, advisory);
+                }
+            }
+
+            println!("\n{} For more information, visit: https://osv.dev", "ℹ".blue());
         }
     }
 

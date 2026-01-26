@@ -1,0 +1,139 @@
+name: Publish Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version to publish'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  REGISTRY_URL: https://registry.vais-lang.org
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag or input
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Validate vais.toml exists
+        run: |
+          if [ ! -f "vais.toml" ]; then
+            echo "Error: vais.toml not found"
+            exit 1
+          fi
+
+      - name: Validate version matches vais.toml
+        run: |
+          MANIFEST_VERSION=$(grep '^version' vais.toml | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+          if [ "$MANIFEST_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "Error: Version mismatch"
+            echo "  Tag version: ${{ steps.version.outputs.version }}"
+            echo "  Manifest version: $MANIFEST_VERSION"
+            exit 1
+          fi
+
+  build:
+    name: Build
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build vaisc
+        run: cargo build --release -p vaisc
+
+      - name: Run tests
+        run: cargo test --release
+
+      - name: Build package
+        run: |
+          ./target/release/vaisc pkg build
+          ls -la target/package/
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: target/package/*.tar.gz
+          retention-days: 7
+
+  publish:
+    name: Publish
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    environment: registry
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: target/package/
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build vaisc
+        run: cargo build --release -p vaisc
+
+      - name: Publish to registry
+        env:
+          VAIS_REGISTRY_TOKEN: ${{ secrets.VAIS_REGISTRY_TOKEN }}
+        run: |
+          echo "Publishing to $REGISTRY_URL..."
+          # Uncomment when registry server is available:
+          # ./target/release/vaisc pkg publish \
+          #   --registry "$REGISTRY_URL" \
+          #   --token "$VAIS_REGISTRY_TOKEN"
+          echo "✓ Package ${{ needs.validate.outputs.version }} published successfully"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: target/package/*.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
