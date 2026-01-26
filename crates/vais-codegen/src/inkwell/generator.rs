@@ -91,6 +91,9 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Lambda functions generated during expression compilation
     lambda_functions: Vec<FunctionValue<'ctx>>,
+
+    /// Enum variant tags: maps (enum_name, variant_name) -> tag
+    enum_variants: HashMap<(String, String), i32>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -128,6 +131,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             struct_fields: HashMap::new(),
             lambda_counter: 0,
             lambda_functions: Vec::new(),
+            enum_variants: HashMap::new(),
         };
 
         // Declare built-in functions
@@ -228,8 +232,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let data_type = self.context.i64_type();
         let enum_type = self.context.struct_type(&[tag_type.into(), data_type.into()], false);
 
+        // Register variant tags: each variant gets a sequential tag starting from 0
+        let enum_name = e.name.node.clone();
+        for (tag, variant) in e.variants.iter().enumerate() {
+            self.enum_variants.insert(
+                (enum_name.clone(), variant.name.node.clone()),
+                tag as i32,
+            );
+        }
+
         self.type_mapper.register_struct(&e.name, enum_type);
-        self.generated_structs.insert(e.name.clone(), enum_type);
+        self.generated_structs.insert(enum_name, enum_type);
 
         Ok(enum_type)
     }
@@ -2049,11 +2062,38 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
     }
 
-    /// Gets the tag value for an enum variant.
-    fn get_enum_variant_tag(&self, _variant_name: &str) -> i32 {
-        // TODO: Implement proper enum variant tag lookup
-        // For now, return 0 as a placeholder
-        0
+    /// Gets the tag value for an enum variant by searching all registered enums.
+    ///
+    /// This method searches through all registered enum variants to find the tag
+    /// for the given variant name. If multiple enums have the same variant name,
+    /// the first match is returned.
+    fn get_enum_variant_tag(&self, variant_name: &str) -> i32 {
+        // Search through all registered enum variants
+        for ((_, v_name), tag) in &self.enum_variants {
+            if v_name == variant_name {
+                return *tag;
+            }
+        }
+        // Variant not found - this could happen for built-in types like Option/Result
+        // In such cases, we use a simple heuristic: Some=1, None=0, Ok=0, Err=1
+        match variant_name {
+            "None" => 0,
+            "Some" => 1,
+            "Ok" => 0,
+            "Err" => 1,
+            _ => 0, // Default to 0 for unknown variants
+        }
+    }
+
+    /// Gets the tag value for an enum variant with explicit enum name.
+    ///
+    /// This method provides more precise lookup when the enum name is known.
+    #[allow(dead_code)]
+    fn get_enum_variant_tag_with_enum(&self, enum_name: &str, variant_name: &str) -> i32 {
+        self.enum_variants
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .copied()
+            .unwrap_or_else(|| self.get_enum_variant_tag(variant_name))
     }
 }
 

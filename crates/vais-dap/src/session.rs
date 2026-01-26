@@ -17,6 +17,70 @@ use crate::protocol::requests::*;
 use crate::protocol::types::*;
 use crate::source_map::SourceMap;
 
+/// Check if a type name represents a compound type that has children.
+///
+/// Compound types include:
+/// - Structs (any PascalCase name or containing `Struct`)
+/// - Arrays (`Vec<...>`, `[T; N]`, etc.)
+/// - Pointers to structs (`*T` where T is a struct)
+/// - Enums with fields
+fn is_compound_type(type_name: Option<&str>) -> bool {
+    let Some(t) = type_name else { return false };
+    let t = t.trim();
+
+    // Empty or primitive types
+    if t.is_empty() {
+        return false;
+    }
+
+    // Known primitive types
+    let primitives = [
+        "i8", "i16", "i32", "i64", "i128", "isize",
+        "u8", "u16", "u32", "u64", "u128", "usize",
+        "f32", "f64", "bool", "char", "()", "register",
+    ];
+    if primitives.contains(&t) {
+        return false;
+    }
+
+    // String types that don't expand well
+    if t == "str" || t == "&str" || t == "String" {
+        return false;
+    }
+
+    // Arrays and vectors
+    if t.starts_with("Vec<") || t.starts_with('[') || t.contains("Array") {
+        return true;
+    }
+
+    // Pointers (might point to structs)
+    if t.starts_with('*') || t.starts_with('&') {
+        // Check if it's a pointer to a primitive
+        let inner = t.trim_start_matches(['*', '&', ' ']);
+        if primitives.contains(&inner) || inner == "str" {
+            return false;
+        }
+        return true;
+    }
+
+    // Generic types like Option<T>, Result<T, E>, Box<T>
+    if t.contains('<') {
+        return true;
+    }
+
+    // Struct-like types (PascalCase or contains "struct")
+    if t.contains("struct") || t.contains("Struct") {
+        return true;
+    }
+
+    // If it starts with an uppercase letter, assume it's a struct/enum
+    if t.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        return true;
+    }
+
+    false
+}
+
 /// A debug session managing the debuggee process
 pub struct DebugSession {
     /// The underlying debugger
@@ -42,7 +106,13 @@ pub struct DebugSession {
 #[derive(Debug, Clone)]
 enum VariableRef {
     Scope { frame_id: i64, scope_type: ScopeType },
-    Variable { parent_ref: i64, name: String },
+    Variable {
+        frame_id: i64,
+        parent_ref: i64,
+        name: String,
+        /// Full evaluation path for lldb (e.g., "myStruct.field.subfield")
+        eval_path: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -550,26 +620,93 @@ impl DebugSession {
                     ScopeType::Arguments => debugger.get_arguments(thread_id, frame_idx).await?,
                     ScopeType::Registers => debugger.get_registers(thread_id).await?,
                 };
+                drop(debugger);
 
-                Ok(raw_vars.into_iter()
+                let mut var_ref_mapping = self.var_ref_mapping.write().await;
+
+                let result = raw_vars.into_iter()
                     .skip(start.unwrap_or(0))
                     .take(count.unwrap_or(usize::MAX))
-                    .map(|v| Variable {
-                        name: v.name,
-                        value: v.value,
-                        var_type: v.type_name,
-                        presentation_hint: None,
-                        evaluate_name: v.evaluate_name,
-                        variables_reference: 0, // TODO: Support nested variables
-                        named_variables: None,
-                        indexed_variables: None,
-                        memory_reference: v.memory_reference,
+                    .map(|v| {
+                        // Check if this variable has children (struct, array, pointer to struct)
+                        let has_children = is_compound_type(v.type_name.as_deref());
+                        let variables_reference = if has_children {
+                            let new_ref = self.next_var_ref();
+                            let eval_path = v.evaluate_name.clone().unwrap_or_else(|| v.name.clone());
+                            var_ref_mapping.insert(new_ref, VariableRef::Variable {
+                                frame_id,
+                                parent_ref: variables_reference,
+                                name: v.name.clone(),
+                                eval_path,
+                            });
+                            new_ref
+                        } else {
+                            0
+                        };
+
+                        Variable {
+                            name: v.name,
+                            value: v.value,
+                            var_type: v.type_name,
+                            presentation_hint: None,
+                            evaluate_name: v.evaluate_name,
+                            variables_reference,
+                            named_variables: None,
+                            indexed_variables: None,
+                            memory_reference: v.memory_reference,
+                        }
                     })
-                    .collect())
+                    .collect();
+
+                Ok(result)
             }
-            VariableRef::Variable { parent_ref, name } => {
-                // TODO: Implement nested variable expansion
-                Ok(vec![])
+            VariableRef::Variable { frame_id, parent_ref: _, name: _, eval_path } => {
+                // Get child variables using the evaluation path
+                let (thread_id, frame_idx) = frame_mapping.get(&frame_id)
+                    .copied()
+                    .ok_or(DapError::FrameNotFound(frame_id))?;
+
+                let debugger = self.debugger.read().await;
+                let raw_vars = debugger.get_children(thread_id, frame_idx, &eval_path).await?;
+                drop(debugger);
+
+                let mut var_ref_mapping = self.var_ref_mapping.write().await;
+
+                let result = raw_vars.into_iter()
+                    .skip(start.unwrap_or(0))
+                    .take(count.unwrap_or(usize::MAX))
+                    .map(|v| {
+                        let has_children = is_compound_type(v.type_name.as_deref());
+                        let child_ref = if has_children {
+                            let new_ref = self.next_var_ref();
+                            let child_eval_path = v.evaluate_name.clone()
+                                .unwrap_or_else(|| format!("{}.{}", eval_path, v.name));
+                            var_ref_mapping.insert(new_ref, VariableRef::Variable {
+                                frame_id,
+                                parent_ref: variables_reference,
+                                name: v.name.clone(),
+                                eval_path: child_eval_path,
+                            });
+                            new_ref
+                        } else {
+                            0
+                        };
+
+                        Variable {
+                            name: v.name,
+                            value: v.value,
+                            var_type: v.type_name,
+                            presentation_hint: None,
+                            evaluate_name: v.evaluate_name,
+                            variables_reference: child_ref,
+                            named_variables: None,
+                            indexed_variables: None,
+                            memory_reference: v.memory_reference,
+                        }
+                    })
+                    .collect();
+
+                Ok(result)
             }
         }
     }

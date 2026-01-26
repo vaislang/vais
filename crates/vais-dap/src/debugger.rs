@@ -486,6 +486,32 @@ impl Debugger {
         Ok(regs)
     }
 
+    /// Get child variables of a compound type (struct, array, pointer)
+    ///
+    /// Uses lldb's expression evaluation to access nested members.
+    /// For example, `eval_path="myStruct.field"` will evaluate `myStruct.field`
+    /// and return its child members.
+    pub async fn get_children(
+        &self,
+        thread_id: i64,
+        frame_idx: usize,
+        eval_path: &str,
+    ) -> DapResult<Vec<RawVariable>> {
+        self.send_command(&format!("thread select {}", thread_id))?;
+        self.wait_for_prompt()?;
+        self.send_command(&format!("frame select {}", frame_idx))?;
+        self.wait_for_prompt()?;
+
+        // Use "frame variable" with the path to get child members
+        // The -T flag shows types, and we specify the variable path
+        let cmd = format!("frame variable -T {}", eval_path);
+        let output = self.send_command_get_output(&cmd)?;
+
+        // Parse the output - lldb returns nested children with indentation
+        let vars = parse_nested_variables(&output, eval_path);
+        Ok(vars)
+    }
+
     pub async fn set_variable(
         &mut self,
         thread_id: i64,
@@ -831,6 +857,114 @@ fn parse_registers(output: &str) -> Vec<RawVariable> {
     }
 
     regs
+}
+
+/// Parse nested variable output from `frame variable -T <path>`.
+///
+/// LLDB outputs nested structures with indentation:
+/// ```text
+/// (MyStruct) myVar = {
+///   (i64) field1 = 42
+///   (String) field2 = "hello"
+///   (Inner) inner = {
+///     (i64) x = 10
+///   }
+/// }
+/// ```
+///
+/// For arrays:
+/// ```text
+/// (Vec<i64>) arr = size=3 {
+///   [0] = 1
+///   [1] = 2
+///   [2] = 3
+/// }
+/// ```
+fn parse_nested_variables(output: &str, parent_path: &str) -> Vec<RawVariable> {
+    let mut vars = Vec::new();
+    let lines: Vec<&str> = output.lines().collect();
+
+    // Skip the first line (parent variable itself) and trailing prompt
+    let mut depth = 0;
+    let mut in_parent = false;
+
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("(lldb)") {
+            continue;
+        }
+
+        // Track braces for nesting level
+        let open_braces = line.matches('{').count();
+        let close_braces = line.matches('}').count();
+
+        if !in_parent {
+            // Look for the opening brace of the parent
+            if line.contains('{') {
+                in_parent = true;
+                depth = 1;
+            }
+            continue;
+        }
+
+        // Update depth
+        depth = depth + open_braces - close_braces;
+
+        // Only process direct children (depth == 1)
+        if depth == 1 && !trimmed.is_empty() && !trimmed.starts_with('}') {
+            // Parse array index pattern: "[0] = value" or "(type) [0] = value"
+            if trimmed.contains('[') && trimmed.contains(']') {
+                if let Some(bracket_start) = trimmed.find('[') {
+                    if let Some(bracket_end) = trimmed.find(']') {
+                        let index = &trimmed[bracket_start + 1..bracket_end];
+                        let rest = trimmed[bracket_end + 1..].trim();
+
+                        if let Some(eq_pos) = rest.find('=') {
+                            let value = rest[eq_pos + 1..].trim().to_string();
+                            let name = format!("[{}]", index);
+                            let eval_name = format!("{}[{}]", parent_path, index);
+
+                            vars.push(RawVariable {
+                                name,
+                                value,
+                                type_name: None, // Array elements usually share parent type
+                                evaluate_name: Some(eval_name),
+                                memory_reference: None,
+                            });
+                        }
+                    }
+                }
+            }
+            // Parse struct field pattern: "(type) name = value"
+            else if trimmed.starts_with('(') {
+                if let Some(paren_end) = trimmed.find(')') {
+                    let type_name = trimmed[1..paren_end].to_string();
+                    let rest = trimmed[paren_end + 1..].trim();
+
+                    if let Some(eq_pos) = rest.find('=') {
+                        let name = rest[..eq_pos].trim().to_string();
+                        let value = rest[eq_pos + 1..].trim().to_string();
+                        let eval_name = format!("{}.{}", parent_path, name);
+
+                        vars.push(RawVariable {
+                            name: name.clone(),
+                            value,
+                            type_name: Some(type_name),
+                            evaluate_name: Some(eval_name),
+                            memory_reference: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Stop if we've closed all braces
+        if depth == 0 {
+            break;
+        }
+    }
+
+    vars
 }
 
 fn parse_expression_result(output: &str) -> Option<(String, String)> {
