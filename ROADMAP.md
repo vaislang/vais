@@ -1183,7 +1183,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - StructInfo에 invariants 필드 추가
   - std/contract_runtime.c에 __panic() 함수 추가
   - 테스트: formal_verification_test.vais, contract_violation_test.vais
-- [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API (진행중)
+- [x] **inkwell 완전 전환** - 텍스트 IR → LLVM C API (완료일: 2026-01-26)
   - [x] Match 표현식 구현 (완료일: 2026-01-26)
     - generate_match(): switch 및 chained conditional branches 지원
     - generate_pattern_check(): Wildcard, Ident, Literal, Range, Or, Tuple, Variant, Struct 패턴 체크
