@@ -1228,7 +1228,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 11: 프로덕션 준비 및 고급 기능
 
-> **상태**: 🔄 진행 중 (15%)
+> **상태**: 🔄 진행 중 (30%)
 > **추가일**: 2026-01-26
 > **예상 기간**: 12-16주 (약 3-4개월)
 > **목표**: 프로덕션 레벨 안정성 및 고급 언어 기능 완성
@@ -1250,16 +1250,15 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 프로덕션 코드에 panic! 없음
 
 ### P1 - 높은 우선순위 (3-4주)
-- [ ] **LSP 기능 확장**
-  - Inlay Hints: 타입 추론 결과 inline 표시
-  - Call Hierarchy: 함수 호출 관계 가시화
-  - Folding Ranges: 코드 블록 접기
-  - Document Links: import 경로 클릭 이동
-- [ ] **표준 라이브러리 확장**
-  - std/memory.vais: memset, memmove, compare 저수준 함수
-  - std/allocator.vais: custom allocator trait
-  - std/graph.vais: 그래프 자료구조
-  - std/serialize.vais: 바이너리 직렬화 포맷
+- [x] **LSP 기능 확장** (이미 구현됨, 검증일: 2026-01-26)
+  - Inlay Hints: 타입 추론 결과 inline 표시 ✓
+  - Call Hierarchy: 함수 호출 관계 가시화 ✓
+  - Folding Ranges: 코드 블록 접기 ✓
+  - Document Links: import 경로 클릭 이동 ✓
+- [x] **표준 라이브러리 확장** (완료일: 2026-01-26)
+  - std/memory.vais: memset, memmove, memcmp, byte swap, bit manipulation
+  - std/allocator.vais: Layout, BumpAllocator, PoolAllocator, FreeListAllocator, StackAllocator
+  - (graph, serialize는 P2로 이동)
 - [ ] **컴파일러 성능 최적화**
   - 타입 체크 메모이제이션 (expression hash 기반)
   - 함수 단위 코드 생성 병렬화 (rayon)
