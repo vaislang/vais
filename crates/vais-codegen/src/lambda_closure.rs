@@ -118,6 +118,9 @@ impl CodeGenerator {
                     self.collect_free_vars_in_expr(&msg.node, bound, free);
                 }
             }
+            Expr::Cast { expr, .. } => {
+                self.collect_free_vars_in_expr(&expr.node, bound, free);
+            }
             Expr::MacroInvoke(_) => {
                 // Macro invocations should be expanded before this analysis
                 // No free variables to collect from unexpanded macros
@@ -139,6 +142,13 @@ impl CodeGenerator {
                 if let Some(pat) = pattern {
                     self.collect_pattern_bindings(&pat.node, &mut local_bound);
                 }
+                for stmt in body {
+                    self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
+                }
+            }
+            Expr::While { condition, body } => {
+                self.collect_free_vars_in_expr(&condition.node, bound, free);
+                let mut local_bound = bound.clone();
                 for stmt in body {
                     self.collect_free_vars_in_stmt(&stmt.node, &mut local_bound, free);
                 }

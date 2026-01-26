@@ -314,6 +314,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // Control flow
             Expr::If { cond, then, else_ } => self.generate_if_expr(&cond.node, then, else_.as_ref()),
             Expr::Loop { pattern, iter, body } => self.generate_loop(pattern.as_ref(), iter.as_deref(), body),
+            Expr::While { condition, body } => self.generate_while_loop(condition, body),
             Expr::Match { expr: match_expr, arms } => self.generate_match(match_expr, arms),
 
             // Struct
@@ -357,6 +358,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.builder
                     .build_load(self.context.i64_type(), ptr_val, "deref")
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            }
+
+            // Type cast
+            Expr::Cast { expr, ty: _ } => {
+                // For now, just evaluate the expression and return as-is
+                // Most casts between same-size types don't need actual conversion
+                self.generate_expr(&expr.node)
             }
 
             // Range
@@ -806,6 +814,69 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.loop_stack.pop();
 
         // Loops return unit by default
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_while_loop(
+        &mut self,
+        condition: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let fn_value = self.current_function.ok_or_else(|| {
+            CodegenError::LlvmError("No current function for while loop".to_string())
+        })?;
+
+        let loop_cond = self.context.append_basic_block(fn_value, &self.fresh_label("while.cond"));
+        let loop_body = self.context.append_basic_block(fn_value, &self.fresh_label("while.body"));
+        let loop_end = self.context.append_basic_block(fn_value, &self.fresh_label("while.end"));
+
+        // Push loop context for break/continue
+        self.loop_stack.push(LoopContext {
+            break_block: loop_end,
+            continue_block: loop_cond,
+        });
+
+        // Branch to condition check
+        self.builder.build_unconditional_branch(loop_cond)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Condition block
+        self.builder.position_at_end(loop_cond);
+        let cond_val = self.generate_expr(&condition.node)?;
+        let cond_bool = if cond_val.is_int_value() {
+            let int_val = cond_val.into_int_value();
+            if int_val.get_type().get_bit_width() > 1 {
+                self.builder.build_int_compare(
+                    IntPredicate::NE,
+                    int_val,
+                    int_val.get_type().const_int(0, false),
+                    "while_cond"
+                ).map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            } else {
+                int_val
+            }
+        } else {
+            self.context.bool_type().const_int(1, false)
+        };
+
+        self.builder.build_conditional_branch(cond_bool, loop_body, loop_end)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Loop body
+        self.builder.position_at_end(loop_body);
+        let _body_val = self.generate_block(body)?;
+
+        // Branch back to condition (if not terminated by break/return)
+        if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+            self.builder.build_unconditional_branch(loop_cond)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
+
+        // Loop end
+        self.builder.position_at_end(loop_end);
+        self.loop_stack.pop();
+
+        // While loops return unit
         Ok(self.context.struct_type(&[], false).const_zero().into())
     }
 

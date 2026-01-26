@@ -5,7 +5,7 @@
 
 use crate::visitor::{ExprVisitor, GenResult};
 use crate::{CodeGenerator, CodegenError};
-use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, MatchArm, Param, Span};
+use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, MatchArm, Param, Span, Type};
 use vais_types::ResolvedType;
 
 impl ExprVisitor for CodeGenerator {
@@ -35,6 +35,9 @@ impl ExprVisitor for CodeGenerator {
             }
             Expr::Loop { pattern: _, iter, body } => {
                 self.visit_loop(iter.as_ref().map(|e| e.as_ref()), body, counter)
+            }
+            Expr::While { condition, body } => {
+                self.visit_while(condition, body, counter)
             }
             Expr::Block(stmts) => self.visit_block(stmts, counter),
             Expr::Assign { target, value } => {
@@ -66,6 +69,7 @@ impl ExprVisitor for CodeGenerator {
             }
             Expr::Ref(inner) => self.visit_ref(inner, counter),
             Expr::Deref(inner) => self.visit_deref(inner, counter),
+            Expr::Cast { expr, ty } => self.visit_cast(expr, ty, counter),
             Expr::Match { expr: match_expr, arms } => {
                 self.visit_match(match_expr, arms, counter)
             }
@@ -223,6 +227,15 @@ impl ExprVisitor for CodeGenerator {
         self.generate_loop_expr(iter, body, counter)
     }
 
+    fn visit_while(
+        &mut self,
+        condition: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+        counter: &mut usize,
+    ) -> GenResult {
+        self.generate_while_expr(condition, body, counter)
+    }
+
     fn visit_block(&mut self, stmts: &[Spanned<Stmt>], counter: &mut usize) -> GenResult {
         let (val, ir, _terminated) = self.generate_block_stmts(stmts, counter)?;
         Ok((val, ir))
@@ -320,6 +333,15 @@ impl ExprVisitor for CodeGenerator {
         ir.push_str(&format!("  {} = load i64, i64* {}\n", result, ptr_val));
 
         Ok((result, ir))
+    }
+
+    fn visit_cast(
+        &mut self,
+        expr: &Spanned<Expr>,
+        ty: &Spanned<Type>,
+        counter: &mut usize,
+    ) -> GenResult {
+        self.generate_cast_expr(expr, ty, counter)
     }
 
     fn visit_match(

@@ -57,6 +57,23 @@ pub(crate) enum EnumVariantFields {
     Struct(Vec<(String, ResolvedType)>),
 }
 
+/// Constant definition info
+#[derive(Debug, Clone)]
+pub(crate) struct ConstInfo {
+    pub name: String,
+    pub ty: ResolvedType,
+    pub value: vais_ast::Spanned<vais_ast::Expr>,
+}
+
+/// Global variable definition info
+#[derive(Debug, Clone)]
+pub(crate) struct GlobalInfo {
+    pub name: String,
+    pub ty: ResolvedType,
+    pub value: vais_ast::Spanned<vais_ast::Expr>,
+    pub is_mutable: bool,
+}
+
 /// Represents the storage kind of a local variable
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LocalVarKind {

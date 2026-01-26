@@ -12,6 +12,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Loop => "Loop",
         Token::Match => "Match",
         Token::Async => "Async",
+        Token::As => "As",
         Token::Return => "Return",
         Token::Break => "Break",
         Token::Continue => "Continue",
@@ -108,6 +109,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Dollar => "Dollar",
         Token::DocComment(_) => "DocComment",
         Token::Extern => "Extern",
+        Token::Global => "Global",
         Token::Ellipsis => "Ellipsis",
     }.to_string()
 }

@@ -106,6 +106,10 @@ pub enum Item {
     Macro(MacroDef),
     /// Extern block: `N "C" { declarations }`
     ExternBlock(ExternBlock),
+    /// Constant definition: `C NAME: Type = value`
+    Const(ConstDef),
+    /// Global variable definition: `G name: Type = value`
+    Global(GlobalDef),
     /// Error recovery node - represents an item that failed to parse
     /// Used for continuing parsing after errors to report multiple errors at once.
     Error {
@@ -492,6 +496,38 @@ pub struct MacroInvoke {
     pub tokens: Vec<MacroToken>,
 }
 
+/// Constant definition: `C NAME: Type = value`
+///
+/// Constants are compile-time evaluated and inlined.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstDef {
+    /// Constant name (typically SCREAMING_SNAKE_CASE)
+    pub name: Spanned<String>,
+    /// Constant type
+    pub ty: Spanned<Type>,
+    /// Constant value (must be compile-time evaluable)
+    pub value: Spanned<Expr>,
+    /// Whether the constant is public
+    pub is_pub: bool,
+}
+
+/// Global variable definition: `G name: Type = value`
+///
+/// Global variables have static storage duration.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalDef {
+    /// Variable name
+    pub name: Spanned<String>,
+    /// Variable type
+    pub ty: Spanned<Type>,
+    /// Initial value
+    pub value: Spanned<Expr>,
+    /// Whether the global is public
+    pub is_pub: bool,
+    /// Whether the global is mutable (default true for globals)
+    pub is_mutable: bool,
+}
+
 /// Const expression for const generic parameters
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstExpr {
@@ -665,6 +701,11 @@ pub enum Expr {
         iter: Option<Box<Spanned<Expr>>>,
         body: Vec<Spanned<Stmt>>,
     },
+    /// While loop: `L condition{...}`
+    While {
+        condition: Box<Spanned<Expr>>,
+        body: Vec<Spanned<Stmt>>,
+    },
     /// Match: `M expr{arms}`
     Match {
         expr: Box<Spanned<Expr>>,
@@ -724,6 +765,11 @@ pub enum Expr {
     Ref(Box<Spanned<Expr>>),
     /// Dereference: `*expr`
     Deref(Box<Spanned<Expr>>),
+    /// Type cast: `expr as Type`
+    Cast {
+        expr: Box<Spanned<Expr>>,
+        ty: Spanned<Type>,
+    },
     /// Assignment: `lhs = rhs`
     Assign {
         target: Box<Spanned<Expr>>,

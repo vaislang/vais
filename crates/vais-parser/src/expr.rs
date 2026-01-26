@@ -606,6 +606,31 @@ impl Parser {
                         );
                     }
                 }
+            } else if self.check(&Token::ColonColon) {
+                // Static method call: Type::method(args)
+                self.advance();
+                let method = self.parse_ident()?;
+                self.expect(&Token::LParen)?;
+                let args = self.parse_args()?;
+                self.expect(&Token::RParen)?;
+                let end = self.prev_span().end;
+
+                if let Expr::Ident(type_name) = expr.node.clone() {
+                    expr = Spanned::new(
+                        Expr::StaticMethodCall {
+                            type_name: Spanned::new(type_name, expr.span),
+                            method,
+                            args,
+                        },
+                        Span::new(start, end),
+                    );
+                } else {
+                    return Err(ParseError::UnexpectedToken {
+                        found: Token::ColonColon,
+                        span: self.prev_span(),
+                        expected: "type name before '::'".into(),
+                    });
+                }
             } else if self.check(&Token::LBracket) {
                 self.advance();
                 let index = self.parse_expr()?;
@@ -694,6 +719,18 @@ impl Parser {
                         Span::new(start, end),
                     );
                 }
+            } else if self.check(&Token::As) {
+                // Type cast: expr as Type
+                self.advance();
+                let ty = self.parse_type()?;
+                let end = self.prev_span().end;
+                expr = Spanned::new(
+                    Expr::Cast {
+                        expr: Box::new(expr),
+                        ty,
+                    },
+                    Span::new(start, end),
+                );
             } else {
                 break;
             }
@@ -933,30 +970,74 @@ impl Parser {
         }
     }
 
-    /// Parse loop expression: `L pattern:iter{...}` or `L{...}`
+    /// Parse loop expression: `L pattern:iter{...}` or `L{...}` or `L condition{...}`
+    /// Three forms:
+    /// - `L { }` - infinite loop
+    /// - `L pattern:iter { }` - for-each loop (pattern iterates over iter)
+    /// - `L condition { }` - while loop (loop while condition is true)
     pub(crate) fn parse_loop_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
-        let (pattern, iter) = if self.check(&Token::LBrace) {
-            (None, None)
-        } else {
-            let pattern = self.parse_pattern()?;
-            self.expect(&Token::Colon)?;
+        if self.check(&Token::LBrace) {
+            // Infinite loop: `L { ... }`
+            self.advance(); // consume '{'
+            let body = self.parse_block_contents()?;
+            self.expect(&Token::RBrace)?;
+
+            let end = self.prev_span().end;
+            return Ok(Spanned::new(
+                Expr::Loop {
+                    pattern: None,
+                    iter: None,
+                    body,
+                },
+                Span::new(start, end),
+            ));
+        }
+
+        // Try to parse as for-each loop first by checking for pattern:iter syntax
+        // We need to look ahead to determine if this is for-each or while loop
+        let saved_pos = self.pos;
+
+        // Try parsing a pattern
+        let pattern_result = self.parse_pattern();
+
+        if pattern_result.is_ok() && self.check(&Token::Colon) {
+            // This is a for-each loop: `L pattern:iter { ... }`
+            let pattern = pattern_result.unwrap();
+            self.advance(); // consume ':'
             let iter = self.parse_expr()?;
-            (Some(pattern), Some(Box::new(iter)))
-        };
 
-        self.expect(&Token::LBrace)?;
-        let body = self.parse_block_contents()?;
-        self.expect(&Token::RBrace)?;
+            self.expect(&Token::LBrace)?;
+            let body = self.parse_block_contents()?;
+            self.expect(&Token::RBrace)?;
 
-        let end = self.prev_span().end;
-        Ok(Spanned::new(
-            Expr::Loop {
-                pattern,
-                iter,
-                body,
-            },
-            Span::new(start, end),
-        ))
+            let end = self.prev_span().end;
+            Ok(Spanned::new(
+                Expr::Loop {
+                    pattern: Some(pattern),
+                    iter: Some(Box::new(iter)),
+                    body,
+                },
+                Span::new(start, end),
+            ))
+        } else {
+            // This is a while loop: `L condition { ... }`
+            // Reset position and parse as expression
+            self.pos = saved_pos;
+            let condition = self.parse_expr()?;
+
+            self.expect(&Token::LBrace)?;
+            let body = self.parse_block_contents()?;
+            self.expect(&Token::RBrace)?;
+
+            let end = self.prev_span().end;
+            Ok(Spanned::new(
+                Expr::While {
+                    condition: Box::new(condition),
+                    body,
+                },
+                Span::new(start, end),
+            ))
+        }
     }
 
     /// Parse match expression: `M expr{arms}`

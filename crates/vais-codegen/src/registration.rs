@@ -240,4 +240,33 @@ impl CodeGenerator {
 
         Ok(())
     }
+
+    /// Register a constant definition
+    pub(crate) fn register_const(&mut self, const_def: &vais_ast::ConstDef) -> CodegenResult<()> {
+        // Store constant in the constants map for later lookup
+        self.constants.insert(
+            const_def.name.node.clone(),
+            crate::types::ConstInfo {
+                name: const_def.name.node.clone(),
+                ty: self.ast_type_to_resolved(&const_def.ty.node),
+                value: const_def.value.clone(),
+            },
+        );
+        Ok(())
+    }
+
+    /// Register a global variable definition
+    pub(crate) fn register_global(&mut self, global_def: &vais_ast::GlobalDef) -> CodegenResult<()> {
+        // Store global in the globals map for later code generation
+        self.globals.insert(
+            global_def.name.node.clone(),
+            crate::types::GlobalInfo {
+                name: global_def.name.node.clone(),
+                ty: self.ast_type_to_resolved(&global_def.ty.node),
+                value: global_def.value.clone(),
+                is_mutable: global_def.is_mutable,
+            },
+        );
+        Ok(())
+    }
 }

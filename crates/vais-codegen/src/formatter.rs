@@ -92,6 +92,8 @@ impl Formatter {
             Item::Impl(i) => self.format_impl(i),
             Item::Macro(m) => self.format_macro(m),
             Item::ExternBlock(e) => self.format_extern_block(e),
+            Item::Const(c) => self.format_const(c),
+            Item::Global(g) => self.format_global(g),
             Item::Error { message, .. } => {
                 // Format error nodes as comments to preserve them in formatted output
                 self.output.push_str(&format!("{}# ERROR: {}\n", self.indent(), message));
@@ -164,6 +166,38 @@ impl Formatter {
 
         self.output.push_str(&indent);
         self.output.push_str("}\n");
+    }
+
+    /// Format a constant definition
+    fn format_const(&mut self, c: &ConstDef) {
+        let indent = self.indent();
+        self.output.push_str(&indent);
+        if c.is_pub {
+            self.output.push_str("P ");
+        }
+        self.output.push_str("C ");
+        self.output.push_str(&c.name.node);
+        self.output.push_str(": ");
+        self.output.push_str(&self.format_type(&c.ty.node));
+        self.output.push_str(" = ");
+        self.format_expr(&c.value.node);
+        self.output.push('\n');
+    }
+
+    /// Format a global variable definition
+    fn format_global(&mut self, g: &GlobalDef) {
+        let indent = self.indent();
+        self.output.push_str(&indent);
+        if g.is_pub {
+            self.output.push_str("P ");
+        }
+        self.output.push_str("G ");
+        self.output.push_str(&g.name.node);
+        self.output.push_str(": ");
+        self.output.push_str(&self.format_type(&g.ty.node));
+        self.output.push_str(" = ");
+        self.format_expr(&g.value.node);
+        self.output.push('\n');
     }
 
     fn format_macro_pattern(&mut self, pattern: &MacroPattern) {
@@ -821,6 +855,9 @@ impl Formatter {
                     Expr::Loop { pattern, iter, body } => {
                         self.format_loop_expr(&indent, pattern, iter.as_ref().map(|e| &**e), body);
                     }
+                    Expr::While { condition, body } => {
+                        self.format_while_expr(&indent, condition, body);
+                    }
                     Expr::Match { expr: match_expr, arms } => {
                         self.format_match_expr(&indent, match_expr, arms);
                     }
@@ -951,6 +988,21 @@ impl Formatter {
         self.output.push_str("}\n");
     }
 
+    /// Format a while loop expression with proper indentation
+    fn format_while_expr(&mut self, indent: &str, condition: &Spanned<Expr>, body: &[Spanned<Stmt>]) {
+        self.output.push_str(indent);
+        self.output.push_str("L ");
+        self.output.push_str(&self.format_expr(&condition.node));
+        self.output.push_str(" {\n");
+        self.push_indent();
+        for stmt in body {
+            self.format_stmt(&stmt.node);
+        }
+        self.pop_indent();
+        self.output.push_str(&self.indent());
+        self.output.push_str("}\n");
+    }
+
     /// Format a match expression with proper indentation
     fn format_match_expr(&mut self, indent: &str, expr: &Spanned<Expr>, arms: &[MatchArm]) {
         self.output.push_str(indent);
@@ -1065,6 +1117,19 @@ impl Formatter {
                 s
             }
 
+            Expr::While { condition, body } => {
+                let mut s = String::from("L ");
+                s.push_str(&self.format_expr(&condition.node));
+                s.push_str(" {\n");
+                for stmt in body {
+                    s.push_str("    ");
+                    s.push_str(&self.format_stmt_inline(&stmt.node));
+                    s.push('\n');
+                }
+                s.push('}');
+                s
+            }
+
             Expr::Match { expr, arms } => {
                 let mut s = format!("M {} {{\n", self.format_expr(&expr.node));
                 for arm in arms {
@@ -1150,6 +1215,10 @@ impl Formatter {
             Expr::Unwrap(expr) => format!("{}!", self.format_expr(&expr.node)),
             Expr::Ref(expr) => format!("&{}", self.format_expr(&expr.node)),
             Expr::Deref(expr) => format!("*{}", self.format_expr(&expr.node)),
+
+            Expr::Cast { expr, ty } => {
+                format!("{} as {}", self.format_expr(&expr.node), self.format_type(&ty.node))
+            }
 
             Expr::Assign { target, value } => {
                 format!("{} = {}", self.format_expr(&target.node), self.format_expr(&value.node))

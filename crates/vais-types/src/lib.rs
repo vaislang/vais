@@ -1093,6 +1093,14 @@ impl TypeChecker {
                         self.register_extern_function(func)?;
                     }
                 }
+                Item::Const(_const_def) => {
+                    // Constant definitions are compile-time evaluated
+                    // Type checking happens during code generation
+                }
+                Item::Global(_global_def) => {
+                    // Global variable definitions
+                    // Type checking happens during code generation
+                }
             }
         }
 
@@ -2053,6 +2061,18 @@ impl TypeChecker {
                 Ok(ResolvedType::Unit)
             }
 
+            Expr::While { condition, body } => {
+                // Check that condition is a boolean expression
+                let cond_type = self.check_expr(condition)?;
+                self.unify(&ResolvedType::Bool, &cond_type)?;
+
+                self.push_scope();
+                self.check_block(body)?;
+                self.pop_scope();
+
+                Ok(ResolvedType::Unit)
+            }
+
             Expr::Match { expr, arms } => {
                 let expr_type = self.check_expr(expr)?;
                 let mut result_type: Option<ResolvedType> = None;
@@ -2693,6 +2713,15 @@ impl TypeChecker {
                         span: None,
                     }),
                 }
+            }
+
+            Expr::Cast { expr, ty } => {
+                // Check the expression
+                let _expr_type = self.check_expr(expr)?;
+                // Resolve the target type
+                let target_type = self.resolve_type(&ty.node);
+                // For now, allow all casts - runtime will handle invalid ones
+                Ok(target_type)
             }
 
             Expr::Assign { target, value } => {
@@ -3521,6 +3550,9 @@ impl TypeChecker {
             Expr::Spawn(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }
+            Expr::Cast { expr, .. } => {
+                self.collect_free_vars(&expr.node, bound, free);
+            }
             Expr::Loop { body, pattern, iter } => {
                 // iter expression runs in current scope
                 if let Some(it) = iter {
@@ -3531,6 +3563,24 @@ impl TypeChecker {
                 if let Some(pat) = pattern {
                     self.collect_pattern_bindings(&pat.node, &mut local_bound);
                 }
+                for stmt in body {
+                    match &stmt.node {
+                        Stmt::Let { name, value, .. } => {
+                            self.collect_free_vars(&value.node, &local_bound, free);
+                            local_bound.insert(name.node.clone());
+                        }
+                        Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        _ => {}
+                    }
+                }
+            }
+            Expr::While { condition, body } => {
+                // condition expression runs in current scope
+                self.collect_free_vars(&condition.node, bound, free);
+                // body is Vec<Spanned<Stmt>>
+                let mut local_bound = bound.clone();
                 for stmt in body {
                     match &stmt.node {
                         Stmt::Let { name, value, .. } => {

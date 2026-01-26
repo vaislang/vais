@@ -474,6 +474,27 @@ pub struct CodeGenerator {
     // Pre-state snapshots for old() expressions in ensures clauses
     // Maps snapshot variable name -> allocated storage name
     old_snapshots: HashMap<String, String>,
+
+    // Decreases expressions for current function (for termination proof)
+    // Maps function name -> (storage_var_name, decreases_expr_span)
+    current_decreases_info: Option<DecreasesInfo>,
+
+    // Constant definitions
+    constants: HashMap<String, types::ConstInfo>,
+
+    // Global variable definitions
+    globals: HashMap<String, types::GlobalInfo>,
+}
+
+/// Information about a function's decreases clause for termination proof
+#[derive(Clone)]
+pub struct DecreasesInfo {
+    /// Storage variable name for the initial decreases value
+    pub storage_name: String,
+    /// The decreases expression from the attribute (already boxed)
+    pub expr: Box<vais_ast::Spanned<vais_ast::Expr>>,
+    /// Function name with decreases clause
+    pub function_name: String,
 }
 
 impl CodeGenerator {
@@ -535,6 +556,9 @@ impl CodeGenerator {
             contract_string_constants: HashMap::new(),
             contract_string_counter: 0,
             old_snapshots: HashMap::new(),
+            current_decreases_info: None,
+            constants: HashMap::new(),
+            globals: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -595,6 +619,17 @@ impl CodeGenerator {
     /// Set current source file for error messages
     pub fn set_source_file(&mut self, file: &str) {
         self.current_file = Some(file.to_string());
+    }
+
+    /// Check if a function call is recursive (calls the current function with decreases clause)
+    fn is_recursive_call(&self, fn_name: &str) -> bool {
+        // Check if we have a decreases clause for this function
+        if let Some(ref decreases_info) = self.current_decreases_info {
+            // A recursive call is when the called function matches the function with decreases
+            decreases_info.function_name == fn_name
+        } else {
+            false
+        }
     }
 
     /// Check if a function has the #[gc] attribute
@@ -916,6 +951,14 @@ impl CodeGenerator {
                         self.register_extern_function(func, &extern_block.abi)?;
                     }
                 }
+                Item::Const(const_def) => {
+                    // Register constant for code generation
+                    self.register_const(const_def)?;
+                }
+                Item::Global(global_def) => {
+                    // Register global variable
+                    self.register_global(global_def)?;
+                }
             }
         }
 
@@ -978,6 +1021,9 @@ impl CodeGenerator {
                 }
                 Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) => {
                     // Already handled in first pass or no code generation needed
+                }
+                Item::Const(_) | Item::Global(_) => {
+                    // Constants and globals are handled in first pass
                 }
                 Item::Error { .. } => {
                     // Error nodes are skipped - already logged in first pass
@@ -1102,7 +1148,7 @@ impl CodeGenerator {
                         self.register_method(&type_name, &method.node)?;
                     }
                 }
-                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Error { .. } => {}
+                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Const(_) | Item::Global(_) | Item::Error { .. } => {}
             }
         }
 
@@ -1183,7 +1229,7 @@ impl CodeGenerator {
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Error { .. } => {}
+                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Const(_) | Item::Global(_) | Item::Error { .. } => {}
             }
         }
 
@@ -1825,6 +1871,12 @@ impl CodeGenerator {
                     ));
                     Ok((result, ir))
                 } else if ret_ty == "void" {
+                    // Check for recursive call with decreases clause
+                    if self.is_recursive_call(&fn_name) {
+                        let check_ir = self.generate_recursive_decreases_check(args, counter)?;
+                        ir.push_str(&check_ir);
+                    }
+
                     // Direct void function call
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
@@ -1835,6 +1887,12 @@ impl CodeGenerator {
                     ));
                     Ok(("void".to_string(), ir))
                 } else if ret_ty == "i32" {
+                    // Check for recursive call with decreases clause
+                    if self.is_recursive_call(&fn_name) {
+                        let check_ir = self.generate_recursive_decreases_check(args, counter)?;
+                        ir.push_str(&check_ir);
+                    }
+
                     // i32 return function call - convert to i64 for consistency
                     let i32_tmp = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
@@ -1852,6 +1910,12 @@ impl CodeGenerator {
                     ));
                     Ok((tmp, ir))
                 } else {
+                    // Check for recursive call with decreases clause
+                    if self.is_recursive_call(&fn_name) {
+                        let check_ir = self.generate_recursive_decreases_check(args, counter)?;
+                        ir.push_str(&check_ir);
+                    }
+
                     // Direct function call with return value
                     let tmp = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
@@ -2061,6 +2125,57 @@ impl CodeGenerator {
                 self.loop_stack.pop();
 
                 // Loop returns void by default (use break with value for expression)
+                Ok(("0".to_string(), ir))
+            }
+
+            // While loop expression
+            Expr::While { condition, body } => {
+                let loop_start = self.next_label("while.start");
+                let loop_body = self.next_label("while.body");
+                let loop_end = self.next_label("while.end");
+
+                // Push loop labels for break/continue
+                self.loop_stack.push(LoopLabels {
+                    continue_label: loop_start.clone(),
+                    break_label: loop_end.clone(),
+                });
+
+                let mut ir = String::new();
+
+                // Jump to condition check
+                ir.push_str(&format!("  br label %{}\n", loop_start));
+                ir.push_str(&format!("{}:\n", loop_start));
+
+                // Evaluate condition
+                let (cond_val, cond_ir) = self.generate_expr(condition, counter)?;
+                ir.push_str(&cond_ir);
+
+                // Convert to i1 for branch
+                let cond_bool = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = icmp ne i64 {}, 0\n",
+                    cond_bool, cond_val
+                ));
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n",
+                    cond_bool, loop_body, loop_end
+                ));
+
+                // Loop body
+                ir.push_str(&format!("{}:\n", loop_body));
+                let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
+                ir.push_str(&body_ir);
+
+                // Jump back to condition if body doesn't terminate
+                if !body_terminated {
+                    ir.push_str(&format!("  br label %{}\n", loop_start));
+                }
+
+                // Loop end
+                ir.push_str(&format!("{}:\n", loop_end));
+
+                self.loop_stack.pop();
+
                 Ok(("0".to_string(), ir))
             }
 
@@ -2588,6 +2703,35 @@ impl CodeGenerator {
 
                 let result = self.next_temp(counter);
                 ir.push_str(&format!("  {} = load i64, i64* {}\n", result, ptr_val));
+
+                Ok((result, ir))
+            }
+
+            // Type cast: expr as Type
+            Expr::Cast { expr, ty } => {
+                let (val, val_ir) = self.generate_expr(expr, counter)?;
+                let mut ir = val_ir;
+
+                let target_type = self.ast_type_to_resolved(&ty.node);
+                let llvm_type = self.type_to_llvm(&target_type);
+
+                // Simple cast - in many cases just bitcast or pass through
+                let result = self.next_temp(counter);
+                match (&target_type, llvm_type.as_str()) {
+                    // Integer to pointer cast
+                    (ResolvedType::Pointer(_), _) | (ResolvedType::Ref(_), _) | (ResolvedType::RefMut(_), _) => {
+                        ir.push_str(&format!("  {} = inttoptr i64 {} to {}\n", result, val, llvm_type));
+                    }
+                    // Pointer to integer cast
+                    _ if val.starts_with('%') || val.parse::<i64>().is_err() => {
+                        // Might be a pointer, try to cast
+                        ir.push_str(&format!("  {} = ptrtoint i64* {} to i64\n", result, val));
+                    }
+                    // Default: just use the value as-is (same size types)
+                    _ => {
+                        return Ok((val, ir));
+                    }
+                }
 
                 Ok((result, ir))
             }
@@ -4223,5 +4367,98 @@ mod tests {
         let ir = gen.generate_module(&module).unwrap();
 
         assert!(ir.contains("call i64 @deep_recursion"));
+    }
+
+    // ==================== Decreases Termination Tests ====================
+
+    #[test]
+    fn test_decreases_basic() {
+        // Test basic decreases clause for termination proof
+        let source = r#"
+            #[requires(n >= 0)]
+            #[decreases(n)]
+            F factorial(n:i64)->i64{I n<=1{R 1}R n*factorial(n-1)}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should have initial decreases storage
+        assert!(ir.contains("__decreases_factorial"), "Expected decreases storage variable");
+        // Should have non-negative check
+        assert!(ir.contains("decreases_nonneg"), "Expected non-negative check");
+        // Should have strict decrease check before recursive call
+        assert!(ir.contains("decreases_check"), "Expected decrease check before recursive call");
+        // Should have panic call for failed check
+        assert!(ir.contains("@__panic"), "Expected panic call for failed check");
+    }
+
+    #[test]
+    fn test_decreases_strict_decrease_check() {
+        // Test that the strict decrease check (new < old) is generated
+        let source = r#"
+            #[decreases(n)]
+            F count_down(n:i64)->i64{I n<=0{R 0}R count_down(n-1)}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should have icmp slt (strictly less than) check
+        assert!(ir.contains("icmp slt i64"), "Expected strict less-than comparison for decreases");
+        // Should have both decreases labels
+        assert!(ir.contains("decreases_check_ok"), "Expected success label");
+        assert!(ir.contains("decreases_check_fail"), "Expected failure label");
+    }
+
+    #[test]
+    fn test_decreases_nonneg_check() {
+        // Test that non-negative check is generated for decreases expression
+        let source = r#"
+            #[decreases(x)]
+            F process(x:i64)->i64{I x<=0{R 0}R process(x-1)+1}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should have icmp sge (signed greater-or-equal) for non-negative check
+        assert!(ir.contains("icmp sge i64"), "Expected non-negative check (sge 0)");
+        assert!(ir.contains("decreases_nonneg_ok"), "Expected success label for non-negative");
+        assert!(ir.contains("decreases_nonneg_fail"), "Expected failure label for non-negative");
+    }
+
+    #[test]
+    fn test_decreases_release_mode() {
+        // Test that decreases checks are skipped in release mode
+        let source = r#"
+            #[decreases(n)]
+            F fib(n:i64)->i64{I n<2{R n}R fib(n-1)+fib(n-2)}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        gen.enable_release_mode();
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should NOT have decreases checks in release mode
+        assert!(!ir.contains("__decreases_fib"), "Should skip decreases in release mode");
+        assert!(!ir.contains("decreases_nonneg"), "Should skip non-negative check in release mode");
+        assert!(!ir.contains("decreases_check"), "Should skip decrease check in release mode");
+    }
+
+    #[test]
+    fn test_decreases_with_selfcall() {
+        // Test decreases with @ self-call operator
+        let source = r#"
+            #[decreases(n)]
+            F sum_to(n:i64)->i64{I n<=0{R 0}R n+@(n-1)}
+        "#;
+        let module = parse(source).unwrap();
+        let mut gen = CodeGenerator::new("test");
+        let ir = gen.generate_module(&module).unwrap();
+
+        // Should have decreases check before the self-call
+        assert!(ir.contains("__decreases_sum_to"), "Expected decreases storage");
+        assert!(ir.contains("decreases_check"), "Expected decrease check before self-call");
     }
 }

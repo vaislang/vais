@@ -3,7 +3,7 @@
 //! This module defines the visitor traits that decompose code generation into
 //! separate concerns for expressions, statements, and items.
 
-use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, MatchArm, Param};
+use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, MatchArm, Param, Type};
 use crate::CodegenResult;
 
 /// Result type for code generation: (value, ir_code)
@@ -95,6 +95,14 @@ pub trait ExprVisitor {
         counter: &mut usize,
     ) -> GenResult;
 
+    /// Visit a while loop expression
+    fn visit_while(
+        &mut self,
+        condition: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+        counter: &mut usize,
+    ) -> GenResult;
+
     /// Visit a block expression
     fn visit_block(&mut self, stmts: &[Spanned<Stmt>], counter: &mut usize) -> GenResult;
 
@@ -168,6 +176,14 @@ pub trait ExprVisitor {
 
     /// Visit a dereference expression (*expr)
     fn visit_deref(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
+
+    /// Visit a type cast expression (expr as Type)
+    fn visit_cast(
+        &mut self,
+        expr: &Spanned<Expr>,
+        ty: &Spanned<Type>,
+        counter: &mut usize,
+    ) -> GenResult;
 
     /// Visit a match expression
     fn visit_match(

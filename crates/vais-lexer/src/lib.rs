@@ -68,6 +68,8 @@ pub enum Token {
     Union,
     #[token("N", priority = 3)]
     Extern,
+    #[token("G", priority = 3)]
+    Global,
 
     // === Type Keywords ===
     #[token("mut")]
@@ -96,6 +98,8 @@ pub enum Token {
     Dyn,
     #[token("macro")]
     Macro,
+    #[token("as")]
+    As,
 
     // === Primitive Types ===
     #[token("i8")]
@@ -331,6 +335,7 @@ impl fmt::Display for Token {
             Token::Defer => write!(f, "D"),
             Token::Union => write!(f, "O"),
             Token::Extern => write!(f, "N"),
+            Token::Global => write!(f, "G"),
             Token::Mut => write!(f, "mut"),
             Token::SelfLower => write!(f, "self"),
             Token::SelfUpper => write!(f, "Self"),
@@ -344,6 +349,7 @@ impl fmt::Display for Token {
             Token::Comptime => write!(f, "comptime"),
             Token::Dyn => write!(f, "dyn"),
             Token::Macro => write!(f, "macro"),
+            Token::As => write!(f, "as"),
             Token::I8 => write!(f, "i8"),
             Token::I16 => write!(f, "i16"),
             Token::I32 => write!(f, "i32"),

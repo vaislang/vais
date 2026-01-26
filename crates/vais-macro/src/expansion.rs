@@ -144,6 +144,8 @@ impl<'a> AstExpander<'a> {
             Item::Use(u) => Item::Use(u),
             Item::Macro(m) => Item::Macro(m),
             Item::ExternBlock(e) => Item::ExternBlock(e),
+            Item::Const(c) => Item::Const(c),
+            Item::Global(g) => Item::Global(g),
             Item::Error { message, skipped_tokens } => Item::Error { message, skipped_tokens },
         };
         Ok(Spanned::new(expanded, span))
@@ -290,6 +292,12 @@ impl<'a> AstExpander<'a> {
                     body: self.expand_stmts(body)?,
                 }
             }
+            Expr::While { condition, body } => {
+                Expr::While {
+                    condition: Box::new(self.expand_expr(*condition)?),
+                    body: self.expand_stmts(body)?,
+                }
+            }
             Expr::Ternary { cond, then, else_ } => {
                 Expr::Ternary {
                     cond: Box::new(self.expand_expr(*cond)?),
@@ -374,6 +382,12 @@ impl<'a> AstExpander<'a> {
             Expr::Deref(inner) => Expr::Deref(Box::new(self.expand_expr(*inner)?)),
             Expr::Spawn(inner) => Expr::Spawn(Box::new(self.expand_expr(*inner)?)),
             Expr::Comptime { body } => Expr::Comptime { body: Box::new(self.expand_expr(*body)?) },
+            Expr::Cast { expr, ty } => {
+                Expr::Cast {
+                    expr: Box::new(self.expand_expr(*expr)?),
+                    ty,
+                }
+            }
             Expr::Assign { target, value } => {
                 Expr::Assign {
                     target: Box::new(self.expand_expr(*target)?),

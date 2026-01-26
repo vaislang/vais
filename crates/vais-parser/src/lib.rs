@@ -391,18 +391,31 @@ impl Parser {
             Item::Trait(self.parse_trait(is_pub)?)
         } else if self.check(&Token::Impl) {
             self.advance();
-            Item::Impl(self.parse_impl()?)
+            // Check if this is an extern function declaration (X F name(...))
+            if self.check(&Token::Function) {
+                self.advance();
+                Item::ExternBlock(self.parse_single_extern_function()?)
+            } else {
+                Item::Impl(self.parse_impl()?)
+            }
         } else if self.check(&Token::Macro) {
             self.advance();
             Item::Macro(self.parse_macro_def(is_pub)?)
         } else if self.check(&Token::Extern) {
             self.advance();
             Item::ExternBlock(self.parse_extern_block()?)
+        } else if self.check(&Token::Continue) {
+            // C at top level is a constant definition, not continue
+            self.advance();
+            Item::Const(self.parse_const_def(is_pub)?)
+        } else if self.check(&Token::Global) {
+            self.advance();
+            Item::Global(self.parse_global_def(is_pub)?)
         } else {
             return Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
-                expected: "F, S, E, O, T, U, W, X, N (extern), or macro".into(),
+                expected: "F, S, E, O, T, U, W, X, N (extern), C (const), G (global), or macro".into(),
             });
         };
 
@@ -432,7 +445,7 @@ impl Parser {
         let name = self.parse_ident()?.node;
 
         // Contract attributes parse their argument as an expression
-        if name == "requires" || name == "ensures" || name == "invariant" {
+        if name == "requires" || name == "ensures" || name == "invariant" || name == "decreases" {
             self.expect(&Token::LParen)?;
 
             // Record the start position for the expression string
@@ -701,6 +714,108 @@ impl Parser {
         }
 
         Ok(Use { path, alias: None })
+    }
+
+    /// Parse constant definition: `C NAME: Type = value`
+    fn parse_const_def(&mut self, is_pub: bool) -> ParseResult<ConstDef> {
+        let name = self.parse_ident()?;
+        self.expect(&Token::Colon)?;
+        let ty = self.parse_type()?;
+        self.expect(&Token::Eq)?;
+        let value = self.parse_expr()?;
+
+        Ok(ConstDef {
+            name,
+            ty,
+            value,
+            is_pub,
+        })
+    }
+
+    /// Parse global variable definition: `G name: Type = value`
+    fn parse_global_def(&mut self, is_pub: bool) -> ParseResult<GlobalDef> {
+        let name = self.parse_ident()?;
+        self.expect(&Token::Colon)?;
+        let ty = self.parse_type()?;
+        self.expect(&Token::Eq)?;
+        let value = self.parse_expr()?;
+
+        Ok(GlobalDef {
+            name,
+            ty,
+            value,
+            is_pub,
+            is_mutable: true, // Globals are mutable by default
+        })
+    }
+
+    /// Parse a single extern function declaration: `X F name(params) -> RetType`
+    /// This is a shorthand for declaring an extern function without a body.
+    /// Returns an ExternBlock containing the single function.
+    fn parse_single_extern_function(&mut self) -> ParseResult<ExternBlock> {
+        let name = self.parse_ident()?;
+
+        // Parse parameters
+        self.expect(&Token::LParen)?;
+        let (params, is_vararg) = self.parse_single_extern_params()?;
+        self.expect(&Token::RParen)?;
+
+        // Parse optional return type
+        let ret_type = if self.check(&Token::Arrow) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        Ok(ExternBlock {
+            abi: "C".to_string(),
+            functions: vec![ExternFunction {
+                name,
+                params,
+                ret_type,
+                is_vararg,
+            }],
+        })
+    }
+
+    /// Parse extern function parameters for single extern declaration (returns params and vararg flag)
+    fn parse_single_extern_params(&mut self) -> ParseResult<(Vec<Param>, bool)> {
+        let mut params = Vec::new();
+        let mut is_vararg = false;
+
+        while !self.check(&Token::RParen) && !self.is_at_end() {
+            // Check for variadic args (...)
+            if self.check(&Token::Ellipsis) {
+                self.advance();
+                is_vararg = true;
+                break;
+            }
+
+            // Parse parameter: name: Type
+            let param_name = self.parse_ident()?;
+            self.expect(&Token::Colon)?;
+            let param_type = self.parse_type()?;
+
+            params.push(Param {
+                name: param_name,
+                ty: param_type,
+                is_mut: false,
+                is_vararg: false,
+            });
+
+            if !self.check(&Token::RParen) {
+                self.expect(&Token::Comma)?;
+                // Allow trailing comma before variadic
+                if self.check(&Token::Ellipsis) {
+                    self.advance();
+                    is_vararg = true;
+                    break;
+                }
+            }
+        }
+
+        Ok((params, is_vararg))
     }
 
     /// Parse trait definition: `W Name { methods }`

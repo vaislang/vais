@@ -5,7 +5,7 @@
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 use crate::types::{LoopLabels, LocalVar, ClosureInfo};
-use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, Span, Param};
+use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, Span, Param, Type};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -715,6 +715,86 @@ impl CodeGenerator {
         self.loop_stack.pop();
 
         Ok(("0".to_string(), ir))
+    }
+
+    /// Generate while loop expression
+    pub(crate) fn generate_while_expr(
+        &mut self,
+        condition: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let loop_start = self.next_label("while.start");
+        let loop_body = self.next_label("while.body");
+        let loop_end = self.next_label("while.end");
+
+        self.loop_stack.push(LoopLabels {
+            continue_label: loop_start.to_string(),
+            break_label: loop_end.to_string(),
+        });
+
+        let mut ir = String::new();
+
+        // Jump to condition check
+        ir.push_str(&format!("  br label %{}\n", loop_start));
+        ir.push_str(&format!("{}:\n", loop_start));
+
+        // Evaluate condition
+        let (cond_val, cond_ir) = self.generate_expr(condition, counter)?;
+        ir.push_str(&cond_ir);
+
+        // Convert to i1 for branch
+        let cond_bool = self.next_temp(counter);
+        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cond_bool, loop_body, loop_end
+        ));
+
+        // Loop body
+        ir.push_str(&format!("{}:\n", loop_body));
+        let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
+        ir.push_str(&body_ir);
+
+        // Jump back to condition if body doesn't terminate
+        if !body_terminated {
+            ir.push_str(&format!("  br label %{}\n", loop_start));
+        }
+
+        // Loop end
+        ir.push_str(&format!("{}:\n", loop_end));
+        self.loop_stack.pop();
+
+        Ok(("0".to_string(), ir))
+    }
+
+    /// Generate cast expression
+    pub(crate) fn generate_cast_expr(
+        &mut self,
+        expr: &Spanned<Expr>,
+        ty: &Spanned<Type>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (val, val_ir) = self.generate_expr(expr, counter)?;
+        let mut ir = val_ir;
+
+        let target_type = self.ast_type_to_resolved(&ty.node);
+        let llvm_type = self.type_to_llvm(&target_type);
+
+        // Simple cast - in many cases just bitcast or pass through
+        let result = self.next_temp(counter);
+        match (&target_type, llvm_type.as_str()) {
+            // Integer to pointer cast
+            (ResolvedType::Pointer(_), _) | (ResolvedType::Ref(_), _) | (ResolvedType::RefMut(_), _) => {
+                ir.push_str(&format!("  {} = inttoptr i64 {} to {}\n", result, val, llvm_type));
+            }
+            // Default: just use the value as-is (same size types)
+            _ => {
+                return Ok((val, ir));
+            }
+        }
+
+        Ok((result, ir))
     }
 
     /// Generate assign expression
