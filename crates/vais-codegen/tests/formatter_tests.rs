@@ -259,10 +259,12 @@ fn test_format_function_with_attributes() {
             Attribute {
                 name: "inline".to_string(),
                 args: vec![],
+                expr: None,
             },
             Attribute {
                 name: "cfg".to_string(),
                 args: vec!["test".to_string()],
+                expr: None,
             },
         ],
     };

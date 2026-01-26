@@ -1,4 +1,0 @@
-# Simple function for bootstrapping test
-# Format: F name(param: i64) -> i64 = expr
-
-F calc(x: i64) -> i64 = x + 10

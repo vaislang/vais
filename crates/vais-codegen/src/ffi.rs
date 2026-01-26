@@ -55,6 +55,7 @@ impl CodeGenerator {
             ret: ret_type.clone(),
             is_async: false,
             is_vararg: func.is_vararg,
+            contracts: None,
         };
 
         self.functions.insert(

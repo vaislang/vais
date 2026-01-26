@@ -581,6 +581,31 @@ impl std::fmt::Display for ResolvedType {
     }
 }
 
+/// Contract clause for formal verification (requires/ensures)
+#[derive(Debug, Clone)]
+pub struct ContractClause {
+    /// Original expression string for error messages
+    pub expr_str: String,
+    /// Source span for error reporting
+    pub span: Span,
+}
+
+/// Contract specification for Design by Contract
+#[derive(Debug, Clone, Default)]
+pub struct ContractSpec {
+    /// Preconditions (requires clauses)
+    pub requires: Vec<ContractClause>,
+    /// Postconditions (ensures clauses)
+    pub ensures: Vec<ContractClause>,
+}
+
+impl ContractSpec {
+    /// Check if the contract specification has any clauses
+    pub fn is_empty(&self) -> bool {
+        self.requires.is_empty() && self.ensures.is_empty()
+    }
+}
+
 /// Function signature
 #[derive(Debug, Clone)]
 pub struct FunctionSig {
@@ -591,6 +616,8 @@ pub struct FunctionSig {
     pub ret: ResolvedType,
     pub is_async: bool,
     pub is_vararg: bool, // true for variadic C functions (printf, etc.)
+    /// Contract specification for formal verification (requires/ensures)
+    pub contracts: Option<ContractSpec>,
 }
 
 /// Struct definition
