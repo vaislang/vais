@@ -369,6 +369,133 @@ Available quick fixes:
 
 ---
 
+## Debug Adapter Protocol (DAP)
+
+Vais includes a Debug Adapter Protocol server (`vais-dap`) for IDE-level debugging support.
+
+### Building the DAP Server
+
+```bash
+cargo build --release --bin vais-dap
+
+# Add to PATH (optional)
+export PATH="$PATH:$(pwd)/target/release"
+```
+
+### Features
+
+- Source-level debugging with breakpoints
+- Step over, step into, step out
+- Local variables and arguments inspection
+- Register inspection
+- Memory read/write
+- Disassembly view
+- Conditional breakpoints
+- Function breakpoints
+- Exception breakpoints (panic)
+- Expression evaluation
+
+### VS Code Debugging
+
+1. Install the Vais extension
+2. Create a launch configuration in `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "vais",
+      "request": "launch",
+      "name": "Debug Vais Program",
+      "program": "${workspaceFolder}/main.vais",
+      "stopOnEntry": true,
+      "autoCompile": true,
+      "optLevel": 0
+    }
+  ]
+}
+```
+
+3. Set breakpoints by clicking in the gutter
+4. Press F5 to start debugging
+
+### Neovim Debugging
+
+With nvim-dap:
+
+```lua
+local dap = require('dap')
+
+dap.adapters.vais = {
+  type = 'executable',
+  command = 'vais-dap',
+}
+
+dap.configurations.vais = {
+  {
+    type = 'vais',
+    request = 'launch',
+    name = 'Debug Vais Program',
+    program = '${file}',
+    stopOnEntry = true,
+    autoCompile = true,
+  }
+}
+```
+
+### Emacs Debugging
+
+With dap-mode:
+
+```elisp
+(require 'dap-mode)
+
+(dap-register-debug-template
+ "Vais Debug"
+ (list :type "vais"
+       :request "launch"
+       :name "Debug Vais"
+       :program nil  ; Will prompt for file
+       :stopOnEntry t
+       :autoCompile t))
+
+;; Or use dap-debug directly
+(defun vais-debug ()
+  "Debug current Vais file."
+  (interactive)
+  (dap-debug
+   (list :type "vais"
+         :request "launch"
+         :name "Debug"
+         :program (buffer-file-name)
+         :stopOnEntry t
+         :autoCompile t)))
+```
+
+### CLI Usage
+
+```bash
+# Start DAP server (stdio mode, for IDE integration)
+vais-dap
+
+# Start DAP server on TCP port (for remote debugging)
+vais-dap --port 4711
+
+# With verbose logging
+vais-dap --log-level debug
+```
+
+### Compile with Debug Info
+
+To enable source-level debugging, compile with the `-g` flag:
+
+```bash
+vaisc build main.vais -g -O0
+```
+
+---
+
 ## Contributing
 
 Found an issue or want to add support for another editor?

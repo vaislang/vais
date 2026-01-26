@@ -1161,12 +1161,20 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - Helix: languages.toml, queries/vais/highlights.scm
   - Emacs: vais-mode.el (major mode), vais-lsp.el (LSP 통합)
   - 통합 가이드 문서: docs/EDITORS.md
-- [ ] **DAP 서버** - 디버그 어댑터 프로토콜
+- [x] **DAP 서버** - 디버그 어댑터 프로토콜 (완료일: 2026-01-26)
+  - crates/vais-dap/ - 새로운 crate
+  - DAP 프로토콜 타입 정의 (protocol/types.rs, requests.rs, responses.rs, events.rs)
+  - DAP 서버 구현 (server.rs) - 모든 표준 요청 핸들러
+  - LLDB 어댑터 구현 (debugger.rs) - lldb CLI 래핑
+  - 세션 관리 (session.rs) - launch/attach/breakpoints
+  - DWARF 소스 매핑 (source_map.rs) - gimli 기반
+  - VSCode 디버거 설정 (package.json contributes.debuggers)
+  - docs/EDITORS.md에 DAP 사용 가이드 추가
 - [ ] **Formal Verification** - requires/ensures 계약
 - [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API
 
 ### 남은 작업 (다음 단계)
-- P4 에디터 통합 완료! DAP/Verification/inkwell은 향후 진행
+- P4 DAP 서버 완료! Verification/inkwell은 향후 진행
 
 ---
 

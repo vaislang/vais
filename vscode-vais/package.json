@@ -73,6 +73,11 @@
           "default": "vais-lsp",
           "description": "Path to the vais-lsp executable. If not specified, will search in PATH."
         },
+        "vais.debugAdapter.path": {
+          "type": "string",
+          "default": "vais-dap",
+          "description": "Path to the vais-dap executable. If not specified, will search in PATH."
+        },
         "vais.trace.server": {
           "type": "string",
           "enum": [
@@ -84,6 +89,114 @@
           "description": "Traces the communication between VS Code and the language server."
         }
       }
-    }
+    },
+    "debuggers": [
+      {
+        "type": "vais",
+        "languages": ["vais"],
+        "label": "Vais Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the Vais source file to debug",
+                "default": "${file}"
+              },
+              "binary": {
+                "type": "string",
+                "description": "Path to pre-compiled binary (optional)"
+              },
+              "args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Command line arguments to pass to the program",
+                "default": []
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the program",
+                "default": "${workspaceFolder}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at the entry point when debugging starts",
+                "default": true
+              },
+              "autoCompile": {
+                "type": "boolean",
+                "description": "Automatically compile the source file before debugging",
+                "default": true
+              },
+              "optLevel": {
+                "type": "number",
+                "description": "Optimization level (0-3)",
+                "default": 0
+              }
+            }
+          },
+          "attach": {
+            "required": ["pid"],
+            "properties": {
+              "pid": {
+                "type": "number",
+                "description": "Process ID to attach to"
+              },
+              "program": {
+                "type": "string",
+                "description": "Path to the program binary (for symbol loading)"
+              },
+              "stopOnAttach": {
+                "type": "boolean",
+                "description": "Stop all threads when attaching",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "vais",
+            "request": "launch",
+            "name": "Debug Vais Program",
+            "program": "${file}",
+            "stopOnEntry": true,
+            "autoCompile": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Vais: Launch",
+            "description": "Launch and debug a Vais program",
+            "body": {
+              "type": "vais",
+              "request": "launch",
+              "name": "Debug ${1:program}",
+              "program": "^\"\\${workspaceFolder}/${2:main.vais}\"",
+              "stopOnEntry": true,
+              "autoCompile": true
+            }
+          },
+          {
+            "label": "Vais: Attach",
+            "description": "Attach to a running Vais process",
+            "body": {
+              "type": "vais",
+              "request": "attach",
+              "name": "Attach to Process",
+              "pid": "${1:0}"
+            }
+          }
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "vais"
+      }
+    ]
   }
 }
