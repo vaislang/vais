@@ -213,6 +213,23 @@ pub trait ExprVisitor {
     /// Note: Macro invocations should be expanded before codegen, so this should
     /// never be called in practice. If it is, it indicates a compiler bug.
     fn visit_macro_invoke(&mut self, invoke: &vais_ast::MacroInvoke) -> GenResult;
+
+    /// Visit an old expression (old(expr))
+    /// Used in ensures clauses to reference pre-state values.
+    fn visit_old(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
+
+    /// Visit an assert expression (assert(condition) or assert(condition, message))
+    /// Generates runtime check that panics if condition is false.
+    fn visit_assert(
+        &mut self,
+        condition: &Spanned<Expr>,
+        message: Option<&Spanned<Expr>>,
+        counter: &mut usize,
+    ) -> GenResult;
+
+    /// Visit an assume expression (assume(condition))
+    /// Tells the verifier/optimizer to assume condition is true.
+    fn visit_assume(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
 }
 
 /// Visitor trait for statement code generation

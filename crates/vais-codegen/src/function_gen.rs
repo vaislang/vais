@@ -59,6 +59,7 @@ impl CodeGenerator {
             name: inst.mangled_name.to_string(),
             fields,
             repr_c: false,
+            invariants: Vec::new(),
         };
         self.structs
             .insert(inst.mangled_name.to_string(), struct_info);
@@ -341,6 +342,11 @@ impl CodeGenerator {
 
         // Generate body
         let mut counter = 0;
+
+        // Generate requires (precondition) checks
+        let requires_ir = self.generate_requires_checks(f, &mut counter)?;
+        ir.push_str(&requires_ir);
+
         match &f.body {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
@@ -349,6 +355,10 @@ impl CodeGenerator {
                 // Execute deferred expressions before return (LIFO order)
                 let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                 ir.push_str(&defer_ir);
+
+                // Generate ensures (postcondition) checks before return
+                let ensures_ir = self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
+                ir.push_str(&ensures_ir);
 
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
                 if ret_type == ResolvedType::Unit {
@@ -373,10 +383,15 @@ impl CodeGenerator {
                 if terminated {
                     // Block already has a terminator, no need for ret
                     // Note: defer cleanup for early returns is handled in Return statement
+                    // Note: ensures checks for early returns need to be added to Return statement handling
                 } else {
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                     ir.push_str(&defer_ir);
+
+                    // Generate ensures (postcondition) checks before return
+                    let ensures_ir = self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
+                    ir.push_str(&ensures_ir);
 
                     // Get debug location from last statement or function end
                     let ret_offset = stmts.last().map(|s| s.span.end).unwrap_or(span.end);

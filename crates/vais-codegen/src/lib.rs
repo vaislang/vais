@@ -22,6 +22,7 @@ pub mod formatter;
 pub mod optimize;
 pub mod visitor;
 mod builtins;
+mod contracts;
 mod control_flow;
 mod expr;
 mod expr_helpers;
@@ -457,6 +458,22 @@ pub struct CodeGenerator {
 
     // Trait implementations: (impl_type, trait_name) -> method_impls
     trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
+
+    // Release mode flag (disables contract checks)
+    release_mode: bool,
+
+    // Current source file being compiled (for contract error messages)
+    current_file: Option<String>,
+
+    // Contract string constants (separate from regular strings)
+    contract_string_constants: HashMap<String, String>,
+
+    // Counter for contract string constant names
+    contract_string_counter: usize,
+
+    // Pre-state snapshots for old() expressions in ensures clauses
+    // Maps snapshot variable name -> allocated storage name
+    old_snapshots: HashMap<String, String>,
 }
 
 impl CodeGenerator {
@@ -513,6 +530,11 @@ impl CodeGenerator {
             vtable_generator: vtable::VtableGenerator::new(),
             trait_defs: HashMap::new(),
             trait_impl_methods: HashMap::new(),
+            release_mode: false,
+            current_file: None,
+            contract_string_constants: HashMap::new(),
+            contract_string_counter: 0,
+            old_snapshots: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -558,6 +580,21 @@ impl CodeGenerator {
     /// Check if GC mode is enabled
     pub fn is_gc_enabled(&self) -> bool {
         self.gc_enabled
+    }
+
+    /// Enable release mode (disables contract checks)
+    pub fn enable_release_mode(&mut self) {
+        self.release_mode = true;
+    }
+
+    /// Check if release mode is enabled
+    pub fn is_release_mode(&self) -> bool {
+        self.release_mode
+    }
+
+    /// Set current source file for error messages
+    pub fn set_source_file(&mut self, file: &str) {
+        self.current_file = Some(file.to_string());
     }
 
     /// Check if a function has the #[gc] attribute
@@ -977,6 +1014,12 @@ impl CodeGenerator {
 
         // Add helper functions for memory operations
         ir.push_str(&self.generate_helper_functions());
+
+        // Add contract runtime declarations if any contracts are present
+        if !self.contract_string_constants.is_empty() {
+            ir.push_str(&self.generate_contract_declarations());
+            ir.push_str(&self.generate_contract_string_constants());
+        }
 
         // Add debug intrinsic declaration if debug info is enabled
         if self.debug_info.is_enabled() {
@@ -2671,6 +2714,45 @@ impl CodeGenerator {
                     "Unexpanded macro invocation: {}! - macros must be expanded before code generation",
                     invoke.name.node
                 )))
+            }
+
+            // Old expression for contract ensures clauses
+            Expr::Old(inner) => {
+                // old(expr) references a pre-snapshot value
+                // In codegen, we generate a load from the pre-snapshot storage
+                let old_var_name = format!("__old_{}", counter);
+                *counter += 1;
+
+                // Check if we have a pre-snapshot for this expression
+                if let Some(snapshot_var) = self.old_snapshots.get(&old_var_name) {
+                    let ty = self.infer_expr_type(inner);
+                    let llvm_ty = self.type_to_llvm(&ty);
+                    let result = self.next_temp(counter);
+                    let ir = format!(
+                        "  {} = load {}, {}* %{}\n",
+                        result, llvm_ty, llvm_ty, snapshot_var
+                    );
+                    Ok((result, ir))
+                } else {
+                    // Fallback: just evaluate the expression (for non-ensures contexts)
+                    self.generate_expr(inner, counter)
+                }
+            }
+
+            // Assert expression
+            Expr::Assert { condition, message } => {
+                self.generate_assert(condition, message.as_deref(), counter)
+            }
+
+            // Assume expression (verification hint, no runtime effect in release)
+            Expr::Assume(inner) => {
+                if self.release_mode {
+                    // In release mode, assume is a no-op
+                    Ok(("0".to_string(), String::new()))
+                } else {
+                    // In debug mode, assume acts like assert but with different error message
+                    self.generate_assume(inner, counter)
+                }
             }
 
             // Lambda expression with captures

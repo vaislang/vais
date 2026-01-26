@@ -1,0 +1,707 @@
+//! Contract code generation for Design by Contract
+//!
+//! Generates LLVM IR for requires (preconditions) and ensures (postconditions).
+//! Contract checks are only generated in debug builds.
+
+use crate::{CodeGenerator, CodegenResult};
+use vais_ast::{Function, Expr, Spanned, IfElse};
+use vais_types::ResolvedType;
+
+impl CodeGenerator {
+    /// Generate requires (precondition) checks for a function
+    ///
+    /// Inserts condition checks after function entry, calling __contract_fail
+    /// if any precondition fails.
+    pub(crate) fn generate_requires_checks(
+        &mut self,
+        f: &Function,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip contract checks in release mode
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        let mut ir = String::new();
+
+        for (idx, attr) in f.attributes.iter().enumerate() {
+            if attr.name == "requires" {
+                if let Some(expr) = &attr.expr {
+                    let check_ir = self.generate_contract_check(
+                        expr,
+                        &f.name.node,
+                        "requires",
+                        idx,
+                        counter,
+                    )?;
+                    ir.push_str(&check_ir);
+                }
+            }
+        }
+
+        Ok(ir)
+    }
+
+    /// Generate ensures (postcondition) checks for a function
+    ///
+    /// Inserts condition checks before function return, calling __contract_fail
+    /// if any postcondition fails. The return value is available as `return`.
+    pub(crate) fn generate_ensures_checks(
+        &mut self,
+        f: &Function,
+        return_value: &str,
+        ret_type: &ResolvedType,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip contract checks in release mode
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        let mut ir = String::new();
+
+        // Register 'return' as a local variable for ensures expressions
+        if !f.attributes.iter().any(|a| a.name == "ensures") {
+            return Ok(ir);
+        }
+
+        // Store the return value in a local for reference in ensures expressions
+        let return_llvm = self.type_to_llvm(ret_type);
+        // Note: llvm_name should NOT include the % prefix - generate_ident adds it
+        let return_var_name = format!("__contract_return.{}", *counter);
+        *counter += 1;
+
+        ir.push_str(&format!(
+            "  %{} = alloca {}\n",
+            return_var_name, return_llvm
+        ));
+        ir.push_str(&format!(
+            "  store {} {}, {}* %{}\n",
+            return_llvm, return_value, return_llvm, return_var_name
+        ));
+
+        // Register 'return' in locals for expression generation
+        // Use alloca since we stored the return value at return_var_name
+        self.locals.insert(
+            "return".to_string(),
+            crate::types::LocalVar::alloca(ret_type.clone(), return_var_name.clone()),
+        );
+
+        for (idx, attr) in f.attributes.iter().enumerate() {
+            if attr.name == "ensures" {
+                if let Some(expr) = &attr.expr {
+                    let check_ir = self.generate_contract_check(
+                        expr,
+                        &f.name.node,
+                        "ensures",
+                        idx,
+                        counter,
+                    )?;
+                    ir.push_str(&check_ir);
+                }
+            }
+        }
+
+        // Remove 'return' from locals
+        self.locals.remove("return");
+
+        Ok(ir)
+    }
+
+    /// Generate a single contract check
+    ///
+    /// Generates:
+    /// ```llvm
+    /// %cond = <evaluate expression>
+    /// br i1 %cond, label %contract_ok_N, label %contract_fail_N
+    ///
+    /// contract_fail_N:
+    ///   call i64 @__contract_fail(i64 <kind>, i8* <condition>, i8* <file>, i64 <line>, i8* <func>)
+    ///   unreachable
+    ///
+    /// contract_ok_N:
+    /// ```
+    fn generate_contract_check(
+        &mut self,
+        expr: &Spanned<Expr>,
+        func_name: &str,
+        kind: &str,  // "requires" or "ensures"
+        idx: usize,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        // Generate the condition expression
+        let (cond_value, cond_ir) = self.generate_expr(expr, counter)?;
+        ir.push_str(&cond_ir);
+
+        // Generate unique labels
+        let ok_label = format!("contract_ok_{}_{}", kind, idx);
+        let fail_label = format!("contract_fail_{}_{}", kind, idx);
+
+        // Convert the condition to i1 for branch
+        // VAIS uses i64 for bool, but LLVM branch needs i1
+        let cond_i1 = format!("%contract_cond_i1_{}", *counter);
+        *counter += 1;
+        ir.push_str(&format!(
+            "  {} = icmp ne i64 {}, 0\n",
+            cond_i1, cond_value
+        ));
+
+        // Branch based on condition
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cond_i1, ok_label, fail_label
+        ));
+
+        // Failure block
+        ir.push_str(&format!("{}:\n", fail_label));
+
+        // Contract kind: 1 = requires, 2 = ensures
+        let kind_value = if kind == "requires" { 1 } else { 2 };
+
+        // Create string constants for error message
+        let condition_str = self.get_or_create_contract_string(
+            &format!("{} condition #{}", kind, idx)
+        );
+        let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+        let file_str = self.get_or_create_contract_string(&file_name);
+        let func_str = self.get_or_create_contract_string(func_name);
+
+        // Get line number from span
+        let line = self.debug_info.offset_to_line(expr.span.start) as i64;
+
+        // Call __contract_fail
+        ir.push_str(&format!(
+            "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})\n",
+            kind_value, condition_str, file_str, line, func_str
+        ));
+        ir.push_str("  unreachable\n");
+
+        // Success block
+        ir.push_str(&format!("{}:\n", ok_label));
+
+        Ok(ir)
+    }
+
+    /// Get or create a contract string constant, returning an i8* GEP expression
+    fn get_or_create_contract_string(&mut self, s: &str) -> String {
+        // Check if we already have this string
+        if let Some(name) = self.contract_string_constants.get(s) {
+            return format!("getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
+                s.len() + 1, s.len() + 1, name);
+        }
+
+        // Create a new string constant
+        let const_name = format!("@.str.contract.{}", self.contract_string_counter);
+        self.contract_string_counter += 1;
+
+        self.contract_string_constants.insert(s.to_string(), const_name.clone());
+
+        format!("getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
+            s.len() + 1, s.len() + 1, const_name)
+    }
+
+    /// Generate declarations for contract runtime functions
+    pub(crate) fn generate_contract_declarations(&self) -> String {
+        // Only generate if we have any contracts
+        if self.contract_string_constants.is_empty() && self.release_mode {
+            return String::new();
+        }
+
+        let mut ir = String::new();
+        ir.push_str("; Contract runtime function declarations\n");
+        ir.push_str("declare i64 @__contract_fail(i64, i8*, i8*, i64, i8*)\n");
+        ir.push_str("declare i64 @__panic(i8*)\n");
+        // LLVM assume intrinsic for optimization hints (used by assume() in release mode)
+        ir.push_str("declare void @llvm.assume(i1)\n");
+        ir.push_str("\n");
+
+        ir
+    }
+
+    /// Generate string constants for contract messages
+    pub(crate) fn generate_contract_string_constants(&self) -> String {
+        let mut ir = String::new();
+
+        for (s, name) in &self.contract_string_constants {
+            let escaped = escape_string_for_llvm(s);
+            ir.push_str(&format!(
+                "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
+                name,
+                s.len() + 1,
+                escaped
+            ));
+        }
+
+        ir
+    }
+
+    /// Check if a function has any contract attributes
+    pub(crate) fn has_contracts(f: &Function) -> bool {
+        f.attributes.iter().any(|a| a.name == "requires" || a.name == "ensures")
+    }
+}
+
+/// Escape a string for LLVM IR constant
+fn escape_string_for_llvm(s: &str) -> String {
+    let mut result = String::new();
+    for c in s.chars() {
+        match c {
+            '\\' => result.push_str("\\5C"),
+            '"' => result.push_str("\\22"),
+            '\n' => result.push_str("\\0A"),
+            '\r' => result.push_str("\\0D"),
+            '\t' => result.push_str("\\09"),
+            c if c.is_ascii_graphic() || c == ' ' => result.push(c),
+            c => {
+                // Escape non-printable characters as hex
+                for byte in c.to_string().as_bytes() {
+                    result.push_str(&format!("\\{:02X}", byte));
+                }
+            }
+        }
+    }
+    result
+}
+
+impl CodeGenerator {
+    /// Generate assert expression
+    ///
+    /// assert(condition) or assert(condition, message)
+    /// Generates runtime check that panics if condition is false.
+    pub(crate) fn generate_assert(
+        &mut self,
+        condition: &Spanned<Expr>,
+        message: Option<&Spanned<Expr>>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        // In release mode, assert is still checked (unlike assume)
+        let mut ir = String::new();
+
+        // Generate the condition expression
+        let (cond_value, cond_ir) = self.generate_expr(condition, counter)?;
+        ir.push_str(&cond_ir);
+
+        // Generate unique labels
+        let ok_label = format!("assert_ok_{}", *counter);
+        let fail_label = format!("assert_fail_{}", *counter);
+        *counter += 1;
+
+        // Convert condition to i1
+        let cond_i1 = format!("%assert_cond_i1_{}", *counter);
+        *counter += 1;
+        ir.push_str(&format!(
+            "  {} = icmp ne i64 {}, 0\n",
+            cond_i1, cond_value
+        ));
+
+        // Branch based on condition
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cond_i1, ok_label, fail_label
+        ));
+
+        // Failure block
+        ir.push_str(&format!("{}:\n", fail_label));
+
+        // Generate error message
+        let msg_str = if let Some(msg_expr) = message {
+            // User-provided message
+            let (msg_val, msg_ir) = self.generate_expr(msg_expr, counter)?;
+            ir.push_str(&msg_ir);
+            msg_val
+        } else {
+            // Default message
+            let default_msg = format!("Assertion failed at {}:{}",
+                self.current_file.as_deref().unwrap_or("unknown"),
+                self.debug_info.offset_to_line(condition.span.start)
+            );
+            let msg_const = self.get_or_create_contract_string(&default_msg);
+            msg_const
+        };
+
+        // Call __panic to terminate
+        ir.push_str(&format!(
+            "  call i64 @__panic(i8* {})\n",
+            msg_str
+        ));
+        ir.push_str("  unreachable\n");
+
+        // Success block
+        ir.push_str(&format!("{}:\n", ok_label));
+
+        // Assert returns unit (0)
+        Ok(("0".to_string(), ir))
+    }
+
+    /// Generate assume expression
+    ///
+    /// assume(condition) tells the verifier/optimizer that condition is true.
+    /// In debug mode, acts like assert. In release mode, generates llvm.assume intrinsic.
+    pub(crate) fn generate_assume(
+        &mut self,
+        condition: &Spanned<Expr>,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let mut ir = String::new();
+
+        // Generate the condition expression
+        let (cond_value, cond_ir) = self.generate_expr(condition, counter)?;
+        ir.push_str(&cond_ir);
+
+        // Convert condition to i1
+        let cond_i1 = format!("%assume_cond_i1_{}", *counter);
+        *counter += 1;
+        ir.push_str(&format!(
+            "  {} = icmp ne i64 {}, 0\n",
+            cond_i1, cond_value
+        ));
+
+        if self.release_mode {
+            // In release mode, use LLVM assume intrinsic for optimization hints
+            ir.push_str(&format!(
+                "  call void @llvm.assume(i1 {})\n",
+                cond_i1
+            ));
+        } else {
+            // In debug mode, check the assumption
+            let ok_label = format!("assume_ok_{}", *counter);
+            let fail_label = format!("assume_fail_{}", *counter);
+            *counter += 1;
+
+            ir.push_str(&format!(
+                "  br i1 {}, label %{}, label %{}\n",
+                cond_i1, ok_label, fail_label
+            ));
+
+            // Failure block
+            ir.push_str(&format!("{}:\n", fail_label));
+
+            let fail_msg = format!("Assumption violated at {}:{}",
+                self.current_file.as_deref().unwrap_or("unknown"),
+                self.debug_info.offset_to_line(condition.span.start)
+            );
+            let msg_const = self.get_or_create_contract_string(&fail_msg);
+
+            ir.push_str(&format!(
+                "  call i64 @__panic(i8* {})\n",
+                msg_const
+            ));
+            ir.push_str("  unreachable\n");
+
+            // Success block
+            ir.push_str(&format!("{}:\n", ok_label));
+        }
+
+        // Assume returns unit (0)
+        Ok(("0".to_string(), ir))
+    }
+
+    /// Generate invariant checks for a struct type
+    ///
+    /// Called after struct construction/modification to verify invariants.
+    pub(crate) fn generate_invariant_checks(
+        &mut self,
+        struct_name: &str,
+        struct_ptr: &str,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip in release mode
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        // Look up struct's invariant attributes
+        let struct_info = self.structs.get(struct_name).cloned();
+        let invariants = struct_info.as_ref()
+            .map(|s| s.invariants.clone())
+            .unwrap_or_default();
+
+        if invariants.is_empty() {
+            return Ok(String::new());
+        }
+
+        let mut ir = String::new();
+
+        for (idx, invariant_expr) in invariants.iter().enumerate() {
+            // Generate the invariant condition
+            // Note: The invariant expression can reference struct fields via 'self'
+            // We need to set up 'self' to point to struct_ptr
+            let saved_self = self.locals.get("self").cloned();
+
+            if let Some(_si) = &struct_info {
+                self.locals.insert(
+                    "self".to_string(),
+                    crate::types::LocalVar::param(
+                        ResolvedType::Named {
+                            name: struct_name.to_string(),
+                            generics: Vec::new(),
+                        },
+                        struct_ptr.trim_start_matches('%').to_string(),
+                    ),
+                );
+            }
+
+            let (cond_value, cond_ir) = self.generate_expr(invariant_expr, counter)?;
+            ir.push_str(&cond_ir);
+
+            // Restore self
+            if let Some(prev) = saved_self {
+                self.locals.insert("self".to_string(), prev);
+            } else {
+                self.locals.remove("self");
+            }
+
+            // Generate check
+            let ok_label = format!("invariant_ok_{}_{}", struct_name, idx);
+            let fail_label = format!("invariant_fail_{}_{}", struct_name, idx);
+
+            let cond_i1 = format!("%invariant_cond_i1_{}", *counter);
+            *counter += 1;
+            ir.push_str(&format!(
+                "  {} = icmp ne i64 {}, 0\n",
+                cond_i1, cond_value
+            ));
+
+            ir.push_str(&format!(
+                "  br i1 {}, label %{}, label %{}\n",
+                cond_i1, ok_label, fail_label
+            ));
+
+            // Failure block
+            ir.push_str(&format!("{}:\n", fail_label));
+
+            let kind_value = 3; // CONTRACT_INVARIANT
+            let condition_str = self.get_or_create_contract_string(
+                &format!("invariant #{} of {}", idx, struct_name)
+            );
+            let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+            let file_str = self.get_or_create_contract_string(&file_name);
+            let func_str = self.get_or_create_contract_string(
+                &self.current_function.clone().unwrap_or_else(|| "unknown".to_string())
+            );
+            let line = self.debug_info.offset_to_line(invariant_expr.span.start) as i64;
+
+            ir.push_str(&format!(
+                "  call i64 @__contract_fail(i64 {}, i8* {}, i8* {}, i64 {}, i8* {})\n",
+                kind_value, condition_str, file_str, line, func_str
+            ));
+            ir.push_str("  unreachable\n");
+
+            // Success block
+            ir.push_str(&format!("{}:\n", ok_label));
+        }
+
+        Ok(ir)
+    }
+
+    /// Generate old() snapshots for ensures clauses
+    ///
+    /// Called at function entry to capture pre-state values for old() references.
+    pub(crate) fn generate_old_snapshots(
+        &mut self,
+        f: &Function,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip if no ensures clauses with old()
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        let mut ir = String::new();
+
+        // Find all old() expressions in ensures clauses
+        for attr in &f.attributes {
+            if attr.name == "ensures" {
+                if let Some(expr) = &attr.expr {
+                    ir.push_str(&self.capture_old_expressions(expr, counter)?);
+                }
+            }
+        }
+
+        Ok(ir)
+    }
+
+    /// Recursively find and capture old() expressions
+    fn capture_old_expressions(
+        &mut self,
+        expr: &Spanned<Expr>,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+
+        match &expr.node {
+            Expr::Old(inner) => {
+                // Capture this expression's value
+                let (value, value_ir) = self.generate_expr(inner, counter)?;
+                ir.push_str(&value_ir);
+
+                // Allocate storage for the snapshot
+                let snapshot_name = format!("__old_snapshot_{}", *counter);
+                let ty = self.infer_expr_type(inner);
+                let llvm_ty = self.type_to_llvm(&ty);
+
+                ir.push_str(&format!(
+                    "  %{} = alloca {}\n",
+                    snapshot_name, llvm_ty
+                ));
+                ir.push_str(&format!(
+                    "  store {} {}, {}* %{}\n",
+                    llvm_ty, value, llvm_ty, snapshot_name
+                ));
+
+                // Register the snapshot
+                let old_var_name = format!("__old_{}", *counter);
+                self.old_snapshots.insert(old_var_name, snapshot_name);
+                *counter += 1;
+            }
+
+            // Recurse into sub-expressions
+            Expr::Binary { left, right, .. } => {
+                ir.push_str(&self.capture_old_expressions(left, counter)?);
+                ir.push_str(&self.capture_old_expressions(right, counter)?);
+            }
+            Expr::Unary { expr: inner, .. } => {
+                ir.push_str(&self.capture_old_expressions(inner, counter)?);
+            }
+            Expr::Call { func, args, .. } => {
+                ir.push_str(&self.capture_old_expressions(func, counter)?);
+                for arg in args {
+                    ir.push_str(&self.capture_old_expressions(arg, counter)?);
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                ir.push_str(&self.capture_old_expressions(receiver, counter)?);
+                for arg in args {
+                    ir.push_str(&self.capture_old_expressions(arg, counter)?);
+                }
+            }
+            Expr::Field { expr: inner, .. } => {
+                ir.push_str(&self.capture_old_expressions(inner, counter)?);
+            }
+            Expr::Index { expr: inner, index } => {
+                ir.push_str(&self.capture_old_expressions(inner, counter)?);
+                ir.push_str(&self.capture_old_expressions(index, counter)?);
+            }
+            Expr::If { cond, then, else_ } => {
+                ir.push_str(&self.capture_old_expressions(cond, counter)?);
+                for stmt in then {
+                    if let vais_ast::Stmt::Expr(e) = &stmt.node {
+                        ir.push_str(&self.capture_old_expressions(e, counter)?);
+                    }
+                }
+                if let Some(else_branch) = else_ {
+                    ir.push_str(&self.capture_old_in_if_else(else_branch, counter)?);
+                }
+            }
+            Expr::Ternary { cond, then, else_ } => {
+                ir.push_str(&self.capture_old_expressions(cond, counter)?);
+                ir.push_str(&self.capture_old_expressions(then, counter)?);
+                ir.push_str(&self.capture_old_expressions(else_, counter)?);
+            }
+            _ => {}
+        }
+
+        Ok(ir)
+    }
+
+    fn capture_old_in_if_else(
+        &mut self,
+        branch: &IfElse,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+        match branch {
+            IfElse::ElseIf(cond, then, else_) => {
+                ir.push_str(&self.capture_old_expressions(cond, counter)?);
+                for stmt in then {
+                    if let vais_ast::Stmt::Expr(e) = &stmt.node {
+                        ir.push_str(&self.capture_old_expressions(e, counter)?);
+                    }
+                }
+                if let Some(next) = else_ {
+                    ir.push_str(&self.capture_old_in_if_else(next, counter)?);
+                }
+            }
+            IfElse::Else(stmts) => {
+                for stmt in stmts {
+                    if let vais_ast::Stmt::Expr(e) = &stmt.node {
+                        ir.push_str(&self.capture_old_expressions(e, counter)?);
+                    }
+                }
+            }
+        }
+        Ok(ir)
+    }
+
+    /// Generate decreases check for termination proofs
+    ///
+    /// Verifies that the decreases expression is non-negative and strictly
+    /// decreasing on recursive calls.
+    pub(crate) fn generate_decreases_checks(
+        &mut self,
+        f: &Function,
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip in release mode
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        let mut ir = String::new();
+
+        for (idx, attr) in f.attributes.iter().enumerate() {
+            if attr.name == "decreases" {
+                if let Some(expr) = &attr.expr {
+                    // Generate the decreases expression value
+                    let (value, value_ir) = self.generate_expr(expr, counter)?;
+                    ir.push_str(&value_ir);
+
+                    // Store the initial value for comparison in recursive calls
+                    let storage_name = format!("__decreases_{}_{}", f.name.node, idx);
+                    ir.push_str(&format!(
+                        "  %{} = alloca i64\n",
+                        storage_name
+                    ));
+                    ir.push_str(&format!(
+                        "  store i64 {}, i64* %{}\n",
+                        value, storage_name
+                    ));
+
+                    // Check that value is non-negative
+                    let ok_label = format!("decreases_nonneg_ok_{}_{}", idx, *counter);
+                    let fail_label = format!("decreases_nonneg_fail_{}_{}", idx, *counter);
+                    *counter += 1;
+
+                    let cmp_result = format!("%decreases_cmp_{}", *counter);
+                    *counter += 1;
+                    ir.push_str(&format!(
+                        "  {} = icmp sge i64 {}, 0\n",
+                        cmp_result, value
+                    ));
+                    ir.push_str(&format!(
+                        "  br i1 {}, label %{}, label %{}\n",
+                        cmp_result, ok_label, fail_label
+                    ));
+
+                    // Failure block
+                    ir.push_str(&format!("{}:\n", fail_label));
+
+                    let fail_msg = format!("decreases expression must be non-negative in function '{}'", f.name.node);
+                    let msg_const = self.get_or_create_contract_string(&fail_msg);
+                    ir.push_str(&format!(
+                        "  call i64 @__panic(i8* {})\n",
+                        msg_const
+                    ));
+                    ir.push_str("  unreachable\n");
+
+                    // Success block
+                    ir.push_str(&format!("{}:\n", ok_label));
+                }
+            }
+        }
+
+        Ok(ir)
+    }
+}

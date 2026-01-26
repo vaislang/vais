@@ -1,0 +1,9 @@
+# Assert violation test
+F test_assert(x: i64) -> i64 {
+    assert(x > 0)
+    x
+}
+
+F main() -> i64 {
+    test_assert(-10)
+}

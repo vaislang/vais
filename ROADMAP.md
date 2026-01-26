@@ -1170,11 +1170,23 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - DWARF 소스 매핑 (source_map.rs) - gimli 기반
   - VSCode 디버거 설정 (package.json contributes.debuggers)
   - docs/EDITORS.md에 DAP 사용 가이드 추가
-- [ ] **Formal Verification** - requires/ensures 계약
+- [x] **Formal Verification** - Design by Contract 형식 검증 (완료일: 2026-01-26)
+  - AST: Expr::Old, Expr::Assert, Expr::Assume 표현식 추가
+  - Parser: old(), assert(), assume() 내장 함수 파싱
+  - Type Checker: 새 표현식 타입 검증 (조건은 Bool, 메시지는 Str)
+  - Codegen/contracts.rs:
+    - generate_assert(): 런타임 검사 생성, 실패 시 __panic 호출
+    - generate_assume(): 디버그에서 검사, 릴리스에서 llvm.assume
+    - generate_invariant_checks(): 구조체 불변식 검증
+    - generate_old_snapshots(): ensures 절의 old() 전처리
+    - generate_decreases_checks(): 종료성 증명 (비음수 체크)
+  - StructInfo에 invariants 필드 추가
+  - std/contract_runtime.c에 __panic() 함수 추가
+  - 테스트: formal_verification_test.vais, contract_violation_test.vais
 - [ ] **inkwell 완전 전환** - 텍스트 IR → LLVM C API
 
 ### 남은 작업 (다음 단계)
-- P4 DAP 서버 완료! Verification/inkwell은 향후 진행
+- P4 Formal Verification 완료! inkwell 전환은 향후 진행
 
 ---
 

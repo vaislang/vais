@@ -387,6 +387,18 @@ impl<'a> AstExpander<'a> {
                     value: Box::new(self.expand_expr(*value)?),
                 }
             }
+            // Contract verification expressions
+            Expr::Old(inner) => Expr::Old(Box::new(self.expand_expr(*inner)?)),
+            Expr::Assert { condition, message } => {
+                Expr::Assert {
+                    condition: Box::new(self.expand_expr(*condition)?),
+                    message: match message {
+                        Some(m) => Some(Box::new(self.expand_expr(*m)?)),
+                        None => None,
+                    },
+                }
+            }
+            Expr::Assume(inner) => Expr::Assume(Box::new(self.expand_expr(*inner)?)),
             // Leaf expressions - no expansion needed
             e @ (Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) |
                  Expr::Ident(_) | Expr::Unit | Expr::SelfCall |

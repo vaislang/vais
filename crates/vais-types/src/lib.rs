@@ -30,6 +30,8 @@ pub use types::{
     ResolvedConst, ConstBinOp,
     // Did-you-mean support
     levenshtein_distance, find_similar_name,
+    // Contract support (Design by Contract)
+    ContractSpec, ContractClause,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
@@ -202,6 +204,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -216,6 +219,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -230,6 +234,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -244,6 +249,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -258,6 +264,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -272,6 +279,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -290,6 +298,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -308,6 +317,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -322,6 +332,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -336,6 +347,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -350,6 +362,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -364,6 +377,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -381,6 +395,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -395,6 +410,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -412,6 +428,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -431,6 +448,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -448,6 +466,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -462,6 +481,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -481,6 +501,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -500,6 +521,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -514,6 +536,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -531,6 +554,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -549,6 +573,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -566,6 +591,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -584,6 +610,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -598,6 +625,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -612,6 +640,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -626,6 +655,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -661,6 +691,7 @@ impl TypeChecker {
                 ret: vec2f32.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -680,6 +711,7 @@ impl TypeChecker {
                 ret: vec4f32.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -703,6 +735,7 @@ impl TypeChecker {
                 ret: vec8f32.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -720,6 +753,7 @@ impl TypeChecker {
                 ret: vec2f64.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -739,6 +773,7 @@ impl TypeChecker {
                 ret: vec4f64.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -758,6 +793,7 @@ impl TypeChecker {
                 ret: vec4i32.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -781,6 +817,7 @@ impl TypeChecker {
                 ret: vec8i32.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -798,6 +835,7 @@ impl TypeChecker {
                 ret: vec2i64.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -817,6 +855,7 @@ impl TypeChecker {
                 ret: vec4i64.clone(),
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -836,7 +875,8 @@ impl TypeChecker {
                         ],
                         ret: $vec_ty.clone(),
                         is_async: false,
-                is_vararg: false,
+                        is_vararg: false,
+                        contracts: None,
                     },
                 );
             };
@@ -898,6 +938,7 @@ impl TypeChecker {
                 ret: ResolvedType::F32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -912,6 +953,7 @@ impl TypeChecker {
                 ret: ResolvedType::F32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -926,6 +968,7 @@ impl TypeChecker {
                 ret: ResolvedType::F64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -940,6 +983,7 @@ impl TypeChecker {
                 ret: ResolvedType::F64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -954,6 +998,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -968,6 +1013,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -982,6 +1028,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
 
@@ -996,6 +1043,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                contracts: None,
             },
         );
     }
@@ -1109,6 +1157,48 @@ impl TypeChecker {
         self.current_generic_bounds = prev_bounds;
     }
 
+    /// Extract contract specification from function attributes
+    ///
+    /// Parses requires/ensures/invariant attributes and builds a ContractSpec.
+    /// Contract expressions must evaluate to bool.
+    fn extract_contracts(&mut self, f: &Function) -> TypeResult<Option<types::ContractSpec>> {
+        use types::{ContractSpec, ContractClause};
+
+        let mut spec = ContractSpec::default();
+
+        for attr in &f.attributes {
+            match attr.name.as_str() {
+                "requires" | "ensures" => {
+                    if let Some(expr) = &attr.expr {
+                        // Type check the contract expression - it must be bool
+                        let expr_type = self.check_expr(expr)?;
+                        if expr_type != ResolvedType::Bool {
+                            return Err(TypeError::Mismatch {
+                                expected: "bool".to_string(),
+                                found: expr_type.to_string(),
+                                span: Some(expr.span),
+                            });
+                        }
+
+                        let clause = ContractClause {
+                            expr_str: attr.args.first().cloned().unwrap_or_default(),
+                            span: expr.span,
+                        };
+
+                        if attr.name == "requires" {
+                            spec.requires.push(clause);
+                        } else {
+                            spec.ensures.push(clause);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(if spec.is_empty() { None } else { Some(spec) })
+    }
+
     /// Register a function signature
     fn register_function(&mut self, f: &Function) -> TypeResult<()> {
         let name = f.name.node.clone();
@@ -1152,6 +1242,7 @@ impl TypeChecker {
                 ret,
                 is_async: f.is_async,
                 is_vararg: false,
+                contracts: None, // Contracts will be extracted in check_function
             },
         );
 
@@ -1190,6 +1281,7 @@ impl TypeChecker {
                 ret,
                 is_async: false,
                 is_vararg: func.is_vararg,
+                contracts: None,
             },
         );
 
@@ -1245,6 +1337,7 @@ impl TypeChecker {
                     ret,
                     is_async: method.node.is_async,
                     is_vararg: false,
+                    contracts: None,
                 },
             );
         }
@@ -1454,6 +1547,7 @@ impl TypeChecker {
                     ret,
                     is_async: method.node.is_async,
                     is_vararg: false,
+                    contracts: None,
                 },
             ));
         }
@@ -1579,13 +1673,29 @@ impl TypeChecker {
         }
 
         // Set current function context
-        self.current_fn_ret = Some(
-            f.ret_type
-                .as_ref()
-                .map(|t| self.resolve_type(&t.node))
-                .unwrap_or(ResolvedType::Unit),
-        );
+        let ret_type = f.ret_type
+            .as_ref()
+            .map(|t| self.resolve_type(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+        self.current_fn_ret = Some(ret_type.clone());
         self.current_fn_name = Some(f.name.node.clone());
+
+        // Type check requires clauses (preconditions)
+        // These can only reference function parameters
+        for attr in &f.attributes {
+            if attr.name == "requires" {
+                if let Some(expr) = &attr.expr {
+                    let expr_type = self.check_expr(expr)?;
+                    if expr_type != ResolvedType::Bool {
+                        return Err(TypeError::Mismatch {
+                            expected: "bool".to_string(),
+                            found: expr_type.to_string(),
+                            span: Some(expr.span),
+                        });
+                    }
+                }
+            }
+        }
 
         // Check body
         let body_type = match &f.body {
@@ -1597,6 +1707,31 @@ impl TypeChecker {
         let expected_ret = self.current_fn_ret.clone()
             .expect("Internal compiler error: current_fn_ret should be set during function checking");
         self.unify(&expected_ret, &body_type)?;
+
+        // Type check ensures clauses (postconditions)
+        // Add 'return' variable to scope for ensures expressions
+        self.define_var("return", ret_type.clone(), false);
+
+        for attr in &f.attributes {
+            if attr.name == "ensures" {
+                if let Some(expr) = &attr.expr {
+                    let expr_type = self.check_expr(expr)?;
+                    if expr_type != ResolvedType::Bool {
+                        return Err(TypeError::Mismatch {
+                            expected: "bool".to_string(),
+                            found: expr_type.to_string(),
+                            span: Some(expr.span),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Extract and store contracts in function signature
+        let contracts = self.extract_contracts(f)?;
+        if let Some(func_sig) = self.functions.get_mut(&f.name.node) {
+            func_sig.contracts = contracts;
+        }
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
@@ -2679,6 +2814,38 @@ impl TypeChecker {
                     span: Some(invoke.name.span),
                     suggestion: Some("Macro invocations must be expanded before type checking".to_string()),
                 })
+            }
+
+            Expr::Old(inner) => {
+                // old(expr) is used in ensures clauses to refer to pre-state values
+                // The type of old(expr) is the same as expr
+                // Note: Semantic checking (that this is only in ensures) is done in codegen
+                self.check_expr(inner)
+            }
+
+            Expr::Assert { condition, message } => {
+                // assert(condition) or assert(condition, message)
+                // Condition must be bool, message (if present) must be str
+                let cond_type = self.check_expr(condition)?;
+                self.unify(&cond_type, &ResolvedType::Bool)?;
+
+                if let Some(msg) = message {
+                    let msg_type = self.check_expr(msg)?;
+                    self.unify(&msg_type, &ResolvedType::Str)?;
+                }
+
+                // assert returns unit (or diverges on failure)
+                Ok(ResolvedType::Unit)
+            }
+
+            Expr::Assume(inner) => {
+                // assume(expr) tells the verifier to assume expr is true
+                // Condition must be bool
+                let cond_type = self.check_expr(inner)?;
+                self.unify(&cond_type, &ResolvedType::Bool)?;
+
+                // assume returns unit
+                Ok(ResolvedType::Unit)
             }
 
             Expr::Error { .. } => {

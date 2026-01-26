@@ -219,6 +219,14 @@ impl CodeGenerator {
                 // Macro invocations should be expanded before type inference
                 ResolvedType::Unknown
             }
+            Expr::Old(inner) => {
+                // old(expr) has the same type as expr
+                self.infer_expr_type(inner)
+            }
+            Expr::Assert { .. } | Expr::Assume(_) => {
+                // assert and assume return unit
+                ResolvedType::Unit
+            }
             _ => ResolvedType::I64, // Default fallback
         }
     }

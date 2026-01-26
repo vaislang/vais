@@ -38,6 +38,7 @@ impl CodeGenerator {
                     ret: ret_type,
                     is_async: f.is_async,
                     is_vararg: false,
+                    contracts: None,
                 },
                 is_extern: false,
                 extern_abi: None,
@@ -100,6 +101,7 @@ impl CodeGenerator {
                     ret: ret_type,
                     is_async: f.is_async,
                     is_vararg: false,
+                    contracts: None,
                 },
                 is_extern: false,
                 extern_abi: None,
@@ -119,12 +121,19 @@ impl CodeGenerator {
             })
             .collect();
 
+        // Extract invariant expressions from attributes
+        let invariants: Vec<_> = s.attributes.iter()
+            .filter(|a| a.name == "invariant")
+            .filter_map(|a| a.expr.as_ref().map(|e| (**e).clone()))
+            .collect();
+
         self.structs.insert(
             s.name.node.to_string(),
             StructInfo {
                 name: s.name.node.to_string(),
                 fields,
                 repr_c: s.attributes.iter().any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
+                invariants,
             },
         );
 
@@ -222,6 +231,7 @@ impl CodeGenerator {
                     ret: ret_type,
                     is_async: false,
                     is_vararg: func.is_vararg,
+                    contracts: None,
                 },
                 is_extern: true,
                 extern_abi: Some(abi.to_string()),

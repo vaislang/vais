@@ -81,6 +81,11 @@ impl ExprVisitor for CodeGenerator {
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
             Expr::Comptime { body } => self.visit_comptime(body, counter),
             Expr::MacroInvoke(invoke) => self.visit_macro_invoke(invoke),
+            Expr::Old(inner) => self.visit_old(inner, counter),
+            Expr::Assert { condition, message } => {
+                self.visit_assert(condition, message.as_deref(), counter)
+            }
+            Expr::Assume(inner) => self.visit_assume(inner, counter),
             Expr::Error { message, .. } => {
                 // Error nodes should not reach codegen - they indicate parsing failures
                 Err(CodegenError::Unsupported(format!(
@@ -391,5 +396,44 @@ impl ExprVisitor for CodeGenerator {
             "Unexpanded macro invocation: {}! - macros must be expanded before code generation",
             invoke.name.node
         )))
+    }
+
+    fn visit_old(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
+        // old(expr) - Reference to pre-state value in ensures clause
+        // Look up the snapshot storage or fallback to current evaluation
+        let old_var_name = format!("__old_{}", *counter);
+        *counter += 1;
+
+        if let Some(snapshot_var) = self.old_snapshots.get(&old_var_name) {
+            let ty = self.infer_expr_type(inner);
+            let llvm_ty = self.type_to_llvm(&ty);
+            let result = self.next_temp(counter);
+            let ir = format!(
+                "  {} = load {}, {}* %{}\n",
+                result, llvm_ty, llvm_ty, snapshot_var
+            );
+            Ok((result, ir))
+        } else {
+            // Fallback: evaluate expression normally (when not in ensures context)
+            self.visit_expr(inner, counter)
+        }
+    }
+
+    fn visit_assert(
+        &mut self,
+        condition: &Spanned<Expr>,
+        message: Option<&Spanned<Expr>>,
+        counter: &mut usize,
+    ) -> GenResult {
+        self.generate_assert(condition, message, counter)
+    }
+
+    fn visit_assume(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
+        if self.release_mode {
+            // In release mode, assume is a no-op
+            Ok(("0".to_string(), String::new()))
+        } else {
+            self.generate_assume(inner, counter)
+        }
     }
 }

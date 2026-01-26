@@ -22,6 +22,9 @@ pub(crate) struct StructInfo {
     pub name: String,
     pub fields: Vec<(String, ResolvedType)>,
     pub repr_c: bool, // true if #[repr(C)] attribute is present
+    /// Invariant expressions for formal verification
+    /// These are checked after struct construction/modification
+    pub invariants: Vec<vais_ast::Spanned<vais_ast::Expr>>,
 }
 
 #[derive(Debug, Clone)]

@@ -717,6 +717,43 @@ impl Parser {
             Token::At => Expr::SelfCall,
             Token::SelfLower => Expr::Ident("self".to_string()),
             Token::Ident(name) => {
+                // Handle contract verification builtins: old(), assert(), assume()
+                if name == "old" && self.check(&Token::LParen) {
+                    self.advance(); // consume (
+                    let inner = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    let end = self.prev_span().end;
+                    return Ok(Spanned::new(
+                        Expr::Old(Box::new(inner)),
+                        Span::new(start, end),
+                    ));
+                }
+                if name == "assert" && self.check(&Token::LParen) {
+                    self.advance(); // consume (
+                    let condition = self.parse_expr()?;
+                    let message = if self.check(&Token::Comma) {
+                        self.advance();
+                        Some(Box::new(self.parse_expr()?))
+                    } else {
+                        None
+                    };
+                    self.expect(&Token::RParen)?;
+                    let end = self.prev_span().end;
+                    return Ok(Spanned::new(
+                        Expr::Assert { condition: Box::new(condition), message },
+                        Span::new(start, end),
+                    ));
+                }
+                if name == "assume" && self.check(&Token::LParen) {
+                    self.advance(); // consume (
+                    let inner = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    let end = self.prev_span().end;
+                    return Ok(Spanned::new(
+                        Expr::Assume(Box::new(inner)),
+                        Span::new(start, end),
+                    ));
+                }
                 // Check for struct literal: `Name{...}`
                 // Only treat as struct literal if name starts with uppercase (type convention)
                 let is_type_name = name.chars().next().is_some_and(|c| c.is_uppercase());

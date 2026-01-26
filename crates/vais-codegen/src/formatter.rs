@@ -1175,6 +1175,15 @@ impl Formatter {
 
             Expr::Spawn(expr) => format!("spawn {{ {} }}", self.format_expr(&expr.node)),
             Expr::Comptime { body } => format!("comptime {{ {} }}", self.format_expr(&body.node)),
+            Expr::Old(inner) => format!("old({})", self.format_expr(&inner.node)),
+            Expr::Assert { condition, message } => {
+                if let Some(msg) = message {
+                    format!("assert({}, {})", self.format_expr(&condition.node), self.format_expr(&msg.node))
+                } else {
+                    format!("assert({})", self.format_expr(&condition.node))
+                }
+            }
+            Expr::Assume(inner) => format!("assume({})", self.format_expr(&inner.node)),
             Expr::MacroInvoke(invoke) => {
                 let delim = match invoke.delimiter {
                     Delimiter::Paren => ('(', ')'),

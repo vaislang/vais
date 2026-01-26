@@ -55,12 +55,19 @@ impl<T> Spanned<T> {
 ///
 /// Attributes like `#[cfg(test)]`, `#\[inline\]`, `#[repr(C)]`, etc. provide metadata
 /// and control compilation behavior.
+///
+/// Contract attributes (`requires`, `ensures`, `invariant`) can contain full expressions
+/// that are stored in the `expr` field for formal verification.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
-    /// Attribute name (e.g., "cfg", "inline", "repr")
+    /// Attribute name (e.g., "cfg", "inline", "repr", "requires", "ensures")
     pub name: String,
     /// Attribute arguments (e.g., cfg(test) -> ["test"], repr(C) -> ["C"])
+    /// For contract attributes, this contains the original expression string
     pub args: Vec<String>,
+    /// Contract expression for requires/ensures/invariant attributes
+    /// Contains the parsed AST expression for formal verification
+    pub expr: Option<Box<Spanned<Expr>>>,
 }
 
 /// Top-level module containing all program items.
@@ -743,6 +750,18 @@ pub enum Expr {
     },
     /// Macro invocation: `name!(args)`
     MacroInvoke(MacroInvoke),
+    /// Old: `old(expr)` - Reference to pre-state value in ensures clause
+    /// Captures the value of an expression before function execution.
+    Old(Box<Spanned<Expr>>),
+    /// Assert: `assert(expr)` or `assert(expr, msg)` - Runtime assertion
+    /// Checks condition at runtime, panics with message if false.
+    Assert {
+        condition: Box<Spanned<Expr>>,
+        message: Option<Box<Spanned<Expr>>>,
+    },
+    /// Assume: `assume(expr)` - Compiler assumption for verification
+    /// Tells the verifier to assume this condition is true.
+    Assume(Box<Spanned<Expr>>),
     /// Error recovery node - represents an expression that failed to parse
     /// Used for continuing parsing after errors to report multiple errors at once.
     Error {

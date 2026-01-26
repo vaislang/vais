@@ -1,0 +1,12 @@
+# Contract violation test
+# This program should fail due to contract violation
+
+#[requires(x > 0)]
+F must_be_positive(x: i64) -> i64 {
+    x
+}
+
+F main() -> i64 {
+    # This should trigger a contract violation
+    must_be_positive(-5)
+}
