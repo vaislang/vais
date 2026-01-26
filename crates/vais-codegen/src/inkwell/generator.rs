@@ -14,7 +14,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, FloatPredicate};
 
-use vais_ast::{self as ast, BinaryOp, Expr, ExprKind, Literal, Module as VaisModule, Stmt, UnaryOp};
+use vais_ast::{self as ast, BinaryOp, Expr, ExprKind, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, UnaryOp};
 use vais_types::ResolvedType;
 
 use crate::{CodegenError, CodegenResult, TargetTriple};
@@ -270,6 +270,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             ExprKind::If(if_else) => self.generate_if(if_else),
             ExprKind::StructLiteral(name, fields) => self.generate_struct_literal(name, fields),
             ExprKind::FieldAccess(obj, field) => self.generate_field_access(obj, field),
+            ExprKind::Match { expr: match_expr, arms } => self.generate_match(match_expr, arms),
             _ => Err(CodegenError::Unsupported(format!(
                 "Expression kind not yet implemented: {:?}",
                 expr.kind
@@ -668,6 +669,509 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let label = format!("{}{}", prefix, self.label_counter);
         self.label_counter += 1;
         label
+    }
+
+    // ========== Match Expression ==========
+
+    fn generate_match(
+        &mut self,
+        match_expr: &Spanned<Expr>,
+        arms: &[MatchArm],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let fn_value = self.current_function.ok_or_else(|| {
+            CodegenError::LlvmError("No current function for match expression".to_string())
+        })?;
+
+        // Generate the expression to match against
+        let match_val = self.generate_expr(&match_expr.node)?;
+
+        // Create merge block
+        let merge_block = self.context.append_basic_block(fn_value, &self.fresh_label("match.merge"));
+
+        // Track arm results for phi node: (value, block)
+        let mut arm_results: Vec<(BasicValueEnum<'ctx>, inkwell::basic_block::BasicBlock<'ctx>)> = Vec::new();
+
+        // Check if all arms are simple integer literals (can use switch)
+        let all_int_literals = arms.iter().all(|arm| {
+            matches!(
+                &arm.pattern.node,
+                Pattern::Literal(Literal::Int(_)) | Pattern::Wildcard
+            )
+        });
+
+        if all_int_literals && !arms.is_empty() && match_val.is_int_value() {
+            // Use LLVM switch instruction for integer pattern matching
+            let default_block = self.context.append_basic_block(fn_value, &self.fresh_label("match.default"));
+
+            // Collect cases and find default arm
+            let mut cases: Vec<(IntValue<'ctx>, inkwell::basic_block::BasicBlock<'ctx>)> = Vec::new();
+            let mut default_arm: Option<&MatchArm> = None;
+            let mut case_arms: Vec<(&MatchArm, inkwell::basic_block::BasicBlock<'ctx>)> = Vec::new();
+
+            for arm in arms {
+                match &arm.pattern.node {
+                    Pattern::Literal(Literal::Int(n)) => {
+                        let arm_block = self.context.append_basic_block(fn_value, &self.fresh_label("match.arm"));
+                        let case_val = self.context.i64_type().const_int(*n as u64, true);
+                        cases.push((case_val, arm_block));
+                        case_arms.push((arm, arm_block));
+                    }
+                    Pattern::Wildcard => {
+                        default_arm = Some(arm);
+                    }
+                    _ => {}
+                }
+            }
+
+            // Build switch instruction
+            let switch_val = match_val.into_int_value();
+            let switch = self.builder.build_switch(switch_val, default_block, &cases)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            let _ = switch; // Suppress unused variable warning
+
+            // Generate arm bodies for integer cases
+            for (arm, arm_block) in case_arms {
+                self.builder.position_at_end(arm_block);
+
+                // Handle guard if present
+                if let Some(guard) = &arm.guard {
+                    let guard_pass = self.context.append_basic_block(fn_value, &self.fresh_label("match.guard.pass"));
+                    let guard_fail = self.context.append_basic_block(fn_value, &self.fresh_label("match.guard.fail"));
+
+                    let guard_val = self.generate_expr(&guard.node)?;
+                    let guard_bool = if guard_val.is_int_value() {
+                        guard_val.into_int_value()
+                    } else {
+                        self.context.bool_type().const_int(1, false) // Truthy fallback
+                    };
+
+                    self.builder.build_conditional_branch(guard_bool, guard_pass, guard_fail)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Guard passed - execute body
+                    self.builder.position_at_end(guard_pass);
+                    let body_val = self.generate_expr(&arm.body.node)?;
+                    self.builder.build_unconditional_branch(merge_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    arm_results.push((body_val, self.builder.get_insert_block().unwrap()));
+
+                    // Guard failed - go to default
+                    self.builder.position_at_end(guard_fail);
+                    self.builder.build_unconditional_branch(default_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                } else {
+                    let body_val = self.generate_expr(&arm.body.node)?;
+                    self.builder.build_unconditional_branch(merge_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    arm_results.push((body_val, arm_block));
+                }
+            }
+
+            // Generate default arm
+            self.builder.position_at_end(default_block);
+            if let Some(arm) = default_arm {
+                let body_val = self.generate_expr(&arm.body.node)?;
+                self.builder.build_unconditional_branch(merge_block)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                arm_results.push((body_val, default_block));
+            } else {
+                // No default arm - return default value (0)
+                let default_val = self.context.i64_type().const_int(0, false);
+                self.builder.build_unconditional_branch(merge_block)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                arm_results.push((default_val.into(), default_block));
+            }
+        } else {
+            // Fall back to chained conditional branches for complex patterns
+            let mut current_block = self.builder.get_insert_block().unwrap();
+
+            for (i, arm) in arms.iter().enumerate() {
+                let is_last = i == arms.len() - 1;
+                let next_block = if is_last {
+                    merge_block
+                } else {
+                    self.context.append_basic_block(fn_value, &self.fresh_label("match.check"))
+                };
+                let arm_body_block = self.context.append_basic_block(fn_value, &self.fresh_label("match.arm"));
+
+                self.builder.position_at_end(current_block);
+
+                // Generate pattern check
+                let check_result = self.generate_pattern_check(&arm.pattern, &match_val)?;
+
+                // Handle guard
+                if let Some(guard) = &arm.guard {
+                    let guard_bind_block = self.context.append_basic_block(fn_value, &self.fresh_label("match.guard.bind"));
+                    let guard_check_block = self.context.append_basic_block(fn_value, &self.fresh_label("match.guard.check"));
+
+                    // First check pattern
+                    self.builder.build_conditional_branch(check_result, guard_bind_block, next_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Bind pattern variables for guard to use
+                    self.builder.position_at_end(guard_bind_block);
+                    self.generate_pattern_bindings(&arm.pattern, &match_val)?;
+                    self.builder.build_unconditional_branch(guard_check_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Then check guard
+                    self.builder.position_at_end(guard_check_block);
+                    let guard_val = self.generate_expr(&guard.node)?;
+                    let guard_bool = if guard_val.is_int_value() {
+                        let int_val = guard_val.into_int_value();
+                        // Convert i64 to i1 if needed
+                        if int_val.get_type().get_bit_width() > 1 {
+                            self.builder.build_int_compare(
+                                IntPredicate::NE,
+                                int_val,
+                                self.context.i64_type().const_int(0, false),
+                                "guard_bool"
+                            ).map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        } else {
+                            int_val
+                        }
+                    } else {
+                        self.context.bool_type().const_int(1, false)
+                    };
+                    self.builder.build_conditional_branch(guard_bool, arm_body_block, next_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Generate arm body (bindings already done)
+                    self.builder.position_at_end(arm_body_block);
+                } else {
+                    // No guard - branch based on pattern check
+                    self.builder.build_conditional_branch(check_result, arm_body_block, next_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Generate arm body
+                    self.builder.position_at_end(arm_body_block);
+
+                    // Bind pattern variables if needed
+                    self.generate_pattern_bindings(&arm.pattern, &match_val)?;
+                }
+
+                let body_val = self.generate_expr(&arm.body.node)?;
+                let body_end_block = self.builder.get_insert_block().unwrap();
+                self.builder.build_unconditional_branch(merge_block)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                arm_results.push((body_val, body_end_block));
+
+                current_block = next_block;
+            }
+
+            // Handle the case when no arm matched (last block leads to merge)
+            // This should be unreachable for exhaustive matches
+        }
+
+        // Merge block with phi node
+        self.builder.position_at_end(merge_block);
+
+        if arm_results.is_empty() {
+            // No arms - return default value
+            Ok(self.context.i64_type().const_int(0, false).into())
+        } else {
+            // Build phi node
+            let first_type = arm_results[0].0.get_type();
+            let phi = self.builder.build_phi(first_type, "match_result")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+            for (val, block) in &arm_results {
+                phi.add_incoming(&[(val, *block)]);
+            }
+
+            Ok(phi.as_basic_value())
+        }
+    }
+
+    /// Generates code to check if a pattern matches the given value.
+    /// Returns an i1 (boolean) value.
+    fn generate_pattern_check(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        match_val: &BasicValueEnum<'ctx>,
+    ) -> CodegenResult<IntValue<'ctx>> {
+        match &pattern.node {
+            Pattern::Wildcard => {
+                // Wildcard always matches
+                Ok(self.context.bool_type().const_int(1, false))
+            }
+            Pattern::Ident(_) => {
+                // Identifier pattern always matches (binding)
+                Ok(self.context.bool_type().const_int(1, false))
+            }
+            Pattern::Literal(lit) => {
+                match lit {
+                    Literal::Int(n) => {
+                        let lit_val = self.context.i64_type().const_int(*n as u64, true);
+                        let cmp = self.builder.build_int_compare(
+                            IntPredicate::EQ,
+                            match_val.into_int_value(),
+                            lit_val,
+                            "pat_eq"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        Ok(cmp)
+                    }
+                    Literal::Bool(b) => {
+                        let lit_val = self.context.bool_type().const_int(*b as u64, false);
+                        let match_int = match_val.into_int_value();
+                        // Convert to same bit width if needed
+                        let cmp = self.builder.build_int_compare(
+                            IntPredicate::EQ,
+                            match_int,
+                            lit_val,
+                            "pat_eq"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        Ok(cmp)
+                    }
+                    Literal::Float(f) => {
+                        let lit_val = self.context.f64_type().const_float(*f);
+                        let cmp = self.builder.build_float_compare(
+                            FloatPredicate::OEQ,
+                            match_val.into_float_value(),
+                            lit_val,
+                            "pat_eq"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        Ok(cmp)
+                    }
+                    Literal::String(s) => {
+                        // String comparison using strcmp
+                        // First, create the pattern string constant
+                        let pattern_str = self.generate_string_literal(s)?;
+
+                        // Get strcmp function
+                        let strcmp_fn = self.module.get_function("strcmp")
+                            .unwrap_or_else(|| {
+                                let i32_type = self.context.i32_type();
+                                let ptr_type = self.context.ptr_type(AddressSpace::default());
+                                let fn_type = i32_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
+                                self.module.add_function("strcmp", fn_type, None)
+                            });
+
+                        // Call strcmp
+                        let cmp_result = self.builder.build_call(
+                            strcmp_fn,
+                            &[(*match_val).into(), pattern_str.into()],
+                            "strcmp_result"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                        let cmp_int = cmp_result.try_as_basic_value().left()
+                            .ok_or_else(|| CodegenError::LlvmError("strcmp returned void".to_string()))?
+                            .into_int_value();
+
+                        // Check if strcmp returned 0 (equal)
+                        let result = self.builder.build_int_compare(
+                            IntPredicate::EQ,
+                            cmp_int,
+                            self.context.i32_type().const_int(0, false),
+                            "str_eq"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                        Ok(result)
+                    }
+                }
+            }
+            Pattern::Range { start, end, inclusive } => {
+                let mut lower_check = self.context.bool_type().const_int(1, false);
+                let mut upper_check = self.context.bool_type().const_int(1, false);
+
+                // Check lower bound
+                if let Some(start_pat) = start {
+                    if let Pattern::Literal(Literal::Int(n)) = &start_pat.node {
+                        let start_val = self.context.i64_type().const_int(*n as u64, true);
+                        lower_check = self.builder.build_int_compare(
+                            IntPredicate::SGE,
+                            match_val.into_int_value(),
+                            start_val,
+                            "range_lower"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+
+                // Check upper bound
+                if let Some(end_pat) = end {
+                    if let Pattern::Literal(Literal::Int(n)) = &end_pat.node {
+                        let end_val = self.context.i64_type().const_int(*n as u64, true);
+                        let cmp = if *inclusive { IntPredicate::SLE } else { IntPredicate::SLT };
+                        upper_check = self.builder.build_int_compare(
+                            cmp,
+                            match_val.into_int_value(),
+                            end_val,
+                            "range_upper"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+
+                // Combine checks
+                let result = self.builder.build_and(lower_check, upper_check, "range_check")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                Ok(result)
+            }
+            Pattern::Or(patterns) => {
+                if patterns.is_empty() {
+                    return Ok(self.context.bool_type().const_int(0, false));
+                }
+
+                let mut result = self.generate_pattern_check(&patterns[0], match_val)?;
+                for pat in patterns.iter().skip(1) {
+                    let check = self.generate_pattern_check(pat, match_val)?;
+                    result = self.builder.build_or(result, check, "or_pat")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                }
+
+                Ok(result)
+            }
+            Pattern::Tuple(patterns) => {
+                if patterns.is_empty() {
+                    return Ok(self.context.bool_type().const_int(1, false));
+                }
+
+                let struct_val = match_val.into_struct_value();
+                let mut result = self.context.bool_type().const_int(1, false);
+
+                for (i, pat) in patterns.iter().enumerate() {
+                    let elem_val = self.builder.build_extract_value(struct_val, i as u32, &format!("tuple_{}", i))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    let check = self.generate_pattern_check(pat, &elem_val)?;
+                    result = self.builder.build_and(result, check, "tuple_check")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                }
+
+                Ok(result)
+            }
+            Pattern::Variant { name, fields: _ } => {
+                // Enum variant pattern: check the tag matches
+                // Enum is represented as { i8 tag, i64 data }
+                let struct_val = match_val.into_struct_value();
+                let tag_val = self.builder.build_extract_value(struct_val, 0, "enum_tag")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_int_value();
+
+                // Find expected tag value
+                let expected_tag = self.get_enum_variant_tag(&name.node);
+
+                let result = self.builder.build_int_compare(
+                    IntPredicate::EQ,
+                    tag_val,
+                    self.context.i8_type().const_int(expected_tag as u64, false),
+                    "variant_check"
+                ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                Ok(result)
+            }
+            Pattern::Struct { name, fields } => {
+                // Struct pattern: check field patterns
+                let struct_name = &name.node;
+                let struct_val = match_val.into_struct_value();
+                let mut result = self.context.bool_type().const_int(1, false);
+
+                for (field_name, field_pat) in fields {
+                    if let Some(pat) = field_pat {
+                        // Get field index
+                        let field_idx = self.get_field_index(struct_name, &field_name.node)?;
+                        let field_val = self.builder.build_extract_value(struct_val, field_idx, &field_name.node)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let check = self.generate_pattern_check(pat, &field_val)?;
+                        result = self.builder.build_and(result, check, "struct_check")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+
+                Ok(result)
+            }
+        }
+    }
+
+    /// Generates code to bind pattern variables to their matched values.
+    fn generate_pattern_bindings(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        match_val: &BasicValueEnum<'ctx>,
+    ) -> CodegenResult<()> {
+        match &pattern.node {
+            Pattern::Wildcard => {
+                // Nothing to bind
+                Ok(())
+            }
+            Pattern::Ident(name) => {
+                // Bind identifier to the matched value
+                let var_type = match_val.get_type();
+                let alloca = self.builder.build_alloca(var_type, name)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder.build_store(alloca, *match_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(name.clone(), (alloca, var_type));
+                Ok(())
+            }
+            Pattern::Literal(_) => {
+                // Literals don't bind anything
+                Ok(())
+            }
+            Pattern::Range { .. } => {
+                // Ranges don't bind anything
+                Ok(())
+            }
+            Pattern::Or(patterns) => {
+                // For or patterns, bind the first pattern (all alternatives should bind the same names)
+                if let Some(first) = patterns.first() {
+                    self.generate_pattern_bindings(first, match_val)?;
+                }
+                Ok(())
+            }
+            Pattern::Tuple(patterns) => {
+                let struct_val = match_val.into_struct_value();
+                for (i, pat) in patterns.iter().enumerate() {
+                    let elem_val = self.builder.build_extract_value(struct_val, i as u32, &format!("tuple_{}", i))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.generate_pattern_bindings(pat, &elem_val)?;
+                }
+                Ok(())
+            }
+            Pattern::Variant { name: _, fields } => {
+                // Bind variant fields
+                // Enum is { i8 tag, i64 data } - extract data and bind
+                let struct_val = match_val.into_struct_value();
+                let data_val = self.builder.build_extract_value(struct_val, 1, "variant_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // For now, assume single field variant
+                if let Some(first_field) = fields.first() {
+                    self.generate_pattern_bindings(first_field, &data_val)?;
+                }
+                Ok(())
+            }
+            Pattern::Struct { name, fields } => {
+                let struct_name = &name.node;
+                let struct_val = match_val.into_struct_value();
+
+                for (field_name, field_pat) in fields {
+                    let field_idx = self.get_field_index(struct_name, &field_name.node)?;
+                    let field_val = self.builder.build_extract_value(struct_val, field_idx, &field_name.node)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    if let Some(pat) = field_pat {
+                        // Pattern specified - bind according to pattern
+                        self.generate_pattern_bindings(pat, &field_val)?;
+                    } else {
+                        // Shorthand: `{x}` means `{x: x}`
+                        let var_type = field_val.get_type();
+                        let alloca = self.builder.build_alloca(var_type, &field_name.node)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder.build_store(alloca, field_val)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.locals.insert(field_name.node.clone(), (alloca, var_type));
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Gets the tag value for an enum variant.
+    fn get_enum_variant_tag(&self, _variant_name: &str) -> i32 {
+        // TODO: Implement proper enum variant tag lookup
+        // For now, return 0 as a placeholder
+        0
     }
 }
 

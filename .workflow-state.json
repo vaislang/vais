@@ -1,20 +1,16 @@
 {
   "phase": 5,
-  "request": "DAP 서버 구현",
+  "request": "inkwell 완전 전환 - 텍스트 IR → LLVM C API",
   "tasks": [
-    { "id": 1, "name": "vais-dap crate 기본 구조 생성", "status": "completed", "model": "Sonnet" },
-    { "id": 2, "name": "DAP 프로토콜 타입 정의", "status": "completed", "model": "Sonnet" },
-    { "id": 3, "name": "DAP 서버 핵심 구현", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "LLDB 어댑터 구현", "status": "completed", "model": "Opus" },
-    { "id": 5, "name": "중단점 관리", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "스택/변수 처리", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "CLI 통합 및 테스트", "status": "completed", "model": "Sonnet" }
+    { "id": 1, "name": "Match 표현식 구현 (inkwell)", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "Loop/While/For 구현 (inkwell)", "status": "pending", "model": "Opus" },
+    { "id": 3, "name": "Lambda/Closure 구현 (inkwell)", "status": "pending", "model": "Opus" },
+    { "id": 4, "name": "Array/Tuple/Index 구현 (inkwell)", "status": "pending", "model": "Sonnet" },
+    { "id": 5, "name": "Method Call 구현 (inkwell)", "status": "pending", "model": "Sonnet" },
+    { "id": 6, "name": "Break/Continue/Defer 문장 구현 (inkwell)", "status": "pending", "model": "Sonnet" },
+    { "id": 7, "name": "제네릭 타입 처리 완성 (inkwell)", "status": "pending", "model": "Opus" },
+    { "id": 8, "name": "Try/Unwrap 구현 (inkwell)", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "DAP 서버 구현 전체 완료",
-  "notes": {
-    "totalTasks": 7,
-    "estimatedSavings": "45%",
-    "buildStatus": "success"
-  }
+  "lastCompleted": "Match 표현식 구현 (inkwell)"
 }
