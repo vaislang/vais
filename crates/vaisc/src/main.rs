@@ -1938,9 +1938,47 @@ fn cmd_watch(
     plugins: &PluginRegistry,
 ) -> Result<(), String> {
     use std::time::Duration;
-    use std::thread;
+    use std::collections::HashSet;
 
-    println!("{} {}", "Watching".cyan().bold(), input.display());
+    // Determine watch directory (parent of input file or current directory)
+    let watch_dir = input.parent().unwrap_or(Path::new(".")).to_path_buf();
+
+    println!("{} {} (directory: {})",
+        "Watching".cyan().bold(),
+        input.display(),
+        watch_dir.display());
+
+    // Collect all .vais files to watch (for import tracking)
+    let mut watched_files: HashSet<PathBuf> = HashSet::new();
+    watched_files.insert(input.canonicalize().unwrap_or_else(|_| input.clone()));
+
+    // Scan for import statements and add imported files
+    if let Ok(content) = std::fs::read_to_string(input) {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("I ") || trimmed.starts_with("import ") {
+                // Extract import path: I "path/to/file" or import "path/to/file"
+                if let Some(start) = trimmed.find('"') {
+                    if let Some(end) = trimmed[start+1..].find('"') {
+                        let import_path = &trimmed[start+1..start+1+end];
+                        let full_path = watch_dir.join(import_path);
+                        if full_path.exists() {
+                            if let Ok(canonical) = full_path.canonicalize() {
+                                watched_files.insert(canonical);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if verbose {
+        println!("{} Watching {} file(s)", "Info".blue().bold(), watched_files.len());
+        for file in &watched_files {
+            println!("  - {}", file.display());
+        }
+    }
 
     // Perform initial build
     let bin_path = input.with_extension("");
@@ -1983,8 +2021,9 @@ fn cmd_watch(
         notify::Config::default(),
     ).map_err(|e| format!("Failed to create watcher: {}", e))?;
 
-    watcher.watch(input, RecursiveMode::NonRecursive)
-        .map_err(|e| format!("Failed to watch file: {}", e))?;
+    // Watch the directory recursively for .vais files
+    watcher.watch(&watch_dir, RecursiveMode::Recursive)
+        .map_err(|e| format!("Failed to watch directory: {}", e))?;
 
     println!("{} Press Ctrl+C to stop", "Ready".green().bold());
 
@@ -2000,9 +2039,29 @@ fn cmd_watch(
                     }
                 }
 
-                // Only recompile on modify events
+                // Only recompile on modify events for .vais files
                 if matches!(event.kind, notify::EventKind::Modify(_)) {
-                    println!("\n{} Change detected, recompiling...", "⟳".cyan().bold());
+                    // Check if the modified file is a .vais file
+                    let is_vais_file = event.paths.iter().any(|p| {
+                        p.extension().map_or(false, |ext| ext == "vais")
+                    });
+
+                    if !is_vais_file {
+                        continue;
+                    }
+
+                    let changed_files: Vec<_> = event.paths.iter()
+                        .filter(|p| p.extension().map_or(false, |ext| ext == "vais"))
+                        .collect();
+
+                    if verbose {
+                        for path in &changed_files {
+                            println!("{} Changed: {}", "⟳".cyan().bold(), path.display());
+                        }
+                    } else {
+                        println!("\n{} Change detected, recompiling...", "⟳".cyan().bold());
+                    }
+
                     last_compile = std::time::SystemTime::now();
 
                     // Rebuild

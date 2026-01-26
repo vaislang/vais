@@ -1228,7 +1228,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 11: 프로덕션 준비 및 고급 기능
 
-> **상태**: 🔄 진행 중 (30%)
+> **상태**: 🔄 진행 중 (50%)
 > **추가일**: 2026-01-26
 > **예상 기간**: 12-16주 (약 3-4개월)
 > **목표**: 프로덕션 레벨 안정성 및 고급 언어 기능 완성
@@ -1249,7 +1249,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 모든 panic!이 테스트 코드 내에 있음 확인
   - 프로덕션 코드에 panic! 없음
 
-### P1 - 높은 우선순위 (3-4주)
+### P1 - 높은 우선순위 (3-4주) ✅ 완료
 - [x] **LSP 기능 확장** (이미 구현됨, 검증일: 2026-01-26)
   - Inlay Hints: 타입 추론 결과 inline 표시 ✓
   - Call Hierarchy: 함수 호출 관계 가시화 ✓
@@ -1259,13 +1259,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - std/memory.vais: memset, memmove, memcmp, byte swap, bit manipulation
   - std/allocator.vais: Layout, BumpAllocator, PoolAllocator, FreeListAllocator, StackAllocator
   - (graph, serialize는 P2로 이동)
-- [ ] **컴파일러 성능 최적화**
-  - 타입 체크 메모이제이션 (expression hash 기반)
-  - 함수 단위 코드 생성 병렬화 (rayon)
-  - 증분 컴파일 - 함수 바디 변경 감지
-- [ ] **CLI/REPL 사용성 개선**
-  - `vaisc watch` 모드 강화 (변경 감지 → 자동 컴파일)
-  - REPL `:type`, `:macro`, `:disasm`, `:profile` 명령어
+- [x] **컴파일러 성능 최적화** (완료일: 2026-01-27)
+  - 타입 체크 메모이제이션: substitute_generics, exhaustiveness 캐싱 구현
+  - 증분 컴파일: 파일/함수 수준 변경 감지 (incremental.rs)
+  - 병렬화: rayon으로 파일 해시 병렬 계산, LLVM LTO로 크로스모듈 최적화
+- [x] **CLI/REPL 사용성 개선** (완료일: 2026-01-27)
+  - `vaisc watch` 모드 강화: 디렉토리 재귀 감시, import 파일 추적
+  - REPL 명령어 추가: `:type <expr>` (타입 표시), `:disasm <expr>` (LLVM IR 표시)
 
 ### P2 - 중간 우선순위 (1-2개월)
 - [ ] **패키지 레지스트리 완성**

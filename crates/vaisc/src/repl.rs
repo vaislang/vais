@@ -242,11 +242,13 @@ fn handle_command(
         }
         ":help" | ":h" => {
             println!("{}", "Commands:".bold());
-            println!("  :help, :h     Show this help");
-            println!("  :quit, :q     Exit the REPL");
-            println!("  :clear        Clear definitions");
-            println!("  :defs         Show current definitions");
-            println!("  :history      Show input history");
+            println!("  :help, :h       Show this help");
+            println!("  :quit, :q       Exit the REPL");
+            println!("  :clear          Clear definitions");
+            println!("  :defs           Show current definitions");
+            println!("  :history        Show input history");
+            println!("  :type <expr>    Show type of expression");
+            println!("  :disasm <expr>  Show LLVM IR for expression");
             println!();
             println!("{}", "Features:".bold());
             println!("  - Multiline input: Unclosed braces/parens continue to next line");
@@ -257,6 +259,8 @@ fn handle_command(
             println!("  F add(a:i64,b:i64)->i64=a+b    Define a function");
             println!("  add(2, 3)                       Call a function");
             println!("  1 + 2 * 3                       Evaluate expression");
+            println!("  :type 1 + 2                     Show type (i64)");
+            println!("  :disasm add(1, 2)               Show LLVM IR");
         }
         ":clear" => {
             definitions.clear();
@@ -281,6 +285,14 @@ fn handle_command(
                     println!("{:3}  {}", i + 1, item);
                 }
             }
+        }
+        _ if input.starts_with(":type ") => {
+            let expr = input.strip_prefix(":type ").unwrap().trim();
+            handle_type_command(expr, definitions);
+        }
+        _ if input.starts_with(":disasm ") => {
+            let expr = input.strip_prefix(":disasm ").unwrap().trim();
+            handle_disasm_command(expr, definitions);
         }
         _ => {
             println!("{} Unknown command: {}", "Error:".red().bold(), input);
@@ -314,6 +326,149 @@ fn handle_definition(input: &str, definitions: &mut Vec<String>) {
         Err(e) => {
             println!("{} {}", "Parse error:".red().bold(), e);
         }
+    }
+}
+
+/// Handle :type command - show the type of an expression
+fn handle_type_command(expr: &str, definitions: &[String]) {
+    // Build source with a wrapper function to infer the type
+    let mut source = String::new();
+    for def in definitions {
+        source.push_str(def);
+        source.push('\n');
+    }
+    source.push_str(&format!("F __repl_type_check()->_={{{}}}", expr));
+
+    match parse(&source) {
+        Ok(ast) => {
+            let mut checker = TypeChecker::new();
+            match checker.check_module(&ast) {
+                Ok(_) => {
+                    // Get the return type of __repl_type_check
+                    if let Some(sig) = checker.get_function("__repl_type_check") {
+                        println!("{} {}", "Type:".cyan().bold(), format_type(&sig.ret));
+                    } else {
+                        println!("{} Could not determine type", "Error:".red().bold());
+                    }
+                }
+                Err(e) => {
+                    println!("{} {}", "Type error:".red().bold(), e);
+                }
+            }
+        }
+        Err(e) => {
+            println!("{} {}", "Parse error:".red().bold(), e);
+        }
+    }
+}
+
+/// Handle :disasm command - show LLVM IR for an expression
+#[cfg(not(feature = "jit"))]
+fn handle_disasm_command(expr: &str, definitions: &[String]) {
+    let mut source = String::new();
+    for def in definitions {
+        source.push_str(def);
+        source.push('\n');
+    }
+    source.push_str(&format!("F __repl_disasm()->i64{{{}}}", expr));
+
+    match parse(&source) {
+        Ok(ast) => {
+            let mut checker = TypeChecker::new();
+            match checker.check_module(&ast) {
+                Ok(_) => {
+                    let mut codegen = CodeGenerator::new("repl_disasm");
+                    match codegen.generate_module(&ast) {
+                        Ok(ir) => {
+                            // Extract just the __repl_disasm function
+                            println!("{}", "LLVM IR:".cyan().bold());
+                            let mut in_func = false;
+                            for line in ir.lines() {
+                                if line.contains("define") && line.contains("@__repl_disasm") {
+                                    in_func = true;
+                                }
+                                if in_func {
+                                    println!("{}", line);
+                                    if line.trim() == "}" {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("{} {}", "Codegen error:".red().bold(), e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("{} {}", "Type error:".red().bold(), e);
+                }
+            }
+        }
+        Err(e) => {
+            println!("{} {}", "Parse error:".red().bold(), e);
+        }
+    }
+}
+
+/// Format a ResolvedType for display
+fn format_type(ty: &vais_types::ResolvedType) -> String {
+    use vais_types::ResolvedType::*;
+    match ty {
+        I8 => "i8".to_string(),
+        I16 => "i16".to_string(),
+        I32 => "i32".to_string(),
+        I64 => "i64".to_string(),
+        I128 => "i128".to_string(),
+        U8 => "u8".to_string(),
+        U16 => "u16".to_string(),
+        U32 => "u32".to_string(),
+        U64 => "u64".to_string(),
+        U128 => "u128".to_string(),
+        F32 => "f32".to_string(),
+        F64 => "f64".to_string(),
+        Bool => "bool".to_string(),
+        Str => "str".to_string(),
+        Unit => "()".to_string(),
+        Never => "!".to_string(),
+        Pointer(inner) => format!("*{}", format_type(inner)),
+        Ref(inner) => format!("&{}", format_type(inner)),
+        RefMut(inner) => format!("&mut {}", format_type(inner)),
+        Array(inner) => format!("[{}]", format_type(inner)),
+        ConstArray { element, size } => format!("[{}; {:?}]", format_type(element), size),
+        Optional(inner) => format!("Option<{}>", format_type(inner)),
+        Result(inner) => format!("Result<{}>", format_type(inner)),
+        Map(key, val) => format!("Map<{}, {}>", format_type(key), format_type(val)),
+        Range(inner) => format!("Range<{}>", format_type(inner)),
+        Future(inner) => format!("Future<{}>", format_type(inner)),
+        Named { name, generics } if generics.is_empty() => name.clone(),
+        Named { name, generics } => {
+            let args: Vec<_> = generics.iter().map(|g| format_type(g)).collect();
+            format!("{}<{}>", name, args.join(", "))
+        }
+        Fn { params, ret } => {
+            let param_strs: Vec<_> = params.iter().map(|p| format_type(p)).collect();
+            format!("fn({}) -> {}", param_strs.join(", "), format_type(ret))
+        }
+        FnPtr { params, ret, is_vararg } => {
+            let param_strs: Vec<_> = params.iter().map(|p| format_type(p)).collect();
+            let vararg = if *is_vararg { ", ..." } else { "" };
+            format!("fn({}{}) -> {}", param_strs.join(", "), vararg, format_type(ret))
+        }
+        Generic(name) => name.clone(),
+        ConstGeneric(name) => format!("const {}", name),
+        Tuple(elems) => {
+            let elem_strs: Vec<_> = elems.iter().map(|e| format_type(e)).collect();
+            format!("({})", elem_strs.join(", "))
+        }
+        Vector { element, lanes } => format!("<{} x {}>", lanes, format_type(element)),
+        DynTrait { trait_name, generics } if generics.is_empty() => format!("dyn {}", trait_name),
+        DynTrait { trait_name, generics } => {
+            let args: Vec<_> = generics.iter().map(|g| format_type(g)).collect();
+            format!("dyn {}<{}>", trait_name, args.join(", "))
+        }
+        Var(id) => format!("?{}", id),
+        Unknown => "unknown".to_string(),
     }
 }
 
@@ -418,11 +573,12 @@ fn handle_command_jit(
         }
         ":help" | ":h" => {
             println!("{}", "Commands:".bold());
-            println!("  :help, :h     Show this help");
-            println!("  :quit, :q     Exit the REPL");
-            println!("  :clear        Clear definitions and reset JIT");
-            println!("  :defs         Show current definitions");
-            println!("  :history      Show input history");
+            println!("  :help, :h       Show this help");
+            println!("  :quit, :q       Exit the REPL");
+            println!("  :clear          Clear definitions and reset JIT");
+            println!("  :defs           Show current definitions");
+            println!("  :history        Show input history");
+            println!("  :type <expr>    Show type of expression");
             println!();
             println!("{}", "Features:".bold());
             println!("  - JIT compilation (Cranelift backend)");
@@ -434,6 +590,7 @@ fn handle_command_jit(
             println!("  F add(a:i64,b:i64)->i64{{a+b}}    Define a function");
             println!("  add(2, 3)                       Call a function");
             println!("  1 + 2 * 3                       Evaluate expression");
+            println!("  :type 1 + 2                     Show type (i64)");
         }
         ":clear" => {
             definitions.clear();
@@ -461,6 +618,10 @@ fn handle_command_jit(
                     println!("{:3}  {}", i + 1, item);
                 }
             }
+        }
+        _ if input.starts_with(":type ") => {
+            let expr = input.strip_prefix(":type ").unwrap().trim();
+            handle_type_command(expr, definitions);
         }
         _ => {
             println!("{} Unknown command: {}", "Error:".red().bold(), input);
