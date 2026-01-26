@@ -1188,6 +1188,8 @@ impl Parser {
             Token::Trait => "W".to_string(),
             Token::Impl => "X".to_string(),
             Token::Defer => "D".to_string(),
+            Token::Extern => "N".to_string(),
+            Token::Union => "O".to_string(),
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     found: tok.token,

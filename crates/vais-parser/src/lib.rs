@@ -373,7 +373,7 @@ impl Parser {
             Item::Function(self.parse_function(is_pub, true, attributes)?)
         } else if self.check(&Token::Struct) {
             self.advance();
-            Item::Struct(self.parse_struct(is_pub)?)
+            Item::Struct(self.parse_struct(is_pub, attributes)?)
         } else if self.check(&Token::Enum) {
             self.advance();
             Item::Enum(self.parse_enum(is_pub)?)
@@ -425,20 +425,62 @@ impl Parser {
     }
 
     /// Parse single attribute: `name(args)` or just `name`
+    ///
+    /// For contract attributes (requires, ensures, invariant), the argument is
+    /// parsed as an expression rather than a simple identifier list.
     fn parse_attribute(&mut self) -> ParseResult<Attribute> {
         let name = self.parse_ident()?.node;
+
+        // Contract attributes parse their argument as an expression
+        if name == "requires" || name == "ensures" || name == "invariant" {
+            self.expect(&Token::LParen)?;
+
+            // Record the start position for the expression string
+            let expr_start = self.pos;
+            let expr = self.parse_expr()?;
+
+            // Reconstruct the expression string from tokens for error messages
+            // We store the original text representation
+            let expr_str = self.reconstruct_expr_string(expr_start, self.pos);
+
+            self.expect(&Token::RParen)?;
+
+            return Ok(Attribute {
+                name,
+                args: vec![expr_str],
+                expr: Some(Box::new(expr)),
+            });
+        }
 
         let args = if self.check(&Token::LParen) {
             self.advance();
             let mut args = Vec::new();
             while !self.check(&Token::RParen) && !self.is_at_end() {
                 if let Some(tok) = self.peek() {
-                    match &tok.token {
-                        Token::Ident(s) => {
-                            args.push(s.clone());
-                            self.advance();
-                        }
-                        _ => break,
+                    // Accept identifiers and single-letter keywords as attribute args
+                    let arg = match &tok.token {
+                        Token::Ident(s) => Some(s.clone()),
+                        // Single-letter keywords can be attribute args (e.g., repr(C))
+                        Token::Continue => Some("C".to_string()),
+                        Token::Function => Some("F".to_string()),
+                        Token::Struct => Some("S".to_string()),
+                        Token::Enum => Some("E".to_string()),
+                        Token::If => Some("I".to_string()),
+                        Token::Loop => Some("L".to_string()),
+                        Token::Match => Some("M".to_string()),
+                        Token::Async => Some("A".to_string()),
+                        Token::Return => Some("R".to_string()),
+                        Token::Break => Some("B".to_string()),
+                        Token::Use => Some("U".to_string()),
+                        Token::Pub => Some("P".to_string()),
+                        Token::TypeKeyword => Some("T".to_string()),
+                        _ => None,
+                    };
+                    if let Some(s) = arg {
+                        args.push(s);
+                        self.advance();
+                    } else {
+                        break;
                     }
                 }
                 if self.check(&Token::Comma) {
@@ -451,7 +493,16 @@ impl Parser {
             Vec::new()
         };
 
-        Ok(Attribute { name, args })
+        Ok(Attribute { name, args, expr: None })
+    }
+
+    /// Reconstruct expression string from token range (for error messages)
+    fn reconstruct_expr_string(&self, start_pos: usize, end_pos: usize) -> String {
+        let tokens: Vec<String> = self.tokens[start_pos..end_pos]
+            .iter()
+            .map(|t| format!("{}", t.token))
+            .collect();
+        tokens.join(" ")
     }
 
     /// Parse function: `name(params)->ret=expr` or `name(params)->ret{...}`
@@ -499,9 +550,7 @@ impl Parser {
     }
 
     /// Parse struct: `Name{fields}` with optional methods
-    fn parse_struct(&mut self, is_pub: bool) -> ParseResult<Struct> {
-        // Get attributes that were parsed before the struct keyword
-        let attributes = Vec::new(); // These will be passed in future refactor
+    fn parse_struct(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<Struct> {
 
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
@@ -1453,7 +1502,17 @@ impl Parser {
                 Vec::new()
             };
             Type::DynTrait { trait_name, generics }
-        } else {
+        } else if let Some(tok) = self.peek() {
+            // Check for function pointer type: fn(...) -> T
+            if let Token::Ident(s) = &tok.token {
+                if s == "fn" {
+                    self.advance(); // consume 'fn'
+                    return Ok(Spanned::new(
+                        self.parse_fn_ptr_type()?,
+                        Span::new(start, self.prev_span().end),
+                    ));
+                }
+            }
             let name = self.parse_type_name()?;
             let generics = if self.check(&Token::Lt) {
                 self.advance();
@@ -1471,6 +1530,8 @@ impl Parser {
             };
 
             Type::Named { name, generics }
+        } else {
+            return Err(ParseError::UnexpectedEof { span: start..start });
         };
 
         let end = self.prev_span().end;
@@ -1664,6 +1725,30 @@ impl Parser {
                 Token::Pub => {
                     self.advance();
                     return Ok(ConstExpr::Param("P".to_string()));
+                }
+                Token::Extern => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("N".to_string()));
+                }
+                Token::Union => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("O".to_string()));
+                }
+                Token::Trait => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("W".to_string()));
+                }
+                Token::Impl => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("X".to_string()));
+                }
+                Token::Defer => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("D".to_string()));
+                }
+                Token::If => {
+                    self.advance();
+                    return Ok(ConstExpr::Param("I".to_string()));
                 }
                 _ => {}
             }

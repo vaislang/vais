@@ -679,7 +679,8 @@ mod tests {
 
     #[test]
     fn test_consecutive_operators() {
-        let source = "+++---***///";
+        // Note: /// is a doc comment, so use separate slashes with spaces
+        let source = "+++---***/ / /";
         let tokens = tokenize(source).unwrap();
         // Should be lexed as separate operators
         assert!(tokens.iter().any(|t| t.token == Token::Plus));
