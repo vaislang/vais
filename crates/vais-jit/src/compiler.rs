@@ -352,6 +352,14 @@ impl JitCompiler {
                     effects: None,
                 }
             }
+            Type::Associated { base, trait_name, assoc_name } => {
+                let resolved_base = self.resolve_type(&base.node);
+                ResolvedType::Associated {
+                    base: Box::new(resolved_base),
+                    trait_name: trait_name.clone(),
+                    assoc_name: assoc_name.clone(),
+                }
+            }
         }
     }
 

@@ -1367,7 +1367,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - Dependent Types: type-level computation
   - Linear Types: 리소스 관리 (한 번 사용)
   - Lifetimes: Rust 스타일 lifetime 타입
-  - Associated Types: trait 관련 타입
+  - [x] Associated Types: trait 관련 타입 ✅
+    - AST: AssociatedTypeImpl (impl에서 `T Item = ConcreteType`)
+    - AST: Type::Associated (`<T as Trait>::Item` 구문)
+    - TraitImpl에 associated_types 맵 추가
+    - 타입 체커에서 associated type 해석 및 검증
+    - impl 블록에서 required associated types 검증
 - [ ] **런타임 최적화**
   - Tiered JIT: 인터프리터 → 기본 JIT → 최적화 JIT
   - Concurrent/incremental GC

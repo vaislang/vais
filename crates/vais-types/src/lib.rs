@@ -1599,11 +1599,32 @@ impl TypeChecker {
                 });
             }
 
+            // Parse associated type implementations
+            let mut assoc_type_impls = std::collections::HashMap::new();
+            for assoc in &impl_block.associated_types {
+                let resolved_ty = self.resolve_type(&assoc.ty.node);
+                assoc_type_impls.insert(assoc.name.node.clone(), resolved_ty);
+            }
+
             // Record that this type implements this trait
             self.trait_impls.push(TraitImpl {
                 trait_name: trait_name_str.clone(),
                 type_name: type_name.clone(),
+                associated_types: assoc_type_impls.clone(),
             });
+
+            // Validate that all required associated types are implemented
+            if let Some(trait_def) = self.traits.get(&trait_name_str).cloned() {
+                for (assoc_name, assoc_def) in &trait_def.associated_types {
+                    if assoc_def.default.is_none() && !assoc_type_impls.contains_key(assoc_name) {
+                        return Err(TypeError::Mismatch {
+                            expected: format!("associated type '{}' from trait '{}'", assoc_name, trait_name_str),
+                            found: "missing".to_string(),
+                            span: None,
+                        });
+                    }
+                }
+            }
 
             // Validate that all required trait methods are implemented
             if let Some(trait_def) = self.traits.get(&trait_name_str).cloned() {
@@ -3143,6 +3164,67 @@ impl TypeChecker {
                     generics: resolved_generics,
                 }
             }
+            Type::Associated { base, trait_name, assoc_name } => {
+                let resolved_base = self.resolve_type(&base.node);
+                // Try to resolve the associated type immediately if possible
+                self.resolve_associated_type(&resolved_base, trait_name.as_deref(), assoc_name)
+            }
+        }
+    }
+
+    /// Resolve an associated type to its concrete type
+    fn resolve_associated_type(
+        &self,
+        base_ty: &ResolvedType,
+        trait_name: Option<&str>,
+        assoc_name: &str,
+    ) -> ResolvedType {
+        // Get the type name from base_ty
+        let type_name = match base_ty {
+            ResolvedType::Named { name, .. } => name.clone(),
+            ResolvedType::Generic(name) => name.clone(),
+            _ => {
+                // Can't resolve, return as-is
+                return ResolvedType::Associated {
+                    base: Box::new(base_ty.clone()),
+                    trait_name: trait_name.map(|s| s.to_string()),
+                    assoc_name: assoc_name.to_string(),
+                };
+            }
+        };
+
+        // Find the trait impl for this type
+        for impl_ in &self.trait_impls {
+            if impl_.type_name == type_name {
+                // If trait_name is specified, check it matches
+                if let Some(tn) = trait_name {
+                    if impl_.trait_name != tn {
+                        continue;
+                    }
+                }
+                // Check if this impl has the associated type
+                if let Some(resolved) = impl_.associated_types.get(assoc_name) {
+                    return resolved.clone();
+                }
+            }
+        }
+
+        // If not found, check trait definition for default
+        if let Some(trait_name) = trait_name {
+            if let Some(trait_def) = self.traits.get(trait_name) {
+                if let Some(assoc_def) = trait_def.associated_types.get(assoc_name) {
+                    if let Some(default) = &assoc_def.default {
+                        return default.clone();
+                    }
+                }
+            }
+        }
+
+        // Return unresolved associated type
+        ResolvedType::Associated {
+            base: Box::new(base_ty.clone()),
+            trait_name: trait_name.map(|s| s.to_string()),
+            assoc_name: assoc_name.to_string(),
         }
     }
 

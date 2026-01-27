@@ -1359,13 +1359,21 @@ impl Parser {
         self.expect(&Token::LBrace)?;
 
         let mut methods = Vec::new();
+        let mut associated_types = Vec::new();
+
         while !self.check(&Token::RBrace) && !self.is_at_end() {
-            let start = self.current_span().start;
-            let method_attrs = self.parse_attributes()?;
-            self.expect(&Token::Function)?;
-            let func = self.parse_function(false, false, method_attrs)?;
-            let end = self.prev_span().end;
-            methods.push(Spanned::new(func, Span::new(start, end)));
+            // Check for associated type: `T Item = SomeType`
+            if self.check(&Token::TypeKeyword) {
+                self.advance();
+                associated_types.push(self.parse_associated_type_impl()?);
+            } else {
+                let start = self.current_span().start;
+                let method_attrs = self.parse_attributes()?;
+                self.expect(&Token::Function)?;
+                let func = self.parse_function(false, false, method_attrs)?;
+                let end = self.prev_span().end;
+                methods.push(Spanned::new(func, Span::new(start, end)));
+            }
         }
 
         self.expect(&Token::RBrace)?;
@@ -1374,8 +1382,17 @@ impl Parser {
             target_type,
             trait_name,
             generics,
+            associated_types,
             methods,
         })
+    }
+
+    /// Parse associated type implementation: `T Item = SomeType`
+    fn parse_associated_type_impl(&mut self) -> ParseResult<AssociatedTypeImpl> {
+        let name = self.parse_ident()?;
+        self.expect(&Token::Eq)?;
+        let ty = self.parse_type()?;
+        Ok(AssociatedTypeImpl { name, ty })
     }
 
     /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>` or `<const N: u64>`

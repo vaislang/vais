@@ -468,6 +468,17 @@ pub enum ResolvedType {
         trait_name: String,
         generics: Vec<ResolvedType>,
     },
+
+    /// Associated type: `<T as Trait>::Item` or unresolved `Self::Item`
+    /// After resolution, this becomes the concrete type
+    Associated {
+        /// Base type (T in <T as Trait>::Item)
+        base: Box<ResolvedType>,
+        /// Trait name (None if using Self::Item syntax)
+        trait_name: Option<String>,
+        /// Associated type name (Item)
+        assoc_name: String,
+    },
 }
 
 impl ResolvedType {
@@ -620,6 +631,13 @@ impl std::fmt::Display for ResolvedType {
                     write!(f, ">")?;
                 }
                 Ok(())
+            }
+            ResolvedType::Associated { base, trait_name, assoc_name } => {
+                if let Some(trait_name) = trait_name {
+                    write!(f, "<{} as {}>::{}", base, trait_name, assoc_name)
+                } else {
+                    write!(f, "{}::{}", base, assoc_name)
+                }
             }
         }
     }

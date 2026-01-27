@@ -209,6 +209,7 @@ impl<'a> AstExpander<'a> {
             target_type: i.target_type,
             trait_name: i.trait_name,
             generics: i.generics,
+            associated_types: i.associated_types,
             methods: expanded_methods,
         })
     }

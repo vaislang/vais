@@ -822,6 +822,13 @@ impl Formatter {
                 let vararg_str = if *is_vararg { ", ..." } else { "" };
                 format!("fn({}{}) -> {}", ps.join(", "), vararg_str, self.format_type(&ret.node))
             }
+            Type::Associated { base, trait_name, assoc_name } => {
+                if let Some(tn) = trait_name {
+                    format!("<{} as {}>::{}", self.format_type(&base.node), tn, assoc_name)
+                } else {
+                    format!("{}::{}", self.format_type(&base.node), assoc_name)
+                }
+            }
         }
     }
 

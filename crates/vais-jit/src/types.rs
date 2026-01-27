@@ -77,6 +77,8 @@ impl TypeMapper {
             ResolvedType::DynTrait { .. } => self.pointer_type,
             // Function pointer: same as regular pointer
             ResolvedType::FnPtr { .. } => self.pointer_type,
+            // Associated type: should be resolved before JIT, fallback to pointer
+            ResolvedType::Associated { .. } => self.pointer_type,
         }
     }
 

@@ -469,6 +469,13 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         }
         Var(id) => format!("?{}", id),
         Unknown => "unknown".to_string(),
+        Associated { base, trait_name, assoc_name } => {
+            if let Some(tn) = trait_name {
+                format!("<{} as {}>::{}", format_type(base), tn, assoc_name)
+            } else {
+                format!("{}::{}", format_type(base), assoc_name)
+            }
+        }
     }
 }
 

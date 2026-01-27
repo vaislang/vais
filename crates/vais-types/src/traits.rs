@@ -35,10 +35,11 @@ pub struct TraitDef {
 
 /// Tracks which types implement which traits
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct TraitImpl {
     pub(crate) trait_name: String,
     pub(crate) type_name: String,
+    /// Concrete types for associated types
+    pub(crate) associated_types: HashMap<String, ResolvedType>,
 }
 
 impl TypeChecker {

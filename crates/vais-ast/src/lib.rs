@@ -307,12 +307,20 @@ pub struct TraitMethod {
     pub is_async: bool,
 }
 
+/// Associated type implementation
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssociatedTypeImpl {
+    pub name: Spanned<String>,
+    pub ty: Spanned<Type>,
+}
+
 /// Impl block: `X Type: Trait { methods }`
 #[derive(Debug, Clone, PartialEq)]
 pub struct Impl {
     pub target_type: Spanned<Type>,
     pub trait_name: Option<Spanned<String>>,
     pub generics: Vec<GenericParam>,
+    pub associated_types: Vec<AssociatedTypeImpl>, // `T Item = i64`
     pub methods: Vec<Spanned<Function>>,
 }
 
@@ -622,6 +630,12 @@ pub enum Type {
     DynTrait {
         trait_name: String,
         generics: Vec<Spanned<Type>>,
+    },
+    /// Associated type: `<T as Trait>::Item` or `Self::Item`
+    Associated {
+        base: Box<Spanned<Type>>,
+        trait_name: Option<String>,  // None for Self::Item
+        assoc_name: String,
     },
 }
 
@@ -1025,6 +1039,13 @@ impl std::fmt::Display for Type {
                     write!(f, ">")?;
                 }
                 Ok(())
+            }
+            Type::Associated { base, trait_name, assoc_name } => {
+                if let Some(trait_name) = trait_name {
+                    write!(f, "<{} as {}>::{}", base.node, trait_name, assoc_name)
+                } else {
+                    write!(f, "{}::{}", base.node, assoc_name)
+                }
             }
         }
     }
