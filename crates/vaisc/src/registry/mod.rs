@@ -15,6 +15,7 @@ mod lockfile;
 mod resolver;
 mod source;
 mod version;
+mod vulnerability;
 
 pub use archive::{pack_package, unpack_package};
 pub use cache::PackageCache;
@@ -25,3 +26,4 @@ pub use lockfile::{LockFile, LockedPackage};
 pub use resolver::{DependencyResolver, ResolvedPackage};
 pub use source::{RegistryConfig, RegistrySource};
 pub use version::{Version, VersionReq};
+pub use vulnerability::{VulnerabilityScanner, Vulnerability};

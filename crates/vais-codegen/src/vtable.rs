@@ -18,6 +18,7 @@
 //! - Method function pointers in declaration order
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use vais_types::{ResolvedType, TraitDef};
 
 /// LLVM IR type for trait object (fat pointer)
@@ -43,6 +44,8 @@ pub struct VtableGenerator {
     vtables: HashMap<(String, String), VtableInfo>,
     /// Counter for unique vtable names
     vtable_counter: usize,
+    /// Generated drop functions for types
+    drop_functions: HashSet<String>,
 }
 
 impl VtableGenerator {
@@ -51,7 +54,55 @@ impl VtableGenerator {
         Self {
             vtables: HashMap::new(),
             vtable_counter: 0,
+            drop_functions: HashSet::new(),
         }
+    }
+
+    /// Generate a drop function for a type that calls free() on the data pointer
+    /// Returns the mangled drop function name
+    pub fn generate_drop_function(&mut self, type_name: &str) -> String {
+        let drop_fn_name = format!("__drop_{}", type_name);
+        self.drop_functions.insert(drop_fn_name.clone());
+        drop_fn_name
+    }
+
+    /// Generate LLVM IR for all drop functions
+    /// Drop functions call free() on the data pointer to deallocate heap memory
+    pub fn generate_drop_functions_ir(&self) -> String {
+        let mut ir = String::new();
+
+        for drop_fn in &self.drop_functions {
+            ir.push_str(&format!(
+                r#"
+define void @{}(i8* %ptr) {{
+entry:
+  %is_null = icmp eq i8* %ptr, null
+  br i1 %is_null, label %done, label %do_free
+
+do_free:
+  call void @free(i8* %ptr)
+  br label %done
+
+done:
+  ret void
+}}
+"#,
+                drop_fn
+            ));
+        }
+
+        ir
+    }
+
+    /// Check if a drop function has been generated for a type
+    pub fn has_drop_function(&self, type_name: &str) -> bool {
+        let drop_fn_name = format!("__drop_{}", type_name);
+        self.drop_functions.contains(&drop_fn_name)
+    }
+
+    /// Get the drop function name for a type
+    pub fn get_drop_function_name(type_name: &str) -> String {
+        format!("__drop_{}", type_name)
     }
 
     /// Generate a vtable for a type implementing a trait
@@ -67,6 +118,9 @@ impl VtableGenerator {
         if let Some(info) = self.vtables.get(&key) {
             return info.clone();
         }
+
+        // Generate drop function for this type
+        self.generate_drop_function(impl_type);
 
         let global_name = format!("@vtable_{}_{}", impl_type, trait_def.name);
 
@@ -139,8 +193,12 @@ impl VtableGenerator {
     ) -> String {
         let vtable_type = Self::vtable_struct_type(trait_def);
 
+        // Generate drop function pointer - cast to i8* for vtable storage
+        let drop_fn_name = Self::get_drop_function_name(&info.impl_type);
+        let drop_fn_ptr = format!("bitcast (void(i8*)* @{} to i8*)", drop_fn_name);
+
         let mut values = vec![
-            "null".to_string(),                   // drop (not implemented yet)
+            drop_fn_ptr,                          // drop function pointer
             format!("{}", type_size),             // size
             format!("{}", type_align),            // align
         ];
@@ -426,5 +484,50 @@ mod tests {
     #[test]
     fn test_trait_object_type() {
         assert_eq!(TRAIT_OBJECT_TYPE, "{ i8*, i8* }");
+    }
+
+    #[test]
+    fn test_drop_function_generation() {
+        let mut gen = VtableGenerator::new();
+
+        // Generate drop function for Dog type
+        let drop_fn = gen.generate_drop_function("Dog");
+        assert_eq!(drop_fn, "__drop_Dog");
+        assert!(gen.has_drop_function("Dog"));
+        assert!(!gen.has_drop_function("Cat"));
+
+        // Generate IR for drop functions
+        let ir = gen.generate_drop_functions_ir();
+        assert!(ir.contains("define void @__drop_Dog(i8* %ptr)"));
+        assert!(ir.contains("call void @free(i8* %ptr)"));
+        assert!(ir.contains("icmp eq i8* %ptr, null"));
+    }
+
+    #[test]
+    fn test_vtable_with_drop() {
+        let mut gen = VtableGenerator::new();
+        let trait_def = create_test_trait();
+
+        let mut impls = HashMap::new();
+        impls.insert("speak".to_string(), "Dog_speak".to_string());
+        impls.insert("move_to".to_string(), "Dog_move_to".to_string());
+
+        let vtable = gen.generate_vtable("Dog", &trait_def, &impls);
+
+        // Verify drop function was generated
+        assert!(gen.has_drop_function("Dog"));
+
+        // Generate vtable global
+        let vtable_ir = gen.generate_vtable_global(&vtable, &trait_def, 16, 8);
+
+        // Verify vtable contains drop function pointer
+        assert!(vtable_ir.contains("@__drop_Dog"));
+        assert!(vtable_ir.contains("bitcast (void(i8*)* @__drop_Dog to i8*)"));
+    }
+
+    #[test]
+    fn test_drop_function_name() {
+        assert_eq!(VtableGenerator::get_drop_function_name("MyType"), "__drop_MyType");
+        assert_eq!(VtableGenerator::get_drop_function_name("Vec_i64"), "__drop_Vec_i64");
     }
 }

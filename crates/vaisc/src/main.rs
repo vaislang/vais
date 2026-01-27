@@ -1933,11 +1933,29 @@ fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(), String> 
         println!("{} Auditing {} package(s)...", "Info".cyan(), locked_packages.len());
     }
 
-    // Check for known vulnerabilities
-    // TODO: Connect to a vulnerability database (e.g., OSV, GHSA)
-    // For now, this is a placeholder implementation
+    // Check for known vulnerabilities using OSV API
+    use registry::VulnerabilityScanner;
 
-    let vulnerabilities: Vec<(String, String, String)> = Vec::new(); // (package, version, advisory)
+    let scanner = VulnerabilityScanner::new();
+    let vulns_by_package = scanner.query_batch(&locked_packages)
+        .unwrap_or_else(|e| {
+            if verbose {
+                eprintln!("{} Failed to query vulnerability database: {}", "Warning".yellow(), e);
+            }
+            std::collections::HashMap::new()
+        });
+
+    // Flatten vulnerabilities into (package, version, advisory) tuples
+    let mut vulnerabilities: Vec<(String, String, String)> = Vec::new();
+    for (name, version) in &locked_packages {
+        if let Some(vulns) = vulns_by_package.get(name) {
+            for vuln in vulns {
+                let severity = VulnerabilityScanner::severity_label(vuln);
+                let advisory = format!("[{}] {} - {}", severity, vuln.id, vuln.summary);
+                vulnerabilities.push((name.clone(), version.clone(), advisory));
+            }
+        }
+    }
 
     match format {
         "json" => {

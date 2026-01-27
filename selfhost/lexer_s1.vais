@@ -283,7 +283,10 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
             lexer_advance(lex)
             kind = TOK_NOT_EQ()
             0
-        } E { 0 }  # TODO: handle single !
+        } E {
+            kind = TOK_NOT()
+            0
+        }
     }
     E I c == 38 {
         # & or &&

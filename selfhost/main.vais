@@ -36,6 +36,7 @@ F TOK_LT_EQ() -> i64 = 68
 F TOK_GT_EQ() -> i64 = 69
 F TOK_EQ_EQ() -> i64 = 70
 F TOK_NOT_EQ() -> i64 = 71
+F TOK_NOT() -> i64 = 78      # ! (logical not)
 F TOK_AMP() -> i64 = 72
 F TOK_PIPE() -> i64 = 73
 F TOK_AND() -> i64 = 79
@@ -512,7 +513,10 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
             lexer_advance(lex)
             kind = TOK_NOT_EQ()
             0
-        } E { 0 }  # TODO: handle single !
+        } E {
+            kind = TOK_NOT()
+            0
+        }
     }
     E I c == 38 {
         # & or &&
@@ -1262,6 +1266,13 @@ F parser_parse_unary(p: i64) -> i64 {
         operand := parser_parse_unary(p)
         e := expr_new(EXPR_UNARY())
         expr_set_field0(e, UNOP_NEG())
+        expr_set_field1(e, operand)
+        e
+    } E I kind == TOK_NOT() {
+        parser_advance(p)
+        operand := parser_parse_unary(p)
+        e := expr_new(EXPR_UNARY())
+        expr_set_field0(e, UNOP_NOT())
         expr_set_field1(e, operand)
         e
     } E {
@@ -3423,6 +3434,46 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             }
         } E {
             result = 0
+            0
+        }
+    } E I kind == EXPR_UNARY() {
+        # Unary expression: op operand
+        op := expr_get_field0(expr)
+        operand := expr_get_field1(expr)
+        operand_reg := cg_gen_expr(cg, operand, param_name_ptr, param_name_len)
+
+        I op == UNOP_NEG() {
+            # Negation: 0 - operand
+            neg_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, neg_reg)
+            cg_emit(cg, " = sub i64 0, ")
+            cg_emit_operand(cg, operand_reg, param_name_ptr, param_name_len)
+            cg_emit_newline(cg)
+            result = neg_reg
+            0
+        } E I op == UNOP_NOT() {
+            # Logical not: operand == 0 ? 1 : 0
+            # Compare to 0
+            cmp_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, cmp_reg)
+            cg_emit(cg, " = icmp eq i64 ")
+            cg_emit_operand(cg, operand_reg, param_name_ptr, param_name_len)
+            cg_emit(cg, ", 0")
+            cg_emit_newline(cg)
+            # Zero-extend i1 to i64
+            zext_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, zext_reg)
+            cg_emit(cg, " = zext i1 %")
+            cg_emit_i64(cg, cmp_reg)
+            cg_emit(cg, " to i64")
+            cg_emit_newline(cg)
+            result = zext_reg
+            0
+        } E {
+            result = operand_reg
             0
         }
     } E { 0 }

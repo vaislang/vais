@@ -477,6 +477,13 @@ F parser_parse_unary(p: i64) -> i64 {
         expr_set_field0(e, UNOP_NEG())
         expr_set_field1(e, operand)
         e
+    } E I kind == TOK_NOT() {
+        parser_advance(p)
+        operand := parser_parse_unary(p)
+        e := expr_new(EXPR_UNARY())
+        expr_set_field0(e, UNOP_NOT())
+        expr_set_field1(e, operand)
+        e
     } E {
         parser_parse_postfix(p)
     }

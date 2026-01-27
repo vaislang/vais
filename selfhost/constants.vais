@@ -35,6 +35,7 @@ F TOK_LT_EQ() -> i64 = 68
 F TOK_GT_EQ() -> i64 = 69
 F TOK_EQ_EQ() -> i64 = 70
 F TOK_NOT_EQ() -> i64 = 71
+F TOK_NOT() -> i64 = 78      # ! (logical not) - same as TOK_BANG
 F TOK_AMP() -> i64 = 72
 F TOK_PIPE() -> i64 = 73
 F TOK_AND() -> i64 = 79
