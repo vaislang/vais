@@ -59,18 +59,18 @@ X TestResult {
     }
 
     F is_passed(&self) -> i64 {
-        self.status == TEST_PASSED
+        (self.status == TEST_PASSED) as i64
     }
 
     F is_failed(&self) -> i64 {
-        self.status == TEST_FAILED
+        (self.status == TEST_FAILED) as i64
     }
 
     F is_skipped(&self) -> i64 {
-        self.status == TEST_SKIPPED
+        (self.status == TEST_SKIPPED) as i64
     }
 
-    F with_location(&self, file: str, line: i64) -> TestResult {
+    F with_location(&self, file: str, line: i64) -> &TestResult {
         self.file = file
         self.line = line
         self
@@ -111,38 +111,38 @@ X TestCase {
     }
 
     # Set setup function
-    F with_setup(&self, setup_fn: i64) -> TestCase {
+    F with_setup(&self, setup_fn: i64) -> &TestCase {
         self.setup_fn = setup_fn
         self
     }
 
     # Set teardown function
-    F with_teardown(&self, teardown_fn: i64) -> TestCase {
+    F with_teardown(&self, teardown_fn: i64) -> &TestCase {
         self.teardown_fn = teardown_fn
         self
     }
 
     # Set timeout
-    F with_timeout(&self, timeout_ms: i64) -> TestCase {
+    F with_timeout(&self, timeout_ms: i64) -> &TestCase {
         self.timeout_ms = timeout_ms
         self
     }
 
     # Mark as should_panic test
-    F should_panic(&self) -> TestCase {
+    F should_panic(&self) -> &TestCase {
         self.should_panic = 1
         self
     }
 
     # Skip this test
-    F skip(&self, reason: str) -> TestCase {
+    F skip(&self, reason: str) -> &TestCase {
         self.skip = 1
         self.skip_reason = reason
         self
     }
 
     # Add a tag
-    F tag(&self, tag: str) -> TestCase {
+    F tag(&self, tag: str) -> &TestCase {
         L self.tags == 0 {
             self.tags = __malloc(64 * 8)  # 64 tags max
         }

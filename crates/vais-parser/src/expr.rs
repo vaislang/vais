@@ -792,9 +792,11 @@ impl Parser {
                     ));
                 }
                 // Check for struct literal: `Name{...}`
-                // Only treat as struct literal if name starts with uppercase (type convention)
+                // Only treat as struct literal if:
+                // 1. name starts with uppercase (type convention)
+                // 2. struct literals are allowed in current context (not in loop/if conditions)
                 let is_type_name = name.chars().next().is_some_and(|c| c.is_uppercase());
-                if is_type_name && self.check(&Token::LBrace) {
+                if is_type_name && self.check(&Token::LBrace) && self.allow_struct_literal {
                     self.advance();
                     let mut fields = Vec::new();
                     while !self.check(&Token::RBrace) && !self.is_at_end() {
@@ -919,7 +921,12 @@ impl Parser {
 
     /// Parse if expression: `I cond{...}E{...}`
     pub(crate) fn parse_if_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        // Disable struct literals in condition to avoid ambiguity with block start
+        let old_allow_struct_literal = self.allow_struct_literal;
+        self.allow_struct_literal = false;
         let cond = self.parse_expr()?;
+        self.allow_struct_literal = old_allow_struct_literal;
+
         self.expect(&Token::LBrace)?;
         let then = self.parse_block_contents()?;
         self.expect(&Token::RBrace)?;
@@ -948,7 +955,12 @@ impl Parser {
         if self.check(&Token::If) {
             // else if
             self.advance();
+            // Disable struct literals in condition to avoid ambiguity with block start
+            let old_allow_struct_literal = self.allow_struct_literal;
+            self.allow_struct_literal = false;
             let cond = self.parse_expr()?;
+            self.allow_struct_literal = old_allow_struct_literal;
+
             self.expect(&Token::LBrace)?;
             let then = self.parse_block_contents()?;
             self.expect(&Token::RBrace)?;
@@ -1023,7 +1035,13 @@ impl Parser {
             // This is a while loop: `L condition { ... }`
             // Reset position and parse as expression
             self.pos = saved_pos;
+
+            // Disable struct literals in condition to avoid ambiguity with block start
+            // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal
+            let old_allow_struct_literal = self.allow_struct_literal;
+            self.allow_struct_literal = false;
             let condition = self.parse_expr()?;
+            self.allow_struct_literal = old_allow_struct_literal;
 
             self.expect(&Token::LBrace)?;
             let body = self.parse_block_contents()?;

@@ -110,6 +110,9 @@ pub struct Parser {
     errors: Vec<ParseError>,
     /// Whether error recovery mode is enabled
     recovery_mode: bool,
+    /// Whether struct literals (Name{...}) are allowed in current context.
+    /// Disabled when parsing loop/if conditions to avoid ambiguity with block start.
+    allow_struct_literal: bool,
 }
 
 impl Parser {
@@ -120,6 +123,7 @@ impl Parser {
             pos: 0,
             errors: Vec::new(),
             recovery_mode: false,
+            allow_struct_literal: true,
         }
     }
 
@@ -133,6 +137,7 @@ impl Parser {
             pos: 0,
             errors: Vec::new(),
             recovery_mode: true,
+            allow_struct_literal: true,
         }
     }
 

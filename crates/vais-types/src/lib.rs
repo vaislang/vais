@@ -67,6 +67,7 @@ pub struct TypeChecker {
     type_aliases: HashMap<String, ResolvedType>,
     traits: HashMap<String, TraitDef>,
     trait_impls: Vec<TraitImpl>, // (type_name, trait_name) pairs
+    constants: HashMap<String, ResolvedType>, // Constant name -> type
 
     // Scope stack
     scopes: Vec<HashMap<String, VarInfo>>,
@@ -112,6 +113,7 @@ impl TypeChecker {
             type_aliases: HashMap::new(),
             traits: HashMap::new(),
             trait_impls: Vec::new(),
+            constants: HashMap::new(),
             scopes: vec![HashMap::new()],
             current_fn_ret: None,
             current_fn_name: None,
@@ -1093,9 +1095,10 @@ impl TypeChecker {
                         self.register_extern_function(func)?;
                     }
                 }
-                Item::Const(_const_def) => {
-                    // Constant definitions are compile-time evaluated
-                    // Type checking happens during code generation
+                Item::Const(const_def) => {
+                    // Register constant with its type
+                    let const_type = self.resolve_type(&const_def.ty.node);
+                    self.constants.insert(const_def.name.node.clone(), const_type);
                 }
                 Item::Global(_global_def) => {
                     // Global variable definitions
@@ -3329,12 +3332,21 @@ impl TypeChecker {
             }
         }
 
+        // Check if it's a constant
+        if let Some(const_type) = self.constants.get(name) {
+            return Ok(VarInfo {
+                ty: const_type.clone(),
+                is_mut: false,
+            });
+        }
+
         // Collect all available names for did-you-mean suggestion
         let mut candidates: Vec<&str> = Vec::new();
         for scope in &self.scopes {
             candidates.extend(scope.keys().map(|s| s.as_str()));
         }
         candidates.extend(self.functions.keys().map(|s| s.as_str()));
+        candidates.extend(self.constants.keys().map(|s| s.as_str()));
         for enum_def in self.enums.values() {
             candidates.extend(enum_def.variants.keys().map(|s| s.as_str()));
         }

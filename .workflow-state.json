@@ -2,7 +2,7 @@
   "phase": 5,
   "request": "다음 할일 알려줘",
   "tasks": [
-    { "id": 1, "name": "속성 기반 테스트 (proptest 스타일)", "status": "in_progress", "model": "Sonnet", "priority": "P3", "note": "기본 프레임워크 완료, test.vais 버그로 인해 전체 테스트 불가" },
+    { "id": 1, "name": "속성 기반 테스트 (proptest 스타일)", "status": "completed", "model": "Sonnet", "priority": "P3", "note": "파서 버그(조건문 구조체 리터럴 모호성) 및 타입체커 버그(상수 스코프) 수정 완료" },
     { "id": 2, "name": "GPU 백엔드 확장 (CUDA/Metal/SIMD)", "status": "pending", "model": "Opus", "priority": "P3" },
     { "id": 3, "name": "동적 모듈 로딩", "status": "pending", "model": "Opus", "priority": "P3" },
     { "id": 4, "name": "고급 최적화", "status": "pending", "model": "Opus", "priority": "P3" },
@@ -10,9 +10,7 @@
     { "id": 6, "name": "런타임 최적화", "status": "pending", "model": "Opus", "priority": "P4" },
     { "id": 7, "name": "문서 및 교육", "status": "pending", "model": "Sonnet", "priority": "P4" }
   ],
-  "currentTask": 1,
-  "blockers": [
-    "std/test.vais: match arm 내부 블록 문법 문제",
-    "모듈 import 시 전역 변수 접근 문제"
-  ]
+  "currentTask": null,
+  "completedAt": "2026-01-27",
+  "blockers": []
 }
