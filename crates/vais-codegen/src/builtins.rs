@@ -182,6 +182,21 @@ impl CodeGenerator {
             ],
             ResolvedType::Unit
         );
+
+        // load_f64: load 64-bit float from memory (internal helper)
+        register_helper!(self, "load_f64" => "__load_f64",
+            vec![("ptr".to_string(), ResolvedType::I64)],
+            ResolvedType::F64
+        );
+
+        // store_f64: store 64-bit float to memory (internal helper)
+        register_helper!(self, "store_f64" => "__store_f64",
+            vec![
+                ("ptr".to_string(), ResolvedType::I64),
+                ("val".to_string(), ResolvedType::F64),
+            ],
+            ResolvedType::Unit
+        );
     }
 
     fn register_file_functions(&mut self) {

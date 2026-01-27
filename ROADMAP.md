@@ -1297,8 +1297,17 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - `#[contract(nonnull)]`: 포인터/문자열 파라미터 null 검사
     - `#[contract(all)]`: 모든 검사 활성화
     - 함수 본문 분석으로 divisor 파라미터 자동 감지
-  - [ ] 재귀 함수 종료성 증명 강화 (decreases)
-  - [ ] 속성 기반 테스트 (proptest 스타일)
+  - [x] 재귀 함수 종료성 증명 강화 (decreases) (완료일: 2026-01-27)
+    - 파서에서 `#[decreases(expr)]` 표현식 파싱 지원
+    - 함수 진입 시 decreases 값 저장 및 비음수 검사
+    - 재귀 호출 전 strict decrease 검사 (new < old)
+    - 릴리스 모드에서 검사 스킵
+    - 5개 단위 테스트 추가
+  - [x] 속성 기반 테스트 (proptest 스타일) (완료일: 2026-01-27)
+    - property_macros.rs: forall!, check!, assert_prop!, quickcheck! 매크로
+    - builtins.rs: __load_f64, __store_f64 builtin 함수 추가
+    - function_gen.rs: f64 메모리 연산 LLVM IR 생성
+    - examples/proptest_example.vais 예제
 - [ ] **GPU 백엔드 확장**
   - CUDA 커널 생성 (thread_block_size, shared memory)
   - Metal (Apple GPU) 지원

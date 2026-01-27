@@ -236,6 +236,24 @@ impl CodeGenerator {
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
 
+        // __load_f64: load a 64-bit float from memory address
+        ir.push_str("\n; Helper function: load f64 from memory\n");
+        ir.push_str("define double @__load_f64(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to double*\n");
+        ir.push_str("  %1 = load double, double* %0\n");
+        ir.push_str("  ret double %1\n");
+        ir.push_str("}\n");
+
+        // __store_f64: store a 64-bit float to memory address
+        ir.push_str("\n; Helper function: store f64 to memory\n");
+        ir.push_str("define void @__store_f64(i64 %ptr, double %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %ptr to double*\n");
+        ir.push_str("  store double %val, double* %0\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+
         ir
     }
 
@@ -351,6 +369,10 @@ impl CodeGenerator {
         let auto_contract_ir = self.generate_auto_contract_checks(f, &mut counter)?;
         ir.push_str(&auto_contract_ir);
 
+        // Generate decreases checks for termination proof
+        let decreases_ir = self.generate_decreases_checks(f, &mut counter)?;
+        ir.push_str(&decreases_ir);
+
         match &f.body {
             FunctionBody::Expr(expr) => {
                 let (value, expr_ir) = self.generate_expr(expr, &mut counter)?;
@@ -427,6 +449,7 @@ impl CodeGenerator {
 
         self.current_function = None;
         self.current_return_type = None;
+        self.clear_decreases_info();
         Ok(ir)
     }
 
