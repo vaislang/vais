@@ -228,3 +228,140 @@ F calc_blocks(n: i64, block_size: i64) -> i64 = (n + block_size - 1) / block_siz
 
 # Calculate total threads for n elements
 F calc_threads(n: i64, block_size: i64) -> i64 = calc_blocks(n, block_size) * block_size
+
+# ============================================================================
+# Metal-specific Functions (Apple GPU)
+# ============================================================================
+
+# Threadgroup memory barrier
+F threadgroup_barrier() -> i64 = 0  # Replaced by Metal compiler
+
+# Device memory barrier
+F device_barrier() -> i64 = 0
+
+# SIMD group (simdgroup) operations
+F simd_sum(val: f64) -> f64 = val
+F simd_min(val: f64) -> f64 = val
+F simd_max(val: f64) -> f64 = val
+F simd_broadcast(val: f64, lane: i64) -> f64 = val
+
+# Quad operations (4-wide SIMD)
+F quad_sum(val: f64) -> f64 = val
+F quad_broadcast(val: f64, lane: i64) -> f64 = val
+
+# ============================================================================
+# AVX-512 SIMD Operations (Intel/AMD)
+# ============================================================================
+
+# 512-bit vector load/store (16 x f32 or 8 x f64)
+F avx512_load_f32(addr: *f32) -> i64 = 0  # Returns vector as i64 handle
+F avx512_store_f32(addr: *f32, vec: i64) -> i64 = 0
+F avx512_load_f64(addr: *f64) -> i64 = 0
+F avx512_store_f64(addr: *f64, vec: i64) -> i64 = 0
+
+# AVX-512 arithmetic
+F avx512_add_f32(a: i64, b: i64) -> i64 = 0
+F avx512_sub_f32(a: i64, b: i64) -> i64 = 0
+F avx512_mul_f32(a: i64, b: i64) -> i64 = 0
+F avx512_div_f32(a: i64, b: i64) -> i64 = 0
+F avx512_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
+
+# AVX-512 reduction
+F avx512_reduce_add_f32(vec: i64) -> f32 = 0.0
+F avx512_reduce_min_f32(vec: i64) -> f32 = 0.0
+F avx512_reduce_max_f32(vec: i64) -> f32 = 0.0
+
+# AVX-512 broadcast
+F avx512_broadcast_f32(val: f32) -> i64 = 0
+F avx512_broadcast_f64(val: f64) -> i64 = 0
+
+# ============================================================================
+# AVX2 SIMD Operations (Intel/AMD)
+# ============================================================================
+
+# 256-bit vector load/store (8 x f32 or 4 x f64)
+F avx2_load_f32(addr: *f32) -> i64 = 0
+F avx2_store_f32(addr: *f32, vec: i64) -> i64 = 0
+F avx2_load_f64(addr: *f64) -> i64 = 0
+F avx2_store_f64(addr: *f64, vec: i64) -> i64 = 0
+
+# AVX2 arithmetic
+F avx2_add_f32(a: i64, b: i64) -> i64 = 0
+F avx2_sub_f32(a: i64, b: i64) -> i64 = 0
+F avx2_mul_f32(a: i64, b: i64) -> i64 = 0
+F avx2_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
+
+# AVX2 broadcast
+F avx2_broadcast_f32(val: f32) -> i64 = 0
+
+# ============================================================================
+# ARM NEON SIMD Operations
+# ============================================================================
+
+# 128-bit vector load/store (4 x f32 or 2 x f64)
+F neon_load_f32(addr: *f32) -> i64 = 0
+F neon_store_f32(addr: *f32, vec: i64) -> i64 = 0
+F neon_load_f64(addr: *f64) -> i64 = 0
+F neon_store_f64(addr: *f64, vec: i64) -> i64 = 0
+
+# NEON arithmetic
+F neon_add_f32(a: i64, b: i64) -> i64 = 0
+F neon_sub_f32(a: i64, b: i64) -> i64 = 0
+F neon_mul_f32(a: i64, b: i64) -> i64 = 0
+F neon_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
+
+# NEON reduction
+F neon_reduce_add_f32(vec: i64) -> f32 = 0.0
+F neon_reduce_min_f32(vec: i64) -> f32 = 0.0
+F neon_reduce_max_f32(vec: i64) -> f32 = 0.0
+
+# NEON broadcast
+F neon_dup_f32(val: f32) -> i64 = 0
+
+# ============================================================================
+# Kernel Launch Configuration
+# ============================================================================
+
+# Configure kernel launch parameters
+S KernelConfig {
+    grid_x: i64,
+    grid_y: i64,
+    grid_z: i64,
+    block_x: i64,
+    block_y: i64,
+    block_z: i64,
+    shared_memory: i64,
+}
+
+# Create default kernel configuration
+F kernel_config_default() -> KernelConfig = KernelConfig {
+    grid_x: 1,
+    grid_y: 1,
+    grid_z: 1,
+    block_x: 256,
+    block_y: 1,
+    block_z: 1,
+    shared_memory: 0,
+}
+
+# Create 1D kernel configuration
+F kernel_config_1d(n: i64, block_size: i64) -> KernelConfig = KernelConfig {
+    grid_x: calc_blocks(n, block_size),
+    grid_y: 1,
+    grid_z: 1,
+    block_x: block_size,
+    block_y: 1,
+    block_z: 1,
+    shared_memory: 0,
+}
+
+# Create 2D kernel configuration
+F kernel_config_2d(width: i64, height: i64, block_x: i64, block_y: i64) -> KernelConfig = KernelConfig {
+    grid_x: calc_blocks(width, block_x),
+    grid_y: calc_blocks(height, block_y),
+    grid_z: 1,
+    block_x: block_x,
+    block_y: block_y,
+    block_z: 1,
+    shared_memory: 0,
+}

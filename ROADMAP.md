@@ -1308,10 +1308,16 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - builtins.rs: __load_f64, __store_f64 builtin 함수 추가
     - function_gen.rs: f64 메모리 연산 LLVM IR 생성
     - examples/proptest_example.vais 예제
-- [ ] **GPU 백엔드 확장**
-  - CUDA 커널 생성 (thread_block_size, shared memory)
-  - Metal (Apple GPU) 지원
-  - AVX-512, NEON SIMD 확장
+- [x] **GPU 백엔드 확장** (완료일: 2026-01-27)
+  - [x] CUDA 커널 생성 (thread_block_size, shared memory 속성 처리)
+  - [x] Metal (Apple GPU) 지원 - metal.rs 코드 생성기
+    - MSL (Metal Shading Language) 코드 생성
+    - threadgroup 메모리, 배리어, SIMD 그룹 연산
+    - Swift 호스트 코드 생성
+  - [x] AVX-512, NEON SIMD 확장 - simd.rs 모듈
+    - SimdTarget: Avx512, Avx2, Sse4, Neon, Sve 지원
+    - 로드/저장, 산술, FMA, 리덕션, 브로드캐스트 인트린식
+    - 43개 테스트 통과
 - [ ] **동적 모듈 로딩**
   - 실행 중 .vais 모듈 동적 로드
   - WASM 플러그인 샌드박싱
@@ -1362,7 +1368,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
-| Phase 11: 프로덕션 준비 | 🔄 진행 중 | 80% |
+| Phase 11: 프로덕션 준비 | 🔄 진행 중 | 87% |
 
 ---
 

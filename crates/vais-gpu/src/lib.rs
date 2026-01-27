@@ -20,6 +20,8 @@
 pub mod cuda;
 pub mod opencl;
 pub mod webgpu;
+pub mod metal;
+pub mod simd;
 mod common;
 
 use thiserror::Error;
@@ -35,6 +37,8 @@ pub enum GpuTarget {
     OpenCL,
     /// WebGPU WGSL (browser-based)
     WebGPU,
+    /// Apple Metal Shading Language
+    Metal,
 }
 
 impl GpuTarget {
@@ -44,6 +48,7 @@ impl GpuTarget {
             "cuda" | "ptx" | "nvidia" => Some(Self::Cuda),
             "opencl" | "cl" => Some(Self::OpenCL),
             "webgpu" | "wgsl" => Some(Self::WebGPU),
+            "metal" | "msl" | "apple" => Some(Self::Metal),
             _ => None,
         }
     }
@@ -54,6 +59,7 @@ impl GpuTarget {
             Self::Cuda => "cu",
             Self::OpenCL => "cl",
             Self::WebGPU => "wgsl",
+            Self::Metal => "metal",
         }
     }
 
@@ -63,6 +69,27 @@ impl GpuTarget {
             Self::Cuda => "CUDA",
             Self::OpenCL => "OpenCL",
             Self::WebGPU => "WebGPU",
+            Self::Metal => "Metal",
+        }
+    }
+
+    /// Check if target is Apple Metal
+    pub fn is_metal(&self) -> bool {
+        matches!(self, Self::Metal)
+    }
+
+    /// Check if target is NVIDIA CUDA
+    pub fn is_cuda(&self) -> bool {
+        matches!(self, Self::Cuda)
+    }
+
+    /// Get recommended shared memory size for target
+    pub fn default_shared_memory(&self) -> usize {
+        match self {
+            Self::Cuda => 48 * 1024,  // 48KB shared memory
+            Self::Metal => 32 * 1024, // 32KB threadgroup memory
+            Self::OpenCL => 32 * 1024,
+            Self::WebGPU => 16 * 1024,
         }
     }
 }
@@ -227,6 +254,17 @@ impl GpuCodeGenerator {
             GpuTarget::Cuda => cuda::generate(module, &mut self.kernels),
             GpuTarget::OpenCL => opencl::generate(module, &mut self.kernels),
             GpuTarget::WebGPU => webgpu::generate(module, &mut self.kernels),
+            GpuTarget::Metal => metal::generate(module, &mut self.kernels),
+        }
+    }
+
+    /// Generate host code for launching kernels
+    pub fn generate_host_code(&self) -> String {
+        match self.target {
+            GpuTarget::Cuda => cuda::generate_host_code(&self.kernels),
+            GpuTarget::OpenCL => opencl::generate_host_code(&self.kernels),
+            GpuTarget::WebGPU => webgpu::generate_host_code(&self.kernels, "Main"),
+            GpuTarget::Metal => metal::generate_host_code(&self.kernels, "Main"),
         }
     }
 
@@ -247,6 +285,8 @@ mod tests {
         assert_eq!(GpuTarget::from_str("opencl"), Some(GpuTarget::OpenCL));
         assert_eq!(GpuTarget::from_str("webgpu"), Some(GpuTarget::WebGPU));
         assert_eq!(GpuTarget::from_str("wgsl"), Some(GpuTarget::WebGPU));
+        assert_eq!(GpuTarget::from_str("metal"), Some(GpuTarget::Metal));
+        assert_eq!(GpuTarget::from_str("msl"), Some(GpuTarget::Metal));
         assert_eq!(GpuTarget::from_str("unknown"), None);
     }
 
@@ -267,5 +307,20 @@ mod tests {
         assert_eq!(GpuTarget::Cuda.extension(), "cu");
         assert_eq!(GpuTarget::OpenCL.extension(), "cl");
         assert_eq!(GpuTarget::WebGPU.extension(), "wgsl");
+        assert_eq!(GpuTarget::Metal.extension(), "metal");
+    }
+
+    #[test]
+    fn test_gpu_target_methods() {
+        assert!(GpuTarget::Metal.is_metal());
+        assert!(!GpuTarget::Cuda.is_metal());
+        assert!(GpuTarget::Cuda.is_cuda());
+        assert!(!GpuTarget::Metal.is_cuda());
+    }
+
+    #[test]
+    fn test_gpu_target_shared_memory() {
+        assert_eq!(GpuTarget::Cuda.default_shared_memory(), 48 * 1024);
+        assert_eq!(GpuTarget::Metal.default_shared_memory(), 32 * 1024);
     }
 }
