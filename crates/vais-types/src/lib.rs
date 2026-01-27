@@ -2979,6 +2979,22 @@ impl TypeChecker {
                 // Future: Return Task<T> type for proper async handling
                 Ok(inner_type)
             }
+            Expr::Lazy(inner) => {
+                let inner_type = self.check_expr(inner)?;
+                // lazy expr creates a Lazy<T> thunk
+                Ok(ResolvedType::Lazy(Box::new(inner_type)))
+            }
+            Expr::Force(inner) => {
+                let inner_type = self.check_expr(inner)?;
+                // force expr evaluates a Lazy<T> and returns T
+                match inner_type {
+                    ResolvedType::Lazy(t) => Ok(*t),
+                    _ => {
+                        // If not a Lazy type, force is a no-op (identity)
+                        Ok(inner_type)
+                    }
+                }
+            }
 
             Expr::Comptime { body } => {
                 // Evaluate the comptime expression at compile time
@@ -3204,6 +3220,32 @@ impl TypeChecker {
             Type::Affine(inner) => {
                 ResolvedType::Affine(Box::new(self.resolve_type(&inner.node)))
             }
+            Type::Dependent { var_name, base, predicate } => {
+                let resolved_base = self.resolve_type(&base.node);
+                // Convert predicate expression to string for storage
+                // The predicate is validated separately during type checking
+                let predicate_str = format!("{:?}", predicate.node);
+                ResolvedType::Dependent {
+                    var_name: var_name.clone(),
+                    base: Box::new(resolved_base),
+                    predicate: predicate_str,
+                }
+            }
+            Type::RefLifetime { lifetime, inner } => {
+                ResolvedType::RefLifetime {
+                    lifetime: lifetime.clone(),
+                    inner: Box::new(self.resolve_type(&inner.node)),
+                }
+            }
+            Type::RefMutLifetime { lifetime, inner } => {
+                ResolvedType::RefMutLifetime {
+                    lifetime: lifetime.clone(),
+                    inner: Box::new(self.resolve_type(&inner.node)),
+                }
+            }
+            Type::Lazy(inner) => {
+                ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node)))
+            }
         }
     }
 
@@ -3264,6 +3306,36 @@ impl TypeChecker {
     }
 
     // Type inference methods have been moved to the inference module
+
+    /// Validate a dependent type predicate.
+    /// The predicate must be a boolean expression when the bound variable has the base type.
+    pub fn validate_dependent_type(
+        &mut self,
+        var_name: &str,
+        base: &ResolvedType,
+        predicate: &Spanned<Expr>,
+    ) -> TypeResult<()> {
+        // Create a new scope for the bound variable
+        self.push_scope();
+        self.define_var(var_name, base.clone(), false);
+
+        // Type check the predicate expression
+        let pred_type = self.check_expr(predicate)?;
+
+        // Remove the temporary scope
+        self.pop_scope();
+
+        // The predicate must evaluate to bool
+        let applied_type = self.apply_substitutions(&pred_type);
+        if applied_type != ResolvedType::Bool {
+            return Err(TypeError::DependentPredicateNotBool {
+                found: applied_type.to_string(),
+                span: Some(predicate.span),
+            });
+        }
+
+        Ok(())
+    }
 
     /// Resolve a const expression from AST to internal representation
     fn resolve_const_expr(&self, expr: &vais_ast::ConstExpr) -> types::ResolvedConst {
@@ -3866,6 +3938,12 @@ impl TypeChecker {
             Expr::Ref(inner) | Expr::Deref(inner) |
             Expr::Try(inner) | Expr::Unwrap(inner) | Expr::Await(inner) |
             Expr::Spawn(inner) => {
+                self.collect_free_vars(&inner.node, bound, free);
+            }
+            Expr::Lazy(inner) => {
+                self.collect_free_vars(&inner.node, bound, free);
+            }
+            Expr::Force(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }
             Expr::Cast { expr, .. } => {

@@ -90,6 +90,8 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_assert(condition, message.as_deref(), counter)
             }
             Expr::Assume(inner) => self.visit_assume(inner, counter),
+            Expr::Lazy(inner) => self.visit_lazy(inner, counter),
+            Expr::Force(inner) => self.visit_force(inner, counter),
             Expr::Error { message, .. } => {
                 // Error nodes should not reach codegen - they indicate parsing failures
                 Err(CodegenError::Unsupported(format!(
@@ -457,5 +459,117 @@ impl ExprVisitor for CodeGenerator {
         } else {
             self.generate_assume(inner, counter)
         }
+    }
+
+    fn visit_lazy(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
+        // Lazy evaluation: Create a thunk struct { i1 computed, T value, i8* thunk_fn }
+        // For simplicity, we evaluate the expression immediately but wrap it in a Lazy struct.
+        // A full implementation would create a closure and defer evaluation.
+
+        let (inner_val, inner_ir) = self.visit_expr(inner, counter)?;
+        let mut ir = inner_ir;
+
+        // Infer the inner type to get the correct LLVM type
+        let inner_type = self.infer_expr_type(inner);
+        let inner_llvm_ty = self.type_to_llvm(&inner_type);
+        let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
+
+        // Allocate the lazy struct
+        let lazy_ptr = self.next_temp(counter);
+        ir.push_str(&format!("  {} = alloca {}\n", lazy_ptr, lazy_ty));
+
+        // Store computed = true (eager evaluation for now)
+        let computed_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 0\n",
+            computed_ptr, lazy_ty, lazy_ty, lazy_ptr
+        ));
+        ir.push_str(&format!("  store i1 1, i1* {}\n", computed_ptr));
+
+        // Store the computed value
+        let value_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
+            value_ptr, lazy_ty, lazy_ty, lazy_ptr
+        ));
+        ir.push_str(&format!("  store {} {}, {}* {}\n", inner_llvm_ty, inner_val, inner_llvm_ty, value_ptr));
+
+        // Store thunk pointer as null (not needed for eager evaluation)
+        let thunk_ptr = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 2\n",
+            thunk_ptr, lazy_ty, lazy_ty, lazy_ptr
+        ));
+        ir.push_str(&format!("  store i8* null, i8** {}\n", thunk_ptr));
+
+        // Load and return the lazy struct
+        let result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = load {}, {}* {}\n", result, lazy_ty, lazy_ty, lazy_ptr));
+
+        Ok((result, ir))
+    }
+
+    fn visit_force(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
+        // Force evaluation: Extract value from Lazy struct
+        // If computed flag is true, return cached value
+        // Otherwise, call thunk and cache result (not implemented for eager mode)
+
+        // Infer the lazy type to extract the inner type
+        let lazy_type = self.infer_expr_type(inner);
+        let inner_type = match &lazy_type {
+            ResolvedType::Lazy(inner) => inner.as_ref().clone(),
+            other => other.clone(), // If not lazy, just return the value
+        };
+
+        // If the inner expression is not a Lazy type, just return the value directly
+        if !matches!(lazy_type, ResolvedType::Lazy(_)) {
+            return self.visit_expr(inner, counter);
+        }
+
+        let inner_llvm_ty = self.type_to_llvm(&inner_type);
+
+        // For lazy values, we need to handle the case where the expression is a variable
+        // The variable holds a Lazy struct, and we need to extract the value field
+
+        // Check if the inner expression is an identifier (variable reference)
+        if let Expr::Ident(name) = &inner.node {
+            if let Some(local) = self.locals.get(name.as_str()).cloned() {
+                let lazy_ty = format!("{{ i1, {}, i8* }}", inner_llvm_ty);
+                let mut ir = String::new();
+
+                if local.is_ssa() {
+                    // For SSA variables, the value is already the struct itself
+                    // Use extractvalue to get the value field (index 1)
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {} {}, 1\n",
+                        result, lazy_ty, local.llvm_name
+                    ));
+                    return Ok((result, ir));
+                } else {
+                    // For alloca variables, get pointer to value field (index 1)
+                    let value_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr {}, {}* %{}, i32 0, i32 1\n",
+                        value_ptr, lazy_ty, lazy_ty, local.llvm_name
+                    ));
+
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = load {}, {}* {}\n", result, inner_llvm_ty, inner_llvm_ty, value_ptr));
+
+                    return Ok((result, ir));
+                }
+            }
+        }
+
+        // For other expressions that produce lazy values, use extractvalue
+        let (lazy_val, lazy_ir) = self.visit_expr(inner, counter)?;
+        let mut ir = lazy_ir;
+
+        // Use extractvalue to get the value field (index 1) from the struct
+        let result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = extractvalue {{ i1, {}, i8* }} {}, 1\n", result, inner_llvm_ty, lazy_val));
+
+        Ok((result, ir))
     }
 }

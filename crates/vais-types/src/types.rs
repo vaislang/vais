@@ -163,6 +163,18 @@ pub enum TypeError {
         first_use_at: Option<Span>,
         move_at: Option<Span>,
     },
+
+    #[error("Dependent type predicate must be a boolean expression, found {found}")]
+    DependentPredicateNotBool {
+        found: String,
+        span: Option<Span>,
+    },
+
+    #[error("Dependent type refinement violation: predicate '{predicate}' may not hold")]
+    RefinementViolation {
+        predicate: String,
+        span: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -185,6 +197,8 @@ impl TypeError {
             TypeError::LinearTypeViolation { defined_at, .. } => defined_at.clone(),
             TypeError::AffineTypeViolation { defined_at, .. } => defined_at.clone(),
             TypeError::MoveAfterUse { move_at, .. } => move_at.clone(),
+            TypeError::DependentPredicateNotBool { span, .. } => *span,
+            TypeError::RefinementViolation { span, .. } => *span,
         }
     }
 
@@ -207,6 +221,8 @@ impl TypeError {
             TypeError::LinearTypeViolation { .. } => "E014",
             TypeError::AffineTypeViolation { .. } => "E015",
             TypeError::MoveAfterUse { .. } => "E016",
+            TypeError::DependentPredicateNotBool { .. } => "E017",
+            TypeError::RefinementViolation { .. } => "E018",
         }
     }
 
@@ -336,6 +352,12 @@ impl TypeError {
             }
             TypeError::MoveAfterUse { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::DependentPredicateNotBool { found, .. } => {
+                vais_i18n::get(&key, &[("found", found)])
+            }
+            TypeError::RefinementViolation { predicate, .. } => {
+                vais_i18n::get(&key, &[("predicate", predicate)])
             }
         }
     }
@@ -542,48 +564,98 @@ pub enum ResolvedType {
 
     /// Affine type wrapper - can be used at most once
     Affine(Box<ResolvedType>),
+
+    /// Dependent type (Refinement type): a type refined by a predicate
+    /// Example: `{n: i64 | n > 0}` represents positive integers
+    /// The predicate is stored as a string representation for display/comparison
+    Dependent {
+        /// The bound variable name
+        var_name: String,
+        /// The base type being refined
+        base: Box<ResolvedType>,
+        /// The predicate expression (stored as string for comparison)
+        predicate: String,
+    },
+
+    /// Reference with explicit lifetime: `&'a T`
+    RefLifetime {
+        lifetime: String,
+        inner: Box<ResolvedType>,
+    },
+
+    /// Mutable reference with explicit lifetime: `&'a mut T`
+    RefMutLifetime {
+        lifetime: String,
+        inner: Box<ResolvedType>,
+    },
+
+    /// Lifetime parameter (e.g., 'a, 'static)
+    Lifetime(String),
+
+    /// Lazy type: `Lazy<T>` - Deferred evaluation thunk
+    /// Contains a closure that computes T when forced, and caches the result.
+    Lazy(Box<ResolvedType>),
 }
 
 impl ResolvedType {
     pub fn is_numeric(&self) -> bool {
-        matches!(
-            self,
+        match self {
             ResolvedType::I8
-                | ResolvedType::I16
-                | ResolvedType::I32
-                | ResolvedType::I64
-                | ResolvedType::I128
-                | ResolvedType::U8
-                | ResolvedType::U16
-                | ResolvedType::U32
-                | ResolvedType::U64
-                | ResolvedType::U128
-                | ResolvedType::F32
-                | ResolvedType::F64
-                | ResolvedType::Generic(_) // Generics are assumed to support numeric ops
-                | ResolvedType::Var(_) // Type variables might resolve to numeric
-                | ResolvedType::Unknown // Unknown might be numeric
-        )
+            | ResolvedType::I16
+            | ResolvedType::I32
+            | ResolvedType::I64
+            | ResolvedType::I128
+            | ResolvedType::U8
+            | ResolvedType::U16
+            | ResolvedType::U32
+            | ResolvedType::U64
+            | ResolvedType::U128
+            | ResolvedType::F32
+            | ResolvedType::F64
+            | ResolvedType::Generic(_) // Generics are assumed to support numeric ops
+            | ResolvedType::Var(_) // Type variables might resolve to numeric
+            | ResolvedType::Unknown => true, // Unknown might be numeric
+            // Wrapper types delegate to inner type
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => inner.is_numeric(),
+            ResolvedType::Dependent { base, .. } => base.is_numeric(),
+            _ => false,
+        }
     }
 
     pub fn is_integer(&self) -> bool {
-        matches!(
-            self,
+        match self {
             ResolvedType::I8
-                | ResolvedType::I16
-                | ResolvedType::I32
-                | ResolvedType::I64
-                | ResolvedType::I128
-                | ResolvedType::U8
-                | ResolvedType::U16
-                | ResolvedType::U32
-                | ResolvedType::U64
-                | ResolvedType::U128
-        )
+            | ResolvedType::I16
+            | ResolvedType::I32
+            | ResolvedType::I64
+            | ResolvedType::I128
+            | ResolvedType::U8
+            | ResolvedType::U16
+            | ResolvedType::U32
+            | ResolvedType::U64
+            | ResolvedType::U128 => true,
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => inner.is_integer(),
+            ResolvedType::Dependent { base, .. } => base.is_integer(),
+            _ => false,
+        }
     }
 
     pub fn is_float(&self) -> bool {
-        matches!(self, ResolvedType::F32 | ResolvedType::F64)
+        match self {
+            ResolvedType::F32 | ResolvedType::F64 => true,
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => inner.is_float(),
+            ResolvedType::Dependent { base, .. } => base.is_float(),
+            _ => false,
+        }
+    }
+
+    /// Get the base type, unwrapping any refinement wrappers (Linear, Affine, Dependent)
+    pub fn base_type(&self) -> &ResolvedType {
+        match self {
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => inner.base_type(),
+            ResolvedType::Dependent { base, .. } => base.base_type(),
+            _ => self,
+        }
     }
 }
 
@@ -704,6 +776,17 @@ impl std::fmt::Display for ResolvedType {
             }
             ResolvedType::Linear(inner) => write!(f, "linear {}", inner),
             ResolvedType::Affine(inner) => write!(f, "affine {}", inner),
+            ResolvedType::Dependent { var_name, base, predicate } => {
+                write!(f, "{{{}: {} | {}}}", var_name, base, predicate)
+            }
+            ResolvedType::RefLifetime { lifetime, inner } => {
+                write!(f, "&'{} {}", lifetime, inner)
+            }
+            ResolvedType::RefMutLifetime { lifetime, inner } => {
+                write!(f, "&'{} mut {}", lifetime, inner)
+            }
+            ResolvedType::Lifetime(name) => write!(f, "'{}", name),
+            ResolvedType::Lazy(inner) => write!(f, "Lazy<{}>", inner),
         }
     }
 }

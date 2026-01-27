@@ -1,0 +1,21 @@
+# Lazy Evaluation Test
+
+F expensive(x: i64) -> i64 = x * x + 2 * x + 1
+
+F main() -> i64 {
+    # Test 1: Basic lazy and force
+    lazy_val := lazy expensive(5)
+    result := force lazy_val
+    putchar(result / 10 + 48)
+    putchar(result % 10 + 48)
+    putchar(10)
+
+    # Test 2: Lazy with simple expression
+    lazy_simple := lazy 42
+    simple_result := force lazy_simple
+    putchar(simple_result / 10 + 48)
+    putchar(simple_result % 10 + 48)
+    putchar(10)
+
+    0
+}

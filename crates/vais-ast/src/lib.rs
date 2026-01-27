@@ -177,7 +177,7 @@ pub struct Param {
     pub ownership: Ownership, // Linear type ownership mode
 }
 
-/// Generic parameter kind - either a type parameter or a const parameter
+/// Generic parameter kind - either a type parameter, const parameter, or lifetime parameter
 #[derive(Debug, Clone, PartialEq)]
 pub enum GenericParamKind {
     /// Type parameter with optional trait bounds (e.g., T, T: Display + Clone)
@@ -187,6 +187,11 @@ pub enum GenericParamKind {
     /// Const parameter with a type (e.g., const N: u64)
     Const {
         ty: Spanned<Type>,
+    },
+    /// Lifetime parameter (e.g., 'a, 'static)
+    Lifetime {
+        /// Lifetime bounds (e.g., 'a: 'b means 'a outlives 'b)
+        bounds: Vec<String>,
     },
 }
 
@@ -214,6 +219,15 @@ impl GenericParam {
             name,
             bounds: vec![],
             kind: GenericParamKind::Const { ty },
+        }
+    }
+
+    /// Create a lifetime generic parameter (e.g., 'a)
+    pub fn new_lifetime(name: Spanned<String>, bounds: Vec<String>) -> Self {
+        Self {
+            name,
+            bounds: vec![],
+            kind: GenericParamKind::Lifetime { bounds },
         }
     }
 
@@ -627,10 +641,22 @@ pub enum Type {
     Result(Box<Spanned<Type>>),
     /// Pointer: `*T`
     Pointer(Box<Spanned<Type>>),
-    /// Reference: `&T`
+    /// Reference: `&T` or `&'a T` (with lifetime)
     Ref(Box<Spanned<Type>>),
-    /// Mutable reference: `&mut T`
+    /// Mutable reference: `&mut T` or `&'a mut T` (with lifetime)
     RefMut(Box<Spanned<Type>>),
+    /// Reference with explicit lifetime: `&'a T`
+    RefLifetime {
+        lifetime: String,
+        inner: Box<Spanned<Type>>,
+    },
+    /// Mutable reference with explicit lifetime: `&'a mut T`
+    RefMutLifetime {
+        lifetime: String,
+        inner: Box<Spanned<Type>>,
+    },
+    /// Lazy type: `Lazy<T>` - Deferred evaluation thunk
+    Lazy(Box<Spanned<Type>>),
     /// Function type: `(A,B)->C`
     Fn {
         params: Vec<Spanned<Type>>,
@@ -656,6 +682,17 @@ pub enum Type {
     Linear(Box<Spanned<Type>>),
     /// Affine type: `affine T` - can be used at most once
     Affine(Box<Spanned<Type>>),
+    /// Dependent type (Refinement type): `{x: T | predicate}`
+    /// A type `T` refined by a predicate that must hold for all values.
+    /// Example: `{n: i64 | n > 0}` (positive integers)
+    Dependent {
+        /// The bound variable name (e.g., "n" in {n: i64 | n > 0})
+        var_name: String,
+        /// The base type being refined
+        base: Box<Spanned<Type>>,
+        /// The predicate expression that must evaluate to bool
+        predicate: Box<Spanned<Expr>>,
+    },
 }
 
 /// Statements
@@ -850,6 +887,13 @@ pub enum Expr {
         /// Tokens that were skipped during recovery
         skipped_tokens: Vec<String>,
     },
+    /// Lazy expression: `lazy expr` - Deferred evaluation
+    /// The expression is not evaluated until explicitly forced.
+    /// Creates a Lazy<T> thunk that memoizes the result.
+    Lazy(Box<Spanned<Expr>>),
+    /// Force expression: `force expr` - Force evaluation of lazy value
+    /// Evaluates a lazy thunk and returns the cached result.
+    Force(Box<Spanned<Expr>>),
 }
 
 /// If-else branch
@@ -1069,6 +1113,12 @@ impl std::fmt::Display for Type {
             }
             Type::Linear(inner) => write!(f, "linear {}", inner.node),
             Type::Affine(inner) => write!(f, "affine {}", inner.node),
+            Type::Dependent { var_name, base, predicate } => {
+                write!(f, "{{{}: {} | {:?}}}", var_name, base.node, predicate.node)
+            }
+            Type::RefLifetime { lifetime, inner } => write!(f, "&'{} {}", lifetime, inner.node),
+            Type::RefMutLifetime { lifetime, inner } => write!(f, "&'{} mut {}", lifetime, inner.node),
+            Type::Lazy(inner) => write!(f, "Lazy<{}>", inner.node),
         }
     }
 }

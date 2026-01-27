@@ -1040,6 +1040,13 @@ impl CodeGenerator {
                         value, storage_name
                     ));
 
+                    // Store decreases info for recursive call checking
+                    self.current_decreases_info = Some(crate::DecreasesInfo {
+                        storage_name: storage_name.clone(),
+                        expr: expr.clone(),
+                        function_name: f.name.node.clone(),
+                    });
+
                     // Check that value is non-negative
                     let ok_label = format!("decreases_nonneg_ok_{}_{}", idx, *counter);
                     let fail_label = format!("decreases_nonneg_fail_{}_{}", idx, *counter);
@@ -1074,5 +1081,137 @@ impl CodeGenerator {
         }
 
         Ok(ir)
+    }
+
+    /// Generate decreases check before a recursive call
+    ///
+    /// This verifies that the decreases expression is strictly less than
+    /// the value stored at function entry.
+    pub(crate) fn generate_recursive_decreases_check(
+        &mut self,
+        args: &[vais_ast::Spanned<Expr>],
+        counter: &mut usize,
+    ) -> CodegenResult<String> {
+        // Skip in release mode
+        if self.release_mode {
+            return Ok(String::new());
+        }
+
+        let decreases_info = match &self.current_decreases_info {
+            Some(info) => info.clone(),
+            None => return Ok(String::new()),
+        };
+
+        let mut ir = String::new();
+
+        // Substitute parameters in decreases expression with call arguments
+        // For now, we assume the decreases expression uses simple parameter references
+        // and we need to evaluate the decreases expression with the call arguments
+
+        // Create temporary bindings for call arguments
+        // This is a simplified version - assumes decreases expression uses first param
+        // A more complete solution would analyze the expression and substitute properly
+
+        // For the common case of `#[decreases(n)]` where n is the first parameter,
+        // we evaluate the decreases expression using the call arguments
+
+        // First, save current locals state
+        let saved_locals = self.locals.clone();
+
+        // Get the function info to map parameters
+        let func_name = &decreases_info.function_name;
+        let func_info = self.functions.get(func_name).cloned();
+
+        if let Some(ref info) = func_info {
+            // Temporarily rebind parameters to call argument values
+            let mut arg_values = Vec::new();
+            for arg in args {
+                let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                ir.push_str(&arg_ir);
+                arg_values.push(val);
+            }
+
+            // Create temporary locals for parameter names with argument values
+            for (i, (param_name, param_type, _)) in info.signature.params.iter().enumerate() {
+                if let Some(arg_val) = arg_values.get(i) {
+                    // Create a temporary alloca for the argument value
+                    let temp_var = format!("__decreases_arg_{}_{}", i, *counter);
+                    *counter += 1;
+                    let ty = self.type_to_llvm(param_type);
+                    ir.push_str(&format!("  %{} = alloca {}\n", temp_var, ty));
+                    ir.push_str(&format!("  store {} {}, {}* %{}\n", ty, arg_val, ty, temp_var));
+
+                    // Register in locals so generate_expr can find it
+                    self.locals.insert(
+                        param_name.clone(),
+                        crate::types::LocalVar::alloca(param_type.clone(), temp_var),
+                    );
+                }
+            }
+        }
+
+        // Generate the new decreases value (using call arguments)
+        let (new_value, new_ir) = self.generate_expr(&decreases_info.expr, counter)?;
+        ir.push_str(&new_ir);
+
+        // Restore saved locals
+        self.locals = saved_locals;
+
+        // Load the original decreases value
+        let old_value = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = load i64, i64* %{}\n",
+            old_value, decreases_info.storage_name
+        ));
+
+        // Check that new_value < old_value (strictly decreasing)
+        let ok_label = format!("decreases_check_ok_{}", *counter);
+        let fail_label = format!("decreases_check_fail_{}", *counter);
+        *counter += 1;
+
+        let cmp_result = format!("%decreases_strict_cmp_{}", *counter);
+        *counter += 1;
+        ir.push_str(&format!(
+            "  {} = icmp slt i64 {}, {}\n",
+            cmp_result, new_value, old_value
+        ));
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cmp_result, ok_label, fail_label
+        ));
+
+        // Failure block
+        ir.push_str(&format!("{}:\n", fail_label));
+
+        let fail_msg = format!(
+            "decreases expression must strictly decrease on recursive call in '{}'",
+            decreases_info.function_name
+        );
+        let msg_const = self.get_or_create_contract_string(&fail_msg);
+        ir.push_str(&format!(
+            "  call i64 @__panic(i8* {})\n",
+            msg_const
+        ));
+        ir.push_str("  unreachable\n");
+
+        // Success block
+        ir.push_str(&format!("{}:\n", ok_label));
+
+        Ok(ir)
+    }
+
+    /// Clear decreases info (called when leaving function scope)
+    pub(crate) fn clear_decreases_info(&mut self) {
+        self.current_decreases_info = None;
+    }
+
+    /// Check if current function has a decreases clause
+    pub(crate) fn has_decreases_clause(&self) -> bool {
+        self.current_decreases_info.is_some()
+    }
+
+    /// Get the function name with decreases clause (if any)
+    pub(crate) fn get_decreases_function_name(&self) -> Option<String> {
+        self.current_decreases_info.as_ref().map(|info| info.function_name.clone())
     }
 }

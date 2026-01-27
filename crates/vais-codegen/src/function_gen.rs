@@ -6,7 +6,7 @@
 use crate::types::{FunctionInfo, LocalVar, StructInfo};
 use crate::{AsyncFunctionInfo, CodeGenerator, CodegenResult};
 use std::collections::HashMap;
-use vais_ast::{Function, FunctionBody, Span, Struct};
+use vais_ast::{Function, FunctionBody, GenericParamKind, Span, Struct};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -25,8 +25,13 @@ impl CodeGenerator {
             .insert(inst.mangled_name.clone(), true);
 
         // Create substitution map from generic params to concrete types
-        let substitutions: HashMap<String, ResolvedType> = generic_struct
+        // Filter out lifetime params (they don't have runtime representation)
+        let type_params: Vec<_> = generic_struct
             .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .collect();
+        let substitutions: HashMap<String, ResolvedType> = type_params
             .iter()
             .zip(inst.type_args.iter())
             .map(|(g, t)| (g.name.node.to_string(), t.clone()))
@@ -84,8 +89,13 @@ impl CodeGenerator {
             .insert(inst.mangled_name.clone(), true);
 
         // Create substitution map from generic params to concrete types
-        let substitutions: HashMap<String, ResolvedType> = generic_fn
+        // Filter out lifetime params (they don't have runtime representation)
+        let type_params: Vec<_> = generic_fn
             .generics
+            .iter()
+            .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+            .collect();
+        let substitutions: HashMap<String, ResolvedType> = type_params
             .iter()
             .zip(inst.type_args.iter())
             .map(|(g, t)| (g.name.node.to_string(), t.clone()))

@@ -81,6 +81,19 @@ impl TypeMapper {
             ResolvedType::Associated { .. } => self.pointer_type,
             // Linear/Affine types: unwrap inner type
             ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => self.map_type(inner),
+            // Dependent types: use the base type
+            ResolvedType::Dependent { base, .. } => self.map_type(base),
+            // Lifetime references: treat like regular references
+            ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => self.map_type(inner),
+            // Lifetime marker: pointer
+            ResolvedType::Lifetime(_) => self.pointer_type,
+            // Lazy type: struct with computed flag, value, and thunk pointer
+            ResolvedType::Lazy(inner) => {
+                // Lazy<T> is represented as a pointer to a struct
+                // For JIT, we use pointer type
+                let _ = inner; // Acknowledge the inner type
+                self.pointer_type
+            }
         }
     }
 

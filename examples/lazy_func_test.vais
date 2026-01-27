@@ -1,0 +1,7 @@
+F double(x: i64) -> i64 = x * 2
+
+F main() -> i64 {
+    x := lazy double(21)
+    y := force x
+    y
+}

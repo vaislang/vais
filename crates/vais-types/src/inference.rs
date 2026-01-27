@@ -115,6 +115,22 @@ impl TypeChecker {
             }
             // Allow implicit integer type conversions (widening and narrowing)
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // Linear type: unwrap and unify with inner type
+            (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => self.unify(inner, other),
+            // Affine type: unwrap and unify with inner type
+            (ResolvedType::Affine(inner), other) | (other, ResolvedType::Affine(inner)) => self.unify(inner, other),
+            // Dependent type: unify the base type only (predicate is checked separately)
+            (ResolvedType::Dependent { base, .. }, other) | (other, ResolvedType::Dependent { base, .. }) => self.unify(base, other),
+            // Lifetime references: unify inner types (lifetime is tracked separately)
+            (ResolvedType::RefLifetime { inner: a, .. }, ResolvedType::RefLifetime { inner: b, .. }) => self.unify(a, b),
+            (ResolvedType::RefMutLifetime { inner: a, .. }, ResolvedType::RefMutLifetime { inner: b, .. }) => self.unify(a, b),
+            // Allow ref with lifetime to unify with plain ref
+            (ResolvedType::RefLifetime { inner, .. }, ResolvedType::Ref(other)) |
+            (ResolvedType::Ref(other), ResolvedType::RefLifetime { inner, .. }) => self.unify(inner, other),
+            (ResolvedType::RefMutLifetime { inner, .. }, ResolvedType::RefMut(other)) |
+            (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => self.unify(inner, other),
+            // Lazy type unification
+            (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),

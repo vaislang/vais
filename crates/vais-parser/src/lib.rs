@@ -1396,7 +1396,7 @@ impl Parser {
         Ok(AssociatedTypeImpl { name, ty })
     }
 
-    /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>` or `<const N: u64>`
+    /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>` or `<const N: u64>` or `<'a, 'b>`
     fn parse_generics(&mut self) -> ParseResult<Vec<GenericParam>> {
         if !self.check(&Token::Lt) {
             return Ok(Vec::new());
@@ -1406,6 +1406,33 @@ impl Parser {
         let mut generics = Vec::new();
 
         while !self.check(&Token::Gt) && !self.is_at_end() {
+            // Check for lifetime parameter: `'a` or `'a: 'b`
+            if let Some(tok) = self.peek() {
+                if let Token::Lifetime(lt) = &tok.token {
+                    let lt_name = lt.clone();
+                    let span = tok.span.clone();
+                    self.advance();
+
+                    // Parse optional lifetime bounds: `: 'b + 'c`
+                    let bounds = if self.check(&Token::Colon) {
+                        self.advance();
+                        self.parse_lifetime_bounds()?
+                    } else {
+                        Vec::new()
+                    };
+
+                    generics.push(GenericParam::new_lifetime(
+                        Spanned::new(lt_name, Span::new(span.start, span.end)),
+                        bounds,
+                    ));
+
+                    if !self.check(&Token::Gt) {
+                        self.expect(&Token::Comma)?;
+                    }
+                    continue;
+                }
+            }
+
             // Check for const generic parameter: `const N: u64`
             if self.check(&Token::Const) {
                 self.advance();
@@ -1434,6 +1461,32 @@ impl Parser {
 
         self.expect(&Token::Gt)?;
         Ok(generics)
+    }
+
+    /// Parse lifetime bounds: `'a + 'b + 'c`
+    fn parse_lifetime_bounds(&mut self) -> ParseResult<Vec<String>> {
+        let mut bounds = Vec::new();
+
+        // Parse first lifetime bound
+        if let Some(tok) = self.peek() {
+            if let Token::Lifetime(lt) = &tok.token {
+                bounds.push(lt.clone());
+                self.advance();
+            }
+        }
+
+        // Parse additional bounds separated by `+`
+        while self.check(&Token::Plus) {
+            self.advance();
+            if let Some(tok) = self.peek() {
+                if let Token::Lifetime(lt) = &tok.token {
+                    bounds.push(lt.clone());
+                    self.advance();
+                }
+            }
+        }
+
+        Ok(bounds)
     }
 
     /// Parse trait bounds: `Trait1 + Trait2 + Trait3`
@@ -1626,15 +1679,34 @@ impl Parser {
             Type::Pointer(Box::new(inner))
         } else if self.check(&Token::Amp) {
             self.advance();
+            // Check for lifetime: &'a T or &'a mut T
+            let lifetime = if let Some(tok) = self.peek() {
+                if let Token::Lifetime(lt) = &tok.token {
+                    let lt_name = lt.clone();
+                    self.advance();
+                    Some(lt_name)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let is_mut = self.check(&Token::Mut);
             if is_mut {
                 self.advance();
             }
             let inner = self.parse_base_type()?;
-            if is_mut {
-                Type::RefMut(Box::new(inner))
-            } else {
-                Type::Ref(Box::new(inner))
+            match (lifetime, is_mut) {
+                (Some(lt), true) => Type::RefMutLifetime {
+                    lifetime: lt,
+                    inner: Box::new(inner),
+                },
+                (Some(lt), false) => Type::RefLifetime {
+                    lifetime: lt,
+                    inner: Box::new(inner),
+                },
+                (None, true) => Type::RefMut(Box::new(inner)),
+                (None, false) => Type::Ref(Box::new(inner)),
             }
         } else if self.check(&Token::Dyn) {
             // dyn Trait or dyn Trait<T>
@@ -1665,6 +1737,20 @@ impl Parser {
             self.advance();
             let inner = self.parse_base_type()?;
             Type::Affine(Box::new(inner))
+        } else if self.check(&Token::LBrace) {
+            // Dependent type (refinement type): {x: T | predicate}
+            self.advance();
+            let var_name = self.parse_ident()?;
+            self.expect(&Token::Colon)?;
+            let base = self.parse_type()?;
+            self.expect(&Token::Pipe)?;
+            let predicate = self.parse_expr()?;
+            self.expect(&Token::RBrace)?;
+            Type::Dependent {
+                var_name: var_name.node,
+                base: Box::new(base),
+                predicate: Box::new(predicate),
+            }
         } else if let Some(tok) = self.peek() {
             // Check for function pointer type: fn(...) -> T
             if let Token::Ident(s) = &tok.token {

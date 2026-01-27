@@ -366,6 +366,28 @@ impl JitCompiler {
             Type::Affine(inner) => {
                 ResolvedType::Affine(Box::new(self.resolve_type(&inner.node)))
             }
+            Type::Dependent { var_name, base, predicate } => {
+                ResolvedType::Dependent {
+                    var_name: var_name.clone(),
+                    base: Box::new(self.resolve_type(&base.node)),
+                    predicate: format!("{:?}", predicate.node), // Store predicate as string representation
+                }
+            }
+            Type::RefLifetime { lifetime, inner } => {
+                ResolvedType::RefLifetime {
+                    lifetime: lifetime.clone(),
+                    inner: Box::new(self.resolve_type(&inner.node)),
+                }
+            }
+            Type::RefMutLifetime { lifetime, inner } => {
+                ResolvedType::RefMutLifetime {
+                    lifetime: lifetime.clone(),
+                    inner: Box::new(self.resolve_type(&inner.node)),
+                }
+            }
+            Type::Lazy(inner) => {
+                ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node)))
+            }
         }
     }
 

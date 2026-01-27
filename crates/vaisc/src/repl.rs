@@ -478,6 +478,13 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         }
         Linear(inner) => format!("linear {}", format_type(inner)),
         Affine(inner) => format!("affine {}", format_type(inner)),
+        Dependent { var_name, base, predicate } => {
+            format!("{{{}: {} | {}}}", var_name, format_type(base), predicate)
+        }
+        RefLifetime { lifetime, inner } => format!("&'{} {}", lifetime, format_type(inner)),
+        RefMutLifetime { lifetime, inner } => format!("&'{} mut {}", lifetime, format_type(inner)),
+        Lifetime(name) => format!("'{}", name),
+        Lazy(inner) => format!("Lazy<{}>", format_type(inner)),
     }
 }
 

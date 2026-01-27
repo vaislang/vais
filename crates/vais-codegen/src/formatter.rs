@@ -831,6 +831,18 @@ impl Formatter {
             }
             Type::Linear(inner) => format!("linear {}", self.format_type(&inner.node)),
             Type::Affine(inner) => format!("affine {}", self.format_type(&inner.node)),
+            Type::Dependent { var_name, base, predicate } => {
+                format!("{{{}: {} | {:?}}}", var_name, self.format_type(&base.node), predicate.node)
+            }
+            Type::RefLifetime { lifetime, inner } => {
+                format!("&'{} {}", lifetime, self.format_type(&inner.node))
+            }
+            Type::RefMutLifetime { lifetime, inner } => {
+                format!("&'{} mut {}", lifetime, self.format_type(&inner.node))
+            }
+            Type::Lazy(inner) => {
+                format!("Lazy<{}>", self.format_type(&inner.node))
+            }
         }
     }
 
@@ -1276,6 +1288,8 @@ impl Formatter {
                 // Format error expressions as comments
                 format!("/* ERROR: {} */", message)
             }
+            Expr::Lazy(inner) => format!("lazy {}", self.format_expr(&inner.node)),
+            Expr::Force(inner) => format!("force {}", self.format_expr(&inner.node)),
         }
     }
 

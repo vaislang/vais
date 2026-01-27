@@ -1230,7 +1230,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 > **상태**: ✅ P4 완료 (100%)
 > **추가일**: 2026-01-26
-> **최종 업데이트**: 2026-01-27
+> **최종 업데이트**: 2026-01-27 (Dependent Types, Lifetimes, Lazy evaluation 구현 완료)
 > **예상 기간**: 12-16주 (약 3-4개월)
 > **목표**: 프로덕션 레벨 안정성 및 고급 언어 기능 완성
 
@@ -1364,7 +1364,12 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - EffectInferrer: 함수 본문에서 효과 자동 추론
     - 순수성 검증 및 효과 불일치 에러 타입
     - 렉서에 pure, effect, io, unsafe 키워드 추가
-  - Dependent Types: type-level computation
+  - [x] Dependent Types (Refinement Types): type-level computation ✅
+    - `{x: T | predicate}` 구문: 타입 정제
+    - Type::Dependent, ResolvedType::Dependent 추가
+    - 파서: 중괄호 내 변수명, 베이스 타입, 술어 표현식 파싱
+    - 타입 체커: validate_dependent_type 함수
+    - 코드젠: 런타임에서는 베이스 타입으로 투명하게 처리
   - [x] Linear Types: 리소스 관리 (한 번 사용) ✅
     - Linearity enum (Unrestricted, Linear, Affine)
     - VarInfo에 linearity 및 use_count 추적 필드 추가
@@ -1373,7 +1378,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - 파서: linear, affine, move, consume 키워드 지원
     - 타입 체커: 변수 사용 횟수 추적 및 검증
     - LinearTypeViolation, AffineTypeViolation 에러 타입
-  - Lifetimes: Rust 스타일 lifetime 타입
+  - [x] Lifetimes: Rust 스타일 lifetime 타입 ✅
+    - `'a`, `'static` 등 라이프타임 구문 지원
+    - Token::Lifetime, GenericParamKind::Lifetime 추가
+    - Type::RefLifetime, Type::RefMutLifetime (`&'a T`, `&'a mut T`)
+    - ResolvedType::RefLifetime, RefMutLifetime, Lifetime
+    - 파서: 제네릭 파라미터에서 라이프타임 파싱
+    - 코드젠: 런타임에서 라이프타임 지워짐 (erased)
   - [x] Associated Types: trait 관련 타입 ✅
     - AST: AssociatedTypeImpl (impl에서 `T Item = ConcreteType`)
     - AST: Type::Associated (`<T as Trait>::Item` 구문)
@@ -1397,7 +1408,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - GcWorker: 백그라운드 GC 워커 스레드
     - ConcurrentGcConfig: GC 설정 (threshold, pause time, marking steps)
     - 19개 테스트 통과 (10 concurrent + 9 기존)
-  - Lazy evaluation 지원
+  - [x] Lazy evaluation 지원 ✅
+    - `lazy expr` 구문: 지연된 평가를 위한 thunk 생성
+    - `force expr` 구문: lazy 값의 평가 강제
+    - ResolvedType::Lazy, Expr::Lazy, Expr::Force 추가
+    - type_inference.rs: Lazy/Force 타입 추론 지원
+    - expr_visitor.rs: visit_lazy/visit_force 코드젠
+    - LLVM 표현: `{ i1, T, i8* }` (computed flag, value, thunk ptr)
+    - 현재는 eager evaluation (즉시 평가 후 캐시)
 - [x] **문서 및 교육** ✅
   - [x] 인터랙티브 튜토리얼 (Rust Book 스타일)
     - vais-tutorial 크레이트: 15개 레슨, 5개 챕터

@@ -121,6 +121,12 @@ pub enum Token {
     #[token("consume")]
     Consume,
 
+    // === Lazy Evaluation ===
+    #[token("lazy")]
+    Lazy,
+    #[token("force")]
+    Force,
+
     // === Primitive Types ===
     #[token("i8")]
     I8,
@@ -232,6 +238,11 @@ pub enum Token {
     // Priority lower than single-letter keywords
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string(), priority = 2)]
     Ident(String),
+
+    // === Lifetime identifiers ===
+    // Lifetime names start with ' followed by identifier (e.g., 'a, 'static)
+    #[regex(r"'[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice()[1..].to_string())]
+    Lifetime(String),
 
     // === Operators ===
     #[token("+")]
@@ -450,6 +461,11 @@ impl fmt::Display for Token {
             Token::Affine => write!(f, "affine"),
             Token::Move => write!(f, "move"),
             Token::Consume => write!(f, "consume"),
+            // Lifetime
+            Token::Lifetime(name) => write!(f, "'{}", name),
+            // Lazy evaluation
+            Token::Lazy => write!(f, "lazy"),
+            Token::Force => write!(f, "force"),
         }
     }
 }

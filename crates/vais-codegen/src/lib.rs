@@ -3110,6 +3110,16 @@ impl CodeGenerator {
                     message
                 )))
             }
+
+            // Lazy and Force expressions - delegate to visitor
+            Expr::Lazy(inner) => {
+                use crate::visitor::ExprVisitor;
+                self.visit_lazy(inner, counter)
+            }
+            Expr::Force(inner) => {
+                use crate::visitor::ExprVisitor;
+                self.visit_force(inner, counter)
+            }
         }
     }
 

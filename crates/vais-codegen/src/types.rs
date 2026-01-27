@@ -300,6 +300,38 @@ impl CodeGenerator {
                 let vararg_suffix = if *is_vararg { ", ..." } else { "" };
                 format!("{}({}{})*", ret_type, param_types.join(", "), vararg_suffix)
             }
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => {
+                // Linear and Affine types are transparent wrappers
+                // They only affect type checking, not runtime representation
+                self.type_to_llvm_impl(inner)
+            }
+            ResolvedType::Dependent { base, .. } => {
+                // Dependent types (refinement types) are transparent at runtime
+                // The predicate is checked at compile time and potentially at runtime
+                // via assertions, but the underlying representation is the base type
+                self.type_to_llvm_impl(base)
+            }
+            ResolvedType::RefLifetime { inner, .. } => {
+                // Lifetime is erased at runtime, just generate pointer to inner type
+                format!("{}*", self.type_to_llvm_impl(inner))
+            }
+            ResolvedType::RefMutLifetime { inner, .. } => {
+                // Lifetime is erased at runtime, just generate pointer to inner type
+                format!("{}*", self.type_to_llvm_impl(inner))
+            }
+            ResolvedType::Lifetime(_) => {
+                // Lifetimes don't have a runtime representation
+                // This shouldn't normally be reached in codegen
+                "i64".to_string()
+            }
+            ResolvedType::Lazy(inner) => {
+                // Lazy<T> is represented as a struct with:
+                // - computed: i1 (has been evaluated)
+                // - value: T (cached value)
+                // - thunk: closure pointer (function to compute value)
+                // For simplicity, we use a pointer to struct
+                format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner))
+            }
             _ => "i64".to_string(), // Default fallback
         }
     }
@@ -379,6 +411,19 @@ impl CodeGenerator {
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved(&inner.node))),
             Type::RefMut(inner) => {
                 ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::RefLifetime { lifetime, inner } => {
+                // Lifetime info is preserved but runtime representation is same as regular ref
+                ResolvedType::RefLifetime {
+                    lifetime: lifetime.clone(),
+                    inner: Box::new(self.ast_type_to_resolved(&inner.node)),
+                }
+            }
+            Type::RefMutLifetime { lifetime, inner } => {
+                ResolvedType::RefMutLifetime {
+                    lifetime: lifetime.clone(),
+                    inner: Box::new(self.ast_type_to_resolved(&inner.node)),
+                }
             }
             Type::Unit => ResolvedType::Unit,
             _ => ResolvedType::Unknown,

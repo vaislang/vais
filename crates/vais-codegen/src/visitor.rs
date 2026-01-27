@@ -246,6 +246,14 @@ pub trait ExprVisitor {
     /// Visit an assume expression (assume(condition))
     /// Tells the verifier/optimizer to assume condition is true.
     fn visit_assume(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
+
+    /// Visit a lazy expression (lazy expr)
+    /// Creates a thunk that defers evaluation until forced.
+    fn visit_lazy(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
+
+    /// Visit a force expression (force expr)
+    /// Forces evaluation of a lazy expression, returning the cached value.
+    fn visit_force(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult;
 }
 
 /// Visitor trait for statement code generation

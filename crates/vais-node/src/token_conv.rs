@@ -120,6 +120,11 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Affine => "Affine",
         Token::Move => "Move",
         Token::Consume => "Consume",
+        // Lazy evaluation keywords
+        Token::Lazy => "Lazy",
+        Token::Force => "Force",
+        // Lifetime tokens
+        Token::Lifetime(lt) => return format!("Lifetime({})", lt),
     }.to_string()
 }
 

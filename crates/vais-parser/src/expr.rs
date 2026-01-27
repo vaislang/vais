@@ -527,6 +527,28 @@ impl Parser {
             ));
         }
 
+        // lazy expr - deferred evaluation
+        if self.check(&Token::Lazy) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(
+                Expr::Lazy(Box::new(expr)),
+                Span::new(start, end),
+            ));
+        }
+
+        // force expr - force evaluation of lazy value
+        if self.check(&Token::Force) {
+            self.advance();
+            let expr = self.parse_unary()?;
+            let end = expr.span.end;
+            return Ok(Spanned::new(
+                Expr::Force(Box::new(expr)),
+                Span::new(start, end),
+            ));
+        }
+
         self.parse_postfix()
     }
 
