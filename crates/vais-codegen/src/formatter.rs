@@ -829,6 +829,8 @@ impl Formatter {
                     format!("{}::{}", self.format_type(&base.node), assoc_name)
                 }
             }
+            Type::Linear(inner) => format!("linear {}", self.format_type(&inner.node)),
+            Type::Affine(inner) => format!("affine {}", self.format_type(&inner.node)),
         }
     }
 
@@ -837,7 +839,7 @@ impl Formatter {
         let indent = self.indent();
 
         match stmt {
-            Stmt::Let { name, ty, value, is_mut } => {
+            Stmt::Let { name, ty, value, is_mut, .. } => {
                 self.output.push_str(&indent);
                 if *is_mut {
                     self.output.push_str("mut ");
@@ -1314,7 +1316,7 @@ impl Formatter {
     /// Format statement inline (without leading indent)
     fn format_stmt_inline(&self, stmt: &Stmt) -> String {
         match stmt {
-            Stmt::Let { name, ty, value, is_mut } => {
+            Stmt::Let { name, ty, value, is_mut, .. } => {
                 let mut s = String::new();
                 if *is_mut {
                     s.push_str("mut ");

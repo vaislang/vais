@@ -115,6 +115,11 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Effect => "Effect",
         Token::Io => "Io",
         Token::Unsafe => "Unsafe",
+        // Linear types keywords
+        Token::Linear => "Linear",
+        Token::Affine => "Affine",
+        Token::Move => "Move",
+        Token::Consume => "Consume",
     }.to_string()
 }
 

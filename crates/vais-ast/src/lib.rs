@@ -153,6 +153,20 @@ pub enum FunctionBody {
     Block(Vec<Spanned<Stmt>>),
 }
 
+/// Ownership mode for linear types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Ownership {
+    /// Regular ownership (can be copied freely)
+    #[default]
+    Regular,
+    /// Linear ownership (must be used exactly once)
+    Linear,
+    /// Affine ownership (can be used at most once)
+    Affine,
+    /// Move ownership (transferred on use)
+    Move,
+}
+
 /// Function parameter
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
@@ -160,6 +174,7 @@ pub struct Param {
     pub ty: Spanned<Type>,
     pub is_mut: bool,
     pub is_vararg: bool, // true for variadic parameters (...)
+    pub ownership: Ownership, // Linear type ownership mode
 }
 
 /// Generic parameter kind - either a type parameter or a const parameter
@@ -637,6 +652,10 @@ pub enum Type {
         trait_name: Option<String>,  // None for Self::Item
         assoc_name: String,
     },
+    /// Linear type: `linear T` - must be used exactly once
+    Linear(Box<Spanned<Type>>),
+    /// Affine type: `affine T` - can be used at most once
+    Affine(Box<Spanned<Type>>),
 }
 
 /// Statements
@@ -648,6 +667,7 @@ pub enum Stmt {
         ty: Option<Spanned<Type>>,
         value: Box<Spanned<Expr>>,
         is_mut: bool,
+        ownership: Ownership, // Linear type ownership mode
     },
     /// Expression statement
     Expr(Box<Spanned<Expr>>),
@@ -1047,6 +1067,8 @@ impl std::fmt::Display for Type {
                     write!(f, "{}::{}", base.node, assoc_name)
                 }
             }
+            Type::Linear(inner) => write!(f, "linear {}", inner.node),
+            Type::Affine(inner) => write!(f, "affine {}", inner.node),
         }
     }
 }

@@ -476,6 +476,8 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
                 format!("{}::{}", format_type(base), assoc_name)
             }
         }
+        Linear(inner) => format!("linear {}", format_type(inner)),
+        Affine(inner) => format!("affine {}", format_type(inner)),
     }
 }
 

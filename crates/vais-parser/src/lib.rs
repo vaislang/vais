@@ -807,6 +807,7 @@ impl Parser {
                 ty: param_type,
                 is_mut: false,
                 is_vararg: false,
+                ownership: Ownership::Regular,
             });
 
             if !self.check(&Token::RParen) {
@@ -1456,6 +1457,20 @@ impl Parser {
         let mut params = Vec::new();
 
         while !self.check(&Token::RParen) && !self.is_at_end() {
+            // Check for ownership modifiers: linear, affine, move
+            let ownership = if self.check(&Token::Linear) {
+                self.advance();
+                Ownership::Linear
+            } else if self.check(&Token::Affine) {
+                self.advance();
+                Ownership::Affine
+            } else if self.check(&Token::Move) {
+                self.advance();
+                Ownership::Move
+            } else {
+                Ownership::Regular
+            };
+
             let is_mut = self.check(&Token::Mut);
             if is_mut {
                 self.advance();
@@ -1495,6 +1510,7 @@ impl Parser {
                         ),
                         is_mut: is_self_mut,
                         is_vararg: false,
+                        ownership,
                     });
                     if !self.check(&Token::RParen) {
                         self.expect(&Token::Comma)?;
@@ -1507,7 +1523,7 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let ty = self.parse_type()?;
 
-            params.push(Param { name, ty, is_mut, is_vararg: false });
+            params.push(Param { name, ty, is_mut, is_vararg: false, ownership });
 
             if !self.check(&Token::RParen) {
                 self.expect(&Token::Comma)?;
@@ -1639,6 +1655,16 @@ impl Parser {
                 Vec::new()
             };
             Type::DynTrait { trait_name, generics }
+        } else if self.check(&Token::Linear) {
+            // linear T - must be used exactly once
+            self.advance();
+            let inner = self.parse_base_type()?;
+            Type::Linear(Box::new(inner))
+        } else if self.check(&Token::Affine) {
+            // affine T - can be used at most once
+            self.advance();
+            let inner = self.parse_base_type()?;
+            Type::Affine(Box::new(inner))
         } else if let Some(tok) = self.peek() {
             // Check for function pointer type: fn(...) -> T
             if let Token::Ident(s) = &tok.token {

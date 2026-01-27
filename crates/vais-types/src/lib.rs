@@ -35,6 +35,8 @@ pub use types::{
     ContractSpec, ContractClause,
     // Effect system support
     Effect, EffectSet, EffectAnnotation,
+    // Linear types support
+    Linearity,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
@@ -1963,6 +1965,7 @@ impl TypeChecker {
                 ty,
                 value,
                 is_mut,
+                ownership,
             } => {
                 let value_type = self.check_expr(value)?;
                 let var_type = if let Some(ty) = ty {
@@ -1972,7 +1975,29 @@ impl TypeChecker {
                 } else {
                     value_type
                 };
-                self.define_var(&name.node, var_type, *is_mut);
+
+                // Convert AST Ownership to type system Linearity
+                let linearity = match ownership {
+                    Ownership::Linear => Linearity::Linear,
+                    Ownership::Affine => Linearity::Affine,
+                    Ownership::Move => Linearity::Affine, // Move semantics act like affine
+                    Ownership::Regular => {
+                        // Check if the type itself is linear/affine
+                        match &var_type {
+                            ResolvedType::Linear(_) => Linearity::Linear,
+                            ResolvedType::Affine(_) => Linearity::Affine,
+                            _ => Linearity::Unrestricted,
+                        }
+                    }
+                };
+
+                self.define_var_with_linearity(
+                    &name.node,
+                    var_type,
+                    *is_mut,
+                    linearity,
+                    Some(name.span.clone()),
+                );
                 Ok(ResolvedType::Unit)
             }
             Stmt::Expr(expr) => self.check_expr(expr),
@@ -2015,7 +2040,11 @@ impl TypeChecker {
             Expr::String(_) => Ok(ResolvedType::Str),
             Expr::Unit => Ok(ResolvedType::Unit),
 
-            Expr::Ident(name) => self.lookup_var_or_err(name),
+            Expr::Ident(name) => {
+                // Mark variable as used for linear type tracking
+                self.mark_var_used(name);
+                self.lookup_var_or_err(name)
+            }
 
             Expr::SelfCall => {
                 // @ can mean two things:
@@ -3169,6 +3198,12 @@ impl TypeChecker {
                 // Try to resolve the associated type immediately if possible
                 self.resolve_associated_type(&resolved_base, trait_name.as_deref(), assoc_name)
             }
+            Type::Linear(inner) => {
+                ResolvedType::Linear(Box::new(self.resolve_type(&inner.node)))
+            }
+            Type::Affine(inner) => {
+                ResolvedType::Affine(Box::new(self.resolve_type(&inner.node)))
+            }
         }
     }
 
@@ -3284,9 +3319,73 @@ impl TypeChecker {
     }
 
     fn define_var(&mut self, name: &str, ty: ResolvedType, is_mut: bool) {
+        self.define_var_with_linearity(name, ty, is_mut, Linearity::Unrestricted, None);
+    }
+
+    fn define_var_with_linearity(
+        &mut self,
+        name: &str,
+        ty: ResolvedType,
+        is_mut: bool,
+        linearity: Linearity,
+        defined_at: Option<Span>,
+    ) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), VarInfo { ty, is_mut });
+            scope.insert(
+                name.to_string(),
+                VarInfo {
+                    ty,
+                    is_mut,
+                    linearity,
+                    use_count: 0,
+                    defined_at,
+                },
+            );
         }
+    }
+
+    /// Mark a variable as used (for linear type tracking)
+    fn mark_var_used(&mut self, name: &str) {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(var_info) = scope.get_mut(name) {
+                var_info.use_count += 1;
+                return;
+            }
+        }
+    }
+
+    /// Check linear/affine variable usage at scope exit
+    fn check_linear_vars_at_scope_exit(&self) -> TypeResult<()> {
+        if let Some(scope) = self.scopes.last() {
+            for (name, var_info) in scope.iter() {
+                if name == "self" || name == "return" {
+                    continue;
+                }
+                match var_info.linearity {
+                    Linearity::Linear => {
+                        if var_info.use_count != 1 {
+                            return Err(TypeError::LinearTypeViolation {
+                                var_name: name.clone(),
+                                expected_uses: 1,
+                                actual_uses: var_info.use_count,
+                                defined_at: var_info.defined_at.clone(),
+                            });
+                        }
+                    }
+                    Linearity::Affine => {
+                        if var_info.use_count > 1 {
+                            return Err(TypeError::AffineTypeViolation {
+                                var_name: name.clone(),
+                                actual_uses: var_info.use_count,
+                                defined_at: var_info.defined_at.clone(),
+                            });
+                        }
+                    }
+                    Linearity::Unrestricted => {}
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Get field types for a struct or enum struct variant.
@@ -3469,6 +3568,9 @@ impl TypeChecker {
                     effects: None,
                 },
                 is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
             });
         }
 
@@ -3496,6 +3598,9 @@ impl TypeChecker {
                         return Ok(VarInfo {
                             ty: enum_type,
                             is_mut: false,
+                            linearity: Linearity::Unrestricted,
+                            use_count: 0,
+                            defined_at: None,
                         });
                     }
                     VariantFieldTypes::Tuple(field_types) => {
@@ -3511,6 +3616,9 @@ impl TypeChecker {
                                 effects: None,
                             },
                             is_mut: false,
+                            linearity: Linearity::Unrestricted,
+                            use_count: 0,
+                            defined_at: None,
                         });
                     }
                     VariantFieldTypes::Struct(_) => {
@@ -3518,6 +3626,9 @@ impl TypeChecker {
                         return Ok(VarInfo {
                             ty: enum_type,
                             is_mut: false,
+                            linearity: Linearity::Unrestricted,
+                            use_count: 0,
+                            defined_at: None,
                         });
                     }
                 }
@@ -3529,6 +3640,9 @@ impl TypeChecker {
             return Ok(VarInfo {
                 ty: const_type.clone(),
                 is_mut: false,
+                linearity: Linearity::Unrestricted,
+                use_count: 0,
+                defined_at: None,
             });
         }
 

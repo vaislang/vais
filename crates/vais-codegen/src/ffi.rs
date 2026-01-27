@@ -226,6 +226,7 @@ mod tests {
                     ),
                     is_mut: false,
                     is_vararg: false,
+                    ownership: Ownership::Regular,
                 }],
                 ret_type: Some(Spanned::new(
                     Type::Named {
@@ -265,6 +266,7 @@ mod tests {
                     ),
                     is_mut: false,
                     is_vararg: false,
+                    ownership: Ownership::Regular,
                 }],
                 ret_type: Some(Spanned::new(
                     Type::Named {

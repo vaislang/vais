@@ -360,6 +360,12 @@ impl JitCompiler {
                     assoc_name: assoc_name.clone(),
                 }
             }
+            Type::Linear(inner) => {
+                ResolvedType::Linear(Box::new(self.resolve_type(&inner.node)))
+            }
+            Type::Affine(inner) => {
+                ResolvedType::Affine(Box::new(self.resolve_type(&inner.node)))
+            }
         }
     }
 

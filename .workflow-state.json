@@ -4,7 +4,7 @@
   "tasks": [
     { "id": 1, "name": "Effect System 구현", "status": "completed", "model": "Opus", "priority": "P4" },
     { "id": 2, "name": "Associated Types 구현", "status": "completed", "model": "Opus", "priority": "P4" },
-    { "id": 3, "name": "Linear Types 구현", "status": "pending", "model": "Opus", "priority": "P4" },
+    { "id": 3, "name": "Linear Types 구현", "status": "completed", "model": "Opus", "priority": "P4" },
     { "id": 4, "name": "Tiered JIT 설계/구현", "status": "pending", "model": "Opus", "priority": "P4" },
     { "id": 5, "name": "Concurrent GC 개선", "status": "pending", "model": "Opus", "priority": "P4" },
     { "id": 6, "name": "인터랙티브 튜토리얼", "status": "pending", "model": "Sonnet", "priority": "P4" },
@@ -12,5 +12,5 @@
     { "id": 8, "name": "FFI bindgen 자동 생성", "status": "pending", "model": "Sonnet", "priority": "P4" }
   ],
   "currentTask": null,
-  "lastCompleted": "Associated Types 구현"
+  "lastCompleted": "Linear Types 구현"
 }

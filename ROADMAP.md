@@ -1365,7 +1365,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
     - 순수성 검증 및 효과 불일치 에러 타입
     - 렉서에 pure, effect, io, unsafe 키워드 추가
   - Dependent Types: type-level computation
-  - Linear Types: 리소스 관리 (한 번 사용)
+  - [x] Linear Types: 리소스 관리 (한 번 사용) ✅
+    - Linearity enum (Unrestricted, Linear, Affine)
+    - VarInfo에 linearity 및 use_count 추적 필드 추가
+    - Ownership enum (Regular, Linear, Affine, Move)
+    - AST: Type::Linear, Type::Affine 타입 표현
+    - 파서: linear, affine, move, consume 키워드 지원
+    - 타입 체커: 변수 사용 횟수 추적 및 검증
+    - LinearTypeViolation, AffineTypeViolation 에러 타입
   - Lifetimes: Rust 스타일 lifetime 타입
   - [x] Associated Types: trait 관련 타입 ✅
     - AST: AssociatedTypeImpl (impl에서 `T Item = ConcreteType`)

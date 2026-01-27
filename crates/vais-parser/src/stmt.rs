@@ -136,19 +136,46 @@ impl Parser {
     }
 
     /// Parse let statement: `x := expr` or `x: T = expr`
+    /// Also supports ownership modifiers: `x := linear expr` or `x: affine T = expr`
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
         let name = self.parse_ident()?;
 
-        let (ty, is_mut) = if self.check(&Token::ColonEq) {
+        let (ty, is_mut, ownership) = if self.check(&Token::ColonEq) {
             self.advance();
+            // Check for ownership modifiers: `x := linear expr`, `x := affine expr`, `x := move expr`
+            let ownership = if self.check(&Token::Linear) {
+                self.advance();
+                Ownership::Linear
+            } else if self.check(&Token::Affine) {
+                self.advance();
+                Ownership::Affine
+            } else if self.check(&Token::Move) {
+                self.advance();
+                Ownership::Move
+            } else {
+                Ownership::Regular
+            };
             // Check for mut: `x := mut expr`
             let is_mut = self.check(&Token::Mut);
             if is_mut {
                 self.advance();
             }
-            (None, is_mut)
+            (None, is_mut, ownership)
         } else if self.check(&Token::Colon) {
             self.advance();
+            // Check for ownership modifiers: `x: linear T = expr`, `x: affine T = expr`
+            let ownership = if self.check(&Token::Linear) {
+                self.advance();
+                Ownership::Linear
+            } else if self.check(&Token::Affine) {
+                self.advance();
+                Ownership::Affine
+            } else if self.check(&Token::Move) {
+                self.advance();
+                Ownership::Move
+            } else {
+                Ownership::Regular
+            };
             // Check for mut: `x: mut T = expr`
             let is_mut = self.check(&Token::Mut);
             if is_mut {
@@ -156,7 +183,7 @@ impl Parser {
             }
             let ty = self.parse_type()?;
             self.expect(&Token::Eq)?;
-            (Some(ty), is_mut)
+            (Some(ty), is_mut, ownership)
         } else {
             return Err(ParseError::UnexpectedToken {
                 found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
@@ -172,6 +199,7 @@ impl Parser {
             ty,
             value: Box::new(value),
             is_mut,
+            ownership,
         })
     }
 

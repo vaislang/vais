@@ -17,6 +17,7 @@ impl StmtVisitor for CodeGenerator {
                 ty,
                 value,
                 is_mut,
+                ..
             } => {
                 self.generate_let_stmt(name, ty.as_ref(), value, *is_mut, counter)
             }

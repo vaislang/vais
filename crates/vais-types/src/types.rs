@@ -141,6 +141,28 @@ pub enum TypeError {
         effects: String,
         span: Option<Span>,
     },
+
+    #[error("Linear type violation: variable '{var_name}' must be used exactly once, but was used {actual_uses} times")]
+    LinearTypeViolation {
+        var_name: String,
+        expected_uses: usize,
+        actual_uses: usize,
+        defined_at: Option<Span>,
+    },
+
+    #[error("Affine type violation: variable '{var_name}' can be used at most once, but was used {actual_uses} times")]
+    AffineTypeViolation {
+        var_name: String,
+        actual_uses: usize,
+        defined_at: Option<Span>,
+    },
+
+    #[error("Move after use: variable '{var_name}' was already moved")]
+    MoveAfterUse {
+        var_name: String,
+        first_use_at: Option<Span>,
+        move_at: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -160,6 +182,9 @@ impl TypeError {
             TypeError::UnreachablePattern(_, span) => *span,
             TypeError::EffectMismatch { span, .. } => *span,
             TypeError::PurityViolation { span, .. } => *span,
+            TypeError::LinearTypeViolation { defined_at, .. } => defined_at.clone(),
+            TypeError::AffineTypeViolation { defined_at, .. } => defined_at.clone(),
+            TypeError::MoveAfterUse { move_at, .. } => move_at.clone(),
         }
     }
 
@@ -179,6 +204,9 @@ impl TypeError {
             TypeError::UnreachablePattern(..) => "E011",
             TypeError::EffectMismatch { .. } => "E012",
             TypeError::PurityViolation { .. } => "E013",
+            TypeError::LinearTypeViolation { .. } => "E014",
+            TypeError::AffineTypeViolation { .. } => "E015",
+            TypeError::MoveAfterUse { .. } => "E016",
         }
     }
 
@@ -223,6 +251,19 @@ impl TypeError {
             }
             TypeError::PurityViolation { callee, .. } => {
                 Some(format!("wrap '{}' call in an unsafe block or remove the pure annotation", callee))
+            }
+            TypeError::LinearTypeViolation { var_name, expected_uses, actual_uses, .. } => {
+                if *actual_uses == 0 {
+                    Some(format!("linear variable '{}' must be used exactly {} time(s), consider using it or marking it as affine", var_name, expected_uses))
+                } else {
+                    Some(format!("linear variable '{}' was used {} time(s), consider splitting usage or copying", var_name, actual_uses))
+                }
+            }
+            TypeError::AffineTypeViolation { var_name, .. } => {
+                Some(format!("affine variable '{}' can only be used once, consider cloning if multiple uses are needed", var_name))
+            }
+            TypeError::MoveAfterUse { var_name, .. } => {
+                Some(format!("variable '{}' was already moved, consider cloning before the first use", var_name))
             }
             _ => None,
         }
@@ -279,6 +320,22 @@ impl TypeError {
             }
             TypeError::PurityViolation { callee, effects, .. } => {
                 vais_i18n::get(&key, &[("callee", callee), ("effects", effects)])
+            }
+            TypeError::LinearTypeViolation { var_name, expected_uses, actual_uses, .. } => {
+                vais_i18n::get(&key, &[
+                    ("var_name", var_name),
+                    ("expected_uses", &expected_uses.to_string()),
+                    ("actual_uses", &actual_uses.to_string()),
+                ])
+            }
+            TypeError::AffineTypeViolation { var_name, actual_uses, .. } => {
+                vais_i18n::get(&key, &[
+                    ("var_name", var_name),
+                    ("actual_uses", &actual_uses.to_string()),
+                ])
+            }
+            TypeError::MoveAfterUse { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
             }
         }
     }
@@ -479,6 +536,12 @@ pub enum ResolvedType {
         /// Associated type name (Item)
         assoc_name: String,
     },
+
+    /// Linear type wrapper - must be used exactly once
+    Linear(Box<ResolvedType>),
+
+    /// Affine type wrapper - can be used at most once
+    Affine(Box<ResolvedType>),
 }
 
 impl ResolvedType {
@@ -639,6 +702,8 @@ impl std::fmt::Display for ResolvedType {
                     write!(f, "{}::{}", base, assoc_name)
                 }
             }
+            ResolvedType::Linear(inner) => write!(f, "linear {}", inner),
+            ResolvedType::Affine(inner) => write!(f, "affine {}", inner),
         }
     }
 }
@@ -978,11 +1043,48 @@ pub struct UnionDef {
     pub fields: HashMap<String, ResolvedType>,
 }
 
+/// Linearity mode for linear type system
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Linearity {
+    /// Unrestricted (can be used any number of times)
+    #[default]
+    Unrestricted,
+    /// Linear (must be used exactly once)
+    Linear,
+    /// Affine (can be used at most once - dropped without use is OK)
+    Affine,
+}
+
+impl Linearity {
+    /// Check if this linearity requires tracking
+    pub fn requires_tracking(&self) -> bool {
+        matches!(self, Linearity::Linear | Linearity::Affine)
+    }
+
+    /// Check if this linearity allows dropping without use
+    pub fn allows_drop_without_use(&self) -> bool {
+        matches!(self, Linearity::Unrestricted | Linearity::Affine)
+    }
+
+    /// Check if a use count is valid for this linearity
+    pub fn is_valid_use_count(&self, count: usize) -> bool {
+        match self {
+            Linearity::Unrestricted => true,
+            Linearity::Linear => count == 1,
+            Linearity::Affine => count <= 1,
+        }
+    }
+}
+
 /// Variable info (internal to type checker)
 #[derive(Debug, Clone)]
 pub(crate) struct VarInfo {
     pub(crate) ty: ResolvedType,
     pub(crate) is_mut: bool,
+    pub(crate) linearity: Linearity,
+    pub(crate) use_count: usize,
+    /// Span where the variable was defined (for error messages)
+    pub(crate) defined_at: Option<vais_ast::Span>,
 }
 
 /// Generic instantiation tracking for monomorphization

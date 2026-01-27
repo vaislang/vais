@@ -111,6 +111,16 @@ pub enum Token {
     #[token("unsafe")]
     Unsafe,
 
+    // === Linear Types Keywords ===
+    #[token("linear")]
+    Linear,
+    #[token("affine")]
+    Affine,
+    #[token("move")]
+    Move,
+    #[token("consume")]
+    Consume,
+
     // === Primitive Types ===
     #[token("i8")]
     I8,
@@ -435,6 +445,11 @@ impl fmt::Display for Token {
             Token::Dot => write!(f, "."),
             Token::ColonColon => write!(f, "::"),
             Token::HashBracket => write!(f, "#["),
+            // Linear types keywords
+            Token::Linear => write!(f, "linear"),
+            Token::Affine => write!(f, "affine"),
+            Token::Move => write!(f, "move"),
+            Token::Consume => write!(f, "consume"),
         }
     }
 }

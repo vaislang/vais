@@ -38,6 +38,7 @@ impl CodeGenerator {
                 ty,
                 value,
                 is_mut,
+                ..
             } => {
                 // Infer type BEFORE generating code, so we can use function return types
                 let inferred_ty = self.infer_expr_type(value);

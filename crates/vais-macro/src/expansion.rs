@@ -451,12 +451,13 @@ impl<'a> AstExpander<'a> {
     fn expand_stmt(&mut self, stmt: Spanned<Stmt>) -> ExpansionResult<Spanned<Stmt>> {
         let span = stmt.span;
         let expanded = match stmt.node {
-            Stmt::Let { name, ty, value, is_mut } => {
+            Stmt::Let { name, ty, value, is_mut, ownership } => {
                 Stmt::Let {
                     name,
                     ty,
                     value: Box::new(self.expand_expr(*value)?),
                     is_mut,
+                    ownership,
                 }
             }
             Stmt::Expr(expr) => Stmt::Expr(Box::new(self.expand_expr(*expr)?)),

@@ -1,0 +1,42 @@
+# Linear Types Test
+# Tests linear and affine type system features
+
+# Regular variable - can be used multiple times
+F test_regular() -> i64 {
+    x := 42
+    y := x + x  # x can be used multiple times
+    R y
+}
+
+# Linear type annotation on variable - must be used exactly once
+F test_linear_var() -> i64 {
+    x := linear 42  # x must be used exactly once
+    R x
+}
+
+# Affine type annotation - can be used at most once
+F test_affine_var() -> i64 {
+    x := affine 100  # x can be used 0 or 1 time
+    R x
+}
+
+# Move semantics - transfer ownership
+F consume_value(move v: i64) -> i64 {
+    R v * 2
+}
+
+F test_move() -> i64 {
+    x := 21
+    result := consume_value(x)  # x is moved
+    R result
+}
+
+# Main entry point
+F main() -> i64 {
+    a := test_regular()
+    b := test_linear_var()
+    c := test_affine_var()
+    d := test_move()
+
+    R a + b + c + d
+}

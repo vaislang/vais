@@ -79,6 +79,8 @@ impl TypeMapper {
             ResolvedType::FnPtr { .. } => self.pointer_type,
             // Associated type: should be resolved before JIT, fallback to pointer
             ResolvedType::Associated { .. } => self.pointer_type,
+            // Linear/Affine types: unwrap inner type
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => self.map_type(inner),
         }
     }
 
