@@ -111,6 +111,10 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Extern => "Extern",
         Token::Global => "Global",
         Token::Ellipsis => "Ellipsis",
+        Token::Pure => "Pure",
+        Token::Effect => "Effect",
+        Token::Io => "Io",
+        Token::Unsafe => "Unsafe",
     }.to_string()
 }
 

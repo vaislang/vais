@@ -3,7 +3,7 @@
 //! Contains definitions for external C functions and helper functions.
 
 use crate::{FunctionInfo, CodeGenerator};
-use vais_types::{ResolvedType, FunctionSig};
+use vais_types::{ResolvedType, FunctionSig, EffectAnnotation};
 use std::collections::HashMap;
 
 /// Convert simple params (name, type) to full params (name, type, is_mut=false)
@@ -26,6 +26,8 @@ macro_rules! register_extern {
                     is_async: false,
                     is_vararg: false,
                     contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
                 },
                 is_extern: true,
                 extern_abi: Some("C".to_string()),
@@ -45,6 +47,8 @@ macro_rules! register_extern {
                     is_async: false,
                     is_vararg: false,
                     contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
                 },
                 is_extern: true,
                 extern_abi: Some("C".to_string()),
@@ -68,6 +72,8 @@ macro_rules! register_helper {
                     is_async: false,
                     is_vararg: false,
                     contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
                 },
                 is_extern: false,
                 extern_abi: None,

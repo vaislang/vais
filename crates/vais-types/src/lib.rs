@@ -7,6 +7,7 @@ pub mod error_report;
 pub mod exhaustiveness;
 pub mod types;
 pub mod comptime;
+pub mod effects;
 
 // Private modules
 mod traits;
@@ -32,10 +33,13 @@ pub use types::{
     levenshtein_distance, find_similar_name,
     // Contract support (Design by Contract)
     ContractSpec, ContractClause,
+    // Effect system support
+    Effect, EffectSet, EffectAnnotation,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
 pub use comptime::{ComptimeEvaluator, ComptimeValue};
+pub use effects::EffectInferrer;
 use traits::TraitImpl;
 use types::VarInfo;
 
@@ -207,6 +211,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -222,6 +228,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -237,6 +245,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -252,6 +262,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -267,6 +279,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -282,6 +296,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -301,6 +317,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -320,6 +338,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -335,6 +355,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -350,6 +372,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -365,6 +389,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -380,6 +406,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -398,6 +426,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -413,6 +443,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -431,6 +463,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -451,6 +485,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -469,6 +505,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -484,6 +522,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -504,6 +544,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -524,6 +566,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -539,6 +583,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -557,6 +603,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -576,6 +624,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -594,6 +644,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -613,6 +665,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -628,6 +682,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -643,6 +699,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -658,6 +716,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -694,6 +754,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -714,6 +776,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -738,6 +802,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -756,6 +822,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -776,6 +844,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -796,6 +866,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -820,6 +892,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -838,6 +912,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -858,6 +934,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -879,6 +957,8 @@ impl TypeChecker {
                         is_async: false,
                         is_vararg: false,
                         contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
                     },
                 );
             };
@@ -941,6 +1021,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -956,6 +1038,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -971,6 +1055,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -986,6 +1072,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -1001,6 +1089,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -1016,6 +1106,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -1031,6 +1123,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -1046,6 +1140,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: false,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
     }
@@ -1254,6 +1350,8 @@ impl TypeChecker {
                 is_async: f.is_async,
                 is_vararg: false,
                 contracts: None, // Contracts will be extracted in check_function
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -1293,6 +1391,8 @@ impl TypeChecker {
                 is_async: false,
                 is_vararg: func.is_vararg,
                 contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
             },
         );
 
@@ -1349,6 +1449,8 @@ impl TypeChecker {
                     is_async: method.node.is_async,
                     is_vararg: false,
                     contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
                 },
             );
         }
@@ -1559,6 +1661,8 @@ impl TypeChecker {
                     is_async: method.node.is_async,
                     is_vararg: false,
                     contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
                 },
             ));
         }
@@ -1916,6 +2020,7 @@ impl TypeChecker {
                         return Ok(ResolvedType::Fn {
                             params: sig.params.iter().map(|(_, t, _)| t.clone()).collect(),
                             ret: Box::new(ret_type),
+                            effects: None,
                         });
                     }
                 }
@@ -2139,7 +2244,7 @@ impl TypeChecker {
                 let func_type = self.check_expr(func)?;
 
                 match func_type {
-                    ResolvedType::Fn { params, ret } => {
+                    ResolvedType::Fn { params, ret, .. } => {
                         if params.len() != args.len() {
                             return Err(TypeError::ArgCount {
                                 expected: params.len(),
@@ -2814,6 +2919,7 @@ impl TypeChecker {
                 Ok(ResolvedType::Fn {
                     params: param_types,
                     ret: Box::new(ret_type),
+                    effects: None,
                 })
             }
 
@@ -3015,6 +3121,7 @@ impl TypeChecker {
             Type::Fn { params, ret } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.resolve_type(&p.node)).collect(),
                 ret: Box::new(self.resolve_type(&ret.node)),
+                effects: None,
             },
             Type::Unit => ResolvedType::Unit,
             Type::Infer => self.fresh_type_var(),
@@ -3025,6 +3132,7 @@ impl TypeChecker {
                     params: resolved_params,
                     ret: resolved_ret,
                     is_vararg: *is_vararg,
+                    effects: None,
                 }
             }
             Type::DynTrait { trait_name, generics } => {
@@ -3276,6 +3384,7 @@ impl TypeChecker {
                 ty: ResolvedType::Fn {
                     params: sig.params.iter().map(|(_, t, _)| t.clone()).collect(),
                     ret: Box::new(ret_type),
+                    effects: None,
                 },
                 is_mut: false,
             });
@@ -3317,6 +3426,7 @@ impl TypeChecker {
                             ty: ResolvedType::Fn {
                                 params,
                                 ret: Box::new(enum_type),
+                                effects: None,
                             },
                             is_mut: false,
                         });

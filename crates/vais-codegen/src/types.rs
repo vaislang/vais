@@ -293,7 +293,7 @@ impl CodeGenerator {
                 // vtable_ptr: i8* pointing to the vtable for this trait
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
-            ResolvedType::FnPtr { params, ret, is_vararg } => {
+            ResolvedType::FnPtr { params, ret, is_vararg, .. } => {
                 // Function pointer type
                 let param_types: Vec<String> = params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
                 let ret_type = self.type_to_llvm_impl(ret);

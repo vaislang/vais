@@ -56,6 +56,8 @@ impl CodeGenerator {
             is_async: false,
             is_vararg: func.is_vararg,
             contracts: None,
+            effect_annotation: vais_types::EffectAnnotation::Infer,
+            inferred_effects: None,
         };
 
         self.functions.insert(
@@ -129,6 +131,7 @@ impl CodeGenerator {
                     params: param_types?,
                     ret: Box::new(ret_type),
                     is_vararg: *is_vararg,
+                    effects: None,
                 })
             }
             Type::Unit => Ok(ResolvedType::Unit),

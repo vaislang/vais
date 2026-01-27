@@ -127,6 +127,20 @@ pub enum TypeError {
 
     #[error("Unreachable pattern at arm {0}")]
     UnreachablePattern(usize, Option<Span>),
+
+    #[error("Effect mismatch: function declared as {declared} but has effect {actual}")]
+    EffectMismatch {
+        declared: String,
+        actual: String,
+        span: Option<Span>,
+    },
+
+    #[error("Pure function cannot call impure function: {callee} has effects {effects}")]
+    PurityViolation {
+        callee: String,
+        effects: String,
+        span: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -144,6 +158,8 @@ impl TypeError {
             TypeError::ImmutableAssign(_, span) => *span,
             TypeError::NonExhaustiveMatch(_, span) => *span,
             TypeError::UnreachablePattern(_, span) => *span,
+            TypeError::EffectMismatch { span, .. } => *span,
+            TypeError::PurityViolation { span, .. } => *span,
         }
     }
 
@@ -161,6 +177,8 @@ impl TypeError {
             TypeError::ImmutableAssign(..) => "E009",
             TypeError::NonExhaustiveMatch(..) => "E010",
             TypeError::UnreachablePattern(..) => "E011",
+            TypeError::EffectMismatch { .. } => "E012",
+            TypeError::PurityViolation { .. } => "E013",
         }
     }
 
@@ -199,6 +217,12 @@ impl TypeError {
             }
             TypeError::ImmutableAssign(name, _) => {
                 Some(format!("consider declaring '{}' as mutable: '{}: mut Type'", name, name))
+            }
+            TypeError::EffectMismatch { declared, .. } => {
+                Some(format!("remove the '{}' annotation or fix the function body", declared))
+            }
+            TypeError::PurityViolation { callee, .. } => {
+                Some(format!("wrap '{}' call in an unsafe block or remove the pure annotation", callee))
             }
             _ => None,
         }
@@ -249,6 +273,12 @@ impl TypeError {
             }
             TypeError::UnreachablePattern(arm, _) => {
                 vais_i18n::get(&key, &[("arm", &arm.to_string())])
+            }
+            TypeError::EffectMismatch { declared, actual, .. } => {
+                vais_i18n::get(&key, &[("declared", declared), ("actual", actual)])
+            }
+            TypeError::PurityViolation { callee, effects, .. } => {
+                vais_i18n::get(&key, &[("callee", callee), ("effects", effects)])
             }
         }
     }
@@ -385,10 +415,12 @@ pub enum ResolvedType {
     Range(Box<ResolvedType>),
     Future(Box<ResolvedType>),
 
-    // Function type
+    // Function type (with optional effect annotation)
     Fn {
         params: Vec<ResolvedType>,
         ret: Box<ResolvedType>,
+        /// Effect set for this function type (None = infer)
+        effects: Option<Box<EffectSet>>,
     },
 
     // Function pointer type (for C FFI callbacks)
@@ -396,6 +428,8 @@ pub enum ResolvedType {
         params: Vec<ResolvedType>,
         ret: Box<ResolvedType>,
         is_vararg: bool,
+        /// Effect set for this function pointer (None = total effects)
+        effects: Option<Box<EffectSet>>,
     },
 
     // Named type (struct/enum)
@@ -517,7 +551,12 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::RefMut(t) => write!(f, "&mut {}", t),
             ResolvedType::Range(t) => write!(f, "Range<{}>", t),
             ResolvedType::Future(t) => write!(f, "Future<{}>", t),
-            ResolvedType::Fn { params, ret } => {
+            ResolvedType::Fn { params, ret, effects } => {
+                if let Some(effects) = effects {
+                    if !effects.is_pure() {
+                        write!(f, "{} ", effects)?;
+                    }
+                }
                 write!(f, "(")?;
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 {
@@ -527,7 +566,12 @@ impl std::fmt::Display for ResolvedType {
                 }
                 write!(f, ")->{}", ret)
             }
-            ResolvedType::FnPtr { params, ret, is_vararg } => {
+            ResolvedType::FnPtr { params, ret, is_vararg, effects } => {
+                if let Some(effects) = effects {
+                    if !effects.is_pure() {
+                        write!(f, "{} ", effects)?;
+                    }
+                }
                 write!(f, "fn(")?;
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 {
@@ -606,6 +650,225 @@ impl ContractSpec {
     }
 }
 
+// ============================================================================
+// Effect System
+// ============================================================================
+
+/// Effect kinds representing different types of side effects
+///
+/// The effect system tracks what side effects a function may have,
+/// enabling purity checking, optimization, and formal verification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Effect {
+    /// Pure - no observable side effects
+    /// Can be safely memoized, reordered, or eliminated
+    Pure,
+
+    /// Read - reads from shared/global state
+    /// Can be reordered with other reads
+    Read,
+
+    /// Write - writes to shared/global state
+    /// Cannot be reordered with reads or writes
+    Write,
+
+    /// Allocate - allocates memory (heap allocation)
+    /// Generally side-effect free but may fail
+    Alloc,
+
+    /// IO - performs input/output operations
+    /// Console, file system, network
+    IO,
+
+    /// Async - may suspend execution
+    /// Async/await, yield, sleep
+    Async,
+
+    /// Panic - may panic or abort
+    /// unwrap, assert, divide by zero
+    Panic,
+
+    /// NonDet - non-deterministic (random, time)
+    /// Different results on each call
+    NonDet,
+
+    /// Unsafe - performs unsafe operations
+    /// Raw pointer dereference, FFI calls
+    Unsafe,
+
+    /// Diverge - may not terminate
+    /// Infinite loops, recursion without base case
+    Diverge,
+}
+
+impl std::fmt::Display for Effect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Effect::Pure => write!(f, "pure"),
+            Effect::Read => write!(f, "read"),
+            Effect::Write => write!(f, "write"),
+            Effect::Alloc => write!(f, "alloc"),
+            Effect::IO => write!(f, "io"),
+            Effect::Async => write!(f, "async"),
+            Effect::Panic => write!(f, "panic"),
+            Effect::NonDet => write!(f, "nondet"),
+            Effect::Unsafe => write!(f, "unsafe"),
+            Effect::Diverge => write!(f, "diverge"),
+        }
+    }
+}
+
+/// Effect set - represents the combination of effects a function may have
+///
+/// Effect sets form a lattice where:
+/// - Bottom (Pure) ⊆ All effects
+/// - Top (All effects) is the supremum
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct EffectSet {
+    /// Set of individual effects
+    effects: std::collections::HashSet<Effect>,
+}
+
+impl EffectSet {
+    /// Create a new empty effect set (pure)
+    pub fn pure() -> Self {
+        Self {
+            effects: std::collections::HashSet::new(),
+        }
+    }
+
+    /// Create an effect set with a single effect
+    pub fn single(effect: Effect) -> Self {
+        let mut effects = std::collections::HashSet::new();
+        if effect != Effect::Pure {
+            effects.insert(effect);
+        }
+        Self { effects }
+    }
+
+    /// Create an effect set with multiple effects
+    pub fn from_effects(effects: impl IntoIterator<Item = Effect>) -> Self {
+        let mut set = std::collections::HashSet::new();
+        for effect in effects {
+            if effect != Effect::Pure {
+                set.insert(effect);
+            }
+        }
+        Self { effects: set }
+    }
+
+    /// Check if this is a pure (empty) effect set
+    pub fn is_pure(&self) -> bool {
+        self.effects.is_empty()
+    }
+
+    /// Check if this effect set is read-only (no writes, IO, etc.)
+    pub fn is_readonly(&self) -> bool {
+        !self.effects.contains(&Effect::Write) &&
+        !self.effects.contains(&Effect::IO) &&
+        !self.effects.contains(&Effect::Alloc)
+    }
+
+    /// Check if this effect set contains a specific effect
+    pub fn contains(&self, effect: Effect) -> bool {
+        if effect == Effect::Pure {
+            return self.effects.is_empty();
+        }
+        self.effects.contains(&effect)
+    }
+
+    /// Add an effect to this set
+    pub fn add(&mut self, effect: Effect) {
+        if effect != Effect::Pure {
+            self.effects.insert(effect);
+        }
+    }
+
+    /// Union two effect sets (combines all effects)
+    pub fn union(&self, other: &EffectSet) -> EffectSet {
+        EffectSet {
+            effects: self.effects.union(&other.effects).copied().collect(),
+        }
+    }
+
+    /// Intersection of two effect sets
+    pub fn intersection(&self, other: &EffectSet) -> EffectSet {
+        EffectSet {
+            effects: self.effects.intersection(&other.effects).copied().collect(),
+        }
+    }
+
+    /// Check if this effect set is a subset of another
+    pub fn is_subset_of(&self, other: &EffectSet) -> bool {
+        self.effects.is_subset(&other.effects)
+    }
+
+    /// Get all effects in this set
+    pub fn effects(&self) -> impl Iterator<Item = &Effect> {
+        self.effects.iter()
+    }
+
+    /// Create common effect sets
+    pub fn io() -> Self {
+        Self::from_effects([Effect::IO, Effect::Panic])
+    }
+
+    pub fn alloc() -> Self {
+        Self::from_effects([Effect::Alloc, Effect::Panic])
+    }
+
+    pub fn read_write() -> Self {
+        Self::from_effects([Effect::Read, Effect::Write])
+    }
+
+    pub fn total() -> Self {
+        Self::from_effects([
+            Effect::Read, Effect::Write, Effect::Alloc,
+            Effect::IO, Effect::Async, Effect::Panic,
+            Effect::NonDet, Effect::Unsafe, Effect::Diverge,
+        ])
+    }
+}
+
+impl std::fmt::Display for EffectSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.effects.is_empty() {
+            write!(f, "pure")
+        } else {
+            let effects: Vec<_> = self.effects.iter().map(|e| e.to_string()).collect();
+            write!(f, "{{{}}}", effects.join(", "))
+        }
+    }
+}
+
+impl std::hash::Hash for EffectSet {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash in a deterministic order
+        let mut effects: Vec<_> = self.effects.iter().collect();
+        effects.sort_by_key(|e| format!("{:?}", e));
+        for effect in effects {
+            effect.hash(state);
+        }
+    }
+}
+
+/// Function effect annotation - how effects are declared/inferred
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectAnnotation {
+    /// No annotation - infer from body
+    Infer,
+    /// Explicitly declared as pure
+    Pure,
+    /// Explicitly declared with specific effects
+    Declared(EffectSet),
+}
+
+impl Default for EffectAnnotation {
+    fn default() -> Self {
+        EffectAnnotation::Infer
+    }
+}
+
 /// Function signature
 #[derive(Debug, Clone)]
 pub struct FunctionSig {
@@ -618,6 +881,44 @@ pub struct FunctionSig {
     pub is_vararg: bool, // true for variadic C functions (printf, etc.)
     /// Contract specification for formal verification (requires/ensures)
     pub contracts: Option<ContractSpec>,
+    /// Effect annotation - declared or inferred effects
+    pub effect_annotation: EffectAnnotation,
+    /// Inferred effects (populated during type checking)
+    pub inferred_effects: Option<EffectSet>,
+}
+
+impl FunctionSig {
+    /// Create a simple function signature with minimal fields
+    pub fn simple(name: &str, params: Vec<(String, ResolvedType, bool)>, ret: ResolvedType) -> Self {
+        Self {
+            name: name.to_string(),
+            generics: vec![],
+            generic_bounds: HashMap::new(),
+            params,
+            ret,
+            is_async: false,
+            is_vararg: false,
+            contracts: None,
+            effect_annotation: EffectAnnotation::Infer,
+            inferred_effects: None,
+        }
+    }
+
+    /// Create a builtin function signature (with IO effects for output functions)
+    pub fn builtin(name: &str, params: Vec<(String, ResolvedType, bool)>, ret: ResolvedType) -> Self {
+        Self {
+            name: name.to_string(),
+            generics: vec![],
+            generic_bounds: HashMap::new(),
+            params,
+            ret,
+            is_async: false,
+            is_vararg: false,
+            contracts: None,
+            effect_annotation: EffectAnnotation::Infer,
+            inferred_effects: None,
+        }
+    }
 }
 
 /// Struct definition
@@ -784,7 +1085,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
                 .join("_");
             format!("tup_{}", args)
         }
-        ResolvedType::Fn { params, ret } => {
+        ResolvedType::Fn { params, ret, .. } => {
             let params_str = params
                 .iter()
                 .map(|p| mangle_type(p))
@@ -846,7 +1147,7 @@ pub fn substitute_type(
                 .collect();
             ResolvedType::Tuple(new_types)
         }
-        ResolvedType::Fn { params, ret } => {
+        ResolvedType::Fn { params, ret, effects } => {
             let new_params = params
                 .iter()
                 .map(|p| substitute_type(p, substitutions))
@@ -855,6 +1156,7 @@ pub fn substitute_type(
             ResolvedType::Fn {
                 params: new_params,
                 ret: new_ret,
+                effects: effects.clone(),
             }
         }
         ResolvedType::Vector { element, lanes } => {

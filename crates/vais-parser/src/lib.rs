@@ -2655,7 +2655,7 @@ X Point{F new(x:f64,y:f64)->Point=Point{x:x,y:y}}
     #[test]
     fn test_import_statement() {
         // Use statement with U keyword
-        let source = "U std::io";
+        let source = "U std::fs";
         let module = parse(source).unwrap();
         let Item::Use(u) = &module.items[0].node else {
             unreachable!("Expected use statement");

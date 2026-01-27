@@ -319,6 +319,7 @@ impl JitCompiler {
             Type::Fn { params, ret } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.resolve_type(&p.node)).collect(),
                 ret: Box::new(self.resolve_type(&ret.node)),
+                effects: None,
             },
             Type::ConstArray { element, size } => {
                 let resolved_element = self.resolve_type(&element.node);
@@ -348,6 +349,7 @@ impl JitCompiler {
                     params: resolved_params,
                     ret: Box::new(self.resolve_type(&ret.node)),
                     is_vararg: *is_vararg,
+                    effects: None,
                 }
             }
         }

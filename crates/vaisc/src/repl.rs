@@ -446,11 +446,11 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
             let args: Vec<_> = generics.iter().map(|g| format_type(g)).collect();
             format!("{}<{}>", name, args.join(", "))
         }
-        Fn { params, ret } => {
+        Fn { params, ret, .. } => {
             let param_strs: Vec<_> = params.iter().map(|p| format_type(p)).collect();
             format!("fn({}) -> {}", param_strs.join(", "), format_type(ret))
         }
-        FnPtr { params, ret, is_vararg } => {
+        FnPtr { params, ret, is_vararg, .. } => {
             let param_strs: Vec<_> = params.iter().map(|p| format_type(p)).collect();
             let vararg = if *is_vararg { ", ..." } else { "" };
             format!("fn({}{}) -> {}", param_strs.join(", "), vararg, format_type(ret))

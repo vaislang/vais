@@ -90,10 +90,12 @@ impl TypeChecker {
                 ResolvedType::Fn {
                     params: pa,
                     ret: ra,
+                    ..
                 },
                 ResolvedType::Fn {
                     params: pb,
                     ret: rb,
+                    ..
                 },
             ) if pa.len() == pb.len() => {
                 for (ta, tb) in pa.iter().zip(pb.iter()) {
@@ -170,9 +172,10 @@ impl TypeChecker {
             ResolvedType::Tuple(types) => {
                 ResolvedType::Tuple(types.iter().map(|t| self.apply_substitutions(t)).collect())
             }
-            ResolvedType::Fn { params, ret } => ResolvedType::Fn {
+            ResolvedType::Fn { params, ret, effects } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.apply_substitutions(p)).collect(),
                 ret: Box::new(self.apply_substitutions(ret)),
+                effects: effects.clone(),
             },
             _ => ty.clone(),
         }
@@ -250,9 +253,10 @@ impl TypeChecker {
             ResolvedType::Tuple(types) => {
                 ResolvedType::Tuple(types.iter().map(|t| self.substitute_generics(t, substitutions)).collect())
             }
-            ResolvedType::Fn { params, ret } => ResolvedType::Fn {
+            ResolvedType::Fn { params, ret, effects } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.substitute_generics(p, substitutions)).collect(),
                 ret: Box::new(self.substitute_generics(ret, substitutions)),
+                effects: effects.clone(),
             },
             ResolvedType::Named { name, generics } => ResolvedType::Named {
                 name: name.clone(),
@@ -390,8 +394,8 @@ impl TypeChecker {
                 Ok(())
             }
             (
-                ResolvedType::Fn { params: params_p, ret: ret_p },
-                ResolvedType::Fn { params: params_a, ret: ret_a },
+                ResolvedType::Fn { params: params_p, ret: ret_p, .. },
+                ResolvedType::Fn { params: params_a, ret: ret_a, .. },
             ) if params_p.len() == params_a.len() => {
                 for (pp, pa) in params_p.iter().zip(params_a.iter()) {
                     self.infer_type_arg(pp, pa, type_args)?;
@@ -464,7 +468,7 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         // Extract expected parameter and return types
         let (expected_params, expected_ret) = match expected {
-            ResolvedType::Fn { params, ret } => (Some(params.clone()), Some(ret.as_ref().clone())),
+            ResolvedType::Fn { params, ret, .. } => (Some(params.clone()), Some(ret.as_ref().clone())),
             _ => (None, None),
         };
 
@@ -519,6 +523,7 @@ impl TypeChecker {
         Ok(ResolvedType::Fn {
             params: final_params,
             ret: Box::new(final_ret),
+            effects: None,  // Effects are inferred separately
         })
     }
 

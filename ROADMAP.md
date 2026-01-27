@@ -1357,7 +1357,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ### P4 - 미래 목표 (6개월+)
 - [ ] **고급 타입 시스템**
-  - Effect System: 부작용 추적 및 순수성 검증
+  - [x] Effect System: 부작용 추적 및 순수성 검증 ✅
+    - Effect enum (Pure, Read, Write, Alloc, IO, Async, Panic, NonDet, Unsafe, Diverge)
+    - EffectSet 래티스 구조 (합집합, 포함 관계)
+    - EffectAnnotation (Infer, Pure, Declared)
+    - EffectInferrer: 함수 본문에서 효과 자동 추론
+    - 순수성 검증 및 효과 불일치 에러 타입
+    - 렉서에 pure, effect, io, unsafe 키워드 추가
   - Dependent Types: type-level computation
   - Linear Types: 리소스 관리 (한 번 사용)
   - Lifetimes: Rust 스타일 lifetime 타입

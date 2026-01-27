@@ -410,7 +410,7 @@ X Counter {
 
 #[test]
 fn test_use_statement() {
-    let source = "U std::io";
+    let source = "U std::fs";
     assert!(compiles(source));
 }
 

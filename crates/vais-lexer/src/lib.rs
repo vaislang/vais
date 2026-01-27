@@ -101,6 +101,16 @@ pub enum Token {
     #[token("as")]
     As,
 
+    // === Effect System Keywords ===
+    #[token("pure")]
+    Pure,
+    #[token("effect")]
+    Effect,
+    #[token("io")]
+    Io,
+    #[token("unsafe")]
+    Unsafe,
+
     // === Primitive Types ===
     #[token("i8")]
     I8,
@@ -350,6 +360,10 @@ impl fmt::Display for Token {
             Token::Dyn => write!(f, "dyn"),
             Token::Macro => write!(f, "macro"),
             Token::As => write!(f, "as"),
+            Token::Pure => write!(f, "pure"),
+            Token::Effect => write!(f, "effect"),
+            Token::Io => write!(f, "io"),
+            Token::Unsafe => write!(f, "unsafe"),
             Token::I8 => write!(f, "i8"),
             Token::I16 => write!(f, "i16"),
             Token::I32 => write!(f, "i32"),
