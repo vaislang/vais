@@ -17,6 +17,7 @@
 //! - `text-codegen` (default): Enable text-based IR generation
 //! - `inkwell-codegen`: Enable inkwell-based generation (requires LLVM 17+)
 
+pub mod advanced_opt;
 pub mod debug;
 pub mod formatter;
 pub mod optimize;

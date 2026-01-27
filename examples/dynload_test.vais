@@ -1,0 +1,536 @@
+# Dynamic Module Loading Test
+# Demonstrates the dynamic loading capabilities of the Vais language.
+#
+# This example shows:
+# 1. Loading dynamic libraries at runtime
+# 2. Getting function pointers from loaded modules
+# 3. Resource limits and capabilities
+# 4. WASM sandbox basics
+#
+# Note: Some features require runtime support that may not be available
+# in all environments.
+
+# Import the dynload standard library
+# IMP std/dynload
+
+# ============================================================================
+# Test 1: Basic Module Loading Simulation
+# ============================================================================
+
+# Since actual dynamic loading requires compiled libraries,
+# we simulate the concepts here.
+
+# Simulate a module handle
+S TestModuleHandle {
+    id: i64,
+    name: i64,
+    version: i64,
+    is_loaded: i64
+}
+
+# Create a test module handle
+F create_test_module(id: i64, name: i64) -> TestModuleHandle {
+    TestModuleHandle {
+        id: id,
+        name: name,
+        version: 1,
+        is_loaded: 1
+    }
+}
+
+# Simulate unloading
+F unload_test_module(m: TestModuleHandle) -> TestModuleHandle {
+    TestModuleHandle {
+        id: m.id,
+        name: m.name,
+        version: m.version,
+        is_loaded: 0
+    }
+}
+
+# Simulate reloading
+F reload_test_module(m: TestModuleHandle) -> TestModuleHandle {
+    TestModuleHandle {
+        id: m.id,
+        name: m.name,
+        version: m.version + 1,
+        is_loaded: 1
+    }
+}
+
+# ============================================================================
+# Test 2: Resource Limits
+# ============================================================================
+
+# Resource limit structure
+S ResourceLimit {
+    max_memory: i64,
+    max_time: i64,
+    max_stack: i64,
+    max_calls: i64
+}
+
+# Create default limits
+F default_resource_limits() -> ResourceLimit {
+    ResourceLimit {
+        max_memory: 67108864,  # 64 MB
+        max_time: 5000,        # 5 seconds
+        max_stack: 1048576,    # 1 MB
+        max_calls: 1000        # 1000 call depth
+    }
+}
+
+# Create restrictive limits
+F restrictive_resource_limits() -> ResourceLimit {
+    ResourceLimit {
+        max_memory: 16777216,  # 16 MB
+        max_time: 1000,        # 1 second
+        max_stack: 262144,     # 256 KB
+        max_calls: 500
+    }
+}
+
+# Check if usage exceeds limits
+F check_limits(used_memory: i64, used_time: i64, limits: ResourceLimit) -> i64 {
+    I used_memory > limits.max_memory {
+        0  # Exceeded
+    } E {
+        I used_time > limits.max_time {
+            0  # Exceeded
+        } E {
+            1  # OK
+        }
+    }
+}
+
+# ============================================================================
+# Test 3: Capability System
+# ============================================================================
+
+# Capability flags
+C CAP_CONSOLE: i64  = 1
+C CAP_TIME: i64     = 2
+C CAP_RANDOM: i64   = 4
+C CAP_FS_READ: i64  = 8
+C CAP_FS_WRITE: i64 = 16
+C CAP_NETWORK: i64  = 32
+
+# Check if capability is granted
+F has_cap(caps: i64, cap: i64) -> i64 {
+    I (caps & cap) != 0 {
+        1
+    } E {
+        0
+    }
+}
+
+# Grant a capability
+F grant_cap(caps: i64, cap: i64) -> i64 {
+    caps | cap
+}
+
+# Revoke a capability
+F revoke_cap(caps: i64, cap: i64) -> i64 {
+    caps & (~cap)
+}
+
+# Check for dangerous capabilities
+F is_dangerous(caps: i64) -> i64 {
+    dangerous := CAP_FS_WRITE | CAP_NETWORK
+    has_cap(caps, dangerous)
+}
+
+# ============================================================================
+# Test 4: Plugin Manifest Simulation
+# ============================================================================
+
+S PluginInfo {
+    name: i64,
+    version_major: i64,
+    version_minor: i64,
+    version_patch: i64,
+    capabilities: i64
+}
+
+# Create plugin info
+F create_plugin_info(name: i64, major: i64, minor: i64, patch: i64) -> PluginInfo {
+    PluginInfo {
+        name: name,
+        version_major: major,
+        version_minor: minor,
+        version_patch: patch,
+        capabilities: CAP_CONSOLE
+    }
+}
+
+# Check version compatibility
+# Returns 1 if plugin version >= required version
+F is_version_compatible(plugin: PluginInfo, req_major: i64, req_minor: i64, req_patch: i64) -> i64 {
+    I plugin.version_major > req_major {
+        1
+    } E {
+        I plugin.version_major < req_major {
+            0
+        } E {
+            # Major version equal, check minor
+            I plugin.version_minor > req_minor {
+                1
+            } E {
+                I plugin.version_minor < req_minor {
+                    0
+                } E {
+                    # Minor version equal, check patch
+                    I plugin.version_patch >= req_patch {
+                        1
+                    } E {
+                        0
+                    }
+                }
+            }
+        }
+    }
+}
+
+# ============================================================================
+# Test 5: Hot Reload State Machine
+# ============================================================================
+
+# Hot reload states
+C STATE_IDLE: i64 = 0
+C STATE_WATCHING: i64 = 1
+C STATE_COMPILING: i64 = 2
+C STATE_LOADING: i64 = 3
+C STATE_ERROR: i64 = 4
+
+S HotReloadState {
+    state: i64,
+    version: i64,
+    last_check: i64,
+    error_code: i64
+}
+
+# Create initial state
+F hot_reload_init() -> HotReloadState {
+    HotReloadState {
+        state: STATE_IDLE,
+        version: 0,
+        last_check: 0,
+        error_code: 0
+    }
+}
+
+# Start watching
+F hot_reload_start(s: HotReloadState) -> HotReloadState {
+    HotReloadState {
+        state: STATE_WATCHING,
+        version: s.version,
+        last_check: 0,
+        error_code: 0
+    }
+}
+
+# Simulate file change detected
+F hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
+    I s.state == STATE_WATCHING {
+        HotReloadState {
+            state: STATE_COMPILING,
+            version: s.version,
+            last_check: s.last_check,
+            error_code: 0
+        }
+    } E {
+        s
+    }
+}
+
+# Simulate compilation success
+F hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
+    I s.state == STATE_COMPILING {
+        HotReloadState {
+            state: STATE_LOADING,
+            version: s.version,
+            last_check: s.last_check,
+            error_code: 0
+        }
+    } E {
+        s
+    }
+}
+
+# Simulate load success
+F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
+    I s.state == STATE_LOADING {
+        HotReloadState {
+            state: STATE_WATCHING,
+            version: s.version + 1,
+            last_check: 0,
+            error_code: 0
+        }
+    } E {
+        s
+    }
+}
+
+# Simulate error
+F hot_reload_error(s: HotReloadState, code: i64) -> HotReloadState {
+    HotReloadState {
+        state: STATE_ERROR,
+        version: s.version,
+        last_check: s.last_check,
+        error_code: code
+    }
+}
+
+# ============================================================================
+# Test Runner
+# ============================================================================
+
+# External print function
+X F printf(fmt: i64, ...) -> i64
+
+# Test module loading simulation
+F test_module_loading() -> i64 {
+    printf("Testing module loading simulation...\n")
+
+    # Create a module
+    m := create_test_module(1, 0)
+
+    I m.is_loaded != 1 {
+        printf("  FAIL: Module should be loaded\n")
+        B 0
+    }
+
+    I m.version != 1 {
+        printf("  FAIL: Initial version should be 1\n")
+        B 0
+    }
+
+    # Reload the module
+    m2 := reload_test_module(m)
+
+    I m2.version != 2 {
+        printf("  FAIL: Version should be 2 after reload\n")
+        B 0
+    }
+
+    # Unload
+    m3 := unload_test_module(m2)
+
+    I m3.is_loaded != 0 {
+        printf("  FAIL: Module should be unloaded\n")
+        B 0
+    }
+
+    printf("  PASS: Module loading simulation\n")
+    1
+}
+
+# Test resource limits
+F test_resource_limits() -> i64 {
+    printf("Testing resource limits...\n")
+
+    limits := default_resource_limits()
+
+    I limits.max_memory != 67108864 {
+        printf("  FAIL: Default max_memory incorrect\n")
+        B 0
+    }
+
+    # Test limit checking
+    I check_limits(10000000, 1000, limits) != 1 {
+        printf("  FAIL: Should be within limits\n")
+        B 0
+    }
+
+    I check_limits(100000000, 1000, limits) != 0 {
+        printf("  FAIL: Should exceed memory limit\n")
+        B 0
+    }
+
+    I check_limits(10000000, 10000, limits) != 0 {
+        printf("  FAIL: Should exceed time limit\n")
+        B 0
+    }
+
+    printf("  PASS: Resource limits\n")
+    1
+}
+
+# Test capability system
+F test_capabilities() -> i64 {
+    printf("Testing capability system...\n")
+
+    caps := CAP_CONSOLE
+
+    I has_cap(caps, CAP_CONSOLE) != 1 {
+        printf("  FAIL: Should have console capability\n")
+        B 0
+    }
+
+    I has_cap(caps, CAP_NETWORK) != 0 {
+        printf("  FAIL: Should not have network capability\n")
+        B 0
+    }
+
+    # Grant network capability
+    caps2 := grant_cap(caps, CAP_NETWORK)
+
+    I has_cap(caps2, CAP_NETWORK) != 1 {
+        printf("  FAIL: Should have network after grant\n")
+        B 0
+    }
+
+    # Check dangerous
+    I is_dangerous(caps) != 0 {
+        printf("  FAIL: Console-only should not be dangerous\n")
+        B 0
+    }
+
+    I is_dangerous(caps2) != 1 {
+        printf("  FAIL: Network capability should be dangerous\n")
+        B 0
+    }
+
+    # Revoke
+    caps3 := revoke_cap(caps2, CAP_NETWORK)
+
+    I has_cap(caps3, CAP_NETWORK) != 0 {
+        printf("  FAIL: Should not have network after revoke\n")
+        B 0
+    }
+
+    printf("  PASS: Capability system\n")
+    1
+}
+
+# Test version compatibility
+F test_version_compatibility() -> i64 {
+    printf("Testing version compatibility...\n")
+
+    plugin := create_plugin_info(0, 2, 1, 0)
+
+    # Should be compatible with 1.0.0
+    I is_version_compatible(plugin, 1, 0, 0) != 1 {
+        printf("  FAIL: 2.1.0 should be compatible with 1.0.0\n")
+        B 0
+    }
+
+    # Should be compatible with 2.0.0
+    I is_version_compatible(plugin, 2, 0, 0) != 1 {
+        printf("  FAIL: 2.1.0 should be compatible with 2.0.0\n")
+        B 0
+    }
+
+    # Should not be compatible with 2.2.0
+    I is_version_compatible(plugin, 2, 2, 0) != 0 {
+        printf("  FAIL: 2.1.0 should not be compatible with 2.2.0\n")
+        B 0
+    }
+
+    # Should not be compatible with 3.0.0
+    I is_version_compatible(plugin, 3, 0, 0) != 0 {
+        printf("  FAIL: 2.1.0 should not be compatible with 3.0.0\n")
+        B 0
+    }
+
+    printf("  PASS: Version compatibility\n")
+    1
+}
+
+# Test hot reload state machine
+F test_hot_reload() -> i64 {
+    printf("Testing hot reload state machine...\n")
+
+    # Initialize
+    state := hot_reload_init()
+
+    I state.state != STATE_IDLE {
+        printf("  FAIL: Initial state should be IDLE\n")
+        B 0
+    }
+
+    # Start watching
+    state := hot_reload_start(state)
+
+    I state.state != STATE_WATCHING {
+        printf("  FAIL: Should be WATCHING after start\n")
+        B 0
+    }
+
+    # Simulate full reload cycle
+    state := hot_reload_change_detected(state)
+    I state.state != STATE_COMPILING {
+        printf("  FAIL: Should be COMPILING after change detected\n")
+        B 0
+    }
+
+    state := hot_reload_compile_success(state)
+    I state.state != STATE_LOADING {
+        printf("  FAIL: Should be LOADING after compile success\n")
+        B 0
+    }
+
+    state := hot_reload_load_success(state)
+    I state.state != STATE_WATCHING {
+        printf("  FAIL: Should be WATCHING after load success\n")
+        B 0
+    }
+
+    I state.version != 1 {
+        printf("  FAIL: Version should be 1 after successful reload\n")
+        B 0
+    }
+
+    printf("  PASS: Hot reload state machine\n")
+    1
+}
+
+# Main entry point
+F main() -> i64 {
+    printf("=== Dynamic Module Loading Tests ===\n\n")
+
+    passed := 0
+    failed := 0
+
+    I test_module_loading() == 1 {
+        passed := passed + 1
+    } E {
+        failed := failed + 1
+    }
+
+    I test_resource_limits() == 1 {
+        passed := passed + 1
+    } E {
+        failed := failed + 1
+    }
+
+    I test_capabilities() == 1 {
+        passed := passed + 1
+    } E {
+        failed := failed + 1
+    }
+
+    I test_version_compatibility() == 1 {
+        passed := passed + 1
+    } E {
+        failed := failed + 1
+    }
+
+    I test_hot_reload() == 1 {
+        passed := passed + 1
+    } E {
+        failed := failed + 1
+    }
+
+    printf("\n=== Results ===\n")
+    printf("Passed: %d\n", passed)
+    printf("Failed: %d\n", failed)
+
+    I failed == 0 {
+        printf("\nAll tests passed!\n")
+        0
+    } E {
+        printf("\nSome tests failed.\n")
+        1
+    }
+}

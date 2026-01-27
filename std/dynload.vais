@@ -1,0 +1,526 @@
+# Dynamic Module Loading Library
+# Provides functions for runtime module loading, WASM sandboxing, and plugin discovery.
+#
+# Features:
+# - Dynamic loading and unloading of Vais modules at runtime
+# - Hot reload support for development
+# - WASM plugin sandboxing with resource limits
+# - Automatic plugin discovery from standard paths
+#
+# This is a high-level interface to the underlying Rust vais-dynload crate.
+
+# ============================================================================
+# External C functions for dynamic loading
+# ============================================================================
+
+# dlopen: Open a dynamic library
+# path: Path to the library (null-terminated string)
+# flags: Loading flags (RTLD_NOW = 2, RTLD_LAZY = 1)
+# Returns: Handle to the library, or 0 on error
+X F dlopen(path: i64, flags: i64) -> i64
+
+# dlclose: Close a dynamic library
+# handle: Handle from dlopen
+# Returns: 0 on success, non-zero on error
+X F dlclose(handle: i64) -> i64
+
+# dlsym: Get symbol address from a library
+# handle: Handle from dlopen
+# symbol: Symbol name (null-terminated string)
+# Returns: Address of the symbol, or 0 if not found
+X F dlsym(handle: i64, symbol: i64) -> i64
+
+# dlerror: Get last error message
+# Returns: Pointer to error string, or 0 if no error
+X F dlerror() -> i64
+
+# ============================================================================
+# Loading flags
+# ============================================================================
+
+# Load library immediately (resolve all symbols)
+C RTLD_NOW: i64 = 2
+
+# Lazy loading (resolve symbols as needed)
+C RTLD_LAZY: i64 = 1
+
+# Make symbols available to subsequently loaded libraries
+C RTLD_GLOBAL: i64 = 256
+
+# ============================================================================
+# Module Handle
+# ============================================================================
+
+# Represents a loaded dynamic module
+S ModuleHandle {
+    handle: i64,      # dlopen handle
+    path: i64,        # Path to the module (string pointer)
+    version: i64,     # Module version (incremented on reload)
+    loaded: i64       # 1 if loaded, 0 if not
+}
+
+# Create a new empty module handle
+F module_handle_new() -> ModuleHandle {
+    ModuleHandle {
+        handle: 0,
+        path: 0,
+        version: 0,
+        loaded: 0
+    }
+}
+
+# Check if module is loaded
+F module_is_loaded(m: ModuleHandle) -> i64 {
+    m.loaded
+}
+
+# Get module version
+F module_version(m: ModuleHandle) -> i64 {
+    m.version
+}
+
+# ============================================================================
+# Module Loading Functions
+# ============================================================================
+
+# Load a dynamic library module
+# path: Path to the library file (dylib/so/dll)
+# Returns: ModuleHandle with the loaded module, or empty handle on error
+F load_module(path: i64) -> ModuleHandle {
+    handle := dlopen(path, RTLD_NOW)
+    I handle == 0 {
+        # Loading failed
+        module_handle_new()
+    } E {
+        ModuleHandle {
+            handle: handle,
+            path: path,
+            version: 1,
+            loaded: 1
+        }
+    }
+}
+
+# Load a module with lazy binding
+# path: Path to the library file
+# Returns: ModuleHandle
+F load_module_lazy(path: i64) -> ModuleHandle {
+    handle := dlopen(path, RTLD_LAZY)
+    I handle == 0 {
+        module_handle_new()
+    } E {
+        ModuleHandle {
+            handle: handle,
+            path: path,
+            version: 1,
+            loaded: 1
+        }
+    }
+}
+
+# Unload a module
+# m: ModuleHandle to unload
+# Returns: 1 on success, 0 on error
+F unload_module(m: ModuleHandle) -> i64 {
+    I m.loaded == 0 {
+        0
+    } E {
+        result := dlclose(m.handle)
+        I result == 0 {
+            1
+        } E {
+            0
+        }
+    }
+}
+
+# Reload a module (unload and load again)
+# m: ModuleHandle to reload
+# Returns: New ModuleHandle with incremented version
+F reload_module(m: ModuleHandle) -> ModuleHandle {
+    I m.loaded == 0 {
+        # Not loaded, just try to load
+        load_module(m.path)
+    } E {
+        # Unload first
+        dlclose(m.handle)
+
+        # Load again
+        handle := dlopen(m.path, RTLD_NOW)
+        I handle == 0 {
+            module_handle_new()
+        } E {
+            ModuleHandle {
+                handle: handle,
+                path: m.path,
+                version: m.version + 1,
+                loaded: 1
+            }
+        }
+    }
+}
+
+# Get a function pointer from a module
+# m: ModuleHandle
+# name: Function name (null-terminated string)
+# Returns: Function pointer, or 0 if not found
+F get_function(m: ModuleHandle, name: i64) -> i64 {
+    I m.loaded == 0 {
+        0
+    } E {
+        dlsym(m.handle, name)
+    }
+}
+
+# Get last error message from dynamic loading
+# Returns: Error string pointer, or 0 if no error
+F get_load_error() -> i64 {
+    dlerror()
+}
+
+# ============================================================================
+# Resource Limits
+# ============================================================================
+
+# Resource limits for sandboxed execution
+S ResourceLimits {
+    max_memory_bytes: i64,     # Maximum memory in bytes
+    max_time_ms: i64,          # Maximum execution time in milliseconds
+    max_stack_bytes: i64,      # Maximum stack size
+    max_call_depth: i64        # Maximum function call depth
+}
+
+# Create default resource limits
+F default_limits() -> ResourceLimits {
+    ResourceLimits {
+        max_memory_bytes: 67108864,  # 64 MB
+        max_time_ms: 5000,           # 5 seconds
+        max_stack_bytes: 1048576,    # 1 MB
+        max_call_depth: 1000
+    }
+}
+
+# Create restrictive limits for untrusted code
+F restrictive_limits() -> ResourceLimits {
+    ResourceLimits {
+        max_memory_bytes: 16777216,  # 16 MB
+        max_time_ms: 1000,           # 1 second
+        max_stack_bytes: 262144,     # 256 KB
+        max_call_depth: 500
+    }
+}
+
+# Create permissive limits for trusted code
+F permissive_limits() -> ResourceLimits {
+    ResourceLimits {
+        max_memory_bytes: 268435456,  # 256 MB
+        max_time_ms: 60000,           # 60 seconds
+        max_stack_bytes: 4194304,     # 4 MB
+        max_call_depth: 5000
+    }
+}
+
+# ============================================================================
+# Plugin Capability System
+# ============================================================================
+
+# Plugin capabilities (bit flags)
+C CAP_NONE: i64        = 0
+C CAP_CONSOLE: i64     = 1       # Console output
+C CAP_TIME: i64        = 2       # Time/clock access
+C CAP_RANDOM: i64      = 4       # Random number generation
+C CAP_FS_READ: i64     = 8       # File system read
+C CAP_FS_WRITE: i64    = 16      # File system write
+C CAP_NETWORK: i64     = 32      # Network access
+C CAP_ENV: i64         = 64      # Environment variables
+C CAP_PROCESS: i64     = 128     # Process spawning
+C CAP_THREADING: i64   = 256     # Multi-threading
+C CAP_GPU: i64         = 512     # GPU/compute access
+
+# Check if a capability is granted
+# caps: Capability flags
+# required: Required capability
+# Returns: 1 if granted, 0 if not
+F has_capability(caps: i64, required: i64) -> i64 {
+    I (caps & required) != 0 {
+        1
+    } E {
+        0
+    }
+}
+
+# Add a capability
+# caps: Current capability flags
+# cap: Capability to add
+# Returns: New capability flags
+F add_capability(caps: i64, cap: i64) -> i64 {
+    caps | cap
+}
+
+# Remove a capability
+# caps: Current capability flags
+# cap: Capability to remove
+# Returns: New capability flags
+F remove_capability(caps: i64, cap: i64) -> i64 {
+    caps & (~cap)
+}
+
+# Check if any dangerous capabilities are present
+F has_dangerous_capabilities(caps: i64) -> i64 {
+    dangerous := CAP_FS_WRITE | CAP_NETWORK | CAP_PROCESS | CAP_ENV
+    has_capability(caps, dangerous)
+}
+
+# ============================================================================
+# Plugin Discovery Paths
+# ============================================================================
+
+# Get user plugin directory path
+# Returns: Pointer to path string, or 0 if not available
+# Note: This would typically be ~/.vais/plugins/
+X F vais_get_user_plugin_dir() -> i64
+
+# Get system plugin directory path
+# Returns: Pointer to path string, or 0 if not available
+# Note: This would typically be /usr/local/lib/vais/plugins/
+X F vais_get_system_plugin_dir() -> i64
+
+# Get VAIS_PLUGIN_PATH environment variable
+X F getenv(name: i64) -> i64
+
+# ============================================================================
+# WASM Sandbox External Functions
+# ============================================================================
+
+# These functions interface with the Rust WASM sandbox implementation
+
+# Create a new WASM sandbox
+# Returns: Sandbox handle
+X F vais_wasm_sandbox_create() -> i64
+
+# Create sandbox with restrictive limits
+X F vais_wasm_sandbox_create_restrictive() -> i64
+
+# Destroy a WASM sandbox
+X F vais_wasm_sandbox_destroy(sandbox: i64) -> i64
+
+# Load WASM bytes into sandbox
+# sandbox: Sandbox handle
+# bytes: Pointer to WASM bytes
+# len: Length of bytes
+# Returns: Instance handle, or 0 on error
+X F vais_wasm_load(sandbox: i64, bytes: i64, len: i64) -> i64
+
+# Call a WASM function (no args, i64 return)
+X F vais_wasm_call_i64(instance: i64, name: i64) -> i64
+
+# Call a WASM function (i64 arg, i64 return)
+X F vais_wasm_call_i64_i64(instance: i64, name: i64, arg: i64) -> i64
+
+# Call a WASM function (two i64 args, i64 return)
+X F vais_wasm_call_i64_i64_i64(instance: i64, name: i64, arg1: i64, arg2: i64) -> i64
+
+# Grant capability to sandbox
+X F vais_wasm_grant_capability(sandbox: i64, cap: i64) -> i64
+
+# Revoke capability from sandbox
+X F vais_wasm_revoke_capability(sandbox: i64, cap: i64) -> i64
+
+# ============================================================================
+# High-Level WASM Sandbox API
+# ============================================================================
+
+# WASM sandbox handle
+S WasmSandbox {
+    handle: i64,
+    capabilities: i64
+}
+
+# Create a new WASM sandbox with default settings
+F sandbox_new() -> WasmSandbox {
+    handle := vais_wasm_sandbox_create()
+    WasmSandbox {
+        handle: handle,
+        capabilities: CAP_CONSOLE  # Console by default
+    }
+}
+
+# Create a restrictive sandbox for untrusted plugins
+F sandbox_restrictive() -> WasmSandbox {
+    handle := vais_wasm_sandbox_create_restrictive()
+    WasmSandbox {
+        handle: handle,
+        capabilities: CAP_NONE
+    }
+}
+
+# Destroy a sandbox
+F sandbox_destroy(s: WasmSandbox) -> i64 {
+    vais_wasm_sandbox_destroy(s.handle)
+}
+
+# Grant a capability to the sandbox
+F sandbox_grant(s: WasmSandbox, cap: i64) -> WasmSandbox {
+    vais_wasm_grant_capability(s.handle, cap)
+    WasmSandbox {
+        handle: s.handle,
+        capabilities: add_capability(s.capabilities, cap)
+    }
+}
+
+# Revoke a capability from the sandbox
+F sandbox_revoke(s: WasmSandbox, cap: i64) -> WasmSandbox {
+    vais_wasm_revoke_capability(s.handle, cap)
+    WasmSandbox {
+        handle: s.handle,
+        capabilities: remove_capability(s.capabilities, cap)
+    }
+}
+
+# WASM instance handle
+S WasmInstance {
+    handle: i64,
+    sandbox: i64
+}
+
+# Load a WASM module into a sandbox
+F sandbox_load(s: WasmSandbox, bytes: i64, len: i64) -> WasmInstance {
+    handle := vais_wasm_load(s.handle, bytes, len)
+    WasmInstance {
+        handle: handle,
+        sandbox: s.handle
+    }
+}
+
+# Call a function in a WASM instance (no args)
+F wasm_call(inst: WasmInstance, name: i64) -> i64 {
+    vais_wasm_call_i64(inst.handle, name)
+}
+
+# Call a function with one i64 argument
+F wasm_call1(inst: WasmInstance, name: i64, arg: i64) -> i64 {
+    vais_wasm_call_i64_i64(inst.handle, name, arg)
+}
+
+# Call a function with two i64 arguments
+F wasm_call2(inst: WasmInstance, name: i64, arg1: i64, arg2: i64) -> i64 {
+    vais_wasm_call_i64_i64_i64(inst.handle, name, arg1, arg2)
+}
+
+# Check if instance is valid
+F wasm_is_valid(inst: WasmInstance) -> i64 {
+    I inst.handle != 0 {
+        1
+    } E {
+        0
+    }
+}
+
+# ============================================================================
+# Hot Reload Support
+# ============================================================================
+
+# Hot reload callback type (function pointer)
+# Parameters: module_path (i64), new_version (i64)
+# Note: In Vais, this is just a function pointer
+
+# Hot reload configuration
+S HotReloadConfig {
+    source_path: i64,      # Path to source file
+    output_dir: i64,       # Output directory for compiled modules
+    debounce_ms: i64,      # Debounce time for file changes
+    verbose: i64           # Enable verbose logging
+}
+
+# Create default hot reload configuration
+F hot_reload_config(source_path: i64) -> HotReloadConfig {
+    HotReloadConfig {
+        source_path: source_path,
+        output_dir: 0,  # Same directory as source
+        debounce_ms: 100,
+        verbose: 0
+    }
+}
+
+# External hot reload functions
+X F vais_hot_reload_create(config: i64) -> i64
+X F vais_hot_reload_start(handle: i64) -> i64
+X F vais_hot_reload_stop(handle: i64) -> i64
+X F vais_hot_reload_check(handle: i64) -> i64
+X F vais_hot_reload_get_version(handle: i64) -> i64
+
+# Hot reloader handle
+S HotReloader {
+    handle: i64,
+    version: i64,
+    running: i64
+}
+
+# Create a new hot reloader
+# Note: This requires the config to be passed as a pointer
+F hot_reloader_new(source_path: i64) -> HotReloader {
+    # For simplicity, create with default config
+    handle := vais_hot_reload_create(source_path)
+    HotReloader {
+        handle: handle,
+        version: 0,
+        running: 0
+    }
+}
+
+# Start hot reloading
+F hot_reloader_start(r: HotReloader) -> HotReloader {
+    vais_hot_reload_start(r.handle)
+    HotReloader {
+        handle: r.handle,
+        version: 1,
+        running: 1
+    }
+}
+
+# Stop hot reloading
+F hot_reloader_stop(r: HotReloader) -> HotReloader {
+    vais_hot_reload_stop(r.handle)
+    HotReloader {
+        handle: r.handle,
+        version: r.version,
+        running: 0
+    }
+}
+
+# Check for changes and reload if necessary
+# Returns: 1 if reloaded, 0 if no change
+F hot_reloader_check(r: HotReloader) -> i64 {
+    I r.running == 0 {
+        0
+    } E {
+        vais_hot_reload_check(r.handle)
+    }
+}
+
+# Get current version
+F hot_reloader_version(r: HotReloader) -> i64 {
+    vais_hot_reload_get_version(r.handle)
+}
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Get platform-specific library extension
+# Returns: Pointer to extension string ("dylib", "so", or "dll")
+F get_library_extension() -> i64 {
+    # This would be implemented based on compile-time target
+    # For now, return a placeholder
+    # macOS: "dylib", Linux: "so", Windows: "dll"
+    0  # Placeholder - implemented by runtime
+}
+
+# Check if a file looks like a plugin library
+# path: File path (null-terminated string)
+# Returns: 1 if it's a plugin library, 0 otherwise
+F is_plugin_library(path: i64) -> i64 {
+    # Check file extension
+    # This is a simplified check - real implementation would parse the path
+    0  # Placeholder
+}

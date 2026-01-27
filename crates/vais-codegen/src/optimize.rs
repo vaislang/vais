@@ -365,6 +365,21 @@ pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
     result
 }
 
+/// Apply optimization passes with advanced analysis
+///
+/// This version includes interprocedural alias analysis, auto-vectorization hints,
+/// and cache-friendly data layout suggestions.
+pub fn optimize_ir_advanced(ir: &str, level: OptLevel) -> String {
+    use crate::advanced_opt::{AdvancedOptConfig, apply_advanced_optimizations};
+
+    // First apply standard optimizations
+    let result = optimize_ir(ir, level);
+
+    // Then apply advanced optimizations based on level
+    let config = AdvancedOptConfig::from_opt_level(level);
+    apply_advanced_optimizations(&result, &config)
+}
+
 /// Constant folding - evaluate constant expressions at compile time
 fn constant_folding(ir: &str) -> String {
     let mut result = String::new();

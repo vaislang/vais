@@ -3,13 +3,13 @@
   "request": "Phase 11 P3 작업 진행",
   "tasks": [
     { "id": 1, "name": "속성 기반 테스트 (proptest 스타일)", "status": "completed", "model": "Sonnet", "priority": "P3", "note": "파서 버그(조건문 구조체 리터럴 모호성) 및 타입체커 버그(상수 스코프) 수정 완료" },
-    { "id": 2, "name": "GPU 백엔드 확장 (CUDA/Metal/SIMD)", "status": "in_progress", "model": "Opus", "priority": "P3" },
-    { "id": 3, "name": "동적 모듈 로딩", "status": "pending", "model": "Opus", "priority": "P3" },
-    { "id": 4, "name": "고급 최적화", "status": "pending", "model": "Opus", "priority": "P3" },
+    { "id": 2, "name": "GPU 백엔드 확장 (CUDA/Metal/SIMD)", "status": "completed", "model": "Opus", "priority": "P3", "completedAt": "2026-01-27" },
+    { "id": 3, "name": "동적 모듈 로딩", "status": "completed", "model": "Opus", "priority": "P3", "completedAt": "2026-01-27" },
+    { "id": 4, "name": "고급 최적화", "status": "in_progress", "model": "Opus", "priority": "P3" },
     { "id": 5, "name": "고급 타입 시스템", "status": "pending", "model": "Opus", "priority": "P4" },
     { "id": 6, "name": "런타임 최적화", "status": "pending", "model": "Opus", "priority": "P4" },
     { "id": 7, "name": "문서 및 교육", "status": "pending", "model": "Sonnet", "priority": "P4" }
   ],
-  "currentTask": 2,
-  "startedAt": "2026-01-27"
+  "currentTask": 4,
+  "lastCompleted": "동적 모듈 로딩"
 }

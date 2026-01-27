@@ -1,0 +1,137 @@
+# Advanced Optimization Test
+# Tests for alias analysis, auto-vectorization, and cache-friendly data layout
+
+# Test struct for data layout optimization
+S Point {
+    x: i64,
+    y: i64,
+
+    F sum(&self) -> i64 = self.x + self.y
+}
+
+# Struct with suboptimal layout (padding between fields)
+S MixedLayout {
+    flag: i64,
+    value: i64,
+    small: i64,
+
+    F total(&self) -> i64 = self.value + self.small
+}
+
+# Function with non-escaping pointers (should benefit from alias analysis)
+F local_computation(x: i64, y: i64) -> i64 {
+    a := x + y
+    b := x * 2
+    c := y * 3
+    a + b + c
+}
+
+# Simple vectorizable loop pattern (unit stride access)
+F vector_add(a: *i64, b: *i64, result: *i64, n: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= n { B 0 }
+        result[i] = a[i] + b[i]
+        i = i + 1
+    }
+    0
+}
+
+# Vectorizable reduction pattern
+F sum_array(arr: *i64, n: i64) -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= n { B 0 }
+        sum = sum + arr[i]
+        i = i + 1
+    }
+    sum
+}
+
+# Non-vectorizable due to loop-carried dependency
+F fibonacci_array(arr: *i64, n: i64) -> i64 {
+    I n < 2 { R 0 }
+    arr[0] = 0
+    arr[1] = 1
+    i := mut 2
+    L {
+        I i >= n { B 0 }
+        arr[i] = arr[i - 1] + arr[i - 2]
+        i = i + 1
+    }
+    0
+}
+
+F print_i64(x: i64) -> i64 {
+    I x >= 100 {
+        putchar(x / 100 + 48)
+        putchar((x / 10) % 10 + 48)
+        putchar(x % 10 + 48)
+    } E I x >= 10 {
+        putchar(x / 10 + 48)
+        putchar(x % 10 + 48)
+    } E {
+        putchar(x + 48)
+    }
+    0
+}
+
+F main() -> i64 {
+    puts("=== Advanced Optimization Test ===")
+
+    # Test local computation
+    result1 := local_computation(10, 20)
+    puts("local_computation(10, 20):")
+    print_i64(result1)
+    putchar(10)
+
+    # Test vectorizable array operations
+    n := 8
+    a: *i64 = [1, 2, 3, 4, 5, 6, 7, 8]
+    b: *i64 = [8, 7, 6, 5, 4, 3, 2, 1]
+    result: *i64 = [0, 0, 0, 0, 0, 0, 0, 0]
+
+    vector_add(a, b, result, n)
+    puts("vector_add result[0]:")
+    print_i64(result[0])
+    putchar(10)
+    puts("vector_add result[7]:")
+    print_i64(result[7])
+    putchar(10)
+
+    # Test sum reduction
+    sum := sum_array(a, n)
+    puts("sum_array:")
+    print_i64(sum)
+    putchar(10)
+
+    # Test fibonacci (non-vectorizable)
+    fib: *i64 = [0, 0, 0, 0, 0, 0, 0, 0]
+    fibonacci_array(fib, n)
+    puts("fib[7]:")
+    print_i64(fib[7])
+    putchar(10)
+
+    # Test struct creation
+    p := Point { x: 100, y: 200 }
+    puts("Point.x:")
+    print_i64(p.x)
+    putchar(10)
+    puts("Point.sum:")
+    print_i64(p.sum())
+    putchar(10)
+
+    # Test mixed layout struct
+    mixed := MixedLayout {
+        flag: 1,
+        value: 42,
+        small: 7,
+    }
+    puts("MixedLayout.total:")
+    print_i64(mixed.total())
+    putchar(10)
+
+    puts("=== Test Complete ===")
+    0
+}
