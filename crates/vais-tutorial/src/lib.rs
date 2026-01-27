@@ -344,7 +344,8 @@ mod tests {
 
     #[test]
     fn test_tutorial_creation() {
-        let tutorial = Tutorial::new();
+        let temp_file = NamedTempFile::new().unwrap();
+        let tutorial = Tutorial::with_progress_file(temp_file.path());
         assert!(!tutorial.chapters.is_empty());
         assert_eq!(tutorial.progress.current_chapter, 0);
         assert_eq!(tutorial.progress.current_lesson, 0);
@@ -352,7 +353,8 @@ mod tests {
 
     #[test]
     fn test_chapter_access() {
-        let tutorial = Tutorial::new();
+        let temp_file = NamedTempFile::new().unwrap();
+        let tutorial = Tutorial::with_progress_file(temp_file.path());
         let chapter = tutorial.get_chapter(0);
         assert!(chapter.is_some());
 

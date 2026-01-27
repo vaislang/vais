@@ -26,7 +26,7 @@ impl Locale {
     pub fn detect() -> Self {
         // 1. Check VAIS_LANG environment variable
         if let Ok(lang) = std::env::var("VAIS_LANG") {
-            if let Some(locale) = Self::from_str(&lang) {
+            if let Some(locale) = Self::parse(&lang) {
                 return locale;
             }
         }
@@ -49,20 +49,14 @@ impl Locale {
         Self::En
     }
 
-    /// Parse a locale from a string
+    /// Parse a locale from a string (returns Option for convenience)
     ///
     /// Accepts various formats:
     /// - Language codes: "en", "ko", "ja", "zh"
     /// - Full names: "english", "korean", "japanese", "chinese"
     /// - Native names: "한국어", "日本語", "中文"
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "en" | "english" => Some(Self::En),
-            "ko" | "korean" | "한국어" => Some(Self::Ko),
-            "ja" | "japanese" | "日本語" => Some(Self::Ja),
-            "zh" | "chinese" | "中文" => Some(Self::Zh),
-            _ => None,
-        }
+    pub fn parse(s: &str) -> Option<Self> {
+        s.parse().ok()
     }
 
     /// Get the locale code (e.g., "en", "ko", "ja", "zh")
@@ -91,6 +85,20 @@ impl Locale {
     }
 }
 
+impl std::str::FromStr for Locale {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "en" | "english" => Ok(Self::En),
+            "ko" | "korean" | "한국어" => Ok(Self::Ko),
+            "ja" | "japanese" | "日本語" => Ok(Self::Ja),
+            "zh" | "chinese" | "中文" => Ok(Self::Zh),
+            _ => Err(()),
+        }
+    }
+}
+
 impl fmt::Display for Locale {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.code())
@@ -103,15 +111,15 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(Locale::from_str("en"), Some(Locale::En));
-        assert_eq!(Locale::from_str("ko"), Some(Locale::Ko));
-        assert_eq!(Locale::from_str("ja"), Some(Locale::Ja));
-        assert_eq!(Locale::from_str("zh"), Some(Locale::Zh));
-        assert_eq!(Locale::from_str("english"), Some(Locale::En));
-        assert_eq!(Locale::from_str("한국어"), Some(Locale::Ko));
-        assert_eq!(Locale::from_str("日本語"), Some(Locale::Ja));
-        assert_eq!(Locale::from_str("中文"), Some(Locale::Zh));
-        assert_eq!(Locale::from_str("invalid"), None);
+        assert_eq!("en".parse::<Locale>(), Ok(Locale::En));
+        assert_eq!("ko".parse::<Locale>(), Ok(Locale::Ko));
+        assert_eq!("ja".parse::<Locale>(), Ok(Locale::Ja));
+        assert_eq!("zh".parse::<Locale>(), Ok(Locale::Zh));
+        assert_eq!("english".parse::<Locale>(), Ok(Locale::En));
+        assert_eq!("한국어".parse::<Locale>(), Ok(Locale::Ko));
+        assert_eq!("日本語".parse::<Locale>(), Ok(Locale::Ja));
+        assert_eq!("中文".parse::<Locale>(), Ok(Locale::Zh));
+        assert!("invalid".parse::<Locale>().is_err());
     }
 
     #[test]

@@ -440,19 +440,21 @@ pub enum MetaVarKind {
     Tt,
 }
 
-impl MetaVarKind {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for MetaVarKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "expr" => Some(MetaVarKind::Expr),
-            "ty" => Some(MetaVarKind::Ty),
-            "ident" => Some(MetaVarKind::Ident),
-            "pat" => Some(MetaVarKind::Pat),
-            "stmt" => Some(MetaVarKind::Stmt),
-            "block" => Some(MetaVarKind::Block),
-            "item" => Some(MetaVarKind::Item),
-            "lit" => Some(MetaVarKind::Lit),
-            "tt" => Some(MetaVarKind::Tt),
-            _ => None,
+            "expr" => Ok(MetaVarKind::Expr),
+            "ty" => Ok(MetaVarKind::Ty),
+            "ident" => Ok(MetaVarKind::Ident),
+            "pat" => Ok(MetaVarKind::Pat),
+            "stmt" => Ok(MetaVarKind::Stmt),
+            "block" => Ok(MetaVarKind::Block),
+            "item" => Ok(MetaVarKind::Item),
+            "lit" => Ok(MetaVarKind::Lit),
+            "tt" => Ok(MetaVarKind::Tt),
+            _ => Err(()),
         }
     }
 }

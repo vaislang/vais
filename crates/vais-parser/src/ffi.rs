@@ -80,11 +80,11 @@ impl Parser {
                 break;
             }
 
-            let start = self.current_span().start;
+            let _start = self.current_span().start;
             let name = self.parse_ident()?;
             self.expect(&Token::Colon)?;
             let ty = self.parse_type()?;
-            let end = self.prev_span().end;
+            let _end = self.prev_span().end;
 
             params.push(Param {
                 name,

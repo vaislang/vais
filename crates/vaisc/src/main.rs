@@ -332,7 +332,7 @@ fn main() {
     // Initialize i18n system
     let locale = cli.locale
         .as_ref()
-        .and_then(|s| Locale::from_str(s));
+        .and_then(|s| Locale::parse(s));
     vais_i18n::init(locale);
 
     // Load plugins

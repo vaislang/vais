@@ -242,6 +242,7 @@ impl Parser {
     /// Synchronize to the next expression boundary for error recovery.
     /// Skips tokens until an expression delimiter is found.
     /// Returns the list of skipped tokens (as strings for debugging).
+    #[allow(dead_code)]
     fn synchronize_expression(&mut self) -> Vec<String> {
         let mut skipped = Vec::new();
         let mut brace_depth = 0;
@@ -1056,7 +1057,7 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let kind_name = self.parse_ident()?.node;
 
-            let kind = MetaVarKind::from_str(&kind_name).ok_or_else(|| ParseError::UnexpectedToken {
+            let kind = kind_name.parse::<MetaVarKind>().map_err(|_| ParseError::UnexpectedToken {
                 found: Token::Ident(kind_name.clone()),
                 span: self.current_span(),
                 expected: "metavariable kind (expr, ty, ident, pat, stmt, block, item, lit, tt)".into(),

@@ -1034,50 +1034,51 @@ impl Parser {
         // Try parsing a pattern
         let pattern_result = self.parse_pattern();
 
-        if pattern_result.is_ok() && self.check(&Token::Colon) {
-            // This is a for-each loop: `L pattern:iter { ... }`
-            let pattern = pattern_result.unwrap();
-            self.advance(); // consume ':'
-            let iter = self.parse_expr()?;
+        if let Ok(pattern) = pattern_result {
+            if self.check(&Token::Colon) {
+                // This is a for-each loop: `L pattern:iter { ... }`
+                self.advance(); // consume ':'
+                let iter = self.parse_expr()?;
 
-            self.expect(&Token::LBrace)?;
-            let body = self.parse_block_contents()?;
-            self.expect(&Token::RBrace)?;
+                self.expect(&Token::LBrace)?;
+                let body = self.parse_block_contents()?;
+                self.expect(&Token::RBrace)?;
 
-            let end = self.prev_span().end;
-            Ok(Spanned::new(
-                Expr::Loop {
-                    pattern: Some(pattern),
-                    iter: Some(Box::new(iter)),
-                    body,
-                },
-                Span::new(start, end),
-            ))
-        } else {
-            // This is a while loop: `L condition { ... }`
-            // Reset position and parse as expression
-            self.pos = saved_pos;
-
-            // Disable struct literals in condition to avoid ambiguity with block start
-            // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal
-            let old_allow_struct_literal = self.allow_struct_literal;
-            self.allow_struct_literal = false;
-            let condition = self.parse_expr()?;
-            self.allow_struct_literal = old_allow_struct_literal;
-
-            self.expect(&Token::LBrace)?;
-            let body = self.parse_block_contents()?;
-            self.expect(&Token::RBrace)?;
-
-            let end = self.prev_span().end;
-            Ok(Spanned::new(
-                Expr::While {
-                    condition: Box::new(condition),
-                    body,
-                },
-                Span::new(start, end),
-            ))
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Loop {
+                        pattern: Some(pattern),
+                        iter: Some(Box::new(iter)),
+                        body,
+                    },
+                    Span::new(start, end),
+                ));
+            }
         }
+
+        // This is a while loop: `L condition { ... }`
+        // Reset position and parse as expression
+        self.pos = saved_pos;
+
+        // Disable struct literals in condition to avoid ambiguity with block start
+        // e.g., `L x == CONST { ... }` should not parse CONST{ as struct literal
+        let old_allow_struct_literal = self.allow_struct_literal;
+        self.allow_struct_literal = false;
+        let condition = self.parse_expr()?;
+        self.allow_struct_literal = old_allow_struct_literal;
+
+        self.expect(&Token::LBrace)?;
+        let body = self.parse_block_contents()?;
+        self.expect(&Token::RBrace)?;
+
+        let end = self.prev_span().end;
+        Ok(Spanned::new(
+            Expr::While {
+                condition: Box::new(condition),
+                body,
+            },
+            Span::new(start, end),
+        ))
     }
 
     /// Parse match expression: `M expr{arms}`

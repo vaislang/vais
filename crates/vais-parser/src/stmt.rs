@@ -95,6 +95,7 @@ impl Parser {
     ///
     /// If parsing fails and recovery mode is enabled, creates an Error node
     /// and synchronizes to the next statement boundary.
+    #[allow(dead_code)]
     pub(crate) fn parse_stmt_with_recovery(&mut self) -> Spanned<Stmt> {
         match self.parse_stmt() {
             Ok(stmt) => stmt,
@@ -207,6 +208,7 @@ impl Parser {
     ///
     /// If parsing fails and recovery mode is enabled, creates an Error expression
     /// and synchronizes to the next expression boundary.
+    #[allow(dead_code)]
     pub(crate) fn parse_expr_with_recovery(&mut self) -> Spanned<Expr> {
         match self.parse_expr() {
             Ok(expr) => expr,
