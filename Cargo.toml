@@ -16,9 +16,12 @@ members = [
     "crates/vais-hotreload",
     "crates/vais-dynload",
     "crates/vais-macro",
+    "crates/vais-profiler",
     "crates/vais-registry-server",
+    "crates/vais-tutorial",
     # "crates/vais-python",  # Requires Python <= 3.13 (PyO3 limitation)
     "crates/vais-node",
+    "crates/vais-bindgen",
     "crates/vaisc",
     "examples/plugins/example-lint",
     "benches",

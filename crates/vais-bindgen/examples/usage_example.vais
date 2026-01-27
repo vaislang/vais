@@ -1,0 +1,90 @@
+// Example of using generated FFI bindings in Vais
+
+// First, generate bindings with:
+// vais-bindgen -l mydb -o db_bindings.vais database.h
+
+// Then import the generated bindings
+import db_bindings::*;
+
+fn main() {
+    // Open database
+    let db = db_open(c"test.db");
+
+    if db == null {
+        println("Failed to open database");
+        return;
+    }
+
+    // Execute query
+    let result: [u8; 1024];
+    let status = db_query(db, c"SELECT * FROM users", result.as_mut_ptr(), 1024);
+
+    if status == 0 {
+        println("Query result: {}", String::from_utf8(&result));
+    } else {
+        println("Query failed with status: {}", status);
+    }
+
+    // Create and use point
+    let p1 = point_create(10, 20);
+    let p2 = point_create(30, 40);
+    let dist = point_distance(p1, p2);
+    println("Distance: {}", dist);
+
+    // Create and render sprite
+    let sprite = sprite_create(p1, 0xFF0000);
+    sprite_render(sprite);
+
+    // Log message (variadic function)
+    log_message(1, c"Processing item %d of %d", 5, 10);
+
+    // Clean up
+    db_close(db);
+}
+
+// Safe wrapper example
+struct Database {
+    handle: *mut db_bindings::Database,
+}
+
+impl Database {
+    fn open(path: &str) -> Option<Self> {
+        let handle = unsafe { db_open(path.as_c_str()) };
+        if handle == null {
+            None
+        } else {
+            Some(Database { handle })
+        }
+    }
+
+    fn query(&self, sql: &str, buffer: &mut [u8]) -> Result<(), i32> {
+        let result = unsafe {
+            db_query(self.handle, sql.as_c_str(), buffer.as_mut_ptr(), buffer.len())
+        };
+
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+}
+
+impl Drop for Database {
+    fn drop(&mut self) {
+        unsafe { db_close(self.handle); }
+    }
+}
+
+// Safe wrapper usage
+fn safe_example() {
+    let db = Database::open("test.db").expect("Failed to open database");
+    let mut buffer = [0u8; 1024];
+
+    match db.query("SELECT * FROM users", &mut buffer) {
+        Ok(_) => println("Query succeeded"),
+        Err(code) => println("Query failed: {}", code),
+    }
+
+    // db is automatically closed when it goes out of scope
+}

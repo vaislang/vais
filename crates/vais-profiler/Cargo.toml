@@ -1,0 +1,31 @@
+[package]
+name = "vais-profiler"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Performance profiling tool for Vais compiler"
+
+[dependencies]
+# Core dependencies
+thiserror.workspace = true
+miette.workspace = true
+
+# Time and system info
+libc = "0.2"
+parking_lot = "0.12"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Optional flamegraph support
+inferno = { version = "0.11", optional = true }
+
+[features]
+default = ["flamegraph"]
+flamegraph = ["inferno"]
+
+[dev-dependencies]
+pretty_assertions.workspace = true

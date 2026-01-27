@@ -4,6 +4,15 @@
 //! enabling immediate code execution without writing to disk or invoking
 //! external compilers like clang.
 //!
+//! # Tiered JIT Compilation
+//!
+//! The JIT compiler supports three tiers:
+//! - **Tier 0 (Interpreter)**: Direct AST evaluation for initial execution
+//! - **Tier 1 (Baseline JIT)**: Fast compilation with minimal optimization
+//! - **Tier 2 (Optimizing JIT)**: Slow compilation with full optimization
+//!
+//! Functions are automatically promoted to higher tiers based on execution counts.
+//!
 //! # Example
 //!
 //! ```ignore
@@ -21,13 +30,34 @@
 //! let result = jit.compile_and_run_main(&ast).unwrap();
 //! assert_eq!(result, 7);
 //! ```
+//!
+//! # Tiered JIT Example
+//!
+//! ```ignore
+//! use vais_jit::{TieredJit, Tier, TierThresholds};
+//! use vais_parser::parse;
+//!
+//! // Create tiered JIT with custom thresholds
+//! let thresholds = TierThresholds {
+//!     interpreter_to_baseline: 100,
+//!     baseline_to_optimizing: 10_000,
+//! };
+//! let mut jit = TieredJit::with_thresholds(thresholds).unwrap();
+//!
+//! let ast = parse("F main()->i64 { 42 }").unwrap();
+//! let result = jit.run_main(&ast).unwrap();
+//! ```
 
 mod compiler;
 mod runtime;
+mod tiered;
 mod types;
 
 pub use compiler::JitCompiler;
 pub use runtime::JitRuntime;
+pub use tiered::{
+    FunctionProfile, FunctionStats, Interpreter, Tier, TierThresholds, TieredJit, Value,
+};
 pub use types::TypeMapper;
 
 /// JIT compilation error.

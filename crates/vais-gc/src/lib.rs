@@ -10,6 +10,16 @@
 //! - **Reference counting** for cycle detection (optional)
 //! - **C FFI** for integration with Vais-generated LLVM code
 //!
+//! # Concurrent GC
+//!
+//! The concurrent garbage collector minimizes pause times by performing
+//! most GC work concurrently with mutator threads:
+//!
+//! - **Tri-color marking**: White (unvisited), Gray (to scan), Black (scanned)
+//! - **Write barrier**: Maintains invariant during concurrent marking
+//! - **Incremental collection**: Work can be divided into smaller steps
+//! - **Concurrent sweep**: Sweep phase runs in background thread
+//!
 //! # Usage
 //!
 //! ```vais
@@ -23,12 +33,17 @@
 //! ```
 
 mod allocator;
+mod concurrent;
 mod ffi;
 mod gc;
 
 pub use allocator::{GcAllocator, GcStats};
-pub use gc::{GcObject, GcHeap, GcRoot};
+pub use concurrent::{
+    default_concurrent_gc, Color, ConcurrentGc, ConcurrentGcConfig, ConcurrentGcHeader,
+    ConcurrentGcObject, ConcurrentGcStats, GcPhase, GcWorker, IncrementalGc, WriteBarrierEntry,
+};
 pub use ffi::*;
+pub use gc::{GcHeap, GcObject, GcRoot};
 
 use std::sync::{Arc, Mutex, OnceLock};
 

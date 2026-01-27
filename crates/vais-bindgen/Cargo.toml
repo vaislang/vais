@@ -1,0 +1,15 @@
+[package]
+name = "vais-bindgen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "1.10"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[[bin]]
+name = "vais-bindgen"
+path = "src/bin/vais-bindgen.rs"
