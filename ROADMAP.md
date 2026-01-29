@@ -1463,7 +1463,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
 | Phase 11: 프로덕션 준비 | ✅ 완료 | 100% |
 | Phase 12: 생태계 성숙 | ✅ 완료 | 100% |
-| Phase 13: 품질 보증 및 프로덕션 검증 | 🔄 진행 중 | 30% (P0 완료) |
+| Phase 13: 품질 보증 및 프로덕션 검증 | 🔄 진행 중 | 60% (P0-P2 완료) |
 
 ---
 
@@ -1729,7 +1729,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 
 ## 🚀 Phase 13: 품질 보증 및 프로덕션 검증
 
-> **상태**: 🔄 진행 중 (P0 완료, P1 완료)
+> **상태**: 🔄 진행 중 (P0 완료, P1 완료, P2 완료)
 > **추가일**: 2026-01-29
 > **목표**: 테스트 커버리지 강화, 실사용 검증, v0.2.0 프로덕션 품질 달성
 
@@ -1782,18 +1782,42 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### P2 - 중간 우선순위 (1-2개월) - 실사용 검증
 
 #### 실세계 프로젝트 검증
-- [ ] **비즈니스 로직 프로젝트** - HTTP 서버 또는 CLI 도구 구현
-  - 누락된 stdlib 기능 식별
-  - 실사용 성능 프로파일링
-  - 개발자 경험(DX) 피드백 수집
-- [ ] **Quickstart 가이드** - "5분만에 시작하기" 문서
-  - 설치 → 첫 프로그램 → 빌드 → 실행
-  - 쿡북/레시피 섹션 추가
+- [x] **비즈니스 로직 프로젝트** - Math CLI & Data Processing 도구 구현 (완료일: 2026-01-29)
+  - Math CLI: Fibonacci, factorial, primes, GCD/LCM, power, isqrt 등 수학 유틸리티
+  - Data Processing: 배열 통계 (sum, min, max, mean, count) 도구
+  - 15개 E2E 테스트 추가 (총 104개): 실사용 알고리즘 검증
+  - DX 피드백 수집: print() 부재, 배열 mutation 불가, 루프 codegen 이슈 등 식별
+  - 누락 stdlib 기능 14개 식별 (print/println, format, strlen, atoi 등)
+- [x] **Quickstart 가이드** - "5분만에 시작하기" 문서 (완료일: 2026-01-29)
+  - 설치 (macOS/Linux/Windows) → 빌드 → 첫 프로그램 → 실행 (5분 플로우)
+  - 언어 기본 문법 요약: 함수, 변수, 제어흐름, 자기재귀, 구조체, 배열, 출력
+  - 쿡북/레시피 7개: Fibonacci, GCD, Prime, Array Stats, Binary Search, Struct, Print Numbers
+  - CLI 명령어 요약: compile, run, check, fmt, repl, time, show-tokens, show-ast
 
 #### 언어 기능 보강
-- [ ] **Const Generics 개선** - 컴파일 타임 상수 제네릭
-- [ ] **Named Arguments / Default Parameters** - 함수 호출 편의성
-- [ ] **Procedural Macros** - 선언적 매크로 넘어 절차적 매크로
+- [x] **Const Generics 개선** - 컴파일 타임 상수 제네릭 (완료일: 2026-01-29)
+  - TypeChecker에 `current_const_generics` 필드 추가: const/type 제네릭 구분 추적
+  - `set_generics()`/`restore_generics()` 확장: const 파라미터 타입 정보 보존
+  - GenericInstantiation에 `const_args` 필드 추가: const 값 인스턴스화 지원
+  - `mangle_name_with_consts()` 함수: const 값 포함 이름 맹글링
+  - `substitute_const_values()` 함수: const 파라미터를 concrete 값으로 대입
+  - `mangle_type()`에 ConstGeneric/ConstArray 처리 추가
+  - 8개 신규 통합 테스트: const generic 타입 추적, 산술, 다중 파라미터, 혼합, 맹글링 등
+- [x] **Named Arguments / Default Parameters** - 함수 호출 편의성 (완료일: 2026-01-29)
+  - AST: `Param.default_value` 필드 추가, `NamedArg`/`CallArgs` 타입 정의
+  - Parser: `= expr` 구문으로 기본값 파싱, 함수/메서드/클로저/FFI 파라미터 지원
+  - TypeChecker: `FunctionSig.required_params` 필드 추가, `min_args()` 메서드
+  - TypeChecker: `register_function()`에서 default 파라미터 카운팅
+  - TypeChecker: `Expr::Call` 체크에서 default 파라미터 생략 허용
+  - 6개 통합 테스트: 기본값 파싱, 생략, 복수 기본값, 전체 제공, 표현식 기본값
+- [x] **Procedural Macros** - 선언적 매크로 넘어 절차적 매크로 (완료일: 2026-01-29)
+  - `proc_macro` 모듈 구현: TokenStream, TokenTree, LiteralToken, Delimiter 타입
+  - `ProcMacro` 트레이트: expand/derive/attribute 3가지 확장 포인트
+  - `ProcMacroRegistry`: 절차적 매크로 등록/조회/관리 시스템
+  - `ProcMacroKind`: FunctionLike, Derive, Attribute 3가지 매크로 종류
+  - 6개 빌트인 proc macro: stringify!, concat!, env!, line!, file!, column!
+  - 토큰 스트림 구성 헬퍼: ident(), int_lit(), str_lit(), punct(), group()
+  - 10개 유닛 테스트: 토큰 스트림, 빌트인 매크로, 커스텀 매크로, 레지스트리, 에러 처리
 
 ### P3 - 낮은 우선순위 (3-6개월) - 생태계 성장
 

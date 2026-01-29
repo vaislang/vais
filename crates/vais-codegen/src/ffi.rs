@@ -57,6 +57,7 @@ impl CodeGenerator {
             ret: ret_type.clone(),
             is_async: false,
             is_vararg: func.is_vararg,
+            required_params: None,
             contracts: None,
             effect_annotation: vais_types::EffectAnnotation::Infer,
             inferred_effects: None,
@@ -232,6 +233,7 @@ mod tests {
                     is_mut: false,
                     is_vararg: false,
                     ownership: Ownership::Regular,
+                    default_value: None,
                 }],
                 ret_type: Some(Spanned::new(
                     Type::Named {
@@ -272,6 +274,7 @@ mod tests {
                     is_mut: false,
                     is_vararg: false,
                     ownership: Ownership::Regular,
+                    default_value: None,
                 }],
                 ret_type: Some(Spanned::new(
                     Type::Named {

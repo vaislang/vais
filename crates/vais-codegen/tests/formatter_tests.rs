@@ -68,13 +68,13 @@ fn test_format_simple_function() {
             Param {
                 name: ident("a"),
                 ty: spanned(named_type("i64")),
-                is_mut: false, ownership: Ownership::Regular,
+                is_mut: false, ownership: Ownership::Regular, default_value: None,
                 is_vararg: false,
             },
             Param {
                 name: ident("b"),
                 ty: spanned(named_type("i64")),
-                is_mut: false, ownership: Ownership::Regular,
+                is_mut: false, ownership: Ownership::Regular, default_value: None,
                 is_vararg: false,
             },
         ],
@@ -131,7 +131,7 @@ fn test_format_function_with_generics() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("T")),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false, ownership: Ownership::Regular, default_value: None,
             is_vararg: false,
         }],
         ret_type: Some(spanned(named_type("T"))),
@@ -159,7 +159,7 @@ fn test_format_function_with_bounded_generics() {
         params: vec![Param {
             name: ident("value"),
             ty: spanned(named_type("T")),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false, ownership: Ownership::Regular, default_value: None,
             is_vararg: false,
         }],
         ret_type: Some(spanned(Type::Unit)),
@@ -209,7 +209,7 @@ fn test_format_function_with_block_body() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("i64")),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false, ownership: Ownership::Regular, default_value: None,
             is_vararg: false,
         }],
         ret_type: Some(spanned(named_type("i64"))),
@@ -218,7 +218,7 @@ fn test_format_function_with_block_body() {
                 name: ident("y"),
                 ty: None,
                 value: Box::new(spanned(int_expr(10))),
-                is_mut: false, ownership: Ownership::Regular,
+                is_mut: false, ownership: Ownership::Regular, default_value: None,
             }),
             spanned(Stmt::Return(Some(Box::new(spanned(Expr::Binary {
                 op: BinOp::Add,
@@ -287,7 +287,7 @@ fn test_format_function_with_mut_params() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("i64")),
-            is_mut: true, ownership: Ownership::Regular,
+            is_mut: true, ownership: Ownership::Regular, default_value: None,
             is_vararg: false,
         }],
         ret_type: Some(spanned(Type::Unit)),
@@ -380,7 +380,7 @@ fn test_format_struct_with_methods() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("i64")),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false, ownership: Ownership::Regular, default_value: None,
             is_vararg: false,
         }],
         ret_type: Some(spanned(named_type("Point"))),
@@ -1028,7 +1028,7 @@ fn test_custom_indent_size() {
             name: ident("x"),
             ty: None,
             value: Box::new(spanned(int_expr(42))),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false, ownership: Ownership::Regular, default_value: None,
         })]),
         is_pub: false,
         is_async: false,
@@ -1063,7 +1063,7 @@ fn test_use_tabs_indentation() {
             name: ident("x"),
             ty: None,
             value: Box::new(spanned(int_expr(42))),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false, ownership: Ownership::Regular, default_value: None,
         })]),
         is_pub: false,
         is_async: false,
@@ -1108,13 +1108,13 @@ fn test_format_multiple_items() {
                     Param {
                         name: ident("a"),
                         ty: spanned(named_type("Int")),
-                        is_mut: false, ownership: Ownership::Regular,
+                        is_mut: false, ownership: Ownership::Regular, default_value: None,
                         is_vararg: false,
                     },
                     Param {
                         name: ident("b"),
                         ty: spanned(named_type("Int")),
-                        is_mut: false, ownership: Ownership::Regular,
+                        is_mut: false, ownership: Ownership::Regular, default_value: None,
                         is_vararg: false,
                     },
                 ],

@@ -1042,6 +1042,9 @@ pub struct FunctionSig {
     pub ret: ResolvedType,
     pub is_async: bool,
     pub is_vararg: bool, // true for variadic C functions (printf, etc.)
+    /// Number of required parameters (those without default values)
+    /// If None, all parameters are required (backward compatible)
+    pub required_params: Option<usize>,
     /// Contract specification for formal verification (requires/ensures)
     pub contracts: Option<ContractSpec>,
     /// Effect annotation - declared or inferred effects
@@ -1061,6 +1064,7 @@ impl FunctionSig {
             ret,
             is_async: false,
             is_vararg: false,
+            required_params: None,
             contracts: None,
             effect_annotation: EffectAnnotation::Infer,
             inferred_effects: None,
@@ -1077,10 +1081,16 @@ impl FunctionSig {
             ret,
             is_async: false,
             is_vararg: false,
+            required_params: None,
             contracts: None,
             effect_annotation: EffectAnnotation::Infer,
             inferred_effects: None,
         }
+    }
+
+    /// Return the minimum number of required arguments
+    pub fn min_args(&self) -> usize {
+        self.required_params.unwrap_or(self.params.len())
     }
 }
 
@@ -1175,6 +1185,8 @@ pub struct GenericInstantiation {
     pub base_name: String,
     /// Concrete type arguments
     pub type_args: Vec<ResolvedType>,
+    /// Concrete const arguments (name -> value)
+    pub const_args: Vec<(String, i64)>,
     /// Mangled name for code generation
     pub mangled_name: String,
     /// Kind of instantiation
@@ -1196,6 +1208,19 @@ impl GenericInstantiation {
         Self {
             base_name: base_name.to_string(),
             type_args,
+            const_args: Vec::new(),
+            mangled_name: mangled,
+            kind: InstantiationKind::Function,
+        }
+    }
+
+    /// Create a new function instantiation with const generic arguments
+    pub fn function_with_consts(base_name: &str, type_args: Vec<ResolvedType>, const_args: Vec<(String, i64)>) -> Self {
+        let mangled = mangle_name_with_consts(base_name, &type_args, &const_args);
+        Self {
+            base_name: base_name.to_string(),
+            type_args,
+            const_args,
             mangled_name: mangled,
             kind: InstantiationKind::Function,
         }
@@ -1207,6 +1232,19 @@ impl GenericInstantiation {
         Self {
             base_name: base_name.to_string(),
             type_args,
+            const_args: Vec::new(),
+            mangled_name: mangled,
+            kind: InstantiationKind::Struct,
+        }
+    }
+
+    /// Create a new struct instantiation with const generic arguments
+    pub fn struct_type_with_consts(base_name: &str, type_args: Vec<ResolvedType>, const_args: Vec<(String, i64)>) -> Self {
+        let mangled = mangle_name_with_consts(base_name, &type_args, &const_args);
+        Self {
+            base_name: base_name.to_string(),
+            type_args,
+            const_args,
             mangled_name: mangled,
             kind: InstantiationKind::Struct,
         }
@@ -1219,6 +1257,7 @@ impl GenericInstantiation {
         Self {
             base_name: method_name.to_string(),
             type_args,
+            const_args: Vec::new(),
             mangled_name: mangled,
             kind: InstantiationKind::Method {
                 struct_name: struct_name.to_string(),
@@ -1238,6 +1277,22 @@ pub fn mangle_name(base: &str, type_args: &[ResolvedType]) -> String {
             .collect::<Vec<_>>()
             .join("_");
         format!("{}${}", base, args_str)
+    }
+}
+
+/// Mangle a generic name with both type and const arguments
+pub fn mangle_name_with_consts(base: &str, type_args: &[ResolvedType], const_args: &[(String, i64)]) -> String {
+    let mut parts = Vec::new();
+    for ty in type_args {
+        parts.push(mangle_type(ty));
+    }
+    for (_, val) in const_args {
+        parts.push(format!("c{}", val));
+    }
+    if parts.is_empty() {
+        base.to_string()
+    } else {
+        format!("{}${}", base, parts.join("_"))
     }
 }
 
@@ -1295,6 +1350,14 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
             format!("fn_{}_{}", params_str, mangle_type(ret))
         }
         ResolvedType::Generic(name) => name.clone(),
+        ResolvedType::ConstGeneric(name) => format!("cg_{}", name),
+        ResolvedType::ConstArray { element, size } => {
+            let size_str = match size.try_evaluate() {
+                Some(n) => format!("{}", n),
+                None => "dyn".to_string(),
+            };
+            format!("arr{}_{}", size_str, mangle_type(element))
+        }
         ResolvedType::Var(id) => format!("v{}", id),
         ResolvedType::Vector { element, lanes } => format!("vec{}_{}", lanes, mangle_type(element)),
         _ => "unknown".to_string(),
@@ -1366,7 +1429,69 @@ pub fn substitute_type(
                 lanes: *lanes,
             }
         }
+        ResolvedType::ConstGeneric(name) => {
+            // Const generics can be substituted if a mapping exists
+            substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
+        }
+        ResolvedType::ConstArray { element, size } => {
+            let new_element = Box::new(substitute_type(element, substitutions));
+            // Substitute const parameter names in size expression
+            let new_size = substitute_const(size, substitutions);
+            ResolvedType::ConstArray {
+                element: new_element,
+                size: new_size,
+            }
+        }
         // Primitives and other types pass through unchanged
         _ => ty.clone(),
+    }
+}
+
+/// Substitute const parameter names in a ResolvedConst expression
+pub fn substitute_const(
+    c: &ResolvedConst,
+    _substitutions: &HashMap<String, ResolvedType>,
+) -> ResolvedConst {
+    // For now, const substitution happens through const_substitutions map
+    c.clone()
+}
+
+/// Substitute const parameters with concrete values in a ResolvedConst expression
+pub fn substitute_const_values(
+    c: &ResolvedConst,
+    const_subs: &HashMap<String, i64>,
+) -> ResolvedConst {
+    match c {
+        ResolvedConst::Value(_) => c.clone(),
+        ResolvedConst::Param(name) => {
+            if let Some(&val) = const_subs.get(name) {
+                ResolvedConst::Value(val)
+            } else {
+                c.clone()
+            }
+        }
+        ResolvedConst::BinOp { op, left, right } => {
+            let new_left = substitute_const_values(left, const_subs);
+            let new_right = substitute_const_values(right, const_subs);
+            // Try to evaluate if both are now concrete
+            if let (Some(l), Some(r)) = (new_left.try_evaluate(), new_right.try_evaluate()) {
+                let result = match op {
+                    ConstBinOp::Add => l.checked_add(r),
+                    ConstBinOp::Sub => l.checked_sub(r),
+                    ConstBinOp::Mul => l.checked_mul(r),
+                    ConstBinOp::Div => {
+                        if r == 0 { None } else { l.checked_div(r) }
+                    }
+                };
+                if let Some(val) = result {
+                    return ResolvedConst::Value(val);
+                }
+            }
+            ResolvedConst::BinOp {
+                op: *op,
+                left: Box::new(new_left),
+                right: Box::new(new_right),
+            }
+        }
     }
 }

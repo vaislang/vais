@@ -29,6 +29,7 @@ pub mod expansion;
 pub mod derive;
 pub mod async_macros;
 pub mod property_macros;
+pub mod proc_macro;
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -51,6 +52,13 @@ pub use property_macros::{
     register_property_macros, process_prop_attribute,
     FORALL_MACRO, CHECK_MACRO, ASSERT_PROP_MACRO,
 };
+pub use proc_macro::{
+    TokenStream, TokenTree, LiteralToken,
+    ProcMacro, ProcMacroKind, ProcMacroRegistry,
+    ProcMacroError, ProcMacroResult,
+};
+// Note: proc_macro::Delimiter is accessed as proc_macro::Delimiter
+// to avoid conflict with vais_ast::Delimiter
 
 /// Error type for macro expansion failures.
 #[derive(Debug, Error)]

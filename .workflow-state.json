@@ -1,14 +1,16 @@
 {
-  "phase": 4,
-  "request": "Phase 13 P1 - Python 바인딩 및 에러 품질",
+  "phase": 5,
+  "request": "Phase 13 P2 - 실사용 검증 및 언어 기능 보강",
   "tasks": [
-    { "id": 1, "name": "vais-python 재활성화 (PyO3)", "status": "done", "model": "Sonnet" },
-    { "id": 2, "name": "Python CI 테스트 추가", "status": "done", "model": "Haiku" },
-    { "id": 3, "name": "Python 예제/튜토리얼 작성", "status": "done", "model": "Haiku" },
-    { "id": 4, "name": "에러 메시지 전수 검사", "status": "done", "model": "Sonnet" },
-    { "id": 5, "name": "에러 복구 시나리오 테스트", "status": "done", "model": "Sonnet" },
-    { "id": 6, "name": "진단 메시지 명확성 개선", "status": "in_progress", "model": "Sonnet" }
+    { "id": 1, "name": "비즈니스 로직 프로젝트 (CLI 도구 구현)", "status": "done", "model": "Opus" },
+    { "id": 2, "name": "Quickstart 가이드 작성", "status": "done", "model": "Sonnet" },
+    { "id": 3, "name": "Const Generics 개선 - 파서/AST/컴파일타임 평가", "status": "done", "model": "Opus" },
+    { "id": 4, "name": "Const Generics 개선 - 타입체크/코드젠 통합", "status": "done", "model": "Opus" },
+    { "id": 5, "name": "Named Arguments / Default Parameters - 파서/AST", "status": "done", "model": "Opus" },
+    { "id": 6, "name": "Named Arguments / Default Parameters - 타입체크/코드젠", "status": "done", "model": "Opus" },
+    { "id": 7, "name": "Procedural Macros - 프레임워크/인터페이스", "status": "done", "model": "Opus" },
+    { "id": 8, "name": "Procedural Macros - 로딩/실행/테스트", "status": "done", "model": "Opus" }
   ],
-  "currentTask": 6,
-  "lastCompleted": "에러 복구 시나리오 테스트"
+  "currentTask": null,
+  "lastCompleted": "Procedural Macros - 로딩/실행/테스트"
 }

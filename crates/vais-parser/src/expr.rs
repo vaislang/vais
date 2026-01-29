@@ -1159,6 +1159,7 @@ impl Parser {
                 is_mut: false,
                 is_vararg: false,
                 ownership: Ownership::Regular,
+                default_value: None,
             });
             if !self.check(&Token::Pipe) {
                 self.expect(&Token::Comma)?;

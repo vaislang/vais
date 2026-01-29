@@ -88,6 +88,9 @@ pub struct TypeChecker {
     // Current generic bounds (maps generic param name to trait bounds)
     current_generic_bounds: HashMap<String, Vec<String>>,
 
+    // Current const generic parameters (maps const param name to its type)
+    current_const_generics: HashMap<String, ResolvedType>,
+
     // Type variable counter for inference
     next_type_var: Cell<usize>,
 
@@ -125,6 +128,7 @@ impl TypeChecker {
             current_fn_name: None,
             current_generics: Vec::new(),
             current_generic_bounds: HashMap::new(),
+            current_const_generics: HashMap::new(),
             next_type_var: Cell::new(0),
             substitutions: HashMap::new(),
             exhaustiveness_checker: ExhaustivenessChecker::new(),
@@ -212,6 +216,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -229,6 +234,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -246,6 +252,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -263,6 +270,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -280,6 +288,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -297,6 +306,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -318,6 +328,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -339,6 +350,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -356,6 +368,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -373,6 +386,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -390,6 +404,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -407,6 +422,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -427,6 +443,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -444,6 +461,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -464,6 +482,7 @@ impl TypeChecker {
                 ret: ResolvedType::Unit,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -486,6 +505,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -506,6 +526,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -523,6 +544,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -545,6 +567,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -567,6 +590,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -584,6 +608,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -604,6 +629,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -625,6 +651,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -645,6 +672,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -666,6 +694,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -683,6 +712,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -700,6 +730,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -717,6 +748,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -755,6 +787,7 @@ impl TypeChecker {
                 ret: vec2f32.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -777,6 +810,7 @@ impl TypeChecker {
                 ret: vec4f32.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -803,6 +837,7 @@ impl TypeChecker {
                 ret: vec8f32.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -823,6 +858,7 @@ impl TypeChecker {
                 ret: vec2f64.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -845,6 +881,7 @@ impl TypeChecker {
                 ret: vec4f64.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -867,6 +904,7 @@ impl TypeChecker {
                 ret: vec4i32.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -893,6 +931,7 @@ impl TypeChecker {
                 ret: vec8i32.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -913,6 +952,7 @@ impl TypeChecker {
                 ret: vec2i64.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -935,6 +975,7 @@ impl TypeChecker {
                 ret: vec4i64.clone(),
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -958,9 +999,10 @@ impl TypeChecker {
                         ret: $vec_ty.clone(),
                         is_async: false,
                         is_vararg: false,
+                        required_params: None,
                         contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                        effect_annotation: EffectAnnotation::Infer,
+                        inferred_effects: None,
                     },
                 );
             };
@@ -1022,6 +1064,7 @@ impl TypeChecker {
                 ret: ResolvedType::F32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1039,6 +1082,7 @@ impl TypeChecker {
                 ret: ResolvedType::F32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1056,6 +1100,7 @@ impl TypeChecker {
                 ret: ResolvedType::F64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1073,6 +1118,7 @@ impl TypeChecker {
                 ret: ResolvedType::F64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1090,6 +1136,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1107,6 +1154,7 @@ impl TypeChecker {
                 ret: ResolvedType::I32,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1124,6 +1172,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1141,6 +1190,7 @@ impl TypeChecker {
                 ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1240,7 +1290,7 @@ impl TypeChecker {
     }
 
     /// Set current generics with their bounds for type resolution
-    fn set_generics(&mut self, generics: &[GenericParam]) -> (Vec<String>, HashMap<String, Vec<String>>) {
+    fn set_generics(&mut self, generics: &[GenericParam]) -> (Vec<String>, HashMap<String, Vec<String>>, HashMap<String, ResolvedType>) {
         let prev_generics = std::mem::replace(
             &mut self.current_generics,
             generics.iter().map(|g| g.name.node.clone()).collect(),
@@ -1257,13 +1307,30 @@ impl TypeChecker {
                 })
                 .collect(),
         );
-        (prev_generics, prev_bounds)
+        // Track const generic parameters with their types
+        // Collect first to avoid borrow conflict with self.resolve_type
+        let new_const_generics: HashMap<String, ResolvedType> = generics
+            .iter()
+            .filter_map(|g| {
+                if let GenericParamKind::Const { ty } = &g.kind {
+                    Some((g.name.node.clone(), self.resolve_type(&ty.node)))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let prev_const_generics = std::mem::replace(
+            &mut self.current_const_generics,
+            new_const_generics,
+        );
+        (prev_generics, prev_bounds, prev_const_generics)
     }
 
     /// Restore previous generics
-    fn restore_generics(&mut self, prev_generics: Vec<String>, prev_bounds: HashMap<String, Vec<String>>) {
+    fn restore_generics(&mut self, prev_generics: Vec<String>, prev_bounds: HashMap<String, Vec<String>>, prev_const_generics: HashMap<String, ResolvedType>) {
         self.current_generics = prev_generics;
         self.current_generic_bounds = prev_bounds;
+        self.current_const_generics = prev_const_generics;
     }
 
     /// Extract contract specification from function attributes
@@ -1316,7 +1383,7 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds) = self.set_generics(&f.generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
 
         let params: Vec<_> = f
             .params
@@ -1334,12 +1401,20 @@ impl TypeChecker {
             .unwrap_or(ResolvedType::Unit);
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         let generic_bounds: HashMap<String, Vec<String>> = f.generics
             .iter()
             .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
             .collect();
+
+        // Count required parameters (those without default values)
+        let has_defaults = f.params.iter().any(|p| p.default_value.is_some());
+        let required_params = if has_defaults {
+            Some(f.params.iter().filter(|p| p.default_value.is_none()).count())
+        } else {
+            None // All required (backward compatible)
+        };
 
         self.functions.insert(
             name.clone(),
@@ -1351,6 +1426,7 @@ impl TypeChecker {
                 ret,
                 is_async: f.is_async,
                 is_vararg: false,
+                required_params,
                 contracts: None, // Contracts will be extracted in check_function
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1392,6 +1468,7 @@ impl TypeChecker {
                 ret,
                 is_async: false,
                 is_vararg: func.is_vararg,
+                required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
                 inferred_effects: None,
@@ -1409,7 +1486,7 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds) = self.set_generics(&s.generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&s.generics);
 
         let mut fields = HashMap::new();
         for field in &s.fields {
@@ -1450,15 +1527,16 @@ impl TypeChecker {
                     ret,
                     is_async: method.node.is_async,
                     is_vararg: false,
+                    required_params: None,
                     contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
                 },
             );
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         self.structs.insert(
             name.clone(),
@@ -1482,7 +1560,7 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds) = self.set_generics(&e.generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&e.generics);
 
         let mut variants = HashMap::new();
         for variant in &e.variants {
@@ -1508,7 +1586,7 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         // Register enum variants for exhaustiveness checking
         let variant_names: Vec<String> = e.variants.iter()
@@ -1536,7 +1614,7 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds) = self.set_generics(&u.generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&u.generics);
 
         let mut fields = HashMap::new();
         for field in &u.fields {
@@ -1544,7 +1622,7 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         self.unions.insert(
             name.clone(),
@@ -1584,7 +1662,7 @@ impl TypeChecker {
         all_generics.extend(impl_block.generics.iter().cloned());
 
         // Set current generics for proper type resolution
-        let (prev_generics, prev_bounds) = self.set_generics(&all_generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
 
         // If implementing a trait, validate the impl
         if let Some(trait_name) = &impl_block.trait_name {
@@ -1683,9 +1761,10 @@ impl TypeChecker {
                     ret,
                     is_async: method.node.is_async,
                     is_vararg: false,
+                    required_params: None,
                     contracts: None,
-                effect_annotation: EffectAnnotation::Infer,
-                inferred_effects: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
                 },
             ));
         }
@@ -1698,7 +1777,7 @@ impl TypeChecker {
         }
 
         // Restore previous generics
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         Ok(())
     }
@@ -1722,7 +1801,7 @@ impl TypeChecker {
         }
 
         // Set current generics for type resolution
-        let (prev_generics, prev_bounds) = self.set_generics(&t.generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&t.generics);
 
         // Parse associated types (with GAT support)
         let mut associated_types = HashMap::new();
@@ -1780,7 +1859,7 @@ impl TypeChecker {
             );
         }
 
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         self.traits.insert(
             name.clone(),
@@ -1814,7 +1893,7 @@ impl TypeChecker {
         self.push_scope();
 
         // Set current generic parameters
-        let (prev_generics, prev_bounds) = self.set_generics(&f.generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
 
         // Add parameters to scope
         for param in &f.params {
@@ -1885,7 +1964,7 @@ impl TypeChecker {
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
         self.pop_scope();
 
         Ok(())
@@ -1906,7 +1985,7 @@ impl TypeChecker {
         all_generics.extend(method.generics.iter().cloned());
 
         // Set current generic parameters (including struct-level generics)
-        let (prev_generics, prev_bounds) = self.set_generics(&all_generics);
+        let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
 
         // Build the generics list for self type (struct-level generics as Generic types)
         let self_generics: Vec<ResolvedType> = struct_generics.iter()
@@ -1952,7 +2031,7 @@ impl TypeChecker {
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
-        self.restore_generics(prev_generics, prev_bounds);
+        self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
         self.pop_scope();
 
         Ok(())
@@ -2293,13 +2372,31 @@ impl TypeChecker {
             }
 
             Expr::Call { func, args } => {
-                // Check if this is a direct call to a generic function
+                // Check if this is a direct call to a known function
                 if let Expr::Ident(func_name) = &func.node {
                     if let Some(sig) = self.functions.get(func_name).cloned() {
                         if !sig.generics.is_empty() {
                             // Generic function call - infer type arguments
                             return self.check_generic_function_call(&sig, args);
                         }
+                        // Check arg count with default parameters support
+                        let min_args = sig.min_args();
+                        let max_args = sig.params.len();
+                        if args.len() < min_args || args.len() > max_args {
+                            return Err(TypeError::ArgCount {
+                                expected: max_args,
+                                got: args.len(),
+                                span: None,
+                            });
+                        }
+                        // Type-check provided arguments against param types
+                        for (i, arg) in args.iter().enumerate() {
+                            let arg_type = self.check_expr(arg)?;
+                            if i < sig.params.len() {
+                                self.unify(&sig.params[i].1, &arg_type)?;
+                            }
+                        }
+                        return Ok(sig.ret.clone());
                     }
                 }
 

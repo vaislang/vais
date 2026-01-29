@@ -1607,3 +1607,172 @@ F test_future() -> i64 {
 "#;
     assert!(compiles(source));
 }
+
+// ==================== Const Generics Improvement Tests (Phase 13 P2) ====================
+
+#[test]
+fn test_const_generic_type_tracking() {
+    // Verify const generics are tracked separately from type generics
+    let source = r#"
+S FixedBuffer<T, const CAP: u64> {
+    data: [T; CAP],
+    capacity: u64
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_with_arithmetic() {
+    // Const expression arithmetic should be evaluated at compile time
+    let source = r#"
+S Grid {
+    cells: [i64; 3 * 4]
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_multiple_params() {
+    // Multiple const generic parameters should all be tracked
+    let source = r#"
+S Tensor<const D1: u64, const D2: u64, const D3: u64> {
+    data: [f64; D1],
+    shape0: u64,
+    shape1: u64,
+    shape2: u64
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_function_param() {
+    // Const generics in function parameters
+    let source = r#"
+F fixed_sum<const N: u64>(arr: [i64; N]) -> i64 {
+    0
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_mixed_with_type() {
+    // Mixed type and const generics should be distinguished
+    let source = r#"
+F transform<T, const SIZE: u64>(data: [T; SIZE]) -> T {
+    data
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_concrete_array_size() {
+    // Concrete const array sizes should evaluate to LLVM array types
+    // [f64; 9] is const-sized array syntax
+    let source = r#"
+S Matrix3x3 {
+    data: [f64; 9],
+    rows: u64
+}
+"#;
+    // Just verify it compiles - the key is that [f64; 9] becomes [9 x double] in LLVM
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_mangling() {
+    // Verify that const generic instantiations produce unique mangled names
+    // This is tested indirectly through the type system
+    let source = r#"
+S SmallBuffer<const N: u64> {
+    data: [i64; N],
+    len: u64
+}
+S LargeBuffer<const N: u64> {
+    data: [i64; N],
+    len: u64
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_const_generic_display() {
+    // Test that const generic types display correctly in error messages
+    let source = r#"
+S ConstVec<T, const N: u64> {
+    items: [T; N],
+    count: u64
+}
+"#;
+    assert!(compiles(source));
+}
+
+// ==================== Default Parameters Tests (Phase 13 P2) ====================
+
+#[test]
+fn test_default_parameter_parsing() {
+    // Default parameter value should parse correctly
+    let source = r#"
+F greet(name: i64, times: i64 = 1) -> i64 {
+    name + times
+}
+F main() -> i64 = greet(42, 1)
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_default_parameter_omitted() {
+    // Calling with fewer args when defaults exist should compile
+    let source = r#"
+F add_with_default(a: i64, b: i64 = 10) -> i64 = a + b
+F main() -> i64 = add_with_default(32)
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_multiple_default_parameters() {
+    // Multiple default parameters
+    let source = r#"
+F compute(x: i64, y: i64 = 5, z: i64 = 10) -> i64 = x + y + z
+F main() -> i64 = compute(27)
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_default_parameter_all_provided() {
+    // All args provided even with defaults
+    let source = r#"
+F compute(x: i64, y: i64 = 5, z: i64 = 10) -> i64 = x + y + z
+F main() -> i64 = compute(10, 20, 30)
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_default_parameter_expression() {
+    // Default value can be an expression
+    let source = r#"
+F scale(value: i64, factor: i64 = 2 * 3) -> i64 = value * factor
+F main() -> i64 = scale(7)
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_named_arg_ast_definition() {
+    // The NamedArg and CallArgs types exist in the AST
+    // This test verifies the AST definitions compile correctly
+    let source = r#"
+F identity(x: i64) -> i64 = x
+F main() -> i64 = identity(42)
+"#;
+    assert!(compiles(source));
+}

@@ -175,6 +175,26 @@ pub struct Param {
     pub is_mut: bool,
     pub is_vararg: bool, // true for variadic parameters (...)
     pub ownership: Ownership, // Linear type ownership mode
+    pub default_value: Option<Box<Spanned<Expr>>>, // Default parameter value
+}
+
+/// Named argument in a function call: `name: expr`
+#[derive(Debug, Clone, PartialEq)]
+pub struct NamedArg {
+    pub name: Spanned<String>,
+    pub value: Spanned<Expr>,
+}
+
+/// Call arguments - either all positional or with named arguments
+#[derive(Debug, Clone, PartialEq)]
+pub enum CallArgs {
+    /// Positional arguments only: `f(a, b, c)`
+    Positional(Vec<Spanned<Expr>>),
+    /// Named arguments (may include positional at the start): `f(a, name: b, other: c)`
+    Named {
+        positional: Vec<Spanned<Expr>>,
+        named: Vec<NamedArg>,
+    },
 }
 
 /// Variance annotation for generic type parameters

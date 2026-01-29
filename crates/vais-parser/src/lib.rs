@@ -817,12 +817,22 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let param_type = self.parse_type()?;
 
+            // Parse optional default value: `= expr`
+            let default_value = if self.check(&Token::Eq) {
+                self.advance();
+                let expr = self.parse_expr()?;
+                Some(Box::new(expr))
+            } else {
+                None
+            };
+
             params.push(Param {
                 name: param_name,
                 ty: param_type,
                 is_mut: false,
                 is_vararg: false,
                 ownership: Ownership::Regular,
+                default_value,
             });
 
             if !self.check(&Token::RParen) {
@@ -1703,6 +1713,7 @@ impl Parser {
                         is_mut: is_self_mut,
                         is_vararg: false,
                         ownership,
+                        default_value: None,
                     });
                     if !self.check(&Token::RParen) {
                         self.expect(&Token::Comma)?;
@@ -1715,7 +1726,16 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let ty = self.parse_type()?;
 
-            params.push(Param { name, ty, is_mut, is_vararg: false, ownership });
+            // Parse optional default value: `= expr`
+            let default_value = if self.check(&Token::Eq) {
+                self.advance();
+                let expr = self.parse_expr()?;
+                Some(Box::new(expr))
+            } else {
+                None
+            };
+
+            params.push(Param { name, ty, is_mut, is_vararg: false, ownership, default_value });
 
             if !self.check(&Token::RParen) {
                 self.expect(&Token::Comma)?;
