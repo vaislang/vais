@@ -31,12 +31,16 @@ pub struct CompletionContext {
     /// The current line up to the cursor.
     pub current_line_prefix: String,
     /// Lines after the cursor (up to MAX_CONTEXT_LINES).
+    #[allow(dead_code)]
     pub suffix_lines: Vec<String>,
     /// Current function name, if inside one.
+    #[allow(dead_code)]
     pub current_function: Option<String>,
     /// Current function return type, if known.
+    #[allow(dead_code)]
     pub current_return_type: Option<String>,
     /// Available local variables in scope (name, type hint).
+    #[allow(dead_code)]
     pub locals_in_scope: Vec<(String, Option<String>)>,
     /// Available functions in the module.
     pub available_functions: Vec<String>,

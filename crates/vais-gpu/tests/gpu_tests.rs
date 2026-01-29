@@ -6,19 +6,19 @@ use vais_gpu::metal::MetalBuiltins;
 
 #[test]
 fn test_gpu_target_from_str() {
-    assert_eq!(GpuTarget::from_str("cuda"), Some(GpuTarget::Cuda));
-    assert_eq!(GpuTarget::from_str("CUDA"), Some(GpuTarget::Cuda));
-    assert_eq!(GpuTarget::from_str("ptx"), Some(GpuTarget::Cuda));
-    assert_eq!(GpuTarget::from_str("nvidia"), Some(GpuTarget::Cuda));
+    assert_eq!(GpuTarget::parse("cuda"), Some(GpuTarget::Cuda));
+    assert_eq!(GpuTarget::parse("CUDA"), Some(GpuTarget::Cuda));
+    assert_eq!(GpuTarget::parse("ptx"), Some(GpuTarget::Cuda));
+    assert_eq!(GpuTarget::parse("nvidia"), Some(GpuTarget::Cuda));
 
-    assert_eq!(GpuTarget::from_str("opencl"), Some(GpuTarget::OpenCL));
-    assert_eq!(GpuTarget::from_str("cl"), Some(GpuTarget::OpenCL));
+    assert_eq!(GpuTarget::parse("opencl"), Some(GpuTarget::OpenCL));
+    assert_eq!(GpuTarget::parse("cl"), Some(GpuTarget::OpenCL));
 
-    assert_eq!(GpuTarget::from_str("webgpu"), Some(GpuTarget::WebGPU));
-    assert_eq!(GpuTarget::from_str("wgsl"), Some(GpuTarget::WebGPU));
+    assert_eq!(GpuTarget::parse("webgpu"), Some(GpuTarget::WebGPU));
+    assert_eq!(GpuTarget::parse("wgsl"), Some(GpuTarget::WebGPU));
 
-    assert_eq!(GpuTarget::from_str("unknown"), None);
-    assert_eq!(GpuTarget::from_str(""), None);
+    assert_eq!(GpuTarget::parse("unknown"), None);
+    assert_eq!(GpuTarget::parse(""), None);
 }
 
 #[test]
@@ -169,9 +169,9 @@ mod metal_tests {
 
     #[test]
     fn test_metal_target_from_str() {
-        assert_eq!(GpuTarget::from_str("metal"), Some(GpuTarget::Metal));
-        assert_eq!(GpuTarget::from_str("msl"), Some(GpuTarget::Metal));
-        assert_eq!(GpuTarget::from_str("apple"), Some(GpuTarget::Metal));
+        assert_eq!(GpuTarget::parse("metal"), Some(GpuTarget::Metal));
+        assert_eq!(GpuTarget::parse("msl"), Some(GpuTarget::Metal));
+        assert_eq!(GpuTarget::parse("apple"), Some(GpuTarget::Metal));
     }
 
     #[test]
@@ -227,12 +227,12 @@ mod simd_tests {
 
     #[test]
     fn test_simd_target_from_str() {
-        assert_eq!(SimdTarget::from_str("avx512"), Some(SimdTarget::Avx512));
-        assert_eq!(SimdTarget::from_str("avx2"), Some(SimdTarget::Avx2));
-        assert_eq!(SimdTarget::from_str("sse4"), Some(SimdTarget::Sse4));
-        assert_eq!(SimdTarget::from_str("neon"), Some(SimdTarget::Neon));
-        assert_eq!(SimdTarget::from_str("sve"), Some(SimdTarget::Sve));
-        assert_eq!(SimdTarget::from_str("unknown"), None);
+        assert_eq!(SimdTarget::parse("avx512"), Some(SimdTarget::Avx512));
+        assert_eq!(SimdTarget::parse("avx2"), Some(SimdTarget::Avx2));
+        assert_eq!(SimdTarget::parse("sse4"), Some(SimdTarget::Sse4));
+        assert_eq!(SimdTarget::parse("neon"), Some(SimdTarget::Neon));
+        assert_eq!(SimdTarget::parse("sve"), Some(SimdTarget::Sve));
+        assert_eq!(SimdTarget::parse("unknown"), None);
     }
 
     #[test]

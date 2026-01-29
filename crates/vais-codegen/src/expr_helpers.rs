@@ -347,6 +347,7 @@ impl CodeGenerator {
     }
 
     /// Generate the IR for a function call
+    #[allow(clippy::too_many_arguments)]
     fn generate_call_ir(
         &mut self,
         fn_name: &str,
@@ -1677,7 +1678,7 @@ impl CodeGenerator {
 
         // For float/double, we need an initial value for ordered reduction
         if elem_ty == "float" || elem_ty == "double" {
-            let zero = if elem_ty == "float" { "0.0" } else { "0.0" };
+            let zero = "0.0";
             ir.push_str(&format!(
                 "  {} = call {} {}({} {}, {} {})\n",
                 result, elem_ty, intrinsic, elem_ty, zero, vec_ty, arg_vals[0]

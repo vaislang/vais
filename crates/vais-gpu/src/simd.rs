@@ -35,7 +35,7 @@ pub enum SimdTarget {
 
 impl SimdTarget {
     /// Parse target from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "avx512" | "avx-512" => Some(Self::Avx512),
             "avx2" | "avx-2" => Some(Self::Avx2),
@@ -867,12 +867,12 @@ mod tests {
 
     #[test]
     fn test_simd_target_from_str() {
-        assert_eq!(SimdTarget::from_str("avx512"), Some(SimdTarget::Avx512));
-        assert_eq!(SimdTarget::from_str("avx2"), Some(SimdTarget::Avx2));
-        assert_eq!(SimdTarget::from_str("sse4"), Some(SimdTarget::Sse4));
-        assert_eq!(SimdTarget::from_str("neon"), Some(SimdTarget::Neon));
-        assert_eq!(SimdTarget::from_str("sve"), Some(SimdTarget::Sve));
-        assert_eq!(SimdTarget::from_str("unknown"), None);
+        assert_eq!(SimdTarget::parse("avx512"), Some(SimdTarget::Avx512));
+        assert_eq!(SimdTarget::parse("avx2"), Some(SimdTarget::Avx2));
+        assert_eq!(SimdTarget::parse("sse4"), Some(SimdTarget::Sse4));
+        assert_eq!(SimdTarget::parse("neon"), Some(SimdTarget::Neon));
+        assert_eq!(SimdTarget::parse("sve"), Some(SimdTarget::Sve));
+        assert_eq!(SimdTarget::parse("unknown"), None);
     }
 
     #[test]

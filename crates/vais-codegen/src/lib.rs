@@ -111,7 +111,7 @@ pub enum TargetTriple {
 
 impl TargetTriple {
     /// Parse a target triple string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         let s_lower = s.to_lowercase();
         match s_lower.as_str() {
             // Native
@@ -423,11 +423,11 @@ fn edit_distance(a: &str, b: &str) -> usize {
     let mut matrix = vec![vec![0; len_b + 1]; len_a + 1];
 
     // Initialize first column and row
-    for i in 0..=len_a {
-        matrix[i][0] = i;
+    for (i, row) in matrix.iter_mut().enumerate().take(len_a + 1) {
+        row[0] = i;
     }
-    for j in 0..=len_b {
-        matrix[0][j] = j;
+    for (j, cell) in matrix[0].iter_mut().enumerate().take(len_b + 1) {
+        *cell = j;
     }
 
     // Fill the matrix

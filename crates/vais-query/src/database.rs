@@ -339,7 +339,7 @@ impl QueryDatabase {
                     let target_matches = file_cache
                         .ir_target
                         .as_ref()
-                        .map_or(false, |t| *t == target);
+                        .is_some_and(|t| *t == target);
                     if entry.input_revision == input_rev && target_matches {
                         return entry.value.clone();
                     }
@@ -412,19 +412,19 @@ impl QueryDatabase {
             "tokenize" => file_cache
                 .tokens
                 .as_ref()
-                .map_or(false, |e| e.input_revision == input_rev),
+                .is_some_and(|e| e.input_revision == input_rev),
             "parse" => file_cache
                 .ast
                 .as_ref()
-                .map_or(false, |e| e.input_revision == input_rev),
+                .is_some_and(|e| e.input_revision == input_rev),
             "type_check" => file_cache
                 .type_checked
                 .as_ref()
-                .map_or(false, |e| e.input_revision == input_rev),
+                .is_some_and(|e| e.input_revision == input_rev),
             "generate_ir" => file_cache
                 .ir
                 .as_ref()
-                .map_or(false, |e| e.input_revision == input_rev),
+                .is_some_and(|e| e.input_revision == input_rev),
             _ => false,
         }
     }
@@ -441,12 +441,12 @@ impl QueryDatabase {
 
     fn store_cache(
         &self,
-        path: &PathBuf,
+        path: &Path,
         _input_rev: Revision,
         f: impl FnOnce(&mut FileCaches),
     ) {
         let mut caches = self.caches.write();
-        let file_cache = caches.entry(path.clone()).or_insert_with(FileCaches::new);
+        let file_cache = caches.entry(path.to_path_buf()).or_insert_with(FileCaches::new);
         f(file_cache);
     }
 

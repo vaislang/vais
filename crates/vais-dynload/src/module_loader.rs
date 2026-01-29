@@ -13,6 +13,9 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::error::{DynloadError, Result};
 
+/// Type alias for reload callback functions
+type ReloadCallback = Box<dyn Fn(ReloadEvent) + Send + Sync>;
+
 /// Event types for module reload
 #[derive(Debug, Clone)]
 pub enum ReloadEvent {
@@ -56,6 +59,16 @@ pub struct LoadedModule {
     /// Function cache
     function_cache: HashMap<String, *mut std::ffi::c_void>,
 }
+
+// SAFETY: LoadedModule is safe to Send between threads because:
+// - The library field is Send
+// - The function pointers are from the loaded library and remain valid
+unsafe impl Send for LoadedModule {}
+
+// SAFETY: LoadedModule is safe to share between threads because:
+// - Access to mutable state (function_cache) is controlled by the Mutex wrapper
+// - The library field is Sync
+unsafe impl Sync for LoadedModule {}
 
 impl LoadedModule {
     /// Get a function pointer from the module
@@ -193,7 +206,7 @@ pub struct ModuleLoader {
     #[allow(dead_code)]
     event_tx: Option<Sender<notify::Result<Event>>>,
     /// Callbacks for reload events
-    reload_callbacks: Mutex<Vec<Box<dyn Fn(ReloadEvent) + Send + Sync>>>,
+    reload_callbacks: Mutex<Vec<ReloadCallback>>,
     /// Module version counter
     version_counter: Mutex<u64>,
 }

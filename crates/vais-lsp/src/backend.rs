@@ -2349,7 +2349,7 @@ impl LanguageServer for VaisBackend {
                             let line = diagnostic.range.start.line as usize;
                             if let Some(line_rope) = doc.content.get_line(line) {
                                 let line_str: String = line_rope.chars().collect();
-                                let start = diagnostic.range.start.character as usize;
+                                let _start = diagnostic.range.start.character as usize;
                                 let end = diagnostic.range.end.character as usize;
 
                                 if end <= line_str.len() {

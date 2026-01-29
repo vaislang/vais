@@ -242,9 +242,7 @@ impl IncrementalCache {
             match serde_json::from_str::<CacheState>(&content) {
                 Ok(state) => {
                     // Validate cache version and compiler version
-                    if state.version != CACHE_VERSION {
-                        CacheState::default()
-                    } else if state.compiler_version != COMPILER_VERSION {
+                    if state.version != CACHE_VERSION || state.compiler_version != COMPILER_VERSION {
                         CacheState::default()
                     } else {
                         state

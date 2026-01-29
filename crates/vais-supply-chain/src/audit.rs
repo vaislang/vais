@@ -141,7 +141,7 @@ impl DependencyAuditor {
     pub fn add_vulnerability(&mut self, package_name: &str, vulnerability: Vulnerability) {
         self.vulnerability_db
             .entry(package_name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(vulnerability);
     }
 
@@ -217,12 +217,11 @@ impl DependencyAuditor {
             } else if pattern.contains(" - ") {
                 // Range: "0.5.0 - 0.5.9"
                 let parts: Vec<&str> = pattern.split(" - ").collect();
-                if parts.len() == 2 {
-                    if self.compare_versions(version, parts[0]) >= 0
-                        && self.compare_versions(version, parts[1]) <= 0
-                    {
-                        return true;
-                    }
+                if parts.len() == 2
+                    && self.compare_versions(version, parts[0]) >= 0
+                    && self.compare_versions(version, parts[1]) <= 0
+                {
+                    return true;
                 }
             } else if pattern == version {
                 return true;

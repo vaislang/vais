@@ -44,3 +44,35 @@ examples/*_out
 # Temp files from testing
 test.txt
 string_test
+
+# LLVM IR files (generated during compilation)
+*.ll
+
+# macOS debug symbols
+*.dSYM/
+
+# Vais compiler cache
+.vais-cache/
+**/.vais-cache/
+
+# Test binary artifacts in examples/ directory
+examples/*_test
+examples/*_test_bin
+examples/*_bin
+examples/*_o0
+examples/*_o1
+examples/*_o2
+examples/*_o3
+examples/advanced_opt_test_o3
+
+# Other common build and test artifacts
+*.tmp
+*.log
+.workflow-state.json
+vaisc-stage1
+vaisc-stage2
+stage2.ll
+temp.ll
+runtime.c
+output.txt
+main_output.ll

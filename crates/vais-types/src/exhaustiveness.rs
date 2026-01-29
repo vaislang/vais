@@ -505,9 +505,7 @@ impl ExhaustivenessChecker {
                     fields: f2,
                 },
             ) => {
-                if n1 != n2 {
-                    a.clone()
-                } else if f1.len() != f2.len() {
+                if n1 != n2 || f1.len() != f2.len() {
                     a.clone()
                 } else {
                     // Subtract field by field (complex case)

@@ -229,19 +229,15 @@ fn type_to_kind(type_name: &str) -> String {
 
     if lower.contains("int") || lower.contains("i32") || lower.contains("i64") ||
        lower.contains("u32") || lower.contains("u64") || lower.contains("isize") ||
-       lower.contains("usize")
+       lower.contains("usize") || lower.contains("float") || lower.contains("f32") ||
+       lower.contains("f64") || lower.contains("bool") || lower.contains("*") ||
+       lower.contains("ptr") || lower.contains("ref")
     {
         "property".to_string()
-    } else if lower.contains("float") || lower.contains("f32") || lower.contains("f64") {
-        "property".to_string()
-    } else if lower.contains("bool") {
-        "property".to_string()
-    } else if lower.contains("str") || lower.contains("string") {
+    } else if lower.contains("str") || lower.contains("string") ||
+       lower.contains("vec") || lower.contains("array") || lower.contains("[")
+    {
         "data".to_string()
-    } else if lower.contains("vec") || lower.contains("array") || lower.contains("[") {
-        "data".to_string()
-    } else if lower.contains("*") || lower.contains("ptr") || lower.contains("ref") {
-        "property".to_string()
     } else if lower.contains("struct") || lower.contains("enum") {
         "class".to_string()
     } else {

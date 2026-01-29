@@ -263,7 +263,7 @@ fn compile_to_result(
     let target_str = target;
 
     let target = if let Some(t) = target_str {
-        TargetTriple::from_str(&t).unwrap_or(TargetTriple::Native)
+        TargetTriple::parse(&t).unwrap_or(TargetTriple::Native)
     } else {
         TargetTriple::Native
     };

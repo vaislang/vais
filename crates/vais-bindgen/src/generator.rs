@@ -296,11 +296,7 @@ impl<'a> Generator<'a> {
         let mut output = String::new();
 
         // Generate wrapper function name
-        let wrapper_name = if method.is_static {
-            format!("{}_{}", cls.name, method.name)
-        } else {
-            format!("{}_{}", cls.name, method.name)
-        };
+        let wrapper_name = format!("{}_{}", cls.name, method.name);
 
         output.push_str("    fn ");
         output.push_str(&wrapper_name);
@@ -394,11 +390,11 @@ impl<'a> Generator<'a> {
                 for method in &cls.methods {
                     if method.access == AccessSpecifier::Public {
                         output.push_str(&self.generate_cpp_method_wrapper_header(cls, method));
-                        output.push_str("\n");
+                        output.push('\n');
                     }
                 }
 
-                output.push_str("\n");
+                output.push('\n');
             }
         }
 
@@ -415,11 +411,7 @@ impl<'a> Generator<'a> {
 
         let return_type_c = self.type_to_c(&method.return_type);
 
-        let wrapper_name = if method.is_static {
-            format!("{}_{}", cls.name, method.name)
-        } else {
-            format!("{}_{}", cls.name, method.name)
-        };
+        let wrapper_name = format!("{}_{}", cls.name, method.name);
 
         if method.is_constructor {
             output.push_str(&format!("{}Handle {}(", cls.name, wrapper_name));

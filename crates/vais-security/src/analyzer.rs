@@ -167,23 +167,21 @@ impl SecurityAnalyzer {
                 self.analyze_expr(&right.node, right.span);
 
                 // Check for unsafe pointer arithmetic
-                if matches!(op, BinOp::Add | BinOp::Sub) {
-                    if self.is_pointer_expr(&left.node) || self.is_pointer_expr(&right.node) {
-                        self.findings.push(SecurityFinding::unsafe_pointer(
-                            "Pointer arithmetic detected - may lead to buffer overflows",
-                            span,
-                        ));
-                    }
+                if matches!(op, BinOp::Add | BinOp::Sub)
+                    && (self.is_pointer_expr(&left.node) || self.is_pointer_expr(&right.node)) {
+                    self.findings.push(SecurityFinding::unsafe_pointer(
+                        "Pointer arithmetic detected - may lead to buffer overflows",
+                        span,
+                    ));
                 }
 
                 // Check for integer overflow risks in arithmetic
-                if matches!(op, BinOp::Add | BinOp::Mul | BinOp::Sub) {
-                    if self.operates_on_user_input(&left.node) || self.operates_on_user_input(&right.node) {
-                        self.findings.push(SecurityFinding::integer_overflow(
-                            format!("Arithmetic operation on potentially unchecked input may overflow"),
-                            span,
-                        ));
-                    }
+                if matches!(op, BinOp::Add | BinOp::Mul | BinOp::Sub)
+                    && (self.operates_on_user_input(&left.node) || self.operates_on_user_input(&right.node)) {
+                    self.findings.push(SecurityFinding::integer_overflow(
+                        "Arithmetic operation on potentially unchecked input may overflow".to_string(),
+                        span,
+                    ));
                 }
             },
             Expr::Unary { expr, .. } => {
@@ -519,16 +517,15 @@ impl SecurityAnalyzer {
         let lower = s.to_lowercase();
 
         // Check for high-entropy strings (potential tokens/keys)
-        if s.len() > 20 && self.is_high_entropy(s) {
-            if lower.contains("key") || lower.contains("token") || lower.contains("secret") ||
-               lower.contains("password") || lower.contains("api") {
-                self.findings.push(SecurityFinding::hardcoded_secret(
-                    format!("Potential hardcoded secret detected: '{}'", self.truncate_string(s, 40)),
-                    span,
-                    Severity::Critical,
-                ));
-                return;
-            }
+        if s.len() > 20 && self.is_high_entropy(s)
+            && (lower.contains("key") || lower.contains("token") || lower.contains("secret") ||
+               lower.contains("password") || lower.contains("api")) {
+            self.findings.push(SecurityFinding::hardcoded_secret(
+                format!("Potential hardcoded secret detected: '{}'", self.truncate_string(s, 40)),
+                span,
+                Severity::Critical,
+            ));
+            return;
         }
 
         // Check for common secret patterns

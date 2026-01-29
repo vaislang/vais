@@ -180,9 +180,11 @@ pub struct Param {
 /// Variance annotation for generic type parameters
 /// Controls subtyping relationship between parameterized types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum Variance {
     /// Invariant (default): T is neither covariant nor contravariant
     /// Container<A> has no subtyping relation with Container<B>
+    #[default]
     Invariant,
     /// Covariant (+T): if A <: B then Container<A> <: Container<B>
     /// Used for read-only/producer types (e.g., Iterator, Supplier)
@@ -190,12 +192,6 @@ pub enum Variance {
     /// Contravariant (-T): if A <: B then Container<B> <: Container<A>
     /// Used for write-only/consumer types (e.g., Predicate, Consumer)
     Contravariant,
-}
-
-impl Default for Variance {
-    fn default() -> Self {
-        Variance::Invariant
-    }
 }
 
 /// Generic parameter kind - either a type parameter, const parameter, or lifetime parameter

@@ -50,6 +50,12 @@ struct LldbProcess {
     stdout_rx: std::sync::mpsc::Receiver<String>,
 }
 
+// SAFETY: Debugger is safe to Send/Sync because:
+// - Access to the Child process is controlled by RwLock in DebugSession
+// - All operations on the process are synchronized
+unsafe impl Send for Debugger {}
+unsafe impl Sync for Debugger {}
+
 impl Debugger {
     pub fn new() -> Self {
         Self {

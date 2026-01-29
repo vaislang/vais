@@ -197,7 +197,7 @@ pub fn compile(source: String, options: Option<CompileOptions>) -> Result<String
     let opt_level = opts.opt_level.unwrap_or(0);
     let module_name = opts.module_name.unwrap_or_else(|| "main".to_string());
     let target = if let Some(t) = opts.target {
-        TargetTriple::from_str(&t).unwrap_or(TargetTriple::Native)
+        TargetTriple::parse(&t).unwrap_or(TargetTriple::Native)
     } else {
         TargetTriple::Native
     };

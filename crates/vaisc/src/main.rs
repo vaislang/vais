@@ -366,7 +366,7 @@ fn main() {
             } else {
 
             let target_triple = target.as_ref()
-                .and_then(|s| TargetTriple::from_str(s))
+                .and_then(|s| TargetTriple::parse(s))
                 .unwrap_or(TargetTriple::Native);
 
             // Parse LTO mode with automatic ThinLTO for O2/O3
@@ -375,7 +375,7 @@ fn main() {
                 vais_codegen::optimize::LtoMode::None
             } else if let Some(mode_str) = lto.as_deref() {
                 // Explicitly specified LTO mode
-                vais_codegen::optimize::LtoMode::from_str(mode_str)
+                vais_codegen::optimize::LtoMode::parse(mode_str)
             } else {
                 // Auto-enable ThinLTO for O2/O3 (release builds)
                 if opt_level >= 2 {
@@ -468,7 +468,7 @@ fn cmd_build_gpu(
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
 
     // Parse GPU target
-    let target = GpuTarget::from_str(gpu_target)
+    let target = GpuTarget::parse(gpu_target)
         .ok_or_else(|| format!("Unknown GPU target: '{}'. Valid targets: cuda, opencl, webgpu", gpu_target))?;
 
     if verbose {
@@ -519,6 +519,7 @@ fn cmd_build_gpu(
 }
 
 /// Wrapper around cmd_build that optionally prints timing information
+#[allow(clippy::too_many_arguments)]
 fn cmd_build_with_timing(
     input: &PathBuf,
     output: Option<PathBuf>,
@@ -556,6 +557,7 @@ fn cmd_build_with_timing(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_build(
     input: &PathBuf,
     output: Option<PathBuf>,
@@ -1116,6 +1118,7 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
     Ok(canonical_path)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compile_ir_to_binary(
     ir_path: &Path,
     bin_path: &Path,
@@ -1134,6 +1137,7 @@ fn compile_ir_to_binary(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compile_to_native(
     ir_path: &Path,
     bin_path: &Path,

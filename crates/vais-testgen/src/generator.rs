@@ -126,7 +126,7 @@ impl TestCase {
         for prop in &self.properties {
             match prop {
                 Property::DoesNotCrash => {
-                    lines.push(format!("{}", call));
+                    lines.push(call.to_string());
                     lines.push("# Should not crash".to_string());
                 }
                 Property::ReturnsNonZero => {
@@ -363,7 +363,7 @@ impl TestGenerator {
         }
 
         // Heuristic: "abs", "normalize", "clamp" → idempotent
-        if param_types.len() >= 1
+        if !param_types.is_empty()
             && (name.contains("abs")
                 || name.contains("normalize")
                 || name.contains("clamp")

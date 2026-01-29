@@ -43,7 +43,7 @@ pub enum GpuTarget {
 
 impl GpuTarget {
     /// Parse target from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "cuda" | "ptx" | "nvidia" => Some(Self::Cuda),
             "opencl" | "cl" => Some(Self::OpenCL),
@@ -280,14 +280,14 @@ mod tests {
 
     #[test]
     fn test_gpu_target_from_str() {
-        assert_eq!(GpuTarget::from_str("cuda"), Some(GpuTarget::Cuda));
-        assert_eq!(GpuTarget::from_str("CUDA"), Some(GpuTarget::Cuda));
-        assert_eq!(GpuTarget::from_str("opencl"), Some(GpuTarget::OpenCL));
-        assert_eq!(GpuTarget::from_str("webgpu"), Some(GpuTarget::WebGPU));
-        assert_eq!(GpuTarget::from_str("wgsl"), Some(GpuTarget::WebGPU));
-        assert_eq!(GpuTarget::from_str("metal"), Some(GpuTarget::Metal));
-        assert_eq!(GpuTarget::from_str("msl"), Some(GpuTarget::Metal));
-        assert_eq!(GpuTarget::from_str("unknown"), None);
+        assert_eq!(GpuTarget::parse("cuda"), Some(GpuTarget::Cuda));
+        assert_eq!(GpuTarget::parse("CUDA"), Some(GpuTarget::Cuda));
+        assert_eq!(GpuTarget::parse("opencl"), Some(GpuTarget::OpenCL));
+        assert_eq!(GpuTarget::parse("webgpu"), Some(GpuTarget::WebGPU));
+        assert_eq!(GpuTarget::parse("wgsl"), Some(GpuTarget::WebGPU));
+        assert_eq!(GpuTarget::parse("metal"), Some(GpuTarget::Metal));
+        assert_eq!(GpuTarget::parse("msl"), Some(GpuTarget::Metal));
+        assert_eq!(GpuTarget::parse("unknown"), None);
     }
 
     #[test]

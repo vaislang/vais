@@ -316,18 +316,17 @@ impl AutoVectorizer {
                 }
 
                 // Check for function calls with side effects
-                if in_loop && trimmed.contains(" = call ") || (in_loop && trimmed.starts_with("call ")) {
-                    if has_side_effects(trimmed) {
-                        // Mark as having side effects - will be checked during vectorizability
-                        memory_accesses.push(MemoryAccess {
-                            instruction: trimmed.to_string(),
-                            base: "__side_effect_call__".to_string(),
-                            index: None,
-                            stride: None,
-                            is_write: true,
-                            element_size: 0,
-                        });
-                    }
+                if (trimmed.starts_with("call ") || trimmed.contains(" = call ")) && in_loop
+                    && has_side_effects(trimmed) {
+                    // Mark as having side effects - will be checked during vectorizability
+                    memory_accesses.push(MemoryAccess {
+                        instruction: trimmed.to_string(),
+                        base: "__side_effect_call__".to_string(),
+                        index: None,
+                        stride: None,
+                        is_write: true,
+                        element_size: 0,
+                    });
                 }
 
                 // Detect induction variable (PHI node in loop header)

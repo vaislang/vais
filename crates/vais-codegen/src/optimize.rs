@@ -26,7 +26,7 @@ pub enum LtoMode {
 }
 
 impl LtoMode {
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "thin" => LtoMode::Thin,
             "full" | "fat" => LtoMode::Full,
@@ -308,7 +308,7 @@ fn extract_function_name(define_line: &str) -> Option<String> {
 }
 
 impl OptLevel {
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "0" | "O0" => OptLevel::O0,
             "1" | "O1" => OptLevel::O1,
@@ -1908,12 +1908,12 @@ loop.end.0:
 
     #[test]
     fn test_lto_mode_parsing() {
-        assert_eq!(LtoMode::from_str("thin"), LtoMode::Thin);
-        assert_eq!(LtoMode::from_str("THIN"), LtoMode::Thin);
-        assert_eq!(LtoMode::from_str("full"), LtoMode::Full);
-        assert_eq!(LtoMode::from_str("fat"), LtoMode::Full);
-        assert_eq!(LtoMode::from_str("none"), LtoMode::None);
-        assert_eq!(LtoMode::from_str("invalid"), LtoMode::None);
+        assert_eq!(LtoMode::parse("thin"), LtoMode::Thin);
+        assert_eq!(LtoMode::parse("THIN"), LtoMode::Thin);
+        assert_eq!(LtoMode::parse("full"), LtoMode::Full);
+        assert_eq!(LtoMode::parse("fat"), LtoMode::Full);
+        assert_eq!(LtoMode::parse("none"), LtoMode::None);
+        assert_eq!(LtoMode::parse("invalid"), LtoMode::None);
     }
 
     #[test]
@@ -2370,9 +2370,7 @@ fn basic_block_merging(ir: &str) -> String {
         }
 
         if skip_block {
-            if trimmed.starts_with("define ") || trimmed == "}" {
-                skip_block = false;
-            } else if trimmed.ends_with(':') && !trimmed.starts_with(';') {
+            if trimmed.starts_with("define ") || trimmed == "}" || (trimmed.ends_with(':') && !trimmed.starts_with(';')) {
                 skip_block = false;
             } else {
                 continue; // Skip instructions in empty block
@@ -2593,10 +2591,10 @@ mod pgo_tests {
 
     #[test]
     fn test_lto_mode() {
-        assert_eq!(LtoMode::from_str("thin"), LtoMode::Thin);
-        assert_eq!(LtoMode::from_str("full"), LtoMode::Full);
-        assert_eq!(LtoMode::from_str("none"), LtoMode::None);
-        assert_eq!(LtoMode::from_str("invalid"), LtoMode::None);
+        assert_eq!(LtoMode::parse("thin"), LtoMode::Thin);
+        assert_eq!(LtoMode::parse("full"), LtoMode::Full);
+        assert_eq!(LtoMode::parse("none"), LtoMode::None);
+        assert_eq!(LtoMode::parse("invalid"), LtoMode::None);
 
         assert!(LtoMode::Thin.is_enabled());
         assert!(LtoMode::Full.is_enabled());
