@@ -1463,6 +1463,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
 | Phase 11: 프로덕션 준비 | ✅ 완료 | 100% |
 | Phase 12: 생태계 성숙 | ✅ 완료 | 100% |
+| Phase 13: 품질 보증 및 프로덕션 검증 | 🔄 진행 중 | 0% |
 
 ---
 
@@ -1723,6 +1724,90 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | M2 | Week 6 | P1 완료 - 안정성 및 성능 개선 |
 | M3 | Week 12 | P2 완료 - 언어 기능 확장 |
 | M4 | Week 20 | P3 완료 - 생태계 성숙 |
+
+---
+
+## 🚀 Phase 13: 품질 보증 및 프로덕션 검증
+
+> **상태**: 🔄 진행 중
+> **추가일**: 2026-01-29
+> **목표**: 테스트 커버리지 강화, 실사용 검증, v0.2.0 프로덕션 품질 달성
+
+### P0 - 긴급 (1-2주) - 테스트 수정 및 CI 강화
+
+#### 테스트 수정
+- [ ] **error_suggestion_tests 수정** - 6개 실패 테스트 복구
+  - 테스트 구문을 현재 파서 문법에 맞게 업데이트
+  - "Did you mean?" 기능 검증
+- [ ] **통합 테스트 확장** - E2E 테스트 스위트 구축
+  - 컴파일 → 실행 → 출력 검증 자동화
+  - 표준 라이브러리 47개 모듈 각각 테스트
+  - 회귀 테스트 추가
+
+#### CI/CD 강화
+- [ ] **Windows CI 추가** - CI 매트릭스에 windows-latest 추가
+  - LLVM codegen Windows 테스트
+  - 크로스 컴파일 검증
+- [ ] **코드 커버리지 측정** - cargo-tarpaulin 또는 llvm-cov 도입
+  - 목표: 80%+ 코드 커버리지
+  - 커버리지 리포트 CI 통합
+
+### P1 - 높은 우선순위 (3-4주) - Python 바인딩 및 에러 품질
+
+#### Python 통합 완성
+- [ ] **vais-python 재활성화** - PyO3 업그레이드 또는 Python 버전 대응
+  - workspace에 재포함
+  - Python CI 테스트 추가
+  - Python 예제/튜토리얼 작성
+
+#### 에러 메시지 품질 감사
+- [ ] **에러 메시지 전수 검사** - 모든 에러 경로 검토
+  - 에러 복구 시나리오 테스트
+  - 진단 메시지 명확성 확인
+  - 실제 사용자 관점의 에러 경험 개선
+
+### P2 - 중간 우선순위 (1-2개월) - 실사용 검증
+
+#### 실세계 프로젝트 검증
+- [ ] **비즈니스 로직 프로젝트** - HTTP 서버 또는 CLI 도구 구현
+  - 누락된 stdlib 기능 식별
+  - 실사용 성능 프로파일링
+  - 개발자 경험(DX) 피드백 수집
+- [ ] **Quickstart 가이드** - "5분만에 시작하기" 문서
+  - 설치 → 첫 프로그램 → 빌드 → 실행
+  - 쿡북/레시피 섹션 추가
+
+#### 언어 기능 보강
+- [ ] **Const Generics 개선** - 컴파일 타임 상수 제네릭
+- [ ] **Named Arguments / Default Parameters** - 함수 호출 편의성
+- [ ] **Procedural Macros** - 선언적 매크로 넘어 절차적 매크로
+
+### P3 - 낮은 우선순위 (3-6개월) - 생태계 성장
+
+#### 패키지 에코시스템
+- [ ] **패키지 레지스트리 배포** - vais-registry-server 운영
+  - 5-10개 예제 커뮤니티 패키지 생성
+  - `vaisc pkg publish` 워크플로우 검증
+- [ ] **패키지 검색/디스커버리** - 카테고리, 태그, 인기순 정렬
+
+#### 성능 최적화
+- [ ] **Profile-Guided Optimization (PGO)** - 프로파일 기반 최적화
+- [ ] **병렬 컴파일** - 모듈 단위 병렬 컴파일
+- [ ] **Comptime 확장** - 컴파일 타임 평가 강화
+
+#### IDE 경험 향상
+- [ ] **인라인 타입 힌트** - LSP inlay hints
+- [ ] **리팩토링 도구** - Extract Function, Inline Variable
+- [ ] **Code Lens** - 인라인 테스트 실행, 벤치마크 표시
+
+### 예상 마일스톤
+
+| 마일스톤 | 기간 | 목표 |
+|----------|------|------|
+| M1 | Week 2 | P0 완료 - 테스트 수정 및 CI 강화 |
+| M2 | Week 6 | P1 완료 - Python 바인딩 및 에러 품질 |
+| M3 | Week 12 | P2 완료 - 실사용 검증 및 언어 보강 |
+| M4 | Week 24 | P3 완료 - 생태계 성장 |
 
 ---
 
