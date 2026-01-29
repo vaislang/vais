@@ -43,8 +43,41 @@ generate_lcov() {
 generate_all() {
     echo -e "${BLUE}Generating all coverage reports...${NC}"
     cd "$PROJECT_ROOT"
-    cargo tarpaulin --config tarpaulin.toml --out Html --out Lcov --output-dir "$COVERAGE_DIR"
+    cargo tarpaulin --config tarpaulin.toml --out Html --out Lcov --out Json --output-dir "$COVERAGE_DIR"
     echo -e "${GREEN}All reports generated in: $COVERAGE_DIR${NC}"
+
+    # Display summary if JSON report exists
+    display_summary
+}
+
+# Display coverage summary from JSON report
+display_summary() {
+    if [ -f "$COVERAGE_DIR/tarpaulin-report.json" ]; then
+        echo -e "\n${BLUE}Coverage Summary:${NC}"
+        echo -e "${BLUE}==================${NC}"
+
+        # Extract coverage percentage (requires jq or grep)
+        if command -v jq &> /dev/null; then
+            COVERAGE=$(jq -r '.coverage' "$COVERAGE_DIR/tarpaulin-report.json" 2>/dev/null || echo "N/A")
+        else
+            COVERAGE=$(grep -oP '"coverage":\s*\K[0-9.]+' "$COVERAGE_DIR/tarpaulin-report.json" 2>/dev/null | head -1 || echo "N/A")
+        fi
+
+        if [ "$COVERAGE" != "N/A" ]; then
+            echo -e "Overall Coverage: ${GREEN}${COVERAGE}%${NC}"
+            echo -e "Target: ${YELLOW}80%+${NC}"
+
+            # Check if coverage meets target
+            if (( $(echo "$COVERAGE >= 80" | bc -l 2>/dev/null || echo 0) )); then
+                echo -e "Status: ${GREEN}✓ PASSING${NC} (meets 80% target)"
+            else
+                echo -e "Status: ${YELLOW}⚠ NEEDS IMPROVEMENT${NC} (below 80% target)"
+            fi
+        else
+            echo -e "${YELLOW}Coverage percentage not available${NC}"
+        fi
+        echo ""
+    fi
 }
 
 # Clean coverage reports
@@ -84,19 +117,22 @@ ${BLUE}Coverage Reporting Script${NC}
 Usage: $0 [command]
 
 Commands:
-    html    Generate HTML coverage report
-    lcov    Generate Lcov format coverage report
-    all     Generate all coverage reports (HTML + Lcov)
-    view    Open HTML coverage report in browser
-    clean   Remove all generated coverage reports
-    help    Show this help message
+    html      Generate HTML coverage report
+    lcov      Generate Lcov format coverage report
+    all       Generate all coverage reports (HTML + Lcov + JSON)
+    summary   Display coverage summary from existing reports
+    view      Open HTML coverage report in browser
+    clean     Remove all generated coverage reports
+    help      Show this help message
 
 Examples:
     $0 html        # Generate HTML report
-    $0 all         # Generate all reports
+    $0 all         # Generate all reports with summary
+    $0 summary     # Display coverage summary
     $0 view        # View HTML report in browser
     $0 clean       # Clean up coverage files
 
+Coverage Target: 80%+
 Coverage reports are saved to: $COVERAGE_DIR
 EOF
 }
@@ -117,6 +153,9 @@ main() {
         all)
             ensure_tarpaulin
             generate_all
+            ;;
+        summary)
+            display_summary
             ;;
         view)
             view_coverage

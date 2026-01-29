@@ -2,7 +2,7 @@
 # Contains custom aliases for common development tasks
 
 [alias]
-# Test coverage measurement
+# Test coverage measurement (all formats configured in tarpaulin.toml)
 # Usage: cargo coverage
 coverage = "tarpaulin --config tarpaulin.toml"
 
@@ -13,6 +13,18 @@ coverage-html = "tarpaulin --config tarpaulin.toml --out Html --output-dir targe
 # Coverage with Lcov format (for CI/CD integration)
 # Usage: cargo coverage-lcov
 coverage-lcov = "tarpaulin --config tarpaulin.toml --out Lcov --output-dir target/coverage"
+
+# Coverage with JSON format (for automated processing)
+# Usage: cargo coverage-json
+coverage-json = "tarpaulin --config tarpaulin.toml --out Json --output-dir target/coverage"
+
+# Full coverage report (HTML + Lcov + JSON)
+# Usage: cargo coverage-full
+coverage-full = "tarpaulin --config tarpaulin.toml --out Html --out Lcov --out Json --output-dir target/coverage"
+
+# Coverage for a specific package
+# Usage: cargo coverage-pkg -- vais-lexer
+coverage-pkg = "tarpaulin --config tarpaulin.toml -p"
 
 # Run tests with output
 # Usage: cargo test-verbose

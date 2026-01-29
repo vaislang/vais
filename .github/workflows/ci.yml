@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable]
 
     steps:
@@ -28,6 +28,18 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
+
+      - name: Setup LLVM and Clang (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y llvm-dev clang
+
+      - name: Setup LLVM and Clang (macOS)
+        if: runner.os == 'macOS'
+        run: brew install llvm
+
+      - name: Setup LLVM and Clang (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -71,6 +83,13 @@ jobs:
           name: vaisc-macos
           path: target/release/vaisc
 
+      - name: Upload release binary (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaisc-windows
+          path: target/release/vaisc.exe
+
   # Coverage job - runs on Ubuntu only for consistent results
   coverage:
     name: Test Coverage
@@ -84,6 +103,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+
+      - name: Setup LLVM and Clang
+        run: sudo apt-get update && sudo apt-get install -y llvm-dev clang
 
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
@@ -101,11 +123,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-coverage-
 
-      - name: Generate coverage reports (HTML)
-        run: cargo tarpaulin --config tarpaulin.toml --out Html --output-dir target/coverage
+      - name: Generate coverage reports
+        run: |
+          echo "Running code coverage analysis with tarpaulin..."
+          cargo tarpaulin --config tarpaulin.toml --out Html --out Lcov --out Json --output-dir target/coverage
+          echo "Coverage report generated successfully"
+        continue-on-error: true
 
-      - name: Generate coverage reports (Lcov)
-        run: cargo tarpaulin --config tarpaulin.toml --out Lcov --output-dir target/coverage
+      - name: Display coverage summary
+        run: |
+          if [ -f target/coverage/tarpaulin-report.json ]; then
+            echo "Coverage Summary:"
+            echo "================"
+            # Extract overall coverage percentage from JSON report
+            COVERAGE=$(grep -oP '"coverage":\s*\K[0-9.]+' target/coverage/tarpaulin-report.json | head -1)
+            echo "Overall Coverage: ${COVERAGE}%"
+            echo ""
+            echo "Target: 80%+"
+            if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+              echo "Status: PASSING (meets 80% target)"
+            else
+              echo "Status: NEEDS IMPROVEMENT (below 80% target)"
+            fi
+          else
+            echo "Coverage report not found"
+          fi
+        continue-on-error: true
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
@@ -114,19 +157,50 @@ jobs:
           path: target/coverage/
           retention-days: 30
 
-      - name: Upload Lcov to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
         with:
           files: ./target/coverage/lcov.info
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
           verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
-  # Bootstrap verification - runs on Ubuntu only (requires clang)
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverageFile = 'target/coverage/tarpaulin-report.json';
+
+            if (fs.existsSync(coverageFile)) {
+              const coverage = JSON.parse(fs.readFileSync(coverageFile, 'utf8'));
+              const coveragePercent = coverage.coverage || 0;
+
+              const comment = `## Coverage Report\n\n` +
+                `Overall Coverage: **${coveragePercent.toFixed(2)}%**\n\n` +
+                `Target: 80%+\n\n` +
+                `${coveragePercent >= 80 ? '✅ PASSING' : '⚠️ NEEDS IMPROVEMENT'}\n\n` +
+                `[View detailed coverage report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+        continue-on-error: true
+
+  # Bootstrap verification - runs on Ubuntu, macOS, and Windows (requires clang)
   bootstrap:
     name: Bootstrap Verification
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     needs: ci
     if: github.event_name == 'push'
 
@@ -139,8 +213,17 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install clang
-        run: sudo apt-get install -y clang
+      - name: Install clang (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Install clang (macOS)
+        if: runner.os == 'macOS'
+        run: echo "clang is available via Xcode CLT"
+
+      - name: Install clang (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -155,17 +238,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-bootstrap-
 
-      - name: Run bootstrap verification (Stage 1-3)
+      - name: Run bootstrap verification (Stage 1-3) - Unix
+        if: runner.os != 'Windows'
         run: ./scripts/bootstrap-verify.sh --verbose --keep
         env:
           BUILD_DIR: /tmp/vais-bootstrap
 
-      - name: Upload bootstrap artifacts
-        if: always()
+      - name: Run bootstrap verification (Stage 1-3) - Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: ./scripts/bootstrap-verify.sh --verbose --keep
+        env:
+          BUILD_DIR: ${{ runner.temp }}/vais-bootstrap
+
+      - name: Upload bootstrap artifacts (Unix)
+        if: always() && runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: bootstrap-artifacts
+          name: bootstrap-artifacts-${{ runner.os }}
           path: /tmp/vais-bootstrap/
+          retention-days: 7
+
+      - name: Upload bootstrap artifacts (Windows)
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-artifacts-${{ runner.os }}
+          path: ${{ env.TEMP }}\vais-bootstrap\
           retention-days: 7
 
   # Note: Full benchmark suite with regression detection runs in bench.yml workflow

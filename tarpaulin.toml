@@ -52,19 +52,40 @@ tests = true
 color = "Auto"
 
 # Fail if coverage falls below threshold (percentage)
-fail-under = 0  # Set to 0 to allow any coverage for now, increase later
+# Goal: 80%+ code coverage for production quality
+fail-under = 80
 
-# Parallel execution
+# Parallel execution (disabled for stability)
 parallel = false
 
-# Precise reporting
+# Precise reporting (line-level granularity)
 precise = true
 
 # Dump coverage report as follows:
-verbose = false
+verbose = true
 
-# Run release builds
+# Run release builds (disabled for better coverage tracking)
 release = false
 
-# Test only this package
+# Test only this package (empty = all workspace packages)
 packages = []
+
+# Follow dependencies
+follow-exec = true
+
+# Include all features
+all-features = false
+
+# Exclude specific crates with low priority for initial coverage
+# These are typically experimental or non-critical packages
+exclude-packages = [
+    "vais-playground-server",
+    "vais-registry-server",
+    "vais-python",
+]
+
+# Coverage reporting options
+# Generate reports showing:
+# - Line coverage
+# - Branch coverage (if available)
+# - Function coverage

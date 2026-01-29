@@ -27,11 +27,12 @@ output-dir = "target/coverage"
 exclude-files = ["benches/*", "examples/*", "tests/*"]
 exclude = ["vais-benches"]
 
-# Enable parallel execution for faster runs
+# Enable parallel execution for faster runs (disabled for stability)
 parallel = false
 
-# Fail if coverage falls below threshold (0 = no minimum)
-fail-under = 0
+# Fail if coverage falls below threshold
+# Goal: 80%+ code coverage for production quality
+fail-under = 80
 ```
 
 ### .cargo/config.toml
@@ -161,27 +162,51 @@ coverage:
 
 ### Codecov Integration
 
-For codecov.io integration:
+The project is configured to automatically upload coverage reports to codecov.io:
 
 1. Get your repository token from [codecov.io](https://codecov.io)
-2. Add to GitHub secrets as `CODECOV_TOKEN` (optional for public repos)
-3. The CI workflow automatically uploads Lcov reports
+2. Add to GitHub secrets as `CODECOV_TOKEN`
+3. The CI workflow automatically uploads coverage reports in multiple formats
 4. View trends at: `https://codecov.io/gh/sswoo88/vais`
 
-## Setting Coverage Thresholds
+The CI coverage job includes:
+- Automated coverage generation with HTML, Lcov, and JSON formats
+- Coverage summary display in workflow logs
+- Artifact upload for historical tracking
+- Codecov integration for trend analysis
+- PR comments with coverage metrics (when applicable)
 
-To enforce minimum coverage requirements:
+## Coverage Targets and Thresholds
+
+### Current Target: 80%+
+
+The Vais project targets **80% or higher code coverage** for production quality. This threshold is configured in `tarpaulin.toml`:
 
 ```toml
 # In tarpaulin.toml
-fail-under = 70  # Fail if coverage drops below 70%
+fail-under = 80  # Fail if coverage drops below 80%
 ```
 
-Or via command line:
+### Setting Custom Thresholds
+
+Override via command line:
 
 ```bash
+# Different threshold
 cargo tarpaulin --fail-under 70
+
+# No minimum (warning only)
+cargo tarpaulin --fail-under 0
 ```
+
+### Coverage Goals by Module
+
+Recommended coverage targets:
+
+- **Core modules** (lexer, parser, codegen): 90%+
+- **Utility modules** (types, AST): 85%+
+- **Experimental features** (GPU, hotreload): 70%+
+- **Server/UI components**: 60%+
 
 ## Performance Considerations
 
@@ -246,9 +271,12 @@ Coverage measurement adds overhead:
 
 1. **Measure regularly** - Run coverage before major releases
 2. **Track trends** - Use codecov to monitor coverage over time
-3. **Set goals** - Aim for >80% line coverage for core modules
-4. **Focus on critical paths** - Prioritize testing business logic
+3. **Meet the 80% target** - Project-wide coverage goal for production readiness
+4. **Focus on critical paths** - Prioritize testing business logic and core functionality
 5. **Document uncovered code** - Use comments to explain intentional gaps
+6. **Review coverage reports** - Check CI artifacts for detailed HTML reports
+7. **Monitor PR coverage** - CI automatically comments on PRs with coverage metrics
+8. **Use the coverage profile** - Optimized build profile for coverage measurement
 
 ## Related Documentation
 

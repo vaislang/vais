@@ -1463,7 +1463,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
 | Phase 11: 프로덕션 준비 | ✅ 완료 | 100% |
 | Phase 12: 생태계 성숙 | ✅ 완료 | 100% |
-| Phase 13: 품질 보증 및 프로덕션 검증 | 🔄 진행 중 | 0% |
+| Phase 13: 품질 보증 및 프로덕션 검증 | 🔄 진행 중 | 30% (P0 완료) |
 
 ---
 
@@ -1751,12 +1751,14 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - 표준 라이브러리 모듈 대부분은 제네릭/트레잇 등 고급 기능 필요로 현 단계에서 E2E 테스트 불가 (향후 Phase에서 진행)
 
 #### CI/CD 강화
-- [ ] **Windows CI 추가** - CI 매트릭스에 windows-latest 추가
-  - LLVM codegen Windows 테스트
-  - 크로스 컴파일 검증
-- [ ] **코드 커버리지 측정** - cargo-tarpaulin 또는 llvm-cov 도입
-  - 목표: 80%+ 코드 커버리지
-  - 커버리지 리포트 CI 통합
+- [x] **Windows CI 추가** - CI 매트릭스에 windows-latest 추가 (완료일: 2026-01-29)
+  - ubuntu/macos/windows 3개 OS 매트릭스로 확장
+  - 플랫폼별 LLVM/clang 설치 (apt/brew/chocolatey)
+  - Bootstrap 검증도 멀티 플랫폼 지원
+- [x] **코드 커버리지 측정** - cargo-tarpaulin 도입 (완료일: 2026-01-29)
+  - 목표: 80%+ 코드 커버리지 (tarpaulin.toml 설정)
+  - HTML/Lcov/JSON 리포트 생성, Codecov 통합
+  - cargo coverage 별칭 및 scripts/coverage.sh 강화
 
 ### P1 - 높은 우선순위 (3-4주) - Python 바인딩 및 에러 품질
 

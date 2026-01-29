@@ -59,3 +59,14 @@ colored = "2.1"
 
 # Testing
 pretty_assertions = "1.4"
+
+[profile.coverage]
+inherits = "dev"
+opt-level = 0
+debug = true
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = false
+codegen-units = 256

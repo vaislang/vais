@@ -1,0 +1,113 @@
+# Codecov configuration
+# Documentation: https://docs.codecov.io/docs/codecov-yaml
+
+# Coverage target configuration
+coverage:
+  precision: 2
+  round: down
+  range: 70..100
+
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+        if_ci_failed: error
+
+    patch:
+      default:
+        target: 75%
+        threshold: 2%
+
+    changes:
+      default:
+        if_ci_failed: error
+
+# Comment on pull requests with coverage information
+comment:
+  layout: "header, diff, flags, components, footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+# Ignore paths from coverage
+ignore:
+  - "benches/**/*"
+  - "examples/**/*"
+  - "tests/**/*"
+  - "target/**/*"
+  - "scripts/**/*"
+
+# Flag configuration for different test types
+flags:
+  unittests:
+    paths:
+      - crates/
+    carryforward: true
+
+# Component-based coverage tracking
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: 80%
+  individual_components:
+    # Core compiler components
+    - component_id: core
+      name: Core Compiler
+      paths:
+        - crates/vais-lexer/**
+        - crates/vais-parser/**
+        - crates/vais-ast/**
+        - crates/vais-types/**
+        - crates/vais-codegen/**
+      statuses:
+        - type: project
+          target: 90%
+
+    # Language tooling
+    - component_id: tooling
+      name: Language Tooling
+      paths:
+        - crates/vais-lsp/**
+        - crates/vais-dap/**
+        - crates/vaisc/**
+      statuses:
+        - type: project
+          target: 85%
+
+    # Advanced features
+    - component_id: advanced
+      name: Advanced Features
+      paths:
+        - crates/vais-jit/**
+        - crates/vais-gc/**
+        - crates/vais-mir/**
+        - crates/vais-query/**
+      statuses:
+        - type: project
+          target: 80%
+
+    # Experimental features
+    - component_id: experimental
+      name: Experimental Features
+      paths:
+        - crates/vais-gpu/**
+        - crates/vais-hotreload/**
+        - crates/vais-plugin/**
+      statuses:
+        - type: project
+          target: 70%
+
+    # Infrastructure
+    - component_id: infrastructure
+      name: Infrastructure
+      paths:
+        - crates/vais-i18n/**
+        - crates/vais-profiler/**
+        - crates/vais-security/**
+        - crates/vais-supply-chain/**
+      statuses:
+        - type: project
+          target: 75%
