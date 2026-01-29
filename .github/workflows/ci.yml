@@ -123,6 +123,51 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+  # Bootstrap verification - runs on Ubuntu only (requires clang)
+  bootstrap:
+    name: Bootstrap Verification
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install clang
+        run: sudo apt-get install -y clang
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bootstrap-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bootstrap-
+
+      - name: Run bootstrap verification (Stage 1-3)
+        run: ./scripts/bootstrap-verify.sh --verbose --keep
+        env:
+          BUILD_DIR: /tmp/vais-bootstrap
+
+      - name: Upload bootstrap artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-artifacts
+          path: /tmp/vais-bootstrap/
+          retention-days: 7
+
   # Note: Full benchmark suite with regression detection runs in bench.yml workflow
   # This job is just a quick smoke test
   benchmark-smoke:

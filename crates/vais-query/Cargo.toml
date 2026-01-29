@@ -1,0 +1,19 @@
+[package]
+name = "vais-query"
+version.workspace = true
+edition.workspace = true
+description = "Salsa-style query-based compilation database for Vais"
+license.workspace = true
+
+[dependencies]
+vais-lexer = { path = "../vais-lexer" }
+vais-parser = { path = "../vais-parser" }
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+vais-codegen = { path = "../vais-codegen" }
+
+sha2 = "0.10"
+parking_lot = "0.12"
+
+[dev-dependencies]
+tempfile = "3.10"

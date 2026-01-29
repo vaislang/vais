@@ -3,6 +3,7 @@
 //! This crate provides LSP implementation for the Vais programming language.
 //! It can be used both as a binary (vais-lsp server) and as a library for testing.
 
+pub mod ai_completion;
 mod backend;
 mod diagnostics;
 mod semantic;

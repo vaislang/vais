@@ -23,6 +23,11 @@ members = [
     # "crates/vais-python",  # Requires Python <= 3.13 (PyO3 limitation)
     "crates/vais-node",
     "crates/vais-bindgen",
+    "crates/vais-query",
+    "crates/vais-mir",
+    "crates/vais-testgen",
+    "crates/vais-supply-chain",
+    "crates/vais-security",
     "crates/vaisc",
     "examples/plugins/example-lint",
     "benches",

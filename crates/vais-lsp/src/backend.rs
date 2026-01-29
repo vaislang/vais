@@ -9,6 +9,7 @@ use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned, Type};
 use vais_parser::parse;
 use vais_codegen::formatter::{FormatConfig, Formatter};
 
+use crate::ai_completion::{CompletionContext as AiContext, generate_ai_completions};
 use crate::semantic::get_semantic_tokens;
 
 /// Call graph entry representing function call relationships
@@ -1880,6 +1881,17 @@ impl LanguageServer for VaisBackend {
             }
         }
 
+        // AI-based completions: analyze context and suggest patterns
+        if let Some(doc) = self.documents.get(uri) {
+            let content: String = doc.content.chars().collect();
+            let ai_ctx = AiContext::from_document(
+                &content,
+                position,
+                doc.ast.as_ref(),
+            );
+            items.extend(generate_ai_completions(&ai_ctx));
+        }
+
         Ok(Some(CompletionResponse::Array(items)))
     }
 
@@ -2324,6 +2336,130 @@ impl LanguageServer for VaisBackend {
                                 }
                             }
                         }
+
+                    // Quick fix for unused variable - suggest prefixing with _
+                    if diagnostic.message.contains("unused variable") {
+                        let var_name = diagnostic
+                            .message
+                            .split('\'')
+                            .nth(1)
+                            .unwrap_or("");
+
+                        if !var_name.is_empty() {
+                            let line = diagnostic.range.start.line as usize;
+                            if let Some(line_rope) = doc.content.get_line(line) {
+                                let line_str: String = line_rope.chars().collect();
+                                let start = diagnostic.range.start.character as usize;
+                                let end = diagnostic.range.end.character as usize;
+
+                                if end <= line_str.len() {
+                                    let edit = WorkspaceEdit {
+                                        changes: Some({
+                                            let mut map = std::collections::HashMap::new();
+                                            map.insert(
+                                                uri.clone(),
+                                                vec![TextEdit {
+                                                    range: diagnostic.range,
+                                                    new_text: format!("_{}", var_name),
+                                                }],
+                                            );
+                                            map
+                                        }),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    };
+
+                                    actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: format!("Prefix with underscore: _{}", var_name),
+                                        kind: Some(CodeActionKind::QUICKFIX),
+                                        diagnostics: Some(vec![diagnostic.clone()]),
+                                        edit: Some(edit),
+                                        ..Default::default()
+                                    }));
+                                }
+                            }
+                        }
+                    }
+
+                    // Quick fix for missing return type
+                    if diagnostic.message.contains("missing return")
+                        || diagnostic.message.contains("expected return") {
+                        let line = diagnostic.range.start.line as usize;
+                        if let Some(line_rope) = doc.content.get_line(line) {
+                            let line_str: String = line_rope.chars().collect();
+
+                            // Find function signature
+                            if let Some(paren_pos) = line_str.find(')') {
+                                let insert_pos = paren_pos + 1;
+                                let position = Position::new(
+                                    diagnostic.range.start.line,
+                                    insert_pos as u32,
+                                );
+
+                                let edit = WorkspaceEdit {
+                                    changes: Some({
+                                        let mut map = std::collections::HashMap::new();
+                                        map.insert(
+                                            uri.clone(),
+                                            vec![TextEdit {
+                                                range: Range::new(position, position),
+                                                new_text: " -> i64".to_string(),
+                                            }],
+                                        );
+                                        map
+                                    }),
+                                    document_changes: None,
+                                    change_annotations: None,
+                                };
+
+                                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                    title: "Add return type: -> i64".to_string(),
+                                    kind: Some(CodeActionKind::QUICKFIX),
+                                    diagnostics: Some(vec![diagnostic.clone()]),
+                                    edit: Some(edit),
+                                    ..Default::default()
+                                }));
+                            }
+                        }
+                    }
+
+                    // Quick fix for missing semicolon/expression
+                    if diagnostic.message.contains("expected") && diagnostic.message.contains(";") {
+                        let line = diagnostic.range.end.line as usize;
+                        if let Some(line_rope) = doc.content.get_line(line) {
+                            let line_str: String = line_rope.chars().collect();
+                            let line_end = line_str.trim_end().len();
+
+                            let position = Position::new(
+                                diagnostic.range.end.line,
+                                line_end as u32,
+                            );
+
+                            let edit = WorkspaceEdit {
+                                changes: Some({
+                                    let mut map = std::collections::HashMap::new();
+                                    map.insert(
+                                        uri.clone(),
+                                        vec![TextEdit {
+                                            range: Range::new(position, position),
+                                            new_text: ";".to_string(),
+                                        }],
+                                    );
+                                    map
+                                }),
+                                document_changes: None,
+                                change_annotations: None,
+                            };
+
+                            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                title: "Add semicolon".to_string(),
+                                kind: Some(CodeActionKind::QUICKFIX),
+                                diagnostics: Some(vec![diagnostic.clone()]),
+                                edit: Some(edit),
+                                ..Default::default()
+                            }));
+                        }
+                    }
                 }
             }
 

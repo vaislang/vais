@@ -1,0 +1,13 @@
+[package]
+name = "vais-security"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-parser = { path = "../vais-parser" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+vais-lexer = { path = "../vais-lexer" }
+pretty_assertions = { workspace = true }

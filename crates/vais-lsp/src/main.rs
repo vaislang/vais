@@ -4,6 +4,7 @@
 
 use tower_lsp::{LspService, Server};
 
+mod ai_completion;
 mod backend;
 mod diagnostics;
 mod semantic;

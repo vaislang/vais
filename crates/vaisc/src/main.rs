@@ -149,6 +149,10 @@ enum Commands {
         /// Provide path to merged .profdata file created by llvm-profdata
         #[arg(long, value_name = "FILE")]
         profile_use: Option<String>,
+
+        /// Show suggested fixes for errors
+        #[arg(long)]
+        suggest_fixes: bool,
     },
 
     /// Run a Vais source file
@@ -355,7 +359,7 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use, suggest_fixes }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(&input, output, gpu_target_str, cli.verbose)
@@ -390,7 +394,7 @@ fn main() {
                 vais_codegen::optimize::PgoMode::None
             };
 
-            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode)
+            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes)
             }
         }
         Some(Commands::Run { input, args }) => {
@@ -438,6 +442,7 @@ fn main() {
                     false,
                     vais_codegen::optimize::LtoMode::None,
                     vais_codegen::optimize::PgoMode::None,
+                    false,
                 )
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
@@ -530,13 +535,14 @@ fn cmd_build_with_timing(
     hot: bool,
     lto_mode: vais_codegen::optimize::LtoMode,
     pgo_mode: vais_codegen::optimize::PgoMode,
+    suggest_fixes: bool,
 ) -> Result<(), String> {
     use std::time::Instant;
 
     let start = Instant::now();
     let result = cmd_build(
         input, output, emit_ir, opt_level, debug, verbose, plugins,
-        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode
+        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes
     );
     let elapsed = start.elapsed();
 
@@ -565,6 +571,7 @@ fn cmd_build(
     hot: bool,
     lto_mode: vais_codegen::optimize::LtoMode,
     pgo_mode: vais_codegen::optimize::PgoMode,
+    suggest_fixes: bool,
 ) -> Result<(), String> {
     use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
 
@@ -694,6 +701,10 @@ fn cmd_build(
     let typecheck_start = std::time::Instant::now();
     let mut checker = TypeChecker::new();
     if let Err(e) = checker.check_module(&final_ast) {
+        // If suggest_fixes is enabled, print suggested fixes
+        if suggest_fixes {
+            print_suggested_fixes(&e, &main_source);
+        }
         // Format error with source context
         return Err(error_formatter::format_type_error(&e, &main_source, input));
     }
@@ -1338,6 +1349,7 @@ fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegi
         false,
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
+        false,
     )?;
 
     // Run the binary
@@ -1538,6 +1550,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 hot,
                 lto_mode,
                 vais_codegen::optimize::PgoMode::None,
+                false,
             )?;
 
             if hot {
@@ -2226,6 +2239,7 @@ fn cmd_watch(
         false,
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
+        false,
     )?;
 
     // Execute initial run if requested
@@ -2309,6 +2323,7 @@ fn cmd_watch(
                         false,
                         vais_codegen::optimize::LtoMode::None,
                         vais_codegen::optimize::PgoMode::None,
+                        false,
                     ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());
@@ -2335,6 +2350,59 @@ fn cmd_watch(
             }
         }
     }
+}
+
+/// Print suggested fixes for type errors
+fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str) {
+    use vais_types::TypeError;
+
+    eprintln!("\n{} Suggested fixes:", "💡".cyan().bold());
+
+    match error {
+        TypeError::UndefinedVar { name, suggestion, .. } => {
+            if let Some(similar) = suggestion {
+                eprintln!("  {} Did you mean '{}'?", "•".green(), similar);
+            } else {
+                eprintln!("  {} Define variable: L {}: i64 = 0", "•".green(), name);
+            }
+        }
+        TypeError::UndefinedFunction { name, suggestion, .. } => {
+            if let Some(similar) = suggestion {
+                eprintln!("  {} Did you mean '{}'?", "•".green(), similar);
+            } else {
+                // Check if it's a common standard library function
+                let common_funcs = [
+                    ("sqrt", "std/math"),
+                    ("sin", "std/math"),
+                    ("cos", "std/math"),
+                    ("abs", "std/math"),
+                    ("read_i64", "std/io"),
+                ];
+
+                for (func, module) in &common_funcs {
+                    if name == *func {
+                        eprintln!("  {} Add import: U {}", "•".green(), module);
+                        break;
+                    }
+                }
+            }
+        }
+        TypeError::Mismatch { expected, found, .. } => {
+            if (expected == "i64" && found == "f64") || (expected == "f64" && found == "i64") {
+                eprintln!("  {} Add type cast: value as {}", "•".green(), expected);
+            }
+        }
+        TypeError::ImmutableAssign(name, _) => {
+            eprintln!("  {} Declare as mutable: {}: mut Type", "•".green(), name);
+        }
+        _ => {
+            // For other errors, show the help message if available
+            if let Some(help) = error.help() {
+                eprintln!("  {} {}", "•".green(), help);
+            }
+        }
+    }
+    eprintln!();
 }
 
 /// Print plugin diagnostics

@@ -1,0 +1,14 @@
+[package]
+name = "vais-testgen"
+version.workspace = true
+edition.workspace = true
+description = "Automatic property-based test generation for Vais programs"
+license.workspace = true
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-parser = { path = "../vais-parser" }
+
+rand = "0.8"
+
+[dev-dependencies]

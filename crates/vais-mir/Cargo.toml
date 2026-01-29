@@ -1,0 +1,12 @@
+[package]
+name = "vais-mir"
+version.workspace = true
+edition.workspace = true
+description = "Middle Intermediate Representation (MIR) for the Vais compiler"
+license.workspace = true
+
+[dependencies]
+vais-ast = { path = "../vais-ast" }
+vais-types = { path = "../vais-types" }
+
+[dev-dependencies]

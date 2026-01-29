@@ -1,0 +1,27 @@
+[package]
+name = "vais-supply-chain"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Supply chain security tools for Vais compiler (SBOM generation, package signing, dependency audit)"
+
+[dependencies]
+# Core dependencies
+thiserror.workspace = true
+miette.workspace = true
+
+# Cryptography
+sha2 = "0.10"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile = "3.8"
