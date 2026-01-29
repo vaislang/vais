@@ -4,7 +4,8 @@ Example usage of vais-python bindings
 
 This demonstrates the Python API for the Vais compiler.
 Note: You need to build the extension first with:
-    PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo build --release -p vais-python
+    pip install maturin
+    cd crates/vais-python && maturin develop --release
 """
 
 import sys

@@ -401,6 +401,50 @@ pub enum CodegenError {
     RecursionLimitExceeded(String),
 }
 
+impl CodegenError {
+    /// Get the error code for this codegen error
+    pub fn error_code(&self) -> &str {
+        match self {
+            CodegenError::UndefinedVar(_) => "C001",
+            CodegenError::UndefinedFunction(_) => "C002",
+            CodegenError::TypeError(_) => "C003",
+            CodegenError::LlvmError(_) => "C004",
+            CodegenError::Unsupported(_) => "C005",
+            CodegenError::RecursionLimitExceeded(_) => "C006",
+        }
+    }
+
+    /// Get a help message for this error
+    pub fn help(&self) -> Option<String> {
+        match self {
+            CodegenError::UndefinedVar(msg) => {
+                if msg.contains("Did you mean") {
+                    None // suggestion already embedded
+                } else {
+                    Some("check that the variable is defined before use".to_string())
+                }
+            }
+            CodegenError::UndefinedFunction(msg) => {
+                if msg.contains("Did you mean") {
+                    None
+                } else {
+                    Some("check that the function is defined before calling it".to_string())
+                }
+            }
+            CodegenError::TypeError(_) => {
+                Some("ensure all operands have compatible types".to_string())
+            }
+            CodegenError::Unsupported(feature) => {
+                Some(format!("'{}' is not yet implemented in code generation", feature))
+            }
+            CodegenError::RecursionLimitExceeded(_) => {
+                Some("consider reducing nesting depth or refactoring recursive types".to_string())
+            }
+            CodegenError::LlvmError(_) => None,
+        }
+    }
+}
+
 type CodegenResult<T> = Result<T, CodegenError>;
 
 // ============================================================================

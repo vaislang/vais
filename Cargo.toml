@@ -20,7 +20,7 @@ members = [
     "crates/vais-registry-server",
     "crates/vais-playground-server",
     "crates/vais-tutorial",
-    # "crates/vais-python",  # Requires Python <= 3.13 (PyO3 limitation)
+    "crates/vais-python",
     "crates/vais-node",
     "crates/vais-bindgen",
     "crates/vais-query",

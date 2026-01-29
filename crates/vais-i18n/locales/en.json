@@ -56,6 +56,38 @@
     }
   },
 
+  "codegen": {
+    "C001": {
+      "title": "Undefined variable",
+      "message": "variable '{name}' is not defined during code generation",
+      "help": "check that the variable is defined before use"
+    },
+    "C002": {
+      "title": "Undefined function",
+      "message": "function '{name}' is not defined during code generation",
+      "help": "check that the function is defined before calling it"
+    },
+    "C003": {
+      "title": "Type error",
+      "message": "type error during code generation: {detail}",
+      "help": "ensure all operands have compatible types"
+    },
+    "C004": {
+      "title": "LLVM error",
+      "message": "LLVM backend error: {detail}"
+    },
+    "C005": {
+      "title": "Unsupported feature",
+      "message": "feature not yet implemented: {feature}",
+      "help": "this feature is not yet available in code generation"
+    },
+    "C006": {
+      "title": "Recursion limit exceeded",
+      "message": "recursion depth limit exceeded: {detail}",
+      "help": "consider reducing nesting depth or refactoring recursive types"
+    }
+  },
+
   "parse": {
     "P001": {
       "title": "Unexpected token",

@@ -148,10 +148,10 @@ fn tokenize(source: String) -> PyResult<Vec<TokenInfo>> {
 /// Serialize AST to Python dict
 fn module_to_dict(module: &Module) -> PyResult<PyObject> {
     Python::with_gil(|py| {
-        let dict = PyDict::new_bound(py);
+        let dict = PyDict::new(py);
         dict.set_item("type", "Module")?;
 
-        let items_list = PyList::empty_bound(py);
+        let items_list = PyList::empty(py);
         // For now, return simplified representation with item count
         // Full AST serialization would require extensive boilerplate
         dict.set_item("items_count", module.items.len())?;
