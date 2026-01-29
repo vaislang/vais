@@ -22,6 +22,7 @@ pub mod debug;
 pub mod formatter;
 pub mod optimize;
 pub mod visitor;
+pub mod wasm_component;
 mod builtins;
 mod contracts;
 mod control_flow;
@@ -98,8 +99,14 @@ pub enum TargetTriple {
     WasiPreview1,
     /// WebAssembly 32-bit with WASI (preview2)
     WasiPreview2,
-    /// RISC-V 64-bit Linux
-    Riscv64Linux,
+    /// RISC-V 64-bit Linux (GNU libc)
+    Riscv64LinuxGnu,
+    /// ARM64 Windows (MSVC)
+    Aarch64WindowsMsvc,
+    /// x86-64 FreeBSD
+    X86_64FreeBsd,
+    /// ARM64 FreeBSD
+    Aarch64FreeBsd,
 }
 
 impl TargetTriple {
@@ -144,7 +151,14 @@ impl TargetTriple {
             "wasi-preview2" | "wasm32-wasip2" => Some(Self::WasiPreview2),
 
             // RISC-V
-            "riscv64" | "riscv64-linux" | "riscv64gc-unknown-linux-gnu" => Some(Self::Riscv64Linux),
+            "riscv64" | "riscv64-linux" | "riscv64gc-unknown-linux-gnu" => Some(Self::Riscv64LinuxGnu),
+
+            // Windows ARM64
+            "aarch64-windows-msvc" | "aarch64-pc-windows-msvc" => Some(Self::Aarch64WindowsMsvc),
+
+            // FreeBSD
+            "x86_64-freebsd" | "x86_64-unknown-freebsd" => Some(Self::X86_64FreeBsd),
+            "aarch64-freebsd" | "aarch64-unknown-freebsd" => Some(Self::Aarch64FreeBsd),
 
             _ => None,
         }
@@ -169,7 +183,10 @@ impl TargetTriple {
             Self::Wasm32Unknown => "wasm32-unknown-unknown",
             Self::WasiPreview1 => "wasm32-wasi",
             Self::WasiPreview2 => "wasm32-wasip2",
-            Self::Riscv64Linux => "riscv64gc-unknown-linux-gnu",
+            Self::Riscv64LinuxGnu => "riscv64gc-unknown-linux-gnu",
+            Self::Aarch64WindowsMsvc => "aarch64-pc-windows-msvc",
+            Self::X86_64FreeBsd => "x86_64-unknown-freebsd",
+            Self::Aarch64FreeBsd => "aarch64-unknown-freebsd",
         }
     }
 
@@ -198,8 +215,20 @@ impl TargetTriple {
                 "e-m:e-p:32:32-i64:64-n32:64-S128",
 
             // RISC-V 64
-            Self::Riscv64Linux =>
+            Self::Riscv64LinuxGnu =>
                 "e-m:e-p:64:64-i64:64-i128:128-n64-S128",
+
+            // Windows ARM64 (uses MSVC-specific mangling)
+            Self::Aarch64WindowsMsvc =>
+                "e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128",
+
+            // FreeBSD x86-64 (same as Linux x86-64)
+            Self::X86_64FreeBsd =>
+                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+
+            // FreeBSD ARM64 (same as Linux ARM64)
+            Self::Aarch64FreeBsd =>
+                "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
         }
     }
 
@@ -210,7 +239,7 @@ impl TargetTriple {
 
     /// Check if this is a Windows target
     pub fn is_windows(&self) -> bool {
-        matches!(self, Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu)
+        matches!(self, Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu | Self::Aarch64WindowsMsvc)
     }
 
     /// Check if this is an Apple platform (macOS, iOS)
@@ -235,6 +264,11 @@ impl TargetTriple {
     /// Check if this uses musl libc
     pub fn is_musl(&self) -> bool {
         matches!(self, Self::X86_64LinuxMusl | Self::Aarch64LinuxMusl)
+    }
+
+    /// Check if this is a FreeBSD target
+    pub fn is_freebsd(&self) -> bool {
+        matches!(self, Self::X86_64FreeBsd | Self::Aarch64FreeBsd)
     }
 
     /// Get pointer size in bits for this target
@@ -263,8 +297,8 @@ impl TargetTriple {
                 flags.push("-static");
             }
 
-            // Windows MSVC
-            Self::X86_64WindowsMsvc => {
+            // Windows MSVC (x86-64 and ARM64)
+            Self::X86_64WindowsMsvc | Self::Aarch64WindowsMsvc => {
                 flags.push("-fms-extensions");
                 flags.push("-fms-compatibility");
             }
@@ -307,7 +341,7 @@ impl TargetTriple {
     /// Get the default output file extension for this target
     pub fn output_extension(&self) -> &'static str {
         match self {
-            Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu => "exe",
+            Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu | Self::Aarch64WindowsMsvc => "exe",
             Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => "wasm",
             Self::Aarch64Ios | Self::Aarch64IosSimulator => "",  // no extension for iOS
             _ => "",  // no extension for Unix-like systems
@@ -321,8 +355,11 @@ impl TargetTriple {
             "x86_64-linux", "x86_64-linux-musl",
             "x86_64-windows-msvc", "x86_64-windows-gnu",
             "x86_64-darwin",
+            "x86_64-freebsd",
             "aarch64-darwin", "aarch64-linux", "aarch64-linux-musl",
             "aarch64-android", "aarch64-ios", "aarch64-ios-sim",
+            "aarch64-windows-msvc",
+            "aarch64-freebsd",
             "armv7-android",
             "wasm32", "wasi", "wasi-preview2",
             "riscv64-linux",

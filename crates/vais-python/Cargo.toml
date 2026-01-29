@@ -2,17 +2,29 @@
 name = "vais-python"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Python bindings for the Vais compiler"
 
 [lib]
 name = "vais"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module"] }
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"] }
 
 # Vais crates
 vais-lexer = { path = "../vais-lexer" }
 vais-parser = { path = "../vais-parser" }
 vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
-vais-codegen = { path = "../vais-codegen" }
+vais-codegen = { path = "../vais-codegen", features = ["text-codegen"] }
+
+[features]
+default = []
+jit = ["vais-jit"]
+
+[dependencies.vais-jit]
+path = "../vais-jit"
+optional = true

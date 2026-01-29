@@ -1,18 +1,17 @@
 {
   "phase": 5,
-  "request": "Phase 12 P2 전체 자동 진행",
+  "request": "Phase 12 P3 전체 자동 진행",
   "tasks": [
-    { "id": 1, "name": "Async Traits - trait에서 async fn 지원", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "Structured Concurrency - TaskGroup, 자동 취소", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "Async Drop - 비동기 리소스 정리", "status": "completed", "model": "Sonnet" },
-    { "id": 4, "name": "GAT - Generic Associated Types", "status": "completed", "model": "Opus" },
-    { "id": 5, "name": "Const Traits - 컴파일 타임 trait 구현", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "Variance Annotations - 제네릭 가변성 명시", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "std/collections - 모든 컬렉션 re-export", "status": "completed", "model": "Haiku" },
-    { "id": 8, "name": "std/crypto - SHA-256, AES-256, HMAC", "status": "completed", "model": "Sonnet" },
-    { "id": 9, "name": "std/async - 비동기 유틸리티 통합", "status": "completed", "model": "Sonnet" },
-    { "id": 10, "name": "std/fmt - 포맷팅 유틸리티", "status": "completed", "model": "Haiku" }
+    { "id": 1, "name": "Playground 개선 - 서버사이드 컴파일/실행", "status": "completed", "model": "Sonnet" },
+    { "id": 2, "name": "패키지 레지스트리 웹 UI - 검색, 문서 호스팅", "status": "completed", "model": "Sonnet" },
+    { "id": 3, "name": "LSP 1.18+ 기능 - Workspace Symbols, Type Hierarchy", "status": "completed", "model": "Sonnet" },
+    { "id": 4, "name": "Windows ARM64 타겟 추가", "status": "completed", "model": "Sonnet" },
+    { "id": 5, "name": "FreeBSD 지원", "status": "completed", "model": "Sonnet" },
+    { "id": 6, "name": "실험적 RISC-V 지원", "status": "completed", "model": "Sonnet" },
+    { "id": 7, "name": "C++ 바인딩 - vais-bindgen 확장", "status": "completed", "model": "Sonnet" },
+    { "id": 8, "name": "Python embedding - PyO3 개선", "status": "completed", "model": "Sonnet" },
+    { "id": 9, "name": "WebAssembly Component Model - wasi-preview2 완전 지원", "status": "completed", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "Phase 12 P2 전체 완료"
+  "lastCompleted": "Phase 12 P3 전체 완료"
 }

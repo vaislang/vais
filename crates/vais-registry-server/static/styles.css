@@ -1,0 +1,441 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Header */
+header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+}
+
+header nav {
+    display: flex;
+    gap: 1.5rem;
+}
+
+header nav a {
+    color: #ecf0f1;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+header nav a:hover {
+    color: #3498db;
+}
+
+/* Main content */
+main {
+    padding: 2rem 0;
+    min-height: calc(100vh - 200px);
+}
+
+/* Search section */
+.search-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.search-section h2 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+}
+
+.search-form {
+    display: flex;
+    gap: 1rem;
+}
+
+.search-form input[type="text"] {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    transition: border-color 0.2s;
+}
+
+.search-form input[type="text"]:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.search-form button {
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-form button:hover {
+    background-color: #2980b9;
+}
+
+/* Results section */
+.results-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.package-card {
+    padding: 1.5rem;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+}
+
+.package-card:last-child {
+    border-bottom: none;
+}
+
+.package-card:hover {
+    background-color: #f8f9fa;
+}
+
+.package-card h3 {
+    margin-bottom: 0.5rem;
+}
+
+.package-card h3 a {
+    color: #2c3e50;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.package-card h3 a:hover {
+    color: #3498db;
+}
+
+.package-card .package-description {
+    color: #666;
+    margin-bottom: 0.75rem;
+}
+
+.package-card .package-info {
+    display: flex;
+    gap: 2rem;
+    font-size: 0.9rem;
+    color: #777;
+}
+
+.package-card .keywords {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.keyword {
+    padding: 0.25rem 0.75rem;
+    background-color: #ecf0f1;
+    border-radius: 3px;
+    font-size: 0.85rem;
+    color: #555;
+}
+
+.no-results {
+    text-align: center;
+    padding: 3rem;
+    color: #999;
+}
+
+/* Package detail page */
+.package-header {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.package-header h2 {
+    font-size: 2rem;
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+
+.description {
+    font-size: 1.1rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+}
+
+.package-meta {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.meta-item {
+    color: #555;
+}
+
+.package-links {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.package-links a {
+    padding: 0.5rem 1rem;
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.package-links a:hover {
+    background-color: #bdc3c7;
+}
+
+/* Installation */
+.installation,
+.versions,
+.dependencies,
+.readme,
+.owners {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.installation h3,
+.versions h3,
+.dependencies h3,
+.readme h3,
+.owners h3 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+}
+
+.installation pre {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.installation code {
+    font-family: 'Courier New', monospace;
+}
+
+/* Versions list */
+.version-item {
+    padding: 1rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.version-item:last-child {
+    border-bottom: none;
+}
+
+.version-number {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.version-yanked {
+    color: #e74c3c;
+    font-style: italic;
+}
+
+.version-info {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.9rem;
+    color: #777;
+}
+
+.download-link {
+    padding: 0.5rem 1rem;
+    background-color: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.download-link:hover {
+    background-color: #2980b9;
+}
+
+/* Dependencies */
+.dependency-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.dependency-item:last-child {
+    border-bottom: none;
+}
+
+.dependency-name {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.dependency-version {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.dependency-badges {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.badge-optional {
+    background-color: #f39c12;
+    color: white;
+}
+
+.badge-dev {
+    background-color: #9b59b6;
+    color: white;
+}
+
+/* README */
+.readme-content {
+    line-height: 1.8;
+    color: #444;
+}
+
+.readme-content h1,
+.readme-content h2,
+.readme-content h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: #2c3e50;
+}
+
+.readme-content h1 {
+    font-size: 2rem;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+}
+
+.readme-content h2 {
+    font-size: 1.5rem;
+}
+
+.readme-content h3 {
+    font-size: 1.2rem;
+}
+
+.readme-content p {
+    margin-bottom: 1rem;
+}
+
+.readme-content code {
+    background-color: #f4f4f4;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+.readme-content pre {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.readme-content pre code {
+    background: none;
+    padding: 0;
+}
+
+/* Owners */
+.owner-item {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    margin: 0.25rem;
+    background-color: #ecf0f1;
+    border-radius: 4px;
+    color: #2c3e50;
+}
+
+/* Footer */
+footer {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1.5rem 0;
+    text-align: center;
+    margin-top: 3rem;
+}
+
+footer p {
+    color: #ecf0f1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .search-form {
+        flex-direction: column;
+    }
+
+    .package-meta,
+    .version-info {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .version-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+}

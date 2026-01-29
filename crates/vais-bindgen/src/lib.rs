@@ -23,18 +23,36 @@ pub enum BindgenError {
 
 pub type Result<T> = std::result::Result<T, BindgenError>;
 
-/// Main bindgen structure for generating Vais FFI bindings from C headers
+/// Language mode for bindgen
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LanguageMode {
+    C,
+    Cpp,
+}
+
+/// Main bindgen structure for generating Vais FFI bindings from C/C++ headers
 pub struct Bindgen {
     config: BindgenConfig,
     declarations: Vec<CDeclaration>,
+    mode: LanguageMode,
 }
 
 impl Bindgen {
-    /// Create a new bindgen instance with default configuration
+    /// Create a new bindgen instance with default configuration (C mode)
     pub fn new() -> Self {
         Self {
             config: BindgenConfig::default(),
             declarations: Vec::new(),
+            mode: LanguageMode::C,
+        }
+    }
+
+    /// Create a new bindgen instance for C++ headers
+    pub fn new_cpp() -> Self {
+        Self {
+            config: BindgenConfig::default(),
+            declarations: Vec::new(),
+            mode: LanguageMode::Cpp,
         }
     }
 
@@ -43,7 +61,23 @@ impl Bindgen {
         Self {
             config,
             declarations: Vec::new(),
+            mode: LanguageMode::C,
         }
+    }
+
+    /// Create a bindgen instance with custom configuration for C++
+    pub fn with_config_cpp(config: BindgenConfig) -> Self {
+        Self {
+            config,
+            declarations: Vec::new(),
+            mode: LanguageMode::Cpp,
+        }
+    }
+
+    /// Set the language mode
+    pub fn set_mode(&mut self, mode: LanguageMode) -> &mut Self {
+        self.mode = mode;
+        self
     }
 
     /// Parse a C header file
@@ -53,9 +87,12 @@ impl Bindgen {
         Ok(self)
     }
 
-    /// Parse C header content from a string
+    /// Parse C/C++ header content from a string
     pub fn parse_header(&mut self, content: &str) -> Result<&mut Self> {
-        let parser = Parser::new(&self.config);
+        let parser = match self.mode {
+            LanguageMode::C => Parser::new(&self.config),
+            LanguageMode::Cpp => Parser::new_cpp(&self.config),
+        };
         let decls = parser.parse(content)?;
         self.declarations.extend(decls);
         Ok(self)
@@ -77,8 +114,22 @@ impl Bindgen {
 
     /// Generate Vais FFI bindings as a string
     pub fn generate(&self) -> Result<String> {
-        let generator = Generator::new(&self.config);
+        let generator = match self.mode {
+            LanguageMode::C => Generator::new(&self.config),
+            LanguageMode::Cpp => Generator::new_cpp(&self.config),
+        };
         generator.generate(&self.declarations)
+    }
+
+    /// Generate C wrapper header for C++ code
+    pub fn generate_cpp_wrapper_header(&self) -> Result<String> {
+        if self.mode != LanguageMode::Cpp {
+            return Err(BindgenError::GenerationError(
+                "C wrapper header generation is only available in C++ mode".to_string(),
+            ));
+        }
+        let generator = Generator::new_cpp(&self.config);
+        generator.generate_cpp_wrapper_header(&self.declarations)
     }
 
     /// Configure the bindgen instance
@@ -159,5 +210,78 @@ mod tests {
         let result = bindgen.generate().unwrap();
 
         assert!(result.contains("u64"));
+    }
+
+    #[test]
+    fn test_bindgen_cpp_class() {
+        let header = r#"
+            class Calculator {
+            public:
+                int add(int a, int b);
+                int subtract(int a, int b);
+            };
+        "#;
+
+        let mut bindgen = Bindgen::new_cpp();
+        bindgen.parse_header(header).unwrap();
+        let result = bindgen.generate().unwrap();
+
+        assert!(result.contains("Calculator"));
+        assert!(result.contains("CalculatorHandle"));
+    }
+
+    #[test]
+    fn test_bindgen_cpp_namespace() {
+        let header = r#"
+            namespace Math {
+                int square(int x);
+            }
+        "#;
+
+        let mut bindgen = Bindgen::new_cpp();
+        bindgen.parse_header(header).unwrap();
+        let result = bindgen.generate().unwrap();
+
+        assert!(result.contains("Math"));
+        assert!(result.contains("Math_square"));
+    }
+
+    #[test]
+    fn test_bindgen_cpp_template() {
+        let header = r#"
+            template<typename T>
+            class Container {
+            public:
+                void add(T item);
+                T get(int index);
+            };
+        "#;
+
+        let mut bindgen = Bindgen::new_cpp();
+        bindgen.parse_header(header).unwrap();
+        let result = bindgen.generate().unwrap();
+
+        assert!(result.contains("Container"));
+    }
+
+    #[test]
+    fn test_bindgen_cpp_wrapper_header() {
+        let header = r#"
+            class MyClass {
+            public:
+                int getValue();
+                void setValue(int v);
+            };
+        "#;
+
+        let mut bindgen = Bindgen::new_cpp();
+        bindgen.parse_header(header).unwrap();
+        let wrapper = bindgen.generate_cpp_wrapper_header().unwrap();
+
+        assert!(wrapper.contains("MyClassHandle"));
+        assert!(wrapper.contains("MyClass_new"));
+        assert!(wrapper.contains("MyClass_delete"));
+        assert!(wrapper.contains("MyClass_getValue"));
+        assert!(wrapper.contains("MyClass_setValue"));
     }
 }

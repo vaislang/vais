@@ -595,3 +595,71 @@ async fn test_document_link_on_nonexistent_document() {
     assert!(result.is_ok());
     assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
 }
+
+// ============================================================================
+// Workspace Symbols and Type Hierarchy Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_workspace_symbols_empty_query() {
+    let service = create_test_service();
+
+    let result = service.inner()
+        .symbol(WorkspaceSymbolParams {
+            query: "".to_string(),
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+    // Should return None when no documents are loaded
+    let symbols = result.unwrap();
+    assert!(symbols.is_none() || symbols.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_workspace_symbols_with_query() {
+    let service = create_test_service();
+
+    let result = service.inner()
+        .symbol(WorkspaceSymbolParams {
+            query: "test".to_string(),
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_type_hierarchy_prepare_on_nonexistent_document() {
+    let service = create_test_service();
+    let uri = test_uri("nonexistent");
+
+    let result = service.inner()
+        .prepare_type_hierarchy(TypeHierarchyPrepareParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: pos(0, 0),
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+        })
+        .await;
+
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+}
+
+#[tokio::test]
+async fn test_server_capabilities_include_workspace_symbols() {
+    let service = create_test_service();
+
+    let params = InitializeParams::default();
+    let result = service.inner().initialize(params).await.unwrap();
+    let caps = result.capabilities;
+
+    // Verify workspace_symbol_provider is present
+    assert!(caps.workspace_symbol_provider.is_some(), "Missing workspace_symbol_provider");
+}

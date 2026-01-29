@@ -1,0 +1,37 @@
+// Calculator component example for wasi-preview2
+// Demonstrates basic component model usage
+
+// Export functions that will be part of the component interface
+export fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+export fn subtract(a: i32, b: i32) -> i32 {
+    a - b
+}
+
+export fn multiply(a: i32, b: i32) -> i32 {
+    a * b
+}
+
+export fn divide(a: i32, b: i32) -> Result<i32> {
+    if b == 0 {
+        Result::Err("Division by zero")
+    } else {
+        Result::Ok(a / b)
+    }
+}
+
+// Main function for command mode
+fn main() {
+    let result = add(5, 3);
+    println("5 + 3 = {}", result);
+
+    let result = multiply(4, 7);
+    println("4 * 7 = {}", result);
+
+    match divide(10, 2) {
+        Result::Ok(v) => println("10 / 2 = {}", v),
+        Result::Err(e) => println("Error: {}", e),
+    }
+}

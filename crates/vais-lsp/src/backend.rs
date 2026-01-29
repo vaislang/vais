@@ -1039,6 +1039,149 @@ impl VaisBackend {
 
         calls
     }
+
+    /// Find the type at a given position (struct, enum, or trait)
+    fn find_type_at_position(&self, uri: &Url, position: Position) -> Option<(String, SymbolKind, Span)> {
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                let line = position.line as usize;
+                let col = position.character as usize;
+                let line_start = doc.content.line_to_char(line);
+                let offset = line_start + col;
+
+                for item in &ast.items {
+                    match &item.node {
+                        Item::Struct(s) => {
+                            if s.name.span.start <= offset && offset <= s.name.span.end {
+                                return Some((s.name.node.clone(), SymbolKind::STRUCT, s.name.span));
+                            }
+                        }
+                        Item::Enum(e) => {
+                            if e.name.span.start <= offset && offset <= e.name.span.end {
+                                return Some((e.name.node.clone(), SymbolKind::ENUM, e.name.span));
+                            }
+                        }
+                        Item::Trait(t) => {
+                            if t.name.span.start <= offset && offset <= t.name.span.end {
+                                return Some((t.name.node.clone(), SymbolKind::INTERFACE, t.name.span));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Find all implementations of a trait across all documents
+    fn find_trait_implementations(&self, trait_name: &str) -> Vec<(Url, String, Span)> {
+        let mut impls = Vec::new();
+
+        for entry in self.documents.iter() {
+            let uri = entry.key();
+            let doc = entry.value();
+
+            if let Some(ast) = &doc.ast {
+                for item in &ast.items {
+                    if let Item::Impl(impl_block) = &item.node {
+                        // Check if this impl block implements the trait
+                        if let Some(trait_ref) = &impl_block.trait_name {
+                            if trait_ref.node == trait_name {
+                                // Get the target type name
+                                let type_name = match &impl_block.target_type.node {
+                                    Type::Named { name, .. } => name.clone(),
+                                    _ => continue,
+                                };
+                                impls.push((uri.clone(), type_name, impl_block.target_type.span));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        impls
+    }
+
+    /// Find all traits implemented by a type
+    fn find_implemented_traits(&self, type_name: &str) -> Vec<(Url, String, Span)> {
+        let mut traits = Vec::new();
+
+        for entry in self.documents.iter() {
+            let uri = entry.key();
+            let doc = entry.value();
+
+            if let Some(ast) = &doc.ast {
+                for item in &ast.items {
+                    if let Item::Impl(impl_block) = &item.node {
+                        // Check if this impl block is for the target type
+                        let target_name = match &impl_block.target_type.node {
+                            Type::Named { name, .. } => name.clone(),
+                            _ => continue,
+                        };
+
+                        if target_name == type_name {
+                            if let Some(trait_ref) = &impl_block.trait_name {
+                                traits.push((uri.clone(), trait_ref.node.clone(), trait_ref.span));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        traits
+    }
+
+    /// Find super traits of a trait
+    fn find_super_traits(&self, trait_name: &str) -> Vec<(Url, String, Span)> {
+        let mut super_traits = Vec::new();
+
+        for entry in self.documents.iter() {
+            let uri = entry.key();
+            let doc = entry.value();
+
+            if let Some(ast) = &doc.ast {
+                for item in &ast.items {
+                    if let Item::Trait(t) = &item.node {
+                        if t.name.node == trait_name {
+                            for super_trait in &t.super_traits {
+                                super_traits.push((uri.clone(), super_trait.node.clone(), super_trait.span));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        super_traits
+    }
+
+    /// Find sub traits (traits that extend this trait)
+    fn find_sub_traits(&self, trait_name: &str) -> Vec<(Url, String, Span)> {
+        let mut sub_traits = Vec::new();
+
+        for entry in self.documents.iter() {
+            let uri = entry.key();
+            let doc = entry.value();
+
+            if let Some(ast) = &doc.ast {
+                for item in &ast.items {
+                    if let Item::Trait(t) = &item.node {
+                        // Check if this trait extends the target trait
+                        for super_trait in &t.super_traits {
+                            if super_trait.node == trait_name {
+                                sub_traits.push((uri.clone(), t.name.node.clone(), t.name.span));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        sub_traits
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -1098,6 +1241,7 @@ impl LanguageServer for VaisBackend {
                     resolve_provider: Some(false),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
@@ -1822,6 +1966,7 @@ impl LanguageServer for VaisBackend {
                     match &item.node {
                         vais_ast::Item::Function(f) => {
                             let range = self.span_to_range(&doc.content, &item.span);
+                            #[allow(deprecated)]
                             symbols.push(SymbolInformation {
                                 name: f.name.node.clone(),
                                 kind: SymbolKind::FUNCTION,
@@ -1836,6 +1981,7 @@ impl LanguageServer for VaisBackend {
                         }
                         vais_ast::Item::Struct(s) => {
                             let range = self.span_to_range(&doc.content, &item.span);
+                            #[allow(deprecated)]
                             symbols.push(SymbolInformation {
                                 name: s.name.node.clone(),
                                 kind: SymbolKind::STRUCT,
@@ -1850,6 +1996,7 @@ impl LanguageServer for VaisBackend {
                         }
                         vais_ast::Item::Enum(e) => {
                             let range = self.span_to_range(&doc.content, &item.span);
+                            #[allow(deprecated)]
                             symbols.push(SymbolInformation {
                                 name: e.name.node.clone(),
                                 kind: SymbolKind::ENUM,
@@ -1864,6 +2011,7 @@ impl LanguageServer for VaisBackend {
                         }
                         vais_ast::Item::Trait(t) => {
                             let range = self.span_to_range(&doc.content, &item.span);
+                            #[allow(deprecated)]
                             symbols.push(SymbolInformation {
                                 name: t.name.node.clone(),
                                 kind: SymbolKind::INTERFACE,
@@ -2642,6 +2790,72 @@ impl LanguageServer for VaisBackend {
         Ok(None)
     }
 
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let query = params.query.to_lowercase();
+        let mut symbols = Vec::new();
+
+        // Search across all loaded documents
+        for entry in self.documents.iter() {
+            let uri = entry.key();
+            let doc = entry.value();
+
+            if let Some(ast) = &doc.ast {
+                for item in &ast.items {
+                    let (name, kind, span) = match &item.node {
+                        Item::Function(f) => {
+                            (&f.name.node, SymbolKind::FUNCTION, &f.name.span)
+                        }
+                        Item::Struct(s) => {
+                            (&s.name.node, SymbolKind::STRUCT, &s.name.span)
+                        }
+                        Item::Enum(e) => {
+                            (&e.name.node, SymbolKind::ENUM, &e.name.span)
+                        }
+                        Item::Trait(t) => {
+                            (&t.name.node, SymbolKind::INTERFACE, &t.name.span)
+                        }
+                        Item::TypeAlias(ta) => {
+                            (&ta.name.node, SymbolKind::TYPE_PARAMETER, &ta.name.span)
+                        }
+                        Item::Const(c) => {
+                            (&c.name.node, SymbolKind::CONSTANT, &c.name.span)
+                        }
+                        Item::Global(g) => {
+                            (&g.name.node, SymbolKind::VARIABLE, &g.name.span)
+                        }
+                        _ => continue,
+                    };
+
+                    // Filter by query (fuzzy match - contains)
+                    if query.is_empty() || name.to_lowercase().contains(&query) {
+                        let range = self.span_to_range(&doc.content, span);
+                        #[allow(deprecated)]
+                        symbols.push(SymbolInformation {
+                            name: name.clone(),
+                            kind,
+                            location: Location {
+                                uri: uri.clone(),
+                                range,
+                            },
+                            tags: None,
+                            deprecated: None,
+                            container_name: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        if symbols.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(symbols))
+        }
+    }
+
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = &params.text_document.uri;
         if let Some(doc) = self.documents.get(uri) {
@@ -2672,5 +2886,174 @@ impl LanguageServer for VaisBackend {
             }
         }
         Ok(None)
+    }
+
+    async fn prepare_type_hierarchy(
+        &self,
+        params: TypeHierarchyPrepareParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // Find the type at the cursor position
+        if let Some((type_name, kind, span)) = self.find_type_at_position(uri, position) {
+            if let Some(doc) = self.documents.get(uri) {
+                let range = self.span_to_range(&doc.content, &span);
+                let selection_range = range;
+
+                let item = TypeHierarchyItem {
+                    name: type_name.clone(),
+                    kind,
+                    tags: None,
+                    detail: None,
+                    uri: uri.clone(),
+                    range,
+                    selection_range,
+                    data: None,
+                };
+
+                return Ok(Some(vec![item]));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn supertypes(
+        &self,
+        params: TypeHierarchySupertypesParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let item = &params.item;
+        let type_name = &item.name;
+        let mut supertypes = Vec::new();
+
+        match item.kind {
+            SymbolKind::STRUCT | SymbolKind::ENUM => {
+                // For structs/enums, supertypes are the traits they implement
+                let traits = self.find_implemented_traits(type_name);
+                for (uri, trait_name, span) in traits {
+                    if let Some(doc) = self.documents.get(&uri) {
+                        let range = self.span_to_range(&doc.content, &span);
+                        supertypes.push(TypeHierarchyItem {
+                            name: trait_name,
+                            kind: SymbolKind::INTERFACE,
+                            tags: None,
+                            detail: Some("Trait".to_string()),
+                            uri,
+                            range,
+                            selection_range: range,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            SymbolKind::INTERFACE => {
+                // For traits, supertypes are the super traits
+                let super_traits = self.find_super_traits(type_name);
+                for (uri, super_trait_name, span) in super_traits {
+                    if let Some(doc) = self.documents.get(&uri) {
+                        let range = self.span_to_range(&doc.content, &span);
+                        supertypes.push(TypeHierarchyItem {
+                            name: super_trait_name,
+                            kind: SymbolKind::INTERFACE,
+                            tags: None,
+                            detail: Some("Super trait".to_string()),
+                            uri,
+                            range,
+                            selection_range: range,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if supertypes.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(supertypes))
+        }
+    }
+
+    async fn subtypes(
+        &self,
+        params: TypeHierarchySubtypesParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let item = &params.item;
+        let type_name = &item.name;
+        let mut subtypes = Vec::new();
+
+        match item.kind {
+            SymbolKind::INTERFACE => {
+                // For traits, subtypes include:
+                // 1. Traits that extend this trait
+                let sub_traits = self.find_sub_traits(type_name);
+                for (uri, sub_trait_name, span) in sub_traits {
+                    if let Some(doc) = self.documents.get(&uri) {
+                        let range = self.span_to_range(&doc.content, &span);
+                        subtypes.push(TypeHierarchyItem {
+                            name: sub_trait_name,
+                            kind: SymbolKind::INTERFACE,
+                            tags: None,
+                            detail: Some("Sub trait".to_string()),
+                            uri,
+                            range,
+                            selection_range: range,
+                            data: None,
+                        });
+                    }
+                }
+
+                // 2. Types that implement this trait
+                let impls = self.find_trait_implementations(type_name);
+                for (uri, impl_type_name, span) in impls {
+                    if let Some(doc) = self.documents.get(&uri) {
+                        let range = self.span_to_range(&doc.content, &span);
+                        // Determine the kind of the implementing type
+                        let kind = if let Some(ast) = &doc.ast {
+                            let mut found_kind = SymbolKind::STRUCT; // default
+                            for item in &ast.items {
+                                match &item.node {
+                                    Item::Struct(s) if s.name.node == impl_type_name => {
+                                        found_kind = SymbolKind::STRUCT;
+                                        break;
+                                    }
+                                    Item::Enum(e) if e.name.node == impl_type_name => {
+                                        found_kind = SymbolKind::ENUM;
+                                        break;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            found_kind
+                        } else {
+                            SymbolKind::STRUCT
+                        };
+
+                        subtypes.push(TypeHierarchyItem {
+                            name: impl_type_name,
+                            kind,
+                            tags: None,
+                            detail: Some("Implementor".to_string()),
+                            uri,
+                            range,
+                            selection_range: range,
+                            data: None,
+                        });
+                    }
+                }
+            }
+            _ => {
+                // For structs/enums, there are no subtypes in the traditional sense
+                // (Vais doesn't have struct/enum inheritance)
+            }
+        }
+
+        if subtypes.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(subtypes))
+        }
     }
 }

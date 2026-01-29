@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{PACKAGE_NAME}} - Vais Package Registry</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Vais Package Registry</h1>
+            <nav>
+                <a href="/">Home</a>
+                <a href="/api/v1/health">API Health</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="package-header">
+            <h2>{{PACKAGE_NAME}}</h2>
+            <p class="description">{{DESCRIPTION}}</p>
+
+            <div class="package-meta">
+                <span class="meta-item">
+                    <strong>Latest Version:</strong> {{LATEST_VERSION}}
+                </span>
+                <span class="meta-item">
+                    <strong>Downloads:</strong> {{DOWNLOADS}}
+                </span>
+                <span class="meta-item">
+                    <strong>License:</strong> {{LICENSE}}
+                </span>
+            </div>
+
+            <div class="package-links">
+                {{HOMEPAGE_LINK}}
+                {{REPOSITORY_LINK}}
+                {{DOCUMENTATION_LINK}}
+            </div>
+
+            {{KEYWORDS}}
+        </section>
+
+        <section class="installation">
+            <h3>Installation</h3>
+            <pre><code>vais add {{PACKAGE_NAME}}</code></pre>
+        </section>
+
+        <section class="versions">
+            <h3>Versions</h3>
+            <div class="versions-list">
+                {{VERSIONS_LIST}}
+            </div>
+        </section>
+
+        <section class="dependencies">
+            <h3>Dependencies (Latest Version)</h3>
+            <div class="dependencies-list">
+                {{DEPENDENCIES_LIST}}
+            </div>
+        </section>
+
+        {{README_SECTION}}
+
+        <section class="owners">
+            <h3>Owners</h3>
+            <div class="owners-list">
+                {{OWNERS_LIST}}
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Vais Package Registry - Open Source Package Management</p>
+        </div>
+    </footer>
+</body>
+</html>

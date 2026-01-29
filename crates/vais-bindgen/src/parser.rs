@@ -97,21 +97,97 @@ pub enum CDeclaration {
     Struct(CStruct),
     Typedef(CTypedef),
     Enum(CEnum),
+    CppClass(CppClass),
+    CppNamespace(CppNamespace),
 }
 
-/// Parser for C headers
+/// Access specifier for C++ class members
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccessSpecifier {
+    Public,
+    Protected,
+    Private,
+}
+
+/// Represents a C++ method
+#[derive(Debug, Clone)]
+pub struct CppMethod {
+    pub name: String,
+    pub return_type: CType,
+    pub parameters: Vec<(String, CType)>,
+    pub is_virtual: bool,
+    pub is_const: bool,
+    pub is_static: bool,
+    pub is_constructor: bool,
+    pub is_destructor: bool,
+    pub access: AccessSpecifier,
+}
+
+/// Represents a C++ class field
+#[derive(Debug, Clone)]
+pub struct CppClassField {
+    pub name: String,
+    pub field_type: CType,
+    pub access: AccessSpecifier,
+}
+
+/// Represents a C++ class definition
+#[derive(Debug, Clone)]
+pub struct CppClass {
+    pub name: String,
+    pub base_classes: Vec<String>,
+    pub methods: Vec<CppMethod>,
+    pub fields: Vec<CppClassField>,
+    pub is_template: bool,
+    pub template_params: Vec<String>,
+}
+
+/// Represents a C++ namespace
+#[derive(Debug, Clone)]
+pub struct CppNamespace {
+    pub name: String,
+    pub items: Vec<CDeclaration>,
+}
+
+/// Parser mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParserMode {
+    C,
+    Cpp,
+}
+
+/// Parser for C/C++ headers
 pub struct Parser<'a> {
     config: &'a BindgenConfig,
+    mode: ParserMode,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(config: &'a BindgenConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            mode: ParserMode::C,
+        }
+    }
+
+    pub fn new_cpp(config: &'a BindgenConfig) -> Self {
+        Self {
+            config,
+            mode: ParserMode::Cpp,
+        }
     }
 
     pub fn parse(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
         let cleaned = self.preprocess(content);
+
+        if self.mode == ParserMode::Cpp {
+            // Parse C++ namespaces
+            declarations.extend(self.parse_namespaces(&cleaned)?);
+
+            // Parse C++ classes
+            declarations.extend(self.parse_classes(&cleaned)?);
+        }
 
         // Parse typedefs
         declarations.extend(self.parse_typedefs(&cleaned)?);
@@ -358,8 +434,10 @@ impl<'a> Parser<'a> {
             });
         }
 
-        // Remove const qualifier
+        // Remove qualifiers and keywords
         let type_str = type_str.trim_start_matches("const").trim();
+        let type_str = type_str.trim_start_matches("static").trim();  // Add static handling
+        let type_str = type_str.trim_start_matches("virtual").trim(); // Add virtual handling
 
         // Remove struct/enum keywords
         let type_str = type_str.trim_start_matches("struct").trim();
@@ -399,6 +477,194 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+    }
+
+    // C++ specific parsing methods
+
+    fn parse_namespaces(&self, content: &str) -> Result<Vec<CDeclaration>> {
+        let mut declarations = Vec::new();
+        let namespace_re = Regex::new(
+            r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}"
+        ).unwrap();
+
+        for cap in namespace_re.captures_iter(content) {
+            let name = cap[1].to_string();
+            let namespace_content = &cap[2];
+
+            // Recursively parse namespace content
+            let items = self.parse(namespace_content)?;
+
+            declarations.push(CDeclaration::CppNamespace(CppNamespace {
+                name,
+                items,
+            }));
+        }
+
+        Ok(declarations)
+    }
+
+    fn parse_classes(&self, content: &str) -> Result<Vec<CDeclaration>> {
+        let mut declarations = Vec::new();
+
+        // Parse class declarations with bodies
+        let class_re = Regex::new(
+            r"(?:template\s*<([^>]*)>\s*)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*(?:public|private|protected)\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*\{([^}]*)\}\s*;"
+        ).unwrap();
+
+        for cap in class_re.captures_iter(content) {
+            let template_params_str = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let name = cap[2].to_string();
+            let base_class = cap.get(3).map(|m| m.as_str().to_string());
+            let body = &cap[4];
+
+            let is_template = !template_params_str.is_empty();
+            let template_params = if is_template {
+                self.parse_template_params(template_params_str)?
+            } else {
+                Vec::new()
+            };
+
+            let base_classes = if let Some(base) = base_class {
+                vec![base]
+            } else {
+                Vec::new()
+            };
+
+            let (methods, fields) = self.parse_class_body(body)?;
+
+            declarations.push(CDeclaration::CppClass(CppClass {
+                name,
+                base_classes,
+                methods,
+                fields,
+                is_template,
+                template_params,
+            }));
+        }
+
+        Ok(declarations)
+    }
+
+    fn parse_template_params(&self, params_str: &str) -> Result<Vec<String>> {
+        let mut params = Vec::new();
+        let param_re = Regex::new(r"(?:typename|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+
+        for cap in param_re.captures_iter(params_str) {
+            params.push(cap[1].to_string());
+        }
+
+        Ok(params)
+    }
+
+    fn parse_class_body(&self, body: &str) -> Result<(Vec<CppMethod>, Vec<CppClassField>)> {
+        let mut methods = Vec::new();
+        let mut fields = Vec::new();
+
+        // Split by access specifiers
+        let sections: Vec<&str> = body.split("public:").collect();
+
+        if sections.len() > 1 {
+            // Parse sections after public:
+            for section in sections.iter().skip(1) {
+                let private_parts: Vec<&str> = section.split("private:").collect();
+
+                if private_parts.len() > 1 {
+                    // Parse public part
+                    self.parse_class_section(private_parts[0], AccessSpecifier::Public, &mut methods, &mut fields)?;
+
+                    // Parse private parts
+                    for private_part in private_parts.iter().skip(1) {
+                        self.parse_class_section(private_part, AccessSpecifier::Private, &mut methods, &mut fields)?;
+                    }
+                } else {
+                    self.parse_class_section(section, AccessSpecifier::Public, &mut methods, &mut fields)?;
+                }
+            }
+        }
+
+        // Parse first section (before any access specifier)
+        if !sections.is_empty() {
+            self.parse_class_section(sections[0], AccessSpecifier::Private, &mut methods, &mut fields)?;
+        }
+
+        Ok((methods, fields))
+    }
+
+    fn parse_class_section(
+        &self,
+        section: &str,
+        access: AccessSpecifier,
+        methods: &mut Vec<CppMethod>,
+        fields: &mut Vec<CppClassField>,
+    ) -> Result<()> {
+        // Collect all declarations in one pass
+        let mut cleaned = String::new();
+        for line in section.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                cleaned.push_str(trimmed);
+                cleaned.push(' ');
+            }
+        }
+
+        // Parse methods with a more flexible regex
+        // Matches: [static|virtual] type name(params)[const][= 0];
+        // Use word boundaries and be careful with greedy matching
+        let method_re = Regex::new(
+            r"(?:(static|virtual)\s+)?([a-zA-Z_][a-zA-Z0-9_*]*(?:\s*\*)*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(const)?\s*(=\s*0)?\s*;"
+        ).unwrap();
+
+        for cap in method_re.captures_iter(&cleaned) {
+            let modifier = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let return_type_str = cap[2].trim();
+            let name = cap[3].to_string();
+            let params_str = cap[4].trim();
+            let const_modifier = cap.get(5).is_some();
+
+            let is_virtual = modifier == "virtual";
+            let is_static = modifier == "static";
+            let is_const = const_modifier;
+
+            let return_type = self.parse_type(return_type_str).unwrap_or(CType::Void);
+            let parameters = self.parse_parameters(params_str)?;
+
+            methods.push(CppMethod {
+                name,
+                return_type,
+                parameters,
+                is_virtual,
+                is_const,
+                is_static,
+                is_constructor: false,
+                is_destructor: false,
+                access,
+            });
+        }
+
+        // Parse fields - simpler pattern
+        let field_re = Regex::new(
+            r"([a-zA-Z_][a-zA-Z0-9_*]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;"
+        ).unwrap();
+
+        for cap in field_re.captures_iter(&cleaned) {
+            let type_str = cap[1].trim();
+            let name = cap[2].to_string();
+
+            // Skip if it's actually a method (would have been captured above)
+            if cleaned.contains(&format!("{}(", name)) {
+                continue;
+            }
+
+            if let Ok(field_type) = self.parse_type(type_str) {
+                fields.push(CppClassField {
+                    name,
+                    field_type,
+                    access,
+                });
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -526,5 +792,78 @@ mod tests {
         let decls = parser.parse(header).unwrap();
 
         assert!(!decls.is_empty());
+    }
+
+    #[test]
+    fn test_parse_cpp_class() {
+        let header = r#"
+            class MyClass {
+            public:
+                int getValue();
+                void setValue(int v);
+            private:
+                int value;
+            };
+        "#;
+        let config = BindgenConfig::default();
+        let parser = Parser::new_cpp(&config);
+        let decls = parser.parse(header).unwrap();
+
+        assert!(!decls.is_empty());
+        match &decls[0] {
+            CDeclaration::CppClass(cls) => {
+                assert_eq!(cls.name, "MyClass");
+                assert!(!cls.methods.is_empty());
+                assert!(!cls.fields.is_empty());
+            }
+            _ => panic!("Expected CppClass declaration"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cpp_namespace() {
+        let header = r#"
+            namespace MyNamespace {
+                int myFunction(int x);
+            }
+        "#;
+        let config = BindgenConfig::default();
+        let parser = Parser::new_cpp(&config);
+        let decls = parser.parse(header).unwrap();
+
+        assert!(!decls.is_empty());
+        match &decls[0] {
+            CDeclaration::CppNamespace(ns) => {
+                assert_eq!(ns.name, "MyNamespace");
+                assert!(!ns.items.is_empty());
+            }
+            _ => panic!("Expected CppNamespace declaration"),
+        }
+    }
+
+    #[test]
+    fn test_parse_template_class() {
+        let header = r#"
+            template<typename T>
+            class Vector {
+            public:
+                void push(T item);
+                T get(int index);
+            };
+        "#;
+        let config = BindgenConfig::default();
+        let parser = Parser::new_cpp(&config);
+        let decls = parser.parse(header).unwrap();
+
+        assert!(!decls.is_empty());
+        match &decls[0] {
+            CDeclaration::CppClass(cls) => {
+                assert_eq!(cls.name, "Vector");
+                assert!(cls.is_template);
+                assert_eq!(cls.template_params.len(), 1);
+                assert_eq!(cls.template_params[0], "T");
+            }
+            _ => panic!("Expected CppClass declaration"),
+        }
     }
 }

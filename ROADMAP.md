@@ -1462,7 +1462,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
 | Phase 11: 프로덕션 준비 | ✅ 완료 | 100% |
-| Phase 12: 생태계 성숙 | 🔄 진행 중 | 50% |
+| Phase 12: 생태계 성숙 | 🔄 진행 중 | 75% |
 
 ---
 
@@ -1594,19 +1594,51 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### P3 - 낮은 우선순위 (3-6개월) - 생태계 확장
 
 #### 개발자 경험
-- [ ] **Playground 개선** - 서버 사이드 컴파일/실행
-- [ ] **패키지 레지스트리 웹 UI** - 검색, 문서 호스팅
-- [ ] **LSP 1.18+ 기능** - Workspace Symbols, Type Hierarchy
+- [x] **Playground 개선** - 서버 사이드 컴파일/실행 (완료일: 2026-01-29)
+  - vais-playground-server 크레이트: Axum 기반 REST API 서버
+  - POST /api/compile: 소스 수신 → 토큰화 → 파싱 → 타입체크 → 코드젠 → clang 링킹 → 실행
+  - 동시 컴파일 제한 (세마포어), 소스 크기 제한 (64KB)
+  - 프론트엔드: 서버 자동 감지, 서버 미가용 시 mock 모드 폴백
+- [x] **패키지 레지스트리 웹 UI** - 검색, 문서 호스팅 (완료일: 2026-01-29)
+  - 패키지 검색 페이지: 검색 폼 + 결과 목록 (이름, 설명, 버전, 다운로드 수)
+  - 패키지 상세 페이지: 메타데이터, 버전 이력, 의존성, README 표시
+  - 서버사이드 HTML 렌더링, XSS 방지, 반응형 디자인
+  - static/index.html, package.html, styles.css + handlers/web.rs
+- [x] **LSP 1.18+ 기능** - Workspace Symbols, Type Hierarchy (완료일: 2026-01-29)
+  - Workspace Symbols: 전체 워크스페이스 심볼 검색 (함수, 구조체, 열거형, 트레이트 등)
+  - Type Hierarchy: prepareTypeHierarchy, supertypes, subtypes
+  - 구조체/열거형의 trait 구현 관계, trait 상속 관계 탐색
+  - 24개 통합 테스트 통과
 
 #### 크로스 플랫폼 지원
-- [ ] **Windows ARM64** 타겟 추가
-- [ ] **FreeBSD 지원**
-- [ ] **실험적 RISC-V 지원**
+- [x] **Windows ARM64** 타겟 추가 (완료일: 2026-01-29)
+  - Aarch64WindowsMsvc: aarch64-pc-windows-msvc 타겟 트리플
+  - MSVC 툴체인 감지, Windows 데이터 레이아웃, .exe 바이너리 생성
+- [x] **FreeBSD 지원** (완료일: 2026-01-29)
+  - X86_64FreeBsd: x86_64-unknown-freebsd
+  - Aarch64FreeBsd: aarch64-unknown-freebsd
+  - BSD 런타임 라이브러리 (c, m, pthread) 지원
+- [x] **실험적 RISC-V 지원** (완료일: 2026-01-29)
+  - Riscv64LinuxGnu: riscv64gc-unknown-linux-gnu
+  - GNU libc 기반 RISC-V 64비트 타겟
 
 #### 상호 운용성
-- [ ] **C++ 바인딩** - vais-bindgen 확장
-- [ ] **Python embedding** - PyO3 개선
-- [ ] **WebAssembly Component Model** - wasi-preview2 완전 지원
+- [x] **C++ 바인딩** - vais-bindgen 확장 (완료일: 2026-01-29)
+  - C++ 파서: CppClass, CppNamespace, CppMethod, AccessSpecifier
+  - 클래스 → 불투명 핸들 + C 래퍼 함수 생성
+  - 생성자/소멸자, 가상 메서드, 정적 메서드 지원
+  - 53개 테스트 통과 (36 라이브러리 + 17 통합)
+- [x] **Python embedding** - PyO3 개선 (완료일: 2026-01-29)
+  - vais-python 크레이트: PyO3 0.22 기반 Python 모듈
+  - compile, compile_and_run, tokenize, parse, check 함수 API
+  - VaisCompiler 클래스, CompileResult, RunResult, Error, TokenInfo
+  - 30+ 테스트 케이스, 포괄적 문서
+- [x] **WebAssembly Component Model** - wasi-preview2 완전 지원 (완료일: 2026-01-29)
+  - wasm_component.rs: WIT 타입 시스템 (record, variant, enum, flags, resource)
+  - WitPackage: WIT 파일 생성, 네임스페이스/버전 관리
+  - ComponentLinkConfig: 리액터/커맨드 모드, 어댑터 모듈 지원
+  - vais_type_to_wit(): Vais → WIT 자동 타입 변환
+  - 8개 테스트 통과
 
 ### P4 - 미래 목표 (6개월+) - 장기 비전
 

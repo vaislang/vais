@@ -1,15 +1,36 @@
 use crate::config::BindgenConfig;
-use crate::parser::{CDeclaration, CEnum, CFunction, CStruct, CType, CTypedef};
+use crate::parser::{
+    AccessSpecifier, CDeclaration, CEnum, CFunction, CStruct, CType, CTypedef,
+    CppClass, CppMethod, CppNamespace,
+};
 use crate::Result;
+
+/// Generator mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneratorMode {
+    C,
+    Cpp,
+}
 
 /// Generator for Vais FFI code
 pub struct Generator<'a> {
     config: &'a BindgenConfig,
+    mode: GeneratorMode,
 }
 
 impl<'a> Generator<'a> {
     pub fn new(config: &'a BindgenConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            mode: GeneratorMode::C,
+        }
+    }
+
+    pub fn new_cpp(config: &'a BindgenConfig) -> Self {
+        Self {
+            config,
+            mode: GeneratorMode::Cpp,
+        }
     }
 
     pub fn generate(&self, declarations: &[CDeclaration]) -> Result<String> {
@@ -43,6 +64,14 @@ impl<'a> Generator<'a> {
                 }
                 CDeclaration::Enum(e) => {
                     output.push_str(&self.generate_enum(e));
+                    output.push_str("\n\n");
+                }
+                CDeclaration::CppClass(cls) => {
+                    output.push_str(&self.generate_cpp_class(cls));
+                    output.push_str("\n\n");
+                }
+                CDeclaration::CppNamespace(ns) => {
+                    output.push_str(&self.generate_cpp_namespace(ns));
                     output.push_str("\n\n");
                 }
             }
@@ -180,6 +209,264 @@ impl<'a> Generator<'a> {
                     format!("[{}; {}]", inner_type, s)
                 } else {
                     format!("*mut {}", inner_type)
+                }
+            }
+        }
+    }
+
+    // C++ specific generation methods
+
+    pub fn generate_cpp_class(&self, cls: &CppClass) -> String {
+        let mut output = String::new();
+
+        // Generate C wrapper functions for C++ methods
+        if self.mode == GeneratorMode::Cpp {
+            output.push_str(&format!("    // C++ class: {}\n", cls.name));
+            output.push_str(&format!("    // Wrapper functions for {} methods\n\n", cls.name));
+
+            // Generate opaque pointer type for class instance
+            output.push_str(&format!(
+                "    type {}Handle = *mut ();\n\n",
+                cls.name
+            ));
+
+            // Generate constructor wrapper
+            if !cls.is_template {
+                output.push_str(&format!(
+                    "    fn {}_new() -> {}Handle;\n\n",
+                    cls.name, cls.name
+                ));
+
+                // Generate destructor wrapper
+                output.push_str(&format!(
+                    "    fn {}_delete(ptr: {}Handle);\n\n",
+                    cls.name, cls.name
+                ));
+            }
+
+            // Generate method wrappers
+            for method in &cls.methods {
+                if method.access == AccessSpecifier::Public {
+                    output.push_str(&self.generate_cpp_method_wrapper(cls, method));
+                    output.push_str("\n\n");
+                }
+            }
+
+            // Generate field accessors for public fields
+            for field in &cls.fields {
+                if field.access == AccessSpecifier::Public {
+                    // Getter
+                    output.push_str(&format!(
+                        "    fn {}_get_{}(ptr: {}Handle) -> {};\n\n",
+                        cls.name,
+                        field.name,
+                        cls.name,
+                        self.type_to_vais(&field.field_type)
+                    ));
+
+                    // Setter
+                    output.push_str(&format!(
+                        "    fn {}_set_{}(ptr: {}Handle, value: {});\n\n",
+                        cls.name,
+                        field.name,
+                        cls.name,
+                        self.type_to_vais(&field.field_type)
+                    ));
+                }
+            }
+        } else {
+            // Generate as struct for C mode
+            output.push_str(&format!("    struct {} {{\n", cls.name));
+            for field in &cls.fields {
+                if field.access == AccessSpecifier::Public {
+                    output.push_str(&format!(
+                        "        {}: {},\n",
+                        field.name,
+                        self.type_to_vais(&field.field_type)
+                    ));
+                }
+            }
+            output.push_str("    }");
+        }
+
+        output
+    }
+
+    fn generate_cpp_method_wrapper(&self, cls: &CppClass, method: &CppMethod) -> String {
+        let mut output = String::new();
+
+        // Generate wrapper function name
+        let wrapper_name = if method.is_static {
+            format!("{}_{}", cls.name, method.name)
+        } else {
+            format!("{}_{}", cls.name, method.name)
+        };
+
+        output.push_str("    fn ");
+        output.push_str(&wrapper_name);
+        output.push('(');
+
+        // Add 'this' pointer for non-static methods
+        let mut params = Vec::new();
+        if !method.is_static && !method.is_constructor {
+            params.push(format!("ptr: {}Handle", cls.name));
+        }
+
+        // Add method parameters
+        for (name, ty) in &method.parameters {
+            params.push(format!("{}: {}", name, self.type_to_vais(ty)));
+        }
+
+        output.push_str(&params.join(", "));
+        output.push(')');
+
+        // Return type
+        let return_type = self.type_to_vais(&method.return_type);
+        if method.is_constructor {
+            output.push_str(&format!(" -> {}Handle", cls.name));
+        } else if return_type != "()" {
+            output.push_str(" -> ");
+            output.push_str(&return_type);
+        }
+
+        output.push(';');
+
+        output
+    }
+
+    pub fn generate_cpp_namespace(&self, ns: &CppNamespace) -> String {
+        let mut output = String::new();
+
+        output.push_str(&format!("    // Namespace: {}\n", ns.name));
+        output.push_str(&format!("    // module {} {{\n\n", ns.name));
+
+        // Generate nested items
+        for item in &ns.items {
+            match item {
+                CDeclaration::Function(func) => {
+                    // Prefix function with namespace
+                    let mut prefixed_func = func.clone();
+                    prefixed_func.name = format!("{}_{}", ns.name, func.name);
+                    output.push_str(&self.generate_function(&prefixed_func));
+                    output.push_str("\n\n");
+                }
+                CDeclaration::CppClass(cls) => {
+                    // Prefix class with namespace
+                    let mut prefixed_cls = cls.clone();
+                    prefixed_cls.name = format!("{}_{}", ns.name, cls.name);
+                    output.push_str(&self.generate_cpp_class(&prefixed_cls));
+                    output.push_str("\n\n");
+                }
+                _ => {
+                    // Handle other declarations
+                }
+            }
+        }
+
+        output.push_str("    // }\n");
+
+        output
+    }
+
+    /// Generate C wrapper header for C++ code
+    pub fn generate_cpp_wrapper_header(&self, declarations: &[CDeclaration]) -> Result<String> {
+        let mut output = String::new();
+
+        output.push_str("// C wrapper header for C++ code\n");
+        output.push_str("// This header should be used to compile C wrapper implementations\n\n");
+        output.push_str("#ifndef VAIS_CPP_WRAPPER_H\n");
+        output.push_str("#define VAIS_CPP_WRAPPER_H\n\n");
+        output.push_str("#ifdef __cplusplus\n");
+        output.push_str("extern \"C\" {\n");
+        output.push_str("#endif\n\n");
+
+        for decl in declarations {
+            if let CDeclaration::CppClass(cls) = decl {
+                // Generate C wrapper function declarations
+                output.push_str(&format!("// Wrappers for class {}\n", cls.name));
+                output.push_str(&format!("typedef void* {}Handle;\n\n", cls.name));
+
+                if !cls.is_template {
+                    output.push_str(&format!("{}Handle {}_new();\n", cls.name, cls.name));
+                    output.push_str(&format!("void {}_delete({}Handle ptr);\n\n", cls.name, cls.name));
+                }
+
+                for method in &cls.methods {
+                    if method.access == AccessSpecifier::Public {
+                        output.push_str(&self.generate_cpp_method_wrapper_header(cls, method));
+                        output.push_str("\n");
+                    }
+                }
+
+                output.push_str("\n");
+            }
+        }
+
+        output.push_str("#ifdef __cplusplus\n");
+        output.push_str("}\n");
+        output.push_str("#endif\n\n");
+        output.push_str("#endif // VAIS_CPP_WRAPPER_H\n");
+
+        Ok(output)
+    }
+
+    fn generate_cpp_method_wrapper_header(&self, cls: &CppClass, method: &CppMethod) -> String {
+        let mut output = String::new();
+
+        let return_type_c = self.type_to_c(&method.return_type);
+
+        let wrapper_name = if method.is_static {
+            format!("{}_{}", cls.name, method.name)
+        } else {
+            format!("{}_{}", cls.name, method.name)
+        };
+
+        if method.is_constructor {
+            output.push_str(&format!("{}Handle {}(", cls.name, wrapper_name));
+        } else {
+            output.push_str(&format!("{} {}(", return_type_c, wrapper_name));
+        }
+
+        let mut params = Vec::new();
+        if !method.is_static && !method.is_constructor {
+            params.push(format!("{}Handle ptr", cls.name));
+        }
+
+        for (name, ty) in &method.parameters {
+            params.push(format!("{} {}", self.type_to_c(ty), name));
+        }
+
+        output.push_str(&params.join(", "));
+        output.push_str(");");
+
+        output
+    }
+
+    fn type_to_c(&self, c_type: &CType) -> String {
+        match c_type {
+            CType::Void => "void".to_string(),
+            CType::Char => "char".to_string(),
+            CType::Short => "short".to_string(),
+            CType::Int => "int".to_string(),
+            CType::Long => "long".to_string(),
+            CType::LongLong => "long long".to_string(),
+            CType::UChar => "unsigned char".to_string(),
+            CType::UShort => "unsigned short".to_string(),
+            CType::UInt => "unsigned int".to_string(),
+            CType::ULong => "unsigned long".to_string(),
+            CType::ULongLong => "unsigned long long".to_string(),
+            CType::Float => "float".to_string(),
+            CType::Double => "double".to_string(),
+            CType::Bool => "bool".to_string(),
+            CType::SizeT => "size_t".to_string(),
+            CType::Custom(name) => name.clone(),
+            CType::Pointer(inner) => format!("{}*", self.type_to_c(inner)),
+            CType::ConstPointer(inner) => format!("const {}*", self.type_to_c(inner)),
+            CType::Array(inner, size) => {
+                if let Some(s) = size {
+                    format!("{}[{}]", self.type_to_c(inner), s)
+                } else {
+                    format!("{}*", self.type_to_c(inner))
                 }
             }
         }
@@ -339,5 +626,68 @@ mod tests {
 
         let result = gen.generate_typedef(&t);
         assert!(result.contains("type MyInt = i32"));
+    }
+
+    #[test]
+    fn test_generate_cpp_class() {
+        use crate::parser::{CppClassField, CppMethod, CppClass};
+
+        let config = BindgenConfig::default();
+        let gen = Generator::new_cpp(&config);
+
+        let cls = CppClass {
+            name: "MyClass".to_string(),
+            base_classes: Vec::new(),
+            methods: vec![
+                CppMethod {
+                    name: "getValue".to_string(),
+                    return_type: CType::Int,
+                    parameters: Vec::new(),
+                    is_virtual: false,
+                    is_const: true,
+                    is_static: false,
+                    is_constructor: false,
+                    is_destructor: false,
+                    access: AccessSpecifier::Public,
+                },
+            ],
+            fields: vec![
+                CppClassField {
+                    name: "value".to_string(),
+                    field_type: CType::Int,
+                    access: AccessSpecifier::Private,
+                },
+            ],
+            is_template: false,
+            template_params: Vec::new(),
+        };
+
+        let result = gen.generate_cpp_class(&cls);
+        assert!(result.contains("MyClass"));
+        assert!(result.contains("MyClassHandle"));
+    }
+
+    #[test]
+    fn test_generate_cpp_namespace() {
+        use crate::parser::CppNamespace;
+
+        let config = BindgenConfig::default();
+        let gen = Generator::new_cpp(&config);
+
+        let func = CFunction {
+            name: "test".to_string(),
+            return_type: CType::Int,
+            parameters: Vec::new(),
+            is_variadic: false,
+        };
+
+        let ns = CppNamespace {
+            name: "MyNamespace".to_string(),
+            items: vec![CDeclaration::Function(func)],
+        };
+
+        let result = gen.generate_cpp_namespace(&ns);
+        assert!(result.contains("MyNamespace"));
+        assert!(result.contains("MyNamespace_test"));
     }
 }

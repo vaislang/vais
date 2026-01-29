@@ -4,6 +4,7 @@ pub mod auth;
 pub mod index;
 pub mod packages;
 pub mod users;
+pub mod web;
 
 use crate::config::ServerConfig;
 use crate::db::DbPool;

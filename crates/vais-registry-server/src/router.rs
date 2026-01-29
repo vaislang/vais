@@ -82,7 +82,14 @@ pub fn create_router(pool: DbPool, storage: PackageStorage, config: ServerConfig
             .allow_headers(Any)
     };
 
+    // Web UI routes
+    let web_routes = Router::new()
+        .route("/", get(handlers::web::index))
+        .route("/packages/:name", get(handlers::web::package_detail))
+        .route("/static/styles.css", get(handlers::web::serve_css));
+
     let app = Router::new()
+        .merge(web_routes)
         .nest("/api/v1", api_routes)
         .layer(cors);
 
