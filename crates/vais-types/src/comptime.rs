@@ -71,6 +71,12 @@ pub struct ComptimeEvaluator {
     scope_stack: Vec<HashMap<String, ComptimeValue>>,
 }
 
+impl Default for ComptimeEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ComptimeEvaluator {
     pub fn new() -> Self {
         Self {

@@ -4,9 +4,9 @@
 
 use colored::Colorize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use vais_ast::{Item, Module, Function, Struct, Enum, Trait, Type, Param, GenericParam};
+use vais_ast::{Item, Module, Function, Struct, Enum, Trait};
 use vais_parser::parse;
 
 /// Documentation item extracted from source
@@ -19,7 +19,7 @@ struct DocItem {
     params: Vec<ParamDoc>,
     returns: Option<String>,
     examples: Vec<String>,
-    generics: Vec<GenericDoc>,
+    _generics: Vec<GenericDoc>,
     visibility: Visibility,
 }
 
@@ -29,6 +29,7 @@ enum DocKind {
     Struct,
     Enum,
     Trait,
+    #[allow(dead_code)]
     Module,
 }
 
@@ -137,7 +138,7 @@ fn collect_vais_files(dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
 }
 
 /// Extract documentation from AST and source code
-fn extract_documentation(file: &PathBuf, ast: &Module, source: &str) -> ModuleDoc {
+fn extract_documentation(file: &Path, ast: &Module, source: &str) -> ModuleDoc {
     let module_name = file
         .file_stem()
         .and_then(|s| s.to_str())
@@ -170,7 +171,7 @@ fn extract_documentation(file: &PathBuf, ast: &Module, source: &str) -> ModuleDo
 
     ModuleDoc {
         name: module_name,
-        path: file.clone(),
+        path: file.to_path_buf(),
         items,
     }
 }
@@ -187,8 +188,8 @@ fn extract_doc_comments(lines: &[&str], start_pos: usize) -> Vec<String> {
             // We've reached the item, look backwards for doc comments
             for j in (0..i).rev() {
                 let prev_line = lines[j].trim();
-                if prev_line.starts_with("///") {
-                    docs.insert(0, prev_line[3..].trim().to_string());
+                if let Some(stripped) = prev_line.strip_prefix("///") {
+                    docs.insert(0, stripped.trim().to_string());
                 } else if !prev_line.is_empty() {
                     // Non-doc-comment line, stop
                     break;
@@ -300,7 +301,7 @@ fn extract_function_doc(f: &Function, docs: Vec<String>) -> DocItem {
         params,
         returns,
         examples,
-        generics,
+        _generics: generics,
         visibility: if f.is_pub { Visibility::Public } else { Visibility::Private },
     }
 }
@@ -360,7 +361,7 @@ fn extract_struct_doc(s: &Struct, docs: Vec<String>) -> DocItem {
         params: vec![],
         returns: None,
         examples,
-        generics,
+        _generics: generics,
         visibility: if s.is_pub { Visibility::Public } else { Visibility::Private },
     }
 }
@@ -417,7 +418,7 @@ fn extract_enum_doc(e: &Enum, docs: Vec<String>) -> DocItem {
         params: vec![],
         returns: None,
         examples,
-        generics,
+        _generics: generics,
         visibility: if e.is_pub { Visibility::Public } else { Visibility::Private },
     }
 }
@@ -485,13 +486,13 @@ fn extract_trait_doc(t: &Trait, docs: Vec<String>) -> DocItem {
         params: vec![],
         returns: None,
         examples,
-        generics,
+        _generics: generics,
         visibility: if t.is_pub { Visibility::Public } else { Visibility::Private },
     }
 }
 
 /// Generate markdown documentation
-fn generate_markdown_docs(docs: &[ModuleDoc], output: &PathBuf) -> Result<(), String> {
+fn generate_markdown_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), String> {
     let mut index = String::new();
     index.push_str("# Vais API Documentation\n\n");
     index.push_str("## Modules\n\n");
@@ -640,7 +641,7 @@ fn generate_markdown_docs(docs: &[ModuleDoc], output: &PathBuf) -> Result<(), St
 }
 
 /// Generate HTML documentation (Rustdoc style)
-fn generate_html_docs(docs: &[ModuleDoc], output: &PathBuf) -> Result<(), String> {
+fn generate_html_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), String> {
     // Modern Rustdoc-inspired styles
     let style = r#"
 * { box-sizing: border-box; }
@@ -924,7 +925,7 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use vais_parser::parse;
 
     #[test]

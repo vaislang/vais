@@ -168,7 +168,7 @@ impl HotReloader {
     }
 
     /// Get a function pointer from the loaded dylib
-    pub fn get_function<T>(&mut self, name: &str) -> Result<libloading::Symbol<T>> {
+    pub fn get_function<T>(&mut self, name: &str) -> Result<libloading::Symbol<'_, T>> {
         self.dylib_loader
             .as_mut()
             .ok_or(HotReloadError::NotInitialized)?

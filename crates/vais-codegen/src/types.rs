@@ -9,6 +9,7 @@ pub(crate) struct LoopLabels {
     pub break_label: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionInfo {
     pub signature: vais_types::FunctionSig,
@@ -16,6 +17,7 @@ pub(crate) struct FunctionInfo {
     pub extern_abi: Option<String>, // ABI for extern functions (e.g., "C")
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct StructInfo {
     #[allow(dead_code)]
@@ -58,6 +60,7 @@ pub(crate) enum EnumVariantFields {
 }
 
 /// Constant definition info
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ConstInfo {
     pub name: String,
@@ -66,6 +69,7 @@ pub(crate) struct ConstInfo {
 }
 
 /// Global variable definition info
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalInfo {
     pub name: String,
@@ -136,6 +140,7 @@ impl LocalVar {
 
     /// Returns true if this variable uses alloca
     #[inline]
+    #[allow(dead_code)]
     pub fn is_alloca(&self) -> bool {
         matches!(self.kind, LocalVarKind::Alloca)
     }
@@ -238,7 +243,7 @@ impl CodeGenerator {
             }
             ResolvedType::Named { name, generics } => {
                 // Single uppercase letter is likely a generic type parameter
-                if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
                     "i64".to_string()
                 } else if !generics.is_empty() {
                     // In Vais, all values are i64-sized, so struct/enum/union layout is the same
@@ -389,7 +394,7 @@ impl CodeGenerator {
                 "Vec4i64" => ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 4 },
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
-                    if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
                         ResolvedType::Generic(name.clone())
                     } else {
                         ResolvedType::Named {

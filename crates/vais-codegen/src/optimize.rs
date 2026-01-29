@@ -70,8 +70,10 @@ impl LtoMode {
 /// vaisc build --profile-use=default.profdata main.vais -o main_optimized
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum PgoMode {
     /// No PGO - standard compilation
+    #[default]
     None,
     /// Generate instrumented binary for profiling
     /// Contains the directory path where .profraw files will be written
@@ -81,11 +83,6 @@ pub enum PgoMode {
     Use(String),
 }
 
-impl Default for PgoMode {
-    fn default() -> Self {
-        PgoMode::None
-    }
-}
 
 impl PgoMode {
     /// Parse PGO mode from command line arguments
@@ -655,7 +652,7 @@ fn is_power_of_2(n: i64) -> bool {
 }
 
 fn log2(n: i64) -> u32 {
-    (63 - n.leading_zeros()) as u32
+    63 - n.leading_zeros()
 }
 
 /// Branch optimization - simplify branches with constant conditions
@@ -970,7 +967,7 @@ fn dead_code_elimination(ir: &str) -> String {
 
     // Second pass: emit only used definitions
     let mut result = Vec::new();
-    for (_i, line) in lines.iter().enumerate() {
+    for line in lines.iter() {
         let trimmed = line.trim();
 
         // Check if this is a definition of an unused variable
@@ -1151,8 +1148,8 @@ fn try_unroll_loop(lines: &[&str], start_idx: usize) -> Option<(Vec<String>, usi
             }
 
             // Detect increment pattern: %next = add i64 %i, INCREMENT
-            if trimmed.contains(" = add i64 ") && !induction_var.is_empty() {
-                if trimmed.contains(&induction_var) {
+            if trimmed.contains(" = add i64 ") && !induction_var.is_empty()
+                && trimmed.contains(&induction_var) {
                     let parts: Vec<&str> = trimmed.split(',').collect();
                     if parts.len() >= 2 {
                         if let Ok(inc) = parts[1].trim().parse::<i64>() {
@@ -1160,7 +1157,6 @@ fn try_unroll_loop(lines: &[&str], start_idx: usize) -> Option<(Vec<String>, usi
                         }
                     }
                 }
-            }
 
             body_lines.push(trimmed.to_string());
         }
@@ -1661,8 +1657,8 @@ fn try_inline_call(line: &str, func: &InlinableFunction, counter: &mut u32) -> O
             // Track variable definitions for renaming
             if let Some(eq_pos) = body_line.find(" = ") {
                 let old_var = body_line[..eq_pos].trim().to_string();
-                if old_var.starts_with('%') {
-                    let var_part = &old_var[1..]; // remove the %
+                if let Some(var_part) = old_var.strip_prefix('%') {
+                    // remove the %
                     let new_var = format!("%inl{}{}", suffix, var_part);
                     local_var_renames.insert(old_var, new_var);
                 }
@@ -1728,10 +1724,10 @@ fn rename_vars_in_line(line: &str, suffix: &str, var_map: &HashMap<String, Strin
     // Then rename local variables (those being defined in this line)
     if let Some(eq_pos) = result.find(" = ") {
         let lhs = result[..eq_pos].trim().to_string();
-        if lhs.starts_with('%') {
+        if let Some(var_part) = lhs.strip_prefix('%') {
             // Create a new variable name that's valid LLVM IR
             // For %0, %1, etc. we need to create %inl1_0, %inl1_1, etc.
-            let var_part = &lhs[1..]; // remove the %
+            // remove the %
             let new_var = format!("%inl{}{}", suffix, var_part);
             let old_var = lhs.clone();
             let rhs = result[eq_pos + 3..].to_string();
@@ -1988,7 +1984,7 @@ pub fn prepare_ir_for_lto(ir: &str, mode: LtoMode) -> String {
     result.push("; LTO enabled".to_string());
 
     for line in ir.lines() {
-        let trimmed = line.trim();
+        let _trimmed = line.trim();
 
         // Add LTO-friendly attributes to function definitions
         if line.starts_with("define ") {
@@ -2278,6 +2274,7 @@ fn remove_dead_functions(ir: &str, dead: &HashSet<String>) -> String {
 ///   ...
 ///   merge:
 ///     ...
+#[allow(dead_code)]
 fn basic_block_merging(ir: &str) -> String {
     let lines: Vec<&str> = ir.lines().collect();
 
@@ -2405,6 +2402,7 @@ fn basic_block_merging(ir: &str) -> String {
 }
 
 /// Rewrite branch targets, replacing references to empty blocks with their final destinations
+#[allow(dead_code)]
 fn rewrite_branch_targets(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
     let mut modified = line.to_string();
     let mut any_change = false;
@@ -2426,6 +2424,7 @@ fn rewrite_branch_targets(line: &str, empty_blocks: &HashMap<String, String>) ->
 }
 
 /// Rewrite phi node labels, replacing references to empty blocks with their final destinations
+#[allow(dead_code)]
 fn rewrite_phi_labels(line: &str, empty_blocks: &HashMap<String, String>) -> Option<String> {
     let mut modified = line.to_string();
     let mut any_change = false;
@@ -2456,6 +2455,7 @@ fn rewrite_phi_labels(line: &str, empty_blocks: &HashMap<String, String>) -> Opt
 }
 
 /// Extract target from unconditional branch: br label %target
+#[allow(dead_code)]
 fn extract_uncond_branch_target(line: &str) -> Option<String> {
     // Pattern: br label %target
     if !line.starts_with("br label %") {
@@ -2471,12 +2471,13 @@ fn extract_uncond_branch_target(line: &str) -> Option<String> {
 }
 
 /// Extract targets from conditional branch: br i1 %cond, label %then, label %else
+#[allow(dead_code)]
 fn extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
     // Pattern: br i1 %cond, label %then, label %else
     let parts: Vec<&str> = line.split("label %").collect();
     if parts.len() >= 3 {
         let then_part = parts[1].split(',').next()?.trim();
-        let else_part = parts[2].trim().trim_end_matches(|c| c == ')' || c == ';' || c == ' ');
+        let else_part = parts[2].trim().trim_end_matches([')', ';', ' ']);
         let then_label: String = then_part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
         let else_label: String = else_part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
         return Some((then_label, else_label));
@@ -2485,6 +2486,7 @@ fn extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
 }
 
 /// Check if a string looks like a label name (not an SSA value)
+#[allow(dead_code)]
 fn is_likely_label(s: &str) -> bool {
     // Labels typically start with a letter and don't look like %1, %2, etc.
     if s.is_empty() {

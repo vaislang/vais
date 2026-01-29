@@ -314,11 +314,11 @@ impl VaisBackend {
                 Item::Function(f) => {
                     match &f.body {
                         FunctionBody::Expr(expr) => {
-                            self.collect_expr_refs(&expr, &mut refs);
+                            self.collect_expr_refs(expr, &mut refs);
                         }
                         FunctionBody::Block(stmts) => {
                             for stmt in stmts {
-                                self.collect_stmt_refs(&stmt, &mut refs);
+                                self.collect_stmt_refs(stmt, &mut refs);
                             }
                         }
                     }
@@ -327,11 +327,11 @@ impl VaisBackend {
                     for method in &impl_block.methods {
                         match &method.node.body {
                             FunctionBody::Expr(expr) => {
-                                self.collect_expr_refs(&expr, &mut refs);
+                                self.collect_expr_refs(expr, &mut refs);
                             }
                             FunctionBody::Block(stmts) => {
                                 for stmt in stmts {
-                                    self.collect_stmt_refs(&stmt, &mut refs);
+                                    self.collect_stmt_refs(stmt, &mut refs);
                                 }
                             }
                         }
@@ -500,10 +500,8 @@ impl VaisBackend {
             Stmt::Expr(expr) => {
                 self.collect_expr_refs(expr, refs);
             }
-            Stmt::Return(expr) => {
-                if let Some(e) = expr {
-                    self.collect_expr_refs(e, refs);
-                }
+            Stmt::Return(Some(e)) => {
+                self.collect_expr_refs(e, refs);
             }
             _ => {}
         }
@@ -788,10 +786,8 @@ impl VaisBackend {
             Stmt::Expr(expr) => {
                 self.collect_calls_from_expr(caller, caller_span, expr, entries);
             }
-            Stmt::Return(expr) => {
-                if let Some(e) = expr {
-                    self.collect_calls_from_expr(caller, caller_span, e, entries);
-                }
+            Stmt::Return(Some(e)) => {
+                self.collect_calls_from_expr(caller, caller_span, e, entries);
             }
             _ => {}
         }
@@ -2133,9 +2129,9 @@ impl LanguageServer for VaisBackend {
                     }
 
                     // Quick fix for type mismatches - suggest type cast
-                    if diagnostic.message.starts_with("Type mismatch:") {
-                        if diagnostic.message.contains("expected i64, found f64")
-                            || diagnostic.message.contains("expected f64, found i64")
+                    if diagnostic.message.starts_with("Type mismatch:")
+                        && (diagnostic.message.contains("expected i64, found f64")
+                            || diagnostic.message.contains("expected f64, found i64"))
                         {
                             let cast_type = if diagnostic.message.contains("expected i64") {
                                 "i64"
@@ -2178,7 +2174,6 @@ impl LanguageServer for VaisBackend {
                                 }
                             }
                         }
-                    }
                 }
             }
 
@@ -2554,7 +2549,7 @@ impl LanguageServer for VaisBackend {
 
             let outgoing: Vec<CallHierarchyOutgoingCall> = calls
                 .iter()
-                .filter_map(|(callee_name, call_span)| {
+                .map(|(callee_name, call_span)| {
                     let call_range = self.span_to_range(&doc.content, call_span);
 
                     // Find the callee definition
@@ -2565,7 +2560,7 @@ impl LanguageServer for VaisBackend {
                             .map(|d| self.span_to_range(&doc.content, &d.span))
                     });
 
-                    Some(CallHierarchyOutgoingCall {
+                    CallHierarchyOutgoingCall {
                         to: CallHierarchyItem {
                             name: callee_name.clone(),
                             kind: SymbolKind::FUNCTION,
@@ -2577,7 +2572,7 @@ impl LanguageServer for VaisBackend {
                             data: None,
                         },
                         from_ranges: vec![call_range],
-                    })
+                    }
                 })
                 .collect();
 

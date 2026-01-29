@@ -24,7 +24,7 @@ impl SampleCollector {
 
         self.samples
             .entry(function_name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(instruction_pointer);
         self.total_samples += 1;
     }

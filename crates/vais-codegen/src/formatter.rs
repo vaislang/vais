@@ -902,7 +902,7 @@ impl Formatter {
             }
             Stmt::Return(expr) => {
                 self.output.push_str(&indent);
-                self.output.push_str("R");
+                self.output.push('R');
                 if let Some(e) = expr {
                     self.output.push(' ');
                     self.output.push_str(&self.format_expr(&e.node));
@@ -911,7 +911,7 @@ impl Formatter {
             }
             Stmt::Break(expr) => {
                 self.output.push_str(&indent);
-                self.output.push_str("B");
+                self.output.push('B');
                 if let Some(e) = expr {
                     self.output.push(' ');
                     self.output.push_str(&self.format_expr(&e.node));
@@ -990,7 +990,7 @@ impl Formatter {
     /// Format a loop expression with proper indentation
     fn format_loop_expr(&mut self, indent: &str, pattern: &Option<Spanned<Pattern>>, iter: Option<&Spanned<Expr>>, body: &[Spanned<Stmt>]) {
         self.output.push_str(indent);
-        self.output.push_str("L");
+        self.output.push('L');
         if let Some(pat) = pattern {
             self.output.push(' ');
             self.output.push_str(&self.format_pattern(&pat.node));

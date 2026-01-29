@@ -767,7 +767,7 @@ impl DefinitionExtractor {
 
         // Extract function name
         let after_f = line_trimmed[2..].trim();
-        let name_end = after_f.find(|c| c == '(' || c == '<').unwrap_or(after_f.len());
+        let name_end = after_f.find(['(', '<']).unwrap_or(after_f.len());
         let name = after_f[..name_end].trim().to_string();
 
         if name.is_empty() {
@@ -788,7 +788,7 @@ impl DefinitionExtractor {
         }
 
         let after_s = line_trimmed[2..].trim();
-        let name_end = after_s.find(|c| c == '{' || c == '<' || c == ' ').unwrap_or(after_s.len());
+        let name_end = after_s.find(['{', '<', ' ']).unwrap_or(after_s.len());
         let name = after_s[..name_end].trim().to_string();
 
         if name.is_empty() {
@@ -807,7 +807,7 @@ impl DefinitionExtractor {
         }
 
         let after_e = line_trimmed[2..].trim();
-        let name_end = after_e.find(|c| c == '{' || c == '<' || c == ' ').unwrap_or(after_e.len());
+        let name_end = after_e.find(['{', '<', ' ']).unwrap_or(after_e.len());
         let name = after_e[..name_end].trim().to_string();
 
         if name.is_empty() {
@@ -860,11 +860,10 @@ impl DefinitionExtractor {
             // Skip Vais keywords
             if !is_vais_keyword(word) && word.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
                 // Check if followed by ( in original body
-                if body.contains(&format!("{}(", word)) || body.contains(&format!("{}<", word)) {
-                    if !deps.contains(&word.to_string()) {
+                if (body.contains(&format!("{}(", word)) || body.contains(&format!("{}<", word)))
+                    && !deps.contains(&word.to_string()) {
                         deps.push(word.to_string());
                     }
-                }
             }
         }
 
@@ -884,11 +883,10 @@ impl DefinitionExtractor {
             // Type names start with uppercase (convention)
             if word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
                && !is_vais_keyword(word)
-               && !is_builtin_type(word) {
-                if !deps.contains(&word.to_string()) {
+               && !is_builtin_type(word)
+                && !deps.contains(&word.to_string()) {
                     deps.push(word.to_string());
                 }
-            }
         }
 
         deps

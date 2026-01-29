@@ -1,5 +1,6 @@
 pub mod collector;
 pub mod reporter;
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub mod ffi;
 
 use collector::{CallGraph, MemoryTracker, SampleCollector};

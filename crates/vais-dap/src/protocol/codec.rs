@@ -3,7 +3,6 @@
 //! Implements the DAP wire format: Content-Length headers followed by JSON payload.
 
 use bytes::{Buf, BufMut, BytesMut};
-use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Decoder, Encoder};
 
 use crate::error::{DapError, DapResult};
@@ -210,8 +209,7 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 fn parse_content_length(header: &str) -> DapResult<usize> {
     for line in header.lines() {
-        if line.starts_with(CONTENT_LENGTH) {
-            let value = &line[CONTENT_LENGTH.len()..];
+        if let Some(value) = line.strip_prefix(CONTENT_LENGTH) {
             return value
                 .trim()
                 .parse()

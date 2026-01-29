@@ -443,28 +443,28 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         Future(inner) => format!("Future<{}>", format_type(inner)),
         Named { name, generics } if generics.is_empty() => name.clone(),
         Named { name, generics } => {
-            let args: Vec<_> = generics.iter().map(|g| format_type(g)).collect();
+            let args: Vec<_> = generics.iter().map(format_type).collect();
             format!("{}<{}>", name, args.join(", "))
         }
         Fn { params, ret, .. } => {
-            let param_strs: Vec<_> = params.iter().map(|p| format_type(p)).collect();
+            let param_strs: Vec<_> = params.iter().map(format_type).collect();
             format!("fn({}) -> {}", param_strs.join(", "), format_type(ret))
         }
         FnPtr { params, ret, is_vararg, .. } => {
-            let param_strs: Vec<_> = params.iter().map(|p| format_type(p)).collect();
+            let param_strs: Vec<_> = params.iter().map(format_type).collect();
             let vararg = if *is_vararg { ", ..." } else { "" };
             format!("fn({}{}) -> {}", param_strs.join(", "), vararg, format_type(ret))
         }
         Generic(name) => name.clone(),
         ConstGeneric(name) => format!("const {}", name),
         Tuple(elems) => {
-            let elem_strs: Vec<_> = elems.iter().map(|e| format_type(e)).collect();
+            let elem_strs: Vec<_> = elems.iter().map(format_type).collect();
             format!("({})", elem_strs.join(", "))
         }
         Vector { element, lanes } => format!("<{} x {}>", lanes, format_type(element)),
         DynTrait { trait_name, generics } if generics.is_empty() => format!("dyn {}", trait_name),
         DynTrait { trait_name, generics } => {
-            let args: Vec<_> = generics.iter().map(|g| format_type(g)).collect();
+            let args: Vec<_> = generics.iter().map(format_type).collect();
             format!("dyn {}<{}>", trait_name, args.join(", "))
         }
         Var(id) => format!("?{}", id),

@@ -7,8 +7,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::mpsc;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{info, trace, warn};
 
 use crate::error::{DapError, DapResult};
 use crate::protocol::types::*;
@@ -392,7 +391,7 @@ impl Debugger {
         Ok(())
     }
 
-    pub async fn pause(&mut self, thread_id: i64) -> DapResult<()> {
+    pub async fn pause(&mut self, _thread_id: i64) -> DapResult<()> {
         self.send_command("process interrupt")?;
         self.wait_for_stop()?;
         Ok(())

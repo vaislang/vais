@@ -8,6 +8,7 @@ use vais_types::ResolvedType;
 
 impl CodeGenerator {
     /// Generate LLVM IR for extern block
+    #[allow(dead_code)]
     pub(crate) fn generate_extern_block(&mut self, block: &ExternBlock) -> CodegenResult<String> {
         let mut ir = String::new();
 
@@ -21,6 +22,7 @@ impl CodeGenerator {
     }
 
     /// Generate extern function declaration
+    #[allow(dead_code)]
     fn generate_extern_function(
         &mut self,
         func: &ExternFunction,
@@ -89,6 +91,7 @@ impl CodeGenerator {
     }
 
     /// Convert AST type to ResolvedType for FFI contexts (with error handling)
+    #[allow(dead_code)]
     fn ffi_ast_type_to_resolved(&self, ty: &Spanned<Type>) -> CodegenResult<ResolvedType> {
         match &ty.node {
             Type::Named { name, generics } => {
@@ -152,6 +155,7 @@ impl CodeGenerator {
     }
 
     /// Generate function pointer type in LLVM
+    #[allow(dead_code)]
     pub(crate) fn generate_fn_ptr_type(&self, params: &[ResolvedType], ret: &ResolvedType, is_vararg: bool) -> String {
         let param_types: Vec<String> = params.iter().map(|p| self.type_to_llvm(p)).collect();
         let ret_type = self.type_to_llvm(ret);
@@ -163,6 +167,7 @@ impl CodeGenerator {
 
     /// Generate variadic function call
     /// For vararg calls, extra arguments are passed without type checking
+    #[allow(dead_code)]
     pub(crate) fn generate_vararg_call(
         &mut self,
         func_name: &str,

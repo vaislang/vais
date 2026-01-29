@@ -16,10 +16,12 @@ use super::alias_analysis::AliasAnalysis;
 
 /// Target vector width
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum VectorWidth {
     /// SSE: 128 bits (4 x i32, 2 x i64, 4 x f32, 2 x f64)
     SSE,
     /// AVX/AVX2: 256 bits (8 x i32, 4 x i64, 8 x f32, 4 x f64)
+    #[default]
     AVX2,
     /// AVX-512: 512 bits (16 x i32, 8 x i64, 16 x f32, 8 x f64)
     AVX512,
@@ -57,11 +59,6 @@ impl VectorWidth {
     }
 }
 
-impl Default for VectorWidth {
-    fn default() -> Self {
-        VectorWidth::AVX2
-    }
-}
 
 /// Loop dependence type
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,7 +226,7 @@ impl AutoVectorizer {
                     if let Some(sources) = branch_targets.get(label) {
                         // A back edge exists if there's a branch from a later block
                         // For simplicity, we consider any label with multiple incoming edges
-                        if sources.len() >= 1 {
+                        if !sources.is_empty() {
                             // Check if this looks like a loop header
                             let mut candidate = VectorizationCandidate {
                                 header: label.clone(),
@@ -276,7 +273,7 @@ impl AutoVectorizer {
                 if in_loop && trimmed.ends_with(':') && !trimmed.starts_with(&candidate.header) {
                     // Check if this is still part of the loop body
                     let label = trimmed.trim_end_matches(':');
-                    if label != &candidate.latch && !label.starts_with(&candidate.header) {
+                    if label != candidate.latch && !label.starts_with(&candidate.header) {
                         // Might have left the loop
                     }
                 }
@@ -369,7 +366,7 @@ impl AutoVectorizer {
 
             // Check if all memory accesses have unit stride
             let all_unit_stride = candidate.memory_accesses.iter()
-                .all(|a| a.stride.map_or(false, |s| s == 1 || s == -1));
+                .all(|a| a.stride.is_some_and(|s| s == 1 || s == -1));
 
             if !all_unit_stride && !candidate.memory_accesses.is_empty() {
                 // Non-unit stride requires gather/scatter

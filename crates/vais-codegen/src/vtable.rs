@@ -126,7 +126,7 @@ done:
 
         // Collect methods in declaration order
         let mut methods = Vec::new();
-        for (method_name, _method_sig) in &trait_def.methods {
+        for method_name in trait_def.methods.keys() {
             if let Some(impl_name) = method_impls.get(method_name) {
                 methods.push((method_name.clone(), impl_name.clone()));
             } else {
@@ -163,7 +163,7 @@ done:
         ];
 
         // Add method function pointer types
-        for (_method_name, method_sig) in &trait_def.methods {
+        for method_sig in trait_def.methods.values() {
             // Method signature: (self: i8*, params...) -> ret
             let mut param_types = vec!["i8*".to_string()]; // self pointer
             for (_param_name, _param_ty, _) in &method_sig.params[1..] { // Skip self

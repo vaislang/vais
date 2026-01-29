@@ -2,7 +2,7 @@
 //!
 //! Generates CUDA C code from Vais AST for NVIDIA GPUs.
 
-use vais_ast::{Module, Item, Stmt, Expr, Spanned, Type, Function, FunctionBody};
+use vais_ast::{Module, Item, Stmt, Expr, Type, Function, FunctionBody};
 use crate::{GpuError, GpuResult, GpuKernel, GpuType};
 use crate::common::{binary_op_str, unary_op_str, GpuBuiltins};
 

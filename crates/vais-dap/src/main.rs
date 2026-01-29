@@ -2,9 +2,8 @@
 //!
 //! Starts the Debug Adapter Protocol server for Vais debugging.
 
-use std::io::{self, BufReader, BufWriter};
+use std::io::{self};
 use std::net::TcpListener;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 

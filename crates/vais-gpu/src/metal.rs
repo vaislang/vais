@@ -179,15 +179,14 @@ impl MetalGenerator {
 
     fn extract_block_size(&self, attrs: &[vais_ast::Attribute]) -> (usize, usize, usize) {
         for attr in attrs {
-            if attr.name == "thread_block_size" || attr.name == "threads_per_threadgroup" {
-                if !attr.args.is_empty() {
+            if (attr.name == "thread_block_size" || attr.name == "threads_per_threadgroup")
+                && !attr.args.is_empty() {
                     // Parse (x, y, z) or just x from args vector
-                    let x = attr.args.get(0).and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(256);
+                    let x = attr.args.first().and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(256);
                     let y = attr.args.get(1).and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(1);
                     let z = attr.args.get(2).and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(1);
                     return (x, y, z);
                 }
-            }
         }
         (256, 1, 1) // Default
     }
@@ -670,7 +669,7 @@ pub fn generate_host_code(kernels: &[GpuKernel], library_name: &str) -> String {
     code.push_str("    init?() {\n");
     code.push_str("        guard let device = MTLCreateSystemDefaultDevice(),\n");
     code.push_str("              let commandQueue = device.makeCommandQueue(),\n");
-    code.push_str(&format!("              let library = try? device.makeDefaultLibrary() else {{\n"));
+    code.push_str("              let library = try? device.makeDefaultLibrary() else {\n");
     code.push_str("            return nil\n");
     code.push_str("        }\n");
     code.push_str("        self.device = device\n");
@@ -687,7 +686,7 @@ pub fn generate_host_code(kernels: &[GpuKernel], library_name: &str) -> String {
         code.push_str("        gridSize: MTLSize,\n");
         code.push_str(&format!("        threadgroupSize: MTLSize = MTLSize(width: {}, height: {}, depth: {})", bx, by, bz));
 
-        for (pname, ptype) in &kernel.params {
+        for (pname, _ptype) in &kernel.params {
             code.push_str(&format!(",\n        {}: MTLBuffer", pname));
         }
 

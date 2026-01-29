@@ -55,6 +55,7 @@ pub struct Chapter {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Progress {
     pub completed_lessons: HashMap<String, bool>,
     pub current_chapter: usize,
@@ -62,16 +63,6 @@ pub struct Progress {
     pub hints_used: HashMap<String, usize>,
 }
 
-impl Default for Progress {
-    fn default() -> Self {
-        Self {
-            completed_lessons: HashMap::new(),
-            current_chapter: 0,
-            current_lesson: 0,
-            hints_used: HashMap::new(),
-        }
-    }
-}
 
 pub struct Tutorial {
     pub chapters: Vec<Chapter>,
@@ -149,7 +140,7 @@ impl Tutorial {
 
         // Get lesson info first to avoid borrowing issues
         let (hint_count, lesson_matches, hint_idx) = if let Some(lesson) = self.get_lesson(chapter_id, lesson_idx) {
-            let current_hints = *self.progress.hints_used.get(lesson_id).unwrap_or(&0) as usize;
+            let current_hints = *self.progress.hints_used.get(lesson_id).unwrap_or(&0);
             (lesson.hints.len(), lesson.id == lesson_id, current_hints)
         } else {
             return None;

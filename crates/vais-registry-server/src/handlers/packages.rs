@@ -429,7 +429,7 @@ fn validate_version(version: &str) -> ServerResult<()> {
     for (i, part) in parts.iter().take(3).enumerate() {
         // Handle prerelease/build metadata
         let num_part = if i == 2 {
-            part.split(|c| c == '-' || c == '+').next().unwrap_or(part)
+            part.split(['-', '+']).next().unwrap_or(part)
         } else {
             part
         };

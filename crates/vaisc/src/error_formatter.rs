@@ -3,7 +3,7 @@
 //! This module provides a centralized interface for formatting errors with source context.
 //! It consolidates formatting logic from TypeError, ParseError, and other error types.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use vais_ast::Span;
 use vais_types::{TypeError, error_report::ErrorReporter};
 use vais_parser::ParseError;
@@ -130,21 +130,21 @@ impl FormattableError for ParseError {
 }
 
 /// Format a type error with source context (localized)
-pub fn format_type_error(error: &TypeError, source: &str, path: &PathBuf) -> String {
-    let context = ErrorFormatContext::new(source.to_string(), path.clone());
+pub fn format_type_error(error: &TypeError, source: &str, path: &Path) -> String {
+    let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
     error.format_with_context(&context)
 }
 
 /// Format a parse error with source context (localized)
-pub fn format_parse_error(error: &ParseError, source: &str, path: &PathBuf) -> String {
-    let context = ErrorFormatContext::new(source.to_string(), path.clone());
+pub fn format_parse_error(error: &ParseError, source: &str, path: &Path) -> String {
+    let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
     error.format_with_context(&context)
 }
 
 /// Format any error implementing FormattableError
 #[allow(dead_code)]
-pub fn format_error<E: FormattableError>(error: &E, source: &str, path: &PathBuf) -> String {
-    let context = ErrorFormatContext::new(source.to_string(), path.clone());
+pub fn format_error<E: FormattableError>(error: &E, source: &str, path: &Path) -> String {
+    let context = ErrorFormatContext::new(source.to_string(), path.to_path_buf());
     error.format_with_context(&context)
 }
 

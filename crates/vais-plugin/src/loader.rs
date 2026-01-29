@@ -10,17 +10,24 @@ use libloading::{Library, Symbol};
 use std::path::Path;
 
 /// Type of the plugin creation function exported by plugins
+#[allow(improper_ctypes_definitions)]
 pub type CreatePluginFn = unsafe fn() -> *mut dyn Plugin;
 
 /// Type of the plugin type query function exported by plugins
 pub type GetPluginTypeFn = unsafe fn() -> PluginType;
 
 /// Type-specific plugin creation functions
+#[allow(improper_ctypes_definitions)]
 pub type CreateLintPluginFn = unsafe fn() -> *mut dyn LintPlugin;
+#[allow(improper_ctypes_definitions)]
 pub type CreateTransformPluginFn = unsafe fn() -> *mut dyn TransformPlugin;
+#[allow(improper_ctypes_definitions)]
 pub type CreateOptimizePluginFn = unsafe fn() -> *mut dyn OptimizePlugin;
+#[allow(improper_ctypes_definitions)]
 pub type CreateCodegenPluginFn = unsafe fn() -> *mut dyn CodegenPlugin;
+#[allow(improper_ctypes_definitions)]
 pub type CreateFormatterPluginFn = unsafe fn() -> *mut dyn FormatterPlugin;
+#[allow(improper_ctypes_definitions)]
 pub type CreateAnalysisPluginFn = unsafe fn() -> *mut dyn AnalysisPlugin;
 
 /// A loaded plugin with its library handle

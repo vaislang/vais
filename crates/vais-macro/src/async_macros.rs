@@ -20,9 +20,8 @@
 //! (a, b, c) := join!(future1(), future2(), future3());
 //! ```
 
-use std::collections::HashMap;
 use vais_ast::*;
-use crate::{MacroRegistry, MacroError, MacroResult, Binding};
+use crate::{MacroRegistry, MacroError, MacroResult};
 
 /// Built-in async macro names
 pub const SELECT_MACRO: &str = "select";

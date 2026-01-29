@@ -122,7 +122,7 @@ impl<'a> DependencyResolver<'a> {
         }
 
         // Return in dependency order (dependencies before dependents)
-        Ok(self.topological_sort()?)
+        self.topological_sort()
     }
 
     /// Resolve from locked version

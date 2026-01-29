@@ -3,13 +3,10 @@
 //! Main server that handles DAP protocol communication and request dispatching.
 
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncBufReadExt, AsyncWriteExt, AsyncReadExt, BufReader, BufWriter};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::error::{DapError, DapResult};
-use crate::protocol::codec::DapMessage;
-use crate::protocol::events::*;
 use crate::protocol::requests::*;
 use crate::protocol::responses::*;
 use crate::protocol::types::*;
@@ -77,8 +74,8 @@ impl DapServer {
                     break;
                 }
 
-                if line.starts_with("Content-Length: ") {
-                    content_length = line[16..].parse().ok();
+                if let Some(len_str) = line.strip_prefix("Content-Length: ") {
+                    content_length = len_str.parse().ok();
                 }
             }
 
@@ -247,10 +244,7 @@ impl DapServer {
     }
 
     async fn handle_disconnect(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
-        let args: DisconnectRequestArguments = match self.parse_args(request) {
-            Ok(a) => a,
-            Err(_) => DisconnectRequestArguments::default(),
-        };
+        let args: DisconnectRequestArguments = self.parse_args(request).unwrap_or_default();
 
         info!("Disconnecting (terminate_debuggee={:?})", args.terminate_debuggee);
 
@@ -262,10 +256,7 @@ impl DapServer {
     }
 
     async fn handle_terminate(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
-        let args: TerminateRequestArguments = match self.parse_args(request) {
-            Ok(a) => a,
-            Err(_) => TerminateRequestArguments::default(),
-        };
+        let args: TerminateRequestArguments = self.parse_args(request).unwrap_or_default();
 
         info!("Terminating debug session (restart={:?})", args.restart);
 
@@ -277,10 +268,7 @@ impl DapServer {
     }
 
     async fn handle_restart(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
-        let args: RestartRequestArguments = match self.parse_args(request) {
-            Ok(a) => a,
-            Err(_) => RestartRequestArguments::default(),
-        };
+        let _args: RestartRequestArguments = self.parse_args(request).unwrap_or_default();
 
         info!("Restarting debug session");
 

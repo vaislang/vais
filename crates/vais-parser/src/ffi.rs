@@ -2,7 +2,7 @@
 //!
 //! Parses extern blocks, function pointers, and variadic functions.
 
-use crate::{ParseError, ParseResult, Parser};
+use crate::{ParseResult, Parser};
 use vais_ast::*;
 use vais_lexer::Token;
 

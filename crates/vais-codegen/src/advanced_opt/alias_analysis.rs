@@ -397,7 +397,7 @@ impl AliasAnalysis {
 
     /// Check if a pointer escapes its defining function
     pub fn escapes(&self, ptr: &str) -> bool {
-        self.pointers.get(ptr).map_or(true, |info| info.escapes)
+        self.pointers.get(ptr).is_none_or(|info| info.escapes)
     }
 
     /// Get function summary
@@ -643,7 +643,7 @@ fn extract_cast_info(line: &str) -> Option<(String, String)> {
     // %dest = bitcast TYPE %src to TYPE
     let dest = extract_def_var(line)?;
     for part in line.split_whitespace() {
-        if part.starts_with('%') && part != &dest {
+        if part.starts_with('%') && part != dest {
             return Some((dest, part.to_string()));
         }
     }

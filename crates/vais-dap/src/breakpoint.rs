@@ -152,13 +152,7 @@ impl BreakpointManager {
             }
         }
 
-        for bp in self.function_breakpoints.values() {
-            if bp.address == Some(address) {
-                return Some(bp);
-            }
-        }
-
-        None
+        self.function_breakpoints.values().find(|&bp| bp.address == Some(address)).map(|v| v as _)
     }
 
     /// Convert managed breakpoint to DAP breakpoint

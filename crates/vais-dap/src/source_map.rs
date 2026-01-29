@@ -3,7 +3,6 @@
 //! Maps between source locations and instruction addresses using DWARF debug info.
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use crate::error::{DapError, DapResult};
 
@@ -54,7 +53,7 @@ impl SourceMap {
     }
 
     fn parse_dwarf(&mut self, object: &object::File) -> DapResult<()> {
-        use gimli::{EndianSlice, LittleEndian, Reader};
+        use gimli::{EndianSlice, LittleEndian};
         use object::{Object, ObjectSection};
 
         let endian = LittleEndian;

@@ -162,11 +162,7 @@ impl FileWatcher {
                 }
             }
             EventKind::Remove(_) => {
-                if let Some(path) = event.paths.first() {
-                    Some(WatchEvent::Removed(path.clone()))
-                } else {
-                    None
-                }
+                event.paths.first().map(|path| WatchEvent::Removed(path.clone()))
             }
             _ => None,
         };
@@ -177,7 +173,7 @@ impl FileWatcher {
     fn is_watched_file(&self, path: &Path) -> bool {
         // Check if this is a .vais file or a dylib that we're watching
         self.watched_paths.iter().any(|p| p == path)
-            || path.extension().map_or(false, |ext| ext == "vais")
+            || path.extension().is_some_and(|ext| ext == "vais")
     }
 }
 

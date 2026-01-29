@@ -1,0 +1,2 @@
+U system
+F main() -> i64 = 42

@@ -3,7 +3,6 @@
 //! Core types used throughout the Debug Adapter Protocol.
 
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 
 /// Base protocol message
 #[derive(Debug, Clone, Serialize, Deserialize)]

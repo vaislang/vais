@@ -99,7 +99,7 @@ impl Default for HygienicContext {
 
 /// AST expander that recursively expands macro invocations
 pub struct AstExpander<'a> {
-    registry: &'a MacroRegistry,
+    _registry: &'a MacroRegistry,
     expander: MacroExpander<'a>,
     hygienic: HygienicContext,
     depth: usize,
@@ -108,7 +108,7 @@ pub struct AstExpander<'a> {
 impl<'a> AstExpander<'a> {
     pub fn new(registry: &'a MacroRegistry) -> Self {
         Self {
-            registry,
+            _registry: registry,
             expander: MacroExpander::new(registry),
             hygienic: HygienicContext::new(),
             depth: 0,

@@ -65,54 +65,51 @@ impl LintPlugin for NamingConventionLint {
         let mut diagnostics = Vec::new();
 
         for item in &module.items {
-            match &item.node {
-                Item::Function(func) => {
-                    let name = &func.name.node;
+            if let Item::Function(func) = &item.node {
+                let name = &func.name.node;
 
-                    // Check function name length
-                    if name.len() > self.max_name_length {
-                        diagnostics.push(
-                            Diagnostic::warning(format!(
-                                "Function '{}' has a very long name ({} chars, max {})",
-                                name,
-                                name.len(),
-                                self.max_name_length
-                            ))
-                            .with_span(func.name.span)
-                            .with_help("Consider using a shorter, more descriptive name"),
-                        );
-                    }
+                // Check function name length
+                if name.len() > self.max_name_length {
+                    diagnostics.push(
+                        Diagnostic::warning(format!(
+                            "Function '{}' has a very long name ({} chars, max {})",
+                            name,
+                            name.len(),
+                            self.max_name_length
+                        ))
+                        .with_span(func.name.span)
+                        .with_help("Consider using a shorter, more descriptive name"),
+                    );
+                }
 
-                    // Check for snake_case naming convention
-                    if !is_snake_case(name) && !name.starts_with("__") {
-                        diagnostics.push(
-                            Diagnostic::warning(format!(
-                                "Function '{}' should use snake_case naming",
-                                name
-                            ))
-                            .with_span(func.name.span)
-                            .with_help("Rename to use lowercase with underscores"),
-                        );
-                    }
+                // Check for snake_case naming convention
+                if !is_snake_case(name) && !name.starts_with("__") {
+                    diagnostics.push(
+                        Diagnostic::warning(format!(
+                            "Function '{}' should use snake_case naming",
+                            name
+                        ))
+                        .with_span(func.name.span)
+                        .with_help("Rename to use lowercase with underscores"),
+                    );
+                }
 
-                    // Check parameter names
-                    if self.warn_short_params {
-                        for param in &func.params {
-                            let param_name = &param.name.node;
-                            if param_name.len() == 1 && !is_common_short_param(param_name) {
-                                diagnostics.push(
-                                    Diagnostic::info(format!(
-                                        "Parameter '{}' in function '{}' has a very short name",
-                                        param_name, name
-                                    ))
-                                    .with_span(param.name.span)
-                                    .with_help("Consider using a more descriptive name"),
-                                );
-                            }
+                // Check parameter names
+                if self.warn_short_params {
+                    for param in &func.params {
+                        let param_name = &param.name.node;
+                        if param_name.len() == 1 && !is_common_short_param(param_name) {
+                            diagnostics.push(
+                                Diagnostic::info(format!(
+                                    "Parameter '{}' in function '{}' has a very short name",
+                                    param_name, name
+                                ))
+                                .with_span(param.name.span)
+                                .with_help("Consider using a more descriptive name"),
+                            );
                         }
                     }
                 }
-                _ => {}
             }
         }
 
@@ -151,6 +148,7 @@ fn is_common_short_param(name: &str) -> bool {
 // Plugin export functions
 
 #[no_mangle]
+#[allow(improper_ctypes_definitions)]
 pub extern "C" fn create_plugin() -> *mut dyn Plugin {
     Box::into_raw(Box::new(NamingConventionLint::new()))
 }
@@ -161,6 +159,7 @@ pub extern "C" fn get_plugin_type() -> PluginType {
 }
 
 #[no_mangle]
+#[allow(improper_ctypes_definitions)]
 pub extern "C" fn create_lint_plugin() -> *mut dyn LintPlugin {
     Box::into_raw(Box::new(NamingConventionLint::new()))
 }

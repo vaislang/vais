@@ -36,6 +36,7 @@ pub fn unary_op_str(op: &UnaryOp) -> &'static str {
 }
 
 /// Check if an expression is GPU-compatible
+#[allow(dead_code)]
 pub fn is_gpu_compatible_expr(expr: &Expr) -> bool {
     match expr {
         Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::Ident(_) => true,
@@ -191,6 +192,7 @@ impl GpuBuiltins {
 }
 
 /// Indent a block of code
+#[allow(dead_code)]
 pub fn indent(code: &str, spaces: usize) -> String {
     let prefix = " ".repeat(spaces);
     code.lines()

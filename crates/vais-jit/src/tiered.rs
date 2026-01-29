@@ -549,6 +549,7 @@ impl Default for Interpreter {
 }
 
 /// Tiered JIT compiler orchestrator.
+#[allow(dead_code)]
 pub struct TieredJit {
     /// Interpreter for Tier 0.
     pub interpreter: Interpreter,

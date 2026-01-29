@@ -676,11 +676,10 @@ impl CodeGenerator {
         use crate::types::EnumVariantFields;
         for enum_info in self.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
-                if variant.name == name {
-                    if matches!(variant.fields, EnumVariantFields::Tuple(_)) {
+                if variant.name == name
+                    && matches!(variant.fields, EnumVariantFields::Tuple(_)) {
                         return Some((enum_info.name.clone(), tag as i32));
                     }
-                }
             }
         }
         None

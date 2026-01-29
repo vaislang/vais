@@ -2,11 +2,14 @@
 //!
 //! The `vaisc` command compiles Vais source files to LLVM IR or native binaries.
 
+#[allow(dead_code)]
 mod doc_gen;
 mod repl;
 mod error_formatter;
+#[allow(dead_code)]
 mod incremental;
 mod package;
+#[allow(dead_code)]
 mod registry;
 
 use clap::{Parser, Subcommand};
@@ -822,7 +825,7 @@ fn load_module_with_imports(
 
 /// Internal function to load a module with source already read
 fn load_module_with_imports_internal(
-    path: &PathBuf,
+    path: &Path,
     loaded: &mut HashSet<PathBuf>,
     verbose: bool,
     source: &str,
@@ -841,10 +844,10 @@ fn load_module_with_imports_internal(
         println!("{} {}", "Compiling".green().bold(), path.display());
     }
 
-    let _tokens = tokenize(&source)
+    let _tokens = tokenize(source)
         .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
 
-    let ast = parse(&source)
+    let ast = parse(source)
         .map_err(|e| error_formatter::format_parse_error(&e, source, path))?;
 
     if verbose {
@@ -900,7 +903,7 @@ fn get_std_path() -> Option<PathBuf> {
                 return Some(std_path);
             }
             // Also try ../std (for cargo run)
-            let std_path = exe_dir.parent().and_then(|p| Some(p.join("std")));
+            let std_path = exe_dir.parent().map(|p| p.join("std"));
             if let Some(path) = std_path {
                 if path.exists() {
                     return Some(path);
@@ -972,7 +975,7 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
         }
     }
 
-    Err(format!("Invalid import path"))
+    Err("Invalid import path".to_string())
 }
 
 /// Validate and canonicalize an import path for security
@@ -1641,7 +1644,7 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
 
 /// Update dependencies
 fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: bool) -> Result<(), String> {
-    use registry::{RegistryClient, RegistrySource, LockFile, DependencyResolver};
+    use registry::{RegistryClient, RegistrySource, DependencyResolver};
     use package::{find_manifest, load_manifest};
 
     // Find and load manifest
@@ -2008,7 +2011,7 @@ fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 result.extend(walkdir(&path, ext));
-            } else if path.extension().map_or(false, |e| e == ext) {
+            } else if path.extension().is_some_and(|e| e == ext) {
                 result.push(path);
             }
         }
@@ -2188,7 +2191,7 @@ fn cmd_watch(
                 if matches!(event.kind, notify::EventKind::Modify(_)) {
                     // Check if the modified file is a .vais file
                     let is_vais_file = event.paths.iter().any(|p| {
-                        p.extension().map_or(false, |ext| ext == "vais")
+                        p.extension().is_some_and(|ext| ext == "vais")
                     });
 
                     if !is_vais_file {
@@ -2196,7 +2199,7 @@ fn cmd_watch(
                     }
 
                     let changed_files: Vec<_> = event.paths.iter()
-                        .filter(|p| p.extension().map_or(false, |ext| ext == "vais"))
+                        .filter(|p| p.extension().is_some_and(|ext| ext == "vais"))
                         .collect();
 
                     if verbose {

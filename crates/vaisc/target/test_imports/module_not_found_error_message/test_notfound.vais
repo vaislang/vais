@@ -1,0 +1,2 @@
+U nonexistent_module
+F main() -> i64 = 42

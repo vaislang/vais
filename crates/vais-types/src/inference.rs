@@ -460,7 +460,7 @@ impl TypeChecker {
                                     TypeError::Mismatch {
                                         expected: exp,
                                         found,
-                                        span: Some(expr.span.clone()),
+                                        span: Some(expr.span),
                                     }
                                 }
                                 _ => e,
@@ -494,7 +494,7 @@ impl TypeChecker {
                 return Err(TypeError::ArgCount {
                     expected: exp_params.len(),
                     got: params.len(),
-                    span: Some(span.clone()),
+                    span: Some(*span),
                 });
             }
         }
@@ -580,7 +580,7 @@ impl TypeChecker {
                 TypeError::Mismatch {
                     expected: first_type.to_string(),
                     found: ty.to_string(),
-                    span: Some(elements[i].span.clone()),
+                    span: Some(elements[i].span),
                 }
             })?;
         }
@@ -590,6 +590,7 @@ impl TypeChecker {
 
     /// Check a generic function call with bidirectional type checking.
     /// Uses both argument types and expected return type to infer type arguments.
+    #[allow(dead_code)]
     pub(crate) fn check_generic_function_call_bidirectional(
         &mut self,
         sig: &FunctionSig,

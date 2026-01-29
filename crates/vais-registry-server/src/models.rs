@@ -87,17 +87,14 @@ pub struct Dependency {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DependencyKind {
+    #[default]
     Normal,
     Dev,
     Build,
 }
 
-impl Default for DependencyKind {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
 
 /// Package owner (for shared ownership)
 #[derive(Debug, Clone, Serialize, Deserialize)]

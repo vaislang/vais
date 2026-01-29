@@ -115,7 +115,7 @@ impl TypeMapper {
             ResolvedType::Unit => 0,
             ResolvedType::Vector { element, lanes } => {
                 // Vector size = element size * lane count
-                self.size_of(element) * (*lanes as u32)
+                self.size_of(element) * *lanes
             }
             _ => {
                 if self.pointer_type == types::I64 {

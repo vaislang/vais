@@ -65,7 +65,7 @@ impl DylibLoader {
     }
 
     /// Get a function symbol from the loaded library
-    pub fn get_function<T>(&mut self, name: &str) -> Result<Symbol<T>> {
+    pub fn get_function<T>(&mut self, name: &str) -> Result<Symbol<'_, T>> {
         let lib = self.current_lib.as_ref()
             .ok_or(HotReloadError::NotInitialized)?;
 

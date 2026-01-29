@@ -1996,7 +1996,7 @@ impl TypeChecker {
                     var_type,
                     *is_mut,
                     linearity,
-                    Some(name.span.clone()),
+                    Some(name.span),
                 );
                 Ok(ResolvedType::Unit)
             }
@@ -2580,11 +2580,11 @@ impl TypeChecker {
                             // Slice returns a pointer to array elements
                             Ok(ResolvedType::Pointer(elem_type))
                         } else if !index_type.is_integer() {
-                            return Err(TypeError::Mismatch {
+                            Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
                                 span: None,
-                            });
+                            })
                         } else {
                             Ok(*elem_type)
                         }
@@ -2599,11 +2599,11 @@ impl TypeChecker {
                             // Slice of pointer returns a pointer
                             Ok(ResolvedType::Pointer(elem_type))
                         } else if !index_type.is_integer() {
-                            return Err(TypeError::Mismatch {
+                            Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
                                 found: index_type.to_string(),
                                 span: None,
-                            });
+                            })
                         } else {
                             Ok(*elem_type)
                         }
@@ -3427,6 +3427,7 @@ impl TypeChecker {
     }
 
     /// Check linear/affine variable usage at scope exit
+    #[allow(dead_code)]
     fn check_linear_vars_at_scope_exit(&self) -> TypeResult<()> {
         if let Some(scope) = self.scopes.last() {
             for (name, var_info) in scope.iter() {
@@ -3440,7 +3441,7 @@ impl TypeChecker {
                                 var_name: name.clone(),
                                 expected_uses: 1,
                                 actual_uses: var_info.use_count,
-                                defined_at: var_info.defined_at.clone(),
+                                defined_at: var_info.defined_at,
                             });
                         }
                     }
@@ -3449,7 +3450,7 @@ impl TypeChecker {
                             return Err(TypeError::AffineTypeViolation {
                                 var_name: name.clone(),
                                 actual_uses: var_info.use_count,
-                                defined_at: var_info.defined_at.clone(),
+                                defined_at: var_info.defined_at,
                             });
                         }
                     }

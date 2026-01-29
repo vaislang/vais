@@ -23,11 +23,11 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 
     let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
 
-    for i in 0..=a_len {
-        matrix[i][0] = i;
+    for (i, row) in matrix.iter_mut().enumerate().take(a_len + 1) {
+        row[0] = i;
     }
-    for j in 0..=b_len {
-        matrix[0][j] = j;
+    for (j, val) in matrix[0].iter_mut().enumerate().take(b_len + 1) {
+        *val = j;
     }
 
     for i in 1..=a_len {
@@ -194,9 +194,9 @@ impl TypeError {
             TypeError::UnreachablePattern(_, span) => *span,
             TypeError::EffectMismatch { span, .. } => *span,
             TypeError::PurityViolation { span, .. } => *span,
-            TypeError::LinearTypeViolation { defined_at, .. } => defined_at.clone(),
-            TypeError::AffineTypeViolation { defined_at, .. } => defined_at.clone(),
-            TypeError::MoveAfterUse { move_at, .. } => move_at.clone(),
+            TypeError::LinearTypeViolation { defined_at, .. } => *defined_at,
+            TypeError::AffineTypeViolation { defined_at, .. } => *defined_at,
+            TypeError::MoveAfterUse { move_at, .. } => *move_at,
             TypeError::DependentPredicateNotBool { span, .. } => *span,
             TypeError::RefinementViolation { span, .. } => *span,
         }
@@ -1020,8 +1020,10 @@ impl std::hash::Hash for EffectSet {
 
 /// Function effect annotation - how effects are declared/inferred
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum EffectAnnotation {
     /// No annotation - infer from body
+    #[default]
     Infer,
     /// Explicitly declared as pure
     Pure,
@@ -1029,11 +1031,6 @@ pub enum EffectAnnotation {
     Declared(EffectSet),
 }
 
-impl Default for EffectAnnotation {
-    fn default() -> Self {
-        EffectAnnotation::Infer
-    }
-}
 
 /// Function signature
 #[derive(Debug, Clone)]
@@ -1161,6 +1158,7 @@ impl Linearity {
 
 /// Variable info (internal to type checker)
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct VarInfo {
     pub(crate) ty: ResolvedType,
     pub(crate) is_mut: bool,
@@ -1236,7 +1234,7 @@ pub fn mangle_name(base: &str, type_args: &[ResolvedType]) -> String {
     } else {
         let args_str = type_args
             .iter()
-            .map(|t| mangle_type(t))
+            .map(mangle_type)
             .collect::<Vec<_>>()
             .join("_");
         format!("{}${}", base, args_str)
@@ -1267,7 +1265,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
             } else {
                 let args = generics
                     .iter()
-                    .map(|g| mangle_type(g))
+                    .map(mangle_type)
                     .collect::<Vec<_>>()
                     .join("_");
                 format!("{}_{}", name, args)
@@ -1283,7 +1281,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         ResolvedType::Tuple(types) => {
             let args = types
                 .iter()
-                .map(|t| mangle_type(t))
+                .map(mangle_type)
                 .collect::<Vec<_>>()
                 .join("_");
             format!("tup_{}", args)
@@ -1291,7 +1289,7 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         ResolvedType::Fn { params, ret, .. } => {
             let params_str = params
                 .iter()
-                .map(|p| mangle_type(p))
+                .map(mangle_type)
                 .collect::<Vec<_>>()
                 .join("_");
             format!("fn_{}_{}", params_str, mangle_type(ret))

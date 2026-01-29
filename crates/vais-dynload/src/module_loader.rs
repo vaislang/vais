@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::SystemTime;
 use parking_lot::{Mutex, RwLock};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher, Event, EventKind};
+use notify::{RecommendedWatcher, Watcher, Event, EventKind};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::error::{DynloadError, Result};
@@ -59,7 +59,7 @@ pub struct LoadedModule {
 
 impl LoadedModule {
     /// Get a function pointer from the module
-    pub fn get_function<T>(&mut self, name: &str) -> Result<libloading::Symbol<T>> {
+    pub fn get_function<T>(&mut self, name: &str) -> Result<libloading::Symbol<'_, T>> {
         unsafe {
             self.library
                 .get(name.as_bytes())
@@ -186,7 +186,7 @@ pub struct ModuleLoader {
     /// Loaded modules by ID
     modules: RwLock<HashMap<String, Arc<Mutex<LoadedModule>>>>,
     /// File watcher for hot reload
-    watcher: Option<RecommendedWatcher>,
+    _watcher: Option<RecommendedWatcher>,
     /// Channel for file change events
     event_rx: Option<Receiver<notify::Result<Event>>>,
     /// Event sender for file changes
@@ -224,7 +224,7 @@ impl ModuleLoader {
         Ok(Self {
             config,
             modules: RwLock::new(HashMap::new()),
-            watcher,
+            _watcher: watcher,
             event_rx,
             event_tx,
             reload_callbacks: Mutex::new(Vec::new()),

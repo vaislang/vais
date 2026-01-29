@@ -4,7 +4,6 @@
 //! breakpoints, stack frames, and variables.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use base64::Engine;
@@ -108,8 +107,8 @@ enum VariableRef {
     Scope { frame_id: i64, scope_type: ScopeType },
     Variable {
         frame_id: i64,
-        parent_ref: i64,
-        name: String,
+        _parent_ref: i64,
+        _name: String,
         /// Full evaluation path for lldb (e.g., "myStruct.field.subfield")
         eval_path: String,
     },
@@ -178,7 +177,7 @@ impl DebugSession {
             let mut debugger = self.debugger.write().await;
             debugger.launch(
                 &binary,
-                args.args.as_ref().map(|v| v.as_slice()).unwrap_or(&[]),
+                args.args.as_deref().unwrap_or(&[]),
                 args.cwd.as_deref(),
                 args.env.as_ref(),
                 args.stop_on_entry.unwrap_or(false),
@@ -497,7 +496,7 @@ impl DebugSession {
             frame_mapping.insert(frame_id, (thread_id, frame_idx));
 
             let source = source_map.get_source_for_address(raw.instruction_pointer)
-                .map(|s| Source::from_path(s));
+                .map(Source::from_path);
 
             let (line, column) = source_map
                 .get_line_column(raw.instruction_pointer)
@@ -527,7 +526,7 @@ impl DebugSession {
 
     pub async fn get_scopes(&self, frame_id: i64) -> DapResult<Vec<Scope>> {
         let frame_mapping = self.frame_mapping.read().await;
-        let (thread_id, frame_idx) = frame_mapping.get(&frame_id)
+        let (_thread_id, _frame_idx) = frame_mapping.get(&frame_id)
             .copied()
             .ok_or(DapError::FrameNotFound(frame_id))?;
 
@@ -635,8 +634,8 @@ impl DebugSession {
                             let eval_path = v.evaluate_name.clone().unwrap_or_else(|| v.name.clone());
                             var_ref_mapping.insert(new_ref, VariableRef::Variable {
                                 frame_id,
-                                parent_ref: variables_reference,
-                                name: v.name.clone(),
+                                _parent_ref: variables_reference,
+                                _name: v.name.clone(),
                                 eval_path,
                             });
                             new_ref
@@ -660,7 +659,7 @@ impl DebugSession {
 
                 Ok(result)
             }
-            VariableRef::Variable { frame_id, parent_ref: _, name: _, eval_path } => {
+            VariableRef::Variable { frame_id, _parent_ref: _, _name: _, eval_path } => {
                 // Get child variables using the evaluation path
                 let (thread_id, frame_idx) = frame_mapping.get(&frame_id)
                     .copied()
@@ -683,8 +682,8 @@ impl DebugSession {
                                 .unwrap_or_else(|| format!("{}.{}", eval_path, v.name));
                             var_ref_mapping.insert(new_ref, VariableRef::Variable {
                                 frame_id,
-                                parent_ref: variables_reference,
-                                name: v.name.clone(),
+                                _parent_ref: variables_reference,
+                                _name: v.name.clone(),
                                 eval_path: child_eval_path,
                             });
                             new_ref
@@ -757,7 +756,7 @@ impl DebugSession {
         &self,
         expression: &str,
         frame_id: Option<i64>,
-        context: Option<EvaluateContext>,
+        _context: Option<EvaluateContext>,
     ) -> DapResult<(String, Option<String>, i64)> {
         let (thread_id, frame_idx) = if let Some(fid) = frame_id {
             let frame_mapping = self.frame_mapping.read().await;

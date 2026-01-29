@@ -56,7 +56,7 @@ pub use debug::{DebugConfig, DebugInfoBuilder};
 
 use std::collections::HashMap;
 use thiserror::Error;
-use vais_ast::{*, IfElse};
+use vais_ast::*;
 use vais_types::ResolvedType;
 
 /// Target architecture for code generation
@@ -634,6 +634,7 @@ impl CodeGenerator {
     }
 
     /// Check if a function has the #[gc] attribute
+    #[allow(dead_code)]
     fn has_gc_attribute(attributes: &[Attribute]) -> bool {
         attributes.iter().any(|attr| attr.name == "gc")
     }
@@ -828,6 +829,7 @@ impl CodeGenerator {
     /// Generate allocation call (malloc or gc_alloc depending on GC mode)
     ///
     /// Returns: (result_register, IR code)
+    #[allow(dead_code)]
     fn generate_alloc(&self, size_arg: &str, counter: &mut usize, type_id: u32) -> (String, String) {
         let mut ir = String::new();
 
@@ -971,13 +973,13 @@ impl CodeGenerator {
 
         // Generate enum types
         for (name, info) in &self.enums.clone() {
-            ir.push_str(&self.generate_enum_type(&name, &info));
+            ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
 
         // Generate union types
         for (name, info) in &self.unions.clone() {
-            ir.push_str(&self.generate_union_type(&name, &info));
+            ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
 
@@ -1170,13 +1172,13 @@ impl CodeGenerator {
 
         // Generate enum types
         for (name, info) in &self.enums.clone() {
-            ir.push_str(&self.generate_enum_type(&name, &info));
+            ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
 
         // Generate union types
         for (name, info) in &self.unions.clone() {
-            ir.push_str(&self.generate_union_type(&name, &info));
+            ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
 
@@ -1779,7 +1781,7 @@ impl CodeGenerator {
                     Ok(("void".to_string(), ir))
                 } else if fn_name == "memcpy" || fn_name == "memcpy_str" {
                     // Special handling for memcpy/memcpy_str: convert pointers as needed
-                    let dest_full = arg_vals.get(0).map(|s| s.as_str()).unwrap_or("i64 0");
+                    let dest_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
                     let src_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
                     let n_val = arg_vals.get(2)
                         .map(|s| s.split_whitespace().last().unwrap_or("0"))
@@ -3028,7 +3030,7 @@ impl CodeGenerator {
                 // Assume result is a struct {i64, i64} passed as i64 ptr or packed value
                 // For simplicity, treat it as a 2-element struct: {tag, value}
                 // where tag 0 = Ok, tag 1 = Err
-                ir.push_str(&format!("  ; Try expression\n"));
+                ir.push_str("  ; Try expression\n");
                 ir.push_str(&format!("  {} = inttoptr i64 {} to {{i64, i64}}*\n", result_ptr, inner_val));
                 ir.push_str(&format!("  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n", tag_ptr, result_ptr));
                 ir.push_str(&format!("  {} = load i64, i64* {}\n", tag, tag_ptr));
@@ -3070,7 +3072,7 @@ impl CodeGenerator {
                 let tag_ptr = self.next_temp(counter);
                 let tag = self.next_temp(counter);
 
-                ir.push_str(&format!("  ; Unwrap expression\n"));
+                ir.push_str("  ; Unwrap expression\n");
                 ir.push_str(&format!("  {} = inttoptr i64 {} to {{i64, i64}}*\n", result_ptr, inner_val));
                 ir.push_str(&format!("  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n", tag_ptr, result_ptr));
                 ir.push_str(&format!("  {} = load i64, i64* {}\n", tag, tag_ptr));

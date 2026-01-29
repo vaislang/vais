@@ -1,4 +1,4 @@
-use crate::{MemoryStats, ProfileSnapshot};
+use crate::ProfileSnapshot;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -292,6 +292,7 @@ impl fmt::Display for CompactReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MemoryStats;
     use std::time::Duration;
 
     fn create_test_snapshot() -> ProfileSnapshot {

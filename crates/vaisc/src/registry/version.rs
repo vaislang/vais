@@ -63,7 +63,7 @@ impl Version {
 
         // Parse major.minor.patch
         let parts: Vec<&str> = version_part.split('.').collect();
-        if parts.len() < 1 || parts.len() > 3 {
+        if parts.is_empty() || parts.len() > 3 {
             return Err(RegistryError::InvalidVersion(format!(
                 "expected 1-3 version components, got {}",
                 parts.len()
@@ -308,20 +308,20 @@ fn parse_predicate(s: &str) -> RegistryResult<Predicate> {
     let s = s.trim();
 
     // Check for operator prefix
-    let (op, version_str) = if s.starts_with(">=") {
-        (Op::GreaterEq, &s[2..])
-    } else if s.starts_with("<=") {
-        (Op::LessEq, &s[2..])
-    } else if s.starts_with('>') {
-        (Op::Greater, &s[1..])
-    } else if s.starts_with('<') {
-        (Op::Less, &s[1..])
-    } else if s.starts_with('=') {
-        (Op::Exact, &s[1..])
-    } else if s.starts_with('^') {
-        (Op::Caret, &s[1..])
-    } else if s.starts_with('~') {
-        (Op::Tilde, &s[1..])
+    let (op, version_str) = if let Some(rest) = s.strip_prefix(">=") {
+        (Op::GreaterEq, rest)
+    } else if let Some(rest) = s.strip_prefix("<=") {
+        (Op::LessEq, rest)
+    } else if let Some(rest) = s.strip_prefix('>') {
+        (Op::Greater, rest)
+    } else if let Some(rest) = s.strip_prefix('<') {
+        (Op::Less, rest)
+    } else if let Some(rest) = s.strip_prefix('=') {
+        (Op::Exact, rest)
+    } else if let Some(rest) = s.strip_prefix('^') {
+        (Op::Caret, rest)
+    } else if let Some(rest) = s.strip_prefix('~') {
+        (Op::Tilde, rest)
     } else if s.contains('*') {
         (Op::Wildcard, s)
     } else {

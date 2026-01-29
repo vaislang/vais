@@ -15,6 +15,6 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| VaisBackend::new(client));
+    let (service, socket) = LspService::new(VaisBackend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
 }

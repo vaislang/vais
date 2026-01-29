@@ -372,7 +372,7 @@ impl DataLayoutOptimizer {
             .collect();
 
         // Only suggest split if there's a meaningful separation
-        if hot_fields.len() >= 1 && cold_fields.len() >= 1 && layout.fields.len() >= 4 {
+        if !hot_fields.is_empty() && !cold_fields.is_empty() && layout.fields.len() >= 4 {
             Some(LayoutSuggestion::SplitHotCold {
                 struct_name: name.to_string(),
                 hot_fields,
@@ -517,7 +517,7 @@ fn parse_gep_struct_access(line: &str) -> Option<(String, usize)> {
 
     // Extract struct type
     let type_start = line.find('%')?;
-    let type_end = line[type_start..].find(|c: char| c == ',' || c == '*')
+    let type_end = line[type_start..].find([',', '*'])
         .map(|i| type_start + i)?;
     let struct_name = line[type_start + 1..type_end].to_string();
 

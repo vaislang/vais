@@ -174,7 +174,7 @@ impl OpenCLGenerator {
     }
 
     fn generate_struct(&mut self, name: &str, fields: &[vais_ast::Field]) -> GpuResult<()> {
-        self.emit_line(&format!("typedef struct {{"));
+        self.emit_line("typedef struct {");
         self.indent_level += 1;
 
         for field in fields {

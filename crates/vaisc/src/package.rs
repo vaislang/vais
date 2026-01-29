@@ -221,7 +221,7 @@ F main() -> i64 {
 pub struct ResolvedDependency {
     pub name: String,
     pub path: PathBuf,
-    pub manifest: PackageManifest,
+    pub _manifest: PackageManifest,
 }
 
 /// Resolve all dependencies for a package
@@ -298,7 +298,7 @@ fn resolve_deps_recursive(
         resolved.push(ResolvedDependency {
             name: name.clone(),
             path: canonical,
-            manifest: dep_manifest,
+            _manifest: dep_manifest,
         });
     }
 

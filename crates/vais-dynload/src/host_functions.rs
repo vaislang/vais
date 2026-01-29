@@ -12,6 +12,7 @@ use crate::error::{DynloadError, Result};
 use crate::manifest::PluginCapability;
 
 /// Type alias for host function implementation
+#[allow(dead_code)]
 pub type HostFunctionImpl = Box<dyn Fn(&[wasmtime::Val]) -> Result<Vec<wasmtime::Val>> + Send + Sync>;
 
 /// A registered host function

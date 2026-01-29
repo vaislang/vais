@@ -235,7 +235,7 @@ impl CodeGenerator {
         ir.push_str("declare i64 @__panic(i8*)\n");
         // LLVM assume intrinsic for optimization hints (used by assume() in release mode)
         ir.push_str("declare void @llvm.assume(i1)\n");
-        ir.push_str("\n");
+        ir.push('\n');
 
         ir
     }
@@ -258,6 +258,7 @@ impl CodeGenerator {
     }
 
     /// Check if a function has any contract attributes
+    #[allow(dead_code)]
     pub(crate) fn has_contracts(f: &Function) -> bool {
         f.attributes.iter().any(|a| a.name == "requires" || a.name == "ensures" || a.name == "contract")
     }
@@ -688,8 +689,8 @@ impl CodeGenerator {
                 self.current_file.as_deref().unwrap_or("unknown"),
                 self.debug_info.offset_to_line(condition.span.start)
             );
-            let msg_const = self.get_or_create_contract_string(&default_msg);
-            msg_const
+            
+            self.get_or_create_contract_string(&default_msg)
         };
 
         // Call __panic to terminate
@@ -772,6 +773,7 @@ impl CodeGenerator {
     /// Generate invariant checks for a struct type
     ///
     /// Called after struct construction/modification to verify invariants.
+    #[allow(dead_code)]
     pub(crate) fn generate_invariant_checks(
         &mut self,
         struct_name: &str,
@@ -870,6 +872,7 @@ impl CodeGenerator {
     /// Generate old() snapshots for ensures clauses
     ///
     /// Called at function entry to capture pre-state values for old() references.
+    #[allow(dead_code)]
     pub(crate) fn generate_old_snapshots(
         &mut self,
         f: &Function,
@@ -895,6 +898,7 @@ impl CodeGenerator {
     }
 
     /// Recursively find and capture old() expressions
+    #[allow(dead_code)]
     fn capture_old_expressions(
         &mut self,
         expr: &Spanned<Expr>,
@@ -977,6 +981,7 @@ impl CodeGenerator {
         Ok(ir)
     }
 
+    #[allow(dead_code)]
     fn capture_old_in_if_else(
         &mut self,
         branch: &IfElse,
@@ -1206,11 +1211,13 @@ impl CodeGenerator {
     }
 
     /// Check if current function has a decreases clause
+    #[allow(dead_code)]
     pub(crate) fn has_decreases_clause(&self) -> bool {
         self.current_decreases_info.is_some()
     }
 
     /// Get the function name with decreases clause (if any)
+    #[allow(dead_code)]
     pub(crate) fn get_decreases_function_name(&self) -> Option<String> {
         self.current_decreases_info.as_ref().map(|info| info.function_name.clone())
     }

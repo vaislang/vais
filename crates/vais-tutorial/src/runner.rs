@@ -326,12 +326,12 @@ impl Default for TutorialRunner {
 }
 
 pub struct CodeValidator {
-    lesson_id: String,
+    _lesson_id: String,
 }
 
 impl CodeValidator {
     pub fn new(lesson_id: String) -> Self {
-        Self { lesson_id }
+        Self { _lesson_id: lesson_id }
     }
 
     pub fn validate(&self, code: &str) -> Result<ValidationResult> {

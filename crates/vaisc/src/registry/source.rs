@@ -112,6 +112,7 @@ impl Default for RegistrySource {
 
 /// Registry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct RegistryConfig {
     /// Default registry for package lookups
     #[serde(default)]
@@ -130,14 +131,6 @@ pub struct NamedRegistry {
     pub source: RegistrySource,
 }
 
-impl Default for RegistryConfig {
-    fn default() -> Self {
-        Self {
-            default: RegistrySource::default(),
-            registries: Vec::new(),
-        }
-    }
-}
 
 impl RegistryConfig {
     /// Create config with only a default registry

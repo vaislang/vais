@@ -505,7 +505,7 @@ impl SimdGenerator {
 
         // Extract vectorization info from attributes
         let elem_type = self.extract_elem_type(&func.attributes);
-        let lanes = self.target.f32_lanes(); // Default to f32 lanes
+        let _lanes = self.target.f32_lanes(); // Default to f32 lanes
 
         let ret_str = func.ret_type
             .as_ref()

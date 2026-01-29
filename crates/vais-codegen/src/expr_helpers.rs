@@ -495,7 +495,7 @@ impl CodeGenerator {
         ir: &mut String,
     ) -> CodegenResult<(String, String)> {
         let dbg_info = self.debug_info.dbg_ref_from_span(span);
-        let dest_full = arg_vals.get(0).map(|s| s.as_str()).unwrap_or("i64 0");
+        let dest_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
         let src_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
         let n_val = arg_vals.get(2).map(|s| s.split_whitespace().last().unwrap_or("0")).unwrap_or("0");
 
@@ -1579,7 +1579,7 @@ impl CodeGenerator {
         // Build vector using insertelement instructions
         // Start with undef and insert each element
         let vec_ty = format!("<{} x {}>", lanes, elem_ty);
-        let mut current_vec = format!("undef");
+        let mut current_vec = "undef".to_string();
 
         for (i, val) in arg_vals.iter().enumerate() {
             let next_vec = self.next_temp(counter);
@@ -1608,14 +1608,14 @@ impl CodeGenerator {
         }
 
         // Parse operation and type from name (e.g., "simd_add_vec4f32")
-        let (op, vec_suffix) = if fn_name.starts_with("simd_add_") {
-            ("add", &fn_name[9..])
-        } else if fn_name.starts_with("simd_sub_") {
-            ("sub", &fn_name[9..])
-        } else if fn_name.starts_with("simd_mul_") {
-            ("mul", &fn_name[9..])
-        } else if fn_name.starts_with("simd_div_") {
-            ("div", &fn_name[9..])
+        let (op, vec_suffix) = if let Some(suffix) = fn_name.strip_prefix("simd_add_") {
+            ("add", suffix)
+        } else if let Some(suffix) = fn_name.strip_prefix("simd_sub_") {
+            ("sub", suffix)
+        } else if let Some(suffix) = fn_name.strip_prefix("simd_mul_") {
+            ("mul", suffix)
+        } else if let Some(suffix) = fn_name.strip_prefix("simd_div_") {
+            ("div", suffix)
         } else {
             return Err(CodegenError::Unsupported(format!("Unknown SIMD op: {}", fn_name)));
         };
@@ -1695,19 +1695,15 @@ impl CodeGenerator {
     /// Parse vector type name to get lanes and element type
     fn parse_vector_type_name(&self, name: &str) -> CodegenResult<(u32, String)> {
         // e.g., "vec4f32" -> (4, "float"), "vec2i64" -> (2, "i64")
-        let (lanes, elem) = if name.starts_with("vec") {
-            let rest = &name[3..]; // Remove "vec" prefix
-            if rest.ends_with("f32") {
-                let lanes_str = &rest[..rest.len()-3];
+        let (lanes, elem) = if let Some(rest) = name.strip_prefix("vec") {
+            // Remove "vec" prefix
+            if let Some(lanes_str) = rest.strip_suffix("f32") {
                 (lanes_str.parse::<u32>().unwrap_or(4), "float".to_string())
-            } else if rest.ends_with("f64") {
-                let lanes_str = &rest[..rest.len()-3];
+            } else if let Some(lanes_str) = rest.strip_suffix("f64") {
                 (lanes_str.parse::<u32>().unwrap_or(2), "double".to_string())
-            } else if rest.ends_with("i32") {
-                let lanes_str = &rest[..rest.len()-3];
+            } else if let Some(lanes_str) = rest.strip_suffix("i32") {
                 (lanes_str.parse::<u32>().unwrap_or(4), "i32".to_string())
-            } else if rest.ends_with("i64") {
-                let lanes_str = &rest[..rest.len()-3];
+            } else if let Some(lanes_str) = rest.strip_suffix("i64") {
                 (lanes_str.parse::<u32>().unwrap_or(2), "i64".to_string())
             } else {
                 return Err(CodegenError::Unsupported(format!("Unknown vector type: {}", name)));
