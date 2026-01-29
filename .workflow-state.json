@@ -3,11 +3,11 @@
   "request": "Phase 13 P0 - 품질 보증 및 프로덕션 검증",
   "tasks": [
     { "id": 1, "name": "error_suggestion_tests 수정", "status": "done", "model": "Sonnet" },
-    { "id": 2, "name": "통합 테스트 확장 - E2E 스위트 Part 1", "status": "in_progress", "model": "Sonnet" },
-    { "id": 3, "name": "통합 테스트 확장 - E2E 스위트 Part 2", "status": "pending", "model": "Sonnet" },
+    { "id": 2, "name": "통합 테스트 확장 - E2E 스위트 Part 1", "status": "done", "model": "Sonnet" },
+    { "id": 3, "name": "통합 테스트 확장 - E2E 스위트 Part 2", "status": "in_progress", "model": "Sonnet" },
     { "id": 4, "name": "Windows CI 추가", "status": "pending", "model": "Haiku" },
     { "id": 5, "name": "코드 커버리지 측정 도입", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": 2,
-  "lastCompleted": "error_suggestion_tests 수정"
+  "currentTask": 3,
+  "lastCompleted": "통합 테스트 확장 - E2E 스위트 Part 1"
 }
