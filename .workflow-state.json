@@ -2,8 +2,8 @@
   "phase": 4,
   "request": "Phase 13 P3 - 생태계 성장",
   "tasks": [
-    { "id": 1, "name": "패키지 레지스트리 배포 - 예제 패키지 생성 및 publish 워크플로우 검증", "status": "in_progress", "model": "Opus" },
-    { "id": 2, "name": "패키지 검색/디스커버리", "status": "pending", "model": "Sonnet" },
+    { "id": 1, "name": "패키지 레지스트리 배포", "status": "done", "model": "Opus" },
+    { "id": 2, "name": "패키지 검색/디스커버리", "status": "in_progress", "model": "Sonnet" },
     { "id": 3, "name": "Profile-Guided Optimization (PGO)", "status": "pending", "model": "Opus" },
     { "id": 4, "name": "병렬 컴파일", "status": "pending", "model": "Opus" },
     { "id": 5, "name": "Comptime 확장", "status": "pending", "model": "Sonnet" },
@@ -11,5 +11,5 @@
     { "id": 7, "name": "리팩토링 도구", "status": "pending", "model": "Sonnet" },
     { "id": 8, "name": "Code Lens", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": 1
+  "currentTask": 2
 }

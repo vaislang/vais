@@ -1007,6 +1007,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 8: 생산성 향상 | ✅ 완료 | 100% |
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
+| Phase 11: 프로덕션 준비 | ✅ 완료 | 100% |
+| Phase 12: 프로덕션 안정화 | ✅ 완료 | 100% |
+| Phase 13: 품질 보증 | 🔄 진행 중 | 90% |
+| **Phase 14: 배포 및 커뮤니티** | **📋 계획됨** | **0%** |
 
 ---
 
@@ -1829,10 +1833,17 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - `vaisc pkg login` CLI 명령어 구현: 인증 토큰 발급 및 ~/.vais/credentials.toml 저장
   - Docker 배포 설정: Dockerfile + docker-compose.yml
   - 레지스트리 클라이언트에 publish/yank/login 메서드 추가
-- [ ] **패키지 검색/디스커버리** - 카테고리, 태그, 인기순 정렬
+- [x] **패키지 검색/디스커버리** - 카테고리, 태그, 인기순 정렬 (완료일: 2026-01-29)
+  - 고급 검색 API: sort(downloads/newest/name/relevance), category, keyword 필터
+  - 새 API 엔드포인트: /categories, /categories/:name, /popular, /recent
+  - Faceted search: 검색 결과에 카테고리별 패키지 수 포함
+  - CLI `vaisc pkg search` 확장: --sort, --category, --keyword 옵션
 
 #### 성능 최적화
-- [ ] **Profile-Guided Optimization (PGO)** - 프로파일 기반 최적화
+- [x] **Profile-Guided Optimization (PGO)** - 프로파일 기반 최적화 (완료일: 2026-01-29)
+  - `vaisc pgo` 자동화 명령어: 3단계 PGO 워크플로우 (instrument → profile → optimize)
+  - llvm-profdata 자동 merge (macOS xcrun 폴백 지원)
+  - `--merge-only` 옵션: 기존 프로파일 데이터로만 재빌드
 - [ ] **병렬 컴파일** - 모듈 단위 병렬 컴파일
 - [ ] **Comptime 확장** - 컴파일 타임 평가 강화
 
@@ -1849,6 +1860,178 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | M2 | Week 6 | P1 완료 - Python 바인딩 및 에러 품질 |
 | M3 | Week 12 | P2 완료 - 실사용 검증 및 언어 보강 |
 | M4 | Week 24 | P3 완료 - 생태계 성장 |
+
+---
+
+## 🚀 Phase 14: 프로덕션 배포 및 커뮤니티 구축
+
+> **상태**: 📋 계획됨
+> **추가일**: 2026-01-29
+> **목표**: 기술적 한계 해소, 설치 가능한 배포, 공식 웹사이트, 커뮤니티 채널 구축
+
+### P0 - 긴급: 기술적 한계 해소
+
+> 실제 프로그램 개발을 가로막는 핵심 버그 및 누락 기능 수정
+
+#### 코드 생성 버그 수정
+- [ ] **중첩 구조체 필드 접근** - `o.a.val` 같은 다단계 필드 접근 codegen 구현
+- [ ] **Enum variant 매칭 버그** - unit variant가 항상 첫 번째 arm으로 매칭되는 문제 수정
+- [ ] **구조체 값 전달 타입 불일치** - 함수 인자로 구조체 전달 시 codegen 수정
+- [ ] **루프 변수 바인딩 codegen 버그** - `L x:arr` 패턴에서 변수 바인딩 수정
+- [ ] **논리 NOT codegen 버그** - `!expr` 연산 코드 생성 수정
+
+#### 필수 언어 기능 추가
+- [ ] **print/println 내장 함수** - 포맷 문자열 지원하는 출력 함수 (`print("x = {}", x)`)
+- [ ] **문자열 타입 완성** - first-class String 타입 (현재는 포인터 조작 필요)
+- [ ] **배열 mutation** - 배열 요소 수정 (`arr[i] = val`)
+- [ ] **format 함수** - 문자열 포매팅 (`format("hello {}", name)`)
+- [ ] **strlen, atoi 등 기본 함수** - 누락된 stdlib 유틸리티 14개 구현
+
+#### 제네릭/트레이트 codegen 완성
+- [ ] **제네릭 함수 codegen** - 현재 타입 시스템만 지원, 실제 IR 생성 완성
+- [ ] **트레이트 메서드 호출 codegen** - vtable 기반 동적 디스패치 실제 구현
+- [ ] **제네릭 stdlib E2E 테스트** - Vec, HashMap 등 제네릭 stdlib 모듈의 실제 컴파일+실행 검증
+
+### P1 - 높은 우선순위: 설치 및 배포 시스템
+
+> `brew install vais` 한 줄로 설치 가능하게 만들기
+
+#### 배포 패키지
+- [ ] **Homebrew Formula 작성** - macOS/Linux용 `brew install vais`
+  - Formula 파일 작성 (의존성: llvm, clang 자동 설치)
+  - Homebrew tap 저장소 생성 (`homebrew-vais`)
+  - 바이너리 릴리스 자동화 (GitHub Releases → Homebrew)
+- [ ] **cargo install 지원** - `cargo install vaisc`
+  - crates.io에 vaisc 퍼블리시
+  - 빌드 의존성 최소화 (text-codegen 기본, inkwell 옵션)
+- [ ] **Linux 패키지** - apt/dnf/pacman 패키지
+  - .deb 패키지 (Ubuntu/Debian)
+  - .rpm 패키지 (Fedora/RHEL)
+  - AUR 패키지 (Arch Linux)
+- [ ] **Windows 설치** - winget/scoop/chocolatey
+  - Windows Installer (.msi)
+  - scoop manifest 작성
+- [ ] **Docker 이미지** - `docker run vais`
+  - 공식 Docker 이미지 (Alpine 기반, clang 포함)
+  - Docker Hub 퍼블리시
+
+#### 릴리스 자동화
+- [ ] **GitHub Releases 자동화** - tag push 시 바이너리 빌드+업로드
+  - x86_64-linux, x86_64-macos, aarch64-macos, x86_64-windows 4종
+  - 릴리스 노트 자동 생성
+  - 체크섬 (SHA256) 파일 포함
+- [ ] **버전 관리 체계** - SemVer 기반 v0.2.0 릴리스 준비
+  - CHANGELOG.md 정리
+  - Breaking changes 문서화
+  - Migration guide 작성
+
+### P2 - 중간 우선순위: 공식 웹사이트
+
+> Vais 언어의 얼굴이 되는 공식 웹사이트 구축
+
+#### 웹사이트 (vais-lang.org 또는 vaislang.dev)
+- [ ] **랜딩 페이지** - 첫인상을 결정하는 메인 페이지
+  - 언어 소개 (토큰 효율성, AI 최적화, 네이티브 성능)
+  - 코드 비교 (Vais vs Rust vs Python 토큰 수 비교)
+  - 실시간 코드 에디터 (Playground 임베드)
+  - 주요 기능 하이라이트 (6가지)
+  - "Get Started" CTA 버튼
+- [ ] **문서 사이트** - mdBook 기반 docs-site 배포
+  - 기존 docs-site/ 디렉토리 활용
+  - 도메인 연결 (docs.vais-lang.org)
+  - 검색 기능
+  - 버전별 문서 관리
+- [ ] **Playground 배포** - 웹 브라우저에서 Vais 코드 실행
+  - 기존 playground/ 디렉토리 활용
+  - play.vais-lang.org 도메인
+  - 예제 코드 갤러리
+  - 공유 링크 (URL로 코드 공유)
+- [ ] **블로그** - 개발 일지 및 언어 설계 결정 공유
+  - "Why Vais?" 첫 포스트
+  - "Vais for AI Code Generation" 기술 포스트
+  - 릴리스 노트 포스트
+- [ ] **호스팅 및 도메인**
+  - 도메인 구매 (vais-lang.org 또는 vaislang.dev)
+  - GitHub Pages 또는 Vercel/Netlify 배포
+  - SSL 인증서 (Let's Encrypt 자동)
+
+### P3 - 커뮤니티 및 홍보
+
+> 사용자 유입과 커뮤니티 형성
+
+#### SNS 채널
+- [ ] **Instagram 계정** - @vaislang
+  - 프로필 설정 (로고, 바이오, 웹사이트 링크)
+  - 코드 스니펫 카드 디자인 템플릿 (Canva/Figma)
+  - 콘텐츠 계획:
+    - "Vais vs Python" 토큰 비교 시리즈
+    - "한 줄 코드" 시리즈 (Fibonacci, Sort 등)
+    - 개발 비하인드 스토리
+    - 성능 벤치마크 인포그래픽
+  - 주 2-3회 포스팅 일정
+- [ ] **Twitter/X 계정** - @vaislang
+  - 개발 진행 상황 공유
+  - 프로그래밍 언어 커뮤니티와 소통
+  - #PLDev #ProgrammingLanguage 해시태그 활용
+- [ ] **GitHub Discussions 활성화** - 커뮤니티 Q&A
+  - Categories: General, Ideas, Show & Tell, Q&A
+  - CONTRIBUTING.md 업데이트
+  - Issue/PR 템플릿 정비
+
+#### 개발자 커뮤니티
+- [ ] **Discord 서버** - 실시간 소통 채널
+  - #general, #help, #showcase, #dev 채널
+  - 봇 설정 (GitHub 알림, 빌드 상태)
+- [ ] **Reddit 홍보** - r/ProgrammingLanguages, r/rust, r/compilers
+  - 언어 소개 포스트
+  - 기술적 설계 결정 공유
+- [ ] **Hacker News / Lobsters 포스트** - 초기 관심 유도
+  - "Show HN: Vais - AI-optimized systems language with single-char keywords"
+
+#### 브랜딩
+- [ ] **로고 디자인** - Vais 공식 로고 및 아이콘
+  - 심볼 마크 + 워드 마크
+  - 다크/라이트 버전
+  - favicon, 소셜 미디어 프로필용 크기별 에셋
+- [ ] **브랜드 가이드** - 색상, 폰트, 톤앤매너 정의
+- [ ] **코드 스니펫 비주얼** - SNS용 코드 카드 템플릿
+  - carbon.sh 스타일 코드 이미지 생성
+  - Vais 문법 하이라이팅 테마
+
+### P4 - 장기: 에코시스템 성장
+
+> 지속 가능한 성장을 위한 기반
+
+#### 교육 콘텐츠
+- [ ] **"Learn Vais in Y Minutes"** - learnxinyminutes.com 기여
+- [ ] **YouTube 튜토리얼 시리즈** - "Building X in Vais"
+  - EP1: 설치 및 첫 프로그램
+  - EP2: 함수와 재귀
+  - EP3: 구조체와 열거형
+  - EP4: 파일 I/O
+  - EP5: 비동기 프로그래밍
+- [ ] **Rosetta Code 기여** - 알고리즘 예제 등록
+
+#### 벤치마크 & 비교
+- [ ] **공식 벤치마크 페이지** - Vais vs C vs Rust vs Go vs Python
+  - 컴파일 시간, 실행 시간, 메모리 사용량
+  - 토큰 수 비교 (AI 코드 생성 비용)
+  - 자동화된 벤치마크 CI
+
+#### 서드파티 통합
+- [ ] **GitHub Actions for Vais** - `setup-vais` 액션
+- [ ] **Rosetta Code** - Vais 언어 페이지 생성 및 예제 기여
+- [ ] **TIOBE/PYPL** - 프로그래밍 언어 인덱스 등록 신청
+
+### 예상 마일스톤
+
+| 마일스톤 | 목표 |
+|----------|------|
+| M1 | P0 완료 - 핵심 버그 수정, 실사용 가능한 언어 |
+| M2 | P1 완료 - brew/cargo install 배포, v0.2.0 릴리스 |
+| M3 | P2 완료 - 공식 웹사이트 + Playground 오픈 |
+| M4 | P3 완료 - SNS 채널 운영, 커뮤니티 100명 |
+| M5 | P4 완료 - 교육 콘텐츠, 벤치마크, 서드파티 통합 |
 
 ---
 

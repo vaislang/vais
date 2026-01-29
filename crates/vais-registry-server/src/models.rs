@@ -223,16 +223,36 @@ pub struct SearchQuery {
     pub limit: usize,
     #[serde(default)]
     pub offset: usize,
+    /// Sort order: "downloads" (default), "newest", "name", "relevance"
+    #[serde(default = "default_sort")]
+    pub sort: String,
+    /// Filter by category
+    pub category: Option<String>,
+    /// Filter by keyword
+    pub keyword: Option<String>,
 }
 
 fn default_limit() -> usize {
     20
 }
 
+fn default_sort() -> String {
+    "downloads".to_string()
+}
+
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
     pub packages: Vec<PackageSearchEntry>,
     pub total: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<CategoryCount>,
+}
+
+/// Category with package count for faceted search
+#[derive(Debug, Serialize)]
+pub struct CategoryCount {
+    pub name: String,
+    pub count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -242,6 +262,7 @@ pub struct PackageSearchEntry {
     pub latest_version: String,
     pub downloads: i64,
     pub keywords: Vec<String>,
+    pub categories: Vec<String>,
     pub updated_at: DateTime<Utc>,
 }
 

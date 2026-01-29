@@ -46,8 +46,15 @@ pub fn create_router(pool: DbPool, storage: PackageStorage, config: ServerConfig
             "/packages/:name/:version/unyank",
             post(handlers::packages::unyank),
         )
-        // Search
+        // Search & Discovery
         .route("/search", get(handlers::packages::search))
+        .route("/categories", get(handlers::packages::list_categories))
+        .route(
+            "/categories/:category",
+            get(handlers::packages::browse_category),
+        )
+        .route("/popular", get(handlers::packages::popular))
+        .route("/recent", get(handlers::packages::recent))
         // Auth routes
         .route("/auth/register", post(handlers::auth::register))
         .route("/auth/login", post(handlers::auth::login))

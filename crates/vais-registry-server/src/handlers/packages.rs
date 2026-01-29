@@ -11,6 +11,7 @@ use axum::{
     Json,
 };
 use chrono::Utc;
+use serde::Deserialize;
 use uuid::Uuid;
 
 /// Publish a new package version
@@ -368,15 +369,30 @@ pub async fn unyank(
     }
 }
 
-/// Search packages
+/// Search packages with sorting, category, and keyword filtering
 pub async fn search(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> ServerResult<Json<SearchResult>> {
-    let (packages, total) =
-        db::search_packages(&state.pool, &query.q, query.limit, query.offset).await?;
+    let (packages, total) = db::search_packages_advanced(
+        &state.pool,
+        &query.q,
+        query.limit,
+        query.offset,
+        &query.sort,
+        query.category.as_deref(),
+        query.keyword.as_deref(),
+    )
+    .await?;
 
-    Ok(Json(SearchResult { packages, total }))
+    // Get category counts for faceted search
+    let categories = db::get_category_counts(&state.pool).await?;
+
+    Ok(Json(SearchResult {
+        packages,
+        total,
+        categories,
+    }))
 }
 
 /// Validate package name
@@ -412,6 +428,105 @@ fn validate_package_name(name: &str) -> ServerResult<()> {
     }
 
     Ok(())
+}
+
+/// List all categories with package counts
+pub async fn list_categories(
+    State(state): State<AppState>,
+) -> ServerResult<Json<Vec<CategoryCount>>> {
+    let categories = db::get_category_counts(&state.pool).await?;
+    Ok(Json(categories))
+}
+
+/// Browse packages by category
+pub async fn browse_category(
+    State(state): State<AppState>,
+    Path(category): Path<String>,
+    Query(params): Query<BrowseParams>,
+) -> ServerResult<Json<SearchResult>> {
+    let (packages, total) = db::search_packages_advanced(
+        &state.pool,
+        "",
+        params.limit,
+        params.offset,
+        &params.sort,
+        Some(&category),
+        None,
+    )
+    .await?;
+
+    let categories = db::get_category_counts(&state.pool).await?;
+
+    Ok(Json(SearchResult {
+        packages,
+        total,
+        categories,
+    }))
+}
+
+/// Get popular packages (sorted by downloads)
+pub async fn popular(
+    State(state): State<AppState>,
+    Query(params): Query<BrowseParams>,
+) -> ServerResult<Json<SearchResult>> {
+    let (packages, total) = db::search_packages_advanced(
+        &state.pool,
+        "",
+        params.limit,
+        params.offset,
+        "downloads",
+        None,
+        None,
+    )
+    .await?;
+
+    Ok(Json(SearchResult {
+        packages,
+        total,
+        categories: vec![],
+    }))
+}
+
+/// Get recently updated packages
+pub async fn recent(
+    State(state): State<AppState>,
+    Query(params): Query<BrowseParams>,
+) -> ServerResult<Json<SearchResult>> {
+    let (packages, total) = db::search_packages_advanced(
+        &state.pool,
+        "",
+        params.limit,
+        params.offset,
+        "newest",
+        None,
+        None,
+    )
+    .await?;
+
+    Ok(Json(SearchResult {
+        packages,
+        total,
+        categories: vec![],
+    }))
+}
+
+/// Browse parameters
+#[derive(Debug, Deserialize)]
+pub struct BrowseParams {
+    #[serde(default = "default_browse_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_browse_sort")]
+    pub sort: String,
+}
+
+fn default_browse_limit() -> usize {
+    20
+}
+
+fn default_browse_sort() -> String {
+    "downloads".to_string()
 }
 
 /// Validate version string

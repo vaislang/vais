@@ -692,42 +692,74 @@ pub async fn search_packages(
     limit: usize,
     offset: usize,
 ) -> ServerResult<(Vec<PackageSearchEntry>, usize)> {
+    search_packages_advanced(pool, query, limit, offset, "downloads", None, None).await
+}
+
+/// Advanced search with sorting, category, and keyword filtering
+pub async fn search_packages_advanced(
+    pool: &DbPool,
+    query: &str,
+    limit: usize,
+    offset: usize,
+    sort: &str,
+    category: Option<&str>,
+    keyword: Option<&str>,
+) -> ServerResult<(Vec<PackageSearchEntry>, usize)> {
     let search_pattern = format!("%{}%", query.to_lowercase());
 
+    // Build WHERE clause dynamically
+    let mut where_clauses = vec![
+        "(LOWER(p.name) LIKE ?1 OR LOWER(p.description) LIKE ?1 OR LOWER(p.keywords) LIKE ?1)".to_string(),
+    ];
+
+    if let Some(cat) = category {
+        where_clauses.push(format!("LOWER(p.categories) LIKE '%{}%'", cat.to_lowercase().replace('\'', "''")));
+    }
+
+    if let Some(kw) = keyword {
+        where_clauses.push(format!("LOWER(p.keywords) LIKE '%{}%'", kw.to_lowercase().replace('\'', "''")));
+    }
+
+    let where_sql = where_clauses.join(" AND ");
+
+    // Sort order
+    let order_sql = match sort {
+        "newest" => "p.updated_at DESC, p.name ASC",
+        "name" => "p.name ASC",
+        "relevance" => "CASE WHEN LOWER(p.name) = LOWER(?1) THEN 0 WHEN LOWER(p.name) LIKE ?1 THEN 1 ELSE 2 END, p.downloads DESC",
+        _ => "p.downloads DESC, p.name ASC", // "downloads" default
+    };
+
     // Get total count
-    let count_row = sqlx::query(
-        r#"
-        SELECT COUNT(*) as count FROM packages
-        WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(keywords) LIKE ?
-        "#,
-    )
-    .bind(&search_pattern)
-    .bind(&search_pattern)
-    .bind(&search_pattern)
-    .fetch_one(pool)
-    .await?;
+    let count_sql = format!(
+        "SELECT COUNT(*) as count FROM packages p WHERE {}",
+        where_sql
+    );
+    let count_row = sqlx::query(&count_sql)
+        .bind(&search_pattern)
+        .fetch_one(pool)
+        .await?;
 
     let total: i64 = count_row.get("count");
 
     // Get packages
-    let rows = sqlx::query(
-        r#"
-        SELECT p.name, p.description, p.keywords, p.downloads, p.updated_at,
+    let query_sql = format!(
+        r#"SELECT p.name, p.description, p.keywords, p.categories, p.downloads, p.updated_at,
                (SELECT version FROM package_versions WHERE package_id = p.id AND yanked = 0
                 ORDER BY created_at DESC LIMIT 1) as latest_version
         FROM packages p
-        WHERE LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(p.keywords) LIKE ?
-        ORDER BY p.downloads DESC, p.name ASC
-        LIMIT ? OFFSET ?
-        "#,
-    )
-    .bind(&search_pattern)
-    .bind(&search_pattern)
-    .bind(&search_pattern)
-    .bind(limit as i64)
-    .bind(offset as i64)
-    .fetch_all(pool)
-    .await?;
+        WHERE {}
+        ORDER BY {}
+        LIMIT ?2 OFFSET ?3"#,
+        where_sql, order_sql
+    );
+
+    let rows = sqlx::query(&query_sql)
+        .bind(&search_pattern)
+        .bind(limit as i64)
+        .bind(offset as i64)
+        .fetch_all(pool)
+        .await?;
 
     let packages = rows
         .into_iter()
@@ -739,6 +771,7 @@ pub async fn search_packages(
                 latest_version: v,
                 downloads: r.get("downloads"),
                 keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
+                categories: serde_json::from_str(r.get::<&str, _>("categories")).unwrap_or_default(),
                 updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
                     .unwrap()
                     .with_timezone(&Utc),
@@ -747,6 +780,38 @@ pub async fn search_packages(
         .collect();
 
     Ok((packages, total as usize))
+}
+
+/// Get category counts for faceted search
+pub async fn get_category_counts(
+    pool: &DbPool,
+) -> ServerResult<Vec<CategoryCount>> {
+    // Since categories are stored as JSON arrays, we need to aggregate
+    let rows = sqlx::query(
+        r#"
+        SELECT categories FROM packages WHERE categories != '[]' AND categories IS NOT NULL
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for row in rows {
+        let cats_str: &str = row.get("categories");
+        if let Ok(cats) = serde_json::from_str::<Vec<String>>(cats_str) {
+            for cat in cats {
+                *counts.entry(cat).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut result: Vec<CategoryCount> = counts
+        .into_iter()
+        .map(|(name, count)| CategoryCount { name, count })
+        .collect();
+    result.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+
+    Ok(result)
 }
 
 // ==================== Index Generation ====================
