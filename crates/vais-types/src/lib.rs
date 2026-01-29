@@ -3115,6 +3115,22 @@ impl TypeChecker {
                     comptime::ComptimeValue::Int(_) => Ok(ResolvedType::I64),
                     comptime::ComptimeValue::Float(_) => Ok(ResolvedType::F64),
                     comptime::ComptimeValue::Bool(_) => Ok(ResolvedType::Bool),
+                    comptime::ComptimeValue::String(_) => Ok(ResolvedType::Str),
+                    comptime::ComptimeValue::Array(ref arr) => {
+                        // Infer array element type from first element
+                        if arr.is_empty() {
+                            Ok(ResolvedType::Array(Box::new(ResolvedType::I64)))
+                        } else {
+                            let elem_type = match &arr[0] {
+                                comptime::ComptimeValue::Int(_) => ResolvedType::I64,
+                                comptime::ComptimeValue::Float(_) => ResolvedType::F64,
+                                comptime::ComptimeValue::Bool(_) => ResolvedType::Bool,
+                                comptime::ComptimeValue::String(_) => ResolvedType::Str,
+                                _ => ResolvedType::I64,
+                            };
+                            Ok(ResolvedType::Array(Box::new(elem_type)))
+                        }
+                    }
                     comptime::ComptimeValue::Unit => Ok(ResolvedType::Unit),
                 }
             }

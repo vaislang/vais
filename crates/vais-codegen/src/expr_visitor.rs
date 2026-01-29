@@ -397,7 +397,7 @@ impl ExprVisitor for CodeGenerator {
         self.generate_unwrap_expr(inner, counter)
     }
 
-    fn visit_comptime(&mut self, body: &Spanned<Expr>, _counter: &mut usize) -> GenResult {
+    fn visit_comptime(&mut self, body: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         // Evaluate the comptime expression at compile time
         let mut evaluator = vais_types::ComptimeEvaluator::new();
         let value = evaluator.eval(body).map_err(|e| {
@@ -409,6 +409,54 @@ impl ExprVisitor for CodeGenerator {
             vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
             vais_types::ComptimeValue::Float(f) => Ok((format!("{:e}", f), String::new())),
             vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
+            vais_types::ComptimeValue::String(s) => {
+                // Create a global string constant
+                let name = format!(".str.{}", self.string_counter);
+                self.string_counter += 1;
+                self.string_constants.push((name.clone(), s.clone()));
+                let len = s.len() + 1;
+                Ok((
+                    format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+                    String::new(),
+                ))
+            }
+            vais_types::ComptimeValue::Array(arr) => {
+                // Generate array literal from comptime array
+                let mut elements = Vec::new();
+                let mut ir = String::new();
+
+                for elem in arr {
+                    match elem {
+                        vais_types::ComptimeValue::Int(n) => elements.push(n.to_string()),
+                        vais_types::ComptimeValue::Float(f) => elements.push(format!("{:e}", f)),
+                        vais_types::ComptimeValue::Bool(b) => elements.push(if b { "1" } else { "0" }.to_string()),
+                        _ => {
+                            return Err(CodegenError::TypeError(
+                                "Comptime arrays can only contain simple values (int, float, bool)".to_string()
+                            ));
+                        }
+                    }
+                }
+
+                // Create array on the stack
+                let array_name = format!("%comptime_array_{}", counter);
+                *counter += 1;
+                let len = elements.len();
+
+                // For now, assume i64 elements (we'd need better type inference for mixed types)
+                ir.push_str(&format!("  {} = alloca [{} x i64]\n", array_name, len));
+
+                for (i, elem_val) in elements.iter().enumerate() {
+                    let elem_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr [{} x i64], [{} x i64]* {}, i64 0, i64 {}\n",
+                        elem_ptr, len, len, array_name, i
+                    ));
+                    ir.push_str(&format!("  store i64 {}, i64* {}\n", elem_val, elem_ptr));
+                }
+
+                Ok((array_name, ir))
+            }
             vais_types::ComptimeValue::Unit => Ok(("void".to_string(), String::new())),
         }
     }
