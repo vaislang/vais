@@ -176,6 +176,18 @@ cargo bench -p vais-benches --bench runtime_bench
 
 ## Documentation
 
+### Official Documentation Site
+
+The comprehensive documentation is available as an interactive mdBook site:
+
+```bash
+# Build and view the documentation
+cd docs-site
+./serve.sh
+```
+
+Visit the [online documentation](https://sswoo.github.io/vais/) or browse the individual files:
+
 - [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Complete language specification
 - [STDLIB.md](docs/STDLIB.md) - Standard library reference
 - [TUTORIAL.md](docs/TUTORIAL.md) - Getting started tutorial

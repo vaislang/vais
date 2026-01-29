@@ -1,0 +1,11 @@
+# mdBook output directory
+book/
+
+# Backup files
+*~
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

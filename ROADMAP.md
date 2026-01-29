@@ -1700,8 +1700,20 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - AuditResult: 취약점 심각도별 분류 및 보고
 
 #### 문서 및 커뮤니티
-- [ ] **공식 문서 사이트** - 검색 가능한 문서
-- [ ] **커뮤니티 패키지 가이드라인**
+- [x] **공식 문서 사이트** - 검색 가능한 문서 (완료일: 2026-01-29)
+  - mdBook 기반 정적 사이트 (docs-site/ 디렉토리)
+  - 66개 문서 페이지를 8개 섹션으로 조직화
+  - 내장 검색 기능, 다크 테마, 반응형 디자인
+  - `{{#include}}` 패턴으로 기존 문서 참조 (중복 제거)
+  - GitHub Actions 자동 배포 (.github/workflows/docs.yml)
+  - build.sh / serve.sh 빌드/개발 서버 스크립트
+- [x] **커뮤니티 패키지 가이드라인** (완료일: 2026-01-29)
+  - docs/PACKAGE_GUIDELINES.md (19KB, 한국어)
+  - vais.toml 구조, 디렉토리 권장사항, 이름 규칙
+  - SemVer 규칙, 하위 호환성, pre-release 버전
+  - 코드 품질 기준 (필수/권장), 보안 요구사항
+  - 배포 절차 (CI/CD GitHub Actions 예제 포함)
+  - 커뮤니티 규칙 (이름 선점 금지, 분쟁 해결, yanking 정책)
 
 ### 예상 마일스톤
 
