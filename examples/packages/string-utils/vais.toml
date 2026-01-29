@@ -1,0 +1,11 @@
+[package]
+name = "string-utils"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "String and character manipulation utilities working at the ASCII/i64 level"
+license = "MIT"
+
+[dependencies]
+
+[build]
+opt_level = 2

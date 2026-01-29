@@ -1,0 +1,87 @@
+# string-utils: Character and string utilities for Vais
+# Works at the ASCII / i64 character-code level.
+
+# Check if a character code is a digit ('0'-'9')
+# Returns 1 if digit, 0 otherwise
+F is_digit(c: i64) -> i64 = c >= 48 ? (c <= 57 ? 1 : 0) : 0
+
+# Check if a character code is an uppercase letter ('A'-'Z')
+F is_upper(c: i64) -> i64 = c >= 65 ? (c <= 90 ? 1 : 0) : 0
+
+# Check if a character code is a lowercase letter ('a'-'z')
+F is_lower(c: i64) -> i64 = c >= 97 ? (c <= 122 ? 1 : 0) : 0
+
+# Check if a character code is alphabetic (a-z or A-Z)
+F is_alpha(c: i64) -> i64 {
+    I is_upper(c) == 1 { ret 1; }
+    is_lower(c)
+}
+
+# Check if a character code is alphanumeric
+F is_alnum(c: i64) -> i64 {
+    I is_alpha(c) == 1 { ret 1; }
+    is_digit(c)
+}
+
+# Check if a character code is whitespace (space, tab, newline, cr)
+F is_space(c: i64) -> i64 {
+    I c == 32 { ret 1; }
+    I c == 9 { ret 1; }
+    I c == 10 { ret 1; }
+    I c == 13 { ret 1; }
+    0
+}
+
+# Convert a lowercase letter to uppercase; others unchanged
+F to_upper_char(c: i64) -> i64 = is_lower(c) == 1 ? c - 32 : c
+
+# Convert an uppercase letter to lowercase; others unchanged
+F to_lower_char(c: i64) -> i64 = is_upper(c) == 1 ? c + 32 : c
+
+# Convert a single digit (0-9) to its ASCII character code
+F digit_to_char(d: i64) -> i64 = d + 48
+
+# Convert an ASCII digit character to its numeric value (no validation)
+F char_to_digit(c: i64) -> i64 = c - 48
+
+# --- Demo main ---
+
+F main() -> i64 {
+    puts("=== string-utils demo ===")
+
+    # is_digit tests
+    puts("is_digit('5'):")
+    putchar(is_digit(53) + 48)
+    putchar(10)
+
+    puts("is_digit('A'):")
+    putchar(is_digit(65) + 48)
+    putchar(10)
+
+    # is_alpha tests
+    puts("is_alpha('Z'):")
+    putchar(is_alpha(90) + 48)
+    putchar(10)
+
+    # to_upper_char
+    puts("to_upper_char('h'):")
+    putchar(to_upper_char(104))
+    putchar(10)
+
+    # to_lower_char
+    puts("to_lower_char('H'):")
+    putchar(to_lower_char(72))
+    putchar(10)
+
+    # is_space
+    puts("is_space(' '):")
+    putchar(is_space(32) + 48)
+    putchar(10)
+
+    puts("is_space('x'):")
+    putchar(is_space(120) + 48)
+    putchar(10)
+
+    puts("=== done ===")
+    0
+}

@@ -1,0 +1,12 @@
+[package]
+name = "algorithm-kit"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "Common algorithms: fibonacci, integer power, Newton's sqrt, Collatz sequence"
+license = "MIT"
+
+[dependencies]
+math-utils = "1.0.0"
+
+[build]
+opt_level = 2

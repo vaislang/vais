@@ -1,0 +1,108 @@
+# crypto-hash: Simple hash functions for Vais
+# These operate on *i64 arrays treated as byte/value sequences.
+# Not suitable for cryptographic use; intended for hash tables and checksums.
+
+# DJB2 hash over an array of i64 values
+# Classic hash: hash = hash * 33 + value
+F djb2_hash(arr: *i64, len: i64) -> i64 {
+    hash := mut 5381
+    i := mut 0
+    L {
+        I i >= len { B 0 }
+        hash = hash * 33 + arr[i]
+        i = i + 1
+    }
+    # Return positive value by masking with a large number
+    I hash < 0 { ret 0 - hash; }
+    hash
+}
+
+# FNV-1a hash over an array of i64 values
+# Uses FNV offset basis and prime (scaled for i64)
+F fnv1a_hash(arr: *i64, len: i64) -> i64 {
+    hash := mut 2166136261
+    i := mut 0
+    L {
+        I i >= len { B 0 }
+        # XOR with value then multiply by FNV prime
+        hash = hash ^ arr[i]
+        hash = hash * 16777619
+        i = i + 1
+    }
+    I hash < 0 { ret 0 - hash; }
+    hash
+}
+
+# Simple modular hash: sum of values mod table_size
+F simple_hash(arr: *i64, len: i64, table_size: i64) -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= len { B 0 }
+        sum = sum + arr[i]
+        i = i + 1
+    }
+    r := sum % table_size
+    I r < 0 { ret 0 - r; }
+    r
+}
+
+# Helper: print a number digit by digit (for values up to 9999999999)
+F print_num(n: i64) -> i64 {
+    I n == 0 {
+        putchar(48)
+        putchar(10)
+        ret 0;
+    }
+    val := mut n
+    I val < 0 {
+        putchar(45)
+        val = 0 - val
+    }
+    # Find highest power of 10
+    div := mut 1
+    L {
+        I div * 10 > val { B 0 }
+        div = div * 10
+    }
+    # Print digits
+    L {
+        I div == 0 { B 0 }
+        d := val / div
+        putchar(d + 48)
+        val = val - d * div
+        div = div / 10
+    }
+    putchar(10)
+    0
+}
+
+# --- Demo main ---
+
+F main() -> i64 {
+    puts("=== crypto-hash demo ===")
+
+    # Hash the sequence [72, 101, 108, 108, 111] = "Hello" as ASCII values
+    data: *i64 = [72, 101, 108, 108, 111]
+
+    puts("DJB2 hash of [H,e,l,l,o]:")
+    h1 := djb2_hash(data, 5)
+    print_num(h1)
+
+    puts("FNV-1a hash of [H,e,l,l,o]:")
+    h2 := fnv1a_hash(data, 5)
+    print_num(h2)
+
+    puts("simple_hash mod 16:")
+    h3 := simple_hash(data, 5, 16)
+    print_num(h3)
+
+    # Different data should produce different hashes
+    data2: *i64 = [87, 111, 114, 108, 100]
+    puts("DJB2 hash of [W,o,r,l,d]:")
+    h4 := djb2_hash(data2, 5)
+    print_num(h4)
+
+    puts("=== done ===")
+    0
+}

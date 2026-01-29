@@ -1,0 +1,140 @@
+# algorithm-kit: Common algorithms for Vais
+# Depends on math-utils for abs.
+# Provides fibonacci, power, integer square root (Newton), and Collatz utilities.
+
+# Fibonacci (iterative, O(n))
+F fibonacci(n: i64) -> i64 {
+    I n < 2 { ret n; }
+    a := mut 0
+    b := mut 1
+    i := mut 2
+    L {
+        I i > n { B 0 }
+        tmp := a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    b
+}
+
+# Integer power: base^exp (exp >= 0)
+# Uses fast exponentiation (exponentiation by squaring)
+F power(base: i64, exp: i64) -> i64 {
+    I exp == 0 { ret 1; }
+    I exp == 1 { ret base; }
+    result := mut 1
+    b := mut base
+    e := mut exp
+    L {
+        I e <= 0 { B 0 }
+        I e % 2 == 1 {
+            result = result * b
+        }
+        b = b * b
+        e = e / 2
+    }
+    result
+}
+
+# Integer square root using Newton's method
+# Returns floor(sqrt(n)) for n >= 0
+F newton_sqrt(n: i64) -> i64 {
+    I n <= 1 { ret n; }
+    x := mut n / 2
+    L {
+        x1 := (x + n / x) / 2
+        I x1 >= x { B 0 }
+        x = x1
+    }
+    x
+}
+
+# Collatz steps: count steps until n reaches 1
+# The Collatz conjecture: if even -> n/2, if odd -> 3n+1
+F collatz_steps(n: i64) -> i64 {
+    I n <= 1 { ret 0; }
+    steps := mut 0
+    val := mut n
+    L {
+        I val <= 1 { B 0 }
+        I val % 2 == 0 {
+            val = val / 2
+        } E {
+            val = val * 3 + 1
+        }
+        steps = steps + 1
+    }
+    steps
+}
+
+# Absolute value (re-exported concept from math-utils dependency)
+F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+
+# Helper: print a number
+F print_num(n: i64) -> i64 {
+    I n == 0 {
+        putchar(48)
+        putchar(10)
+        ret 0;
+    }
+    val := mut n
+    I val < 0 {
+        putchar(45)
+        val = 0 - val
+    }
+    div := mut 1
+    L {
+        I div * 10 > val { B 0 }
+        div = div * 10
+    }
+    L {
+        I div == 0 { B 0 }
+        d := val / div
+        putchar(d + 48)
+        val = val - d * div
+        div = div / 10
+    }
+    putchar(10)
+    0
+}
+
+# --- Demo main ---
+
+F main() -> i64 {
+    puts("=== algorithm-kit demo ===")
+
+    # Fibonacci
+    puts("fibonacci(10):")
+    print_num(fibonacci(10))
+
+    puts("fibonacci(20):")
+    print_num(fibonacci(20))
+
+    # Power
+    puts("power(2, 10):")
+    print_num(power(2, 10))
+
+    puts("power(3, 5):")
+    print_num(power(3, 5))
+
+    # Newton sqrt
+    puts("newton_sqrt(144):")
+    print_num(newton_sqrt(144))
+
+    puts("newton_sqrt(1000):")
+    print_num(newton_sqrt(1000))
+
+    # Collatz
+    puts("collatz_steps(27):")
+    print_num(collatz_steps(27))
+
+    puts("collatz_steps(1):")
+    print_num(collatz_steps(1))
+
+    puts("collatz_steps(6):")
+    print_num(collatz_steps(6))
+
+    puts("=== done ===")
+    0
+}

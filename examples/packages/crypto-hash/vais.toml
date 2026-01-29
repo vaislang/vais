@@ -1,0 +1,11 @@
+[package]
+name = "crypto-hash"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "Simple non-cryptographic hash functions (DJB2, FNV-1a) operating on i64 sequences"
+license = "MIT"
+
+[dependencies]
+
+[build]
+opt_level = 2

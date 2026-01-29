@@ -1,0 +1,100 @@
+# math-utils: Mathematical utility functions for Vais
+# Provides common math operations as pure functions.
+
+# Absolute value of an integer
+F abs(x: i64) -> i64 = x < 0 ? 0 - x : x
+
+# Minimum of two integers
+F min(a: i64, b: i64) -> i64 = a < b ? a : b
+
+# Maximum of two integers
+F max(a: i64, b: i64) -> i64 = a > b ? a : b
+
+# Clamp a value between lo and hi (inclusive)
+F clamp(x: i64, lo: i64, hi: i64) -> i64 {
+    I x < lo { ret lo; }
+    I x > hi { ret hi; }
+    x
+}
+
+# Greatest common divisor using Euclidean algorithm (recursive)
+F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : gcd(b, a % b)
+
+# Least common multiple
+F lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+
+# Check if a number is prime
+# Returns 1 if prime, 0 otherwise
+F is_prime(n: i64) -> i64 {
+    I n < 2 { ret 0; }
+    I n < 4 { ret 1; }
+    I n % 2 == 0 { ret 0; }
+    i := mut 3
+    L {
+        I i * i > n { B 0 }
+        I n % i == 0 { ret 0; }
+        i = i + 2
+    }
+    1
+}
+
+# Factorial (recursive)
+F factorial(n: i64) -> i64 = n < 2 ? 1 : n * @(n - 1)
+
+# --- Demo main ---
+
+F main() -> i64 {
+    puts("=== math-utils demo ===")
+
+    # abs
+    puts("abs(-42):")
+    v := abs(0 - 42)
+    putchar(v / 10 + 48)
+    putchar(v % 10 + 48)
+    putchar(10)
+
+    # min / max
+    puts("min(3,7):")
+    putchar(min(3, 7) + 48)
+    putchar(10)
+
+    puts("max(3,7):")
+    putchar(max(3, 7) + 48)
+    putchar(10)
+
+    # clamp
+    puts("clamp(15, 0, 9):")
+    putchar(clamp(15, 0, 9) + 48)
+    putchar(10)
+
+    # gcd / lcm
+    puts("gcd(12,8):")
+    putchar(gcd(12, 8) + 48)
+    putchar(10)
+
+    puts("lcm(4,6):")
+    r := lcm(4, 6)
+    putchar(r / 10 + 48)
+    putchar(r % 10 + 48)
+    putchar(10)
+
+    # is_prime
+    puts("is_prime(7):")
+    putchar(is_prime(7) + 48)
+    putchar(10)
+
+    puts("is_prime(9):")
+    putchar(is_prime(9) + 48)
+    putchar(10)
+
+    # factorial
+    puts("factorial(5):")
+    f := factorial(5)
+    putchar(f / 100 + 48)
+    putchar((f / 10) % 10 + 48)
+    putchar(f % 10 + 48)
+    putchar(10)
+
+    puts("=== done ===")
+    0
+}

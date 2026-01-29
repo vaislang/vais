@@ -1,0 +1,122 @@
+# benchmark-utils: Benchmarking helpers for Vais
+# Provides iteration runners and simple accumulation utilities.
+# Since Vais does not yet have a clock FFI, these count iterations
+# and accumulate results to prevent dead-code elimination.
+
+# Run a computation N times, summing results to prevent optimizing away.
+# func_id selects which built-in workload to run:
+#   0 = noop (returns 1)
+#   1 = fib(20)
+#   2 = sum 1..100
+F run_iterations(n: i64, func_id: i64) -> i64 {
+    acc := mut 0
+    i := mut 0
+    L {
+        I i >= n { B 0 }
+        I func_id == 0 {
+            acc = acc + 1
+        }
+        I func_id == 1 {
+            acc = acc + bench_fib(20)
+        }
+        I func_id == 2 {
+            acc = acc + bench_sum(100)
+        }
+        i = i + 1
+    }
+    acc
+}
+
+# Internal: fibonacci for benchmarking
+F bench_fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
+
+# Internal: sum from 1 to n
+F bench_sum(n: i64) -> i64 {
+    total := mut 0
+    i := mut 1
+    L {
+        I i > n { B 0 }
+        total = total + i
+        i = i + 1
+    }
+    total
+}
+
+# Accumulate: apply a simple fold over a range [0, n)
+# Returns sum of f(i) where f(i) = i * i (square each index)
+F accumulate_squares(n: i64) -> i64 {
+    acc := mut 0
+    i := mut 0
+    L {
+        I i >= n { B 0 }
+        acc = acc + i * i
+        i = i + 1
+    }
+    acc
+}
+
+# Black hole: consume a value to prevent dead-code elimination
+# Just returns the value (identity), but the call itself is a barrier.
+F black_hole(x: i64) -> i64 = x
+
+# Helper: print a number
+F print_num(n: i64) -> i64 {
+    I n == 0 {
+        putchar(48)
+        putchar(10)
+        ret 0;
+    }
+    val := mut n
+    I val < 0 {
+        putchar(45)
+        val = 0 - val
+    }
+    div := mut 1
+    L {
+        I div * 10 > val { B 0 }
+        div = div * 10
+    }
+    L {
+        I div == 0 { B 0 }
+        d := val / div
+        putchar(d + 48)
+        val = val - d * div
+        div = div / 10
+    }
+    putchar(10)
+    0
+}
+
+# --- Demo main ---
+
+F main() -> i64 {
+    puts("=== benchmark-utils demo ===")
+
+    # Run noop 1000 times
+    r0 := run_iterations(1000, 0)
+    puts("noop x1000 accumulator:")
+    print_num(r0)
+
+    # Run fib(20) 3 times
+    r1 := run_iterations(3, 1)
+    puts("fib(20) x3 accumulator:")
+    print_num(r1)
+
+    # Run sum(100) 5 times
+    r2 := run_iterations(5, 2)
+    puts("sum(100) x5 accumulator:")
+    print_num(r2)
+
+    # Accumulate squares 0..10
+    sq := accumulate_squares(10)
+    puts("sum of squares 0..9:")
+    print_num(sq)
+
+    # Black hole
+    bh := black_hole(42)
+    puts("black_hole(42):")
+    print_num(bh)
+
+    puts("=== done ===")
+    0
+}

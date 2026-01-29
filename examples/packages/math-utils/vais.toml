@@ -1,0 +1,11 @@
+[package]
+name = "math-utils"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "Mathematical utility functions for Vais: abs, min, max, clamp, gcd, lcm, is_prime, factorial"
+license = "MIT"
+
+[dependencies]
+
+[build]
+opt_level = 2

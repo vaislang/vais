@@ -76,6 +76,12 @@ pub enum RegistryError {
 
     #[error("TOML parse error: {message}")]
     TomlError { message: String },
+
+    #[error("publish failed: {message}")]
+    PublishFailed { message: String },
+
+    #[error("authentication required: {message}")]
+    AuthRequired { message: String },
 }
 
 pub type RegistryResult<T> = Result<T, RegistryError>;

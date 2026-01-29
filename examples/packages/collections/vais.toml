@@ -1,0 +1,11 @@
+[package]
+name = "collections"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "Collection algorithms: search and sort routines for pointer-based arrays"
+license = "MIT"
+
+[dependencies]
+
+[build]
+opt_level = 2

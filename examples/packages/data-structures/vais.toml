@@ -1,0 +1,11 @@
+[package]
+name = "data-structures"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "Basic data structures: array-backed stack and circular queue"
+license = "MIT"
+
+[dependencies]
+
+[build]
+opt_level = 2

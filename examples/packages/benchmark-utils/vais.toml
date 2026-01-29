@@ -1,0 +1,11 @@
+[package]
+name = "benchmark-utils"
+version = "1.0.0"
+authors = ["Vais Community"]
+description = "Simple benchmarking and iteration utilities for measuring Vais code performance"
+license = "MIT"
+
+[dependencies]
+
+[build]
+opt_level = 2

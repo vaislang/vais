@@ -1,0 +1,124 @@
+# collections: Search and sort algorithms for Vais
+# Arrays are represented as *i64 pointers with explicit length.
+
+# Linear search: returns index of target or -1 if not found
+F linear_search(arr: *i64, len: i64, target: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B 0 }
+        I arr[i] == target { ret i; }
+        i = i + 1
+    }
+    0 - 1
+}
+
+# Binary search on a sorted array: returns index of target or -1
+F binary_search(arr: *i64, len: i64, target: i64) -> i64 {
+    lo := mut 0
+    hi := mut len - 1
+    L {
+        I lo > hi { B 0 }
+        mid := lo + (hi - lo) / 2
+        I arr[mid] == target { ret mid; }
+        I arr[mid] < target {
+            lo = mid + 1
+        } E {
+            hi = mid - 1
+        }
+    }
+    0 - 1
+}
+
+# Bubble sort (in-place, ascending)
+F bubble_sort(arr: *i64, len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len - 1 { B 0 }
+        j := mut 0
+        L {
+            I j >= len - 1 - i { B 0 }
+            I arr[j] > arr[j + 1] {
+                tmp := arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = tmp
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    0
+}
+
+# Selection sort (in-place, ascending)
+F selection_sort(arr: *i64, len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len - 1 { B 0 }
+        min_idx := mut i
+        j := mut i + 1
+        L {
+            I j >= len { B 0 }
+            I arr[j] < arr[min_idx] {
+                min_idx = j
+            }
+            j = j + 1
+        }
+        I min_idx != i {
+            tmp := arr[i]
+            arr[i] = arr[min_idx]
+            arr[min_idx] = tmp
+        }
+        i = i + 1
+    }
+    0
+}
+
+# Helper: print an array of single-digit numbers
+F print_arr(arr: *i64, len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B 0 }
+        putchar(arr[i] + 48)
+        I i < len - 1 { putchar(32) }
+        i = i + 1
+    }
+    putchar(10)
+    0
+}
+
+# --- Demo main ---
+
+F main() -> i64 {
+    puts("=== collections demo ===")
+
+    arr: *i64 = [5, 3, 8, 1, 9, 2, 7, 4, 6]
+
+    puts("Original array:")
+    print_arr(arr, 9)
+
+    # Linear search
+    idx := linear_search(arr, 9, 8)
+    puts("linear_search for 8, index:")
+    putchar(idx + 48)
+    putchar(10)
+
+    # Bubble sort
+    bubble_sort(arr, 9)
+    puts("After bubble_sort:")
+    print_arr(arr, 9)
+
+    # Binary search on sorted array
+    idx2 := binary_search(arr, 9, 7)
+    puts("binary_search for 7, index:")
+    putchar(idx2 + 48)
+    putchar(10)
+
+    # Selection sort on another array
+    arr2: *i64 = [9, 4, 6, 2, 1]
+    selection_sort(arr2, 5)
+    puts("After selection_sort:")
+    print_arr(arr2, 5)
+
+    puts("=== done ===")
+    0
+}

@@ -17,6 +17,7 @@ mod source;
 mod version;
 mod vulnerability;
 
+pub use archive::{pack_package, sha256_hex};
 pub use cache::PackageCache;
 pub use client::RegistryClient;
 pub use lockfile::LockFile;
