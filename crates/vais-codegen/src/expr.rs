@@ -64,7 +64,29 @@ impl CodeGenerator {
         } else if self.functions.contains_key(name) {
             Ok((format!("@{}", name), String::new()))
         } else {
-            Err(CodegenError::UndefinedVar(name.to_string()))
+            // Collect all available symbols for suggestions
+            let mut candidates: Vec<&str> = Vec::new();
+
+            // Add local variables
+            for var_name in self.locals.keys() {
+                candidates.push(var_name.as_str());
+            }
+
+            // Add function names
+            for func_name in self.functions.keys() {
+                candidates.push(func_name.as_str());
+            }
+
+            // Add "self" if we're in a method context
+            if self.current_function.is_some() {
+                candidates.push("self");
+            }
+
+            // Get suggestions
+            let suggestions = crate::suggest_similar(name, &candidates, 3);
+            let suggestion_text = crate::format_did_you_mean(&suggestions);
+
+            Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
         }
     }
 
@@ -186,7 +208,15 @@ impl CodeGenerator {
                     );
                     Ok((val.clone(), ir))
                 } else {
-                    Err(CodegenError::UndefinedVar(name.clone()))
+                    // Collect all available symbols for suggestions
+                    let candidates: Vec<&str> = self.locals.keys()
+                        .map(|s| s.as_str())
+                        .collect();
+
+                    let suggestions = crate::suggest_similar(name, &candidates, 3);
+                    let suggestion_text = crate::format_did_you_mean(&suggestions);
+
+                    Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
                 }
             }
             Expr::Index { expr: arr_expr, index } => {
@@ -228,7 +258,13 @@ impl CodeGenerator {
                 );
                 Ok((val.to_string(), ir))
             }
-            _ => Err(CodegenError::TypeError("Cannot index non-array type".to_string())),
+            _ => {
+                let type_name = format!("{:?}", arr_type);
+                Err(CodegenError::TypeError(format!(
+                    "Cannot index non-array type (found {})",
+                    type_name
+                )))
+            }
         }
     }
 
@@ -247,8 +283,21 @@ impl CodeGenerator {
         if let ResolvedType::Named { name: struct_name, .. } = &obj_type {
             if let Some(struct_info) = self.structs.get(struct_name).cloned() {
                 let field_idx = struct_info.fields.iter()
-                    .position(|(n, _)| n == &field.node)
-                    .ok_or_else(|| CodegenError::UndefinedVar(format!("field {} not found", field.node)))?;
+                    .position(|(n, _)| n == &field.node);
+
+                let field_idx = if let Some(idx) = field_idx {
+                    idx
+                } else {
+                    // Suggest similar field names
+                    let candidates: Vec<&str> = struct_info.fields.iter()
+                        .map(|(name, _)| name.as_str())
+                        .collect();
+
+                    let suggestions = crate::suggest_similar(&field.node, &candidates, 3);
+                    let suggestion_text = crate::format_did_you_mean(&suggestions);
+
+                    return Err(CodegenError::UndefinedVar(format!("field {}{}", field.node, suggestion_text)));
+                };
 
                 let struct_llvm = self.type_to_llvm(&obj_type);
                 let (_, field_ty) = &struct_info.fields[field_idx];
@@ -265,7 +314,11 @@ impl CodeGenerator {
                 Err(CodegenError::UndefinedVar(format!("struct {} not found", struct_name)))
             }
         } else {
-            Err(CodegenError::TypeError("Cannot access field of non-struct type".to_string()))
+            let type_name = format!("{:?}", obj_type);
+            Err(CodegenError::TypeError(format!(
+                "Cannot access field of non-struct type (found {})",
+                type_name
+            )))
         }
     }
 

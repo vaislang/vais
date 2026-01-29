@@ -442,17 +442,35 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     fn generate_var(&mut self, name: &str) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let (ptr, var_type) = self
-            .locals
-            .get(name)
-            .ok_or_else(|| CodegenError::UndefinedVar(name.to_string()))?;
+        let result = self.locals.get(name);
 
-        let value = self.builder.build_load(
-            *var_type,
-            *ptr,
-            name,
-        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        Ok(value)
+        if let Some((ptr, var_type)) = result {
+            let value = self.builder.build_load(
+                *var_type,
+                *ptr,
+                name,
+            ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(value)
+        } else {
+            // Collect all available symbols for suggestions
+            let mut candidates: Vec<&str> = Vec::new();
+
+            // Add local variables
+            for var_name in self.locals.keys() {
+                candidates.push(var_name.as_str());
+            }
+
+            // Add function names
+            for func_name in self.functions.keys() {
+                candidates.push(func_name.as_str());
+            }
+
+            // Get suggestions
+            let suggestions = crate::suggest_similar(name, &candidates, 3);
+            let suggestion_text = crate::format_did_you_mean(&suggestions);
+
+            Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
+        }
     }
 
     fn generate_binary(
@@ -586,8 +604,34 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let fn_value = self
             .functions
             .get(&fn_name)
-            .or_else(|| self.module.get_function(&fn_name))
-            .ok_or_else(|| CodegenError::UndefinedFunction(fn_name.clone()))?;
+            .or_else(|| self.module.get_function(&fn_name));
+
+        let fn_value = if let Some(func) = fn_value {
+            func
+        } else {
+            // Collect all available function names for suggestions
+            let mut candidates: Vec<&str> = Vec::new();
+
+            // Add registered functions
+            for func_name in self.functions.keys() {
+                candidates.push(func_name.as_str());
+            }
+
+            // Add module functions
+            let mut current_func = self.module.get_first_function();
+            while let Some(func) = current_func {
+                if let Some(name) = func.get_name().to_str().ok() {
+                    candidates.push(name);
+                }
+                current_func = func.get_next_function();
+            }
+
+            // Get suggestions
+            let suggestions = crate::suggest_similar(&fn_name, &candidates, 3);
+            let suggestion_text = crate::format_did_you_mean(&suggestions);
+
+            return Err(CodegenError::UndefinedFunction(format!("{}{}", fn_name, suggestion_text)));
+        };
 
         // Generate arguments
         let arg_values: Vec<BasicMetadataValueEnum> = args

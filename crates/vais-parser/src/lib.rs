@@ -185,6 +185,13 @@ impl Parser {
                     Token::If | Token::Loop | Token::Match => {
                         break;
                     }
+                    // Item-level keywords - if we hit these, we've gone too far
+                    // (likely missing a closing brace in the function body)
+                    Token::Function | Token::Struct | Token::Enum | Token::Union |
+                    Token::Use | Token::Trait | Token::Impl |
+                    Token::Macro | Token::Pub | Token::Async | Token::Extern => {
+                        break;
+                    }
                     _ => {
                         // Check for let statement (ident followed by := or :)
                         if let Token::Ident(_) = &tok.token {
@@ -529,9 +536,10 @@ impl Parser {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
+        let lparen_span = self.current_span();
         self.expect(&Token::LParen)?;
         let params = self.parse_params()?;
-        self.expect(&Token::RParen)?;
+        self.expect_closing(&Token::RParen, lparen_span)?;
 
         let ret_type = if self.check(&Token::Arrow) {
             self.advance();
@@ -544,9 +552,10 @@ impl Parser {
             self.advance();
             FunctionBody::Expr(Box::new(self.parse_expr()?))
         } else if self.check(&Token::LBrace) {
+            let lbrace_span = self.current_span();
             self.advance();
             let stmts = self.parse_block_contents()?;
-            self.expect(&Token::RBrace)?;
+            self.expect_closing(&Token::RBrace, lbrace_span)?;
             FunctionBody::Block(stmts)
         } else {
             return Err(ParseError::UnexpectedToken {
@@ -574,6 +583,7 @@ impl Parser {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
+        let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
         let mut fields = Vec::new();
         let mut methods = Vec::new();
@@ -599,7 +609,7 @@ impl Parser {
             }
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_closing(&Token::RBrace, lbrace_span)?;
 
         Ok(Struct {
             name,
@@ -616,6 +626,7 @@ impl Parser {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
+        let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
         let mut variants = Vec::new();
 
@@ -626,7 +637,7 @@ impl Parser {
             }
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_closing(&Token::RBrace, lbrace_span)?;
 
         Ok(Enum {
             name,
@@ -641,6 +652,7 @@ impl Parser {
         let name = self.parse_ident()?;
 
         let fields = if self.check(&Token::LParen) {
+            let lparen_span = self.current_span();
             self.advance();
             let mut types = Vec::new();
             while !self.check(&Token::RParen) && !self.is_at_end() {
@@ -649,9 +661,10 @@ impl Parser {
                     self.expect(&Token::Comma)?;
                 }
             }
-            self.expect(&Token::RParen)?;
+            self.expect_closing(&Token::RParen, lparen_span)?;
             VariantFields::Tuple(types)
         } else if self.check(&Token::LBrace) {
+            let lbrace_span = self.current_span();
             self.advance();
             let mut fields = Vec::new();
             while !self.check(&Token::RBrace) && !self.is_at_end() {
@@ -660,7 +673,7 @@ impl Parser {
                     self.expect(&Token::Comma)?;
                 }
             }
-            self.expect(&Token::RBrace)?;
+            self.expect_closing(&Token::RBrace, lbrace_span)?;
             VariantFields::Struct(fields)
         } else {
             VariantFields::Unit
@@ -674,6 +687,7 @@ impl Parser {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
+        let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
         let mut fields = Vec::new();
 
@@ -684,7 +698,7 @@ impl Parser {
             }
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_closing(&Token::RBrace, lbrace_span)?;
 
         Ok(Union {
             name,
@@ -838,6 +852,7 @@ impl Parser {
             Vec::new()
         };
 
+        let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
 
         let mut methods = Vec::new();
@@ -853,7 +868,7 @@ impl Parser {
             }
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_closing(&Token::RBrace, lbrace_span)?;
 
         Ok(Trait {
             name,
@@ -905,9 +920,10 @@ impl Parser {
         self.expect(&Token::Function)?;
         let name = self.parse_ident()?;
 
+        let lparen_span = self.current_span();
         self.expect(&Token::LParen)?;
         let params = self.parse_params()?;
-        self.expect(&Token::RParen)?;
+        self.expect_closing(&Token::RParen, lparen_span)?;
 
         let ret_type = if self.check(&Token::Arrow) {
             self.advance();
@@ -921,7 +937,11 @@ impl Parser {
             self.advance();
             Some(FunctionBody::Expr(Box::new(self.parse_expr()?)))
         } else if self.check(&Token::LBrace) {
-            Some(FunctionBody::Block(self.parse_block_contents()?))
+            let lbrace_span = self.current_span();
+            self.advance();
+            let stmts = self.parse_block_contents()?;
+            self.expect_closing(&Token::RBrace, lbrace_span)?;
+            Some(FunctionBody::Block(stmts))
         } else {
             None
         };
@@ -946,6 +966,7 @@ impl Parser {
         // Expect `!` after macro name
         self.expect(&Token::Bang)?;
 
+        let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
 
         let mut rules = Vec::new();
@@ -953,7 +974,7 @@ impl Parser {
             rules.push(self.parse_macro_rule()?);
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_closing(&Token::RBrace, lbrace_span)?;
 
         Ok(MacroDef { name, rules, is_pub })
     }
@@ -1358,6 +1379,7 @@ impl Parser {
             None
         };
 
+        let lbrace_span = self.current_span();
         self.expect(&Token::LBrace)?;
 
         let mut methods = Vec::new();
@@ -1378,7 +1400,7 @@ impl Parser {
             }
         }
 
-        self.expect(&Token::RBrace)?;
+        self.expect_closing(&Token::RBrace, lbrace_span)?;
 
         Ok(Impl {
             target_type,
@@ -1403,7 +1425,8 @@ impl Parser {
             return Ok(Vec::new());
         }
 
-        self.advance();
+        let open_span = self.current_span();
+        self.advance(); // consume '<'
         let mut generics = Vec::new();
 
         while !self.check(&Token::Gt) && !self.is_at_end() {
@@ -1417,7 +1440,17 @@ impl Parser {
                     // Parse optional lifetime bounds: `: 'b + 'c`
                     let bounds = if self.check(&Token::Colon) {
                         self.advance();
-                        self.parse_lifetime_bounds()?
+                        match self.parse_lifetime_bounds() {
+                            Ok(b) => b,
+                            Err(e) => {
+                                if self.recovery_mode {
+                                    self.record_error(e);
+                                    self.skip_to_generic_separator();
+                                    continue;
+                                }
+                                return Err(e);
+                            }
+                        }
                     } else {
                         Vec::new()
                     };
@@ -1428,40 +1461,121 @@ impl Parser {
                     ));
 
                     if !self.check(&Token::Gt) {
-                        self.expect(&Token::Comma)?;
+                        if let Err(e) = self.expect(&Token::Comma) {
+                            if self.recovery_mode {
+                                self.record_error(e);
+                                self.skip_to_generic_separator();
+                            } else {
+                                return Err(e);
+                            }
+                        }
                     }
                     continue;
+                }
+            }
+
+            // Check if we've hit a delimiter that indicates we've escaped the generic list
+            // Note: We can't check for single-letter keywords (F, S, E, etc.) because they
+            // can be used as generic parameter names (e.g., `E Result<T,E>`).
+            // We only check for delimiters that cannot appear in a generic parameter list.
+            if let Some(tok) = self.peek() {
+                match &tok.token {
+                    Token::LParen | Token::LBrace => {
+                        // We've hit a delimiter - likely missing `>`
+                        break;
+                    }
+                    _ => {}
                 }
             }
 
             // Check for const generic parameter: `const N: u64`
             if self.check(&Token::Const) {
                 self.advance();
-                let name = self.parse_ident()?;
-                self.expect(&Token::Colon)?;
-                let ty = self.parse_type()?;
-                generics.push(GenericParam::new_const(name, ty));
+                match self.parse_const_generic_param() {
+                    Ok(param) => generics.push(param),
+                    Err(e) => {
+                        if self.recovery_mode {
+                            self.record_error(e);
+                            self.skip_to_generic_separator();
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                }
             } else {
-                let name = self.parse_ident()?;
-
-                // Parse optional trait bounds: `: Trait1 + Trait2`
-                let bounds = if self.check(&Token::Colon) {
-                    self.advance();
-                    self.parse_trait_bounds()?
-                } else {
-                    Vec::new()
-                };
-
-                generics.push(GenericParam::new_type(name, bounds));
+                match self.parse_type_generic_param() {
+                    Ok(param) => generics.push(param),
+                    Err(e) => {
+                        if self.recovery_mode {
+                            self.record_error(e);
+                            self.skip_to_generic_separator();
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                }
             }
 
             if !self.check(&Token::Gt) {
-                self.expect(&Token::Comma)?;
+                if let Err(e) = self.expect(&Token::Comma) {
+                    if self.recovery_mode {
+                        self.record_error(e);
+                        self.skip_to_generic_separator();
+                    } else {
+                        return Err(e);
+                    }
+                }
             }
         }
 
-        self.expect(&Token::Gt)?;
+        self.expect_closing(&Token::Gt, open_span)?;
         Ok(generics)
+    }
+
+    /// Helper: parse a single const generic parameter (after `const` is consumed)
+    fn parse_const_generic_param(&mut self) -> ParseResult<GenericParam> {
+        let name = self.parse_ident()?;
+        self.expect(&Token::Colon)?;
+        let ty = self.parse_type()?;
+        Ok(GenericParam::new_const(name, ty))
+    }
+
+    /// Helper: parse a single type generic parameter
+    fn parse_type_generic_param(&mut self) -> ParseResult<GenericParam> {
+        let name = self.parse_ident()?;
+        let bounds = if self.check(&Token::Colon) {
+            self.advance();
+            self.parse_trait_bounds()?
+        } else {
+            Vec::new()
+        };
+        Ok(GenericParam::new_type(name, bounds))
+    }
+
+    /// Skip tokens until we find `,` or `>` in a generic parameter list.
+    fn skip_to_generic_separator(&mut self) {
+        let mut angle_depth = 0i32;
+        while !self.is_at_end() {
+            if let Some(tok) = self.peek() {
+                match &tok.token {
+                    Token::Comma if angle_depth == 0 => {
+                        self.advance(); // consume the comma
+                        return;
+                    }
+                    Token::Gt if angle_depth == 0 => {
+                        return; // Don't consume - let parse_generics handle it
+                    }
+                    Token::Lt => angle_depth += 1,
+                    Token::Gt => angle_depth -= 1,
+                    // Stop at delimiters that indicate we've escaped the generic list
+                    Token::LParen | Token::LBrace | Token::Function | Token::Struct | Token::Enum => {
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            self.advance();
+        }
     }
 
     /// Parse lifetime bounds: `'a + 'b + 'c`
@@ -1627,6 +1741,7 @@ impl Parser {
         let start = self.current_span().start;
 
         let ty = if self.check(&Token::LParen) {
+            let lparen_span = self.current_span();
             self.advance();
             if self.check(&Token::RParen) {
                 self.advance();
@@ -1637,7 +1752,7 @@ impl Parser {
                     self.advance();
                     types.push(self.parse_type()?);
                 }
-                self.expect(&Token::RParen)?;
+                self.expect_closing(&Token::RParen, lparen_span)?;
 
                 if self.check(&Token::Arrow) {
                     self.advance();
@@ -1653,25 +1768,26 @@ impl Parser {
                 }
             }
         } else if self.check(&Token::LBracket) {
+            let lbracket_span = self.current_span();
             self.advance();
             let key_or_elem = self.parse_type()?;
 
             if self.check(&Token::Colon) {
                 self.advance();
                 let value = self.parse_type()?;
-                self.expect(&Token::RBracket)?;
+                self.expect_closing(&Token::RBracket, lbracket_span.clone())?;
                 Type::Map(Box::new(key_or_elem), Box::new(value))
             } else if self.check(&Token::Semi) {
                 // [T; N] - const-sized array
                 self.advance();
                 let size = self.parse_const_expr()?;
-                self.expect(&Token::RBracket)?;
+                self.expect_closing(&Token::RBracket, lbracket_span.clone())?;
                 Type::ConstArray {
                     element: Box::new(key_or_elem),
                     size,
                 }
             } else {
-                self.expect(&Token::RBracket)?;
+                self.expect_closing(&Token::RBracket, lbracket_span)?;
                 Type::Array(Box::new(key_or_elem))
             }
         } else if self.check(&Token::Star) {
@@ -2048,6 +2164,98 @@ impl Parser {
                 span: self.current_span(),
                 expected: Self::token_to_friendly_name(expected),
             })
+        }
+    }
+
+    /// Expect a closing delimiter with enhanced error recovery.
+    /// When the expected closer is not found, records an error with the opening
+    /// delimiter's location and attempts to synchronize.
+    fn expect_closing(&mut self, expected: &Token, open_span: std::ops::Range<usize>) -> ParseResult<SpannedToken> {
+        if self.check(expected) {
+            return self.advance().ok_or_else(|| ParseError::UnexpectedEof {
+                span: self.current_span(),
+            });
+        }
+
+        // Create a descriptive error message
+        let closer_name = Self::token_to_friendly_name(expected);
+        let opener_name = match expected {
+            Token::RParen => "'('",
+            Token::RBrace => "'{'",
+            Token::RBracket => "'['",
+            Token::Gt => "'<'",
+            _ => "opening delimiter",
+        };
+
+        let found = self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into()));
+        let span = self.current_span();
+
+        let err = ParseError::UnexpectedToken {
+            found,
+            span: span.clone(),
+            expected: format!("{} to match {} at position {}", closer_name, opener_name, open_span.start),
+        };
+
+        if self.recovery_mode {
+            self.record_error(err);
+            // Try to skip to the closing delimiter or a sync point
+            self.skip_to_closing(expected);
+            // Return a synthetic token
+            Ok(SpannedToken {
+                token: expected.clone(),
+                span,
+            })
+        } else {
+            Err(err)
+        }
+    }
+
+    /// Skip tokens until we find the expected closing delimiter or a sync point.
+    fn skip_to_closing(&mut self, expected: &Token) {
+        let mut depth = 0i32;
+        let opener = match expected {
+            Token::RParen => Some(Token::LParen),
+            Token::RBrace => Some(Token::LBrace),
+            Token::RBracket => Some(Token::LBracket),
+            Token::Gt => Some(Token::Lt),
+            _ => None,
+        };
+
+        while !self.is_at_end() {
+            if let Some(tok) = self.peek() {
+                // Found matching closer at depth 0
+                if depth == 0 && &tok.token == expected {
+                    self.advance(); // consume the closer
+                    return;
+                }
+
+                // Track nesting
+                if let Some(ref open) = opener {
+                    if &tok.token == open {
+                        depth += 1;
+                    } else if &tok.token == expected {
+                        depth -= 1;
+                        if depth < 0 {
+                            self.advance();
+                            return;
+                        }
+                    }
+                }
+
+                // Stop at statement/item boundaries if we can't find the closer
+                match &tok.token {
+                    Token::Semi => {
+                        return; // Don't consume - let the caller handle it
+                    }
+                    Token::Function | Token::Struct | Token::Enum | Token::Trait | Token::Impl
+                        if depth == 0 =>
+                    {
+                        return; // At a top-level item - stop
+                    }
+                    _ => {}
+                }
+            }
+            self.advance();
         }
     }
 
@@ -3608,5 +3816,87 @@ W MyTrait{F method()->i64}
         assert!(valid_functions >= 2, "Should have at least 2 valid functions");
         assert!(valid_enums >= 1, "Should have at least 1 valid enum");
         assert!(valid_traits >= 1, "Should have at least 1 valid trait");
+    }
+
+    #[test]
+    fn test_error_recovery_missing_closing_paren() {
+        let source = r#"
+F broken(x: i64, y: i64 -> i64 = x + y
+F good() -> i64 = 42
+"#;
+        let (module, errors) = parse_with_recovery(source);
+        assert!(!errors.is_empty(), "Expected error for missing ')'");
+
+        // Should still parse the good function
+        let has_good = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Function(f) if f.name.node == "good")
+        });
+        assert!(has_good, "Should have parsed 'good' function after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_missing_closing_brace() {
+        let source = r#"
+F broken() -> i64 {
+    x := 1
+    y := 2
+
+F good() -> i64 = 42
+"#;
+        let (module, errors) = parse_with_recovery(source);
+        assert!(!errors.is_empty(), "Expected error for missing '}}'");
+
+        let has_good = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Function(f) if f.name.node == "good")
+        });
+        assert!(has_good, "Should have parsed 'good' function after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_generic_missing_closing_angle() {
+        let source = r#"
+F broken<T(x: T) -> T = x
+F good() -> i64 = 42
+"#;
+        let (module, errors) = parse_with_recovery(source);
+        assert!(!errors.is_empty(), "Expected error for missing '>'");
+
+        let has_good = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Function(f) if f.name.node == "good")
+        });
+        assert!(has_good, "Should have parsed 'good' function after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_generic_invalid_param() {
+        let source = r#"
+F broken<T, 123, U>(x: T) -> T = x
+F good() -> i64 = 42
+"#;
+        let (module, errors) = parse_with_recovery(source);
+        assert!(!errors.is_empty(), "Expected error for invalid generic param");
+
+        let has_good = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Function(f) if f.name.node == "good")
+        });
+        assert!(has_good, "Should have parsed 'good' function after recovery");
+    }
+
+    #[test]
+    fn test_error_recovery_mismatched_brackets() {
+        let source = r#"
+F broken() -> i64 {
+    x := [1, 2, 3}
+    x
+}
+F good() -> i64 = 42
+"#;
+        let (module, errors) = parse_with_recovery(source);
+        assert!(!errors.is_empty(), "Expected error for mismatched brackets");
+
+        let has_good = module.items.iter().any(|item| {
+            matches!(&item.node, Item::Function(f) if f.name.node == "good")
+        });
+        assert!(has_good, "Should have parsed 'good' function after recovery");
     }
 }

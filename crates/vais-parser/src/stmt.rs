@@ -18,6 +18,20 @@ impl Parser {
         let mut stmts = Vec::new();
 
         while !self.check(&Token::RBrace) && !self.is_at_end() {
+            // Check if we've hit an item-level keyword - this means we're likely
+            // missing a closing brace and have escaped the function body
+            if let Some(tok) = self.peek() {
+                match &tok.token {
+                    Token::Function | Token::Struct | Token::Enum | Token::Union |
+                    Token::Use | Token::Trait | Token::Impl |
+                    Token::Macro | Token::Pub | Token::Async | Token::Extern => {
+                        // We've hit a top-level item keyword - stop parsing block contents
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+
             match self.parse_stmt() {
                 Ok(stmt) => stmts.push(stmt),
                 Err(e) => {

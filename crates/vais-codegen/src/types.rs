@@ -195,8 +195,15 @@ impl CodeGenerator {
             return cached.clone();
         }
 
-        // Convert type to LLVM representation
-        let result = self.type_to_llvm_impl(ty);
+        // Convert type to LLVM representation with recursion tracking
+        let result = match self.type_to_llvm_impl(ty) {
+            Ok(r) => r,
+            Err(e) => {
+                // On recursion error, print a warning and return a fallback type
+                eprintln!("Warning: {}", e);
+                "i64".to_string()
+            }
+        };
 
         // Cache the result using interior mutability
         self.type_to_llvm_cache.borrow_mut().insert(cache_key, result.clone());
@@ -204,8 +211,20 @@ impl CodeGenerator {
     }
 
     /// Internal implementation of type_to_llvm without caching
-    fn type_to_llvm_impl(&self, ty: &ResolvedType) -> String {
-        match ty {
+    fn type_to_llvm_impl(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
+        // Track recursion depth
+        self.enter_type_recursion("type_to_llvm")?;
+
+        let result = self.type_to_llvm_impl_inner(ty);
+
+        // Always exit recursion, even on error
+        self.exit_type_recursion();
+        result
+    }
+
+    /// Inner implementation of type_to_llvm (actual conversion logic)
+    fn type_to_llvm_impl_inner(&self, ty: &ResolvedType) -> crate::CodegenResult<String> {
+        Ok(match ty {
             ResolvedType::I8 => "i8".to_string(),
             ResolvedType::I16 => "i16".to_string(),
             ResolvedType::I32 => "i32".to_string(),
@@ -221,10 +240,10 @@ impl CodeGenerator {
             ResolvedType::Bool => "i1".to_string(),
             ResolvedType::Str => "i8*".to_string(),
             ResolvedType::Unit => "void".to_string(),
-            ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
+            ResolvedType::Array(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
             ResolvedType::ConstArray { element, size } => {
                 // Const-sized array: [N x T]
-                let elem_ty = self.type_to_llvm_impl(element);
+                let elem_ty = self.type_to_llvm_impl(element)?;
                 match size.try_evaluate() {
                     Some(n) => format!("[{} x {}]", n, elem_ty),
                     None => {
@@ -233,9 +252,9 @@ impl CodeGenerator {
                     }
                 }
             }
-            ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
-            ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
-            ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm_impl(inner)),
+            ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
+            ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
+            ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
             ResolvedType::Range(_inner) => {
                 // Range is represented as a struct with start and end fields
                 // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
@@ -249,23 +268,23 @@ impl CodeGenerator {
                     // In Vais, all values are i64-sized, so struct/enum/union layout is the same
                     // regardless of type arguments. Use base name for enums, structs, and unions.
                     if self.enums.contains_key(name) || self.structs.contains_key(name) || self.unions.contains_key(name) {
-                        return format!("%{}", name);
-                    }
-
-                    // Generic struct with type arguments (not in our structs map - external?)
-                    // Check if all generics are concrete (not Generic or Var types)
-                    let all_concrete = generics.iter().all(|g| {
-                        !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))
-                    });
-
-                    if all_concrete {
-                        // Use mangled name for concrete instantiations
-                        let mangled = self.mangle_struct_name(name, generics);
-                        format!("%{}", mangled)
-                    } else {
-                        // For generic types with unresolved parameters, use base struct name
-                        // In Vais, all values are i64-sized, so struct layout is the same
                         format!("%{}", name)
+                    } else {
+                        // Generic struct with type arguments (not in our structs map - external?)
+                        // Check if all generics are concrete (not Generic or Var types)
+                        let all_concrete = generics.iter().all(|g| {
+                            !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))
+                        });
+
+                        if all_concrete {
+                            // Use mangled name for concrete instantiations
+                            let mangled = self.mangle_struct_name(name, generics);
+                            format!("%{}", mangled)
+                        } else {
+                            // For generic types with unresolved parameters, use base struct name
+                            // In Vais, all values are i64-sized, so struct layout is the same
+                            format!("%{}", name)
+                        }
                     }
                 } else {
                     // Non-generic struct/enum/union - return type without pointer
@@ -275,7 +294,7 @@ impl CodeGenerator {
             ResolvedType::Generic(param) => {
                 // Check if we have a substitution for this generic parameter
                 if let Some(concrete) = self.get_generic_substitution(param) {
-                    self.type_to_llvm_impl(&concrete)
+                    self.type_to_llvm_impl(&concrete)?
                 } else {
                     // Fallback to i64 for unresolved generics
                     "i64".to_string()
@@ -289,7 +308,7 @@ impl CodeGenerator {
             }
             ResolvedType::Vector { element, lanes } => {
                 // SIMD vector type: <lanes x element_type>
-                let elem_ty = self.type_to_llvm_impl(element);
+                let elem_ty = self.type_to_llvm_impl(element)?;
                 format!("<{} x {}>", lanes, elem_ty)
             }
             ResolvedType::DynTrait { .. } => {
@@ -300,29 +319,30 @@ impl CodeGenerator {
             }
             ResolvedType::FnPtr { params, ret, is_vararg, .. } => {
                 // Function pointer type
-                let param_types: Vec<String> = params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
-                let ret_type = self.type_to_llvm_impl(ret);
+                let param_types: Result<Vec<String>, _> = params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
+                let param_types = param_types?;
+                let ret_type = self.type_to_llvm_impl(ret)?;
                 let vararg_suffix = if *is_vararg { ", ..." } else { "" };
                 format!("{}({}{})*", ret_type, param_types.join(", "), vararg_suffix)
             }
             ResolvedType::Linear(inner) | ResolvedType::Affine(inner) => {
                 // Linear and Affine types are transparent wrappers
                 // They only affect type checking, not runtime representation
-                self.type_to_llvm_impl(inner)
+                self.type_to_llvm_impl(inner)?
             }
             ResolvedType::Dependent { base, .. } => {
                 // Dependent types (refinement types) are transparent at runtime
                 // The predicate is checked at compile time and potentially at runtime
                 // via assertions, but the underlying representation is the base type
-                self.type_to_llvm_impl(base)
+                self.type_to_llvm_impl(base)?
             }
             ResolvedType::RefLifetime { inner, .. } => {
                 // Lifetime is erased at runtime, just generate pointer to inner type
-                format!("{}*", self.type_to_llvm_impl(inner))
+                format!("{}*", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::RefMutLifetime { inner, .. } => {
                 // Lifetime is erased at runtime, just generate pointer to inner type
-                format!("{}*", self.type_to_llvm_impl(inner))
+                format!("{}*", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::Lifetime(_) => {
                 // Lifetimes don't have a runtime representation
@@ -335,10 +355,10 @@ impl CodeGenerator {
                 // - value: T (cached value)
                 // - thunk: closure pointer (function to compute value)
                 // For simplicity, we use a pointer to struct
-                format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner))
+                format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner)?)
             }
             _ => "i64".to_string(), // Default fallback
-        }
+        })
     }
 
     /// Get bit width for integer types
@@ -366,6 +386,22 @@ impl CodeGenerator {
 
     /// Convert AST Type to ResolvedType
     pub(crate) fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
+        // Track recursion depth
+        if self.enter_type_recursion("ast_type_to_resolved").is_err() {
+            // On recursion limit, return Unknown type as fallback
+            eprintln!("Warning: Type recursion limit exceeded in ast_type_to_resolved");
+            return ResolvedType::Unknown;
+        }
+
+        let result = self.ast_type_to_resolved_impl(ty);
+
+        // Always exit recursion
+        self.exit_type_recursion();
+        result
+    }
+
+    /// Internal implementation of ast_type_to_resolved
+    fn ast_type_to_resolved_impl(&self, ty: &Type) -> ResolvedType {
         match ty {
             Type::Named { name, generics } => match name.as_str() {
                 "i8" => ResolvedType::I8,
@@ -401,33 +437,33 @@ impl CodeGenerator {
                             name: name.clone(),
                             generics: generics
                                 .iter()
-                                .map(|g| self.ast_type_to_resolved(&g.node))
+                                .map(|g| self.ast_type_to_resolved_impl(&g.node))
                                 .collect(),
                         }
                     }
                 }
             },
             Type::Array(inner) => {
-                ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
+                ResolvedType::Array(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
             Type::Pointer(inner) => {
-                ResolvedType::Pointer(Box::new(self.ast_type_to_resolved(&inner.node)))
+                ResolvedType::Pointer(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
-            Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved_impl(&inner.node))),
             Type::RefMut(inner) => {
-                ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+                ResolvedType::RefMut(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
             Type::RefLifetime { lifetime, inner } => {
                 // Lifetime info is preserved but runtime representation is same as regular ref
                 ResolvedType::RefLifetime {
                     lifetime: lifetime.clone(),
-                    inner: Box::new(self.ast_type_to_resolved(&inner.node)),
+                    inner: Box::new(self.ast_type_to_resolved_impl(&inner.node)),
                 }
             }
             Type::RefMutLifetime { lifetime, inner } => {
                 ResolvedType::RefMutLifetime {
                     lifetime: lifetime.clone(),
-                    inner: Box::new(self.ast_type_to_resolved(&inner.node)),
+                    inner: Box::new(self.ast_type_to_resolved_impl(&inner.node)),
                 }
             }
             Type::Unit => ResolvedType::Unit,

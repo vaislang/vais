@@ -1,14 +1,13 @@
 {
-  "phase": 5,
-  "request": "Phase 12 P0 전체 자동 진행",
+  "phase": 4,
+  "request": "Phase 12 P1 전체 자동 진행",
   "tasks": [
-    { "id": 1, "name": "dead_code 정리 (40+ allow 해결)", "status": "completed", "model": "Sonnet" },
-    { "id": 2, "name": "clippy 경고 해결", "status": "completed", "model": "Sonnet" },
-    { "id": 3, "name": "FFI 안전성 경고 수정", "status": "completed", "model": "Sonnet" },
-    { "id": 4, "name": "inkwell for loop 패턴 바인딩 구현", "status": "completed", "model": "Sonnet" },
-    { "id": 5, "name": "auto_vectorize placeholder 완성", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "LSP document formatting 통합", "status": "completed", "model": "Sonnet" }
+    { "id": 1, "name": "에러 복구 강화 (괄호/제네릭 불일치)", "status": "completed", "model": "Sonnet" },
+    { "id": 2, "name": "에러 메시지 품질 향상 (유사 심볼 제안)", "status": "in_progress", "model": "Sonnet" },
+    { "id": 3, "name": "재귀 깊이 제한 (무한 재귀 방지)", "status": "completed", "model": "Sonnet" },
+    { "id": 4, "name": "컴파일 시간 벤치마크 대시보드", "status": "pending", "model": "Sonnet" },
+    { "id": 5, "name": "대규모 프로젝트 스케일 테스트", "status": "pending", "model": "Sonnet" },
+    { "id": 6, "name": "LLVM 빌드 최적화 (ThinLTO 기본화)", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": null,
-  "lastCompleted": "Phase 12 P0 전체 완료"
+  "currentTask": 2
 }

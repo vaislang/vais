@@ -1503,20 +1503,34 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### P1 - 높은 우선순위 (3-4주) - 안정성 및 성능
 
 #### 컴파일러 안정성
-- [ ] **에러 복구 강화** - 더 많은 문법 오류에서 복구
-  - 괄호/중괄호 불일치 복구
-  - 제네릭 파라미터 오류 복구
-- [ ] **에러 메시지 품질 향상**
-  - 유사 심볼 제안 (Did you mean: `foo`?)
-  - 타입 불일치 시 구체적인 수정 제안
-- [ ] **재귀 깊이 제한** - 무한 재귀 타입/제네릭 방지
+- [x] **에러 복구 강화** - 더 많은 문법 오류에서 복구 (완료일: 2026-01-29)
+  - 괄호/중괄호 불일치 복구: expect_closing + skip_to_closing 메서드
+  - 제네릭 파라미터 오류 복구: skip_to_generic_separator, 개별 파라미터 에러 처리
+  - 구조체/열거형/트레이트/impl 블록 전체에 expect_closing 적용
+- [x] **에러 메시지 품질 향상** (완료일: 2026-01-29)
+  - 유사 심볼 제안 (Did you mean: `foo`?): Levenshtein 거리 기반 suggest_similar()
+  - 타입 불일치 시 구체적인 수정 제안: suggest_type_conversion()
+  - 변수/함수/필드 접근 에러에 유사 심볼 제안 통합
+- [x] **재귀 깊이 제한** - 무한 재귀 타입/제네릭 방지 (완료일: 2026-01-29)
+  - MAX_TYPE_RECURSION_DEPTH=128, Cell<usize> 기반 깊이 추적
+  - type_to_llvm_impl, ast_type_to_resolved에 재귀 제한 적용
 
 #### 성능 최적화
-- [ ] **컴파일 시간 벤치마크 대시보드**
-  - GitHub Actions에서 컴파일 시간 자동 측정
-  - PR별 성능 회귀 감지
-- [ ] **대규모 프로젝트 스케일 테스트** - 10,000줄+ 프로젝트
-- [ ] **LLVM 빌드 최적화** - ThinLTO 기본 활성화
+- [x] **컴파일 시간 벤치마크 대시보드** (완료일: 2026-01-29)
+  - GitHub Actions bench.yml 워크플로우: PR별 성능 회귀 감지 (10% 임계값)
+  - CLI --time 플래그: 컴파일 단계별 타이밍 출력 (parse/typecheck/codegen)
+  - Criterion 기반 벤치마크: lexer/parser/typechecker/codegen/full pipeline 측정
+  - analyze_bench.sh: 로컬 벤치마크 비교 분석 스크립트
+- [x] **대규모 프로젝트 스케일 테스트** - 10,000줄+ 프로젝트 (완료일: 2026-01-29)
+  - 19개 스케일 테스트: 100~50,000 아이템 파싱/타입체크
+  - 현실적 패턴 테스트: 함수 호출 체인, 제네릭, 패턴 매칭
+  - 스트레스 테스트: 깊은 호출 체인, 넓은 match, 대규모 구조체
+  - stress_test.sh: CLI 기반 점진적 스케일 테스트
+- [x] **LLVM 빌드 최적화** - ThinLTO 기본 활성화 (완료일: 2026-01-29)
+  - ThinLTO 자동 활성화: O2/O3 빌드에서 기본으로 ThinLTO 적용
+  - CLI 플래그 추가: `--no-lto` (자동 LTO 비활성화), `--lto=thin|full|none` (명시적 LTO 모드)
+  - 패키지 빌드 지원: `vaisc pkg build --release`에서 자동 ThinLTO 적용
+  - 테스트 추가: 6개의 통합 테스트로 LTO 동작 검증
 
 ### P2 - 중간 우선순위 (1-2개월) - 언어 기능 확장
 

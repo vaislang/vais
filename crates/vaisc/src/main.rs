@@ -63,6 +63,10 @@ struct Cli {
     #[arg(short, long)]
     verbose: bool,
 
+    /// Show compilation phase timings
+    #[arg(long)]
+    time: bool,
+
     /// Set the locale for error messages (en, ko, ja)
     #[arg(long, value_name = "LOCALE", global = true)]
     locale: Option<String>,
@@ -126,9 +130,14 @@ enum Commands {
         gpu: Option<String>,
 
         /// Enable Link-Time Optimization
-        /// Values: thin, full (default: none)
+        /// Values: thin, full, none
+        /// Default: thin for O2/O3, none for O0/O1
         #[arg(long, value_name = "MODE")]
         lto: Option<String>,
+
+        /// Disable automatic Link-Time Optimization (ThinLTO is enabled by default for O2/O3)
+        #[arg(long)]
+        no_lto: bool,
 
         /// Generate profile instrumentation for PGO
         /// Creates instrumented binary that writes profiling data to the specified directory
@@ -346,7 +355,7 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, profile_generate, profile_use }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(&input, output, gpu_target_str, cli.verbose)
@@ -356,10 +365,21 @@ fn main() {
                 .and_then(|s| TargetTriple::from_str(s))
                 .unwrap_or(TargetTriple::Native);
 
-            // Parse LTO mode
-            let lto_mode = lto.as_deref()
-                .map(vais_codegen::optimize::LtoMode::from_str)
-                .unwrap_or(vais_codegen::optimize::LtoMode::None);
+            // Parse LTO mode with automatic ThinLTO for O2/O3
+            let lto_mode = if no_lto {
+                // Explicitly disable LTO
+                vais_codegen::optimize::LtoMode::None
+            } else if let Some(mode_str) = lto.as_deref() {
+                // Explicitly specified LTO mode
+                vais_codegen::optimize::LtoMode::from_str(mode_str)
+            } else {
+                // Auto-enable ThinLTO for O2/O3 (release builds)
+                if opt_level >= 2 {
+                    vais_codegen::optimize::LtoMode::Thin
+                } else {
+                    vais_codegen::optimize::LtoMode::None
+                }
+            };
 
             // Parse PGO mode (mutually exclusive: generate vs use)
             let pgo_mode = if let Some(dir) = profile_generate.as_deref() {
@@ -370,7 +390,7 @@ fn main() {
                 vais_codegen::optimize::PgoMode::None
             };
 
-            cmd_build(&input, output, emit_ir, opt_level, debug, cli.verbose, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode)
+            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode)
             }
         }
         Some(Commands::Run { input, args }) => {
@@ -402,13 +422,14 @@ fn main() {
         None => {
             // Direct file compilation
             if let Some(input) = cli.input {
-                cmd_build(
+                cmd_build_with_timing(
                     &input,
                     cli.output,
                     cli.emit_ir,
                     0,
                     false,
                     cli.verbose,
+                    cli.time,
                     &plugins,
                     TargetTriple::Native,
                     false,
@@ -490,6 +511,43 @@ fn cmd_build_gpu(
     }
 
     Ok(())
+}
+
+/// Wrapper around cmd_build that optionally prints timing information
+fn cmd_build_with_timing(
+    input: &PathBuf,
+    output: Option<PathBuf>,
+    emit_ir: bool,
+    opt_level: u8,
+    debug: bool,
+    verbose: bool,
+    time: bool,
+    plugins: &PluginRegistry,
+    target: TargetTriple,
+    force_rebuild: bool,
+    gc: bool,
+    gc_threshold: Option<usize>,
+    hot: bool,
+    lto_mode: vais_codegen::optimize::LtoMode,
+    pgo_mode: vais_codegen::optimize::PgoMode,
+) -> Result<(), String> {
+    use std::time::Instant;
+
+    let start = Instant::now();
+    let result = cmd_build(
+        input, output, emit_ir, opt_level, debug, verbose, plugins,
+        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode
+    );
+    let elapsed = start.elapsed();
+
+    if time {
+        println!("\n{} Total compilation time: {:.3}s",
+            "⏱".cyan().bold(),
+            elapsed.as_secs_f64()
+        );
+    }
+
+    result
 }
 
 fn cmd_build(
@@ -579,11 +637,14 @@ fn cmd_build(
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
     // Parse main file and resolve imports
+    let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let merged_ast = load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source)?;
+    let parse_time = parse_start.elapsed();
 
     if verbose {
         println!("  {} total items (including imports)", merged_ast.items.len());
+        println!("  {} Parse time: {:.3}s", "⏱".cyan(), parse_time.as_secs_f64());
     }
 
     // Run lint plugins
@@ -630,14 +691,17 @@ fn cmd_build(
     }
 
     // Type check
+    let typecheck_start = std::time::Instant::now();
     let mut checker = TypeChecker::new();
     if let Err(e) = checker.check_module(&final_ast) {
         // Format error with source context
         return Err(error_formatter::format_type_error(&e, &main_source, input));
     }
+    let typecheck_time = typecheck_start.elapsed();
 
     if verbose {
         println!("  {}", "Type check passed".green());
+        println!("  {} Type check time: {:.3}s", "⏱".cyan(), typecheck_time.as_secs_f64());
     }
 
     // Generate LLVM IR
@@ -679,8 +743,14 @@ fn cmd_build(
         }
     }
 
+    let codegen_start = std::time::Instant::now();
     let raw_ir = codegen.generate_module(&final_ast)
         .map_err(|e| format!("Codegen error: {}", e))?;
+    let codegen_time = codegen_start.elapsed();
+
+    if verbose {
+        println!("  {} Codegen time: {:.3}s", "⏱".cyan(), codegen_time.as_secs_f64());
+    }
 
     // Apply optimization passes before emitting IR
     // When debug is enabled, disable optimizations to preserve debuggability
@@ -708,7 +778,11 @@ fn cmd_build(
     };
 
     if verbose && opt_level > 0 && !debug {
-        println!("{} Applied Vais IR optimizations (O{})", "Optimizing".cyan().bold(), opt_level);
+        let mut opt_info = format!("Applied Vais IR optimizations (O{})", opt_level);
+        if lto_mode.is_enabled() {
+            opt_info.push_str(&format!(" + {:?}", lto_mode));
+        }
+        println!("{} {}", "Optimizing".cyan().bold(), opt_info);
     } else if verbose && debug && opt_level > 0 {
         println!("{} Optimizations disabled for debug build", "Note".yellow().bold());
     }
@@ -1433,6 +1507,13 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             let opt_level = if release { 2 } else { 0 };
             let output = pkg_dir.join("target").join(&manifest.package.name);
 
+            // Auto-enable ThinLTO for release builds
+            let lto_mode = if release {
+                vais_codegen::optimize::LtoMode::Thin
+            } else {
+                vais_codegen::optimize::LtoMode::None
+            };
+
             // Create target directory
             let target_dir = pkg_dir.join("target");
             fs::create_dir_all(&target_dir)
@@ -1441,7 +1522,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             // Load empty plugin registry for build
             let plugins = PluginRegistry::new();
 
-            // Build using existing infrastructure (no LTO/PGO for pkg build, can be added later)
+            // Build using existing infrastructure with automatic ThinLTO for release builds
             cmd_build(
                 &entry,
                 Some(output.clone()),
@@ -1455,7 +1536,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 false,
                 None,
                 hot,
-                vais_codegen::optimize::LtoMode::None,
+                lto_mode,
                 vais_codegen::optimize::PgoMode::None,
             )?;
 

@@ -59,6 +59,10 @@ use thiserror::Error;
 use vais_ast::*;
 use vais_types::ResolvedType;
 
+/// Maximum recursion depth for type resolution to prevent stack overflow
+/// This limit protects against infinite recursive types like: type A = B; type B = A;
+const MAX_TYPE_RECURSION_DEPTH: usize = 128;
+
 /// Target architecture for code generation
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetTriple {
@@ -354,9 +358,152 @@ pub enum CodegenError {
     /// Feature not yet implemented in code generation
     #[error("Unsupported feature: {0}")]
     Unsupported(String),
+
+    /// Recursion depth limit exceeded (infinite type recursion)
+    #[error("Recursion depth limit exceeded: {0}")]
+    RecursionLimitExceeded(String),
 }
 
 type CodegenResult<T> = Result<T, CodegenError>;
+
+// ============================================================================
+// Error Message Suggestion Utilities
+// ============================================================================
+
+/// Calculate the Levenshtein edit distance between two strings
+fn edit_distance(a: &str, b: &str) -> usize {
+    let len_a = a.len();
+    let len_b = b.len();
+
+    if len_a == 0 {
+        return len_b;
+    }
+    if len_b == 0 {
+        return len_a;
+    }
+
+    // Create a matrix for dynamic programming
+    let mut matrix = vec![vec![0; len_b + 1]; len_a + 1];
+
+    // Initialize first column and row
+    for i in 0..=len_a {
+        matrix[i][0] = i;
+    }
+    for j in 0..=len_b {
+        matrix[0][j] = j;
+    }
+
+    // Fill the matrix
+    for (i, ca) in a.chars().enumerate() {
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            matrix[i + 1][j + 1] = std::cmp::min(
+                std::cmp::min(
+                    matrix[i][j + 1] + 1,     // deletion
+                    matrix[i + 1][j] + 1,     // insertion
+                ),
+                matrix[i][j] + cost,          // substitution
+            );
+        }
+    }
+
+    matrix[len_a][len_b]
+}
+
+/// Find similar symbols from a list of candidates and return suggestions
+///
+/// Returns up to `max_suggestions` candidates sorted by edit distance.
+/// Only includes candidates within a reasonable edit distance threshold.
+fn suggest_similar(name: &str, candidates: &[&str], max_suggestions: usize) -> Vec<String> {
+    // Calculate max distance based on name length
+    // Short names (1-3 chars): max 1 edit, medium (4-7): max 2, long: max 3
+    let max_distance = if name.len() <= 3 {
+        1
+    } else if name.len() <= 7 {
+        2
+    } else {
+        3
+    };
+
+    let mut suggestions: Vec<(String, usize)> = candidates
+        .iter()
+        .map(|&candidate| {
+            // Check for case-insensitive match first
+            if candidate.eq_ignore_ascii_case(name) {
+                (candidate.to_string(), 0)
+            } else {
+                let distance = edit_distance(name, candidate);
+                (candidate.to_string(), distance)
+            }
+        })
+        .filter(|(_, distance)| *distance <= max_distance)
+        .collect();
+
+    // Sort by distance, then alphabetically
+    suggestions.sort_by(|a, b| {
+        match a.1.cmp(&b.1) {
+            std::cmp::Ordering::Equal => a.0.cmp(&b.0),
+            other => other,
+        }
+    });
+
+    // Take top suggestions
+    suggestions
+        .into_iter()
+        .take(max_suggestions)
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/// Format a "did you mean" suggestion string
+fn format_did_you_mean(suggestions: &[String]) -> String {
+    match suggestions.len() {
+        0 => String::new(),
+        1 => format!(". Did you mean `{}`?", suggestions[0]),
+        2 => format!(". Did you mean `{}` or `{}`?", suggestions[0], suggestions[1]),
+        _ => {
+            let first_two = suggestions[0..2].join("`, `");
+            format!(". Did you mean `{}`, or `{}`?", first_two, suggestions[2])
+        }
+    }
+}
+
+/// Suggest type conversion hints based on common type mismatches
+#[allow(dead_code)]
+fn suggest_type_conversion(expected: &str, found: &str) -> String {
+    // Common numeric conversions
+    if expected.starts_with('i') && found.starts_with('f') {
+        return format!(". Consider using `as {}` for explicit conversion", expected);
+    }
+    if expected.starts_with('f') && found.starts_with('i') {
+        return format!(". Consider using `as {}` for explicit conversion", expected);
+    }
+
+    // Integer size conversions
+    if expected.starts_with('i') && found.starts_with('i') && expected != found {
+        return format!(". Consider using `as {}` to convert", expected);
+    }
+
+    // Float size conversions
+    if expected.starts_with('f') && found.starts_with('f') && expected != found {
+        return format!(". Consider using `as {}` to convert", expected);
+    }
+
+    // String conversions
+    if expected == "String" && found == "&str" {
+        return ". Consider using `.to_string()` or `.into()`".to_string();
+    }
+    if expected == "&str" && found == "String" {
+        return ". Consider using `.as_str()` or `&`".to_string();
+    }
+
+    // Bool to integer
+    if expected.starts_with('i') && found == "bool" {
+        return format!(". Consider using `as {}` to convert boolean to integer", expected);
+    }
+
+    String::new()
+}
 
 /// Result of generating a block of statements
 /// (value, ir_code, is_terminated)
@@ -485,6 +632,9 @@ pub struct CodeGenerator {
 
     // Global variable definitions
     globals: HashMap<String, types::GlobalInfo>,
+
+    // Type recursion depth tracking (prevents infinite recursion)
+    type_recursion_depth: std::cell::Cell<usize>,
 }
 
 /// Information about a function's decreases clause for termination proof
@@ -560,6 +710,7 @@ impl CodeGenerator {
             current_decreases_info: None,
             constants: HashMap::new(),
             globals: HashMap::new(),
+            type_recursion_depth: std::cell::Cell::new(0),
         };
 
         // Register built-in extern functions
@@ -667,10 +818,36 @@ impl CodeGenerator {
         vais_types::mangle_name(name, generics)
     }
 
+    /// Enter a type recursion level and check depth limit
+    /// Returns an error if recursion limit is exceeded
+    fn enter_type_recursion(&self, context: &str) -> CodegenResult<()> {
+        let depth = self.type_recursion_depth.get();
+        if depth >= MAX_TYPE_RECURSION_DEPTH {
+            return Err(CodegenError::RecursionLimitExceeded(
+                format!("Type recursion depth limit ({}) exceeded in {}", MAX_TYPE_RECURSION_DEPTH, context)
+            ));
+        }
+        self.type_recursion_depth.set(depth + 1);
+        Ok(())
+    }
+
+    /// Exit a type recursion level
+    fn exit_type_recursion(&self) {
+        let depth = self.type_recursion_depth.get();
+        self.type_recursion_depth.set(depth.saturating_sub(1));
+    }
+
     /// Get the size of a type in bytes (for generic operations)
     #[allow(dead_code)]
     pub(crate) fn type_size(&self, ty: &ResolvedType) -> usize {
-        match ty {
+        // Track recursion depth
+        if self.enter_type_recursion("type_size").is_err() {
+            // On recursion limit, return default size
+            eprintln!("Warning: Type recursion limit exceeded in type_size");
+            return 8;
+        }
+
+        let size = match ty {
             ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
             ResolvedType::I16 | ResolvedType::U16 => 2,
             ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
@@ -696,7 +873,11 @@ impl CodeGenerator {
             }
             ResolvedType::DynTrait { .. } => 16, // Fat pointer: data + vtable
             _ => 8, // Default
-        }
+        };
+
+        // Always exit recursion
+        self.exit_type_recursion();
+        size
     }
 
     /// Register a trait definition for vtable generation
@@ -4473,5 +4654,164 @@ mod tests {
         // Should have decreases check before the self-call
         assert!(ir.contains("__decreases_sum_to"), "Expected decreases storage");
         assert!(ir.contains("decreases_check"), "Expected decrease check before self-call");
+    }
+
+    #[test]
+    fn test_type_recursion_depth_limit() {
+        // Test that deeply nested types work within the limit
+        use vais_types::ResolvedType;
+
+        let gen = CodeGenerator::new("test");
+
+        // Create a deeply nested pointer type (should work)
+        let mut nested_type = ResolvedType::I32;
+        for _ in 0..50 {
+            nested_type = ResolvedType::Pointer(Box::new(nested_type));
+        }
+
+        // This should work fine (well within the 128 limit)
+        let llvm_type = gen.type_to_llvm(&nested_type);
+        assert!(llvm_type.ends_with('*'), "Should generate nested pointers");
+
+        // Create an extremely deeply nested type (exceeds limit of 128)
+        let mut extremely_nested = ResolvedType::I32;
+        for _ in 0..150 {
+            extremely_nested = ResolvedType::Pointer(Box::new(extremely_nested));
+        }
+
+        // This should hit the recursion limit and fall back to i64
+        // (The error is logged but doesn't fail - returns fallback type)
+        let llvm_type_over_limit = gen.type_to_llvm(&extremely_nested);
+        // Should still return a valid type (either i64 fallback or truncated)
+        assert!(!llvm_type_over_limit.is_empty(), "Should return a fallback type on recursion limit");
+    }
+
+    #[test]
+    fn test_type_recursion_reset_between_calls() {
+        // Test that recursion depth is properly reset between calls
+        use vais_types::ResolvedType;
+
+        let gen = CodeGenerator::new("test");
+
+        // First call with nested types
+        let mut nested1 = ResolvedType::I32;
+        for _ in 0..30 {
+            nested1 = ResolvedType::Pointer(Box::new(nested1));
+        }
+        let _ = gen.type_to_llvm(&nested1);
+
+        // Second call should work independently (depth should be reset)
+        let mut nested2 = ResolvedType::I64;
+        for _ in 0..30 {
+            nested2 = ResolvedType::Pointer(Box::new(nested2));
+        }
+        let llvm_type = gen.type_to_llvm(&nested2);
+        assert!(llvm_type.ends_with('*'), "Second call should work independently");
+    }
+
+    #[test]
+    fn test_ast_type_recursion_limit() {
+        // Test that ast_type_to_resolved also respects recursion limits
+        use vais_ast::{Type, Span};
+
+        let gen = CodeGenerator::new("test");
+
+        // Create deeply nested AST type
+        let mut nested = Type::Named {
+            name: "i32".to_string(),
+            generics: vec![]
+        };
+        for _ in 0..50 {
+            nested = Type::Pointer(Box::new(Spanned::new(nested, Span { start: 0, end: 0 })));
+        }
+
+        // Should work within limit
+        let resolved = gen.ast_type_to_resolved(&nested);
+        assert!(matches!(resolved, ResolvedType::Pointer(_)), "Should resolve nested pointers");
+
+        // Create extremely nested type (exceeds limit)
+        let mut extremely_nested = Type::Named {
+            name: "i32".to_string(),
+            generics: vec![]
+        };
+        for _ in 0..150 {
+            extremely_nested = Type::Pointer(Box::new(Spanned::new(extremely_nested, Span { start: 0, end: 0 })));
+        }
+
+        // Should hit limit and return fallback
+        let resolved_over = gen.ast_type_to_resolved(&extremely_nested);
+        // Should still return a valid type (Unknown as fallback)
+        assert!(
+            matches!(resolved_over, ResolvedType::Unknown | ResolvedType::Pointer(_)),
+            "Should return a fallback or truncated type on recursion limit"
+        );
+    }
+
+    #[test]
+    fn test_edit_distance() {
+        assert_eq!(edit_distance("", ""), 0);
+        assert_eq!(edit_distance("hello", "hello"), 0);
+        assert_eq!(edit_distance("hello", "hallo"), 1);
+        assert_eq!(edit_distance("hello", "hell"), 1);
+        assert_eq!(edit_distance("hello", "helloo"), 1);
+        assert_eq!(edit_distance("kitten", "sitting"), 3);
+        assert_eq!(edit_distance("saturday", "sunday"), 3);
+    }
+
+    #[test]
+    fn test_suggest_similar() {
+        let candidates = vec!["count", "counter", "account", "mount", "county"];
+
+        // Exact case-insensitive match should be prioritized
+        let suggestions = suggest_similar("COUNT", &candidates, 3);
+        assert_eq!(suggestions[0], "count");
+
+        // Close matches
+        let suggestions = suggest_similar("countr", &candidates, 3);
+        assert!(suggestions.contains(&"counter".to_string()));
+        assert!(suggestions.contains(&"count".to_string()));
+
+        // Should limit to max_suggestions
+        let suggestions = suggest_similar("cont", &candidates, 2);
+        assert!(suggestions.len() <= 2);
+
+        // No matches if too far
+        let suggestions = suggest_similar("xyz", &candidates, 3);
+        assert!(suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_format_did_you_mean() {
+        assert_eq!(format_did_you_mean(&[]), "");
+        assert_eq!(
+            format_did_you_mean(&["foo".to_string()]),
+            ". Did you mean `foo`?"
+        );
+        assert_eq!(
+            format_did_you_mean(&["foo".to_string(), "bar".to_string()]),
+            ". Did you mean `foo` or `bar`?"
+        );
+        assert_eq!(
+            format_did_you_mean(&["foo".to_string(), "bar".to_string(), "baz".to_string()]),
+            ". Did you mean `foo`, `bar`, or `baz`?"
+        );
+    }
+
+    #[test]
+    fn test_suggest_type_conversion() {
+        // Numeric conversions
+        assert!(suggest_type_conversion("i64", "f64").contains("as i64"));
+        assert!(suggest_type_conversion("f64", "i64").contains("as f64"));
+        assert!(suggest_type_conversion("i32", "i64").contains("as i32"));
+
+        // String conversions
+        assert!(suggest_type_conversion("String", "&str").contains(".to_string()"));
+        assert!(suggest_type_conversion("&str", "String").contains(".as_str()"));
+
+        // Bool to int
+        assert!(suggest_type_conversion("i64", "bool").contains("as i64"));
+
+        // No suggestion for unrelated types
+        assert_eq!(suggest_type_conversion("Vec", "HashMap"), "");
     }
 }

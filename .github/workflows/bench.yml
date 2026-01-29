@@ -1,0 +1,259 @@
+name: Benchmark Dashboard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for comparison
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+
+      - name: Run benchmarks
+        run: |
+          cargo bench -p vais-benches --bench compile_bench -- --output-format bencher | tee bench-output.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          tool: 'cargo'
+          output-file-path: bench-output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          # Save and deploy to gh-pages branch for historical tracking
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          alert-threshold: '110%'
+          comment-on-alert: true
+          fail-on-alert: false
+          # Show benchmark chart
+          alert-comment-cc-users: '@sswoo88'
+
+      - name: Compare benchmarks (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Run benchmarks and save results
+          cargo bench -p vais-benches --bench compile_bench -- --save-baseline pr-baseline
+
+          # Checkout main branch to compare
+          git fetch origin main:main
+          git checkout main
+          cargo bench -p vais-benches --bench compile_bench -- --save-baseline main-baseline
+
+          # Switch back to PR branch
+          git checkout -
+
+          # Compare baselines using criterion
+          cargo bench -p vais-benches --bench compile_bench -- --load-baseline main-baseline --baseline pr-baseline
+
+      - name: Parse and check for regressions
+        if: github.event_name == 'pull_request'
+        id: check_regression
+        run: |
+          # Create a script to parse benchmark results and check for regressions
+          cat > check_regression.sh << 'EOF'
+          #!/bin/bash
+
+          THRESHOLD=10  # 10% regression threshold
+          HAS_REGRESSION=false
+
+          # Parse criterion output for performance changes
+          while IFS= read -r line; do
+            # Look for "change:" lines in criterion output
+            if [[ "$line" =~ change:.*\+([0-9]+\.[0-9]+)% ]]; then
+              change="${BASH_REMATCH[1]}"
+              if (( $(echo "$change > $THRESHOLD" | bc -l) )); then
+                echo "::warning::Performance regression detected: +${change}%"
+                HAS_REGRESSION=true
+              fi
+            fi
+          done < bench-output.txt
+
+          if [ "$HAS_REGRESSION" = true ]; then
+            echo "has_regression=true" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "has_regression=false" >> $GITHUB_OUTPUT
+          fi
+          EOF
+
+          chmod +x check_regression.sh
+          ./check_regression.sh || true
+
+      - name: Generate benchmark summary
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "## 📊 Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Performance comparison between this PR and main branch:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          # Extract key metrics from bench output
+          grep -E "(time:|thrpt:|change:)" bench-output.txt | head -50 >> $GITHUB_STEP_SUMMARY || echo "No benchmark data available" >> $GITHUB_STEP_SUMMARY
+
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "**Threshold:** Performance regressions >10% will fail the build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in [Criterion reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('bench-output.txt', 'utf8');
+
+            // Extract key benchmark lines
+            const lines = output.split('\n');
+            const benchLines = lines.filter(line =>
+              line.includes('time:') ||
+              line.includes('thrpt:') ||
+              line.includes('change:')
+            ).slice(0, 30);
+
+            const body = `## 📊 Benchmark Results
+
+            Performance comparison for this PR:
+
+            \`\`\`
+            ${benchLines.join('\n')}
+            \`\`\`
+
+            <details>
+            <summary>View full benchmark output</summary>
+
+            \`\`\`
+            ${output.slice(0, 4000)}
+            \`\`\`
+            </details>
+
+            **Note:** Regressions >10% will cause the build to fail.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            target/criterion/
+            bench-output.txt
+          retention-days: 90
+
+      - name: Fail on regression
+        if: github.event_name == 'pull_request' && steps.check_regression.outputs.has_regression == 'true'
+        run: |
+          echo "::error::Performance regression detected (>10%). Please investigate."
+          exit 1
+
+  # Compile time tracking for real-world files
+  compile-time-tracking:
+    name: Compile Time Tracking
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build compiler
+        run: cargo build --release -p vaisc
+
+      - name: Measure compile times
+        run: |
+          # Create a script to measure compilation time for various files
+          cat > measure_compile_time.sh << 'EOF'
+          #!/bin/bash
+
+          VAISC="./target/release/vaisc"
+
+          echo "# Compile Time Measurements" > compile-times.txt
+          echo "" >> compile-times.txt
+
+          # Test files from examples directory
+          TEST_FILES=(
+            "examples/fibonacci.vais"
+            "examples/control_flow.vais"
+            "examples/struct.vais"
+            "examples/generic_test.vais"
+            "examples/trait_test.vais"
+          )
+
+          for file in "${TEST_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "Testing: $file"
+              # Run compilation 3 times and take average
+              total=0
+              for i in {1..3}; do
+                start=$(date +%s%N)
+                $VAISC "$file" --emit-ir -o /tmp/out.ll 2>&1 > /dev/null
+                end=$(date +%s%N)
+                elapsed=$(( (end - start) / 1000000 ))  # Convert to ms
+                total=$(( total + elapsed ))
+              done
+              avg=$(( total / 3 ))
+
+              echo "- $file: ${avg}ms" >> compile-times.txt
+            fi
+          done
+
+          cat compile-times.txt
+          EOF
+
+          chmod +x measure_compile_time.sh
+          ./measure_compile_time.sh
+
+      - name: Upload compile time data
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-time-data
+          path: compile-times.txt
+          retention-days: 90
+
+      - name: Display results
+        run: |
+          echo "## ⏱️ Compilation Time Tracking" >> $GITHUB_STEP_SUMMARY
+          cat compile-times.txt >> $GITHUB_STEP_SUMMARY
