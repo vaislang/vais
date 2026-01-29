@@ -1,0 +1,19 @@
+# Contract failure test - demonstrates requires violation
+
+# This function requires x to be positive
+#[requires(x > 0)]
+F must_be_positive(x: i64) -> i64 {
+    x
+}
+
+# Main function to test contract failure
+F main() -> i64 {
+    puts("Testing contract violation...")
+
+    # This should trigger a requires violation
+    v1 := must_be_positive(-5)
+
+    # This should never be reached
+    puts("This should not print!")
+    0
+}

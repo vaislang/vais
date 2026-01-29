@@ -1,0 +1,13 @@
+# Simple Lifetime Test without generic lifetime params
+
+# Simple reference without lifetime
+F get_ref(x: &i64) -> &i64 {
+    R x
+}
+
+F main() -> i64 {
+    n := 42
+    r := get_ref(&n)
+    puts("Lifetime test passed!")
+    R 0
+}

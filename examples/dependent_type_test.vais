@@ -1,0 +1,31 @@
+# Dependent Types (Refinement Types) Test
+# Syntax: {var_name: BaseType | predicate}
+
+# Positive integer type
+F test_positive(n: {x: i64 | x > 0}) -> i64 {
+    R n * 2
+}
+
+# Non-negative integer type
+F test_nonneg(n: {x: i64 | x >= 0}) -> i64 {
+    R n + 1
+}
+
+# Bounded integer (array index type)
+F test_bounded(idx: {i: i64 | i >= 0}) -> i64 {
+    R idx
+}
+
+# Function using positive type
+F double_positive(n: {x: i64 | x > 0}) -> {r: i64 | r > 0} {
+    R n * 2
+}
+
+F main() -> i64 {
+    result := test_positive(5)
+    result2 := test_nonneg(0)
+    result3 := test_bounded(3)
+
+    puts("Dependent types test passed!")
+    R 0
+}

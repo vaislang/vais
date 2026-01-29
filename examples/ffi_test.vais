@@ -1,0 +1,43 @@
+# FFI Test - extern blocks, function pointers, and varargs
+
+# Extern block with C ABI
+N "C" {
+    F puts(s: *i8) -> i32;
+    F printf(fmt: *i8, ...) -> i32;
+    F malloc(size: i64) -> *i8;
+    F free(ptr: *i8) -> ();
+}
+
+# repr(C) struct for FFI
+#[repr(C)]
+S Point {
+    x: i32,
+    y: i32
+}
+
+# Function pointer type
+F apply(f: fn(i32, i32) -> i32, a: i32, b: i32) -> i32 {
+    f(a, b)
+}
+
+# Callback function
+F add(a: i32, b: i32) -> i32 = a + b
+
+# Main function using FFI
+F main() -> i64 {
+    # Test extern function call
+    puts("Hello from FFI!")
+
+    # Test varargs function
+    printf("Numbers: %d %d\n", 42, 100)
+
+    # Test function pointer
+    result := apply(add, 10, 20)
+    printf("Result: %d\n", result)
+
+    # Test repr(C) struct
+    point := Point { x: 5, y: 10 }
+    printf("Point: (%d, %d)\n", point.x, point.y)
+
+    0
+}

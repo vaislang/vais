@@ -1,0 +1,513 @@
+# Vais Self-Hosting Compiler - Main Entry (Stage 1)
+# CLI entry point with import system support
+
+U constants
+U stringbuffer_s1
+U lexer_s1
+U helpers_s1
+U parser_s1
+U codegen_s1
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F print_str(ptr: i64, len: i64) -> i64 {
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        putchar(load_byte(ptr + i))
+        i = i + 1
+    }
+    1
+}
+
+# Read file into memory (length stored at ptr-8)
+F read_file(path: str) -> i64 {
+    fp := fopen(path, "rb")
+    I fp == 0 { 0 }
+    E {
+        fseek(fp, 0, 2)  # SEEK_END
+        size := ftell(fp)
+        fseek(fp, 0, 0)  # SEEK_SET
+
+        buf := malloc(size + 9)
+        I buf == 0 {
+            fclose(fp)
+            0
+        } E {
+            bytes_read := fread(buf + 8, 1, size, fp)
+            store_byte(buf + 8 + bytes_read, 0)
+            store_i64(buf, bytes_read)
+            fclose(fp)
+            buf + 8
+        }
+    }
+}
+
+# ============================================================================
+# Debug Helpers
+# ============================================================================
+
+F debug_print_expr(expr: i64, depth: i64) -> i64 {
+    I expr == 0 {
+        puts("    NULL")
+        putchar(10)
+        R 0
+    }
+    kind := expr_get_kind(expr)
+    # Indent
+    i: mut i64 = 0
+    L {
+        I i >= depth { B } E { 0 }
+        puts("  ")
+        i = i + 1
+    }
+    I kind == EXPR_INT() {
+        puts("INT: ")
+        print_i64(expr_get_field0(expr))
+        putchar(10)
+        0
+    } E I kind == EXPR_IDENT() {
+        puts("IDENT: ")
+        print_str(expr_get_field0(expr), expr_get_field1(expr))
+        putchar(10)
+        0
+    } E I kind == EXPR_CALL() {
+        puts("CALL: ")
+        print_str(expr_get_field0(expr), expr_get_field1(expr))
+        puts(" (")
+        print_i64(expr_get_field3(expr))
+        puts(" args)")
+        putchar(10)
+        # Print arguments
+        args := expr_get_field2(expr)
+        arg_count := expr_get_field3(expr)
+        j: mut i64 = 0
+        L {
+            I j >= arg_count { B } E { 0 }
+            arg := load_i64(args + j * 8)
+            debug_print_expr(arg, depth + 1)
+            j = j + 1
+        }
+        0
+    } E I kind == EXPR_BINARY() {
+        puts("BINARY op=")
+        print_i64(expr_get_field0(expr))
+        putchar(10)
+        debug_print_expr(expr_get_field1(expr), depth + 1)
+        debug_print_expr(expr_get_field2(expr), depth + 1)
+        0
+    } E {
+        puts("EXPR kind=")
+        print_i64(kind)
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Import System
+# ============================================================================
+
+# Loaded modules tracker (simple array, max 64 modules)
+# Layout: count(8) + paths[64 * 16] (ptr+len each)
+F loaded_modules_new() -> i64 {
+    lm := malloc(8 + 64 * 16)
+    store_i64(lm, 0)  # count = 0
+    lm
+}
+
+F loaded_modules_count(lm: i64) -> i64 = load_i64(lm)
+
+F loaded_modules_contains(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
+    count := loaded_modules_count(lm)
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        idx := 8 + i * 16
+        ptr := load_i64(lm + idx)
+        len := load_i64(lm + idx + 8)
+        I len == path_len {
+            I memcmp(ptr, path_ptr, len) == 0 {
+                R 1
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+F loaded_modules_add(lm: i64, path_ptr: i64, path_len: i64) -> i64 {
+    count := loaded_modules_count(lm)
+    I count >= 64 { R 0 }  # Max modules reached
+    idx := 8 + count * 16
+    store_i64(lm + idx, path_ptr)
+    store_i64(lm + idx + 8, path_len)
+    store_i64(lm, count + 1)
+    1
+}
+
+# String comparison (memcmp wrapper for i64 pointers)
+F memcmp(a: i64, b: i64, len: i64) -> i64 {
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+        I ca != cb {
+            R ca - cb
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+# Resolve import path to file path
+# Input: "std/io" or "utils" (relative to base_dir)
+# Output: allocated string with full path
+F resolve_import_path(base_dir: i64, base_len: i64, mod_path: i64, mod_len: i64) -> i64 {
+    # Build: base_dir + "/" + mod_path + ".vais"
+    sb := sb_new(512)
+
+    # Add base directory
+    I base_len > 0 {
+        sb_append_bytes(sb, base_dir, base_len)
+        sb_append_byte(sb, 47)  # /
+        0
+    } E { 0 }
+
+    # Add module path
+    sb_append_bytes(sb, mod_path, mod_len)
+
+    # Add .vais extension
+    sb_append_cstr(sb, ".vais")
+
+    # Null terminate
+    sb_append_byte(sb, 0)
+
+    ptr := sb_get_data(sb)
+    free(sb)
+    ptr
+}
+
+# Get directory from file path
+F get_directory(path: i64, path_len: i64) -> i64 {
+    # Find last /
+    last_slash: mut i64 = 0 - 1
+    i: mut i64 = 0
+    L {
+        I i >= path_len { B } E { 0 }
+        I load_byte(path + i) == 47 {  # /
+            last_slash = i
+            0
+        } E { 0 }
+        i = i + 1
+    }
+
+    I last_slash < 0 {
+        # No directory, return empty
+        result := malloc(2)
+        store_byte(result, 46)  # .
+        store_byte(result + 1, 0)
+        result
+    } E {
+        # Copy directory part
+        result := malloc(last_slash + 2)
+        memcpy(result, path, last_slash)
+        store_byte(result + last_slash, 0)
+        result
+    }
+}
+
+# All items array: ptr(8) + count(8) + cap(8)
+F all_items_new(cap: i64) -> i64 {
+    ai := malloc(24)
+    store_i64(ai, malloc(cap * 8))  # items array
+    store_i64(ai + 8, 0)             # count
+    store_i64(ai + 16, cap)          # capacity
+    ai
+}
+
+F all_items_get_ptr(ai: i64) -> i64 = load_i64(ai)
+F all_items_get_count(ai: i64) -> i64 = load_i64(ai + 8)
+F all_items_get_cap(ai: i64) -> i64 = load_i64(ai + 16)
+
+F all_items_add(ai: i64, item: i64) -> i64 {
+    count := all_items_get_count(ai)
+    cap := all_items_get_cap(ai)
+
+    I count >= cap {
+        # Grow
+        new_cap := cap * 2
+        old_ptr := all_items_get_ptr(ai)
+        new_ptr := malloc(new_cap * 8)
+        memcpy(new_ptr, old_ptr, count * 8)
+        free(old_ptr)
+        store_i64(ai, new_ptr)
+        store_i64(ai + 16, new_cap)
+        0
+    } E { 0 }
+
+    ptr := all_items_get_ptr(ai)
+    store_i64(ptr + count * 8, item)
+    store_i64(ai + 8, count + 1)
+    1
+}
+
+# strlen for i64 pointer (null-terminated)
+F strlen_ptr(s: i64) -> i64 {
+    len: mut i64 = 0
+    L {
+        I load_byte(s + len) == 0 { B } E { 0 }
+        len = len + 1
+    }
+    len
+}
+
+# read_file variant that takes i64 pointer instead of str
+F read_file_ptr(path: i64) -> i64 {
+    # fopen_ptr accepts i64 pointer as path
+    fp := fopen_ptr(path, "rb")
+    I fp == 0 { 0 }
+    E {
+        fseek(fp, 0, 2)  # SEEK_END
+        size := ftell(fp)
+        fseek(fp, 0, 0)  # SEEK_SET
+
+        buf := malloc(size + 9)
+        I buf == 0 {
+            fclose(fp)
+            0
+        } E {
+            bytes_read := fread(buf + 8, 1, size, fp)
+            store_byte(buf + 8 + bytes_read, 0)
+            store_i64(buf, bytes_read)
+            fclose(fp)
+            buf + 8
+        }
+    }
+}
+
+# Load a module with import resolution
+# Returns number of items added to all_items
+F load_module_with_imports(
+    file_path: i64,
+    all_items: i64,
+    loaded: i64
+) -> i64 {
+    # Get path length
+    path_len := strlen_ptr(file_path)
+
+    # Check if already loaded
+    I loaded_modules_contains(loaded, file_path, path_len) == 1 {
+        R 0  # Already loaded, skip
+    }
+
+    # Mark as loaded
+    loaded_modules_add(loaded, file_path, path_len)
+
+    # Read file
+    source_data := read_file_ptr(file_path)
+    I source_data == 0 {
+        puts("[Import] Cannot read: ")
+        print_str(file_path, path_len)
+        putchar(10)
+        R 0
+    }
+
+    source_len := load_i64(source_data - 8)
+
+    # Get base directory for relative imports
+    base_dir := get_directory(file_path, path_len)
+    base_len := strlen_ptr(base_dir)
+
+    # Tokenize
+    lex := lexer_new(source_data, source_len)
+    tokens := malloc(32768 * 48)
+    token_count := lexer_tokenize(lex, tokens)
+
+    # Parse
+    parser := parser_new(tokens, token_count)
+    parser_parse_module(parser)
+
+    item_count := parser_get_item_count(parser)
+    items := parser_get_items(parser)
+
+    # Process items
+    added: mut i64 = 0
+    i: mut i64 = 0
+    L {
+        I i >= item_count { B } E { 0 }
+        item := load_i64(items + i * 8)
+        kind := item_get_kind(item)
+
+        I kind == ITEM_USE() {
+            # Recursively load imported module
+            mod_path := item_get_name_ptr(item)
+            mod_len := item_get_name_len(item)
+
+            resolved := resolve_import_path(base_dir, base_len, mod_path, mod_len)
+            load_module_with_imports(resolved, all_items, loaded)
+            # Note: resolved is leaked, but ok for now
+            0
+        } E {
+            # Add non-use items
+            all_items_add(all_items, item)
+            added = added + 1
+            0
+        }
+
+        i = i + 1
+    }
+
+    # Cleanup (but keep items as they're referenced by all_items)
+    free(tokens)
+    lexer_free(lex)
+    # Don't free parser as items are still referenced
+
+    added
+}
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+F main() -> i64 {
+    puts("=======================================\n")
+    puts("  Vais Self-Hosting Compiler (Stage 1)\n")
+    puts("  Version: 0.5.0 (Modular)\n")
+    puts("=======================================\n\n")
+
+    # Hardcoded path for bootstrapping
+    puts("[INFO] Compiling: /tmp/test_import.vais\n")
+
+    # Initialize import system
+    loaded := loaded_modules_new()
+    all_items := all_items_new(1024)
+
+    # Create path string manually (avoid variable binding issue)
+    # "/tmp/test_import.vais" = 21 chars + null = 22 bytes
+    path_ptr := malloc(22)
+    store_byte(path_ptr + 0, 47)   # /
+    store_byte(path_ptr + 1, 116)  # t
+    store_byte(path_ptr + 2, 109)  # m
+    store_byte(path_ptr + 3, 112)  # p
+    store_byte(path_ptr + 4, 47)   # /
+    store_byte(path_ptr + 5, 116)  # t
+    store_byte(path_ptr + 6, 101)  # e
+    store_byte(path_ptr + 7, 115)  # s
+    store_byte(path_ptr + 8, 116)  # t
+    store_byte(path_ptr + 9, 95)   # _
+    store_byte(path_ptr + 10, 105) # i
+    store_byte(path_ptr + 11, 109) # m
+    store_byte(path_ptr + 12, 112) # p
+    store_byte(path_ptr + 13, 111) # o
+    store_byte(path_ptr + 14, 114) # r
+    store_byte(path_ptr + 15, 116) # t
+    store_byte(path_ptr + 16, 46)  # .
+    store_byte(path_ptr + 17, 118) # v
+    store_byte(path_ptr + 18, 97)  # a
+    store_byte(path_ptr + 19, 105) # i
+    store_byte(path_ptr + 20, 115) # s
+    store_byte(path_ptr + 21, 0)   # null
+
+    # Load main module with imports
+    puts("[1] Loading modules with imports...\n")
+    load_module_with_imports(path_ptr, all_items, loaded)
+
+    item_count := all_items_get_count(all_items)
+    puts("    Total items loaded: ")
+    print_i64(item_count)
+    putchar(10)
+
+    I item_count == 0 {
+        puts("    Parse: FAILED (no items found)\n")
+        R 1
+    }
+
+    # Print loaded items
+    items := all_items_get_ptr(all_items)
+    func_count: mut i64 = 0
+    struct_count: mut i64 = 0
+    i: mut i64 = 0
+    L {
+        I i >= item_count { B } E { 0 }
+        item := load_i64(items + i * 8)
+        kind := item_get_kind(item)
+        I kind == ITEM_FUNCTION() {
+            puts("    Function: ")
+            print_str(item_get_name_ptr(item), item_get_name_len(item))
+            putchar(10)
+            func_count = func_count + 1
+            0
+        } E I kind == ITEM_STRUCT() {
+            puts("    Struct: ")
+            print_str(item_get_name_ptr(item), item_get_name_len(item))
+            putchar(10)
+            struct_count = struct_count + 1
+            0
+        } E I kind == ITEM_IMPL() {
+            puts("    Impl: ")
+            print_str(item_get_name_ptr(item), item_get_name_len(item))
+            putchar(10)
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    puts("    Functions: ")
+    print_i64(func_count)
+    puts(", Structs: ")
+    print_i64(struct_count)
+    putchar(10)
+
+    # Step 2: Codegen
+    puts("[2] Codegen...\n")
+    cg := cg_new()
+    cg_emit_header(cg)
+    cg_gen_all_functions_from_items(cg, items, item_count)
+    cg_finalize(cg)
+
+    # Print generated IR
+    puts("\n--- Generated LLVM IR ---\n")
+    ir_ptr := cg_get_output(cg)
+    ir_len := cg_get_output_len(cg)
+    print_str(ir_ptr, ir_len)
+    puts("--- End of LLVM IR ---\n")
+
+    # Write to file
+    fp := fopen("selfhost/main_output.ll", "wb")
+    I fp != 0 {
+        fwrite(ir_ptr, 1, ir_len, fp)
+        fclose(fp)
+        puts("\n[OK] Written to selfhost/main_output.ll\n")
+        0
+    } E {
+        puts("\n[ERROR] Could not write output file\n")
+        0
+    }
+
+    # Cleanup
+    cg_free(cg)
+    free(path_ptr)
+
+    puts("[OK] Compilation successful!\n")
+    0
+}

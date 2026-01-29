@@ -1,0 +1,23 @@
+# Lifetime Test
+# Syntax: &'a T (reference with lifetime 'a)
+
+# Function with lifetime annotation (parsed correctly)
+# This demonstrates the lifetime syntax is properly handled
+F identity<'a>(x: &'a i64) -> &'a i64 {
+    R x
+}
+
+# Simple reference without lifetime (implicit)
+F get_ref(x: &i64) -> &i64 {
+    R x
+}
+
+# Function using lifetime-annotated types in parameter
+F test_lifetime_type(x: &i64) -> i64 {
+    R *x
+}
+
+F main() -> i64 {
+    puts("Lifetime syntax test passed!")
+    R 0
+}

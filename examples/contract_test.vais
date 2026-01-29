@@ -1,0 +1,74 @@
+# Contract test - demonstrates requires/ensures formal verification
+
+# Test 1: Simple precondition
+# This function requires x to be positive
+#[requires(x > 0)]
+F abs_positive(x: i64) -> i64 {
+    x
+}
+
+# Test 2: Postcondition
+# This function ensures the result is always >= 0
+#[ensures(return >= 0)]
+F abs_simple(x: i64) -> i64 {
+    I x < 0 {
+        -x
+    } E {
+        x
+    }
+}
+
+# Test 3: Both requires and ensures
+# Factorial function with contracts
+#[requires(n >= 0)]
+#[ensures(return >= 1)]
+F factorial(n: i64) -> i64 {
+    I n <= 1 {
+        R 1
+    }
+    R n * factorial(n - 1)
+}
+
+# Test 4: Multiple requires
+#[requires(a > 0)]
+#[requires(b > 0)]
+#[ensures(return > 0)]
+F multiply_positive(a: i64, b: i64) -> i64 {
+    a * b
+}
+
+# Test 5: Ensures with return value comparison
+#[requires(x >= 0)]
+#[ensures(return >= x)]
+F double(x: i64) -> i64 {
+    x * 2
+}
+
+# Main function to test contracts
+F main() -> i64 {
+    # Test abs_positive with valid input
+    v1 := abs_positive(42)
+    puts("Testing abs_positive(42)...")
+
+    # Test abs_simple
+    v2 := abs_simple(-5)
+    puts("Testing abs_simple(-5)...")
+
+    v3 := abs_simple(10)
+    puts("Testing abs_simple(10)...")
+
+    # Test factorial
+    v4 := factorial(5)
+    puts("Testing factorial(5)...")
+
+    # Test multiply_positive
+    v5 := multiply_positive(3, 4)
+    puts("Testing multiply_positive(3, 4)...")
+
+    # Test double
+    v6 := double(7)
+    puts("Testing double(7)...")
+
+    puts("All contract tests passed!")
+    0
+}

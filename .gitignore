@@ -64,6 +64,8 @@ examples/*_o1
 examples/*_o2
 examples/*_o3
 examples/advanced_opt_test_o3
+examples/inline_test_debug*
+examples/lazy_simple
 
 # Other common build and test artifacts
 *.tmp

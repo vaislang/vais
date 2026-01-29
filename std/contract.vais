@@ -1,0 +1,44 @@
+# Contract support library for formal verification
+# Provides runtime support for requires/ensures/invariant checks
+#
+# This module is used internally by the compiler to generate contract
+# violation handlers. It should not be imported directly by user code.
+
+# Contract violation types
+C CONTRACT_REQUIRES: i64 = 1
+C CONTRACT_ENSURES: i64 = 2
+C CONTRACT_INVARIANT: i64 = 3
+
+# Extern C functions for output
+X F puts(s: str) -> i32
+X F printf(format: str, ...) -> i32
+X F exit(code: i32) -> ()
+
+# Contract violation handler
+# Called when a contract (requires/ensures/invariant) is violated
+# kind: type of contract (1=requires, 2=ensures, 3=invariant)
+# condition: the condition that failed (as string)
+# file: source file name
+# line: source line number
+# func: function name
+F __contract_fail(kind: i64, condition: str, file: str, line: i64, func: str) -> i64 {
+    I kind == CONTRACT_REQUIRES {
+        printf("Contract violation: precondition failed\n")
+    } E I kind == CONTRACT_ENSURES {
+        printf("Contract violation: postcondition failed\n")
+    } E {
+        printf("Contract violation: invariant failed\n")
+    }
+    printf("  Condition: %s\n", condition)
+    printf("  Location: %s:%d in function '%s'\n", file, line, func)
+    exit(1)
+    0
+}
+
+# Simpler panic function for contract failures
+# msg: error message to display
+F __panic(msg: str) -> i64 {
+    printf("panic: %s\n", msg)
+    exit(1)
+    0
+}
