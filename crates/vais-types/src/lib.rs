@@ -1724,15 +1724,26 @@ impl TypeChecker {
         // Set current generics for type resolution
         let (prev_generics, prev_bounds) = self.set_generics(&t.generics);
 
-        // Parse associated types
+        // Parse associated types (with GAT support)
         let mut associated_types = HashMap::new();
         for assoc in &t.associated_types {
             let bounds: Vec<String> = assoc.bounds.iter().map(|b| b.node.clone()).collect();
             let default = assoc.default.as_ref().map(|ty| self.resolve_type(&ty.node));
+
+            // Extract GAT generic parameters and their bounds
+            let gat_generics: Vec<String> = assoc.generics.iter()
+                .map(|g| g.name.node.clone())
+                .collect();
+            let gat_bounds: HashMap<String, Vec<String>> = assoc.generics.iter()
+                .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                .collect();
+
             associated_types.insert(
                 assoc.name.node.clone(),
                 AssociatedTypeDef {
                     name: assoc.name.node.clone(),
+                    generics: gat_generics,
+                    generic_bounds: gat_bounds,
                     bounds,
                     default,
                 },
@@ -1764,6 +1775,7 @@ impl TypeChecker {
                     ret,
                     has_default: method.default_body.is_some(),
                     is_async: method.is_async,
+                    is_const: method.is_const,
                 },
             );
         }

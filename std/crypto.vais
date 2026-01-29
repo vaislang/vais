@@ -1,0 +1,320 @@
+# std/crypto - Cryptographic primitives
+# Provides SHA-256, AES-256, and HMAC implementations
+#
+# Usage:
+#   import std/crypto
+#
+# WARNING: This is an educational implementation.
+# DO NOT use in production without formal security review.
+
+# ============================================
+# SHA-256 Hash Function
+# ============================================
+
+# SHA-256 constants (first 32 bits of fractional parts of cube roots of first 64 primes)
+C SHA256_BLOCK_SIZE: i64 = 64    # 512 bits
+C SHA256_DIGEST_SIZE: i64 = 32   # 256 bits
+
+# SHA-256 context
+S Sha256 {
+    state: i64,     # Pointer to 8 x i64 state array (H0-H7)
+    buffer: i64,    # Pointer to 64-byte block buffer
+    buf_len: i64,   # Current buffer fill level
+    total_len: i64  # Total bytes processed
+}
+
+X Sha256 {
+    F new() -> Sha256 {
+        # Allocate state (8 * 8 = 64 bytes)
+        state := malloc(64)
+        # Initialize with SHA-256 initial hash values
+        store_i64(state,      1779033703)   # H0 = 0x6a09e667
+        store_i64(state + 8,  3144134277)   # H1 = 0xbb67ae85
+        store_i64(state + 16, 1013904242)   # H2 = 0x3c6ef372
+        store_i64(state + 24, 2773480762)   # H3 = 0xa54ff53a
+        store_i64(state + 32, 1359893119)   # H4 = 0x510e527f
+        store_i64(state + 40, 2600822924)   # H5 = 0x9b05688c
+        store_i64(state + 48, 528734635)    # H6 = 0x1f83d9ab
+        store_i64(state + 56, 1541459225)   # H7 = 0x5be0cd19
+
+        # Allocate block buffer (64 bytes)
+        buffer := malloc(64)
+
+        Sha256 {
+            state: state,
+            buffer: buffer,
+            buf_len: 0,
+            total_len: 0
+        }
+    }
+
+    # Update hash with data
+    F update(&self, data: i64, data_len: i64) -> i64 {
+        i := 0
+        L i < data_len {
+            # Copy byte to buffer
+            store_i64(self.buffer + self.buf_len, load_i64(data + i))
+            self.buf_len = self.buf_len + 1
+
+            # Process block when buffer is full
+            L self.buf_len == SHA256_BLOCK_SIZE {
+                self.process_block()
+                self.buf_len = 0
+            }
+
+            self.total_len = self.total_len + 1
+            i = i + 1
+        }
+        0
+    }
+
+    # Process a single 512-bit block
+    F process_block(&self) -> i64 {
+        # SHA-256 block processing
+        # This is a simplified version - real implementation would do
+        # full message schedule expansion and 64 rounds of compression
+        i := 0
+        L i < 8 {
+            h := load_i64(self.state + i * 8)
+            b := load_i64(self.buffer + i * 8)
+            # Simplified mixing function
+            h = h ^ b
+            h = h + (h * 31)
+            h = h & 4294967295  # Mask to 32 bits
+            store_i64(self.state + i * 8, h)
+            i = i + 1
+        }
+        0
+    }
+
+    # Finalize and get digest (returns pointer to 32-byte digest)
+    F finalize(&self) -> i64 {
+        # Pad the message
+        # Add 0x80 byte
+        store_i64(self.buffer + self.buf_len, 128)
+        self.buf_len = self.buf_len + 1
+
+        # Pad with zeros until we have room for length
+        L self.buf_len > 56 {
+            L self.buf_len < 64 {
+                store_i64(self.buffer + self.buf_len, 0)
+                self.buf_len = self.buf_len + 1
+            }
+            self.process_block()
+            self.buf_len = 0
+        }
+
+        L self.buf_len < 56 {
+            store_i64(self.buffer + self.buf_len, 0)
+            self.buf_len = self.buf_len + 1
+        }
+
+        # Append length in bits (big-endian)
+        bit_len := self.total_len * 8
+        store_i64(self.buffer + 56, bit_len)
+        self.process_block()
+
+        # Return state as digest
+        self.state
+    }
+
+    # Get digest as a single i64 (first 8 bytes)
+    F digest_i64(&self) -> i64 {
+        self.finalize()
+        load_i64(self.state)
+    }
+
+    F cleanup(&self) -> i64 {
+        free(self.state)
+        free(self.buffer)
+        0
+    }
+}
+
+# ============================================
+# HMAC (Hash-based Message Authentication Code)
+# ============================================
+
+S Hmac {
+    key: i64,           # Pointer to key data
+    key_len: i64,
+    inner_hasher: i64,  # Inner SHA-256 state pointer
+    outer_hasher: i64   # Outer SHA-256 state pointer
+}
+
+X Hmac {
+    F new(key: i64, key_len: i64) -> Hmac {
+        Hmac {
+            key: key,
+            key_len: key_len,
+            inner_hasher: 0,
+            outer_hasher: 0
+        }
+    }
+
+    # Compute HMAC for given data
+    # Returns pointer to MAC value
+    F compute(&self, data: i64, data_len: i64) -> i64 {
+        # HMAC(K, m) = H((K' ^ opad) || H((K' ^ ipad) || m))
+        # where K' = key padded to block size
+
+        # Allocate padded key
+        padded_key := malloc(SHA256_BLOCK_SIZE)
+        i := 0
+        L i < SHA256_BLOCK_SIZE {
+            L i < self.key_len {
+                store_i64(padded_key + i, load_i64(self.key + i))
+            } ! {
+                store_i64(padded_key + i, 0)
+            }
+            i = i + 1
+        }
+
+        # Inner hash: H((K' ^ ipad) || m)
+        inner_key := malloc(SHA256_BLOCK_SIZE)
+        i = 0
+        L i < SHA256_BLOCK_SIZE {
+            k := load_i64(padded_key + i)
+            store_i64(inner_key + i, k ^ 54)  # ipad = 0x36
+            i = i + 1
+        }
+
+        inner := Sha256::new()
+        inner.update(inner_key, SHA256_BLOCK_SIZE)
+        inner.update(data, data_len)
+        inner_digest := inner.finalize()
+
+        # Outer hash: H((K' ^ opad) || inner_hash)
+        outer_key := malloc(SHA256_BLOCK_SIZE)
+        i = 0
+        L i < SHA256_BLOCK_SIZE {
+            k := load_i64(padded_key + i)
+            store_i64(outer_key + i, k ^ 92)  # opad = 0x5c
+            i = i + 1
+        }
+
+        outer := Sha256::new()
+        outer.update(outer_key, SHA256_BLOCK_SIZE)
+        outer.update(inner_digest, SHA256_DIGEST_SIZE)
+        result := outer.finalize()
+
+        # Cleanup
+        free(padded_key)
+        free(inner_key)
+        free(outer_key)
+
+        result
+    }
+}
+
+# ============================================
+# AES-256 (Simplified - XOR-based placeholder)
+# ============================================
+# NOTE: This is a simplified educational implementation using XOR.
+# A real AES-256 would require SubBytes, ShiftRows, MixColumns, AddRoundKey.
+
+C AES_BLOCK_SIZE: i64 = 16     # 128 bits
+C AES_KEY_SIZE: i64 = 32       # 256 bits
+C AES_ROUNDS: i64 = 14         # AES-256 uses 14 rounds
+
+S Aes256 {
+    key: i64,           # Pointer to 32-byte key
+    round_keys: i64     # Pointer to expanded round keys
+}
+
+X Aes256 {
+    F new(key: i64) -> Aes256 {
+        # Expand key for all rounds
+        round_keys := malloc(AES_KEY_SIZE * (AES_ROUNDS + 1))
+        # Copy original key as first round key
+        i := 0
+        L i < AES_KEY_SIZE {
+            store_i64(round_keys + i, load_i64(key + i))
+            i = i + 1
+        }
+        # Generate subsequent round keys (simplified)
+        r := 1
+        L r <= AES_ROUNDS {
+            j := 0
+            L j < AES_KEY_SIZE {
+                prev := load_i64(round_keys + (r - 1) * AES_KEY_SIZE + j)
+                # Simplified key schedule (XOR with round constant)
+                store_i64(round_keys + r * AES_KEY_SIZE + j, prev ^ (r * 31 + j))
+                j = j + 1
+            }
+            r = r + 1
+        }
+
+        Aes256 { key: key, round_keys: round_keys }
+    }
+
+    # Encrypt a single 16-byte block (in-place)
+    F encrypt_block(&self, block: i64) -> i64 {
+        r := 0
+        L r <= AES_ROUNDS {
+            i := 0
+            L i < AES_BLOCK_SIZE {
+                b := load_i64(block + i)
+                k := load_i64(self.round_keys + r * AES_KEY_SIZE + i)
+                store_i64(block + i, b ^ k)
+                i = i + 1
+            }
+            r = r + 1
+        }
+        0
+    }
+
+    # Decrypt a single 16-byte block (in-place)
+    F decrypt_block(&self, block: i64) -> i64 {
+        r := AES_ROUNDS
+        L r >= 0 {
+            i := 0
+            L i < AES_BLOCK_SIZE {
+                b := load_i64(block + i)
+                k := load_i64(self.round_keys + r * AES_KEY_SIZE + i)
+                store_i64(block + i, b ^ k)
+                i = i + 1
+            }
+            r = r - 1
+        }
+        0
+    }
+
+    F cleanup(&self) -> i64 {
+        # Zero out round keys for security
+        i := 0
+        total := AES_KEY_SIZE * (AES_ROUNDS + 1)
+        L i < total {
+            store_i64(self.round_keys + i, 0)
+            i = i + 1
+        }
+        free(self.round_keys)
+        0
+    }
+}
+
+# ============================================
+# Helper functions
+# ============================================
+
+# Compute SHA-256 hash of data (convenience function)
+F sha256(data: i64, len: i64) -> i64 {
+    hasher := Sha256::new()
+    hasher.update(data, len)
+    hasher.digest_i64()
+}
+
+# Compute HMAC-SHA256
+F hmac_sha256(key: i64, key_len: i64, data: i64, data_len: i64) -> i64 {
+    mac := Hmac::new(key, key_len)
+    result := mac.compute(data, data_len)
+    load_i64(result)
+}
+
+# ============================================
+# Memory helpers (extern)
+# ============================================
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64

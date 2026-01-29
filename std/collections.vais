@@ -1,0 +1,263 @@
+# std/collections - Unified re-export of all collection types
+# Provides a single import point for all collection types in the standard library.
+#
+# Usage:
+#   import std/collections
+#
+# This module re-exports:
+#   - Vec<T>         - Dynamic array (from std/vec)
+#   - HashMap<K,V>   - Hash table (from std/hashmap)
+#   - BTreeMap<K,V>  - Sorted tree map (from std/btreemap)
+#   - HashSet<T>     - Hash set (from std/set)
+#   - Deque<T>       - Double-ended queue (from std/deque)
+#   - PriorityQueue  - Priority queue / min-heap (from std/priority_queue)
+#   - LinkedList<T>  - Doubly-linked list
+
+# ============================================
+# Re-exports
+# ============================================
+
+# Note: In Vais, import resolution handles re-exports.
+# This file serves as the canonical "collections" module.
+
+# ============================================
+# LinkedList - Doubly-linked list
+# ============================================
+
+# Node for the linked list
+S LinkedListNode {
+    value: i64,
+    prev: i64,      # Pointer to previous node (0 = none)
+    next: i64       # Pointer to next node (0 = none)
+}
+
+# Doubly-linked list
+S LinkedList {
+    head: i64,      # Pointer to first node
+    tail: i64,      # Pointer to last node
+    len: i64        # Number of elements
+}
+
+X LinkedList {
+    F new() -> LinkedList {
+        LinkedList { head: 0, tail: 0, len: 0 }
+    }
+
+    # Push to front
+    F push_front(&self, value: i64) -> i64 {
+        node_ptr := malloc(24)  # 3 fields * 8 bytes
+        store_i64(node_ptr, value)       # value
+        store_i64(node_ptr + 8, 0)       # prev = null
+        store_i64(node_ptr + 16, self.head) # next = current head
+
+        L self.head != 0 {
+            # Update old head's prev
+            store_i64(self.head + 8, node_ptr)
+        } ! {
+            # Empty list - set tail
+            self.tail = node_ptr
+        }
+
+        self.head = node_ptr
+        self.len = self.len + 1
+        0
+    }
+
+    # Push to back
+    F push_back(&self, value: i64) -> i64 {
+        node_ptr := malloc(24)
+        store_i64(node_ptr, value)
+        store_i64(node_ptr + 8, self.tail)  # prev = current tail
+        store_i64(node_ptr + 16, 0)         # next = null
+
+        L self.tail != 0 {
+            store_i64(self.tail + 16, node_ptr)
+        } ! {
+            self.head = node_ptr
+        }
+
+        self.tail = node_ptr
+        self.len = self.len + 1
+        0
+    }
+
+    # Pop from front (returns value, or 0 if empty)
+    F pop_front(&self) -> i64 {
+        L self.head == 0 {
+            R 0
+        }
+
+        value := load_i64(self.head)
+        next := load_i64(self.head + 16)
+        free(self.head)
+
+        self.head = next
+        L next != 0 {
+            store_i64(next + 8, 0)  # new head's prev = null
+        } ! {
+            self.tail = 0
+        }
+
+        self.len = self.len - 1
+        value
+    }
+
+    # Pop from back (returns value, or 0 if empty)
+    F pop_back(&self) -> i64 {
+        L self.tail == 0 {
+            R 0
+        }
+
+        value := load_i64(self.tail)
+        prev := load_i64(self.tail + 8)
+        free(self.tail)
+
+        self.tail = prev
+        L prev != 0 {
+            store_i64(prev + 16, 0)  # new tail's next = null
+        } ! {
+            self.head = 0
+        }
+
+        self.len = self.len - 1
+        value
+    }
+
+    # Peek at front value
+    F front(&self) -> i64 {
+        L self.head == 0 {
+            R 0
+        }
+        load_i64(self.head)
+    }
+
+    # Peek at back value
+    F back(&self) -> i64 {
+        L self.tail == 0 {
+            R 0
+        }
+        load_i64(self.tail)
+    }
+
+    # Get length
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        self.len == 0
+    }
+
+    # Clear all elements
+    F clear(&self) -> i64 {
+        current := self.head
+        L current != 0 {
+            next := load_i64(current + 16)
+            free(current)
+            current = next
+        }
+        self.head = 0
+        self.tail = 0
+        self.len = 0
+        0
+    }
+
+    # Check if value exists in list
+    F contains(&self, value: i64) -> i64 {
+        current := self.head
+        L current != 0 {
+            L load_i64(current) == value {
+                R 1
+            }
+            current = load_i64(current + 16)
+        }
+        0
+    }
+}
+
+# ============================================
+# RingBuffer - Fixed-capacity circular buffer
+# ============================================
+
+S RingBuffer {
+    data: i64,          # Pointer to data array
+    capacity: i64,
+    head: i64,          # Read position
+    tail: i64,          # Write position
+    len: i64
+}
+
+X RingBuffer {
+    F new(capacity: i64) -> RingBuffer {
+        data := malloc(capacity * 8)
+        RingBuffer {
+            data: data,
+            capacity: capacity,
+            head: 0,
+            tail: 0,
+            len: 0
+        }
+    }
+
+    # Push value to back (returns 0 on success, 1 if full)
+    F push(&self, value: i64) -> i64 {
+        L self.len == self.capacity {
+            R 1  # Full
+        }
+        store_i64(self.data + self.tail * 8, value)
+        self.tail = (self.tail + 1) % self.capacity
+        self.len = self.len + 1
+        0
+    }
+
+    # Pop value from front (returns value, 0 if empty)
+    F pop(&self) -> i64 {
+        L self.len == 0 {
+            R 0  # Empty
+        }
+        value := load_i64(self.data + self.head * 8)
+        self.head = (self.head + 1) % self.capacity
+        self.len = self.len - 1
+        value
+    }
+
+    # Peek at front
+    F front(&self) -> i64 {
+        L self.len == 0 {
+            R 0
+        }
+        load_i64(self.data + self.head * 8)
+    }
+
+    F len(&self) -> i64 {
+        self.len
+    }
+
+    F is_empty(&self) -> i64 {
+        self.len == 0
+    }
+
+    F is_full(&self) -> i64 {
+        self.len == self.capacity
+    }
+
+    F capacity(&self) -> i64 {
+        self.capacity
+    }
+
+    F clear(&self) -> i64 {
+        self.head = 0
+        self.tail = 0
+        self.len = 0
+        0
+    }
+}
+
+# ============================================
+# Memory helpers (extern)
+# ============================================
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64

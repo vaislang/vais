@@ -13,12 +13,16 @@ pub struct TraitMethodSig {
     pub ret: ResolvedType,
     pub has_default: bool,
     pub is_async: bool,
+    pub is_const: bool, // Const trait method (compile-time evaluable)
 }
 
 /// Associated type definition
+/// Supports Generic Associated Types (GAT): associated types with their own generic params
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeDef {
     pub name: String,
+    pub generics: Vec<String>, // GAT: generic parameter names (e.g., ["'a", "B"])
+    pub generic_bounds: HashMap<String, Vec<String>>, // GAT: bounds for each generic param
     pub bounds: Vec<String>,
     pub default: Option<ResolvedType>,
 }
@@ -99,6 +103,10 @@ impl TypeChecker {
                 ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 | ResolvedType::U64 |
                 ResolvedType::F32 | ResolvedType::F64 | ResolvedType::Bool | ResolvedType::Str
             ),
+            // Drop/AsyncDrop - not implemented by primitives
+            "Drop" | "AsyncDrop" => false,
+            // Future - not implemented by primitives
+            "Future" => false,
             // Unknown traits - assume not implemented
             _ => false,
         }

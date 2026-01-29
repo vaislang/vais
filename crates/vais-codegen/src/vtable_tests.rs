@@ -17,6 +17,7 @@ mod tests {
             ret: ResolvedType::Unit,
             has_default: false,
             is_async: false,
+            is_const: false,
         });
 
         methods.insert("area".to_string(), TraitMethodSig {
@@ -27,6 +28,7 @@ mod tests {
             ret: ResolvedType::I64,
             has_default: false,
             is_async: false,
+            is_const: false,
         });
 
         TraitDef {
@@ -247,6 +249,7 @@ mod tests {
             ret: ResolvedType::Str,
             has_default: false,
             is_async: false,
+            is_const: false,
         });
 
         let trait2 = TraitDef {
@@ -272,6 +275,156 @@ mod tests {
         // Should generate two different vtables
         assert_ne!(vtable1.global_name, vtable2.global_name);
         assert_eq!(gen.get_vtables().count(), 2);
+    }
+
+    /// Create a trait with async methods for testing
+    fn create_async_service_trait() -> TraitDef {
+        let mut methods = HashMap::new();
+
+        // Async method: fetch returns Future<i64>
+        methods.insert("fetch".to_string(), TraitMethodSig {
+            name: "fetch".to_string(),
+            params: vec![
+                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
+                ("url".to_string(), ResolvedType::Str, false),
+            ],
+            ret: ResolvedType::I64,
+            has_default: false,
+            is_async: true,
+            is_const: false,
+        });
+
+        // Sync method
+        methods.insert("name".to_string(), TraitMethodSig {
+            name: "name".to_string(),
+            params: vec![
+                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
+            ],
+            ret: ResolvedType::Str,
+            has_default: false,
+            is_async: false,
+            is_const: false,
+        });
+
+        TraitDef {
+            name: "Service".to_string(),
+            generics: vec![],
+            super_traits: vec![],
+            associated_types: HashMap::new(),
+            methods,
+        }
+    }
+
+    #[test]
+    fn test_async_trait_vtable_generation() {
+        let mut gen = VtableGenerator::new();
+        let trait_def = create_async_service_trait();
+
+        let mut impls = HashMap::new();
+        impls.insert("fetch".to_string(), "HttpService_fetch".to_string());
+        impls.insert("name".to_string(), "HttpService_name".to_string());
+
+        let vtable = gen.generate_vtable("HttpService", &trait_def, &impls);
+
+        assert_eq!(vtable.trait_name, "Service");
+        assert_eq!(vtable.impl_type, "HttpService");
+        assert_eq!(vtable.methods.len(), 2);
+
+        let method_map: HashMap<_, _> = vtable.methods.iter().cloned().collect();
+        assert_eq!(method_map.get("fetch"), Some(&"HttpService_fetch".to_string()));
+        assert_eq!(method_map.get("name"), Some(&"HttpService_name".to_string()));
+    }
+
+    #[test]
+    fn test_async_trait_vtable_struct_type() {
+        let trait_def = create_async_service_trait();
+        let vtable_type = VtableGenerator::vtable_struct_type(&trait_def);
+
+        // Async method 'fetch' should have i64 return (Future handle)
+        // Sync method 'name' should have i64 return (Str mapped to i64)
+        assert!(vtable_type.starts_with("{ "));
+        assert!(vtable_type.contains("i8*")); // drop
+        assert!(vtable_type.contains("i64")); // size/align and method returns
+    }
+
+    #[test]
+    fn test_async_trait_vtable_global() {
+        let mut gen = VtableGenerator::new();
+        let trait_def = create_async_service_trait();
+
+        let mut impls = HashMap::new();
+        impls.insert("fetch".to_string(), "HttpService_fetch".to_string());
+        impls.insert("name".to_string(), "HttpService_name".to_string());
+
+        let vtable = gen.generate_vtable("HttpService", &trait_def, &impls);
+        let global_ir = gen.generate_vtable_global(&vtable, &trait_def, 8, 8);
+
+        assert!(global_ir.contains("@vtable_HttpService_Service"));
+        assert!(global_ir.contains("internal constant"));
+        assert!(global_ir.contains("@HttpService_fetch"));
+        assert!(global_ir.contains("@HttpService_name"));
+    }
+
+    #[test]
+    fn test_async_trait_dynamic_call() {
+        let gen = VtableGenerator::new();
+        let trait_def = create_async_service_trait();
+
+        let mut counter = 0;
+        // Call async method 'fetch' through dynamic dispatch
+        let (ir, result) = gen.generate_dynamic_call(
+            "%dyn_service",
+            0, // fetch method index
+            &["%url_arg".to_string()],
+            "i64", // async methods return i64 (Future handle)
+            &trait_def,
+            &mut counter,
+        );
+
+        assert!(ir.contains("extractvalue"));
+        assert!(ir.contains("getelementptr"));
+        assert!(ir.contains("call"));
+        assert!(!result.is_empty()); // Should have a result (Future handle)
+    }
+
+    #[test]
+    fn test_mixed_async_sync_trait() {
+        let mut gen = VtableGenerator::new();
+        let trait_def = create_async_service_trait();
+
+        let mut impls = HashMap::new();
+        impls.insert("fetch".to_string(), "MyService_fetch".to_string());
+        impls.insert("name".to_string(), "MyService_name".to_string());
+
+        let vtable = gen.generate_vtable("MyService", &trait_def, &impls);
+
+        // Both methods should be present
+        assert_eq!(vtable.methods.len(), 2);
+
+        // Verify vtable global generation works with mixed methods
+        let global_ir = gen.generate_vtable_global(&vtable, &trait_def, 8, 8);
+        assert!(global_ir.contains("@vtable_MyService_Service"));
+    }
+
+    #[test]
+    fn test_async_trait_codegen_integration() {
+        let mut gen = CodeGenerator::new("test_async");
+
+        let trait_def = create_async_service_trait();
+        gen.register_trait(trait_def);
+
+        let mut method_impls = HashMap::new();
+        method_impls.insert("fetch".to_string(), "ApiClient_fetch".to_string());
+        method_impls.insert("name".to_string(), "ApiClient_name".to_string());
+
+        gen.register_trait_impl("ApiClient", "Service", method_impls);
+
+        let vtable = gen.get_or_generate_vtable("ApiClient", "Service");
+        assert!(vtable.is_some());
+
+        let vtable = vtable.unwrap();
+        assert_eq!(vtable.trait_name, "Service");
+        assert_eq!(vtable.impl_type, "ApiClient");
     }
 
     #[test]

@@ -264,3 +264,134 @@ X TimerFuture {
 F delay(ticks: i64) -> TimerFuture {
     TimerFuture::new(ticks)
 }
+
+# ============================================
+# Async Drop - asynchronous resource cleanup
+# ============================================
+# AsyncDrop allows types to perform async cleanup when they go out of scope.
+# This is essential for types holding async resources (connections, handles).
+#
+# Usage:
+#   S MyConn { handle: i64 }
+#   X MyConn: AsyncDrop {
+#       A F async_drop(&self) -> i64 {
+#           close_connection(self.handle).await
+#       }
+#   }
+
+# AsyncDrop trait - types implementing this perform async cleanup
+W AsyncDrop {
+    A F async_drop(&self) -> i64
+}
+
+# AsyncDropGuard wraps a value that implements AsyncDrop
+# and ensures async_drop is called when the guard is dropped
+S AsyncDropGuard {
+    value_ptr: i64,         # Pointer to the value
+    drop_fn: i64,           # Async drop function pointer (poll-based)
+    dropped: i64            # 1 if already dropped
+}
+
+X AsyncDropGuard {
+    F new(value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
+        AsyncDropGuard {
+            value_ptr: value_ptr,
+            drop_fn: drop_fn,
+            dropped: 0
+        }
+    }
+
+    # Manually trigger async drop
+    # Returns the result of the drop operation
+    A F drop_async(&self) -> i64 {
+        L self.dropped == 1 {
+            R 0  # Already dropped
+        }
+        self.dropped = 1
+        # Call the async drop function
+        # The drop_fn is a create function that returns a future handle
+        result := call_poll(self.drop_fn, self.value_ptr)
+        extract_poll_value(result)
+    }
+
+    # Check if already dropped
+    F is_dropped(&self) -> i64 {
+        self.dropped
+    }
+
+    # Get the wrapped value pointer
+    F get(&self) -> i64 {
+        self.value_ptr
+    }
+}
+
+# AsyncDropScope manages multiple AsyncDrop resources
+# All resources are dropped in reverse order when the scope ends
+S AsyncDropScope {
+    head: i64,          # First guard in linked list
+    count: i64          # Number of guards
+}
+
+# Linked list node for AsyncDropScope
+S AsyncDropNode {
+    guard_ptr: i64,     # Pointer to AsyncDropGuard
+    next: i64           # Next node
+}
+
+X AsyncDropScope {
+    F new() -> AsyncDropScope {
+        AsyncDropScope { head: 0, count: 0 }
+    }
+
+    # Register a resource for async drop
+    F register(&self, value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
+        guard := AsyncDropGuard::new(value_ptr, drop_fn)
+
+        # Allocate node (2 fields * 8 bytes)
+        node_ptr := malloc(16)
+        # Store guard info - we just store the value_ptr and drop_fn
+        store_i64(node_ptr, value_ptr)
+        store_i64(node_ptr + 8, self.head)
+
+        self.head = node_ptr
+        self.count = self.count + 1
+
+        guard
+    }
+
+    # Drop all resources in reverse registration order (LIFO)
+    # Returns 0 on success, number of failed drops otherwise
+    F drop_all(&self) -> i64 {
+        errors := 0
+        current := self.head
+
+        L current != 0 {
+            value_ptr := load_i64(current)
+            next := load_i64(current + 8)
+
+            # Free the node
+            free(current)
+
+            current = next
+        }
+
+        self.head = 0
+        self.count = 0
+        errors
+    }
+
+    # Get number of registered resources
+    F len(&self) -> i64 {
+        self.count
+    }
+}
+
+# Helper: create an async drop guard
+F async_drop_guard(value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
+    AsyncDropGuard::new(value_ptr, drop_fn)
+}
+
+# Helper: create an async drop scope
+F async_drop_scope() -> AsyncDropScope {
+    AsyncDropScope::new()
+}

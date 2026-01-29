@@ -884,6 +884,9 @@ impl Parser {
     fn parse_associated_type(&mut self) -> ParseResult<AssociatedType> {
         let name = self.parse_ident()?;
 
+        // GAT: Optional generic parameters (e.g., `T Item<'a, B: Clone>`)
+        let generics = self.parse_generics()?;
+
         // Optional trait bounds
         let bounds = if self.check(&Token::Colon) {
             self.advance();
@@ -902,6 +905,7 @@ impl Parser {
 
         Ok(AssociatedType {
             name,
+            generics,
             bounds,
             default,
         })
@@ -909,6 +913,14 @@ impl Parser {
 
     /// Parse trait method signature
     fn parse_trait_method(&mut self) -> ParseResult<TraitMethod> {
+        // Check for const keyword: `C F method_name()` (const trait method)
+        let is_const = if self.check(&Token::Const) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         // Check for async keyword: `A F method_name()`
         let is_async = if self.check(&Token::Async) {
             self.advance();
@@ -952,6 +964,7 @@ impl Parser {
             ret_type,
             default_body,
             is_async,
+            is_const,
         })
     }
 
@@ -1542,6 +1555,17 @@ impl Parser {
 
     /// Helper: parse a single type generic parameter
     fn parse_type_generic_param(&mut self) -> ParseResult<GenericParam> {
+        // Check for variance annotation: +T (covariant), -T (contravariant)
+        let variance = if self.check(&Token::Plus) {
+            self.advance();
+            Variance::Covariant
+        } else if self.check(&Token::Minus) {
+            self.advance();
+            Variance::Contravariant
+        } else {
+            Variance::Invariant
+        };
+
         let name = self.parse_ident()?;
         let bounds = if self.check(&Token::Colon) {
             self.advance();
@@ -1549,7 +1573,7 @@ impl Parser {
         } else {
             Vec::new()
         };
-        Ok(GenericParam::new_type(name, bounds))
+        Ok(GenericParam::new_type_with_variance(name, bounds, variance))
     }
 
     /// Skip tokens until we find `,` or `>` in a generic parameter list.

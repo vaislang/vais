@@ -1,13 +1,18 @@
 {
-  "phase": 4,
-  "request": "Phase 12 P1 전체 자동 진행",
+  "phase": 5,
+  "request": "Phase 12 P2 전체 자동 진행",
   "tasks": [
-    { "id": 1, "name": "에러 복구 강화 (괄호/제네릭 불일치)", "status": "completed", "model": "Sonnet" },
-    { "id": 2, "name": "에러 메시지 품질 향상 (유사 심볼 제안)", "status": "in_progress", "model": "Sonnet" },
-    { "id": 3, "name": "재귀 깊이 제한 (무한 재귀 방지)", "status": "completed", "model": "Sonnet" },
-    { "id": 4, "name": "컴파일 시간 벤치마크 대시보드", "status": "pending", "model": "Sonnet" },
-    { "id": 5, "name": "대규모 프로젝트 스케일 테스트", "status": "pending", "model": "Sonnet" },
-    { "id": 6, "name": "LLVM 빌드 최적화 (ThinLTO 기본화)", "status": "pending", "model": "Sonnet" }
+    { "id": 1, "name": "Async Traits - trait에서 async fn 지원", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "Structured Concurrency - TaskGroup, 자동 취소", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "Async Drop - 비동기 리소스 정리", "status": "completed", "model": "Sonnet" },
+    { "id": 4, "name": "GAT - Generic Associated Types", "status": "completed", "model": "Opus" },
+    { "id": 5, "name": "Const Traits - 컴파일 타임 trait 구현", "status": "completed", "model": "Sonnet" },
+    { "id": 6, "name": "Variance Annotations - 제네릭 가변성 명시", "status": "completed", "model": "Sonnet" },
+    { "id": 7, "name": "std/collections - 모든 컬렉션 re-export", "status": "completed", "model": "Haiku" },
+    { "id": 8, "name": "std/crypto - SHA-256, AES-256, HMAC", "status": "completed", "model": "Sonnet" },
+    { "id": 9, "name": "std/async - 비동기 유틸리티 통합", "status": "completed", "model": "Sonnet" },
+    { "id": 10, "name": "std/fmt - 포맷팅 유틸리티", "status": "completed", "model": "Haiku" }
   ],
-  "currentTask": 2
+  "currentTask": null,
+  "lastCompleted": "Phase 12 P2 전체 완료"
 }

@@ -170,7 +170,10 @@ done:
                 param_types.push("i64".to_string()); // Simplified: all args as i64
             }
 
-            let ret_type = if matches!(method_sig.ret, ResolvedType::Unit) {
+            // For async methods, return type is always i64 (Future handle)
+            let ret_type = if method_sig.is_async {
+                "i64" // Async methods return a Future handle (i64 pointer to state)
+            } else if matches!(method_sig.ret, ResolvedType::Unit) {
                 "void"
             } else {
                 "i64" // Simplified: all returns as i64
@@ -214,7 +217,10 @@ done:
                     for _ in &method_sig.params[1..] {
                         param_types.push("i64".to_string());
                     }
-                    let ret_type = if matches!(method_sig.ret, ResolvedType::Unit) {
+                    // For async methods, return type is always i64 (Future handle)
+                    let ret_type = if method_sig.is_async {
+                        "i64"
+                    } else if matches!(method_sig.ret, ResolvedType::Unit) {
                         "void"
                     } else {
                         "i64"
@@ -416,6 +422,7 @@ mod tests {
             ret: ResolvedType::I64,
             has_default: false,
             is_async: false,
+            is_const: false,
         });
         methods.insert("move_to".to_string(), TraitMethodSig {
             name: "move_to".to_string(),
@@ -427,6 +434,7 @@ mod tests {
             ret: ResolvedType::Unit,
             has_default: false,
             is_async: false,
+            is_const: false,
         });
 
         TraitDef {

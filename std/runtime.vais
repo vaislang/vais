@@ -234,3 +234,325 @@ X F load_i64(ptr: i64) -> i64
 X F call_poll(poll_fn: i64, future_ptr: i64) -> i64
 X F extract_poll_status(poll_result: i64) -> i64
 X F extract_poll_value(poll_result: i64) -> i64
+
+# ============================================
+# Structured Concurrency - TaskGroup
+# ============================================
+# TaskGroup ensures all spawned child tasks complete (or are cancelled)
+# before the group itself completes. This provides structured concurrency
+# guarantees: no orphaned tasks, automatic cancellation on failure.
+
+# Task entry in the group's task list
+S TaskEntry {
+    task_ptr: i64,      # Pointer to TaskNode
+    future_ptr: i64,    # Pointer to future state
+    poll_fn: i64,       # Poll function pointer
+    status: i64,        # 0=pending, 1=running, 2=ready, 3=completed, 4=cancelled
+    result: i64,        # Task result value
+    error: i64,         # Error flag (0=ok, 1=error)
+    next: i64           # Next entry pointer (linked list)
+}
+
+# TaskGroup - spawn and manage a group of concurrent tasks
+# All tasks must complete before the group completes
+S TaskGroup {
+    name: i64,              # Pointer to name string (for debugging)
+    head: i64,              # First task entry
+    tail: i64,              # Last task entry
+    task_count: i64,        # Total tasks spawned
+    completed_count: i64,   # Tasks completed
+    cancelled: i64,         # 1 if group was cancelled
+    cancel_on_error: i64,   # 1 if siblings should be cancelled on error
+    results: i64,           # Pointer to results array
+    max_concurrency: i64    # Maximum concurrent tasks (0 = unlimited)
+}
+
+X TaskGroup {
+    # Create a new TaskGroup
+    F new() -> TaskGroup {
+        TaskGroup {
+            name: 0,
+            head: 0,
+            tail: 0,
+            task_count: 0,
+            completed_count: 0,
+            cancelled: 0,
+            cancel_on_error: 1,
+            results: 0,
+            max_concurrency: 0
+        }
+    }
+
+    # Create a named TaskGroup (for debugging)
+    F named(name_ptr: i64) -> TaskGroup {
+        TaskGroup {
+            name: name_ptr,
+            head: 0,
+            tail: 0,
+            task_count: 0,
+            completed_count: 0,
+            cancelled: 0,
+            cancel_on_error: 1,
+            results: 0,
+            max_concurrency: 0
+        }
+    }
+
+    # Set whether to cancel all tasks when one fails
+    F set_cancel_on_error(&self, enabled: i64) -> i64 {
+        self.cancel_on_error = enabled
+        0
+    }
+
+    # Set maximum concurrent tasks (0 = unlimited)
+    F set_max_concurrency(&self, max: i64) -> i64 {
+        self.max_concurrency = max
+        0
+    }
+
+    # Spawn a new task into the group
+    F spawn(&self, future_ptr: i64, poll_fn: i64) -> i64 {
+        L self.cancelled == 1 {
+            R 0  # Don't spawn if group is cancelled
+        }
+
+        # Allocate TaskEntry (7 fields * 8 bytes = 56 bytes)
+        entry_ptr := malloc(56)
+
+        # Initialize entry
+        store_i64(entry_ptr, 0)              # task_ptr (unused for now)
+        store_i64(entry_ptr + 8, future_ptr) # future_ptr
+        store_i64(entry_ptr + 16, poll_fn)   # poll_fn
+        store_i64(entry_ptr + 24, 0)         # status = pending
+        store_i64(entry_ptr + 32, 0)         # result
+        store_i64(entry_ptr + 40, 0)         # error
+        store_i64(entry_ptr + 48, 0)         # next
+
+        # Add to linked list
+        L self.tail == 0 {
+            self.head = entry_ptr
+            self.tail = entry_ptr
+        } ! {
+            store_i64(self.tail + 48, entry_ptr)
+            self.tail = entry_ptr
+        }
+
+        self.task_count = self.task_count + 1
+        self.task_count  # Return task index
+    }
+
+    # Run all tasks in the group to completion
+    # Returns 0 on success, 1 if any task failed
+    F run(&self) -> i64 {
+        has_error := 0
+
+        L self.completed_count < self.task_count {
+            L self.cancelled == 1 {
+                # Cancel remaining tasks
+                self.cancel_remaining()
+                R 1
+            }
+
+            # Poll all pending/running tasks
+            current := self.head
+            L current != 0 {
+                status := load_i64(current + 24)
+
+                # Only poll pending or running tasks
+                L status < 2 {
+                    future_ptr := load_i64(current + 8)
+                    poll_fn := load_i64(current + 16)
+
+                    # Mark as running
+                    store_i64(current + 24, 1)
+
+                    # Poll the task
+                    poll_result := call_poll(poll_fn, future_ptr)
+                    poll_status := extract_poll_status(poll_result)
+                    poll_value := extract_poll_value(poll_result)
+
+                    L poll_status == 1 {
+                        # Task completed
+                        store_i64(current + 24, 3)  # COMPLETED
+                        store_i64(current + 32, poll_value)
+                        self.completed_count = self.completed_count + 1
+
+                        # Check if result indicates an error (negative = error)
+                        L poll_value < 0 {
+                            store_i64(current + 40, 1)  # error flag
+                            has_error = 1
+
+                            L self.cancel_on_error == 1 {
+                                self.cancelled = 1
+                            }
+                        }
+                    } ! {
+                        # Still pending
+                        store_i64(current + 24, 0)
+                    }
+                }
+
+                current = load_i64(current + 48)
+            }
+        }
+
+        has_error
+    }
+
+    # Cancel all remaining tasks
+    F cancel_remaining(&self) -> i64 {
+        current := self.head
+        L current != 0 {
+            status := load_i64(current + 24)
+            # Cancel tasks that haven't completed
+            L status < 3 {
+                store_i64(current + 24, 4)  # CANCELLED
+                self.completed_count = self.completed_count + 1
+            }
+            current = load_i64(current + 48)
+        }
+        0
+    }
+
+    # Cancel the entire group
+    F cancel(&self) -> i64 {
+        self.cancelled = 1
+        self.cancel_remaining()
+    }
+
+    # Get the number of completed tasks
+    F completed(&self) -> i64 {
+        self.completed_count
+    }
+
+    # Get the total number of tasks
+    F total(&self) -> i64 {
+        self.task_count
+    }
+
+    # Check if all tasks are done
+    F is_done(&self) -> i64 {
+        self.completed_count == self.task_count
+    }
+
+    # Check if group was cancelled
+    F is_cancelled(&self) -> i64 {
+        self.cancelled
+    }
+
+    # Get result of task at index (0-based)
+    F result(&self, index: i64) -> i64 {
+        current := self.head
+        i := 0
+        L current != 0 {
+            L i == index {
+                R load_i64(current + 32)
+            }
+            i = i + 1
+            current = load_i64(current + 48)
+        }
+        0
+    }
+
+    # Get error flag of task at index
+    F has_error(&self, index: i64) -> i64 {
+        current := self.head
+        i := 0
+        L current != 0 {
+            L i == index {
+                R load_i64(current + 40)
+            }
+            i = i + 1
+            current = load_i64(current + 48)
+        }
+        0
+    }
+
+    # Get status of task at index
+    F task_status(&self, index: i64) -> i64 {
+        current := self.head
+        i := 0
+        L current != 0 {
+            L i == index {
+                R load_i64(current + 24)
+            }
+            i = i + 1
+            current = load_i64(current + 48)
+        }
+        0
+    }
+
+    # Free all task entries
+    F cleanup(&self) -> i64 {
+        current := self.head
+        L current != 0 {
+            next := load_i64(current + 48)
+            free(current)
+            current = next
+        }
+        self.head = 0
+        self.tail = 0
+        0
+    }
+}
+
+# ============================================
+# Scoped Task - ensures tasks complete within scope
+# ============================================
+
+# ScopedTask runs a TaskGroup and guarantees cleanup
+S ScopedTask {
+    group: i64      # Pointer to TaskGroup
+}
+
+X ScopedTask {
+    F new() -> ScopedTask {
+        # Allocate TaskGroup on heap
+        group_ptr := malloc(72)  # 9 fields * 8 bytes
+        # Initialize all fields to 0
+        i := 0
+        L i < 9 {
+            store_i64(group_ptr + i * 8, 0)
+            i = i + 1
+        }
+        # Set cancel_on_error default to 1
+        store_i64(group_ptr + 48, 1)
+
+        ScopedTask { group: group_ptr }
+    }
+
+    F spawn(&self, future_ptr: i64, poll_fn: i64) -> i64 {
+        group_ptr := self.group as *TaskGroup
+        group_ptr.spawn(future_ptr, poll_fn)
+    }
+
+    # Run all tasks and cleanup - guaranteed to not leak tasks
+    F run_and_cleanup(&self) -> i64 {
+        group_ptr := self.group as *TaskGroup
+        result := group_ptr.run()
+
+        # Always cleanup, even on error
+        group_ptr.cleanup()
+
+        result
+    }
+}
+
+# ============================================
+# Helper functions for structured concurrency
+# ============================================
+
+# Create a new task group
+F task_group() -> TaskGroup {
+    TaskGroup::new()
+}
+
+# Create a named task group
+F task_group_named(name_ptr: i64) -> TaskGroup {
+    TaskGroup::named(name_ptr)
+}
+
+# Create a scoped task runner
+F scoped_task() -> ScopedTask {
+    ScopedTask::new()
+}

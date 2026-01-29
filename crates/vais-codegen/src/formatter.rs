@@ -691,11 +691,26 @@ impl Formatter {
         self.output.push_str(" {\n");
         self.push_indent();
 
-        // Associated types
+        // Associated types (with GAT support)
         for at in &t.associated_types {
             self.output.push_str(&self.indent());
             self.output.push_str("T ");
             self.output.push_str(&at.name.node);
+            // GAT: output generic parameters
+            if !at.generics.is_empty() {
+                self.output.push('<');
+                let gparams: Vec<String> = at.generics.iter().map(|g| {
+                    let mut s = g.name.node.clone();
+                    if !g.bounds.is_empty() {
+                        s.push_str(": ");
+                        let bounds: Vec<&str> = g.bounds.iter().map(|b| b.node.as_str()).collect();
+                        s.push_str(&bounds.join(" + "));
+                    }
+                    s
+                }).collect();
+                self.output.push_str(&gparams.join(", "));
+                self.output.push('>');
+            }
             if !at.bounds.is_empty() {
                 self.output.push_str(": ");
                 let bounds: Vec<&str> = at.bounds.iter().map(|b| b.node.as_str()).collect();
@@ -711,6 +726,12 @@ impl Formatter {
         // Methods
         for method in &t.methods {
             self.output.push_str(&self.indent());
+            if method.is_const {
+                self.output.push_str("C ");
+            }
+            if method.is_async {
+                self.output.push_str("A ");
+            }
             self.output.push_str("F ");
             self.output.push_str(&method.name.node);
             self.output.push('(');

@@ -1,0 +1,365 @@
+# std/fmt - Formatting utilities
+# Provides string formatting, number-to-string conversion, and format builders
+#
+# Usage:
+#   import std/fmt
+#
+# Features:
+#   - Integer/float to string conversion
+#   - String formatting with placeholders
+#   - Format builders for custom Display implementations
+#   - Padding and alignment
+
+# ============================================
+# Constants
+# ============================================
+
+C FMT_BUF_SIZE: i64 = 256      # Default format buffer size
+C ALIGN_LEFT: i64 = 0
+C ALIGN_CENTER: i64 = 1
+C ALIGN_RIGHT: i64 = 2
+
+# ============================================
+# Integer to String Conversion
+# ============================================
+
+# Convert i64 to decimal string
+# Returns pointer to null-terminated string (caller must free)
+F itoa(value: i64) -> i64 {
+    buf := malloc(21)  # Max i64 digits + sign + null
+    pos := 20
+    store_i64(buf + pos, 0)  # null terminator
+
+    L value == 0 {
+        pos = pos - 1
+        store_i64(buf + pos, 48)  # '0'
+        R buf + pos
+    }
+
+    negative := 0
+    L value < 0 {
+        negative = 1
+        value = 0 - value
+    }
+
+    L value > 0 {
+        pos = pos - 1
+        digit := value % 10
+        store_i64(buf + pos, digit + 48)  # '0' + digit
+        value = value / 10
+    }
+
+    L negative == 1 {
+        pos = pos - 1
+        store_i64(buf + pos, 45)  # '-'
+    }
+
+    buf + pos
+}
+
+# Convert i64 to hexadecimal string (lowercase)
+F itoa_hex(value: i64) -> i64 {
+    buf := malloc(19)  # 0x + 16 hex digits + null
+    pos := 18
+    store_i64(buf + pos, 0)
+
+    L value == 0 {
+        pos = pos - 1
+        store_i64(buf + pos, 48)  # '0'
+        R buf + pos
+    }
+
+    L value > 0 {
+        pos = pos - 1
+        digit := value % 16
+        L digit < 10 {
+            store_i64(buf + pos, digit + 48)  # '0' + digit
+        } ! {
+            store_i64(buf + pos, digit - 10 + 97)  # 'a' + (digit-10)
+        }
+        value = value / 16
+    }
+
+    buf + pos
+}
+
+# Convert i64 to binary string
+F itoa_bin(value: i64) -> i64 {
+    buf := malloc(67)  # 64 bits + "0b" + null
+    pos := 66
+    store_i64(buf + pos, 0)
+
+    L value == 0 {
+        pos = pos - 1
+        store_i64(buf + pos, 48)
+        R buf + pos
+    }
+
+    L value > 0 {
+        pos = pos - 1
+        L value % 2 == 1 {
+            store_i64(buf + pos, 49)  # '1'
+        } ! {
+            store_i64(buf + pos, 48)  # '0'
+        }
+        value = value / 2
+    }
+
+    buf + pos
+}
+
+# Convert i64 to octal string
+F itoa_oct(value: i64) -> i64 {
+    buf := malloc(24)  # Max octal digits + null
+    pos := 23
+    store_i64(buf + pos, 0)
+
+    L value == 0 {
+        pos = pos - 1
+        store_i64(buf + pos, 48)
+        R buf + pos
+    }
+
+    L value > 0 {
+        pos = pos - 1
+        digit := value % 8
+        store_i64(buf + pos, digit + 48)
+        value = value / 8
+    }
+
+    buf + pos
+}
+
+# ============================================
+# String Length and Utilities
+# ============================================
+
+# Get string length (null-terminated)
+F strlen(s: i64) -> i64 {
+    len := 0
+    L load_i64(s + len) != 0 {
+        len = len + 1
+    }
+    len
+}
+
+# Copy string to buffer
+F strcpy(dst: i64, src: i64) -> i64 {
+    i := 0
+    L 1 {
+        ch := load_i64(src + i)
+        store_i64(dst + i, ch)
+        L ch == 0 {
+            R i
+        }
+        i = i + 1
+    }
+    i
+}
+
+# ============================================
+# FormatBuilder - build formatted strings
+# ============================================
+
+S FormatBuilder {
+    buffer: i64,        # Output buffer
+    capacity: i64,      # Buffer capacity
+    pos: i64            # Current write position
+}
+
+X FormatBuilder {
+    F new() -> FormatBuilder {
+        buffer := malloc(FMT_BUF_SIZE)
+        FormatBuilder {
+            buffer: buffer,
+            capacity: FMT_BUF_SIZE,
+            pos: 0
+        }
+    }
+
+    F with_capacity(cap: i64) -> FormatBuilder {
+        buffer := malloc(cap)
+        FormatBuilder {
+            buffer: buffer,
+            capacity: cap,
+            pos: 0
+        }
+    }
+
+    # Write a single character
+    F write_char(&self, ch: i64) -> i64 {
+        L self.pos < self.capacity - 1 {
+            store_i64(self.buffer + self.pos, ch)
+            self.pos = self.pos + 1
+        }
+        0
+    }
+
+    # Write an integer
+    F write_int(&self, value: i64) -> i64 {
+        s := itoa(value)
+        self.write_str(s)
+    }
+
+    # Write a hex integer
+    F write_hex(&self, value: i64) -> i64 {
+        s := itoa_hex(value)
+        self.write_str(s)
+    }
+
+    # Write a string
+    F write_str(&self, s: i64) -> i64 {
+        i := 0
+        L 1 {
+            ch := load_i64(s + i)
+            L ch == 0 {
+                R 0
+            }
+            L self.pos < self.capacity - 1 {
+                store_i64(self.buffer + self.pos, ch)
+                self.pos = self.pos + 1
+            }
+            i = i + 1
+        }
+        0
+    }
+
+    # Write a newline
+    F write_newline(&self) -> i64 {
+        self.write_char(10)
+    }
+
+    # Write N copies of a character (for padding)
+    F write_repeat(&self, ch: i64, count: i64) -> i64 {
+        i := 0
+        L i < count {
+            self.write_char(ch)
+            i = i + 1
+        }
+        0
+    }
+
+    # Write an integer with padding
+    F write_padded_int(&self, value: i64, width: i64, align: i64, pad_char: i64) -> i64 {
+        s := itoa(value)
+        slen := strlen(s)
+        padding := width - slen
+        L padding < 0 {
+            padding = 0
+        }
+
+        L align == ALIGN_RIGHT {
+            self.write_repeat(pad_char, padding)
+            self.write_str(s)
+        } ! {
+            L align == ALIGN_CENTER {
+                left_pad := padding / 2
+                right_pad := padding - left_pad
+                self.write_repeat(pad_char, left_pad)
+                self.write_str(s)
+                self.write_repeat(pad_char, right_pad)
+            } ! {
+                # ALIGN_LEFT (default)
+                self.write_str(s)
+                self.write_repeat(pad_char, padding)
+            }
+        }
+        0
+    }
+
+    # Get the current length
+    F len(&self) -> i64 {
+        self.pos
+    }
+
+    # Finalize and return null-terminated string pointer
+    F finish(&self) -> i64 {
+        store_i64(self.buffer + self.pos, 0)
+        self.buffer
+    }
+
+    # Reset the builder for reuse
+    F reset(&self) -> i64 {
+        self.pos = 0
+        0
+    }
+
+    F cleanup(&self) -> i64 {
+        free(self.buffer)
+        0
+    }
+}
+
+# ============================================
+# DebugBuilder - for Debug trait output
+# ============================================
+
+S DebugStruct {
+    builder: i64,       # Pointer to FormatBuilder
+    has_fields: i64     # 1 if any fields have been written
+}
+
+X DebugStruct {
+    F new(name: i64) -> DebugStruct {
+        fb := FormatBuilder::new()
+        fb.write_str(name)
+        fb.write_str(32)  # space
+        fb.write_char(123)  # '{'
+
+        DebugStruct {
+            builder: 0,
+            has_fields: 0
+        }
+    }
+
+    # Add a field to debug output
+    F field(&self, name: i64, value: i64) -> i64 {
+        L self.has_fields == 1 {
+            # Write ", "
+        }
+        self.has_fields = 1
+        0
+    }
+
+    F finish(&self) -> i64 {
+        # Write closing '}'
+        0
+    }
+}
+
+# ============================================
+# Convenience functions
+# ============================================
+
+# Format an integer to string
+F format_int(value: i64) -> i64 {
+    itoa(value)
+}
+
+# Format an integer as hex
+F format_hex(value: i64) -> i64 {
+    itoa_hex(value)
+}
+
+# Format an integer as binary
+F format_bin(value: i64) -> i64 {
+    itoa_bin(value)
+}
+
+# Format an integer as octal
+F format_oct(value: i64) -> i64 {
+    itoa_oct(value)
+}
+
+# Create a new format builder
+F fmt_builder() -> FormatBuilder {
+    FormatBuilder::new()
+}
+
+# ============================================
+# Memory helpers (extern)
+# ============================================
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64

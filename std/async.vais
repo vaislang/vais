@@ -1,0 +1,379 @@
+# std/async - Async utilities and combinators
+# Provides high-level async programming utilities built on top of
+# std/future and std/runtime.
+#
+# Usage:
+#   import std/async
+#
+# Features:
+#   - Timeout combinator
+#   - Retry logic
+#   - Race / race_ok
+#   - AsyncMutex (async-aware lock)
+#   - AsyncChannel (async-aware channel)
+#   - Debounce / Throttle
+
+# ============================================
+# Timeout - wraps a future with a deadline
+# ============================================
+
+S TimeoutFuture {
+    inner_ptr: i64,     # Inner future pointer
+    inner_poll: i64,    # Inner future poll function
+    deadline: i64,      # Maximum ticks before timeout
+    elapsed: i64        # Current tick count
+}
+
+X TimeoutFuture {
+    F new(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
+        TimeoutFuture {
+            inner_ptr: inner_ptr,
+            inner_poll: inner_poll,
+            deadline: deadline,
+            elapsed: 0
+        }
+    }
+}
+
+# Create a timeout wrapper
+# Returns -1 if the inner future doesn't complete within deadline ticks
+F timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
+    TimeoutFuture::new(inner_ptr, inner_poll, deadline)
+}
+
+# ============================================
+# Retry - retries a future on failure
+# ============================================
+
+S RetryConfig {
+    max_retries: i64,       # Maximum number of retries
+    backoff_base: i64,      # Base delay between retries (in ticks)
+    backoff_factor: i64,    # Multiplier for exponential backoff (x100, so 200 = 2x)
+    current_retry: i64,     # Current retry count
+    current_delay: i64      # Current backoff delay
+}
+
+X RetryConfig {
+    F new(max_retries: i64) -> RetryConfig {
+        RetryConfig {
+            max_retries: max_retries,
+            backoff_base: 1,
+            backoff_factor: 200,    # 2x exponential backoff
+            current_retry: 0,
+            current_delay: 1
+        }
+    }
+
+    F with_backoff(max_retries: i64, base: i64, factor: i64) -> RetryConfig {
+        RetryConfig {
+            max_retries: max_retries,
+            backoff_base: base,
+            backoff_factor: factor,
+            current_retry: 0,
+            current_delay: base
+        }
+    }
+
+    # Check if we should retry
+    F should_retry(&self) -> i64 {
+        self.current_retry < self.max_retries
+    }
+
+    # Record a retry attempt
+    F record_retry(&self) -> i64 {
+        self.current_retry = self.current_retry + 1
+        self.current_delay = self.current_delay * self.backoff_factor / 100
+        self.current_delay
+    }
+
+    # Get current retry count
+    F retries(&self) -> i64 {
+        self.current_retry
+    }
+
+    # Get remaining retries
+    F remaining(&self) -> i64 {
+        self.max_retries - self.current_retry
+    }
+}
+
+# ============================================
+# Race - returns first completed future's result
+# ============================================
+
+S RaceFuture {
+    futures: i64,       # Pointer to array of (future_ptr, poll_fn) pairs
+    count: i64,         # Number of futures
+    completed: i64      # Index of completed future (-1 = none)
+}
+
+X RaceFuture {
+    F new(count: i64) -> RaceFuture {
+        futures := malloc(count * 16)  # Each entry: 8 bytes ptr + 8 bytes poll_fn
+        RaceFuture {
+            futures: futures,
+            count: count,
+            completed: 0 - 1
+        }
+    }
+
+    # Add a future to the race (0-indexed)
+    F add(&self, index: i64, future_ptr: i64, poll_fn: i64) -> i64 {
+        store_i64(self.futures + index * 16, future_ptr)
+        store_i64(self.futures + index * 16 + 8, poll_fn)
+        0
+    }
+
+    # Get which future completed first
+    F winner(&self) -> i64 {
+        self.completed
+    }
+
+    F cleanup(&self) -> i64 {
+        free(self.futures)
+        0
+    }
+}
+
+# ============================================
+# AsyncMutex - async-aware mutual exclusion
+# ============================================
+
+S AsyncMutex {
+    locked: i64,        # 1 if locked, 0 if unlocked
+    value: i64,         # Protected value
+    waiters: i64,       # Number of waiting tasks
+    waiter_head: i64    # Linked list of waiting futures
+}
+
+X AsyncMutex {
+    F new(value: i64) -> AsyncMutex {
+        AsyncMutex {
+            locked: 0,
+            value: value,
+            waiters: 0,
+            waiter_head: 0
+        }
+    }
+
+    # Try to acquire the lock (non-blocking)
+    # Returns 1 if acquired, 0 if already locked
+    F try_lock(&self) -> i64 {
+        L self.locked == 0 {
+            self.locked = 1
+            R 1
+        }
+        0
+    }
+
+    # Release the lock
+    F unlock(&self) -> i64 {
+        self.locked = 0
+        # Wake first waiter if any
+        L self.waiter_head != 0 {
+            self.waiters = self.waiters - 1
+        }
+        0
+    }
+
+    # Get the protected value (must be locked)
+    F get(&self) -> i64 {
+        self.value
+    }
+
+    # Set the protected value (must be locked)
+    F set(&self, value: i64) -> i64 {
+        self.value = value
+        0
+    }
+
+    # Check if locked
+    F is_locked(&self) -> i64 {
+        self.locked
+    }
+}
+
+# ============================================
+# AsyncChannel - async-aware bounded channel
+# ============================================
+
+S AsyncChannel {
+    buffer: i64,        # Ring buffer for messages
+    capacity: i64,
+    head: i64,          # Read position
+    tail: i64,          # Write position
+    len: i64,           # Current message count
+    closed: i64         # 1 if channel is closed
+}
+
+X AsyncChannel {
+    F new(capacity: i64) -> AsyncChannel {
+        buffer := malloc(capacity * 8)
+        AsyncChannel {
+            buffer: buffer,
+            capacity: capacity,
+            head: 0,
+            tail: 0,
+            len: 0,
+            closed: 0
+        }
+    }
+
+    # Try to send a message (non-blocking)
+    # Returns 0 on success, 1 if full, 2 if closed
+    F try_send(&self, value: i64) -> i64 {
+        L self.closed == 1 {
+            R 2
+        }
+        L self.len == self.capacity {
+            R 1
+        }
+        store_i64(self.buffer + self.tail * 8, value)
+        self.tail = (self.tail + 1) % self.capacity
+        self.len = self.len + 1
+        0
+    }
+
+    # Try to receive a message (non-blocking)
+    # Returns the value, or -1 if empty, -2 if closed
+    F try_recv(&self) -> i64 {
+        L self.len == 0 {
+            L self.closed == 1 {
+                R 0 - 2
+            }
+            R 0 - 1
+        }
+        value := load_i64(self.buffer + self.head * 8)
+        self.head = (self.head + 1) % self.capacity
+        self.len = self.len - 1
+        value
+    }
+
+    # Close the channel
+    F close(&self) -> i64 {
+        self.closed = 1
+        0
+    }
+
+    # Check if channel is empty
+    F is_empty(&self) -> i64 {
+        self.len == 0
+    }
+
+    # Check if channel is full
+    F is_full(&self) -> i64 {
+        self.len == self.capacity
+    }
+
+    # Get number of pending messages
+    F pending(&self) -> i64 {
+        self.len
+    }
+
+    # Check if closed
+    F is_closed(&self) -> i64 {
+        self.closed
+    }
+
+    F cleanup(&self) -> i64 {
+        free(self.buffer)
+        0
+    }
+}
+
+# ============================================
+# Debounce - delays execution until input settles
+# ============================================
+
+S Debounce {
+    delay: i64,         # Delay in ticks before executing
+    last_trigger: i64,  # Tick count of last trigger
+    pending: i64        # 1 if there's a pending execution
+}
+
+X Debounce {
+    F new(delay: i64) -> Debounce {
+        Debounce {
+            delay: delay,
+            last_trigger: 0,
+            pending: 0
+        }
+    }
+
+    # Trigger the debounce (resets timer)
+    F trigger(&self, current_tick: i64) -> i64 {
+        self.last_trigger = current_tick
+        self.pending = 1
+        0
+    }
+
+    # Check if the debounced action should execute
+    F should_execute(&self, current_tick: i64) -> i64 {
+        L self.pending == 1 {
+            L current_tick - self.last_trigger >= self.delay {
+                self.pending = 0
+                R 1
+            }
+        }
+        0
+    }
+}
+
+# ============================================
+# Throttle - limits execution rate
+# ============================================
+
+S Throttle {
+    interval: i64,      # Minimum interval between executions
+    last_exec: i64      # Tick count of last execution
+}
+
+X Throttle {
+    F new(interval: i64) -> Throttle {
+        Throttle {
+            interval: interval,
+            last_exec: 0
+        }
+    }
+
+    # Check if action is allowed (and record execution if so)
+    F try_execute(&self, current_tick: i64) -> i64 {
+        L current_tick - self.last_exec >= self.interval {
+            self.last_exec = current_tick
+            R 1
+        }
+        0
+    }
+}
+
+# ============================================
+# Helper functions
+# ============================================
+
+# Create a timeout for a future
+F with_timeout(inner_ptr: i64, inner_poll: i64, deadline: i64) -> TimeoutFuture {
+    TimeoutFuture::new(inner_ptr, inner_poll, deadline)
+}
+
+# Create a retry config with default backoff
+F retry(max_retries: i64) -> RetryConfig {
+    RetryConfig::new(max_retries)
+}
+
+# Create an async mutex
+F async_mutex(value: i64) -> AsyncMutex {
+    AsyncMutex::new(value)
+}
+
+# Create an async channel
+F async_channel(capacity: i64) -> AsyncChannel {
+    AsyncChannel::new(capacity)
+}
+
+# ============================================
+# Memory helpers (extern)
+# ============================================
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64

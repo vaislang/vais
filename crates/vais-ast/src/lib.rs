@@ -177,6 +177,27 @@ pub struct Param {
     pub ownership: Ownership, // Linear type ownership mode
 }
 
+/// Variance annotation for generic type parameters
+/// Controls subtyping relationship between parameterized types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Variance {
+    /// Invariant (default): T is neither covariant nor contravariant
+    /// Container<A> has no subtyping relation with Container<B>
+    Invariant,
+    /// Covariant (+T): if A <: B then Container<A> <: Container<B>
+    /// Used for read-only/producer types (e.g., Iterator, Supplier)
+    Covariant,
+    /// Contravariant (-T): if A <: B then Container<B> <: Container<A>
+    /// Used for write-only/consumer types (e.g., Predicate, Consumer)
+    Contravariant,
+}
+
+impl Default for Variance {
+    fn default() -> Self {
+        Variance::Invariant
+    }
+}
+
 /// Generic parameter kind - either a type parameter, const parameter, or lifetime parameter
 #[derive(Debug, Clone, PartialEq)]
 pub enum GenericParamKind {
@@ -195,12 +216,13 @@ pub enum GenericParamKind {
     },
 }
 
-/// Generic parameter with optional trait bounds
+/// Generic parameter with optional trait bounds and variance annotation
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericParam {
     pub name: Spanned<String>,
     pub bounds: Vec<Spanned<String>>, // Trait constraints (e.g., T: Display + Clone) - kept for backward compatibility
     pub kind: GenericParamKind,
+    pub variance: Variance, // Variance annotation: Invariant (default), Covariant (+), Contravariant (-)
 }
 
 impl GenericParam {
@@ -210,6 +232,17 @@ impl GenericParam {
             name,
             bounds: bounds.clone(),
             kind: GenericParamKind::Type { bounds },
+            variance: Variance::Invariant,
+        }
+    }
+
+    /// Create a type generic parameter with variance annotation
+    pub fn new_type_with_variance(name: Spanned<String>, bounds: Vec<Spanned<String>>, variance: Variance) -> Self {
+        Self {
+            name,
+            bounds: bounds.clone(),
+            kind: GenericParamKind::Type { bounds },
+            variance,
         }
     }
 
@@ -219,6 +252,7 @@ impl GenericParam {
             name,
             bounds: vec![],
             kind: GenericParamKind::Const { ty },
+            variance: Variance::Invariant,
         }
     }
 
@@ -228,12 +262,23 @@ impl GenericParam {
             name,
             bounds: vec![],
             kind: GenericParamKind::Lifetime { bounds },
+            variance: Variance::Invariant,
         }
     }
 
     /// Check if this is a const generic parameter
     pub fn is_const(&self) -> bool {
         matches!(self.kind, GenericParamKind::Const { .. })
+    }
+
+    /// Check if this parameter is covariant
+    pub fn is_covariant(&self) -> bool {
+        matches!(self.variance, Variance::Covariant)
+    }
+
+    /// Check if this parameter is contravariant
+    pub fn is_contravariant(&self) -> bool {
+        matches!(self.variance, Variance::Contravariant)
     }
 }
 
@@ -308,9 +353,11 @@ pub struct Use {
 }
 
 /// Associated type in a trait
+/// Supports Generic Associated Types (GAT): `T Item<'a, B: Clone>`
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssociatedType {
     pub name: Spanned<String>,
+    pub generics: Vec<GenericParam>, // GAT: generic parameters for this associated type
     pub bounds: Vec<Spanned<String>>, // Optional trait bounds
     pub default: Option<Spanned<Type>>, // Optional default type
 }
@@ -334,6 +381,7 @@ pub struct TraitMethod {
     pub ret_type: Option<Spanned<Type>>,
     pub default_body: Option<FunctionBody>,
     pub is_async: bool,
+    pub is_const: bool, // Const trait method (compile-time evaluable)
 }
 
 /// Associated type implementation

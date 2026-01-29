@@ -185,6 +185,7 @@ impl<'a> AstExpander<'a> {
                 params: method.params,
                 ret_type: method.ret_type,
                 is_async: method.is_async,
+                is_const: method.is_const,
                 default_body,
             });
         }

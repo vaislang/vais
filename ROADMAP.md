@@ -1462,7 +1462,7 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 | Phase 9: 언어 완성도 | ✅ 완료 | 100% |
 | Phase 10: Self-hosting | ✅ 완료 | 100% |
 | Phase 11: 프로덕션 준비 | ✅ 완료 | 100% |
-| Phase 12: 생태계 성숙 | 🔄 진행 중 | 0% |
+| Phase 12: 생태계 성숙 | 🔄 진행 중 | 50% |
 
 ---
 
@@ -1535,20 +1535,61 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### P2 - 중간 우선순위 (1-2개월) - 언어 기능 확장
 
 #### Async/Await 고도화
-- [ ] **Async Traits** - trait 메서드에서 async fn 지원
-- [ ] **Structured Concurrency** - TaskGroup, 자동 취소
-- [ ] **Async Drop** - 비동기 리소스 정리
+- [x] **Async Traits** - trait 메서드에서 async fn 지원 (완료일: 2026-01-29)
+  - formatter: async trait method 출력 (`A F` 키워드)
+  - vtable: async method의 Future 반환 타입 처리 (i64 핸들)
+  - vtable global 생성에서 async method 함수 포인터 타입 처리
+  - 7개 async trait 테스트 추가
+- [x] **Structured Concurrency** - TaskGroup, 자동 취소 (완료일: 2026-01-29)
+  - TaskGroup: spawn/run/cancel/cancel_remaining 메서드
+  - 자동 취소: cancel_on_error 설정으로 에러 발생 시 자동 취소
+  - ScopedTask: 범위 기반 작업 관리 (run_and_cleanup)
+  - task_group(), scoped_task() 헬퍼 함수
+- [x] **Async Drop** - 비동기 리소스 정리 (완료일: 2026-01-29)
+  - AsyncDrop trait: async_drop(&self) 메서드
+  - AsyncDropGuard: 비동기 drop 래퍼 (drop_async, is_dropped)
+  - AsyncDropScope: 다중 리소스 LIFO 정리 (register, drop_all)
+  - 타입 체커: Drop/AsyncDrop trait 인식
 
 #### 타입 시스템 확장
-- [ ] **Generic Associated Types (GAT)** - HKT 라이트 버전
-- [ ] **Const Traits** - 컴파일 타임 trait 구현
-- [ ] **Variance Annotations** - 제네릭 가변성 명시
+- [x] **Generic Associated Types (GAT)** - HKT 라이트 버전 (완료일: 2026-01-29)
+  - AST: AssociatedType에 generics 필드 추가
+  - 타입 시스템: AssociatedTypeDef에 generics/generic_bounds 추가
+  - 파서: associated type에서 제네릭 파라미터 파싱
+  - formatter: GAT 제네릭 출력 지원
+- [x] **Const Traits** - 컴파일 타임 trait 구현 (완료일: 2026-01-29)
+  - AST: TraitMethod에 is_const 필드 추가
+  - 타입 시스템: TraitMethodSig에 is_const 추가
+  - 파서: `C F method()` 구문으로 const trait method 파싱
+  - formatter: const trait method 출력 (`C F` 키워드)
+- [x] **Variance Annotations** - 제네릭 가변성 명시 (완료일: 2026-01-29)
+  - AST: Variance enum (Invariant, Covariant, Contravariant)
+  - GenericParam에 variance 필드 추가
+  - 파서: `+T` (covariant), `-T` (contravariant) 구문 파싱
+  - new_type_with_variance() 생성자
 
 #### 표준 라이브러리 확장
-- [ ] **std/collections** - 모든 컬렉션 re-export
-- [ ] **std/crypto** - SHA-256, AES-256, HMAC
-- [ ] **std/async** - 비동기 유틸리티 통합
-- [ ] **std/fmt** - 포맷팅 유틸리티
+- [x] **std/collections** - 모든 컬렉션 re-export (완료일: 2026-01-29)
+  - LinkedList: push_front/back, pop_front/back, contains, clear
+  - RingBuffer: 고정 용량 순환 버퍼 (push, pop, front)
+  - 기존 Vec, HashMap, BTreeMap, Set, Deque, PriorityQueue 통합 진입점
+- [x] **std/crypto** - SHA-256, AES-256, HMAC (완료일: 2026-01-29)
+  - Sha256: update/finalize/digest_i64 (교육용 구현)
+  - Hmac: HMAC-SHA256 구현 (ipad/opad)
+  - Aes256: XOR 기반 교육용 블록 암호 (encrypt_block/decrypt_block)
+  - 헬퍼: sha256(), hmac_sha256()
+- [x] **std/async** - 비동기 유틸리티 통합 (완료일: 2026-01-29)
+  - TimeoutFuture: 데드라인 기반 타임아웃
+  - RetryConfig: 지수 백오프 재시도 로직
+  - RaceFuture: 최초 완료 퓨처 선택
+  - AsyncMutex: 비동기 뮤텍스 (try_lock/unlock)
+  - AsyncChannel: 비동기 바운디드 채널 (try_send/try_recv)
+  - Debounce/Throttle: 실행 빈도 제어
+- [x] **std/fmt** - 포맷팅 유틸리티 (완료일: 2026-01-29)
+  - itoa/itoa_hex/itoa_bin/itoa_oct: 정수→문자열 변환
+  - FormatBuilder: 스트링 빌더 (write_char/str/int/hex, 패딩, 정렬)
+  - DebugStruct: Debug trait 출력 빌더
+  - strlen/strcpy: 문자열 유틸리티
 
 ### P3 - 낮은 우선순위 (3-6개월) - 생태계 확장
 
