@@ -1,16 +1,14 @@
 {
   "phase": 5,
-  "request": "Phase 11 P4 작업 진행",
+  "request": "Phase 12 P0 전체 자동 진행",
   "tasks": [
-    { "id": 1, "name": "Effect System 구현", "status": "completed", "model": "Opus", "priority": "P4" },
-    { "id": 2, "name": "Associated Types 구현", "status": "completed", "model": "Opus", "priority": "P4" },
-    { "id": 3, "name": "Linear Types 구현", "status": "completed", "model": "Opus", "priority": "P4" },
-    { "id": 4, "name": "Tiered JIT 설계/구현", "status": "completed", "model": "Opus", "priority": "P4" },
-    { "id": 5, "name": "Concurrent GC 개선", "status": "completed", "model": "Opus", "priority": "P4" },
-    { "id": 6, "name": "인터랙티브 튜토리얼", "status": "completed", "model": "Sonnet", "priority": "P4" },
-    { "id": 7, "name": "성능 프로파일링 가이드", "status": "completed", "model": "Sonnet", "priority": "P4" },
-    { "id": 8, "name": "FFI bindgen 자동 생성", "status": "completed", "model": "Sonnet", "priority": "P4" }
+    { "id": 1, "name": "dead_code 정리 (40+ allow 해결)", "status": "completed", "model": "Sonnet" },
+    { "id": 2, "name": "clippy 경고 해결", "status": "completed", "model": "Sonnet" },
+    { "id": 3, "name": "FFI 안전성 경고 수정", "status": "completed", "model": "Sonnet" },
+    { "id": 4, "name": "inkwell for loop 패턴 바인딩 구현", "status": "completed", "model": "Sonnet" },
+    { "id": 5, "name": "auto_vectorize placeholder 완성", "status": "completed", "model": "Sonnet" },
+    { "id": 6, "name": "LSP document formatting 통합", "status": "completed", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "Phase 11 P4 전체 완료"
+  "lastCompleted": "Phase 12 P0 전체 완료"
 }

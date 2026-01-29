@@ -748,6 +748,128 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             CodegenError::LlvmError("No current function for loop".to_string())
         })?;
 
+        // Check if this is a range-based for loop
+        let is_range_loop = iter.as_ref().map_or(false, |it| {
+            matches!(&it.node, Expr::Range { .. })
+        });
+
+        if is_range_loop && pattern.is_some() {
+            // Range-based for loop: L pattern : start..end { body }
+            self.generate_range_for_loop(fn_value, pattern.unwrap(), iter.unwrap(), body)
+        } else {
+            // Condition-based or infinite loop
+            self.generate_condition_loop(fn_value, pattern, iter, body)
+        }
+    }
+
+    fn generate_range_for_loop(
+        &mut self,
+        fn_value: inkwell::values::FunctionValue<'ctx>,
+        pattern: &Spanned<Pattern>,
+        iter: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Extract range start, end, inclusive from the iter expression
+        let (start_expr, end_expr, inclusive) = match &iter.node {
+            Expr::Range { start, end, inclusive } => (start.as_deref(), end.as_deref(), *inclusive),
+            _ => unreachable!("generate_range_for_loop called with non-range iter"),
+        };
+
+        // Generate start and end values
+        let start_val = if let Some(s) = start_expr {
+            self.generate_expr(&s.node)?.into_int_value()
+        } else {
+            self.context.i64_type().const_int(0, false)
+        };
+
+        let end_val = if let Some(e) = end_expr {
+            self.generate_expr(&e.node)?.into_int_value()
+        } else {
+            self.context.i64_type().const_int(i64::MAX as u64, false)
+        };
+
+        // Create counter variable
+        let counter_alloca = self.builder.build_alloca(self.context.i64_type(), "loop_counter")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_store(counter_alloca, start_val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        let loop_cond = self.context.append_basic_block(fn_value, &self.fresh_label("for.cond"));
+        let loop_body = self.context.append_basic_block(fn_value, &self.fresh_label("for.body"));
+        let loop_inc = self.context.append_basic_block(fn_value, &self.fresh_label("for.inc"));
+        let loop_end = self.context.append_basic_block(fn_value, &self.fresh_label("for.end"));
+
+        // Push loop context: continue goes to increment, break goes to end
+        self.loop_stack.push(LoopContext {
+            break_block: loop_end,
+            continue_block: loop_inc,
+        });
+
+        // Branch to condition check
+        self.builder.build_unconditional_branch(loop_cond)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Condition block: counter < end (or counter <= end for inclusive)
+        self.builder.position_at_end(loop_cond);
+        let current_val = self.builder.build_load(self.context.i64_type(), counter_alloca, "counter_val")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+
+        let cmp_pred = if inclusive {
+            IntPredicate::SLE
+        } else {
+            IntPredicate::SLT
+        };
+        let cond = self.builder.build_int_compare(cmp_pred, current_val, end_val, "for_cond")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        self.builder.build_conditional_branch(cond, loop_body, loop_end)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Body block: bind pattern to current counter value, execute body
+        self.builder.position_at_end(loop_body);
+
+        // Load current counter and bind to pattern
+        let counter_for_bind = self.builder.build_load(self.context.i64_type(), counter_alloca, "bind_val")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.generate_pattern_bindings(pattern, &counter_for_bind)?;
+
+        // Generate body
+        let _body_val = self.generate_block(body)?;
+
+        // Branch to increment (if not terminated by break/return)
+        if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+            self.builder.build_unconditional_branch(loop_inc)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
+
+        // Increment block: counter += 1
+        self.builder.position_at_end(loop_inc);
+        let inc_val = self.builder.build_load(self.context.i64_type(), counter_alloca, "inc_load")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let next_val = self.builder.build_int_add(inc_val, self.context.i64_type().const_int(1, false), "inc_val")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_store(counter_alloca, next_val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_unconditional_branch(loop_cond)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // End block
+        self.builder.position_at_end(loop_end);
+        self.loop_stack.pop();
+
+        // For loops return unit
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_condition_loop(
+        &mut self,
+        fn_value: inkwell::values::FunctionValue<'ctx>,
+        pattern: Option<&Spanned<Pattern>>,
+        iter: Option<&Spanned<Expr>>,
+        body: &[Spanned<Stmt>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let loop_start = self.context.append_basic_block(fn_value, &self.fresh_label("loop.start"));
         let loop_body = self.context.append_basic_block(fn_value, &self.fresh_label("loop.body"));
         let loop_end = self.context.append_basic_block(fn_value, &self.fresh_label("loop.end"));
@@ -795,10 +917,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Loop body
         self.builder.position_at_end(loop_body);
 
-        // Bind pattern if present
-        if let Some(_pat) = pattern {
-            // For now, pattern binding in for loops is not fully implemented
-            // This would require iterator support
+        // Bind pattern if present (for non-range patterns with condition value)
+        if let (Some(pat), Some(iter_expr)) = (pattern, iter) {
+            let iter_val = self.generate_expr(&iter_expr.node)?;
+            self.generate_pattern_bindings(pat, &iter_val)?;
         }
 
         let _body_val = self.generate_block(body)?;

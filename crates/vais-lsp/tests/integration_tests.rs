@@ -414,7 +414,7 @@ async fn test_server_capabilities_comprehensive() {
     assert!(caps.document_link_provider.is_some(), "Missing document_link_provider");
 
     // Verify capabilities that should NOT be present (not yet implemented)
-    assert!(caps.document_formatting_provider.is_none(), "document_formatting_provider should not be implemented");
+    assert!(caps.document_formatting_provider.is_some(), "Missing document_formatting_provider");
 }
 
 // ============================================================================

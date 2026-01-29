@@ -7,6 +7,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned, Type};
 use vais_parser::parse;
+use vais_codegen::formatter::{FormatConfig, Formatter};
 
 use crate::semantic::get_semantic_tokens;
 
@@ -1097,6 +1098,7 @@ impl LanguageServer for VaisBackend {
                     resolve_provider: Some(false),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
         })
@@ -2637,6 +2639,38 @@ impl LanguageServer for VaisBackend {
             }
         }
 
+        Ok(None)
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = &params.text_document.uri;
+        if let Some(doc) = self.documents.get(uri) {
+            let source = doc.content.to_string();
+            // Parse the source to get an AST
+            if let Ok(module) = parse(&source) {
+                let config = FormatConfig {
+                    indent_size: params.options.tab_size as usize,
+                    use_tabs: !params.options.insert_spaces,
+                    ..FormatConfig::default()
+                };
+                let mut formatter = Formatter::new(config);
+                let formatted = formatter.format_module(&module);
+
+                // Replace entire document content
+                let line_count = doc.content.len_lines();
+                let last_line = doc.content.line(line_count.saturating_sub(1));
+                let last_char = last_line.len_chars();
+
+                let edit = TextEdit {
+                    range: Range {
+                        start: Position::new(0, 0),
+                        end: Position::new(line_count as u32, last_char as u32),
+                    },
+                    new_text: formatted,
+                };
+                return Ok(Some(vec![edit]));
+            }
+        }
         Ok(None)
     }
 }

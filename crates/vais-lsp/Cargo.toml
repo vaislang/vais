@@ -15,6 +15,7 @@ vais-lexer = { path = "../vais-lexer" }
 vais-parser = { path = "../vais-parser" }
 vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
+vais-codegen = { path = "../vais-codegen" }
 
 # Utilities
 serde = { version = "1.0", features = ["derive"] }
