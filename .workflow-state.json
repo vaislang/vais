@@ -1,10 +1,13 @@
 {
-  "phase": 5,
-  "request": "Phase 12 P4 - 문서/커뮤니티 작업 완료",
+  "phase": 4,
+  "request": "Phase 13 P0 - 품질 보증 및 프로덕션 검증",
   "tasks": [
-    { "id": 1, "name": "공식 문서 사이트 - 검색 가능한 문서", "status": "done", "model": "Sonnet" },
-    { "id": 2, "name": "커뮤니티 패키지 가이드라인", "status": "done", "model": "Haiku" }
+    { "id": 1, "name": "error_suggestion_tests 수정", "status": "in_progress", "model": "Sonnet" },
+    { "id": 2, "name": "통합 테스트 확장 - E2E 스위트 Part 1", "status": "pending", "model": "Sonnet" },
+    { "id": 3, "name": "통합 테스트 확장 - E2E 스위트 Part 2", "status": "pending", "model": "Sonnet" },
+    { "id": 4, "name": "Windows CI 추가", "status": "pending", "model": "Haiku" },
+    { "id": 5, "name": "코드 커버리지 측정 도입", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": null,
-  "completedAt": "2026-01-29"
+  "currentTask": 1,
+  "lastCompleted": null
 }

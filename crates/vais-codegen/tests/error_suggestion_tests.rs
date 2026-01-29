@@ -59,7 +59,8 @@ fn test_undefined_variable_multiple_suggestions() {
 
 #[test]
 fn test_undefined_function_suggestion() {
-    let source = "F print_num(x:i64)->i64=x;F main()->i64=@print_nu(42)";
+    // Fixed: Remove semicolon between declarations and use regular function call instead of @
+    let source = "F print_num(x:i64)->i64=x F main()->i64=print_nu(42)";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let result = gen.generate_module(&module);
@@ -83,8 +84,9 @@ fn test_undefined_function_suggestion() {
 
 #[test]
 fn test_field_not_found_suggestion() {
+    // Fixed: Use S for struct instead of T
     let source = r#"
-        T Point{x:i64,y:i64}
+        S Point{x:i64,y:i64}
         F test(p:Point)->i64=p.X
     "#;
     let module = parse(source).unwrap();

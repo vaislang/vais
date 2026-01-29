@@ -1736,9 +1736,10 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
 ### P0 - 긴급 (1-2주) - 테스트 수정 및 CI 강화
 
 #### 테스트 수정
-- [ ] **error_suggestion_tests 수정** - 6개 실패 테스트 복구
-  - 테스트 구문을 현재 파서 문법에 맞게 업데이트
-  - "Did you mean?" 기능 검증
+- [x] **error_suggestion_tests 수정** - 6개 실패 테스트 복구 (완료일: 2026-01-29)
+  - 테스트 구문을 현재 파서 문법에 맞게 업데이트 (T→S, 세미콜론 제거)
+  - "Did you mean?" 기능 검증: 미정의 변수/함수 제안, 필드 접근 제안 구현
+  - 배열 인덱싱 타입 체크 추가
 - [ ] **통합 테스트 확장** - E2E 테스트 스위트 구축
   - 컴파일 → 실행 → 출력 검증 자동화
   - 표준 라이브러리 47개 모듈 각각 테스트
