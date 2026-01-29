@@ -1844,7 +1844,13 @@ ae528ef Enhance LSP with comprehensive auto-completion and hover support
   - `vaisc pgo` 자동화 명령어: 3단계 PGO 워크플로우 (instrument → profile → optimize)
   - llvm-profdata 자동 merge (macOS xcrun 폴백 지원)
   - `--merge-only` 옵션: 기존 프로파일 데이터로만 재빌드
-- [ ] **병렬 컴파일** - 모듈 단위 병렬 컴파일
+- [x] **병렬 컴파일** - 모듈 단위 병렬 컴파일 (완료일: 2026-01-29)
+  - `--parallel`/`-j` CLI 플래그 추가: 스레드 수 지정 (0=자동 감지)
+  - rayon 기반 병렬 모듈 파싱: 다수 import를 동시에 파싱
+  - 병렬 최적화 파이프라인: per-function IR 최적화 병렬 처리
+  - IR 분할기 (split_ir_into_functions): 함수 단위로 IR을 분할하여 독립적으로 최적화
+  - ParallelConfig: 스레드 수, 파싱/최적화 병렬화 설정
+  - 6개 단위 테스트 추가
 - [ ] **Comptime 확장** - 컴파일 타임 평가 강화
 
 #### IDE 경험 향상

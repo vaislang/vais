@@ -378,7 +378,7 @@ pub fn optimize_ir_advanced(ir: &str, level: OptLevel) -> String {
 }
 
 /// Constant folding - evaluate constant expressions at compile time
-fn constant_folding(ir: &str) -> String {
+pub(crate) fn constant_folding(ir: &str) -> String {
     let mut result = String::new();
 
     for line in ir.lines() {
@@ -444,7 +444,7 @@ where
 }
 
 /// Dead store elimination - remove stores that are never read
-fn dead_store_elimination(ir: &str) -> String {
+pub(crate) fn dead_store_elimination(ir: &str) -> String {
     let lines: Vec<&str> = ir.lines().collect();
     let mut loaded_vars: HashSet<String> = HashSet::new();
     let mut result = Vec::new();
@@ -495,7 +495,7 @@ fn dead_store_elimination(ir: &str) -> String {
 }
 
 /// Common subexpression elimination
-fn common_subexpression_elimination(ir: &str) -> String {
+pub(crate) fn common_subexpression_elimination(ir: &str) -> String {
     let mut result = String::new();
     let mut expr_to_var: HashMap<String, String> = HashMap::new();
 
@@ -549,7 +549,7 @@ fn extract_binop_expr(line: &str) -> Option<(String, String)> {
 }
 
 /// Strength reduction - replace expensive operations with cheaper ones
-fn strength_reduction(ir: &str) -> String {
+pub(crate) fn strength_reduction(ir: &str) -> String {
     let mut result = String::new();
 
     for line in ir.lines() {
@@ -656,7 +656,7 @@ fn log2(n: i64) -> u32 {
 }
 
 /// Branch optimization - simplify branches with constant conditions
-fn branch_optimization(ir: &str) -> String {
+pub(crate) fn branch_optimization(ir: &str) -> String {
     let mut result = Vec::new();
     let mut skip_until_label = false;
     let target_label = String::new();
@@ -747,7 +747,7 @@ fn extract_branch_label(line: &str, take_then: bool) -> Option<String> {
 ///   br i1 %X, label %then, label %else
 ///
 /// IMPORTANT: Only removes zext/icmp if the result is ONLY used in br i1
-fn conditional_branch_simplification(ir: &str) -> String {
+pub(crate) fn conditional_branch_simplification(ir: &str) -> String {
     let lines: Vec<&str> = ir.lines().collect();
     let mut result = Vec::new();
 
@@ -922,7 +922,7 @@ fn try_replace_branch_cond(line: &str, icmp_to_i1: &HashMap<String, String>) -> 
 }
 
 /// Dead code elimination - remove unused definitions
-fn dead_code_elimination(ir: &str) -> String {
+pub(crate) fn dead_code_elimination(ir: &str) -> String {
     let lines: Vec<&str> = ir.lines().collect();
     let mut used_vars: HashSet<String> = HashSet::new();
     let mut var_definitions: HashMap<String, usize> = HashMap::new();
@@ -1018,7 +1018,7 @@ fn is_side_effect_free(line: &str) -> bool {
 }
 
 /// Loop optimizations - includes LICM, loop unrolling, and simple loop transformations
-fn loop_invariant_motion(ir: &str) -> String {
+pub(crate) fn loop_invariant_motion(ir: &str) -> String {
     // First pass: Loop unrolling for simple counted loops
     let unrolled = loop_unrolling(ir);
 
@@ -1404,7 +1404,7 @@ struct InlinableFunction {
 }
 
 /// Aggressive inlining for small functions
-fn aggressive_inline(ir: &str) -> String {
+pub(crate) fn aggressive_inline(ir: &str) -> String {
     // Parse all small functions that are candidates for inlining
     let inline_candidates = find_inline_candidates(ir);
 

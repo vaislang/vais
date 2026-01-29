@@ -21,6 +21,7 @@ pub mod advanced_opt;
 pub mod debug;
 pub mod formatter;
 pub mod optimize;
+pub mod parallel;
 pub mod visitor;
 pub mod wasm_component;
 mod builtins;

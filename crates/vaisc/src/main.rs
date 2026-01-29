@@ -153,6 +153,10 @@ enum Commands {
         /// Show suggested fixes for errors
         #[arg(long)]
         suggest_fixes: bool,
+
+        /// Enable parallel compilation with N threads (0 = auto-detect)
+        #[arg(short = 'j', long, value_name = "THREADS")]
+        parallel: Option<usize>,
     },
 
     /// Run a Vais source file
@@ -433,7 +437,7 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use, suggest_fixes }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(&input, output, gpu_target_str, cli.verbose)
@@ -468,7 +472,12 @@ fn main() {
                 vais_codegen::optimize::PgoMode::None
             };
 
-            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes)
+            // Configure parallel compilation
+            let parallel_config = parallel.map(|threads| {
+                vais_codegen::parallel::ParallelConfig::new(threads)
+            });
+
+            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config)
             }
         }
         Some(Commands::Run { input, args }) => {
@@ -520,6 +529,7 @@ fn main() {
                     vais_codegen::optimize::LtoMode::None,
                     vais_codegen::optimize::PgoMode::None,
                     false,
+                    None, // parallel_config
                 )
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
@@ -614,13 +624,14 @@ fn cmd_build_with_timing(
     lto_mode: vais_codegen::optimize::LtoMode,
     pgo_mode: vais_codegen::optimize::PgoMode,
     suggest_fixes: bool,
+    parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
 ) -> Result<(), String> {
     use std::time::Instant;
 
     let start = Instant::now();
     let result = cmd_build(
         input, output, emit_ir, opt_level, debug, verbose, plugins,
-        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes
+        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config
     );
     let elapsed = start.elapsed();
 
@@ -651,6 +662,7 @@ fn cmd_build(
     lto_mode: vais_codegen::optimize::LtoMode,
     pgo_mode: vais_codegen::optimize::PgoMode,
     suggest_fixes: bool,
+    parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
 ) -> Result<(), String> {
     use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
 
@@ -718,6 +730,17 @@ fn cmd_build(
         println!("{} (--force-rebuild)", "Full rebuild".yellow().bold());
     }
 
+    // Initialize parallel compilation if requested
+    let use_parallel = parallel_config.is_some();
+    if let Some(ref config) = parallel_config {
+        config.init_thread_pool()?;
+        if verbose {
+            println!("{} Parallel compilation enabled ({} threads)",
+                "⚡".cyan().bold(),
+                config.effective_threads());
+        }
+    }
+
     // Read source for error reporting
     let main_source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
@@ -725,7 +748,11 @@ fn cmd_build(
     // Parse main file and resolve imports
     let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
-    let merged_ast = load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source)?;
+    let merged_ast = if use_parallel {
+        load_module_with_imports_parallel(input, &mut loaded_modules, verbose, &main_source)?
+    } else {
+        load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source)?
+    };
     let parse_time = parse_start.elapsed();
 
     if verbose {
@@ -851,7 +878,14 @@ fn cmd_build(
         2 => OptLevel::O2,
         _ => OptLevel::O3,
     };
-    let ir = optimize_ir(&raw_ir, opt);
+    let ir = if use_parallel && opt != OptLevel::O0 {
+        if verbose {
+            println!("  {} Parallel optimization enabled", "⚡".cyan());
+        }
+        vais_codegen::parallel::parallel_optimize_ir(&raw_ir, opt)
+    } else {
+        optimize_ir(&raw_ir, opt)
+    };
 
     // Run plugin optimizations
     let plugin_opt = match effective_opt_level {
@@ -1035,6 +1069,141 @@ fn load_module_with_imports_internal(
                 // Recursively load the imported module
                 let imported = load_module_with_imports(&module_path, loaded, verbose)?;
                 all_items.extend(imported.items);
+            }
+            _ => {
+                all_items.push(item);
+            }
+        }
+    }
+
+    Ok(Module { items: all_items })
+}
+
+/// Load a module with parallel parsing of imports
+///
+/// First pass: parse the main module to discover import paths.
+/// Second pass: parse all imported modules in parallel using rayon.
+/// Third pass: merge all items in correct order.
+fn load_module_with_imports_parallel(
+    path: &Path,
+    loaded: &mut HashSet<PathBuf>,
+    verbose: bool,
+    source: &str,
+) -> Result<Module, String> {
+    use rayon::prelude::*;
+
+    // Canonicalize path
+    let canonical = path.canonicalize()
+        .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
+
+    if loaded.contains(&canonical) {
+        return Ok(Module { items: vec![] });
+    }
+    loaded.insert(canonical.clone());
+
+    if verbose {
+        println!("{} {} (parallel)", "Compiling".green().bold(), path.display());
+    }
+
+    let _tokens = tokenize(source)
+        .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
+
+    let ast = parse(source)
+        .map_err(|e| error_formatter::format_parse_error(&e, source, path))?;
+
+    if verbose {
+        println!("  {} items", ast.items.len());
+    }
+
+    let base_dir = path.parent().unwrap_or(Path::new("."));
+
+    // Phase 1: Collect all import paths first
+    let mut import_paths: Vec<PathBuf> = Vec::new();
+    let mut import_indices: Vec<usize> = Vec::new();
+
+    for (idx, item) in ast.items.iter().enumerate() {
+        if let Item::Use(use_stmt) = &item.node {
+            let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
+            let module_canonical = module_path.canonicalize()
+                .map_err(|e| format!("Cannot resolve path '{}': {}", module_path.display(), e))?;
+            if !loaded.contains(&module_canonical) {
+                import_paths.push(module_path);
+                import_indices.push(idx);
+                loaded.insert(module_canonical);
+            }
+        }
+    }
+
+    // Phase 2: Parse all imports in parallel
+    let parsed_results: Vec<(PathBuf, Result<(Module, String), String>)> = if import_paths.len() > 1 {
+        if verbose {
+            println!("  {} Parsing {} imports in parallel", "⚡".cyan(), import_paths.len());
+        }
+        import_paths
+            .par_iter()
+            .map(|p| {
+                let result = (|| -> Result<(Module, String), String> {
+                    let src = fs::read_to_string(p)
+                        .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
+                    let _tokens = tokenize(&src)
+                        .map_err(|e| format!("Lexer error in '{}': {}", p.display(), e))?;
+                    let module = parse(&src)
+                        .map_err(|e| format!("Parse error in '{}': {:?}", p.display(), e))?;
+                    Ok((module, src))
+                })();
+                (p.clone(), result)
+            })
+            .collect()
+    } else {
+        import_paths.iter().map(|p| {
+            let result = (|| -> Result<(Module, String), String> {
+                let src = fs::read_to_string(p)
+                    .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
+                let _tokens = tokenize(&src)
+                    .map_err(|e| format!("Lexer error in '{}': {}", p.display(), e))?;
+                let module = parse(&src)
+                    .map_err(|e| format!("Parse error in '{}': {:?}", p.display(), e))?;
+                Ok((module, src))
+            })();
+            (p.clone(), result)
+        }).collect()
+    };
+
+    // Build a map from path -> parsed module
+    let mut parsed_map: std::collections::HashMap<PathBuf, vais_ast::Module> =
+        std::collections::HashMap::new();
+    for (import_path, result) in parsed_results {
+        let (parsed_module, _src) = result?;
+        // Recursively resolve imports within each parsed module
+        let sub_base = import_path.parent().unwrap_or(Path::new("."));
+        let mut sub_items = Vec::new();
+        for item in parsed_module.items {
+            match &item.node {
+                Item::Use(use_stmt) => {
+                    let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
+                    let sub_imported = load_module_with_imports(&sub_path, loaded, verbose)?;
+                    sub_items.extend(sub_imported.items);
+                }
+                _ => {
+                    sub_items.push(item);
+                }
+            }
+        }
+        parsed_map.insert(import_path, Module { items: sub_items });
+    }
+
+    // Phase 3: Merge items in correct order
+    let mut all_items = Vec::new();
+    let mut import_idx = 0;
+    for (idx, item) in ast.items.into_iter().enumerate() {
+        match &item.node {
+            Item::Use(_) => {
+                if import_idx < import_indices.len() && import_indices[import_idx] == idx {
+                    if let Some(imported_module) = parsed_map.remove(&import_paths[import_idx]) {
+                        all_items.extend(imported_module.items);
+                    }
+                    import_idx += 1;
+                }
             }
             _ => {
                 all_items.push(item);
@@ -1431,6 +1600,7 @@ fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegi
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
         false,
+        None, // parallel_config
     )?;
 
     // Run the binary
@@ -1632,6 +1802,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 lto_mode,
                 vais_codegen::optimize::PgoMode::None,
                 false,
+                None, // parallel_config
             )?;
 
             if hot {
@@ -2635,6 +2806,7 @@ fn cmd_pgo(
             vais_codegen::optimize::LtoMode::None,
             vais_codegen::optimize::PgoMode::Generate(profile_dir.to_string()),
             false, // suggest_fixes
+            None, // parallel_config
         )?;
 
         println!("{} Instrumented binary: {}", "  ✓".green(), instrumented_bin.display());
@@ -2712,6 +2884,7 @@ fn cmd_pgo(
         vais_codegen::optimize::LtoMode::Thin,
         vais_codegen::optimize::PgoMode::Use(profdata_path),
         false, // suggest_fixes
+        None, // parallel_config
     )?;
 
     println!("{} PGO-optimized binary: {}", "  ✓".green(), output_path.display());
@@ -2789,6 +2962,7 @@ fn cmd_watch(
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
         false,
+        None, // parallel_config
     )?;
 
     // Execute initial run if requested
@@ -2873,6 +3047,7 @@ fn cmd_watch(
                         vais_codegen::optimize::LtoMode::None,
                         vais_codegen::optimize::PgoMode::None,
                         false,
+                        None, // parallel_config
                     ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());
