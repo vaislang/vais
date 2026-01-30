@@ -44,6 +44,10 @@ pub mod cross_compile;
 mod cache_tests;
 #[cfg(test)]
 mod vtable_tests;
+#[cfg(test)]
+mod struct_param_tests;
+#[cfg(test)]
+mod nested_field_tests;
 
 // Inkwell-based code generator (optional)
 #[cfg(feature = "inkwell-codegen")]
@@ -1551,6 +1555,108 @@ impl CodeGenerator {
 
     // Function generation functions are in function_gen.rs module
 
+    fn generate_range_for_loop(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        iter: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (start_expr, end_expr, inclusive) = match &iter.node {
+            Expr::Range { start, end, inclusive } => (start.as_deref(), end.as_deref(), *inclusive),
+            _ => unreachable!("generate_range_for_loop called with non-range iter"),
+        };
+
+        let mut ir = String::new();
+
+        let (start_val, start_ir) = if let Some(s) = start_expr {
+            self.generate_expr(s, counter)?
+        } else {
+            ("0".to_string(), String::new())
+        };
+        ir.push_str(&start_ir);
+
+        let (end_val, end_ir) = if let Some(e) = end_expr {
+            self.generate_expr(e, counter)?
+        } else {
+            (format!("{}", i64::MAX), String::new())
+        };
+        ir.push_str(&end_ir);
+
+        let counter_var = format!("%loop_counter.{}", self.label_counter);
+        self.label_counter += 1;
+        ir.push_str(&format!("  {} = alloca i64\n", counter_var));
+        ir.push_str(&format!("  store i64 {}, i64* {}\n", start_val, counter_var));
+
+        let pattern_var = if let Pattern::Ident(name) = &pattern.node {
+            let var_name = format!("{}.for", name);
+            let llvm_name = format!("%{}", var_name);
+            ir.push_str(&format!("  {} = alloca i64\n", llvm_name));
+            self.locals.insert(
+                name.clone(),
+                LocalVar::alloca(ResolvedType::I64, var_name.clone()),
+            );
+            Some((name.clone(), llvm_name))
+        } else {
+            None
+        };
+
+        let loop_cond = self.next_label("for.cond");
+        let loop_body_label = self.next_label("for.body");
+        let loop_inc = self.next_label("for.inc");
+        let loop_end = self.next_label("for.end");
+
+        self.loop_stack.push(LoopLabels {
+            continue_label: loop_inc.clone(),
+            break_label: loop_end.clone(),
+        });
+
+        ir.push_str(&format!("  br label %{}\n", loop_cond));
+
+        ir.push_str(&format!("{}:\n", loop_cond));
+        let current_val = self.next_temp(counter);
+        ir.push_str(&format!("  {} = load i64, i64* {}\n", current_val, counter_var));
+
+        let cmp_pred = if inclusive { "sle" } else { "slt" };
+        let cond_result = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = icmp {} i64 {}, {}\n",
+            cond_result, cmp_pred, current_val, end_val
+        ));
+        ir.push_str(&format!(
+            "  br i1 {}, label %{}, label %{}\n",
+            cond_result, loop_body_label, loop_end
+        ));
+
+        ir.push_str(&format!("{}:\n", loop_body_label));
+
+        if let Some((_, llvm_name)) = &pattern_var {
+            let bind_val = self.next_temp(counter);
+            ir.push_str(&format!("  {} = load i64, i64* {}\n", bind_val, counter_var));
+            ir.push_str(&format!("  store i64 {}, i64* {}\n", bind_val, llvm_name));
+        }
+
+        let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
+        ir.push_str(&body_ir);
+
+        if !body_terminated {
+            ir.push_str(&format!("  br label %{}\n", loop_inc));
+        }
+
+        ir.push_str(&format!("{}:\n", loop_inc));
+        let inc_load = self.next_temp(counter);
+        ir.push_str(&format!("  {} = load i64, i64* {}\n", inc_load, counter_var));
+        let inc_result = self.next_temp(counter);
+        ir.push_str(&format!("  {} = add i64 {}, 1\n", inc_result, inc_load));
+        ir.push_str(&format!("  store i64 {}, i64* {}\n", inc_result, counter_var));
+        ir.push_str(&format!("  br label %{}\n", loop_cond));
+
+        ir.push_str(&format!("{}:\n", loop_end));
+        self.loop_stack.pop();
+
+        Ok(("0".to_string(), ir))
+    }
+
     fn generate_expr(
         &mut self,
         expr: &Spanned<Expr>,
@@ -1975,6 +2081,20 @@ impl CodeGenerator {
                         .map(|ty| self.type_to_llvm(ty))
                         .unwrap_or_else(|| "i64".to_string());
 
+                    // For struct arguments, load the value if we have a pointer
+                    // (struct literals generate alloca+stores, returning pointers)
+                    if let Some(ResolvedType::Named { .. }) = &param_ty {
+                        // Check if val looks like a pointer (starts with %)
+                        if val.starts_with('%') {
+                            let loaded = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* {}\n",
+                                loaded, arg_ty, arg_ty, val
+                            ));
+                            val = loaded;
+                        }
+                    }
+
                     // Insert integer conversion if needed (trunc for narrowing, sext for widening)
                     if let Some(param_type) = &param_ty {
                         let src_bits = self.get_integer_bits_from_val(&val);
@@ -2385,7 +2505,18 @@ impl CodeGenerator {
             }
 
             // Loop expression
-            Expr::Loop { pattern: _, iter, body } => {
+            Expr::Loop { pattern, iter, body } => {
+                // Check if this is a range-based for loop
+                let is_range_loop = iter.as_ref().map_or(false, |it| {
+                    matches!(&it.node, Expr::Range { .. })
+                });
+
+                if is_range_loop && pattern.is_some() {
+                    // Range-based for loop: L pattern : start..end { body }
+                    return self.generate_range_for_loop(pattern.as_ref().unwrap(), iter.as_ref().unwrap(), body, counter);
+                }
+
+                // Conditional or infinite loop
                 let loop_start = self.next_label("loop.start");
                 let loop_body = self.next_label("loop.body");
                 let loop_end = self.next_label("loop.end");
@@ -2395,7 +2526,6 @@ impl CodeGenerator {
                     continue_label: loop_start.clone(),
                     break_label: loop_end.clone(),
                 });
-
 
                 let mut ir = String::new();
 
@@ -2865,80 +2995,87 @@ impl CodeGenerator {
                 let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
                 let mut ir = obj_ir;
 
-                // Try to find struct or union info based on variable name
-                if let Expr::Ident(var_name) = &obj_expr.node {
-                    if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
-                        if let ResolvedType::Named { name: type_name, .. } = &local.ty {
-                            // First check if it's a struct
-                            if let Some(struct_info) = self.structs.get(type_name).cloned() {
-                                let field_idx = struct_info.fields.iter()
-                                    .position(|(n, _)| n == &field.node)
-                                    .ok_or_else(|| {
-                                        let candidates: Vec<&str> = struct_info.fields.iter()
-                                            .map(|(name, _)| name.as_str())
-                                            .collect();
-                                        let suggestions = suggest_similar(&field.node, &candidates, 3);
-                                        let suggestion_text = format_did_you_mean(&suggestions);
-                                        CodegenError::TypeError(format!(
-                                            "Unknown field '{}' in struct '{}'{}",
-                                            field.node, type_name, suggestion_text
-                                        ))
-                                    })?;
+                // Use type inference to get the type of the object expression
+                // This handles both simple identifiers and nested field accesses
+                let obj_type = self.infer_expr_type(obj_expr);
 
-                                let field_ty = &struct_info.fields[field_idx].1;
-                                let llvm_ty = self.type_to_llvm(field_ty);
+                if let ResolvedType::Named { name: type_name, .. } = &obj_type {
+                    // First check if it's a struct
+                    if let Some(struct_info) = self.structs.get(type_name).cloned() {
+                        let field_idx = struct_info.fields.iter()
+                            .position(|(n, _)| n == &field.node)
+                            .ok_or_else(|| {
+                                let candidates: Vec<&str> = struct_info.fields.iter()
+                                    .map(|(name, _)| name.as_str())
+                                    .collect();
+                                let suggestions = suggest_similar(&field.node, &candidates, 3);
+                                let suggestion_text = format_did_you_mean(&suggestions);
+                                CodegenError::TypeError(format!(
+                                    "Unknown field '{}' in struct '{}'{}",
+                                    field.node, type_name, suggestion_text
+                                ))
+                            })?;
 
-                                // Generate temps in correct order: field_ptr first, then result
-                                let field_ptr = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                                    field_ptr, type_name, type_name, obj_val, field_idx
-                                ));
+                        let field_ty = &struct_info.fields[field_idx].1;
+                        let llvm_ty = self.type_to_llvm(field_ty);
 
-                                let result = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = load {}, {}* {}\n",
-                                    result, llvm_ty, llvm_ty, field_ptr
-                                ));
+                        // Generate field pointer
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
+                            field_ptr, type_name, type_name, obj_val, field_idx
+                        ));
 
-                                return Ok((result, ir));
-                            }
-                            // Then check if it's a union
-                            else if let Some(union_info) = self.unions.get(type_name).cloned() {
-                                let field_ty = union_info.fields.iter()
-                                    .find(|(n, _)| n == &field.node)
-                                    .map(|(_, ty)| ty.clone())
-                                    .ok_or_else(|| {
-                                        let candidates: Vec<&str> = union_info.fields.iter()
-                                            .map(|(name, _)| name.as_str())
-                                            .collect();
-                                        let suggestions = suggest_similar(&field.node, &candidates, 3);
-                                        let suggestion_text = format_did_you_mean(&suggestions);
-                                        CodegenError::TypeError(format!(
-                                            "Unknown field '{}' in union '{}'{}",
-                                            field.node, type_name, suggestion_text
-                                        ))
-                                    })?;
-
-                                let llvm_ty = self.type_to_llvm(&field_ty);
-
-                                // For union field access, bitcast union pointer to field type pointer
-                                // All fields share offset 0
-                                let field_ptr = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = bitcast %{}* {} to {}*\n",
-                                    field_ptr, type_name, obj_val, llvm_ty
-                                ));
-
-                                let result = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = load {}, {}* {}\n",
-                                    result, llvm_ty, llvm_ty, field_ptr
-                                ));
-
-                                return Ok((result, ir));
-                            }
+                        // Only load if the field is not itself a struct (to support nested access)
+                        // For nested field access like o.a.val, we want o.a to return a pointer to Inner,
+                        // not the Inner value itself
+                        if matches!(field_ty, ResolvedType::Named { .. }) {
+                            // Field is a struct - return pointer for nested access
+                            return Ok((field_ptr, ir));
+                        } else {
+                            // Field is a primitive - load the value
+                            let result = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* {}\n",
+                                result, llvm_ty, llvm_ty, field_ptr
+                            ));
+                            return Ok((result, ir));
                         }
+                    }
+                    // Then check if it's a union
+                    else if let Some(union_info) = self.unions.get(type_name).cloned() {
+                        let field_ty = union_info.fields.iter()
+                            .find(|(n, _)| n == &field.node)
+                            .map(|(_, ty)| ty.clone())
+                            .ok_or_else(|| {
+                                let candidates: Vec<&str> = union_info.fields.iter()
+                                    .map(|(name, _)| name.as_str())
+                                    .collect();
+                                let suggestions = suggest_similar(&field.node, &candidates, 3);
+                                let suggestion_text = format_did_you_mean(&suggestions);
+                                CodegenError::TypeError(format!(
+                                    "Unknown field '{}' in union '{}'{}",
+                                    field.node, type_name, suggestion_text
+                                ))
+                            })?;
+
+                        let llvm_ty = self.type_to_llvm(&field_ty);
+
+                        // For union field access, bitcast union pointer to field type pointer
+                        // All fields share offset 0
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = bitcast %{}* {} to {}*\n",
+                            field_ptr, type_name, obj_val, llvm_ty
+                        ));
+
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = load {}, {}* {}\n",
+                            result, llvm_ty, llvm_ty, field_ptr
+                        ));
+
+                        return Ok((result, ir));
                     }
                 }
 
@@ -3971,15 +4108,15 @@ mod tests {
     }
 
     #[test]
-    // TODO: Loop variables not yet implemented - range loops don't register the loop variable
-    #[ignore]
     fn test_for_loop() {
         let source = "F sum_to(n:i64)->i64{s:=0;L i:0..n{s+=i};s}";
         let module = parse(source).unwrap();
         let mut gen = CodeGenerator::new("test");
         let ir = gen.generate_module(&module).unwrap();
         assert!(ir.contains("define i64 @sum_to"));
-        assert!(ir.contains("loop"));
+        assert!(ir.contains("for.cond"));
+        assert!(ir.contains("for.body"));
+        assert!(ir.contains("for.inc"));
     }
 
     #[test]

@@ -240,6 +240,22 @@ impl CodeGenerator {
                     other => other,
                 }
             }
+            Expr::Field { expr: obj_expr, field } => {
+                // Get the type of the object being accessed
+                let obj_type = self.infer_expr_type(obj_expr);
+                // If it's a named type (struct), look up the field type
+                if let ResolvedType::Named { name: struct_name, .. } = &obj_type {
+                    if let Some(struct_info) = self.structs.get(struct_name) {
+                        for (field_name, field_type) in &struct_info.fields {
+                            if field_name == &field.node {
+                                return field_type.clone();
+                            }
+                        }
+                    }
+                }
+                // Default fallback if field not found
+                ResolvedType::I64
+            }
             _ => ResolvedType::I64, // Default fallback
         }
     }

@@ -212,6 +212,32 @@ F handle(r: Result) -> i64 = M r {
     assert!(compiles(source));
 }
 
+#[test]
+fn test_enum_unit_variant_matching() {
+    let source = r#"
+E Status { Pending, Running, Done }
+
+F status_to_code(s: Status) -> i64 = M s {
+    Pending => 0,
+    Running => 1,
+    Done => 2
+}
+
+F test_status() -> i64 {
+    pending := Pending;
+    running := Running;
+    done := Done;
+    a := status_to_code(pending);
+    b := status_to_code(running);
+    c := status_to_code(done);
+    a + b + c
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("icmp eq i32"));
+    assert!(ir.contains("define i64 @test_status"));
+}
+
 // ==================== Generic Tests ====================
 
 #[test]

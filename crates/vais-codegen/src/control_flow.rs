@@ -412,9 +412,38 @@ impl CodeGenerator {
                 // Wildcard always matches
                 Ok(("1".to_string(), String::new()))
             }
-            Pattern::Ident(_) => {
-                // Identifier pattern always matches (binding)
-                Ok(("1".to_string(), String::new()))
+            Pattern::Ident(name) => {
+                // Check if this is a unit enum variant (like None, Some without args)
+                // If so, we need to check the discriminant, not just match anything
+                if self.is_unit_enum_variant(name) {
+                    // Generate discriminant check for unit enum variant
+                    let mut ir = String::new();
+
+                    // Get the tag from the enum value (first field at index 0)
+                    let tag_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr {{ i32 }}, {{ i32 }}* {}, i32 0, i32 0\n",
+                        tag_ptr, match_val
+                    ));
+
+                    let tag_val = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = load i32, i32* {}\n", tag_val, tag_ptr));
+
+                    // Find the expected tag value for this variant
+                    let expected_tag = self.get_enum_variant_tag(name);
+
+                    // Compare tag
+                    let result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = icmp eq i32 {}, {}\n",
+                        result, tag_val, expected_tag
+                    ));
+
+                    Ok((result, ir))
+                } else {
+                    // Identifier pattern always matches (binding)
+                    Ok(("1".to_string(), String::new()))
+                }
             }
             Pattern::Literal(lit) => match lit {
                 Literal::Int(n) => {

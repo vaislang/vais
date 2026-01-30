@@ -299,10 +299,13 @@ impl CodeGenerator {
                 .and_then(|f| f.signature.params.get(i))
                 .map(|(_, ty, _)| ty.clone());
 
-            let arg_ty = param_ty
-                .as_ref()
-                .map(|ty| self.type_to_llvm(ty))
-                .unwrap_or_else(|| "i64".to_string());
+            // Determine argument LLVM type - use parameter type if available, otherwise infer from expression
+            let arg_ty = if let Some(ref pt) = param_ty {
+                self.type_to_llvm(pt)
+            } else {
+                let inferred_ty = self.infer_expr_type(arg);
+                self.type_to_llvm(&inferred_ty)
+            };
 
             // Insert integer conversion if needed
             if let Some(param_type) = &param_ty {
@@ -327,6 +330,22 @@ impl CodeGenerator {
                     }
                     val = conv_tmp;
                 }
+            }
+
+            // For struct types, load the value from pointer if the expression produces a pointer
+            // Struct literals return pointers (alloca), but function params expect values
+            // This applies whether we have function info or not
+            let type_to_check = param_ty.as_ref().cloned().unwrap_or_else(|| self.infer_expr_type(arg));
+            let is_named = matches!(type_to_check, ResolvedType::Named { .. });
+            let is_value = self.is_expr_value(arg);
+
+            if is_named && !is_value {
+                let loaded = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    loaded, arg_ty, arg_ty, val
+                ));
+                val = loaded;
             }
 
             arg_vals.push(format!("{} {}", arg_ty, val));
