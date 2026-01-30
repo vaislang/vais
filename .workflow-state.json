@@ -1,14 +1,13 @@
 {
   "phase": 4,
-  "request": "Phase 14 P2 - 공식 웹사이트 구축",
+  "request": "Phase 14 P3 - 커뮤니티 및 홍보",
   "tasks": [
-    { "id": 1, "name": "랜딩 페이지 구조 설계", "status": "done", "model": "Opus" },
-    { "id": 2, "name": "랜딩 페이지 구현 Part 1 (Hero+소개+코드비교)", "status": "done", "model": "Sonnet" },
-    { "id": 3, "name": "랜딩 페이지 구현 Part 2 (기능+Playground+CTA)", "status": "done", "model": "Sonnet" },
-    { "id": 4, "name": "문서 사이트 배포 설정", "status": "in_progress", "model": "Haiku" },
-    { "id": 5, "name": "Playground 배포 설정", "status": "in_progress", "model": "Sonnet" },
-    { "id": 6, "name": "블로그 시스템 구축", "status": "in_progress", "model": "Sonnet" },
-    { "id": 7, "name": "호스팅/도메인 설정 가이드", "status": "in_progress", "model": "Haiku" }
+    { "id": 1, "name": "GitHub Discussions 활성화 설정", "status": "done", "model": "Haiku" },
+    { "id": 2, "name": "SNS 계정 프로필/콘텐츠 계획 문서", "status": "done", "model": "Haiku" },
+    { "id": 3, "name": "Discord 서버 설정 가이드", "status": "done", "model": "Haiku" },
+    { "id": 4, "name": "커뮤니티 홍보 전략 문서 (Reddit/HN/Lobsters 포스트 초안)", "status": "in_progress", "model": "Sonnet" },
+    { "id": 5, "name": "로고/브랜드 가이드 문서", "status": "in_progress", "model": "Sonnet" },
+    { "id": 6, "name": "코드 스니펫 비주얼 템플릿 설계", "status": "in_progress", "model": "Sonnet" }
   ],
-  "currentTask": null
+  "currentTask": 4
 }

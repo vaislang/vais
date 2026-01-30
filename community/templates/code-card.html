@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vais Code Card Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Colors */
+            --vais-dark-bg: #1A202C;
+            --vais-darker-bg: #171923;
+            --vais-code-bg: #2D3748;
+            --vais-green: #48BB78;
+            --vais-green-light: #68D391;
+            --vais-blue: #667EEA;
+            --vais-purple: #9F7AEA;
+
+            /* Syntax Colors */
+            --keyword: #F687B3;
+            --operator: #FBD38D;
+            --string: #68D391;
+            --number: #90CDF4;
+            --comment: #718096;
+            --type: #FC8181;
+
+            /* UI Colors */
+            --text-primary: #F7FAFC;
+            --text-secondary: #CBD5E0;
+            --border: #4A5568;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1A202C 0%, #2D3748 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: var(--text-primary);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--vais-green);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+        }
+
+        .editor-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 968px) {
+            .editor-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .editor-panel, .preview-panel {
+            background: var(--vais-darker-bg);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid var(--border);
+        }
+
+        .panel-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--vais-green-light);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            background: var(--vais-code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 14px;
+        }
+
+        textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: 2px solid var(--vais-green);
+            border-color: var(--vais-green);
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            background: var(--vais-green);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: var(--vais-green-light);
+        }
+
+        button.secondary {
+            background: var(--vais-blue);
+        }
+
+        button.secondary:hover {
+            background: var(--vais-purple);
+        }
+
+        /* Card Styles */
+        #cardPreview {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+        }
+
+        .code-card {
+            width: 600px;
+            height: 600px;
+            background: linear-gradient(135deg, var(--vais-dark-bg) 0%, var(--vais-darker-bg) 100%);
+            border-radius: 12px;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .card-logo {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--vais-green);
+        }
+
+        .card-title {
+            font-size: 36px;
+            font-weight: 700;
+            text-align: center;
+            margin-top: 60px;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .card-divider {
+            width: 150px;
+            height: 3px;
+            background: var(--vais-green);
+            margin: 0 auto 30px;
+            border-radius: 2px;
+        }
+
+        .card-code {
+            flex: 1;
+            background: var(--vais-code-bg);
+            border-radius: 8px;
+            padding: 25px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            line-height: 1.6;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+        }
+
+        .card-footer {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Type 2: Comparison */
+        .code-card.type-comparison {
+            padding: 30px;
+        }
+
+        .comparison-header {
+            text-align: center;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 30px;
+        }
+
+        .comparison-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .comparison-block {
+            background: var(--vais-code-bg);
+            border-radius: 8px;
+            padding: 20px;
+            border: 2px solid var(--border);
+        }
+
+        .comparison-block.vais {
+            border-color: var(--vais-green);
+        }
+
+        .comparison-label {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .comparison-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .comparison-stats {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .token-bar {
+            height: 30px;
+            background: var(--vais-code-bg);
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .token-fill {
+            height: 100%;
+            background: var(--vais-green);
+            transition: width 0.5s;
+        }
+
+        /* Type 3: Tip */
+        .code-card.type-tip .card-title {
+            margin-top: 40px;
+        }
+
+        .tip-icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .tip-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .tip-section {
+            background: var(--vais-code-bg);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .tip-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        /* Syntax Highlighting */
+        .keyword { color: var(--keyword); font-weight: 600; }
+        .operator { color: var(--operator); }
+        .string { color: var(--string); }
+        .number { color: var(--number); }
+        .comment { color: var(--comment); font-style: italic; }
+        .type { color: var(--type); }
+
+        /* Instructions */
+        .instructions {
+            background: var(--vais-darker-bg);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid var(--border);
+            margin-top: 20px;
+        }
+
+        .instructions h3 {
+            color: var(--vais-green-light);
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            list-style-position: inside;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .instructions code {
+            background: var(--vais-code-bg);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--vais-green-light);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Vais Code Card Generator</h1>
+            <p class="subtitle">Create beautiful code snippets for social media</p>
+        </header>
+
+        <div class="editor-container">
+            <div class="editor-panel">
+                <h2 class="panel-title">Edit Card</h2>
+
+                <div class="form-group">
+                    <label for="cardType">Card Type</label>
+                    <select id="cardType" onchange="updateCardType()">
+                        <option value="type1">Type 1: Single Code Snippet</option>
+                        <option value="type2">Type 2: Language Comparison</option>
+                        <option value="type3">Type 3: Daily Tip</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="cardTitle">Title</label>
+                    <input type="text" id="cardTitle" value="Fibonacci in Vais" oninput="updateCard()">
+                </div>
+
+                <div class="form-group" id="codeGroup1">
+                    <label for="cardCode">Code (Vais)</label>
+                    <textarea id="cardCode" oninput="updateCard()">F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
+
+F main()->i64 = fib(10)  # Returns 55</textarea>
+                </div>
+
+                <div class="form-group" id="codeGroup2" style="display: none;">
+                    <label for="cardCode2">Code (Comparison Language)</label>
+                    <textarea id="cardCode2" oninput="updateCard()">fn fib(n: i64) -> i64 {
+    if n < 2 {
+        n
+    } else {
+        fib(n - 1) + fib(n - 2)
+    }
+}</textarea>
+                </div>
+
+                <div class="form-group" id="langGroup" style="display: none;">
+                    <label for="compLang">Comparison Language</label>
+                    <input type="text" id="compLang" value="Rust" oninput="updateCard()">
+                </div>
+
+                <div class="button-group">
+                    <button onclick="updateCard()">Update Preview</button>
+                    <button class="secondary" onclick="downloadCard()">Download PNG</button>
+                </div>
+            </div>
+
+            <div class="preview-panel">
+                <h2 class="panel-title">Preview</h2>
+                <div id="cardPreview">
+                    <div class="code-card" id="codeCard">
+                        <div class="card-logo">Vais</div>
+                        <div class="card-title">Fibonacci in Vais</div>
+                        <div class="card-divider"></div>
+                        <div class="card-code" id="cardCodeContent"></div>
+                        <div class="card-footer">@vaislang</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>Instructions</h3>
+            <ul>
+                <li>Select a card type from the dropdown menu</li>
+                <li>Enter your title and code snippet</li>
+                <li>Preview updates automatically</li>
+                <li>Click "Download PNG" to save your card (Note: requires html2canvas library for full functionality)</li>
+                <li>Supported keywords: <code>F</code>, <code>S</code>, <code>E</code>, <code>I</code>, <code>L</code>, <code>M</code>, <code>R</code>, <code>U</code></li>
+                <li>Self-recursion operator: <code>@</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Vais syntax highlighting
+        function highlightVais(code) {
+            // Keywords: F, S, E, I, L, M, R, U
+            code = code.replace(/\b([FSILMRUE])\b/g, '<span class="keyword">$1</span>');
+
+            // Self-recursion operator
+            code = code.replace(/@/g, '<span class="operator">@</span>');
+
+            // Other operators
+            code = code.replace(/(->|:=|=>|\?\?)/g, '<span class="operator">$1</span>');
+
+            // Types
+            code = code.replace(/\b(i64|i32|i16|i8|u64|u32|u16|u8|f64|f32|bool|String)\b/g, '<span class="type">$1</span>');
+
+            // Numbers
+            code = code.replace(/\b(\d+)\b/g, '<span class="number">$1</span>');
+
+            // Strings
+            code = code.replace(/"([^"]*)"/g, '<span class="string">"$1"</span>');
+
+            // Comments
+            code = code.replace(/#(.*)$/gm, '<span class="comment">#$1</span>');
+
+            return code;
+        }
+
+        function updateCardType() {
+            const cardType = document.getElementById('cardType').value;
+            const codeGroup2 = document.getElementById('codeGroup2');
+            const langGroup = document.getElementById('langGroup');
+
+            if (cardType === 'type2') {
+                codeGroup2.style.display = 'block';
+                langGroup.style.display = 'block';
+            } else {
+                codeGroup2.style.display = 'none';
+                langGroup.style.display = 'none';
+            }
+
+            updateCard();
+        }
+
+        function updateCard() {
+            const cardType = document.getElementById('cardType').value;
+            const title = document.getElementById('cardTitle').value;
+            const code = document.getElementById('cardCode').value;
+            const card = document.getElementById('codeCard');
+
+            // Remove all type classes
+            card.className = 'code-card';
+
+            if (cardType === 'type1') {
+                updateType1(title, code);
+            } else if (cardType === 'type2') {
+                updateType2(title, code);
+            } else if (cardType === 'type3') {
+                updateType3(title, code);
+            }
+        }
+
+        function updateType1(title, code) {
+            const card = document.getElementById('codeCard');
+            const highlighted = highlightVais(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+
+            card.innerHTML = `
+                <div class="card-logo">Vais</div>
+                <div class="card-title">${title}</div>
+                <div class="card-divider"></div>
+                <div class="card-code"><pre>${highlighted}</pre></div>
+                <div class="card-footer">@vaislang</div>
+            `;
+        }
+
+        function updateType2(title, code) {
+            const card = document.getElementById('codeCard');
+            card.classList.add('type-comparison');
+
+            const code2 = document.getElementById('cardCode2').value;
+            const compLang = document.getElementById('compLang').value;
+
+            const vaisHighlighted = highlightVais(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+            const otherCode = code2.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            // Simple token count (split by spaces and symbols)
+            const vaisTokens = code.split(/[\s\(\)\{\}\[\];,]+/).filter(t => t.length > 0).length;
+            const otherTokens = code2.split(/[\s\(\)\{\}\[\];,]+/).filter(t => t.length > 0).length;
+            const maxTokens = Math.max(vaisTokens, otherTokens);
+
+            card.innerHTML = `
+                <div class="card-logo">Vais</div>
+                <div class="comparison-header">Vais vs ${compLang}</div>
+                <div class="comparison-container">
+                    <div class="comparison-block vais">
+                        <div class="comparison-label" style="color: var(--vais-green);">Vais (${vaisTokens} tokens)</div>
+                        <div class="comparison-code"><pre>${vaisHighlighted}</pre></div>
+                    </div>
+                    <div class="comparison-block">
+                        <div class="comparison-label" style="color: var(--text-secondary);">${compLang} (${otherTokens} tokens)</div>
+                        <div class="comparison-code"><pre>${otherCode}</pre></div>
+                    </div>
+                </div>
+                <div class="comparison-stats">
+                    <div style="color: var(--vais-green); font-weight: 600; margin-bottom: 8px;">
+                        ${Math.round((1 - vaisTokens/otherTokens) * 100)}% fewer tokens
+                    </div>
+                    <div class="token-bar">
+                        <div class="token-fill" style="width: ${(vaisTokens/maxTokens)*100}%"></div>
+                    </div>
+                </div>
+                <div class="card-footer">@vaislang</div>
+            `;
+        }
+
+        function updateType3(title, code) {
+            const card = document.getElementById('codeCard');
+            card.classList.add('type-tip');
+
+            const highlighted = highlightVais(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+
+            card.innerHTML = `
+                <div class="card-logo">Vais</div>
+                <div class="tip-icon">💡</div>
+                <div class="card-title">${title}</div>
+                <div class="tip-content">
+                    <div class="tip-section">
+                        <div class="tip-label">Example:</div>
+                        <pre>${highlighted}</pre>
+                    </div>
+                    <div style="text-align: center; color: var(--vais-green-light); font-size: 20px;">
+                        ✨ Shorter & clearer!
+                    </div>
+                </div>
+                <div class="card-footer">@vaislang</div>
+            `;
+        }
+
+        function downloadCard() {
+            alert('To enable PNG download, include the html2canvas library:\n\n<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"><\/script>\n\nThen add this function:\n\nhtml2canvas(document.getElementById("codeCard")).then(canvas => {\n  const link = document.createElement("a");\n  link.download = "vais-code-card.png";\n  link.href = canvas.toDataURL();\n  link.click();\n});');
+
+            // For now, show alternative method
+            console.log('Alternative: Take a screenshot of the preview panel using your OS screenshot tool');
+            console.log('macOS: Cmd+Shift+4, then Space, then click the preview');
+            console.log('Windows: Win+Shift+S');
+        }
+
+        // Initialize card on load
+        updateCard();
+    </script>
+
+    <!--
+    Uncomment below to enable PNG download functionality:
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script>
+        function downloadCard() {
+            const card = document.getElementById('codeCard');
+            html2canvas(card, {
+                backgroundColor: null,
+                scale: 2 // Higher quality
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'vais-code-card.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+    -->
+</body>
+</html>

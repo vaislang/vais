@@ -1,0 +1,64 @@
+title: "[Show and Tell] "
+labels: ["show-and-tell"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Awesome! We'd love to see what you've created with Vais!
+
+        Share your projects, libraries, tools, or any cool things you've built.
+
+  - type: textarea
+    attributes:
+      label: Project/Creation Title
+      description: What's the name of your project or creation?
+      placeholder: |
+        Example: "VLang - A Vais package manager" or "Neural Network Framework in Vais"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Description
+      description: Tell us about your project
+      placeholder: |
+        What does it do? Why did you build it? What makes it special?
+
+        Example: "A high-performance neural network library that leverages Vais's type system and memory safety for AI workloads..."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Links and Resources
+      description: Share links to your project
+      placeholder: |
+        - GitHub Repository: https://github.com/...
+        - Live Demo: https://...
+        - Documentation: https://...
+        - Blog Post: https://...
+
+  - type: textarea
+    attributes:
+      label: Key Features
+      description: Highlight the key features or accomplishments
+      placeholder: |
+        - Feature 1
+        - Feature 2
+        - Achievement or metric that's impressive
+        - Any interesting technical details
+
+  - type: textarea
+    attributes:
+      label: Challenges and Learnings
+      description: What challenges did you face? What did you learn?
+      placeholder: |
+        Share your journey! What was difficult? What insights did you gain about Vais?
+
+  - type: checkboxes
+    attributes:
+      label: Code of Conduct
+      description: By submitting this showcase, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

@@ -1,0 +1,72 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your question! The Vais community is here to help.
+
+        Before posting, please check if your question has been answered in:
+        - [Vais Documentation](https://vais.dev/docs)
+        - [Existing Discussions](https://github.com/vais-ral/vais/discussions)
+        - [Examples](https://github.com/vais-ral/vais/tree/main/examples)
+
+  - type: textarea
+    attributes:
+      label: Question
+      description: What's your question about Vais?
+      placeholder: |
+        Ask your question here. Be as specific as possible to help others provide better answers.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Context
+      description: Provide context about what you're trying to accomplish
+      placeholder: |
+        - What are you building or trying to implement?
+        - What have you already tried?
+        - What documentation or resources have you consulted?
+
+  - type: textarea
+    attributes:
+      label: Code Example
+      description: If applicable, provide a minimal code example
+      placeholder: |
+        ```vais
+        // Minimal reproducible example
+
+        ```
+
+  - type: dropdown
+    attributes:
+      label: Vais Version
+      description: Which version of Vais are you using?
+      options:
+        - "Latest"
+        - "0.1.x"
+        - "Development (main branch)"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Platform
+      description: What platform are you developing on?
+      options:
+        - "Linux"
+        - "macOS"
+        - "Windows"
+        - "Other"
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: Code of Conduct
+      description: By submitting this question, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

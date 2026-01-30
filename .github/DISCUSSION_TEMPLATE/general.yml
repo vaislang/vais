@@ -1,0 +1,34 @@
+title: "[Discussion] "
+labels: ["discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for starting a discussion! We're excited to hear from the Vais community.
+
+        Please provide clear context for your discussion below.
+
+  - type: textarea
+    attributes:
+      label: Discussion Topic
+      description: What would you like to discuss with the community?
+      placeholder: |
+        Share your thoughts, ideas, or topics you'd like to explore with other Vais developers.
+        This could be language design discussions, development practices, or any other topic relevant to Vais.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Context
+      description: Provide any additional context or background information
+      placeholder: |
+        Add any relevant background information, links, or references that would help others understand your discussion better.
+
+  - type: checkboxes
+    attributes:
+      label: Code of Conduct
+      description: By submitting this discussion, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
