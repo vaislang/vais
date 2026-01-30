@@ -349,6 +349,24 @@ impl TypeChecker {
             },
         );
 
+        // format: (format, ...) -> str - format string, returns allocated string
+        self.functions.insert(
+            "format".to_string(),
+            FunctionSig {
+                name: "format".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("format".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::Str,
+                is_async: false,
+                is_vararg: true,
+                required_params: Some(1),
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // memcpy: (dest, src, n) -> i64
         self.functions.insert(
             "memcpy".to_string(),
@@ -516,6 +534,266 @@ impl TypeChecker {
                     ("val".to_string(), ResolvedType::I64, false),
                 ],
                 ret: ResolvedType::Unit,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // ===== Standard library utility functions =====
+
+        // atoi: (s: str) -> i32 - string to integer
+        self.functions.insert(
+            "atoi".to_string(),
+            FunctionSig {
+                name: "atoi".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // atol: (s: str) -> i64 - string to long integer
+        self.functions.insert(
+            "atol".to_string(),
+            FunctionSig {
+                name: "atol".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // atof: (s: str) -> f64 - string to double
+        self.functions.insert(
+            "atof".to_string(),
+            FunctionSig {
+                name: "atof".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::F64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // labs: (x: i64) -> i64 - absolute value (long integer)
+        self.functions.insert(
+            "labs".to_string(),
+            FunctionSig {
+                name: "labs".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("x".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // fabs: (x: f64) -> f64 - absolute value (double)
+        self.functions.insert(
+            "fabs".to_string(),
+            FunctionSig {
+                name: "fabs".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("x".to_string(), ResolvedType::F64, false)],
+                ret: ResolvedType::F64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // sqrt: (x: f64) -> f64 - square root
+        self.functions.insert(
+            "sqrt".to_string(),
+            FunctionSig {
+                name: "sqrt".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("x".to_string(), ResolvedType::F64, false)],
+                ret: ResolvedType::F64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // rand: () -> i32 - pseudo-random number
+        self.functions.insert(
+            "rand".to_string(),
+            FunctionSig {
+                name: "rand".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![],
+                ret: ResolvedType::I32,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // srand: (seed: i32) -> void - seed random number generator
+        self.functions.insert(
+            "srand".to_string(),
+            FunctionSig {
+                name: "srand".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("seed".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::Unit,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // isdigit: (c: i32) -> i32 - test if digit
+        self.functions.insert(
+            "isdigit".to_string(),
+            FunctionSig {
+                name: "isdigit".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("c".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // isalpha: (c: i32) -> i32 - test if alphabetic
+        self.functions.insert(
+            "isalpha".to_string(),
+            FunctionSig {
+                name: "isalpha".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("c".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // toupper: (c: i32) -> i32 - convert to uppercase
+        self.functions.insert(
+            "toupper".to_string(),
+            FunctionSig {
+                name: "toupper".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("c".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // tolower: (c: i32) -> i32 - convert to lowercase
+        self.functions.insert(
+            "tolower".to_string(),
+            FunctionSig {
+                name: "tolower".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("c".to_string(), ResolvedType::I32, false)],
+                ret: ResolvedType::I32,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // strcpy: (dest: i64, src: str) -> i64 - copy string
+        self.functions.insert(
+            "strcpy".to_string(),
+            FunctionSig {
+                name: "strcpy".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("dest".to_string(), ResolvedType::I64, false),
+                    ("src".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // strcat: (dest: i64, src: str) -> i64 - concatenate string
+        self.functions.insert(
+            "strcat".to_string(),
+            FunctionSig {
+                name: "strcat".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("dest".to_string(), ResolvedType::I64, false),
+                    ("src".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
                 required_params: None,

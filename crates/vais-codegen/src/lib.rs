@@ -1976,6 +1976,11 @@ impl CodeGenerator {
                         return self.generate_print_call(name, args, counter, expr.span);
                     }
 
+                    // Handle format builtin: returns formatted string
+                    if name == "format" {
+                        return self.generate_format_call(args, counter, expr.span);
+                    }
+
                     // Handle str_to_ptr builtin: convert string pointer to i64
                     if name == "str_to_ptr" {
                         if args.len() != 1 {
@@ -2687,6 +2692,22 @@ impl CodeGenerator {
                     ir.push_str(&format!(
                         "  store i64 {}, i64* {}\n",
                         val, ptr_val
+                    ));
+                } else if let Expr::Index { expr: arr_expr, index } = &target.node {
+                    // Array index assignment: arr[i] = value
+                    let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
+                    ir.push_str(&arr_ir);
+                    let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
+                    ir.push_str(&idx_ir);
+
+                    let elem_ptr = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = getelementptr i64, i64* {}, i64 {}\n",
+                        elem_ptr, arr_val, idx_val
+                    ));
+                    ir.push_str(&format!(
+                        "  store i64 {}, i64* {}\n",
+                        val, elem_ptr
                     ));
                 } else if let Expr::Field { expr: obj_expr, field } = &target.node {
                     // Field assignment: obj.field = value

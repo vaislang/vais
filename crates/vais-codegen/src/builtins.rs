@@ -92,6 +92,7 @@ impl CodeGenerator {
         self.register_memory_functions();
         self.register_file_functions();
         self.register_string_functions();
+        self.register_stdlib_functions();
         self.register_async_functions();
         self.register_simd_functions();
         self.register_gc_functions();
@@ -171,6 +172,28 @@ impl CodeGenerator {
                     generic_bounds: HashMap::new(),
                     params: convert_params(vec![("format".to_string(), ResolvedType::Str)]),
                     ret: ResolvedType::Unit,
+                    is_async: false,
+                    is_vararg: true,
+                    required_params: Some(1),
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+                is_extern: false,
+                extern_abi: None,
+            },
+        );
+
+        // format: format string output, returns allocated string
+        self.functions.insert(
+            "format".to_string(),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: "format".to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: convert_params(vec![("format".to_string(), ResolvedType::Str)]),
+                    ret: ResolvedType::Str,
                     is_async: false,
                     is_vararg: true,
                     required_params: Some(1),
@@ -412,6 +435,106 @@ impl CodeGenerator {
                 ("dest".to_string(), ResolvedType::I64),
                 ("src".to_string(), ResolvedType::Str),
                 ("len".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+    }
+
+    fn register_stdlib_functions(&mut self) {
+        // --- Number conversion functions ---
+
+        // atoi: (s: str) -> i32 - string to integer
+        register_extern!(self, "atoi",
+            vec![("s".to_string(), ResolvedType::Str)],
+            ResolvedType::I32
+        );
+
+        // atol: (s: str) -> i64 - string to long integer
+        register_extern!(self, "atol",
+            vec![("s".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // atof: (s: str) -> f64 - string to double
+        register_extern!(self, "atof",
+            vec![("s".to_string(), ResolvedType::Str)],
+            ResolvedType::F64
+        );
+
+        // --- Math functions ---
+
+        // labs: (x: i64) -> i64 - absolute value (long integer)
+        register_extern!(self, "labs",
+            vec![("x".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // fabs: (x: f64) -> f64 - absolute value (double)
+        register_extern!(self, "fabs",
+            vec![("x".to_string(), ResolvedType::F64)],
+            ResolvedType::F64
+        );
+
+        // sqrt: (x: f64) -> f64 - square root
+        register_extern!(self, "sqrt",
+            vec![("x".to_string(), ResolvedType::F64)],
+            ResolvedType::F64
+        );
+
+        // rand: () -> i32 - pseudo-random number
+        register_extern!(self, "rand",
+            vec![],
+            ResolvedType::I32
+        );
+
+        // srand: (seed: i32) -> void - seed random number generator
+        register_extern!(self, "srand",
+            vec![("seed".to_string(), ResolvedType::I32)],
+            ResolvedType::Unit
+        );
+
+        // --- Character classification functions ---
+
+        // isdigit: (c: i32) -> i32 - test if digit
+        register_extern!(self, "isdigit",
+            vec![("c".to_string(), ResolvedType::I32)],
+            ResolvedType::I32
+        );
+
+        // isalpha: (c: i32) -> i32 - test if alphabetic
+        register_extern!(self, "isalpha",
+            vec![("c".to_string(), ResolvedType::I32)],
+            ResolvedType::I32
+        );
+
+        // toupper: (c: i32) -> i32 - convert to uppercase
+        register_extern!(self, "toupper",
+            vec![("c".to_string(), ResolvedType::I32)],
+            ResolvedType::I32
+        );
+
+        // tolower: (c: i32) -> i32 - convert to lowercase
+        register_extern!(self, "tolower",
+            vec![("c".to_string(), ResolvedType::I32)],
+            ResolvedType::I32
+        );
+
+        // --- String manipulation functions ---
+
+        // strcpy: (dest: i64, src: str) -> i64 - copy string
+        register_extern!(self, "strcpy",
+            vec![
+                ("dest".to_string(), ResolvedType::I64),
+                ("src".to_string(), ResolvedType::Str),
+            ],
+            ResolvedType::I64
+        );
+
+        // strcat: (dest: i64, src: str) -> i64 - concatenate string
+        register_extern!(self, "strcat",
+            vec![
+                ("dest".to_string(), ResolvedType::I64),
+                ("src".to_string(), ResolvedType::Str),
             ],
             ResolvedType::I64
         );

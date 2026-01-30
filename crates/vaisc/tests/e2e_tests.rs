@@ -442,6 +442,43 @@ F main() -> i64 {
     assert_exit_code(source, 42);
 }
 
+#[test]
+fn e2e_array_mutation() {
+    let source = r#"
+F main() -> i64 {
+    arr: *i64 = [10, 20, 30, 0]
+    arr[3] = 42
+    arr[3]
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_array_mutation_overwrite() {
+    let source = r#"
+F main() -> i64 {
+    arr: *i64 = [1, 2, 3, 4]
+    arr[0] = 99
+    arr[0]
+}
+"#;
+    assert_exit_code(source, 99);
+}
+
+#[test]
+fn e2e_array_mutation_with_expr_index() {
+    let source = r#"
+F main() -> i64 {
+    arr: *i64 = [10, 20, 30, 40, 50]
+    i := 2
+    arr[i] = 42
+    arr[2]
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
 // ==================== Complex Programs ====================
 
 #[test]
@@ -1395,4 +1432,75 @@ F main() -> i64 {
 }
 "#;
     assert_stdout_contains(source, "done");
+}
+
+// ==================== Format Function ====================
+
+#[test]
+fn e2e_format_simple() {
+    let source = r#"
+F main() -> i64 {
+    s: str = format("hello {}", 42)
+    println(s)
+    0
+}
+"#;
+    assert_stdout_contains(source, "hello 42");
+}
+
+#[test]
+fn e2e_format_multiple_args() {
+    let source = r#"
+F main() -> i64 {
+    s: str = format("{} + {} = {}", 1, 2, 3)
+    println(s)
+    0
+}
+"#;
+    assert_stdout_contains(source, "1 + 2 = 3");
+}
+
+#[test]
+fn e2e_format_no_args() {
+    let source = r#"
+F main() -> i64 {
+    s: str = format("plain text")
+    println(s)
+    0
+}
+"#;
+    assert_stdout_contains(source, "plain text");
+}
+
+// ==================== Stdlib Utility Functions ====================
+
+#[test]
+fn e2e_atoi() {
+    let source = r#"
+F main() -> i64 {
+    x: i32 = atoi("42")
+    x
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_atol() {
+    let source = r#"
+F main() -> i64 {
+    atol("99")
+}
+"#;
+    assert_exit_code(source, 99);
+}
+
+#[test]
+fn e2e_labs() {
+    let source = r#"
+F main() -> i64 {
+    labs(-42)
+}
+"#;
+    assert_exit_code(source, 42);
 }

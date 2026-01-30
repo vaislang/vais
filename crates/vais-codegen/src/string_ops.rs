@@ -370,6 +370,7 @@ impl CodeGenerator {
         ir.push_str("\n; String runtime extern declarations\n");
         // strstr is new (not in builtins.rs)
         ir.push_str("declare i8* @strstr(i8*, i8*)\n");
+        ir.push_str("declare i32 @snprintf(i8*, i64, i8*, ...)\n");
         ir
     }
 }
