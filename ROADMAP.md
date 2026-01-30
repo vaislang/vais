@@ -173,9 +173,9 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **Comptime 확장** - 컴파일 타임 평가 강화 (String/Array 타입, 내장 함수 5종, assert, break/continue) (완료일: 2026-01-29)
 
 #### IDE 경험 향상
-- [ ] **인라인 타입 힌트** - LSP inlay hints
-- [ ] **리팩토링 도구** - Extract Function, Inline Variable
-- [ ] **Code Lens** - 인라인 테스트 실행, 벤치마크 표시
+- [x] **인라인 타입 힌트** - LSP inlay hints (타입 추론, 파라미터 이름 힌트, AST 기반 경량 추론) (완료일: 2026-01-29)
+- [x] **리팩토링 도구** - Inline Variable, Convert Expression/Block Body, Introduce Named Params + 기존 Extract Variable/Function (완료일: 2026-01-29)
+- [x] **Code Lens** - 테스트/벤치마크 실행, 참조 수, 구현 수 표시 (완료일: 2026-01-29)
 
 ### 예상 마일스톤
 

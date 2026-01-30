@@ -5,9 +5,11 @@ use ropey::Rope;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned, Type};
+use vais_ast::{Module, Span, Item, Expr, Stmt, FunctionBody, Spanned, Type, IfElse};
 use vais_parser::parse;
 use vais_codegen::formatter::{FormatConfig, Formatter};
+
+use std::collections::HashMap;
 
 use crate::ai_completion::{CompletionContext as AiContext, generate_ai_completions};
 use crate::semantic::get_semantic_tokens;
@@ -796,32 +798,288 @@ impl VaisBackend {
     }
 
     /// Collect inlay hints from AST
-    fn collect_inlay_hints(&self, ast: &Module, rope: &Rope) -> Vec<InlayHintInfo> {
-        let mut hints = Vec::new();
-
+    /// Build a map of function signatures from AST items
+    fn build_function_map(&self, ast: &Module) -> HashMap<String, (Vec<String>, Option<String>)> {
+        let mut func_map = HashMap::new();
+        
         for item in &ast.items {
-            if let Item::Function(f) = &item.node {
-                match &f.body {
-                    FunctionBody::Expr(_) => {}
-                    FunctionBody::Block(stmts) => {
-                        for stmt in stmts {
-                            self.collect_hints_from_stmt(stmt, &mut hints);
-                        }
+            match &item.node {
+                Item::Function(f) => {
+                    let name = f.name.node.clone();
+                    let params: Vec<String> = f.params.iter()
+                        .map(|p| p.name.node.clone())
+                        .collect();
+                    let ret_type = f.ret_type.as_ref().map(|rt| format!("{:?}", rt.node));
+                    func_map.insert(name, (params, ret_type));
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        let name = method.node.name.node.clone();
+                        let params: Vec<String> = method.node.params.iter()
+                            .map(|p| p.name.node.clone())
+                            .collect();
+                        let ret_type = method.node.ret_type.as_ref().map(|rt| format!("{:?}", rt.node));
+                        func_map.insert(name, (params, ret_type));
                     }
                 }
+                Item::Trait(trait_def) => {
+                    for method in &trait_def.methods {
+                        let name = method.name.node.clone();
+                        let params: Vec<String> = method.params.iter()
+                            .map(|p| p.name.node.clone())
+                            .collect();
+                        let ret_type = method.ret_type.as_ref().map(|rt| format!("{:?}", rt.node));
+                        func_map.insert(name, (params, ret_type));
+                    }
+                }
+                _ => {}
             }
+        }
+        
+        func_map
+    }
 
-            if let Item::Impl(impl_block) = &item.node {
-                for method in &impl_block.methods {
-                    match &method.node.body {
-                        FunctionBody::Expr(_) => {}
-                        FunctionBody::Block(stmts) => {
-                            for stmt in stmts {
-                                self.collect_hints_from_stmt(stmt, &mut hints);
+    /// Infer a type hint string from an expression
+    fn infer_expr_type_hint(&self, expr: &Spanned<Expr>, func_map: &HashMap<String, (Vec<String>, Option<String>)>) -> Option<String> {
+        match &expr.node {
+            Expr::Int(_) => Some("i64".to_string()),
+            Expr::Float(_) => Some("f64".to_string()),
+            Expr::Bool(_) => Some("bool".to_string()),
+            Expr::String(_) => Some("str".to_string()),
+            Expr::Array(elems) => {
+                if elems.is_empty() {
+                    Some("[_]".to_string())
+                } else {
+                    let elem_type = self.infer_expr_type_hint(&elems[0], func_map)
+                        .unwrap_or_else(|| "_".to_string());
+                    Some(format!("[{}]", elem_type))
+                }
+            }
+            Expr::Tuple(elems) => {
+                let types: Vec<String> = elems.iter()
+                    .map(|e| self.infer_expr_type_hint(e, func_map).unwrap_or_else(|| "_".to_string()))
+                    .collect();
+                Some(format!("({})", types.join(", ")))
+            }
+            Expr::Call { func, .. } => {
+                // Try to extract function name and look up return type
+                if let Expr::Ident(name) = &func.node {
+                    if let Some((_, ret_type)) = func_map.get(name) {
+                        return ret_type.clone().or_else(|| Some("()".to_string()));
+                    }
+                }
+                Some("_".to_string())
+            }
+            Expr::StructLit { name, .. } => {
+                Some(name.node.clone())
+            }
+            Expr::Range { .. } => {
+                Some("Range".to_string())
+            }
+            Expr::Block(stmts) => {
+                // Try to infer from last statement/expression
+                if let Some(last) = stmts.last() {
+                    if let Stmt::Expr(e) = &last.node {
+                        return self.infer_expr_type_hint(e, func_map);
+                    } else if let Stmt::Return(Some(e)) = &last.node {
+                        return self.infer_expr_type_hint(e, func_map);
+                    }
+                }
+                Some("()".to_string())
+            }
+            _ => Some("_".to_string()),
+        }
+    }
+
+    /// Collect parameter name hints from expressions
+    fn collect_hints_from_expr(
+        &self,
+        expr: &Spanned<Expr>,
+        func_map: &HashMap<String, (Vec<String>, Option<String>)>,
+        hints: &mut Vec<InlayHintInfo>,
+    ) {
+        match &expr.node {
+            Expr::Call { func, args, .. } => {
+                // Extract function name
+                if let Expr::Ident(func_name) = &func.node {
+                    if let Some((params, _)) = func_map.get(func_name) {
+                        // Add parameter name hints for each argument
+                        for (i, arg) in args.iter().enumerate() {
+                            if i < params.len() {
+                                let param_name = &params[i];
+                                
+                                // Skip if argument is already a variable with the same name
+                                let skip = if let Expr::Ident(arg_name) = &arg.node {
+                                    arg_name == param_name
+                                } else {
+                                    false
+                                };
+                                
+                                if !skip {
+                                    hints.push(InlayHintInfo {
+                                        position: arg.span.start,
+                                        label: format!("{}: ", param_name),
+                                        kind: InlayHintKind::PARAMETER,
+                                    });
+                                }
                             }
                         }
                     }
                 }
+                
+                // Recursively process arguments
+                for arg in args {
+                    self.collect_hints_from_expr(arg, func_map, hints);
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                self.collect_hints_from_expr(receiver, func_map, hints);
+                for arg in args {
+                    self.collect_hints_from_expr(arg, func_map, hints);
+                }
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    self.collect_hints_from_stmt(stmt, func_map, hints);
+                }
+            }
+            Expr::If { cond, then, else_ } => {
+                self.collect_hints_from_expr(cond, func_map, hints);
+                for stmt in then {
+                    self.collect_hints_from_stmt(stmt, func_map, hints);
+                }
+                if let Some(else_branch) = else_ {
+                    match else_branch {
+                        IfElse::ElseIf(cond, stmts, next_else) => {
+                            self.collect_hints_from_expr(cond, func_map, hints);
+                            for stmt in stmts {
+                                self.collect_hints_from_stmt(stmt, func_map, hints);
+                            }
+                            // Recursively handle nested else-if/else
+                            if let Some(_next) = next_else {
+                                // Would need recursive handling here
+                            }
+                        }
+                        IfElse::Else(stmts) => {
+                            for stmt in stmts {
+                                self.collect_hints_from_stmt(stmt, func_map, hints);
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::Match { expr, arms } => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+                for arm in arms {
+                    self.collect_hints_from_expr(&arm.body, func_map, hints);
+                }
+            }
+            Expr::Loop { body, .. } => {
+                for stmt in body {
+                    self.collect_hints_from_stmt(stmt, func_map, hints);
+                }
+            }
+            Expr::While { condition, body } => {
+                self.collect_hints_from_expr(condition, func_map, hints);
+                for stmt in body {
+                    self.collect_hints_from_stmt(stmt, func_map, hints);
+                }
+            }
+            
+            Expr::Array(elems) => {
+                for elem in elems {
+                    self.collect_hints_from_expr(elem, func_map, hints);
+                }
+            }
+            Expr::Tuple(elems) => {
+                for elem in elems {
+                    self.collect_hints_from_expr(elem, func_map, hints);
+                }
+            }
+            Expr::StructLit { fields, .. } => {
+                for (_, value) in fields {
+                    self.collect_hints_from_expr(value, func_map, hints);
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.collect_hints_from_expr(left, func_map, hints);
+                self.collect_hints_from_expr(right, func_map, hints);
+            }
+            Expr::Unary { expr, .. } => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Expr::Index { expr, index } => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+                self.collect_hints_from_expr(index, func_map, hints);
+            }
+            Expr::Cast { expr, .. } => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Expr::Lambda { body, .. } => {
+                self.collect_hints_from_expr(body, func_map, hints);
+            }
+            
+            Expr::Try(e) => {
+                self.collect_hints_from_expr(e, func_map, hints);
+            }
+            
+            Expr::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    self.collect_hints_from_expr(s, func_map, hints);
+                }
+                if let Some(e) = end {
+                    self.collect_hints_from_expr(e, func_map, hints);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect inlay hints from AST
+    fn collect_inlay_hints(&self, ast: &Module, rope: &Rope) -> Vec<InlayHintInfo> {
+        let mut hints = Vec::new();
+        
+        // Build function signature map
+        let func_map = self.build_function_map(ast);
+
+        // Collect hints from all items
+        for item in &ast.items {
+            match &item.node {
+                Item::Function(f) => {
+                    match &f.body {
+                        FunctionBody::Expr(expr) => {
+                            self.collect_hints_from_expr(expr, &func_map, &mut hints);
+                        }
+                        FunctionBody::Block(stmts) => {
+                            for stmt in stmts {
+                                self.collect_hints_from_stmt(stmt, &func_map, &mut hints);
+                            }
+                        }
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        match &method.node.body {
+                            FunctionBody::Expr(expr) => {
+                                self.collect_hints_from_expr(expr, &func_map, &mut hints);
+                            }
+                            FunctionBody::Block(stmts) => {
+                                for stmt in stmts {
+                                    self.collect_hints_from_stmt(stmt, &func_map, &mut hints);
+                                }
+                            }
+                        }
+                    }
+                }
+                Item::Const(const_def) => {
+                    // Check const initialization expressions
+                    self.collect_hints_from_expr(&const_def.value, &func_map, &mut hints);
+                }
+                Item::Global(global_def) => {
+                    // Check global initialization expressions
+                    self.collect_hints_from_expr(&global_def.value, &func_map, &mut hints);
+                }
+                _ => {}
             }
         }
 
@@ -831,29 +1089,227 @@ impl VaisBackend {
     }
 
     /// Collect inlay hints from a statement
-    fn collect_hints_from_stmt(&self, stmt: &Spanned<Stmt>, hints: &mut Vec<InlayHintInfo>) {
-        if let Stmt::Let { name, ty, .. } = &stmt.node {
-            // Add type hint for variables with inferred types (no explicit type annotation)
-            match ty {
-                None => {
-                    // No type annotation at all - suggest inferred type
-                    hints.push(InlayHintInfo {
-                        position: name.span.end,
-                        label: ": _".to_string(), // Placeholder for inferred type
-                        kind: InlayHintKind::TYPE,
-                    });
+    fn collect_hints_from_stmt(
+        &self,
+        stmt: &Spanned<Stmt>,
+        func_map: &HashMap<String, (Vec<String>, Option<String>)>,
+        hints: &mut Vec<InlayHintInfo>,
+    ) {
+        match &stmt.node {
+            Stmt::Let { name, ty, value, .. } => {
+                // Add type hint for variables with inferred types (no explicit type annotation)
+                match ty {
+                    None => {
+                        // No type annotation - infer from expression
+                        let type_hint = self.infer_expr_type_hint(value, func_map)
+                            .unwrap_or_else(|| "_".to_string());
+                        hints.push(InlayHintInfo {
+                            position: name.span.end,
+                            label: format!(": {}", type_hint),
+                            kind: InlayHintKind::TYPE,
+                        });
+                    }
+                    Some(spanned_ty) if matches!(spanned_ty.node, Type::Infer) => {
+                        // Explicit `_` type - show inferred type
+                        let type_hint = self.infer_expr_type_hint(value, func_map)
+                            .unwrap_or_else(|| "_".to_string());
+                        hints.push(InlayHintInfo {
+                            position: name.span.end,
+                            label: format!(": {}", type_hint),
+                            kind: InlayHintKind::TYPE,
+                        });
+                    }
+                    _ => {
+                        // Explicit type annotation - no type hint needed
+                    }
                 }
-                Some(spanned_ty) if matches!(spanned_ty.node, Type::Infer) => {
-                    // Explicit `_` type - keep it as is
+                
+                // Collect parameter hints from the value expression
+                self.collect_hints_from_expr(value, func_map, hints);
+            }
+            Stmt::Expr(expr) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Stmt::Return(Some(expr)) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Stmt::Break(Some(expr)) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            Stmt::Defer(expr) => {
+                self.collect_hints_from_expr(expr, func_map, hints);
+            }
+            _ => {}
+        }
+    }
+
+    /// Count references to a symbol name in the AST (for Code Lens)
+    fn count_references_in_ast(&self, ast: &Module, name: &str) -> usize {
+        let mut count = 0;
+        for item in &ast.items {
+            match &item.node {
+                Item::Function(f) => {
+                    // Don't count the definition itself
+                    if f.name.node != name {
+                        count += self.count_name_in_function_body(&f.body, name);
+                    }
+                    // Count in parameter types
+                    for param in &f.params {
+                        count += self.count_name_in_type(&param.ty.node, name);
+                    }
+                    if let Some(ret) = &f.ret_type {
+                        count += self.count_name_in_type(&ret.node, name);
+                    }
                 }
-                _ => {
-                    // Explicit type annotation - no hint needed
+                Item::Impl(imp) => {
+                    for method in &imp.methods {
+                        count += self.count_name_in_function_body(&method.node.body, name);
+                        for param in &method.node.params {
+                            count += self.count_name_in_type(&param.ty.node, name);
+                        }
+                    }
                 }
+                Item::Struct(s) => {
+                    if s.name.node != name {
+                        for field in &s.fields {
+                            count += self.count_name_in_type(&field.ty.node, name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        count
+    }
+
+    fn count_name_in_function_body(&self, body: &FunctionBody, name: &str) -> usize {
+        match body {
+            FunctionBody::Expr(e) => self.count_name_in_expr(&e.node, name),
+            FunctionBody::Block(stmts) => {
+                stmts.iter().map(|s| self.count_name_in_stmt(&s.node, name)).sum()
             }
         }
     }
 
-    /// Collect folding ranges from AST
+    fn count_name_in_stmt(&self, stmt: &Stmt, name: &str) -> usize {
+        match stmt {
+            Stmt::Let { value, ty, .. } => {
+                let mut c = self.count_name_in_expr(&value.node, name);
+                if let Some(t) = ty {
+                    c += self.count_name_in_type(&t.node, name);
+                }
+                c
+            }
+            Stmt::Expr(e) => self.count_name_in_expr(&e.node, name),
+            Stmt::Return(Some(e)) => self.count_name_in_expr(&e.node, name),
+            // Assign is an Expr variant, not Stmt
+            Stmt::Defer(e) => self.count_name_in_expr(&e.node, name),
+            _ => 0,
+        }
+    }
+
+    fn count_name_in_expr(&self, expr: &Expr, name: &str) -> usize {
+        match expr {
+            Expr::Ident(id) if id == name => 1,
+            Expr::Call { func, args, .. } => {
+                let mut c = self.count_name_in_expr(&func.node, name);
+                for a in args {
+                    c += self.count_name_in_expr(&a.node, name);
+                }
+                c
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                let mut c = self.count_name_in_expr(&receiver.node, name);
+                for a in args {
+                    c += self.count_name_in_expr(&a.node, name);
+                }
+                c
+            }
+            Expr::Binary { left, right, .. } => {
+                self.count_name_in_expr(&left.node, name)
+                    + self.count_name_in_expr(&right.node, name)
+            }
+            Expr::Unary { expr: e, .. } => self.count_name_in_expr(&e.node, name),
+            Expr::If { cond, then, else_, .. } => {
+                let mut c = self.count_name_in_expr(&cond.node, name);
+                for s in then {
+                    c += self.count_name_in_stmt(&s.node, name);
+                }
+                if let Some(el) = else_ {
+                    c += self.count_name_in_if_else(el, name);
+                }
+                c
+            }
+            Expr::Block(stmts) => {
+                stmts.iter().map(|s| self.count_name_in_stmt(&s.node, name)).sum()
+            }
+            Expr::Array(elems) => {
+                elems.iter().map(|e| self.count_name_in_expr(&e.node, name)).sum()
+            }
+            Expr::Tuple(elems) => {
+                elems.iter().map(|e| self.count_name_in_expr(&e.node, name)).sum()
+            }
+            Expr::Index { expr: e, index } => {
+                self.count_name_in_expr(&e.node, name)
+                    + self.count_name_in_expr(&index.node, name)
+            }
+            Expr::Field { expr: e, .. } => self.count_name_in_expr(&e.node, name),
+            Expr::StructLit { name: sname, fields, .. } => {
+                let mut c = if sname.node == name { 1 } else { 0 };
+                for (_, val) in fields {
+                    c += self.count_name_in_expr(&val.node, name);
+                }
+                c
+            }
+            Expr::Assign { target, value } => {
+                self.count_name_in_expr(&target.node, name)
+                    + self.count_name_in_expr(&value.node, name)
+            }
+            _ => 0,
+        }
+    }
+
+    fn count_name_in_if_else(&self, if_else: &vais_ast::IfElse, name: &str) -> usize {
+        match if_else {
+            vais_ast::IfElse::ElseIf(cond, stmts, else_opt) => {
+                let mut c = self.count_name_in_expr(&cond.node, name);
+                for s in stmts {
+                    c += self.count_name_in_stmt(&s.node, name);
+                }
+                if let Some(el) = else_opt {
+                    c += self.count_name_in_if_else(el, name);
+                }
+                c
+            }
+            vais_ast::IfElse::Else(stmts) => {
+                stmts.iter().map(|s| self.count_name_in_stmt(&s.node, name)).sum()
+            }
+        }
+    }
+
+    fn count_name_in_type(&self, ty: &Type, name: &str) -> usize {
+        match ty {
+            Type::Named { name: n, generics } => {
+                let mut c = if n == name { 1 } else { 0 };
+                for g in generics {
+                    c += self.count_name_in_type(&g.node, name);
+                }
+                c
+            }
+            Type::Array(inner) => self.count_name_in_type(&inner.node, name),
+            Type::Optional(inner) => self.count_name_in_type(&inner.node, name),
+            Type::Result(inner) => self.count_name_in_type(&inner.node, name),
+            Type::Map(key, value) => {
+                self.count_name_in_type(&key.node, name)
+                    + self.count_name_in_type(&value.node, name)
+            }
+            Type::Tuple(elems) => {
+                elems.iter().map(|e| self.count_name_in_type(&e.node, name)).sum()
+            }
+            _ => 0,
+        }
+    }
+
     fn collect_folding_ranges(&self, ast: &Module, rope: &Rope) -> Vec<FoldingRangeInfo> {
         let mut ranges = Vec::new();
 
@@ -1183,6 +1639,268 @@ impl VaisBackend {
 
         sub_traits
     }
+
+    /// Find all references to a variable in a statement
+    fn find_var_references_in_stmt(
+        &self,
+        stmt: &Spanned<Stmt>,
+        var_name: &str,
+        refs: &mut Vec<Range>,
+        rope: &Rope,
+    ) {
+        match &stmt.node {
+            Stmt::Let { value, .. } => {
+                self.find_var_references_in_expr(value, var_name, refs, rope);
+            }
+            Stmt::Expr(expr) => {
+                self.find_var_references_in_expr(expr, var_name, refs, rope);
+            }
+            Stmt::Return(Some(expr)) => {
+                self.find_var_references_in_expr(expr, var_name, refs, rope);
+            }
+            _ => {}
+        }
+    }
+
+    /// Find all references to a variable in an expression
+    fn find_var_references_in_expr(
+        &self,
+        expr: &Spanned<Expr>,
+        var_name: &str,
+        refs: &mut Vec<Range>,
+        rope: &Rope,
+    ) {
+        match &expr.node {
+            Expr::Ident(name) if name == var_name => {
+                refs.push(self.span_to_range(rope, &expr.span));
+            }
+            Expr::Binary { left, right, .. } => {
+                self.find_var_references_in_expr(left, var_name, refs, rope);
+                self.find_var_references_in_expr(right, var_name, refs, rope);
+            }
+            Expr::Unary { expr: inner, .. } => {
+                self.find_var_references_in_expr(inner, var_name, refs, rope);
+            }
+            Expr::Call { func, args, .. } => {
+                self.find_var_references_in_expr(func, var_name, refs, rope);
+                for arg in args {
+                    self.find_var_references_in_expr(arg, var_name, refs, rope);
+                }
+            }
+            Expr::Index { expr: array, index, .. } => {
+                self.find_var_references_in_expr(array, var_name, refs, rope);
+                self.find_var_references_in_expr(index, var_name, refs, rope);
+            }
+            Expr::Field { expr: object, .. } => {
+                self.find_var_references_in_expr(object, var_name, refs, rope);
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                self.find_var_references_in_expr(receiver, var_name, refs, rope);
+                for arg in args {
+                    self.find_var_references_in_expr(arg, var_name, refs, rope);
+                }
+            }
+            Expr::StructLit { fields, .. } => {
+                for (_, field_expr) in fields {
+                    self.find_var_references_in_expr(field_expr, var_name, refs, rope);
+                }
+            }
+            Expr::Array(elements) => {
+                for elem in elements {
+                    self.find_var_references_in_expr(elem, var_name, refs, rope);
+                }
+            }
+            Expr::Tuple(elements) => {
+                for elem in elements {
+                    self.find_var_references_in_expr(elem, var_name, refs, rope);
+                }
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                }
+            }
+            Expr::If { cond, then, else_ } => {
+                self.find_var_references_in_expr(cond, var_name, refs, rope);
+                for stmt in then {
+                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                }
+                if let Some(else_branch) = else_ {
+                    match else_branch {
+                        IfElse::ElseIf(else_cond, else_then, else_next) => {
+                            self.find_var_references_in_expr(&else_cond, var_name, refs, rope);
+                            for stmt in else_then {
+                                self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                            }
+                            if let Some(next) = else_next {
+                                // Recursively handle the next else-if/else
+                                if let IfElse::Else(stmts) = next.as_ref() {
+                                    for stmt in stmts {
+                                        self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                                    }
+                                }
+                            }
+                        }
+                        IfElse::Else(else_stmts) => {
+                            for stmt in else_stmts {
+                                self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::While { condition, body } => {
+                self.find_var_references_in_expr(condition, var_name, refs, rope);
+                for stmt in body {
+                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                }
+            }
+            Expr::Loop { iter, body, .. } => {
+                if let Some(iterable) = iter {
+                    self.find_var_references_in_expr(iterable, var_name, refs, rope);
+                }
+                for stmt in body {
+                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                }
+            }
+            Expr::Match { expr, arms } => {
+                self.find_var_references_in_expr(expr, var_name, refs, rope);
+                for arm in arms {
+                    self.find_var_references_in_expr(&arm.body, var_name, refs, rope);
+                }
+            }
+            Expr::Ternary { cond, then, else_ } => {
+                self.find_var_references_in_expr(cond, var_name, refs, rope);
+                self.find_var_references_in_expr(then, var_name, refs, rope);
+                self.find_var_references_in_expr(else_, var_name, refs, rope);
+            }
+            _ => {}
+        }
+    }
+
+    /// Find function call at cursor in a statement and add named parameter refactoring
+    fn find_call_at_cursor_in_stmt(
+        &self,
+        stmt: &Spanned<Stmt>,
+        cursor_offset: usize,
+        rope: &Rope,
+        ast: &Module,
+        uri: &Url,
+        actions: &mut Vec<CodeActionOrCommand>,
+    ) {
+        match &stmt.node {
+            Stmt::Let { value, .. } => {
+                self.find_call_at_cursor_in_expr(value, cursor_offset, rope, ast, uri, actions);
+            }
+            Stmt::Expr(expr) => {
+                self.find_call_at_cursor_in_expr(expr, cursor_offset, rope, ast, uri, actions);
+            }
+            Stmt::Return(Some(expr)) => {
+                self.find_call_at_cursor_in_expr(expr, cursor_offset, rope, ast, uri, actions);
+            }
+            _ => {}
+        }
+    }
+
+    /// Find function call at cursor in an expression and add named parameter refactoring
+    fn find_call_at_cursor_in_expr(
+        &self,
+        expr: &Spanned<Expr>,
+        cursor_offset: usize,
+        rope: &Rope,
+        ast: &Module,
+        uri: &Url,
+        actions: &mut Vec<CodeActionOrCommand>,
+    ) {
+        if let Expr::Call { func, args, .. } = &expr.node {
+            // Check if cursor is within this call expression
+            if cursor_offset >= expr.span.start && cursor_offset <= expr.span.end {
+                // Get the function name
+                if let Expr::Ident(func_name) = &func.node {
+                    // Find the function definition to get parameter names
+                    for item in &ast.items {
+                        if let Item::Function(function) = &item.node {
+                            if function.name.node == *func_name && !args.is_empty() {
+                                // Check if args are already named (simple heuristic)
+                                let has_named_args = args.iter().any(|arg| {
+                                    matches!(&arg.node, Expr::Binary { .. })
+                                });
+
+                                if !has_named_args && function.params.len() == args.len() {
+                                    // Build the named argument call
+                                    let mut named_args_parts = Vec::new();
+                                    for (arg, param) in args.iter().zip(&function.params) {
+                                        let arg_text: String = rope
+                                            .chars()
+                                            .skip(arg.span.start)
+                                            .take(arg.span.end - arg.span.start)
+                                            .collect();
+                                        named_args_parts.push(format!("{}: {}", param.name.node, arg_text));
+                                    }
+                                    let named_args_text = named_args_parts.join(", ");
+
+                                    // Find the opening and closing parentheses
+                                    let call_start = func.span.end;
+                                    let call_end = expr.span.end;
+
+                                    let edit = WorkspaceEdit {
+                                        changes: Some({
+                                            let mut map = std::collections::HashMap::new();
+                                            map.insert(
+                                                uri.clone(),
+                                                vec![TextEdit {
+                                                    range: Range {
+                                                        start: self.offset_to_position(rope, call_start),
+                                                        end: self.offset_to_position(rope, call_end),
+                                                    },
+                                                    new_text: format!("({})", named_args_text),
+                                                }],
+                                            );
+                                            map
+                                        }),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    };
+
+                                    actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: "Introduce named parameters".to_string(),
+                                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                        diagnostics: None,
+                                        edit: Some(edit),
+                                        ..Default::default()
+                                    }));
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recursively search in nested expressions
+        match &expr.node {
+            Expr::Binary { left, right, .. } => {
+                self.find_call_at_cursor_in_expr(left, cursor_offset, rope, ast, uri, actions);
+                self.find_call_at_cursor_in_expr(right, cursor_offset, rope, ast, uri, actions);
+            }
+            Expr::Unary { expr: inner, .. } => {
+                self.find_call_at_cursor_in_expr(inner, cursor_offset, rope, ast, uri, actions);
+            }
+            Expr::Call { func, args, .. } => {
+                self.find_call_at_cursor_in_expr(func, cursor_offset, rope, ast, uri, actions);
+                for arg in args {
+                    self.find_call_at_cursor_in_expr(arg, cursor_offset, rope, ast, uri, actions);
+                }
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    self.find_call_at_cursor_in_stmt(stmt, cursor_offset, rope, ast, uri, actions);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -1244,6 +1962,9 @@ impl LanguageServer for VaisBackend {
                 }),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 ..Default::default()
             },
         })
@@ -2628,6 +3349,270 @@ impl LanguageServer for VaisBackend {
                     }
                 }
             }
+
+            // Refactor: Inline Variable
+            if let Some(ast) = &doc.ast {
+                // Convert range.start to offset
+                let cursor_line = range.start.line as usize;
+                let cursor_char = range.start.character as usize;
+                let cursor_offset = if let Some(line_start_char) = doc.content.try_line_to_char(cursor_line).ok() {
+                    line_start_char + cursor_char
+                } else {
+                    0
+                };
+
+                // Find Let statement at cursor
+                for item in &ast.items {
+                    if let Item::Function(func) = &item.node {
+                        if let FunctionBody::Block(stmts) = &func.body {
+                            for (stmt_idx, stmt) in stmts.iter().enumerate() {
+                                if let Stmt::Let { name, value, .. } = &stmt.node {
+                                    // Check if cursor is on this let statement
+                                    if cursor_offset >= stmt.span.start && cursor_offset <= stmt.span.end {
+                                        let var_name = &name.node;
+                                        
+                                        // Get the initializer expression text
+                                        let init_text: String = doc.content
+                                            .chars()
+                                            .skip(value.span.start)
+                                            .take(value.span.end - value.span.start)
+                                            .collect();
+
+                                        // Find all references to this variable in the function
+                                        let mut reference_ranges = Vec::new();
+                                        
+                                        // Look in subsequent statements for references
+                                        for ref_stmt in &stmts[stmt_idx + 1..] {
+                                            self.find_var_references_in_stmt(
+                                                ref_stmt,
+                                                var_name,
+                                                &mut reference_ranges,
+                                                &doc.content,
+                                            );
+                                        }
+
+                                        if !reference_ranges.is_empty() {
+                                            let mut edits = Vec::new();
+                                            
+                                            // Remove the let statement line
+                                            let let_range = self.span_to_range(&doc.content, &stmt.span);
+                                            // Extend to include the whole line
+                                            let let_line_start = Position::new(let_range.start.line, 0);
+                                            let let_line_end = Position::new(let_range.end.line + 1, 0);
+                                            edits.push(TextEdit {
+                                                range: Range::new(let_line_start, let_line_end),
+                                                new_text: String::new(),
+                                            });
+                                            
+                                            // Replace each reference with the initializer
+                                            for ref_range in reference_ranges {
+                                                edits.push(TextEdit {
+                                                    range: ref_range,
+                                                    new_text: init_text.clone(),
+                                                });
+                                            }
+
+                                            let edit = WorkspaceEdit {
+                                                changes: Some({
+                                                    let mut map = std::collections::HashMap::new();
+                                                    map.insert(uri.clone(), edits);
+                                                    map
+                                                }),
+                                                document_changes: None,
+                                                change_annotations: None,
+                                            };
+
+                                            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                                title: format!("Inline variable '{}'", var_name),
+                                                kind: Some(CodeActionKind::REFACTOR_INLINE),
+                                                diagnostics: None,
+                                                edit: Some(edit),
+                                                ..Default::default()
+                                            }));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Refactor: Convert to/from Expression Body
+            if let Some(ast) = &doc.ast {
+                let cursor_line = range.start.line as usize;
+                let cursor_char = range.start.character as usize;
+                let _cursor_offset = if let Some(line_start_char) = doc.content.try_line_to_char(cursor_line).ok() {
+                    line_start_char + cursor_char
+                } else {
+                    0
+                };
+
+                for item in &ast.items {
+                    if let Item::Function(func) = &item.node {
+                        let func_range = self.span_to_range(&doc.content, &item.span);
+                        
+                        // Check if cursor is in this function
+                        if position_in_range(&range.start, &func_range) {
+                            match &func.body {
+                                // Convert block body to expression body
+                                FunctionBody::Block(stmts) if stmts.len() == 1 => {
+                                    let stmt = &stmts[0];
+                                    let expr_span = match &stmt.node {
+                                        Stmt::Return(Some(expr)) => Some(&expr.span),
+                                        Stmt::Expr(expr) => Some(&expr.span),
+                                        _ => None,
+                                    };
+
+                                    if let Some(expr_span) = expr_span {
+                                        // Get expression text
+                                        let expr_text: String = doc.content
+                                            .chars()
+                                            .skip(expr_span.start)
+                                            .take(expr_span.end - expr_span.start)
+                                            .collect();
+
+                                        // Find the opening brace of the function body
+                                        let body_start = if let FunctionBody::Block(stmts) = &func.body {
+                                            if let Some(first_stmt) = stmts.first() {
+                                                // Work backwards from first statement to find '{'
+                                                let mut brace_offset = first_stmt.span.start;
+                                                while brace_offset > 0 {
+                                                    brace_offset -= 1;
+                                                    if let Some(ch) = doc.content.get_char(brace_offset) {
+                                                        if ch == '{' {
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                brace_offset
+                                            } else {
+                                                item.span.start
+                                            }
+                                        } else {
+                                            item.span.start
+                                        };
+
+                                        let body_end = item.span.end;
+                                        
+                                        let edit = WorkspaceEdit {
+                                            changes: Some({
+                                                let mut map = std::collections::HashMap::new();
+                                                map.insert(
+                                                    uri.clone(),
+                                                    vec![TextEdit {
+                                                        range: Range {
+                                                            start: self.offset_to_position(&doc.content, body_start),
+                                                            end: self.offset_to_position(&doc.content, body_end),
+                                                        },
+                                                        new_text: format!("= {}", expr_text),
+                                                    }],
+                                                );
+                                                map
+                                            }),
+                                            document_changes: None,
+                                            change_annotations: None,
+                                        };
+
+                                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                            title: "Convert to expression body".to_string(),
+                                            kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                            diagnostics: None,
+                                            edit: Some(edit),
+                                            ..Default::default()
+                                        }));
+                                    }
+                                }
+                                // Convert expression body to block body
+                                FunctionBody::Expr(expr) => {
+                                    let expr_text: String = doc.content
+                                        .chars()
+                                        .skip(expr.span.start)
+                                        .take(expr.span.end - expr.span.start)
+                                        .collect();
+
+                                    // Find the '=' before the expression
+                                    let mut eq_offset = expr.span.start;
+                                    while eq_offset > 0 {
+                                        eq_offset -= 1;
+                                        if let Some(ch) = doc.content.get_char(eq_offset) {
+                                            if ch == '=' {
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    let edit = WorkspaceEdit {
+                                        changes: Some({
+                                            let mut map = std::collections::HashMap::new();
+                                            map.insert(
+                                                uri.clone(),
+                                                vec![TextEdit {
+                                                    range: Range {
+                                                        start: self.offset_to_position(&doc.content, eq_offset),
+                                                        end: self.offset_to_position(&doc.content, expr.span.end),
+                                                    },
+                                                    new_text: format!("{{\n    {}\n}}", expr_text),
+                                                }],
+                                            );
+                                            map
+                                        }),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    };
+
+                                    actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: "Convert to block body".to_string(),
+                                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                        diagnostics: None,
+                                        edit: Some(edit),
+                                        ..Default::default()
+                                    }));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Refactor: Introduce Named Parameter
+            if let Some(ast) = &doc.ast {
+                let cursor_line = range.start.line as usize;
+                let cursor_char = range.start.character as usize;
+                let cursor_offset = if let Some(line_start_char) = doc.content.try_line_to_char(cursor_line).ok() {
+                    line_start_char + cursor_char
+                } else {
+                    0
+                };
+
+                // Find function call at cursor and offer to convert to named arguments
+                for item in &ast.items {
+                    if let Item::Function(func) = &item.node {
+                        if let FunctionBody::Block(stmts) = &func.body {
+                            for stmt in stmts {
+                                self.find_call_at_cursor_in_stmt(
+                                    stmt,
+                                    cursor_offset,
+                                    &doc.content,
+                                    ast,
+                                    uri,
+                                    &mut actions,
+                                );
+                            }
+                        } else if let FunctionBody::Expr(expr) = &func.body {
+                            self.find_call_at_cursor_in_expr(
+                                expr,
+                                cursor_offset,
+                                &doc.content,
+                                ast,
+                                uri,
+                                &mut actions,
+                            );
+                        }
+                    }
+                }
+            }
         }
 
         if actions.is_empty() {
@@ -3191,5 +4176,184 @@ impl LanguageServer for VaisBackend {
         } else {
             Ok(Some(subtypes))
         }
+    }
+
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        let uri = &params.text_document.uri;
+
+        if let Some(doc) = self.documents.get(uri) {
+            if let Some(ast) = &doc.ast {
+                let mut lenses = Vec::new();
+
+                for item in &ast.items {
+                    match &item.node {
+                        Item::Function(f) => {
+                            let range = self.span_to_range(&doc.content, &f.name.span);
+
+                            // Test lens: show "Run Test" for #[test] functions
+                            let is_test = f.attributes.iter().any(|attr| attr.name == "test");
+                            if is_test {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: "$(testing-run-icon) Run Test".to_string(),
+                                        command: "vais.runTest".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(f.name.node.clone()),
+                                            serde_json::Value::String(uri.to_string()),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: "$(debug-alt) Debug Test".to_string(),
+                                        command: "vais.debugTest".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(f.name.node.clone()),
+                                            serde_json::Value::String(uri.to_string()),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+
+                            // References lens: count references to this function
+                            let ref_count = self.count_references_in_ast(ast, &f.name.node);
+                            if ref_count > 0 {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: format!("{} reference{}", ref_count, if ref_count == 1 { "" } else { "s" }),
+                                        command: "vais.showReferences".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(uri.to_string()),
+                                            serde_json::json!({ "line": range.start.line, "character": range.start.character }),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+
+                            // Benchmark lens for #[bench] functions
+                            let is_bench = f.attributes.iter().any(|attr| attr.name == "bench" || attr.name == "benchmark");
+                            if is_bench {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: "$(graph) Run Benchmark".to_string(),
+                                        command: "vais.runBenchmark".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(f.name.node.clone()),
+                                            serde_json::Value::String(uri.to_string()),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+                        }
+                        Item::Struct(s) => {
+                            let range = self.span_to_range(&doc.content, &s.name.span);
+
+                            // Implementation count
+                            let impl_count = ast.items.iter().filter(|i| {
+                                if let Item::Impl(imp) = &i.node {
+                                    if let Type::Named { name, .. } = &imp.target_type.node {
+                                        return name == &s.name.node;
+                                    }
+                                }
+                                false
+                            }).count();
+
+                            if impl_count > 0 {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: format!("{} impl block{}", impl_count, if impl_count == 1 { "" } else { "s" }),
+                                        command: "vais.showImplementations".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(uri.to_string()),
+                                            serde_json::json!({ "line": range.start.line, "character": range.start.character }),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+
+                            // Reference count for structs
+                            let ref_count = self.count_references_in_ast(ast, &s.name.node);
+                            if ref_count > 0 {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: format!("{} reference{}", ref_count, if ref_count == 1 { "" } else { "s" }),
+                                        command: "vais.showReferences".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(uri.to_string()),
+                                            serde_json::json!({ "line": range.start.line, "character": range.start.character }),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+                        }
+                        Item::Enum(e) => {
+                            let range = self.span_to_range(&doc.content, &e.name.span);
+                            let ref_count = self.count_references_in_ast(ast, &e.name.node);
+                            if ref_count > 0 {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: format!("{} reference{}", ref_count, if ref_count == 1 { "" } else { "s" }),
+                                        command: "vais.showReferences".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(uri.to_string()),
+                                            serde_json::json!({ "line": range.start.line, "character": range.start.character }),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+                        }
+                        Item::Trait(t) => {
+                            let range = self.span_to_range(&doc.content, &t.name.span);
+
+                            // Count trait implementations
+                            let impl_count = ast.items.iter().filter(|i| {
+                                if let Item::Impl(imp) = &i.node {
+                                    if let Some(trait_name) = &imp.trait_name {
+                                        return trait_name.node == t.name.node;
+                                    }
+                                }
+                                false
+                            }).count();
+
+                            if impl_count > 0 {
+                                lenses.push(CodeLens {
+                                    range,
+                                    command: Some(Command {
+                                        title: format!("{} implementation{}", impl_count, if impl_count == 1 { "" } else { "s" }),
+                                        command: "vais.showImplementations".to_string(),
+                                        arguments: Some(vec![
+                                            serde_json::Value::String(uri.to_string()),
+                                            serde_json::json!({ "line": range.start.line, "character": range.start.character }),
+                                        ]),
+                                    }),
+                                    data: None,
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                if !lenses.is_empty() {
+                    return Ok(Some(lenses));
+                }
+            }
+        }
+
+        Ok(None)
     }
 }

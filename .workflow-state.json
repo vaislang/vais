@@ -6,11 +6,10 @@
     { "id": 2, "name": "패키지 검색/디스커버리", "status": "done", "model": "Sonnet" },
     { "id": 3, "name": "Profile-Guided Optimization (PGO)", "status": "done", "model": "Opus" },
     { "id": 4, "name": "병렬 컴파일", "status": "done", "model": "Opus" },
-    { "id": 5, "name": "Comptime 확장", "status": "in_progress", "model": "Sonnet" },
-    { "id": 6, "name": "LSP Inlay Hints", "status": "pending", "model": "Sonnet" },
-    { "id": 7, "name": "리팩토링 도구", "status": "pending", "model": "Sonnet" },
-    { "id": 8, "name": "Code Lens", "status": "pending", "model": "Sonnet" }
+    { "id": 5, "name": "Comptime 확장", "status": "done", "model": "Sonnet" },
+    { "id": 6, "name": "LSP Inlay Hints", "status": "done", "model": "Sonnet" },
+    { "id": 7, "name": "리팩토링 도구", "status": "done", "model": "Sonnet" },
+    { "id": 8, "name": "Code Lens", "status": "in_progress", "model": "Sonnet" }
   ],
-  "currentTask": 5,
-  "lastCompleted": "병렬 컴파일"
+  "currentTask": 8
 }
