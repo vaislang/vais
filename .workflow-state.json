@@ -1,15 +1,14 @@
 {
-  "phase": 5,
-  "request": "Phase 14 P1 - 설치 및 배포 시스템",
+  "phase": 4,
+  "request": "Phase 14 P2 - 공식 웹사이트 구축",
   "tasks": [
-    { "id": 1, "name": "Homebrew Formula 작성", "status": "done", "model": "Sonnet" },
-    { "id": 2, "name": "cargo install 지원", "status": "done", "model": "Haiku" },
-    { "id": 3, "name": "Linux 패키지 스크립트", "status": "done", "model": "Sonnet" },
-    { "id": 4, "name": "Windows 설치 매니페스트", "status": "done", "model": "Haiku" },
-    { "id": 5, "name": "Docker 이미지", "status": "done", "model": "Sonnet" },
-    { "id": 6, "name": "GitHub Releases 자동화", "status": "done", "model": "Sonnet" },
-    { "id": 7, "name": "버전 관리 체계", "status": "done", "model": "Sonnet" }
+    { "id": 1, "name": "랜딩 페이지 구조 설계", "status": "done", "model": "Opus" },
+    { "id": 2, "name": "랜딩 페이지 구현 Part 1 (Hero+소개+코드비교)", "status": "done", "model": "Sonnet" },
+    { "id": 3, "name": "랜딩 페이지 구현 Part 2 (기능+Playground+CTA)", "status": "done", "model": "Sonnet" },
+    { "id": 4, "name": "문서 사이트 배포 설정", "status": "in_progress", "model": "Haiku" },
+    { "id": 5, "name": "Playground 배포 설정", "status": "in_progress", "model": "Sonnet" },
+    { "id": 6, "name": "블로그 시스템 구축", "status": "in_progress", "model": "Sonnet" },
+    { "id": 7, "name": "호스팅/도메인 설정 가이드", "status": "in_progress", "model": "Haiku" }
   ],
-  "currentTask": null,
-  "lastCompleted": "버전 관리 체계"
+  "currentTask": null
 }

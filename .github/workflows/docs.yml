@@ -56,7 +56,8 @@ jobs:
       - name: Install mdBook
         run: |
           if ! command -v mdbook &> /dev/null; then
-            cargo install mdbook
+            cargo install cargo-binstall
+            cargo binstall -y mdbook
           fi
 
       - name: Build documentation

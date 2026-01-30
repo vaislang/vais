@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vais - AI-Optimized Systems Programming Language</title>
+  <meta name="description" content="Vais is a token-efficient systems programming language designed for AI code generation with native LLVM performance.">
+  <meta property="og:title" content="Vais - AI-Optimized Systems Programming Language">
+  <meta property="og:description" content="Token-efficient syntax, LLVM backend, type inference. Write less tokens, get native performance.">
+  <meta property="og:type" content="website">
+  <link rel="stylesheet" href="/src/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">
+        <span class="logo-symbol">V</span>
+        <span class="logo-text">vais</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#compare">Compare</a>
+        <a href="#playground">Playground</a>
+        <a href="/docs" class="nav-link-docs">Docs</a>
+        <a href="https://github.com/siho-song/vais" class="nav-link-github" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+      </div>
+      <button class="nav-mobile-toggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="container">
+      <div class="hero-content">
+        <div class="hero-badge">v0.2.0 — Now with generics & traits</div>
+        <h1 class="hero-title">
+          Write <span class="gradient-text">fewer tokens</span>,<br>
+          get <span class="gradient-text">native performance</span>
+        </h1>
+        <p class="hero-subtitle">
+          Vais is a systems programming language optimized for AI code generation.
+          Single-character keywords, expression-oriented syntax, and LLVM-powered native speed.
+        </p>
+        <div class="hero-actions">
+          <a href="#playground" class="btn btn-primary">Try in Browser</a>
+          <a href="#install" class="btn btn-secondary">
+            <code>brew install vais</code>
+          </a>
+        </div>
+      </div>
+      <div class="hero-code">
+        <div class="code-window">
+          <div class="code-header">
+            <span class="code-dot red"></span>
+            <span class="code-dot yellow"></span>
+            <span class="code-dot green"></span>
+            <span class="code-filename">fibonacci.vais</span>
+          </div>
+          <pre class="code-body"><code><span class="kw">F</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
+  <span class="kw">I</span> n &lt;= <span class="num">1</span> { n }
+  <span class="kw">E</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
+}
+
+<span class="kw">F</span> <span class="fn">main</span>() {
+  <span class="kw">V</span> result = <span class="fn">fib</span>(<span class="num">10</span>)
+  <span class="fn">println</span>(<span class="str">"fib(10) = {}"</span>, result)
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Token Comparison Section -->
+  <section class="compare" id="compare">
+    <div class="container">
+      <h2 class="section-title">Token Efficiency Matters</h2>
+      <p class="section-subtitle">
+        AI models pay per token. Vais uses up to <strong>40% fewer tokens</strong> than Rust
+        for equivalent programs — saving cost and context window.
+      </p>
+      <div class="compare-grid">
+        <!-- Vais -->
+        <div class="compare-card compare-card-vais">
+          <div class="compare-header">
+            <span class="compare-lang">Vais</span>
+            <span class="compare-tokens">~32 tokens</span>
+          </div>
+          <pre class="compare-code"><code><span class="kw">S</span> <span class="type">Point</span> {
+  x: <span class="type">f64</span>,
+  y: <span class="type">f64</span>,
+}
+
+<span class="kw">F</span> <span class="fn">dist</span>(p: <span class="type">Point</span>) -> <span class="type">f64</span> {
+  <span class="fn">sqrt</span>(p.x * p.x + p.y * p.y)
+}</code></pre>
+        </div>
+        <!-- Rust -->
+        <div class="compare-card">
+          <div class="compare-header">
+            <span class="compare-lang">Rust</span>
+            <span class="compare-tokens">~52 tokens</span>
+          </div>
+          <pre class="compare-code"><code><span class="kw">struct</span> <span class="type">Point</span> {
+    x: <span class="type">f64</span>,
+    y: <span class="type">f64</span>,
+}
+
+<span class="kw">fn</span> <span class="fn">dist</span>(p: &amp;<span class="type">Point</span>) -&gt; <span class="type">f64</span> {
+    (p.x * p.x + p.y * p.y).<span class="fn">sqrt</span>()
+}</code></pre>
+        </div>
+        <!-- Python -->
+        <div class="compare-card">
+          <div class="compare-header">
+            <span class="compare-lang">Python</span>
+            <span class="compare-tokens">~48 tokens</span>
+          </div>
+          <pre class="compare-code"><code><span class="kw">from</span> math <span class="kw">import</span> sqrt
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+
+<span class="decorator">@dataclass</span>
+<span class="kw">class</span> <span class="type">Point</span>:
+    x: <span class="type">float</span>
+    y: <span class="type">float</span>
+
+<span class="kw">def</span> <span class="fn">dist</span>(p: <span class="type">Point</span>) -> <span class="type">float</span>:
+    <span class="kw">return</span> <span class="fn">sqrt</span>(p.x * p.x + p.y * p.y)</code></pre>
+        </div>
+      </div>
+      <div class="compare-bar-section">
+        <h3 class="compare-bar-title">Token Count Comparison</h3>
+        <div class="compare-bars">
+          <div class="bar-item">
+            <span class="bar-label">Vais</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-vais" style="width: 62%"></div>
+            </div>
+            <span class="bar-value">32</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Python</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-python" style="width: 92%"></div>
+            </div>
+            <span class="bar-value">48</span>
+          </div>
+          <div class="bar-item">
+            <span class="bar-label">Rust</span>
+            <div class="bar-track">
+              <div class="bar-fill bar-rust" style="width: 100%"></div>
+            </div>
+            <span class="bar-value">52</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="section-title">Why Vais?</h2>
+      <p class="section-subtitle">
+        Designed from the ground up for AI-assisted development without sacrificing performance.
+      </p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">V</div>
+          <h3>Single-Char Keywords</h3>
+          <p><code>F</code> for function, <code>S</code> for struct, <code>I</code>/<code>E</code> for if/else, <code>L</code> for loop, <code>M</code> for match. Minimal tokens, maximum clarity.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">@</div>
+          <h3>Self-Recursion Operator</h3>
+          <p>The <code>@</code> operator calls the current function recursively. No need to repeat the function name — AI-friendly and concise.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">{}</div>
+          <h3>Everything is an Expression</h3>
+          <p>If/else, match, and blocks all return values. No <code>return</code> keyword needed for the last expression. Functional and ergonomic.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>LLVM Native Speed</h3>
+          <p>Compiles to optimized native code via LLVM. Get C-level performance with high-level ergonomics. Supports LTO and PGO.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">T</div>
+          <h3>Type Inference</h3>
+          <p>Bidirectional type checking infers types automatically. Write <code>V x = 42</code> instead of explicit type annotations everywhere.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔧</div>
+          <h3>Full Toolchain</h3>
+          <p>LSP server, formatter, debugger, REPL, package manager, and IDE plugins for VSCode and IntelliJ. Production-ready tooling.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Playground Section -->
+  <section class="playground-section" id="playground">
+    <div class="container">
+      <h2 class="section-title">Try Vais Now</h2>
+      <p class="section-subtitle">
+        Write and run Vais code directly in your browser. No installation required.
+      </p>
+      <div class="playground-embed">
+        <div class="playground-placeholder">
+          <div class="playground-placeholder-icon">▶</div>
+          <p>Launch Interactive Playground</p>
+          <a href="/playground/" class="btn btn-primary" target="_blank">Open Playground</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Install Section -->
+  <section class="install" id="install">
+    <div class="container">
+      <h2 class="section-title">Get Started in Seconds</h2>
+      <div class="install-grid">
+        <div class="install-card">
+          <h3>macOS / Linux</h3>
+          <div class="install-cmd">
+            <code>brew tap siho-song/vais && brew install vais</code>
+            <button class="copy-btn" data-copy="brew tap siho-song/vais && brew install vais" aria-label="Copy">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="install-card">
+          <h3>Cargo</h3>
+          <div class="install-cmd">
+            <code>cargo install vaisc</code>
+            <button class="copy-btn" data-copy="cargo install vaisc" aria-label="Copy">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="install-card">
+          <h3>Docker</h3>
+          <div class="install-cmd">
+            <code>docker run -it vais/vais:latest</code>
+            <button class="copy-btn" data-copy="docker run -it vais/vais:latest" aria-label="Copy">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <span class="logo-symbol">V</span>
+          <span class="logo-text">vais</span>
+          <p class="footer-tagline">AI-Optimized Systems Language</p>
+        </div>
+        <div class="footer-col">
+          <h4>Learn</h4>
+          <a href="/docs/">Documentation</a>
+          <a href="/playground/">Playground</a>
+          <a href="/docs/getting-started/">Quick Start</a>
+        </div>
+        <div class="footer-col">
+          <h4>Community</h4>
+          <a href="https://github.com/siho-song/vais" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/siho-song/vais/discussions" target="_blank" rel="noopener">Discussions</a>
+          <a href="https://github.com/siho-song/vais/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h4>More</h4>
+          <a href="/blog/">Blog</a>
+          <a href="https://github.com/siho-song/vais/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+          <a href="https://github.com/siho-song/vais/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Vais Contributors. Built with ❤ for AI.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
