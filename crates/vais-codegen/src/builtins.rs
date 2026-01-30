@@ -98,10 +98,26 @@ impl CodeGenerator {
     }
 
     fn register_io_functions(&mut self) {
-        // printf for printing
-        register_extern!(self, "printf",
-            vec![("format".to_string(), ResolvedType::Str)],
-            ResolvedType::I32
+        // printf for printing (variadic)
+        self.functions.insert(
+            "printf".to_string(),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: "printf".to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: convert_params(vec![("format".to_string(), ResolvedType::Str)]),
+                    ret: ResolvedType::I32,
+                    is_async: false,
+                    is_vararg: true,
+                    required_params: Some(1),
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+                is_extern: true,
+                extern_abi: Some("C".to_string()),
+            },
         );
 
         // putchar for single character output
@@ -120,6 +136,51 @@ impl CodeGenerator {
         register_extern!(self, "puts_ptr" => "puts",
             vec![("s".to_string(), ResolvedType::I64)],
             ResolvedType::I32
+        );
+
+        // print: format string output (no newline)
+        // Registered as vararg; first arg is format string, rest are values
+        self.functions.insert(
+            "print".to_string(),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: "print".to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: convert_params(vec![("format".to_string(), ResolvedType::Str)]),
+                    ret: ResolvedType::Unit,
+                    is_async: false,
+                    is_vararg: true,
+                    required_params: Some(1),
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+                is_extern: false,
+                extern_abi: None,
+            },
+        );
+
+        // println: format string output (with newline)
+        self.functions.insert(
+            "println".to_string(),
+            FunctionInfo {
+                signature: FunctionSig {
+                    name: "println".to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: convert_params(vec![("format".to_string(), ResolvedType::Str)]),
+                    ret: ResolvedType::Unit,
+                    is_async: false,
+                    is_vararg: true,
+                    required_params: Some(1),
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+                is_extern: false,
+                extern_abi: None,
+            },
         );
 
         // exit: (i32) -> void (noreturn)

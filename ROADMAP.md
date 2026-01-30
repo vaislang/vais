@@ -206,7 +206,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **논리 NOT codegen 버그** - `!expr` 연산 코드 생성 수정 (완료일: 2026-01-30)
 
 #### 필수 언어 기능 추가
-- [ ] **print/println 내장 함수** - 포맷 문자열 지원하는 출력 함수 (`print("x = {}", x)`)
+- [x] **print/println 내장 함수** - 포맷 문자열 지원하는 출력 함수 (`print("x = {}", x)`) (완료일: 2026-01-30)
 - [ ] **문자열 타입 완성** - first-class String 타입 (현재는 포인터 조작 필요)
 - [ ] **배열 mutation** - 배열 요소 수정 (`arr[i] = val`)
 - [ ] **format 함수** - 문자열 포매팅 (`format("hello {}", name)`)

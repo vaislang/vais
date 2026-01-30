@@ -313,6 +313,42 @@ impl TypeChecker {
             },
         );
 
+        // print: (format, ...) -> void - format string output (no newline)
+        self.functions.insert(
+            "print".to_string(),
+            FunctionSig {
+                name: "print".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("format".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::Unit,
+                is_async: false,
+                is_vararg: true,
+                required_params: Some(1),
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // println: (format, ...) -> void - format string output (with newline)
+        self.functions.insert(
+            "println".to_string(),
+            FunctionSig {
+                name: "println".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("format".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::Unit,
+                is_async: false,
+                is_vararg: true,
+                required_params: Some(1),
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // memcpy: (dest, src, n) -> i64
         self.functions.insert(
             "memcpy".to_string(),
@@ -2379,10 +2415,10 @@ impl TypeChecker {
                             // Generic function call - infer type arguments
                             return self.check_generic_function_call(&sig, args);
                         }
-                        // Check arg count with default parameters support
+                        // Check arg count with default parameters and vararg support
                         let min_args = sig.min_args();
                         let max_args = sig.params.len();
-                        if args.len() < min_args || args.len() > max_args {
+                        if args.len() < min_args || (!sig.is_vararg && args.len() > max_args) {
                             return Err(TypeError::ArgCount {
                                 expected: max_args,
                                 got: args.len(),

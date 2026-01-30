@@ -292,7 +292,17 @@ impl CodeGenerator {
             );
         }
 
-        format!("declare {} @{}({})", ret, info.signature.name, params.join(", "))
+        if info.signature.is_vararg {
+            let mut all_params = params.join(", ");
+            if !all_params.is_empty() {
+                all_params.push_str(", ...");
+            } else {
+                all_params.push_str("...");
+            }
+            format!("declare {} @{}({})", ret, info.signature.name, all_params)
+        } else {
+            format!("declare {} @{}({})", ret, info.signature.name, params.join(", "))
+        }
     }
 
     #[allow(dead_code)]

@@ -1312,3 +1312,87 @@ F main() -> i64 {
     // Elements > 50: 93, 68, 85, 76, 54 = 5
     assert_exit_code(source, 5);
 }
+
+// === print/println built-in tests ===
+
+#[test]
+fn e2e_println_simple_string() {
+    let source = r#"
+F main() -> i64 {
+    println("Hello, World!")
+    0
+}
+"#;
+    assert_stdout_contains(source, "Hello, World!");
+}
+
+#[test]
+fn e2e_print_simple_string() {
+    let source = r#"
+F main() -> i64 {
+    print("Hello")
+    0
+}
+"#;
+    assert_stdout_contains(source, "Hello");
+}
+
+#[test]
+fn e2e_println_format_integer() {
+    let source = r#"
+F main() -> i64 {
+    x: i64 = 42
+    println("x = {}", x)
+    0
+}
+"#;
+    assert_stdout_contains(source, "x = 42");
+}
+
+#[test]
+fn e2e_println_format_multiple() {
+    let source = r#"
+F main() -> i64 {
+    a: i64 = 10
+    b: i64 = 20
+    println("{} + {} = {}", a, b, a + b)
+    0
+}
+"#;
+    assert_stdout_contains(source, "10 + 20 = 30");
+}
+
+#[test]
+fn e2e_println_format_string_arg() {
+    let source = r#"
+F main() -> i64 {
+    println("name: {}", "Vais")
+    0
+}
+"#;
+    assert_stdout_contains(source, "name: Vais");
+}
+
+#[test]
+fn e2e_print_no_newline() {
+    let source = r#"
+F main() -> i64 {
+    print("AB")
+    print("CD")
+    putchar(10)
+    0
+}
+"#;
+    assert_stdout_contains(source, "ABCD");
+}
+
+#[test]
+fn e2e_println_no_args() {
+    let source = r#"
+F main() -> i64 {
+    println("done")
+    0
+}
+"#;
+    assert_stdout_contains(source, "done");
+}

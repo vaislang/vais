@@ -1948,6 +1948,11 @@ impl CodeGenerator {
             Expr::Call { func, args } => {
                 // Check if this is an enum variant constructor or builtin
                 if let Expr::Ident(name) = &func.node {
+                    // Handle print/println builtins with format string support
+                    if name == "print" || name == "println" {
+                        return self.generate_print_call(name, args, counter, expr.span);
+                    }
+
                     // Handle str_to_ptr builtin: convert string pointer to i64
                     if name == "str_to_ptr" {
                         if args.len() != 1 {

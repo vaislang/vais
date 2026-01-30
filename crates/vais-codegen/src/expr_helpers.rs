@@ -249,6 +249,11 @@ impl CodeGenerator {
                 return self.generate_simd_intrinsic(name, args, counter);
             }
 
+            // Handle print/println builtins with format string support
+            if name == "print" || name == "println" {
+                return self.generate_print_call(name, args, counter, span);
+            }
+
             // Handle str_to_ptr builtin: convert string pointer to i64
             if name == "str_to_ptr" {
                 if args.len() != 1 {
@@ -594,6 +599,191 @@ impl CodeGenerator {
         let result = self.next_temp(counter);
         ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
         Ok((result, std::mem::take(ir)))
+    }
+
+    /// Generate print/println call with format string support
+    ///
+    /// Converts Vais format strings like `print("x = {}", x)` to printf calls.
+    /// `{}` placeholders are replaced with the appropriate C format specifier
+    /// based on the inferred type of each argument.
+    pub(crate) fn generate_print_call(
+        &mut self,
+        fn_name: &str,
+        args: &[Spanned<Expr>],
+        counter: &mut usize,
+        span: Span,
+    ) -> CodegenResult<(String, String)> {
+        let dbg_info = self.debug_info.dbg_ref_from_span(span);
+        let mut ir = String::new();
+
+        if args.is_empty() {
+            // print() with no args: do nothing
+            return Ok(("void".to_string(), ir));
+        }
+
+        // First argument must be a string literal (format string)
+        let format_str = match &args[0].node {
+            Expr::String(s) => s.clone(),
+            _ => {
+                // Non-literal first arg: treat as simple string output
+                let (val, val_ir) = self.generate_expr(&args[0], counter)?;
+                ir.push_str(&val_ir);
+                if fn_name == "println" {
+                    // For println with non-literal, use puts
+                    let i32_result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i32 @puts(i8* {}){}\n",
+                        i32_result, val, dbg_info
+                    ));
+                } else {
+                    // For print with non-literal, use printf with %s
+                    let fmt_name = format!(".str.{}", self.string_counter);
+                    self.string_counter += 1;
+                    self.string_constants.push((fmt_name.clone(), "%s".to_string()));
+                    let fmt_len = 3; // "%s" + null
+                    let fmt_ptr = format!(
+                        "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                        fmt_len, fmt_len, fmt_name
+                    );
+                    let _result = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = call i32 (i8*, ...) @printf(i8* {}, i8* {}){}\n",
+                        _result, fmt_ptr, val, dbg_info
+                    ));
+                }
+                return Ok(("void".to_string(), ir));
+            }
+        };
+
+        // Infer types of extra arguments (skip first format string arg)
+        let extra_args = &args[1..];
+        let mut arg_types: Vec<ResolvedType> = Vec::new();
+        for arg in extra_args {
+            arg_types.push(self.infer_expr_type(arg));
+        }
+
+        // Convert Vais format string `{}` to C printf format specifiers
+        let mut c_format = String::new();
+        let mut arg_idx = 0;
+        let mut chars = format_str.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                if chars.peek() == Some(&'{') {
+                    // Escaped {{ -> literal {
+                    chars.next();
+                    c_format.push('{');
+                } else if chars.peek() == Some(&'}') {
+                    // {} -> format specifier based on type
+                    chars.next();
+                    if arg_idx < arg_types.len() {
+                        let spec = match &arg_types[arg_idx] {
+                            ResolvedType::I32 => "%d",
+                            ResolvedType::I64 => "%ld",
+                            ResolvedType::F32 | ResolvedType::F64 => "%f",
+                            ResolvedType::Str => "%s",
+                            ResolvedType::Bool => "%ld", // bools are i64 in codegen
+                            // Char type not yet in Vais
+                            _ => "%ld", // default to i64
+                        };
+                        c_format.push_str(spec);
+                        arg_idx += 1;
+                    } else {
+                        return Err(CodegenError::TypeError(
+                            "Too few arguments for format string".to_string(),
+                        ));
+                    }
+                } else {
+                    c_format.push(ch);
+                }
+            } else if ch == '}' {
+                if chars.peek() == Some(&'}') {
+                    // Escaped }} -> literal }
+                    chars.next();
+                    c_format.push('}');
+                } else {
+                    c_format.push(ch);
+                }
+            } else {
+                c_format.push(ch);
+            }
+        }
+
+        // For println, append newline
+        if fn_name == "println" {
+            c_format.push('\n');
+        }
+
+        // Create global string constant for the C format string
+        let fmt_name = format!(".str.{}", self.string_counter);
+        self.string_counter += 1;
+        self.string_constants.push((fmt_name.clone(), c_format.clone()));
+        let fmt_len = c_format.len() + 1; // +1 for null terminator
+        let fmt_ptr = format!(
+            "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+            fmt_len, fmt_len, fmt_name
+        );
+
+        // Evaluate extra arguments and build printf call
+        let mut printf_args = vec![format!("i8* {}", fmt_ptr)];
+
+        for (i, arg) in extra_args.iter().enumerate() {
+            let (val, arg_ir) = self.generate_expr(arg, counter)?;
+            ir.push_str(&arg_ir);
+
+            let llvm_ty = match &arg_types[i] {
+                ResolvedType::I32 => "i32",
+                ResolvedType::F32 => "float",
+                ResolvedType::F64 => "double",
+                ResolvedType::Str => "i8*",
+                // Char type not yet in Vais
+                _ => "i64", // i64, bool, etc.
+            };
+
+            // For i32 params, we may need to truncate from i64
+            if llvm_ty == "i32" {
+                let trunc_tmp = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = trunc i64 {} to i32\n",
+                    trunc_tmp, val
+                ));
+                printf_args.push(format!("i32 {}", trunc_tmp));
+            } else {
+                printf_args.push(format!("{} {}", llvm_ty, val));
+            }
+        }
+
+        // If no extra args and println, use puts for efficiency
+        if extra_args.is_empty() && fn_name == "println" {
+            // Remove the printf format string (with \n) we added above
+            self.string_constants.pop();
+            self.string_counter -= 1;
+            // Create puts string (without trailing \n, since puts adds one)
+            let puts_str = &c_format[..c_format.len() - 1];
+            let puts_name = format!(".str.{}", self.string_counter);
+            self.string_counter += 1;
+            self.string_constants.push((puts_name.clone(), puts_str.to_string()));
+            let puts_len = puts_str.len() + 1;
+            let puts_ptr = format!(
+                "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                puts_len, puts_len, puts_name
+            );
+            let _result = self.next_temp(counter);
+            ir.push_str(&format!(
+                "  {} = call i32 @puts(i8* {}){}\n",
+                _result, puts_ptr, dbg_info
+            ));
+            return Ok(("void".to_string(), ir));
+        }
+
+        // For print with no extra args, use printf with just the format string
+        let result = self.next_temp(counter);
+        ir.push_str(&format!(
+            "  {} = call i32 (i8*, ...) @printf({}){}\n",
+            result, printf_args.join(", "), dbg_info
+        ));
+
+        Ok(("void".to_string(), ir))
     }
 
     /// Generate if expression
