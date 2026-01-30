@@ -1,0 +1,18 @@
+// Greatest Common Divisor (GCD)
+// Computes GCD using Euclidean algorithm with recursion
+
+F gcd(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        R a
+    }
+    R @(b, a % b)
+}
+
+F main() -> i64 {
+    println("GCD Examples:")
+    println("gcd(48, 18) = {}", gcd(48, 18))
+    println("gcd(100, 50) = {}", gcd(100, 50))
+    println("gcd(17, 19) = {}", gcd(17, 19))
+    println("gcd(1071, 462) = {}", gcd(1071, 462))
+    R 0
+}

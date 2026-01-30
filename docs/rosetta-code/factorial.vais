@@ -1,0 +1,17 @@
+// Factorial
+// Computes n! using recursion
+
+F factorial(n: i64) -> i64 {
+    I n <= 1 {
+        R 1
+    }
+    R n * @(n - 1)
+}
+
+F main() -> i64 {
+    println("Factorial values:")
+    L i := 0; i <= 10; i := i + 1 {
+        println("{}! = {}", i, factorial(i))
+    }
+    R 0
+}

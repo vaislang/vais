@@ -1,0 +1,35 @@
+// Binary Search
+// Searches for a target value in a sorted array
+
+F binary_search(arr: *i64, left: i64, right: i64, target: i64) -> i64 {
+    I left > right {
+        R -1
+    }
+
+    mid := left + (right - left) / 2
+
+    I arr[mid] == target {
+        R mid
+    }
+
+    I arr[mid] > target {
+        R binary_search(arr, left, mid - 1, target)
+    }
+
+    R binary_search(arr, mid + 1, right, target)
+}
+
+F main() -> i64 {
+    arr: *i64 = [2, 5, 8, 12, 16, 23, 38, 45, 56, 67, 78]
+    target := 23
+
+    result := binary_search(arr, 0, 10, target)
+
+    I result == -1 {
+        puts("Element not found")
+    } {
+        println("Element found at index: {}", result)
+    }
+
+    R 0
+}

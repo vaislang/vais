@@ -1,0 +1,17 @@
+// Fibonacci Sequence
+// Computes the nth Fibonacci number using recursion
+
+F fibonacci(n: i64) -> i64 {
+    I n <= 1 {
+        R n
+    }
+    R @(n - 1) + @(n - 2)
+}
+
+F main() -> i64 {
+    println("Fibonacci numbers:")
+    L i := 0; i < 10; i := i + 1 {
+        println("fib({}) = {}", i, fibonacci(i))
+    }
+    R 0
+}

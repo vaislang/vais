@@ -1,0 +1,34 @@
+// Bubble Sort
+// Sorts an array in ascending order using bubble sort algorithm
+
+F bubble_sort(arr: *i64, n: i64) -> i64 {
+    L i := 0; i < n; i := i + 1 {
+        L j := 0; j < n - i - 1; j := j + 1 {
+            I arr[j] > arr[j + 1] {
+                mut temp := arr[j]
+                arr[j] := arr[j + 1]
+                arr[j + 1] := temp
+            }
+        }
+    }
+    R 0
+}
+
+F print_array(arr: *i64, n: i64) -> i64 {
+    L i := 0; i < n; i := i + 1 {
+        println("{}", arr[i])
+    }
+    R 0
+}
+
+F main() -> i64 {
+    arr: *i64 = [64, 34, 25, 12, 22, 11, 90]
+    puts("Original array:")
+    print_array(arr, 7)
+
+    bubble_sort(arr, 7)
+
+    puts("Sorted array:")
+    print_array(arr, 7)
+    R 0
+}

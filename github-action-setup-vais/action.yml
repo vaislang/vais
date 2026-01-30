@@ -1,0 +1,162 @@
+name: "Setup Vais"
+description: "Install the Vais programming language compiler"
+
+inputs:
+  version:
+    description: "Version of Vais to install (default: latest)"
+    required: false
+    default: "latest"
+  token:
+    description: "GitHub token for API requests (optional, helps with rate limits)"
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Detect OS and Architecture
+      id: detect
+      shell: bash
+      run: |
+        OS_NAME=$(uname -s)
+        ARCH=$(uname -m)
+
+        case "$OS_NAME" in
+          Linux)
+            OS_TYPE="linux"
+            ;;
+          Darwin)
+            OS_TYPE="macos"
+            ;;
+          MINGW*|MSYS*|CYGWIN*)
+            OS_TYPE="windows"
+            ;;
+          *)
+            echo "Unsupported OS: $OS_NAME"
+            exit 1
+            ;;
+        esac
+
+        case "$ARCH" in
+          x86_64|amd64)
+            ARCH_TYPE="x86_64"
+            ;;
+          aarch64|arm64)
+            ARCH_TYPE="aarch64"
+            ;;
+          *)
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+        esac
+
+        echo "os_type=$OS_TYPE" >> $GITHUB_OUTPUT
+        echo "arch_type=$ARCH_TYPE" >> $GITHUB_OUTPUT
+        echo "Detected: $OS_TYPE-$ARCH_TYPE"
+
+    - name: Determine Download URL
+      id: url
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        OS_TYPE: ${{ steps.detect.outputs.os_type }}
+        ARCH_TYPE: ${{ steps.detect.outputs.arch_type }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        # Determine the version to download
+        if [ "$VERSION" = "latest" ]; then
+          if [ -n "$GITHUB_TOKEN" ]; then
+            RELEASE_INFO=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/vais-lang/vais/releases/latest")
+          else
+            RELEASE_INFO=$(curl -s "https://api.github.com/repos/vais-lang/vais/releases/latest")
+          fi
+
+          VERSION_TAG=$(echo "$RELEASE_INFO" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+          if [ -z "$VERSION_TAG" ]; then
+            echo "Failed to fetch latest version from GitHub API"
+            exit 1
+          fi
+          VERSION="${VERSION_TAG#v}"
+        fi
+
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Using Vais version: $VERSION"
+
+    - name: Download and Install Vais
+      shell: bash
+      env:
+        VERSION: ${{ steps.url.outputs.version }}
+        OS_TYPE: ${{ steps.detect.outputs.os_type }}
+        ARCH_TYPE: ${{ steps.detect.outputs.arch_type }}
+      run: |
+        # Create temporary directory for download
+        TEMP_DIR=$(mktemp -d)
+        trap "rm -rf $TEMP_DIR" EXIT
+
+        # Determine binary name based on OS
+        case "$OS_TYPE" in
+          linux)
+            BINARY_NAME="vaisc-$VERSION-$ARCH_TYPE-unknown-linux-gnu"
+            ARCHIVE_EXT=".tar.gz"
+            ;;
+          macos)
+            BINARY_NAME="vaisc-$VERSION-$ARCH_TYPE-apple-darwin"
+            ARCHIVE_EXT=".tar.gz"
+            ;;
+          windows)
+            BINARY_NAME="vaisc-$VERSION-x86_64-pc-windows-msvc"
+            ARCHIVE_EXT=".zip"
+            ;;
+        esac
+
+        ARCHIVE_NAME="$BINARY_NAME$ARCHIVE_EXT"
+        DOWNLOAD_URL="https://github.com/vais-lang/vais/releases/download/v$VERSION/$ARCHIVE_NAME"
+
+        echo "Downloading from: $DOWNLOAD_URL"
+
+        # Download the release
+        if ! curl -L -f -o "$TEMP_DIR/$ARCHIVE_NAME" "$DOWNLOAD_URL"; then
+          echo "Failed to download $ARCHIVE_NAME"
+          echo "Please check:"
+          echo "  - Version $VERSION exists"
+          echo "  - Binary is available for $OS_TYPE-$ARCH_TYPE"
+          exit 1
+        fi
+
+        # Extract the archive
+        INSTALL_DIR="$HOME/.vais/bin"
+        mkdir -p "$INSTALL_DIR"
+
+        case "$ARCHIVE_EXT" in
+          .tar.gz)
+            tar -xzf "$TEMP_DIR/$ARCHIVE_NAME" -C "$TEMP_DIR"
+            ;;
+          .zip)
+            unzip -q "$TEMP_DIR/$ARCHIVE_NAME" -d "$TEMP_DIR"
+            ;;
+        esac
+
+        # Find and copy the binary
+        BINARY_PATH=$(find "$TEMP_DIR" -type f -name "vaisc" -o -name "vaisc.exe" 2>/dev/null | head -1)
+        if [ -z "$BINARY_PATH" ]; then
+          echo "Failed to find vaisc binary in archive"
+          exit 1
+        fi
+
+        chmod +x "$BINARY_PATH"
+        cp "$BINARY_PATH" "$INSTALL_DIR/vaisc"
+
+        echo "Vais installed to: $INSTALL_DIR/vaisc"
+        echo "$INSTALL_DIR" >> $GITHUB_PATH
+
+    - name: Verify Installation
+      shell: bash
+      run: |
+        echo "Verifying Vais installation..."
+        if ! command -v vaisc &> /dev/null; then
+          echo "vaisc not found in PATH after installation"
+          exit 1
+        fi
+
+        vaisc --version
+        echo "Vais installation verified successfully!"

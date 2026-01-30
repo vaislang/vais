@@ -1,0 +1,41 @@
+// Palindrome Check
+// Checks if a string is a palindrome
+
+F is_palindrome(s: str) -> bool {
+    left := 0
+    right := 99  // Assuming max string length of 100
+
+    // Find actual length
+    len := 0
+    L len < 100 {
+        I s[len] == 0 {
+            right := len - 1
+        }
+        len := len + 1
+    }
+
+    mut left := 0
+    mut right := len - 1
+
+    L left < right {
+        I s[left] != s[right] {
+            R false
+        }
+        left := left + 1
+        right := right - 1
+    }
+
+    R true
+}
+
+F main() -> i64 {
+    test1 := "racecar"
+    test2 := "hello"
+    test3 := "madam"
+
+    println("Is '{}' a palindrome? {}", test1, is_palindrome(test1))
+    println("Is '{}' a palindrome? {}", test2, is_palindrome(test2))
+    println("Is '{}' a palindrome? {}", test3, is_palindrome(test3))
+
+    R 0
+}

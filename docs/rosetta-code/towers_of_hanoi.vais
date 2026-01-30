@@ -1,0 +1,21 @@
+// Towers of Hanoi
+// Classic recursive puzzle solution
+
+F hanoi(n: i64, source: i64, destination: i64, auxiliary: i64) -> i64 {
+    I n == 1 {
+        println("Move disk 1 from rod {} to rod {}", source, destination)
+        R 0
+    }
+
+    @(n - 1, source, auxiliary, destination)
+    println("Move disk {} from rod {} to rod {}", n, source, destination)
+    @(n - 1, auxiliary, destination, source)
+
+    R 0
+}
+
+F main() -> i64 {
+    puts("Towers of Hanoi solution for 3 disks:")
+    hanoi(3, 1, 3, 2)
+    R 0
+}

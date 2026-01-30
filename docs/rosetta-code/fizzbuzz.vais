@@ -1,0 +1,22 @@
+// FizzBuzz
+// Classic FizzBuzz algorithm: print numbers 1-100 with special rules
+
+F fizzbuzz(n: i64) -> i64 {
+    L i := 1; i <= n; i := i + 1 {
+        I i % 15 == 0 {
+            puts("FizzBuzz")
+        } I i % 3 == 0 {
+            puts("Fizz")
+        } I i % 5 == 0 {
+            puts("Buzz")
+        } {
+            println("{}", i)
+        }
+    }
+    R 0
+}
+
+F main() -> i64 {
+    fizzbuzz(100)
+    R 0
+}

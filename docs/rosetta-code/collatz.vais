@@ -1,0 +1,26 @@
+// Collatz Conjecture
+// Generates Collatz sequence for a given number
+
+F collatz_length(n: i64) -> i64 {
+    mut count := 0
+
+    L n != 1 {
+        println("{}", n)
+        I n % 2 == 0 {
+            n := n / 2
+        } {
+            n := n * 3 + 1
+        }
+        count := count + 1
+    }
+
+    println("1")
+    R count + 1
+}
+
+F main() -> i64 {
+    puts("Collatz sequence for 27:")
+    length := collatz_length(27)
+    println("Sequence length: {}", length)
+    R 0
+}
