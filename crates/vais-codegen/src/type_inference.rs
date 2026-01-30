@@ -192,6 +192,17 @@ impl CodeGenerator {
             } => {
                 // Get method return type from struct definition
                 let recv_type = self.infer_expr_type(receiver);
+
+                // String method return types
+                // Note: bool methods return i64 (0/1) at runtime, matching comparison ops
+                if matches!(recv_type, ResolvedType::Str) {
+                    return match method.node.as_str() {
+                        "len" | "charAt" | "indexOf" | "contains" | "startsWith" | "endsWith" | "isEmpty" => ResolvedType::I64,
+                        "substring" => ResolvedType::Str,
+                        _ => ResolvedType::I64,
+                    };
+                }
+
                 if let ResolvedType::Named { name, .. } = &recv_type {
                     let method_name = format!("{}_{}", name, method.node);
                     if let Some(fn_info) = self.functions.get(&method_name) {

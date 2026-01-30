@@ -36,6 +36,7 @@ mod lambda_closure;
 mod registration;
 mod stmt;
 mod stmt_visitor;
+mod string_ops;
 mod type_inference;
 mod types;
 pub mod vtable;
@@ -663,6 +664,9 @@ pub struct CodeGenerator {
     // Flag to emit unwrap panic message and abort declaration
     needs_unwrap_panic: bool,
 
+    // Flag to emit string helper functions
+    needs_string_helpers: bool,
+
     // Current basic block name (for phi node predecessor tracking)
     current_block: String,
 
@@ -781,6 +785,7 @@ impl CodeGenerator {
             async_await_points: Vec::new(),
             current_async_function: None,
             needs_unwrap_panic: false,
+            needs_string_helpers: false,
             current_block: "entry".to_string(),
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
             generic_substitutions: HashMap::new(),
@@ -1335,6 +1340,12 @@ impl CodeGenerator {
         // Add helper functions for memory operations
         ir.push_str(&self.generate_helper_functions());
 
+        // Add string helper functions if needed
+        if self.needs_string_helpers {
+            ir.push_str(&self.generate_string_helper_functions());
+            ir.push_str(&self.generate_string_extern_declarations());
+        }
+
         // Add contract runtime declarations if any contracts are present
         if !self.contract_string_constants.is_empty() {
             ir.push_str(&self.generate_contract_declarations());
@@ -1539,6 +1550,12 @@ impl CodeGenerator {
 
         // Add helper functions
         ir.push_str(&self.generate_helper_functions());
+
+        // Add string helper functions if needed
+        if self.needs_string_helpers {
+            ir.push_str(&self.generate_string_helper_functions());
+            ir.push_str(&self.generate_string_extern_declarations());
+        }
 
         // Add debug intrinsics if debug info is enabled
         if self.debug_info.is_enabled() {
@@ -1785,6 +1802,12 @@ impl CodeGenerator {
 
                 let mut ir = left_ir;
                 ir.push_str(&right_ir);
+
+                // Handle string operations
+                let left_type = self.infer_expr_type(left);
+                if matches!(left_type, ResolvedType::Str) {
+                    return self.generate_string_binary_op(op, &left_val, &right_val, ir, counter);
+                }
 
                 // Handle comparison and logical operations (result is i1)
                 let is_comparison = matches!(
@@ -3108,6 +3131,13 @@ impl CodeGenerator {
                 let mut ir = recv_ir;
 
                 let method_name = &method.node;
+
+                // String method calls: str.len(), str.charAt(), str.contains(), etc.
+                if matches!(recv_type, ResolvedType::Str) {
+                    return self.generate_string_method_call(
+                        &recv_val, &ir, method_name, args, counter,
+                    );
+                }
 
                 // Build full method name: StructName_methodName
                 let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {

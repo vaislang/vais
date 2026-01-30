@@ -57,6 +57,12 @@ impl CodeGenerator {
         let mut ir = left_ir;
         ir.push_str(&right_ir);
 
+        // Handle string operations
+        let left_type = self.infer_expr_type(left);
+        if matches!(left_type, ResolvedType::Str) {
+            return self.generate_string_binary_op(op, &left_val, &right_val, ir, counter);
+        }
+
         // Handle comparison and logical operations (result is i1)
         let is_comparison = matches!(
             op,
@@ -1405,6 +1411,13 @@ impl CodeGenerator {
         let mut ir = recv_ir;
 
         let method_name = &method.node;
+
+        // String method calls: str.len(), str.charAt(), str.contains(), etc.
+        if matches!(recv_type, ResolvedType::Str) {
+            return self.generate_string_method_call(
+                &recv_val, &ir, method_name, args, counter,
+            );
+        }
 
         let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
             format!("{}_{}", name, method_name)

@@ -1802,3 +1802,168 @@ F main() -> i64 = identity(42)
 "#;
     assert!(compiles(source));
 }
+
+// ==================== String Operations Tests ====================
+
+#[test]
+fn test_string_concatenation() {
+    let source = r#"
+F greet(name: str) -> str {
+    "Hello, " + name
+}
+F main() -> i64 {
+    msg := greet("World")
+    strlen(msg)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_equality() {
+    let source = r#"
+F check(s: str) -> i64 {
+    I s == "hello" {
+        1
+    } E {
+        0
+    }
+}
+F main() -> i64 = check("hello")
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_inequality() {
+    let source = r#"
+F check(s: str) -> i64 {
+    I s != "world" {
+        1
+    } E {
+        0
+    }
+}
+F main() -> i64 = check("hello")
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_len() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello"
+    s.len()
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_charAt() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello"
+    s.charAt(0)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_contains() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello world"
+    I s.contains("world") {
+        1
+    } E {
+        0
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_indexOf() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello world"
+    s.indexOf("world")
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_substring() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello world"
+    sub := s.substring(0, 5)
+    strlen(sub)
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_startsWith() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello world"
+    I s.startsWith("hello") {
+        1
+    } E {
+        0
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_endsWith() {
+    let source = r#"
+F main() -> i64 {
+    s := "hello world"
+    I s.endsWith("world") {
+        1
+    } E {
+        0
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_method_isEmpty() {
+    let source = r#"
+F main() -> i64 {
+    s := ""
+    I s.isEmpty() {
+        1
+    } E {
+        0
+    }
+}
+"#;
+    assert!(compiles(source));
+}
+
+#[test]
+fn test_string_comparison_operators() {
+    let source = r#"
+F main() -> i64 {
+    I "abc" < "def" {
+        1
+    } E {
+        0
+    }
+}
+"#;
+    assert!(compiles(source));
+}

@@ -2214,6 +2214,11 @@ impl TypeChecker {
 
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
+                        // Allow string concatenation with +
+                        if matches!(op, BinOp::Add) && matches!(left_type, ResolvedType::Str) {
+                            self.unify(&left_type, &right_type)?;
+                            return Ok(ResolvedType::Str);
+                        }
                         if !left_type.is_numeric() {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
@@ -2225,6 +2230,11 @@ impl TypeChecker {
                         Ok(left_type)
                     }
                     BinOp::Lt | BinOp::Lte | BinOp::Gt | BinOp::Gte => {
+                        // Allow string comparison with <, >, <=, >=
+                        if matches!(left_type, ResolvedType::Str) {
+                            self.unify(&left_type, &right_type)?;
+                            return Ok(ResolvedType::Bool);
+                        }
                         if !left_type.is_numeric() {
                             return Err(TypeError::Mismatch {
                                 expected: "numeric".to_string(),
@@ -2559,6 +2569,59 @@ impl TypeChecker {
                     };
 
                     return Ok(ret_type);
+                }
+
+                // Built-in string methods
+                if matches!(receiver_type, ResolvedType::Str) {
+                    match method.node.as_str() {
+                        "len" => {
+                            if !args.is_empty() {
+                                return Err(TypeError::ArgCount { expected: 0, got: args.len(), span: None });
+                            }
+                            return Ok(ResolvedType::I64);
+                        }
+                        "charAt" => {
+                            if args.len() != 1 {
+                                return Err(TypeError::ArgCount { expected: 1, got: args.len(), span: None });
+                            }
+                            let arg_type = self.check_expr(&args[0])?;
+                            self.unify(&ResolvedType::I64, &arg_type)?;
+                            return Ok(ResolvedType::I64);
+                        }
+                        "contains" | "startsWith" | "endsWith" => {
+                            if args.len() != 1 {
+                                return Err(TypeError::ArgCount { expected: 1, got: args.len(), span: None });
+                            }
+                            let arg_type = self.check_expr(&args[0])?;
+                            self.unify(&ResolvedType::Str, &arg_type)?;
+                            return Ok(ResolvedType::Bool);
+                        }
+                        "indexOf" => {
+                            if args.len() != 1 {
+                                return Err(TypeError::ArgCount { expected: 1, got: args.len(), span: None });
+                            }
+                            let arg_type = self.check_expr(&args[0])?;
+                            self.unify(&ResolvedType::Str, &arg_type)?;
+                            return Ok(ResolvedType::I64);
+                        }
+                        "substring" => {
+                            if args.len() != 2 {
+                                return Err(TypeError::ArgCount { expected: 2, got: args.len(), span: None });
+                            }
+                            let start_type = self.check_expr(&args[0])?;
+                            self.unify(&ResolvedType::I64, &start_type)?;
+                            let end_type = self.check_expr(&args[1])?;
+                            self.unify(&ResolvedType::I64, &end_type)?;
+                            return Ok(ResolvedType::Str);
+                        }
+                        "isEmpty" => {
+                            if !args.is_empty() {
+                                return Err(TypeError::ArgCount { expected: 0, got: args.len(), span: None });
+                            }
+                            return Ok(ResolvedType::Bool);
+                        }
+                        _ => {} // Fall through to error
+                    }
                 }
 
                 // Try to find similar method names for suggestion

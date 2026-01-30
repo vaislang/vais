@@ -7,8 +7,8 @@
     { "id": 3, "name": "구조체 값 전달 타입 불일치 수정", "status": "done", "model": "Sonnet" },
     { "id": 4, "name": "루프 변수 바인딩 codegen 버그 수정", "status": "done", "model": "Sonnet" },
     { "id": 5, "name": "논리 NOT codegen 버그 수정", "status": "done", "model": "Haiku" },
-    { "id": 6, "name": "print/println 내장 함수 구현", "status": "in_progress", "model": "Opus" },
-    { "id": 7, "name": "문자열 타입 완성", "status": "pending", "model": "Opus" },
+    { "id": 6, "name": "print/println 내장 함수 구현", "status": "done", "model": "Opus" },
+    { "id": 7, "name": "문자열 타입 완성", "status": "done", "model": "Opus" },
     { "id": 8, "name": "배열 mutation 구현", "status": "pending", "model": "Sonnet" },
     { "id": 9, "name": "format 함수 구현", "status": "pending", "model": "Sonnet" },
     { "id": 10, "name": "strlen/atoi 등 기본 함수 14개", "status": "pending", "model": "Sonnet" },
@@ -16,5 +16,5 @@
     { "id": 12, "name": "트레이트 메서드 호출 codegen", "status": "pending", "model": "Opus" },
     { "id": 13, "name": "제네릭 stdlib E2E 테스트", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": 6
+  "currentTask": 7
 }

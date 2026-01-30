@@ -207,7 +207,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 #### 필수 언어 기능 추가
 - [x] **print/println 내장 함수** - 포맷 문자열 지원하는 출력 함수 (`print("x = {}", x)`) (완료일: 2026-01-30)
-- [ ] **문자열 타입 완성** - first-class String 타입 (현재는 포인터 조작 필요)
+- [x] **문자열 타입 완성** - 런타임 연결(+), 비교(==,!=,<,>), 메서드(len,charAt,contains,indexOf,substring,startsWith,endsWith,isEmpty) (완료일: 2026-01-30)
 - [ ] **배열 mutation** - 배열 요소 수정 (`arr[i] = val`)
 - [ ] **format 함수** - 문자열 포매팅 (`format("hello {}", name)`)
 - [ ] **strlen, atoi 등 기본 함수** - 누락된 stdlib 유틸리티 14개 구현

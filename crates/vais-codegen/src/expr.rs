@@ -102,8 +102,16 @@ impl CodeGenerator {
         let (left_val, left_ir) = self.generate_expr(left, counter)?;
         let (right_val, right_ir) = self.generate_expr(right, counter)?;
 
-        let tmp = self.next_temp(counter);
         let left_type = self.infer_expr_type(left);
+
+        // Handle string operations
+        if matches!(left_type, ResolvedType::Str) {
+            let mut ir = left_ir;
+            ir.push_str(&right_ir);
+            return self.generate_string_binary_op(op, &left_val, &right_val, ir, counter);
+        }
+
+        let tmp = self.next_temp(counter);
         let is_float = matches!(left_type, ResolvedType::F32 | ResolvedType::F64);
         let bits = self.get_integer_bits(&left_type);
 
