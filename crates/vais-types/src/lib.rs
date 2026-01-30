@@ -4243,6 +4243,25 @@ impl TypeChecker {
 
     /// Find a method from trait implementations for a given type
     fn find_trait_method(&self, receiver_type: &ResolvedType, method_name: &str) -> Option<TraitMethodSig> {
+        // Handle dyn Trait types - look up method directly in trait definition
+        let dyn_trait = match receiver_type {
+            ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                    Some(trait_name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        if let Some(trait_name) = dyn_trait {
+            if let Some(trait_def) = self.traits.get(&trait_name) {
+                return trait_def.methods.get(method_name).cloned();
+            }
+            return None;
+        }
+
         // Get the type name from the receiver type
         let type_name = match receiver_type {
             ResolvedType::Named { name, .. } => name.clone(),

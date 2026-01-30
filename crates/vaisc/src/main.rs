@@ -861,8 +861,12 @@ fn cmd_build(
     }
 
     let codegen_start = std::time::Instant::now();
-    let raw_ir = codegen.generate_module(&final_ast)
-        .map_err(|e| format!("Codegen error: {}", e))?;
+    let instantiations = checker.get_generic_instantiations();
+    let raw_ir = if instantiations.is_empty() {
+        codegen.generate_module(&final_ast)
+    } else {
+        codegen.generate_module_with_instantiations(&final_ast, instantiations)
+    }.map_err(|e| format!("Codegen error: {}", e))?;
     let codegen_time = codegen_start.elapsed();
 
     if verbose {

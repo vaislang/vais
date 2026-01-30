@@ -131,6 +131,8 @@ impl TypeChecker {
             (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => self.unify(inner, other),
             // Lazy type unification
             (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
+            // DynTrait: dyn Trait accepts any concrete type that implements the trait
+            (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),

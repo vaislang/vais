@@ -66,6 +66,7 @@ fn test_vararg_function_signature() {
         ret: ResolvedType::I32,
         is_async: false,
         is_vararg: true,
+        required_params: None,
         contracts: None,
         effect_annotation: vais_types::EffectAnnotation::Infer,
         inferred_effects: None,

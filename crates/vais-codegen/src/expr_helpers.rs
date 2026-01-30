@@ -283,7 +283,14 @@ impl CodeGenerator {
 
         // Check if this is a direct function call or indirect (lambda) call
         let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
-            if self.functions.contains_key(name) {
+            // Check if this is a generic function that needs monomorphization
+            if let Some(instantiations_list) = self.generic_fn_instantiations.get(name) {
+                let arg_types: Vec<vais_types::ResolvedType> = args.iter()
+                    .map(|a| self.infer_expr_type(a))
+                    .collect();
+                let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
+                (mangled, false)
+            } else if self.functions.contains_key(name) {
                 (name.clone(), false)
             } else if self.locals.contains_key(name) {
                 (name.clone(), true) // Lambda call

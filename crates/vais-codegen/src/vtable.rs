@@ -80,7 +80,8 @@ entry:
   br i1 %is_null, label %done, label %do_free
 
 do_free:
-  call void @free(i8* %ptr)
+  %ptr_as_i64 = ptrtoint i8* %ptr to i64
+  call void @free(i64 %ptr_as_i64)
   br label %done
 
 done:
@@ -198,12 +199,12 @@ done:
 
         // Generate drop function pointer - cast to i8* for vtable storage
         let drop_fn_name = Self::get_drop_function_name(&info.impl_type);
-        let drop_fn_ptr = format!("bitcast (void(i8*)* @{} to i8*)", drop_fn_name);
+        let drop_fn_ptr = format!("i8* bitcast (void(i8*)* @{} to i8*)", drop_fn_name);
 
         let mut values = vec![
-            drop_fn_ptr,                          // drop function pointer
-            format!("{}", type_size),             // size
-            format!("{}", type_align),            // align
+            drop_fn_ptr,                           // drop function pointer
+            format!("i64 {}", type_size),          // size
+            format!("i64 {}", type_align),         // align
         ];
 
         // Add method function pointers
@@ -213,11 +214,11 @@ done:
             } else {
                 // Get method signature to generate correct function pointer type
                 if let Some(method_sig) = trait_def.methods.get(method_name) {
-                    let mut param_types = vec!["i8*".to_string()];
+                    // Build vtable function type (uses i8* for self)
+                    let mut vtable_param_types = vec!["i8*".to_string()];
                     for _ in &method_sig.params[1..] {
-                        param_types.push("i64".to_string());
+                        vtable_param_types.push("i64".to_string());
                     }
-                    // For async methods, return type is always i64 (Future handle)
                     let ret_type = if method_sig.is_async {
                         "i64"
                     } else if matches!(method_sig.ret, ResolvedType::Unit) {
@@ -225,14 +226,23 @@ done:
                     } else {
                         "i64"
                     };
-                    // Cast function to expected type
+
+                    // Build concrete function type (uses %Type* for self)
+                    let mut concrete_param_types = vec![format!("%{}*", info.impl_type)];
+                    for _ in &method_sig.params[1..] {
+                        concrete_param_types.push("i64".to_string());
+                    }
+
+                    let vtable_fn_type = format!("{}({})*", ret_type, vtable_param_types.join(", "));
+                    let concrete_fn_type = format!("{}({})*", ret_type, concrete_param_types.join(", "));
+
+                    // Cast from concrete function type to vtable function type
                     values.push(format!(
-                        "bitcast ({}({})* @{} to {}({})*)",
-                        ret_type,
-                        param_types.join(", "),
+                        "{} bitcast ({} @{} to {})",
+                        vtable_fn_type,
+                        concrete_fn_type,
                         impl_name,
-                        ret_type,
-                        param_types.join(", ")
+                        vtable_fn_type
                     ));
                 } else {
                     values.push("null".to_string());
@@ -366,12 +376,16 @@ done:
         *temp_counter += 1;
 
         // Determine function type from method signature
-        let fn_type = format!("{}(i8*, {})*", ret_type,
-            args.iter().map(|_| "i64").collect::<Vec<_>>().join(", "));
+        let extra_arg_types = args.iter().map(|_| "i64").collect::<Vec<_>>().join(", ");
+        let fn_type = if extra_arg_types.is_empty() {
+            format!("{}(i8*)*", ret_type)
+        } else {
+            format!("{}(i8*, {})*", ret_type, extra_arg_types)
+        };
 
         ir.push_str(&format!(
-            "  {} = load {}*, {}** {}\n",
-            fn_ptr, fn_type.trim_end_matches('*'), fn_ptr_ptr, fn_ptr_ptr
+            "  {} = load {}, {}* {}\n",
+            fn_ptr, fn_type, fn_type, fn_ptr_ptr
         ));
 
         // Build argument list: data_ptr followed by method arguments
@@ -383,7 +397,7 @@ done:
         // Generate the indirect call
         let result = if ret_type == "void" {
             ir.push_str(&format!(
-                "  call {} {} ({})\n",
+                "  call {} {}({})\n",
                 ret_type, fn_ptr, call_args.join(", ")
             ));
             "".to_string()
@@ -392,7 +406,7 @@ done:
             *temp_counter += 1;
 
             ir.push_str(&format!(
-                "  {} = call {} {} ({})\n",
+                "  {} = call {} {}({})\n",
                 result_name, ret_type, fn_ptr, call_args.join(", ")
             ));
             result_name
@@ -507,7 +521,7 @@ mod tests {
         // Generate IR for drop functions
         let ir = gen.generate_drop_functions_ir();
         assert!(ir.contains("define void @__drop_Dog(i8* %ptr)"));
-        assert!(ir.contains("call void @free(i8* %ptr)"));
+        assert!(ir.contains("call void @free(i64 %ptr_as_i64)"));
         assert!(ir.contains("icmp eq i8* %ptr, null"));
     }
 

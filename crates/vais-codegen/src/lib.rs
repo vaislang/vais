@@ -728,6 +728,13 @@ pub struct CodeGenerator {
 
     // Type recursion depth tracking (prevents infinite recursion)
     type_recursion_depth: std::cell::Cell<usize>,
+
+    // Generic function instantiation map: base_name -> Vec<(type_args, mangled_name)>
+    // Used to resolve generic function calls to their mangled specialized names
+    generic_fn_instantiations: HashMap<String, Vec<(Vec<ResolvedType>, String)>>,
+
+    // Generic function templates stored for specialization (base_name -> Function)
+    generic_function_templates: HashMap<String, Function>,
 }
 
 /// Information about a function's decreases clause for termination proof
@@ -806,6 +813,8 @@ impl CodeGenerator {
             constants: HashMap::new(),
             globals: HashMap::new(),
             type_recursion_depth: std::cell::Cell::new(0),
+            generic_fn_instantiations: HashMap::new(),
+            generic_function_templates: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -978,6 +987,46 @@ impl CodeGenerator {
     /// Register a trait definition for vtable generation
     pub fn register_trait(&mut self, trait_def: vais_types::TraitDef) {
         self.trait_defs.insert(trait_def.name.clone(), trait_def);
+    }
+
+    /// Register a trait from AST definition (converts AST Trait to TraitDef)
+    fn register_trait_from_ast(&mut self, t: &vais_ast::Trait) {
+        let mut methods = HashMap::new();
+        for m in &t.methods {
+            let params: Vec<(String, ResolvedType, bool)> = m.params.iter()
+                .map(|p| {
+                    let ty = if p.name.node == "self" {
+                        // self parameter is a pointer to the implementing type
+                        ResolvedType::I64 // placeholder, resolved at call site
+                    } else {
+                        self.ast_type_to_resolved(&p.ty.node)
+                    };
+                    (p.name.node.clone(), ty, p.is_mut)
+                })
+                .collect();
+
+            let ret = m.ret_type.as_ref()
+                .map(|t| self.ast_type_to_resolved(&t.node))
+                .unwrap_or(ResolvedType::Unit);
+
+            methods.insert(m.name.node.clone(), vais_types::TraitMethodSig {
+                name: m.name.node.clone(),
+                params,
+                ret,
+                has_default: m.default_body.is_some(),
+                is_async: m.is_async,
+                is_const: m.is_const,
+            });
+        }
+
+        let trait_def = vais_types::TraitDef {
+            name: t.name.node.clone(),
+            generics: t.generics.iter().map(|g| g.name.node.clone()).collect(),
+            super_traits: t.super_traits.iter().map(|s| s.node.clone()).collect(),
+            associated_types: HashMap::new(), // Simplified for now
+            methods,
+        };
+        self.register_trait(trait_def);
     }
 
     /// Register a trait implementation for vtable generation
@@ -1208,13 +1257,26 @@ impl CodeGenerator {
                     for method in &impl_block.methods {
                         self.register_method(&type_name, &method.node)?;
                     }
+                    // Register trait impl for vtable generation
+                    if let Some(ref trait_name) = impl_block.trait_name {
+                        let mut method_impls = HashMap::new();
+                        for method in &impl_block.methods {
+                            let fn_name = format!("{}_{}", type_name, method.node.name.node);
+                            method_impls.insert(method.node.name.node.clone(), fn_name);
+                        }
+                        self.register_trait_impl(&type_name, &trait_name.node, method_impls);
+                    }
                 }
                 Item::Use(_) => {
                     // Use statements are handled at the compiler level (AST merging)
                     // No code generation needed for imports
                 }
-                Item::Trait(_) | Item::TypeAlias(_) => {
-                    // Traits and type aliases don't generate code
+                Item::Trait(trait_def) => {
+                    // Register trait for vtable generation
+                    self.register_trait_from_ast(trait_def);
+                }
+                Item::TypeAlias(_) => {
+                    // Type aliases don't generate code
                 }
                 Item::Macro(_) => {
                     // Macro definitions are expanded at compile time
@@ -1337,6 +1399,18 @@ impl CodeGenerator {
             ir.push_str(lambda_ir);
         }
 
+        // Add vtable globals and drop functions for trait objects
+        let vtable_ir = self.generate_vtable_globals();
+        if !vtable_ir.is_empty() {
+            ir.push_str("\n; VTable globals for trait objects\n");
+            ir.push_str(&vtable_ir);
+        }
+        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
+        if !drop_ir.is_empty() {
+            ir.push_str("\n; Drop functions for trait objects\n");
+            ir.push_str(&drop_ir);
+        }
+
         // Add helper functions for memory operations
         ir.push_str(&self.generate_helper_functions());
 
@@ -1390,6 +1464,12 @@ impl CodeGenerator {
         // Header
         ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
         ir.push_str("source_filename = \"<vais>\"\n");
+
+        // Target triple and data layout (for non-native targets)
+        if !matches!(self.target, TargetTriple::Native) {
+            ir.push_str(&format!("target datalayout = \"{}\"\n", self.target.data_layout()));
+            ir.push_str(&format!("target triple = \"{}\"\n", self.target.triple_str()));
+        }
         ir.push('\n');
 
         // Initialize debug info if enabled
@@ -1406,10 +1486,11 @@ impl CodeGenerator {
                 Item::Function(f) => {
                     // Track this function name (generic or not)
                     self.declared_functions.insert(f.name.node.clone());
-                    
+
                     if !f.generics.is_empty() {
                         // Store generic function for later specialization
                         generic_functions.insert(f.name.node.clone(), f.clone());
+                        self.generic_function_templates.insert(f.name.node.clone(), f.clone());
                     } else {
                         self.register_function(f)?;
                     }
@@ -1435,8 +1516,93 @@ impl CodeGenerator {
                     for method in &impl_block.methods {
                         self.register_method(&type_name, &method.node)?;
                     }
+                    // Register trait impl for vtable generation
+                    if let Some(ref trait_name) = impl_block.trait_name {
+                        let mut method_impls = HashMap::new();
+                        for method in &impl_block.methods {
+                            let fn_name = format!("{}_{}", type_name, method.node.name.node);
+                            method_impls.insert(method.node.name.node.clone(), fn_name);
+                        }
+                        self.register_trait_impl(&type_name, &trait_name.node, method_impls);
+                    }
                 }
-                Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Const(_) | Item::Global(_) | Item::Error { .. } => {}
+                Item::Trait(trait_def) => {
+                    self.register_trait_from_ast(trait_def);
+                }
+                Item::ExternBlock(extern_block) => {
+                    for func in &extern_block.functions {
+                        self.register_extern_function(func, &extern_block.abi)?;
+                    }
+                }
+                Item::Const(const_def) => {
+                    self.register_const(const_def)?;
+                }
+                Item::Global(global_def) => {
+                    self.register_global(global_def)?;
+                }
+                Item::Use(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::Error { .. } => {}
+            }
+        }
+
+        // Build generic function instantiation mapping and register specialized function signatures
+        for inst in instantiations {
+            if let vais_types::InstantiationKind::Function = inst.kind {
+                if let Some(generic_fn) = generic_functions.get(&inst.base_name) {
+                    // Build instantiation mapping: base_name -> [(type_args, mangled_name)]
+                    self.generic_fn_instantiations
+                        .entry(inst.base_name.clone())
+                        .or_default()
+                        .push((inst.type_args.clone(), inst.mangled_name.clone()));
+
+                    // Register the specialized function signature so call codegen can find it
+                    let substitutions: HashMap<String, ResolvedType> = generic_fn
+                        .generics
+                        .iter()
+                        .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                        .zip(inst.type_args.iter())
+                        .map(|(g, t)| (g.name.node.to_string(), t.clone()))
+                        .collect();
+
+                    let params: Vec<_> = generic_fn
+                        .params
+                        .iter()
+                        .map(|p| {
+                            let ty = self.ast_type_to_resolved(&p.ty.node);
+                            let concrete_ty = vais_types::substitute_type(&ty, &substitutions);
+                            (p.name.node.to_string(), concrete_ty, p.is_mut)
+                        })
+                        .collect();
+
+                    let ret_type = generic_fn
+                        .ret_type
+                        .as_ref()
+                        .map(|t| {
+                            let ty = self.ast_type_to_resolved(&t.node);
+                            vais_types::substitute_type(&ty, &substitutions)
+                        })
+                        .unwrap_or(ResolvedType::Unit);
+
+                    self.functions.insert(
+                        inst.mangled_name.clone(),
+                        FunctionInfo {
+                            signature: vais_types::FunctionSig {
+                                name: inst.mangled_name.clone(),
+                                generics: vec![],
+                                generic_bounds: HashMap::new(),
+                                params,
+                                ret: ret_type,
+                                is_async: generic_fn.is_async,
+                                is_vararg: false,
+                                required_params: None,
+                                contracts: None,
+                                effect_annotation: vais_types::EffectAnnotation::Infer,
+                                inferred_effects: None,
+                            },
+                            is_extern: false,
+                            extern_abi: None,
+                        },
+                    );
+                }
             }
         }
 
@@ -1548,6 +1714,18 @@ impl CodeGenerator {
             ir.push_str(lambda_ir);
         }
 
+        // Add vtable globals for trait objects
+        let vtable_ir = self.generate_vtable_globals();
+        if !vtable_ir.is_empty() {
+            ir.push_str("\n; VTable globals for trait objects\n");
+            ir.push_str(&vtable_ir);
+        }
+        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
+        if !drop_ir.is_empty() {
+            ir.push_str("\n; Drop functions for trait objects\n");
+            ir.push_str(&drop_ir);
+        }
+
         // Add helper functions
         ir.push_str(&self.generate_helper_functions());
 
@@ -1555,6 +1733,12 @@ impl CodeGenerator {
         if self.needs_string_helpers {
             ir.push_str(&self.generate_string_helper_functions());
             ir.push_str(&self.generate_string_extern_declarations());
+        }
+
+        // Add contract runtime declarations if any contracts are present
+        if !self.contract_string_constants.is_empty() {
+            ir.push_str(&self.generate_contract_declarations());
+            ir.push_str(&self.generate_contract_string_constants());
         }
 
         // Add debug intrinsics if debug info is enabled
@@ -2052,8 +2236,17 @@ impl CodeGenerator {
 
                 // Check if this is a direct function call or indirect (lambda) call
                 let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
-                    // Check if this is a known function or a local variable (lambda)
-                    if self.functions.contains_key(name) {
+                    // Check if this is a generic function that needs monomorphization
+                    if let Some(instantiations_list) = self.generic_fn_instantiations.get(name) {
+                        // Infer argument types to select the right specialization
+                        let arg_types: Vec<ResolvedType> = args.iter()
+                            .map(|a| self.infer_expr_type(a))
+                            .collect();
+
+                        // Find the matching instantiation based on argument types
+                        let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
+                        (mangled, false)
+                    } else if self.functions.contains_key(name) {
                         (name.clone(), false)
                     } else if self.locals.contains_key(name) {
                         (name.clone(), true) // Lambda call
@@ -2125,6 +2318,79 @@ impl CodeGenerator {
                                 loaded, arg_ty, arg_ty, val
                             ));
                             val = loaded;
+                        }
+                    }
+
+                    // Trait object coercion: &ConcreteType -> &dyn Trait
+                    // When parameter expects &dyn Trait and argument is a concrete type reference,
+                    // create a fat pointer { data_ptr, vtable_ptr }
+                    if let Some(ref param_type) = param_ty {
+                        let dyn_trait = match param_type {
+                            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                                if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                                    Some(trait_name.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                            ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                            _ => None,
+                        };
+
+                        if let Some(trait_name) = dyn_trait {
+                            // Get the concrete type of the argument
+                            let arg_expr_type = self.infer_expr_type(arg);
+                            let concrete_type_name = match &arg_expr_type {
+                                ResolvedType::Named { name, .. } => Some(name.clone()),
+                                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                                    if let ResolvedType::Named { name, .. } = inner.as_ref() {
+                                        Some(name.clone())
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            };
+
+                            if let Some(concrete_name) = concrete_type_name {
+                                // Generate vtable for this concrete type + trait
+                                let vtable_info = self.get_or_generate_vtable(&concrete_name, &trait_name);
+
+                                if let Some(vtable) = vtable_info {
+                                    // Load the actual struct pointer if we have a pointer-to-pointer
+                                    // (Ref expressions return the address of the storage, not the struct)
+                                    let struct_ptr = self.next_temp(counter);
+                                    ir.push_str(&format!(
+                                        "  {} = load %{}*, %{}** {}\n",
+                                        struct_ptr, concrete_name, concrete_name, val
+                                    ));
+                                    // Cast data pointer to i8*
+                                    let data_ptr = self.next_temp(counter);
+                                    ir.push_str(&format!(
+                                        "  {} = bitcast %{}* {} to i8*\n",
+                                        data_ptr, concrete_name, struct_ptr
+                                    ));
+
+                                    // Create fat pointer { i8*, i8* }
+                                    let trait_obj_1 = self.next_temp(counter);
+                                    ir.push_str(&format!(
+                                        "  {} = insertvalue {{ i8*, i8* }} undef, i8* {}, 0\n",
+                                        trait_obj_1, data_ptr
+                                    ));
+                                    let vtable_cast = self.next_temp(counter);
+                                    ir.push_str(&format!(
+                                        "  {} = bitcast {{ i8*, i64, i64, i64(i8*)* }}* {} to i8*\n",
+                                        vtable_cast, vtable.global_name
+                                    ));
+                                    let trait_obj_2 = self.next_temp(counter);
+                                    ir.push_str(&format!(
+                                        "  {} = insertvalue {{ i8*, i8* }} {}, i8* {}, 1\n",
+                                        trait_obj_2, trait_obj_1, vtable_cast
+                                    ));
+
+                                    val = trait_obj_2;
+                                }
+                            }
                         }
                     }
 
@@ -3160,6 +3426,36 @@ impl CodeGenerator {
                     );
                 }
 
+                // Check for dynamic trait dispatch (dyn Trait)
+                let dyn_trait_name = match &recv_type {
+                    ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                            Some(trait_name.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+
+                if let Some(trait_name) = dyn_trait_name {
+                    // Dynamic dispatch through vtable
+                    // Generate additional arguments (just values, vtable generator adds types)
+                    let mut extra_arg_vals = Vec::new();
+                    for arg in args {
+                        let (val, arg_ir) = self.generate_expr(arg, counter)?;
+                        ir.push_str(&arg_ir);
+                        extra_arg_vals.push(val);
+                    }
+
+                    let (dyn_ir, result) = self.generate_dyn_method_call(
+                        &recv_val, &trait_name, method_name, &extra_arg_vals, counter
+                    )?;
+                    ir.push_str(&dyn_ir);
+                    return Ok((result, ir));
+                }
+
                 // Build full method name: StructName_methodName
                 let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
                     format!("{}_{}", name, method_name)
@@ -3727,6 +4023,108 @@ impl CodeGenerator {
         let tmp = format!("%{}", counter);
         *counter += 1;
         tmp
+    }
+
+    /// Resolve a generic function call to the appropriate mangled specialized name.
+    /// Given a base function name and the inferred argument types, finds the
+    /// matching instantiation from the pre-computed instantiation list.
+    fn resolve_generic_call(
+        &self,
+        base_name: &str,
+        arg_types: &[ResolvedType],
+        instantiations_list: &[(Vec<ResolvedType>, String)],
+    ) -> String {
+        // If only one instantiation exists, use it directly
+        if instantiations_list.len() == 1 {
+            return instantiations_list[0].1.clone();
+        }
+
+        // Look up the generic function template to map argument types to type parameters
+        if let Some(template) = self.generic_function_templates.get(base_name) {
+            let type_params: Vec<&String> = template
+                .generics
+                .iter()
+                .filter(|g| !matches!(g.kind, GenericParamKind::Lifetime { .. }))
+                .map(|g| &g.name.node)
+                .collect();
+
+            // Infer type arguments from argument types by matching against parameter types
+            let mut inferred: HashMap<String, ResolvedType> = HashMap::new();
+            for (i, param) in template.params.iter().enumerate() {
+                if i < arg_types.len() {
+                    self.infer_type_args(&self.ast_type_to_resolved(&param.ty.node), &arg_types[i], &type_params, &mut inferred);
+                }
+            }
+
+            // Build type_args vector in order of generic params
+            let type_args: Vec<ResolvedType> = type_params
+                .iter()
+                .map(|name| inferred.get(*name).cloned().unwrap_or(ResolvedType::I64))
+                .collect();
+
+            // Find exact match in instantiations
+            for (inst_types, mangled) in instantiations_list {
+                if inst_types == &type_args {
+                    return mangled.clone();
+                }
+            }
+        }
+
+        // Fallback: try to mangle based on argument types directly
+        let mangled = vais_types::mangle_name(base_name, arg_types);
+        if self.functions.contains_key(&mangled) {
+            return mangled;
+        }
+
+        // Last resort: use first instantiation
+        instantiations_list.first()
+            .map(|(_, name)| name.clone())
+            .unwrap_or_else(|| base_name.to_string())
+    }
+
+    /// Infer type arguments by matching a parameter type pattern against a concrete argument type.
+    fn infer_type_args(
+        &self,
+        param_type: &ResolvedType,
+        arg_type: &ResolvedType,
+        type_params: &[&String],
+        inferred: &mut HashMap<String, ResolvedType>,
+    ) {
+        match param_type {
+            ResolvedType::Generic(name) => {
+                // Direct generic type parameter (e.g., T)
+                if type_params.iter().any(|tp| *tp == name) {
+                    inferred.entry(name.clone()).or_insert_with(|| arg_type.clone());
+                }
+            }
+            ResolvedType::Named { name, generics } => {
+                // Check if this is a type parameter name
+                if type_params.iter().any(|tp| *tp == name) {
+                    inferred.entry(name.clone()).or_insert_with(|| arg_type.clone());
+                } else if let ResolvedType::Named { generics: arg_generics, .. } = arg_type {
+                    // Recurse into generic arguments
+                    for (g, ag) in generics.iter().zip(arg_generics.iter()) {
+                        self.infer_type_args(g, ag, type_params, inferred);
+                    }
+                }
+            }
+            ResolvedType::Array(inner) => {
+                if let ResolvedType::Array(arg_inner) = arg_type {
+                    self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            ResolvedType::Pointer(inner) => {
+                if let ResolvedType::Pointer(arg_inner) = arg_type {
+                    self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            ResolvedType::Optional(inner) => {
+                if let ResolvedType::Optional(arg_inner) = arg_type {
+                    self.infer_type_args(inner, arg_inner, type_params, inferred);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Generate code for a block expression (used in if/else branches)

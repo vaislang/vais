@@ -20,9 +20,15 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
     let mut checker = TypeChecker::new();
     checker.check_module(&module).map_err(|e| format!("Type error: {:?}", e))?;
 
-    // Step 4: Generate LLVM IR
+    // Step 4: Generate LLVM IR (with generic instantiations if any)
     let mut gen = CodeGenerator::new("test");
-    let ir = gen.generate_module(&module).map_err(|e| format!("Codegen error: {:?}", e))?;
+    let instantiations = checker.get_generic_instantiations();
+    let ir = if instantiations.is_empty() {
+        gen.generate_module(&module).map_err(|e| format!("Codegen error: {:?}", e))?
+    } else {
+        gen.generate_module_with_instantiations(&module, instantiations)
+            .map_err(|e| format!("Codegen error: {:?}", e))?
+    };
 
     Ok(ir)
 }
@@ -1966,4 +1972,128 @@ F main() -> i64 {
 }
 "#;
     assert!(compiles(source));
+}
+
+// ==================== Generic Function Monomorphization E2E Tests ====================
+
+#[test]
+fn test_generic_identity_single_type() {
+    let source = r#"
+F identity<T>(x: T) -> T = x
+F main() -> i64 {
+    identity(42)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@identity$i64"));
+}
+
+#[test]
+fn test_generic_identity_multiple_types() {
+    let source = r#"
+F identity<T>(x: T) -> T = x
+F main() -> i64 {
+    a := identity(42)
+    b := identity(3.14)
+    a
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@identity$i64"));
+    assert!(ir.contains("@identity$f64"));
+}
+
+#[test]
+fn test_generic_function_with_operations() {
+    let source = r#"
+F add_pair<T>(a: T, b: T) -> T = a + b
+F main() -> i64 {
+    add_pair(10, 20)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@add_pair$i64"));
+}
+
+#[test]
+fn test_generic_function_call_resolution() {
+    let source = r#"
+F wrap<T>(x: T) -> T = x
+F main() -> i64 {
+    wrap(100)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("call i64 @wrap$i64"));
+}
+
+// ==================== Trait Dynamic Dispatch E2E Tests ====================
+
+#[test]
+fn test_trait_static_dispatch() {
+    let source = r#"
+W Drawable {
+    F draw(&self) -> i64
+}
+S Circle { radius: i64 }
+X Circle: Drawable {
+    F draw(&self) -> i64 = self.radius
+}
+F main() -> i64 {
+    c := Circle { radius: 42 }
+    c.draw()
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("@Circle_draw"));
+}
+
+#[test]
+fn test_trait_dynamic_dispatch_codegen() {
+    let source = r#"
+W Drawable {
+    F draw(&self) -> i64
+}
+S Circle { radius: i64 }
+X Circle: Drawable {
+    F draw(&self) -> i64 = self.radius
+}
+F draw_shape(shape: &dyn Drawable) -> i64 = shape.draw()
+F main() -> i64 {
+    c := Circle { radius: 42 }
+    draw_shape(&c)
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("extractvalue { i8*, i8* }"), "Should extract from fat pointer");
+    assert!(ir.contains("vtable_Circle_Drawable"), "Should have vtable global");
+    assert!(ir.contains("insertvalue { i8*, i8* }"), "Should create trait object");
+}
+
+#[test]
+fn test_trait_multiple_impls_dispatch() {
+    let source = r#"
+W Shape {
+    F area(&self) -> i64
+}
+S Rect { w: i64, h: i64 }
+X Rect: Shape {
+    F area(&self) -> i64 = self.w * self.h
+}
+S Square { side: i64 }
+X Square: Shape {
+    F area(&self) -> i64 = self.side * self.side
+}
+F get_area(s: &dyn Shape) -> i64 = s.area()
+F main() -> i64 {
+    r := Rect { w: 3, h: 4 }
+    s := Square { side: 5 }
+    a1 := get_area(&r)
+    a2 := get_area(&s)
+    a1 + a2
+}
+"#;
+    let ir = compile_to_ir(source).unwrap();
+    assert!(ir.contains("vtable_Rect_Shape"));
+    assert!(ir.contains("vtable_Square_Shape"));
 }

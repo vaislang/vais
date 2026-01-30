@@ -253,8 +253,21 @@ impl CodeGenerator {
                 }
             }
             ResolvedType::Pointer(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
-            ResolvedType::Ref(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
-            ResolvedType::RefMut(inner) => format!("{}*", self.type_to_llvm_impl(inner)?),
+            ResolvedType::Ref(inner) => {
+                // &dyn Trait is a fat pointer itself (not a pointer to fat pointer)
+                if matches!(inner.as_ref(), ResolvedType::DynTrait { .. }) {
+                    self.type_to_llvm_impl(inner)?
+                } else {
+                    format!("{}*", self.type_to_llvm_impl(inner)?)
+                }
+            }
+            ResolvedType::RefMut(inner) => {
+                if matches!(inner.as_ref(), ResolvedType::DynTrait { .. }) {
+                    self.type_to_llvm_impl(inner)?
+                } else {
+                    format!("{}*", self.type_to_llvm_impl(inner)?)
+                }
+            }
             ResolvedType::Range(_inner) => {
                 // Range is represented as a struct with start and end fields
                 // For now, we'll use a simple struct: { i64 start, i64 end, i1 inclusive }
@@ -467,6 +480,15 @@ impl CodeGenerator {
                 }
             }
             Type::Unit => ResolvedType::Unit,
+            Type::DynTrait { trait_name, generics } => {
+                ResolvedType::DynTrait {
+                    trait_name: trait_name.clone(),
+                    generics: generics
+                        .iter()
+                        .map(|g| self.ast_type_to_resolved_impl(&g.node))
+                        .collect(),
+                }
+            }
             _ => ResolvedType::Unknown,
         }
     }
