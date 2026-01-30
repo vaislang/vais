@@ -1,0 +1,44 @@
+# Maintainer: Steve <steve@vais-lang.org>
+pkgname=vais
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="AI-optimized systems programming language with LLVM backend"
+arch=('x86_64')
+url="https://github.com/sswoo88/vais"
+license=('MIT')
+depends=('clang' 'llvm>=17')
+makedepends=('rust' 'cargo')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/sswoo88/vais/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')  # TODO: Update with actual checksum after release
+
+build() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+
+    # Build release binary
+    cargo build --release --locked --bin vaisc
+}
+
+check() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+
+    # Run tests (optional, comment out if tests are slow)
+    # cargo test --release
+}
+
+package() {
+    cd "${srcdir}/${pkgname}-${pkgver}"
+
+    # Install binary
+    install -Dm755 "target/release/vaisc" "${pkgdir}/usr/bin/vaisc"
+
+    # Install standard library
+    install -dm755 "${pkgdir}/usr/share/vais/std"
+    cp -r std/* "${pkgdir}/usr/share/vais/std/"
+
+    # Install license
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+    # Install documentation
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    install -Dm644 CHANGELOG.md "${pkgdir}/usr/share/doc/${pkgname}/CHANGELOG.md"
+}

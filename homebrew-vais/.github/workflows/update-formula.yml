@@ -1,0 +1,48 @@
+name: Update Formula on Release
+
+on:
+  repository_dispatch:
+    types: [new-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update to (e.g., 0.1.0)'
+        required: true
+      sha256:
+        description: 'SHA256 of the release tarball'
+        required: true
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+
+      - name: Update formula
+        run: |
+          VERSION="${{ github.event.inputs.version || github.event.client_payload.version }}"
+          SHA256="${{ github.event.inputs.sha256 || github.event.client_payload.sha256 }}"
+
+          # Update the formula file
+          sed -i "s|archive/refs/tags/v[0-9.]*\.tar\.gz|archive/refs/tags/v${VERSION}.tar.gz|" Formula/vais.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/vais.rb
+
+          echo "Updated formula to version ${VERSION}"
+          git diff Formula/vais.rb
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Update vais to ${{ github.event.inputs.version || github.event.client_payload.version }}"
+          title: "Update vais to ${{ github.event.inputs.version || github.event.client_payload.version }}"
+          body: |
+            Automated update of Vais formula to version ${{ github.event.inputs.version || github.event.client_payload.version }}
+
+            Changes:
+            - Updated version to ${{ github.event.inputs.version || github.event.client_payload.version }}
+            - Updated SHA256 checksum
+
+            Please review and test before merging.
+          branch: update-vais-${{ github.event.inputs.version || github.event.client_payload.version }}
+          delete-branch: true

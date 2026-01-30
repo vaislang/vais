@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "description": "AI-optimized systems programming language",
+  "homepage": "https://github.com/sswoo88/vais",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/sswoo88/vais/releases/download/v0.2.0/vais-x86_64-windows.zip",
+      "hash": "placeholder_sha256_hash"
+    }
+  },
+  "bin": "vaisc.exe",
+  "checkver": {
+    "github": "https://github.com/sswoo88/vais",
+    "regex": "(?<version>v[\\d.]+)"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/sswoo88/vais/releases/download/v$version/vais-x86_64-windows.zip"
+      }
+    }
+  }
+}

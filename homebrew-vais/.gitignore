@@ -1,0 +1,12 @@
+# Homebrew tap .gitignore
+
+# Test artifacts
+*.bottle.*
+*.tar.gz
+
+# macOS
+.DS_Store
+
+# Backup files
+*.bak
+*~

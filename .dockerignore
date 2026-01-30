@@ -1,0 +1,97 @@
+# Rust build artifacts
+target/
+
+# Git repository
+.git/
+.github/
+
+# LLVM IR files (generated during compilation)
+*.ll
+
+# Workflow state
+.workflow-state.json
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vais compiler cache
+.vais-cache/
+**/.vais-cache/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# Test binary artifacts
+examples/*_test
+examples/*_test_bin
+examples/*_bin
+examples/*_o0
+examples/*_o1
+examples/*_o2
+examples/*_o3
+examples/advanced_opt_test_o3
+examples/inline_test_debug*
+examples/lazy_simple
+
+# Compiled Vais binaries
+examples/hello
+examples/hello_world
+examples/fib
+examples/control_flow
+examples/arrays
+examples/enum_test
+examples/file_test
+examples/generic_test
+examples/iter_test
+examples/loop_break_test
+examples/malloc_test
+examples/method_test
+examples/option_test
+examples/pattern_match_test
+examples/printf_test
+examples/putchar_var
+examples/string_test
+examples/trait_test
+examples/*_out
+
+# Temp and log files
+*.tmp
+*.log
+test.txt
+string_test
+vaisc-stage1
+vaisc-stage2
+stage2.ll
+temp.ll
+runtime.c
+output.txt
+main_output.ll
+
+# Documentation build artifacts
+docs-site/node_modules/
+docs-site/.next/
+docs-site/out/
+
+# Fuzzing artifacts
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+
+# Benchmarking results
+benches/target/
+
+# Coverage reports
+tarpaulin-report.html
+cobertura.xml

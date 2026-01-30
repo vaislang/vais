@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  vais:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./examples:/workspace
+    working_dir: /workspace
+    # Override entrypoint if you want to run interactive shell
+    # entrypoint: []
+    # command: /bin/bash

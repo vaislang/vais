@@ -17,49 +17,71 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            name: vais-linux-x86_64
+            archive_name: vais-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: vais-macos-x86_64
+            archive_name: vais-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: vais-macos-aarch64
+            archive_name: vais-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            name: vais-windows-x86_64.exe
+            archive_name: vais-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release binary
-        working-directory: vais-rs
-        run: cargo build --release --target ${{ matrix.target }} -p vais-cli
-
-      - name: Prepare artifact (Unix)
-        if: runner.os != 'Windows'
+      - name: Install LLVM dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
-          cp vais-rs/target/${{ matrix.target }}/release/vais ${{ matrix.name }}
-          chmod +x ${{ matrix.name }}
+          sudo apt-get update
+          sudo apt-get install -y clang llvm-dev
 
-      - name: Prepare artifact (Windows)
+      - name: Install LLVM dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+
+      - name: Install LLVM dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          cp vais-rs/target/${{ matrix.target }}/release/vais.exe ${{ matrix.name }}
+          choco install llvm
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p vaisc
+
+      - name: Package release (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p release/vais
+          cp target/${{ matrix.target }}/release/vaisc release/vais/
+          cp -r std release/vais/
+          cd release
+          tar -czf ../vais-${{ github.ref_name }}-${{ matrix.target }}.tar.gz vais
+
+      - name: Package release (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release\vais
+          Copy-Item target\${{ matrix.target }}\release\vaisc.exe release\vais\
+          Copy-Item -Recurse std release\vais\
+          Compress-Archive -Path release\vais\* -DestinationPath vais-${{ github.ref_name }}-${{ matrix.target }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
-          path: ${{ matrix.name }}
+          name: vais-${{ github.ref_name }}-${{ matrix.target }}
+          path: vais-${{ github.ref_name }}-${{ matrix.target }}.*
 
   release:
-    name: Create Release
+    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -74,10 +96,21 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create release
-        uses: softprops/action-gh-release@v1
+      - name: Move artifacts to release directory
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} release/ \;
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd release
+          sha256sum * > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: release/*
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}

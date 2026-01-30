@@ -2,8 +2,13 @@
 name = "vaisc"
 version.workspace = true
 edition.workspace = true
-description = "Vais compiler CLI"
-license.workspace = true
+description = "AI-optimized systems programming language compiler"
+license = "MIT"
+repository = "https://github.com/sswoo88/vais"
+homepage = "https://github.com/sswoo88/vais"
+keywords = ["compiler", "programming-language", "llvm", "ai-optimized"]
+categories = ["compilers", "development-tools"]
+readme = "../../README.md"
 
 [[bin]]
 name = "vaisc"

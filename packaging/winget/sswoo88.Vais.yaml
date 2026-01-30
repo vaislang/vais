@@ -1,0 +1,13 @@
+PackageIdentifier: sswoo88.Vais
+PackageVersion: 0.2.0
+PackageName: Vais
+Publisher: Steve
+License: MIT
+ShortDescription: AI-optimized systems programming language
+InstallerType: zip
+Installers:
+  - Architecture: x64
+    Url: https://github.com/sswoo88/vais/releases/download/v0.2.0/vais-x86_64-windows.zip
+    InstallerSha256: placeholder_sha256_hash
+ManifestType: singleton
+ManifestVersion: 1.4.0
