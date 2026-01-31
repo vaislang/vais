@@ -32,6 +32,38 @@ members = [
     "examples/plugins/example-lint",
     "benches",
 ]
+# Exclude Python/Node bindings from default build - they require
+# their respective language toolchains (maturin for Python, napi for Node)
+default-members = [
+    "crates/vais-lexer",
+    "crates/vais-parser",
+    "crates/vais-ast",
+    "crates/vais-types",
+    "crates/vais-codegen",
+    "crates/vais-lsp",
+    "crates/vais-dap",
+    "crates/vais-i18n",
+    "crates/vais-plugin",
+    "crates/vais-jit",
+    "crates/vais-gc",
+    "crates/vais-gpu",
+    "crates/vais-hotreload",
+    "crates/vais-dynload",
+    "crates/vais-macro",
+    "crates/vais-profiler",
+    "crates/vais-registry-server",
+    "crates/vais-playground-server",
+    "crates/vais-tutorial",
+    "crates/vais-bindgen",
+    "crates/vais-query",
+    "crates/vais-mir",
+    "crates/vais-testgen",
+    "crates/vais-supply-chain",
+    "crates/vais-security",
+    "crates/vaisc",
+    "examples/plugins/example-lint",
+    "benches",
+]
 
 [workspace.package]
 version = "0.1.0"

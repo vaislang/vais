@@ -680,6 +680,9 @@ pub struct CodeGenerator {
     // Generated struct instantiations (mangled_name -> already_generated)
     generated_structs: HashMap<String, bool>,
 
+    // Generic struct name aliases (base_name -> mangled_name, e.g., "Box" -> "Box$i64")
+    generic_struct_aliases: HashMap<String, String>,
+
     // Generated function instantiations (mangled_name -> already_generated)
     generated_functions: HashMap<String, bool>,
 
@@ -797,6 +800,7 @@ impl CodeGenerator {
             debug_info: DebugInfoBuilder::new(DebugConfig::default()),
             generic_substitutions: HashMap::new(),
             generated_structs: HashMap::new(),
+            generic_struct_aliases: HashMap::new(),
             generated_functions: HashMap::new(),
             type_to_llvm_cache: std::cell::RefCell::new(HashMap::new()),
             gc_enabled: false,
@@ -909,6 +913,18 @@ impl CodeGenerator {
     #[allow(dead_code)]
     pub(crate) fn clear_generic_substitutions(&mut self) {
         self.generic_substitutions.clear();
+    }
+
+    /// Resolve a struct name, checking aliases for generic specializations.
+    /// Returns the mangled name if the base name has a registered alias (e.g., "Box" -> "Box$i64").
+    pub(crate) fn resolve_struct_name(&self, name: &str) -> String {
+        if self.structs.contains_key(name) {
+            return name.to_string();
+        }
+        if let Some(mangled) = self.generic_struct_aliases.get(name) {
+            return mangled.clone();
+        }
+        name.to_string()
     }
 
     /// Generate mangled name for a generic struct
@@ -3151,7 +3167,8 @@ impl CodeGenerator {
             // Struct literal: Point{x:1, y:2}
             // Also handles union literal: IntOrFloat{as_int: 42}
             Expr::StructLit { name, fields } => {
-                let type_name = &name.node;
+                let resolved_name = self.resolve_struct_name(&name.node);
+                let type_name = &resolved_name;
 
                 // First check if it's a struct
                 if let Some(struct_info) = self.structs.get(type_name).cloned() {
@@ -3314,7 +3331,8 @@ impl CodeGenerator {
                 // This handles both simple identifiers and nested field accesses
                 let obj_type = self.infer_expr_type(obj_expr);
 
-                if let ResolvedType::Named { name: type_name, .. } = &obj_type {
+                if let ResolvedType::Named { name: orig_type_name, .. } = &obj_type {
+                    let type_name = &self.resolve_struct_name(orig_type_name);
                     // First check if it's a struct
                     if let Some(struct_info) = self.structs.get(type_name).cloned() {
                         let field_idx = struct_info.fields.iter()

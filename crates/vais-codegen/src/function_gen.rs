@@ -69,6 +69,11 @@ impl CodeGenerator {
         self.structs
             .insert(inst.mangled_name.to_string(), struct_info);
 
+        // Register a name mapping from base name to mangled name
+        // so struct literals and field accesses in generic impl methods can resolve it
+        self.generic_struct_aliases
+            .insert(inst.base_name.to_string(), inst.mangled_name.to_string());
+
         // Restore old substitutions
         self.generic_substitutions = old_subst;
 

@@ -1366,6 +1366,9 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         let type_name = &name.node;
 
+        let resolved_name = self.resolve_struct_name(type_name);
+        let type_name = &resolved_name;
+
         // First check if it's a struct
         if let Some(struct_info) = self.structs.get(type_name).cloned() {
             let mut ir = String::new();
@@ -1500,7 +1503,8 @@ impl CodeGenerator {
 
         if let Expr::Ident(var_name) = &obj.node {
             if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
-                if let ResolvedType::Named { name: type_name, .. } = &local.ty {
+                if let ResolvedType::Named { name: orig_type_name, .. } = &local.ty {
+                    let type_name = &self.resolve_struct_name(orig_type_name);
                     // First check if it's a struct
                     if let Some(struct_info) = self.structs.get(type_name).cloned() {
                         let field_idx = struct_info.fields.iter()
