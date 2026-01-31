@@ -183,14 +183,11 @@ impl CodeGenerator {
                             let mut inferred = None;
                             for (field_name, field_expr) in fields {
                                 // Find the field info
-                                if let Some((_, field_ty)) = struct_info.fields.iter()
+                                if let Some((_, ResolvedType::Generic(p))) = struct_info.fields.iter()
                                     .find(|(name, _)| name == &field_name.node) {
-                                    // If this field uses the generic parameter, infer from the expression
-                                    if let ResolvedType::Generic(p) = field_ty {
-                                        if p == param {
-                                            inferred = Some(self.infer_expr_type(field_expr));
-                                            break;
-                                        }
+                                    if p == param {
+                                        inferred = Some(self.infer_expr_type(field_expr));
+                                        break;
                                     }
                                 }
                             }

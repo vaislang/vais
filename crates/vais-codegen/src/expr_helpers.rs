@@ -548,17 +548,49 @@ impl CodeGenerator {
         } else if fn_name == "puts_ptr" {
             self.generate_puts_ptr_call(arg_vals, counter, span, ir)
         } else if ret_ty == "void" {
-            ir.push_str(&format!(
-                "  call void @{}({}){}\n",
-                actual_fn_name, arg_vals.join(", "), dbg_info
-            ));
+            let is_vararg = self.functions.get(fn_name)
+                .map(|f| f.signature.is_vararg)
+                .unwrap_or(false);
+            if is_vararg {
+                let param_types: Vec<String> = self.functions.get(fn_name)
+                    .map(|f| f.signature.params.iter()
+                        .map(|(_, ty, _)| self.type_to_llvm(ty))
+                        .collect())
+                    .unwrap_or_default();
+                let sig = format!("void ({}, ...)", param_types.join(", "));
+                ir.push_str(&format!(
+                    "  call {} @{}({}){}\n",
+                    sig, actual_fn_name, arg_vals.join(", "), dbg_info
+                ));
+            } else {
+                ir.push_str(&format!(
+                    "  call void @{}({}){}\n",
+                    actual_fn_name, arg_vals.join(", "), dbg_info
+                ));
+            }
             Ok(("void".to_string(), std::mem::take(ir)))
         } else {
+            let is_vararg = self.functions.get(fn_name)
+                .map(|f| f.signature.is_vararg)
+                .unwrap_or(false);
             let tmp = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = call {} @{}({}){}\n",
-                tmp, ret_ty, actual_fn_name, arg_vals.join(", "), dbg_info
-            ));
+            if is_vararg {
+                let param_types: Vec<String> = self.functions.get(fn_name)
+                    .map(|f| f.signature.params.iter()
+                        .map(|(_, ty, _)| self.type_to_llvm(ty))
+                        .collect())
+                    .unwrap_or_default();
+                let sig = format!("{} ({}, ...)", ret_ty, param_types.join(", "));
+                ir.push_str(&format!(
+                    "  {} = call {} @{}({}){}\n",
+                    tmp, sig, actual_fn_name, arg_vals.join(", "), dbg_info
+                ));
+            } else {
+                ir.push_str(&format!(
+                    "  {} = call {} @{}({}){}\n",
+                    tmp, ret_ty, actual_fn_name, arg_vals.join(", "), dbg_info
+                ));
+            }
             Ok((tmp, std::mem::take(ir)))
         }
     }
@@ -1466,14 +1498,11 @@ impl CodeGenerator {
                     let mut inferred = None;
                     for (field_name, field_expr) in fields {
                         // Find the field info
-                        if let Some((_, field_ty)) = struct_info.fields.iter()
+                        if let Some((_, ResolvedType::Generic(p))) = struct_info.fields.iter()
                             .find(|(name, _)| name == &field_name.node) {
-                            // If this field uses the generic parameter, infer from the expression
-                            if let ResolvedType::Generic(p) = field_ty {
-                                if p == param {
-                                    inferred = Some(self.infer_expr_type(field_expr));
-                                    break;
-                                }
+                            if p == param {
+                                inferred = Some(self.infer_expr_type(field_expr));
+                                break;
                             }
                         }
                     }
@@ -1710,14 +1739,11 @@ impl CodeGenerator {
             );
         }
 
-        let full_method_name = if let ResolvedType::Named { name, generics } = &recv_type {
-            // For generic types with concrete type arguments, use the mangled name
-            if !generics.is_empty() {
-                let mangled_name = self.mangle_struct_name(name, generics);
-                format!("{}_{}", mangled_name, method_name)
-            } else {
-                format!("{}_{}", name, method_name)
-            }
+        // Use resolve_struct_name to match definition naming (e.g., Pair → Pair$i64)
+        // For non-generic structs, this is a no-op (Vec → Vec)
+        let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
+            let resolved = self.resolve_struct_name(name);
+            format!("{}_{}", resolved, method_name)
         } else {
             method_name.clone()
         };

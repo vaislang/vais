@@ -1738,3 +1738,138 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ==================== Runtime Output Verification ====================
+
+#[test]
+fn e2e_println_integer_format() {
+    let source = r#"
+F main() -> i64 {
+    println("value = {}", 42)
+    0
+}
+"#;
+    assert_stdout_contains(source, "value = 42");
+}
+
+#[test]
+fn e2e_println_multiple_args() {
+    let source = r#"
+F main() -> i64 {
+    x := 10
+    y := 20
+    println("{} + {} = {}", x, y, x + y)
+    0
+}
+"#;
+    assert_stdout_contains(source, "10 + 20 = 30");
+}
+
+#[test]
+fn e2e_puts_hello_world_output() {
+    let source = r#"
+F main() -> i64 {
+    puts("hello world")
+    0
+}
+"#;
+    assert_stdout_contains(source, "hello world");
+}
+
+#[test]
+fn e2e_if_else_expression_value() {
+    let source = r#"
+F main() -> i64 {
+    x := 10
+    y := I x > 5 { 1 } E { 0 }
+    y
+}
+"#;
+    assert_exit_code(source, 1);
+}
+
+#[test]
+fn e2e_if_else_expression_false_branch() {
+    let source = r#"
+F main() -> i64 {
+    x := 3
+    y := I x > 5 { 1 } E { 0 }
+    y
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_match_output_verification() {
+    let source = r#"
+F describe(n: i64) -> i64 {
+    M n {
+        0 => 0,
+        1 => 1,
+        _ => 99
+    }
+}
+
+F main() -> i64 {
+    a := describe(0)
+    b := describe(1)
+    c := describe(7)
+    putchar(a + 48)
+    putchar(b + 48)
+    putchar(10)
+    I c == 99 { 0 } E { 1 }
+}
+"#;
+    assert_stdout_contains(source, "01");
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_recursive_fib_output() {
+    let source = r#"
+F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)
+F main() -> i64 = fib(10) - 55
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_loop_with_break() {
+    let source = r#"
+F main() -> i64 {
+    i := mut 0
+    total := mut 0
+    L {
+        I i >= 5 { B }
+        total = total + i
+        i = i + 1
+    }
+    total - 10
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_nested_function_calls() {
+    let source = r#"
+F add(a: i64, b: i64) -> i64 = a + b
+F mul(a: i64, b: i64) -> i64 = a * b
+F main() -> i64 = add(mul(3, 4), mul(2, 3)) - 18
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_mutable_variable_update() {
+    let source = r#"
+F main() -> i64 {
+    x := mut 1
+    x = x + 1
+    x = x * 3
+    x - 6
+}
+"#;
+    assert_exit_code(source, 0);
+}
