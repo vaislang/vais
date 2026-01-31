@@ -22,6 +22,11 @@ name = "gc_bench"
 path = "gc_bench.rs"
 harness = false
 
+[[bench]]
+name = "compiler_benchmarks"
+path = "compiler_benchmarks.rs"
+harness = false
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }

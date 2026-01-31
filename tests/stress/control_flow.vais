@@ -1,0 +1,442 @@
+# Stress Test 4: Control Flow
+# Testing complex control flow, nested conditionals, loops, early returns, error handling
+
+# ==================== Nested Conditionals ====================
+
+# Classify number into categories
+F classify_number(n: i64) -> str {
+    I n < 0 {
+        I n < -100 {
+            "very negative"
+        } E I n < -10 {
+            "negative"
+        } E {
+            "slightly negative"
+        }
+    } E I n == 0 {
+        "zero"
+    } E {
+        I n < 10 {
+            "single digit"
+        } E I n < 100 {
+            "double digit"
+        } E I n < 1000 {
+            "triple digit"
+        } E {
+            "large"
+        }
+    }
+}
+
+# Grade classification with multiple conditions
+F calculate_grade(score: i64) -> str {
+    I score < 0 || score > 100 {
+        "invalid"
+    } E I score >= 90 {
+        "A"
+    } E I score >= 80 {
+        "B"
+    } E I score >= 70 {
+        "C"
+    } E I score >= 60 {
+        "D"
+    } E {
+        "F"
+    }
+}
+
+# Complex boolean logic
+F check_access(age: i64, is_member: bool, has_pass: bool) -> bool {
+    (age >= 18 && is_member) || has_pass
+}
+
+# Nested ternary operators
+F max_of_three(a: i64, b: i64, c: i64) -> i64 {
+    I a >= b && a >= c {
+        a
+    } E I b >= c {
+        b
+    } E {
+        c
+    }
+}
+
+F min_of_three(a: i64, b: i64, c: i64) -> i64 {
+    I a <= b && a <= c {
+        a
+    } E I b <= c {
+        b
+    } E {
+        c
+    }
+}
+
+# ==================== Pattern Matching ====================
+
+# Day of week
+E DayOfWeek {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday
+}
+
+F is_weekend(day: DayOfWeek) -> bool {
+    M day {
+        Saturday => true,
+        Sunday => true,
+        _ => false
+    }
+}
+
+F day_number(day: DayOfWeek) -> i64 {
+    M day {
+        Monday => 1,
+        Tuesday => 2,
+        Wednesday => 3,
+        Thursday => 4,
+        Friday => 5,
+        Saturday => 6,
+        Sunday => 7
+    }
+}
+
+# Traffic light state machine
+E TrafficLight {
+    Red,
+    Yellow,
+    Green
+}
+
+F next_light(current: TrafficLight) -> TrafficLight {
+    M current {
+        Red => Green,
+        Green => Yellow,
+        Yellow => Red
+    }
+}
+
+F can_go(light: TrafficLight) -> bool {
+    M light {
+        Green => true,
+        Yellow => false,
+        Red => false
+    }
+}
+
+# ==================== Loop-like Recursion ====================
+
+# Count down from n to 0
+F countdown(n: i64) -> i64 {
+    I n <= 0 {
+        0
+    } E {
+        @(n - 1)
+    }
+}
+
+# Count up to n
+F count_to(n: i64, current: i64) -> i64 {
+    I current >= n {
+        current
+    } E {
+        @(n, current + 1)
+    }
+}
+
+# Sum from 1 to n
+F sum_to(n: i64) -> i64 {
+    I n <= 0 {
+        0
+    } E {
+        n + @(n - 1)
+    }
+}
+
+# Product from 1 to n
+F product_to(n: i64) -> i64 {
+    I n <= 1 {
+        1
+    } E {
+        n * @(n - 1)
+    }
+}
+
+# Iterate with accumulator
+F iterate(n: i64, acc: i64, step: i64) -> i64 {
+    I n <= 0 {
+        acc
+    } E {
+        @(n - 1, acc + step, step)
+    }
+}
+
+# ==================== Early Return Patterns ====================
+
+# Find first positive number
+F find_first_positive(arr: *i64, len: i64, idx: i64) -> i64 {
+    I idx >= len {
+        0 - 1
+    } E I arr[idx] > 0 {
+        arr[idx]
+    } E {
+        @(arr, len, idx + 1)
+    }
+}
+
+# Find last negative number
+F find_last_negative(arr: *i64, len: i64) -> i64 {
+    find_last_negative_helper(arr, len, 0, 0 - 1)
+}
+
+F find_last_negative_helper(arr: *i64, len: i64, idx: i64, last: i64) -> i64 {
+    I idx >= len {
+        last
+    } E {
+        new_last := I arr[idx] < 0 { arr[idx] } E { last }
+        @(arr, len, idx + 1, new_last)
+    }
+}
+
+# ==================== Error Handling Patterns ====================
+
+E ErrorType {
+    DivisionByZero,
+    NegativeNumber,
+    OutOfRange,
+    InvalidInput
+}
+
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+# Safe division
+F safe_divide(a: i64, b: i64) -> Result<i64, ErrorType> {
+    I b == 0 {
+        Err(DivisionByZero)
+    } E {
+        Ok(a / b)
+    }
+}
+
+# Safe square root (only positive)
+F safe_sqrt(n: i64) -> Result<i64, ErrorType> {
+    I n < 0 {
+        Err(NegativeNumber)
+    } E {
+        Ok(isqrt(n))
+    }
+}
+
+F isqrt(n: i64) -> i64 {
+    I n < 2 {
+        n
+    } E {
+        isqrt_helper(n, n / 2)
+    }
+}
+
+F isqrt_helper(n: i64, guess: i64) -> i64 {
+    next := (guess + n / guess) / 2
+    I next >= guess {
+        guess
+    } E {
+        @(n, next)
+    }
+}
+
+# Safe array access
+F safe_array_get(arr: *i64, len: i64, idx: i64) -> Result<i64, ErrorType> {
+    I idx < 0 || idx >= len {
+        Err(OutOfRange)
+    } E {
+        Ok(arr[idx])
+    }
+}
+
+# Chain of operations with error handling
+F chain_operations(a: i64, b: i64, c: i64) -> Result<i64, ErrorType> {
+    step1 := safe_divide(a, b)
+    M step1 {
+        Ok(v1) => {
+            step2 := safe_sqrt(v1)
+            M step2 {
+                Ok(v2) => Ok(v2 + c),
+                Err(e) => Err(e)
+            }
+        },
+        Err(e) => Err(e)
+    }
+}
+
+# ==================== Complex Control Flow ====================
+
+# FizzBuzz
+F fizzbuzz(n: i64) -> str {
+    I n % 15 == 0 {
+        "FizzBuzz"
+    } E I n % 3 == 0 {
+        "Fizz"
+    } E I n % 5 == 0 {
+        "Buzz"
+    } E {
+        "number"
+    }
+}
+
+# Leap year check
+F is_leap_year(year: i64) -> bool {
+    I year % 400 == 0 {
+        true
+    } E I year % 100 == 0 {
+        false
+    } E I year % 4 == 0 {
+        true
+    } E {
+        false
+    }
+}
+
+# Sign function
+F sign(n: i64) -> i64 {
+    I n > 0 {
+        1
+    } E I n < 0 {
+        0 - 1
+    } E {
+        0
+    }
+}
+
+# Absolute value
+F abs(n: i64) -> i64 {
+    I n < 0 {
+        0 - n
+    } E {
+        n
+    }
+}
+
+# Clamp value to range
+F clamp(value: i64, min: i64, max: i64) -> i64 {
+    I value < min {
+        min
+    } E I value > max {
+        max
+    } E {
+        value
+    }
+}
+
+# ==================== State Machines ====================
+
+E PlayerState {
+    Idle,
+    Walking,
+    Running,
+    Jumping,
+    Falling
+}
+
+F can_jump(state: PlayerState) -> bool {
+    M state {
+        Idle => true,
+        Walking => true,
+        Running => true,
+        Jumping => false,
+        Falling => false
+    }
+}
+
+F next_state(state: PlayerState, input: i64) -> PlayerState {
+    M state {
+        Idle => {
+            I input == 1 { Walking }
+            E I input == 2 { Jumping }
+            E { Idle }
+        },
+        Walking => {
+            I input == 0 { Idle }
+            E I input == 2 { Running }
+            E I input == 3 { Jumping }
+            E { Walking }
+        },
+        Running => {
+            I input == 0 { Walking }
+            E I input == 3 { Jumping }
+            E { Running }
+        },
+        Jumping => Falling,
+        Falling => Idle
+    }
+}
+
+# ==================== Complex Iterations ====================
+
+# Nested iteration simulation
+F nested_sum(outer: i64, inner: i64) -> i64 {
+    nested_sum_outer(outer, inner, 0, 0)
+}
+
+F nested_sum_outer(outer: i64, inner: i64, i: i64, acc: i64) -> i64 {
+    I i >= outer {
+        acc
+    } E {
+        inner_sum := nested_sum_inner(inner, 0, 0)
+        @(outer, inner, i + 1, acc + inner_sum)
+    }
+}
+
+F nested_sum_inner(inner: i64, j: i64, acc: i64) -> i64 {
+    I j >= inner {
+        acc
+    } E {
+        @(inner, j + 1, acc + j)
+    }
+}
+
+# ==================== Test Driver ====================
+
+F main() -> i64 {
+    # Test classification
+    c1 := classify_number(42)
+    c2 := classify_number(-50)
+
+    # Test grade
+    g1 := calculate_grade(85)
+    g2 := calculate_grade(92)
+
+    # Test max/min
+    max_val := max_of_three(10, 20, 15)
+    min_val := min_of_three(10, 20, 15)
+
+    # Test sum
+    sum := sum_to(10)
+
+    # Test fizzbuzz
+    fb15 := fizzbuzz(15)
+    fb3 := fizzbuzz(3)
+
+    # Test leap year
+    leap1 := is_leap_year(2000)
+    leap2 := is_leap_year(1900)
+
+    # Test safe operations
+    div_result := safe_divide(10, 2)
+    sqrt_result := safe_sqrt(16)
+
+    # Test nested sum
+    nested := nested_sum(5, 5)
+
+    # Verify results
+    I max_val == 20 && min_val == 10 && sum == 55 && nested == 50 {
+        0
+    } E {
+        1
+    }
+}

@@ -1,0 +1,393 @@
+# Stress Test 1: Data Structures
+# Testing array-based stacks, queues, and various data structure algorithms
+
+# ==================== Stack Operations (Array-Based) ====================
+
+# Push element onto stack (returns new top index)
+F stack_push(stack: *i64, top: i64, value: i64) -> i64 {
+    stack[top] = value
+    top + 1
+}
+
+# Pop element from stack (returns new top index)
+F stack_pop(top: i64) -> i64 {
+    I top > 0 {
+        top - 1
+    } E {
+        0
+    }
+}
+
+# Peek at top element
+F stack_peek(stack: *i64, top: i64) -> i64 {
+    stack[top - 1]
+}
+
+# Check if stack is empty
+F stack_is_empty(top: i64) -> bool {
+    top == 0
+}
+
+# Stack operations test
+F test_stack() -> i64 {
+    stack: *i64 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    top := 0
+
+    top = stack_push(stack, top, 10)
+    top = stack_push(stack, top, 20)
+    top = stack_push(stack, top, 30)
+
+    val := stack_peek(stack, top)
+    top = stack_pop(top)
+
+    val
+}
+
+# ==================== Queue Operations (Circular Array) ====================
+
+# Enqueue element (returns new rear index)
+F queue_enqueue(queue: *i64, rear: i64, size: i64, value: i64) -> i64 {
+    queue[rear] = value
+    (rear + 1) % size
+}
+
+# Dequeue element (returns new front index)
+F queue_dequeue(front: i64, size: i64) -> i64 {
+    (front + 1) % size
+}
+
+# Get front element
+F queue_front(queue: *i64, front: i64) -> i64 {
+    queue[front]
+}
+
+# Queue test
+F test_queue() -> i64 {
+    queue: *i64 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    size := 10
+    front := 0
+    rear := 0
+
+    rear = queue_enqueue(queue, rear, size, 100)
+    rear = queue_enqueue(queue, rear, size, 200)
+    rear = queue_enqueue(queue, rear, size, 300)
+
+    val := queue_front(queue, front)
+    front = queue_dequeue(front, size)
+
+    val
+}
+
+# ==================== Array List Operations ====================
+
+# Insert at end (returns new length)
+F list_append(arr: *i64, len: i64, value: i64) -> i64 {
+    arr[len] = value
+    len + 1
+}
+
+# Remove from end (returns new length)
+F list_pop(len: i64) -> i64 {
+    I len > 0 {
+        len - 1
+    } E {
+        0
+    }
+}
+
+# Insert at index
+F list_insert(arr: *i64, len: i64, index: i64, value: i64) -> i64 {
+    list_insert_shift(arr, len, index, value)
+    len + 1
+}
+
+F list_insert_shift(arr: *i64, len: i64, index: i64, value: i64) -> i64 {
+    I index >= len {
+        arr[index] = value
+        0
+    } E {
+        list_insert_shift(arr, len, index + 1, arr[index])
+        arr[index] = value
+        0
+    }
+}
+
+# Remove at index
+F list_remove(arr: *i64, len: i64, index: i64) -> i64 {
+    list_remove_shift(arr, len, index)
+    len - 1
+}
+
+F list_remove_shift(arr: *i64, len: i64, index: i64) -> i64 {
+    I index >= len - 1 {
+        0
+    } E {
+        arr[index] = arr[index + 1]
+        @(arr, len, index + 1)
+    }
+}
+
+# Find element in list
+F list_find(arr: *i64, len: i64, value: i64) -> i64 {
+    list_find_helper(arr, len, value, 0)
+}
+
+F list_find_helper(arr: *i64, len: i64, value: i64, idx: i64) -> i64 {
+    I idx >= len {
+        0 - 1
+    } E I arr[idx] == value {
+        idx
+    } E {
+        @(arr, len, value, idx + 1)
+    }
+}
+
+# ==================== Binary Heap Operations ====================
+
+# Get parent index
+F heap_parent(idx: i64) -> i64 {
+    (idx - 1) / 2
+}
+
+# Get left child index
+F heap_left(idx: i64) -> i64 {
+    2 * idx + 1
+}
+
+# Get right child index
+F heap_right(idx: i64) -> i64 {
+    2 * idx + 2
+}
+
+# Swap two elements
+F heap_swap(arr: *i64, i: i64, j: i64) -> i64 {
+    temp := arr[i]
+    arr[i] = arr[j]
+    arr[j] = temp
+    0
+}
+
+# Heapify down (max heap)
+F heap_heapify_down(arr: *i64, len: i64, idx: i64) -> i64 {
+    left := heap_left(idx)
+    right := heap_right(idx)
+    largest := idx
+
+    largest = I left < len && arr[left] > arr[largest] { left } E { largest }
+    largest = I right < len && arr[right] > arr[largest] { right } E { largest }
+
+    I largest != idx {
+        heap_swap(arr, idx, largest)
+        @(arr, len, largest)
+    } E {
+        0
+    }
+}
+
+# Heapify up
+F heap_heapify_up(arr: *i64, idx: i64) -> i64 {
+    I idx > 0 {
+        parent := heap_parent(idx)
+        I arr[idx] > arr[parent] {
+            heap_swap(arr, idx, parent)
+            @(arr, parent)
+        } E {
+            0
+        }
+    } E {
+        0
+    }
+}
+
+# ==================== Hash Table (Simple Array-Based) ====================
+
+# Simple hash function (modulo)
+F hash_func(key: i64, size: i64) -> i64 {
+    I key < 0 {
+        (0 - key) % size
+    } E {
+        key % size
+    }
+}
+
+# Insert into hash table
+F hash_insert(table: *i64, size: i64, key: i64, value: i64) -> i64 {
+    idx := hash_func(key, size)
+    table[idx] = value
+    0
+}
+
+# Get from hash table
+F hash_get(table: *i64, size: i64, key: i64) -> i64 {
+    idx := hash_func(key, size)
+    table[idx]
+}
+
+# ==================== Array Algorithms ====================
+
+# Reverse array in place
+F array_reverse(arr: *i64, len: i64) -> i64 {
+    array_reverse_helper(arr, 0, len - 1)
+}
+
+F array_reverse_helper(arr: *i64, left: i64, right: i64) -> i64 {
+    I left >= right {
+        0
+    } E {
+        temp := arr[left]
+        arr[left] = arr[right]
+        arr[right] = temp
+        @(arr, left + 1, right - 1)
+    }
+}
+
+# Rotate array left by k positions
+F array_rotate_left(arr: *i64, len: i64, k: i64) -> i64 {
+    k_mod := k % len
+    array_reverse(arr, k_mod)
+    array_reverse_range(arr, k_mod, len - 1)
+    array_reverse(arr, len)
+}
+
+F array_reverse_range(arr: *i64, left: i64, right: i64) -> i64 {
+    I left >= right {
+        0
+    } E {
+        temp := arr[left]
+        arr[left] = arr[right]
+        arr[right] = temp
+        @(arr, left + 1, right - 1)
+    }
+}
+
+# Find maximum subarray sum (Kadane's algorithm)
+F max_subarray_sum(arr: *i64, len: i64) -> i64 {
+    kadane(arr, len, 0, 0, arr[0])
+}
+
+F kadane(arr: *i64, len: i64, idx: i64, curr_sum: i64, max_sum: i64) -> i64 {
+    I idx >= len {
+        max_sum
+    } E {
+        new_curr := I curr_sum + arr[idx] > arr[idx] { curr_sum + arr[idx] } E { arr[idx] }
+        new_max := I new_curr > max_sum { new_curr } E { max_sum }
+        @(arr, len, idx + 1, new_curr, new_max)
+    }
+}
+
+# ==================== Set Operations (Boolean Array) ====================
+
+# Add element to set
+F set_add(set: *i64, value: i64) -> i64 {
+    set[value] = 1
+    0
+}
+
+# Remove element from set
+F set_remove(set: *i64, value: i64) -> i64 {
+    set[value] = 0
+    0
+}
+
+# Check if element in set
+F set_contains(set: *i64, value: i64) -> bool {
+    set[value] == 1
+}
+
+# Set union
+F set_union(set1: *i64, set2: *i64, result: *i64, size: i64) -> i64 {
+    set_union_helper(set1, set2, result, size, 0)
+}
+
+F set_union_helper(set1: *i64, set2: *i64, result: *i64, size: i64, idx: i64) -> i64 {
+    I idx >= size {
+        0
+    } E {
+        result[idx] = I set1[idx] == 1 || set2[idx] == 1 { 1 } E { 0 }
+        @(set1, set2, result, size, idx + 1)
+    }
+}
+
+# Set intersection
+F set_intersection(set1: *i64, set2: *i64, result: *i64, size: i64) -> i64 {
+    set_intersection_helper(set1, set2, result, size, 0)
+}
+
+F set_intersection_helper(set1: *i64, set2: *i64, result: *i64, size: i64, idx: i64) -> i64 {
+    I idx >= size {
+        0
+    } E {
+        result[idx] = I set1[idx] == 1 && set2[idx] == 1 { 1 } E { 0 }
+        @(set1, set2, result, size, idx + 1)
+    }
+}
+
+# ==================== Matrix Operations ====================
+
+# Matrix addition (2x2)
+F matrix_add_2x2(a: *i64, b: *i64, result: *i64) -> i64 {
+    result[0] = a[0] + b[0]
+    result[1] = a[1] + b[1]
+    result[2] = a[2] + b[2]
+    result[3] = a[3] + b[3]
+    0
+}
+
+# Matrix multiplication (2x2)
+F matrix_mul_2x2(a: *i64, b: *i64, result: *i64) -> i64 {
+    result[0] = a[0] * b[0] + a[1] * b[2]
+    result[1] = a[0] * b[1] + a[1] * b[3]
+    result[2] = a[2] * b[0] + a[3] * b[2]
+    result[3] = a[2] * b[1] + a[3] * b[3]
+    0
+}
+
+# Matrix transpose (2x2)
+F matrix_transpose_2x2(a: *i64, result: *i64) -> i64 {
+    result[0] = a[0]
+    result[1] = a[2]
+    result[2] = a[1]
+    result[3] = a[3]
+    0
+}
+
+# Matrix determinant (2x2)
+F matrix_det_2x2(a: *i64) -> i64 {
+    a[0] * a[3] - a[1] * a[2]
+}
+
+# ==================== Test Driver ====================
+
+F main() -> i64 {
+    # Test stack
+    stack_result := test_stack()
+
+    # Test queue
+    queue_result := test_queue()
+
+    # Test array list
+    test_list: *i64 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    list_len := 0
+    list_len = list_append(test_list, list_len, 10)
+    list_len = list_append(test_list, list_len, 20)
+    list_len = list_append(test_list, list_len, 30)
+
+    # Test hash table
+    hash_table: *i64 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    hash_insert(hash_table, 10, 3, 42)
+    hash_val := hash_get(hash_table, 10, 3)
+
+    # Test matrix operations
+    mat_a: *i64 = [1, 2, 3, 4]
+    mat_b: *i64 = [5, 6, 7, 8]
+    mat_result: *i64 = [0, 0, 0, 0]
+    matrix_mul_2x2(mat_a, mat_b, mat_result)
+    det := matrix_det_2x2(mat_a)
+
+    # Verify results
+    I stack_result == 30 && queue_result == 100 && hash_val == 42 && det == -2 {
+        0
+    } E {
+        1
+    }
+}

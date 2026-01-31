@@ -1,0 +1,158 @@
+name: Memory Safety (ASan)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC
+    - cron: '0 0 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  asan:
+    name: AddressSanitizer Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-asan-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install LLVM 17
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Run ASan tests on vais-parser
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vais-parser \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run ASan tests on vais-lexer
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vais-lexer \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run ASan tests on vais-types
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vais-types \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run ASan tests on vais-ast
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vais-ast \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run ASan tests on vais-codegen
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vais-codegen \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run ASan tests on vais-gc
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vais-gc \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- --test-threads=1
+        continue-on-error: false
+
+      - name: Run ASan memory safety tests (vaisc)
+        env:
+          RUSTFLAGS: "-Z sanitizer=address"
+          RUSTDOCFLAGS: "-Z sanitizer=address"
+        run: |
+          cargo +nightly test -p vaisc \
+            -Z build-std --target x86_64-unknown-linux-gnu \
+            -- memory_safety --test-threads=1
+        continue-on-error: false
+
+      - name: Upload ASan logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asan-logs
+          path: target/asan-logs/
+          retention-days: 7
+
+  verify-without-asan:
+    name: Verify tests work without ASan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+
+      - name: Run memory safety tests without ASan
+        run: cargo test -p vaisc -- memory_safety
+        continue-on-error: false
+
+      - name: Verify tests pass
+        run: echo "Memory safety tests work without ASan ✓"

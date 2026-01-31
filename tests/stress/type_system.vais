@@ -1,0 +1,475 @@
+# Stress Test 3: Type System
+# Testing enums, pattern matching, structs, and complex type interactions
+
+# ==================== Basic Enums ====================
+
+E Option {
+    None,
+    Some(i64)
+}
+
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+E Either {
+    Left(i64),
+    Right(i64)
+}
+
+E Color {
+    Red,
+    Green,
+    Blue,
+    RGB(i64, i64, i64)
+}
+
+# ==================== Struct Types ====================
+
+S Pair {
+    first: i64,
+    second: i64
+}
+
+S Triple {
+    first: i64,
+    second: i64,
+    third: i64
+}
+
+S Point {
+    x: i64,
+    y: i64
+}
+
+S Rectangle {
+    top_left: Point,
+    width: i64,
+    height: i64
+}
+
+S Circle {
+    center: Point,
+    radius: i64
+}
+
+# ==================== Option Pattern Matching ====================
+
+F option_is_some(opt: Option) -> bool {
+    M opt {
+        Some(_) => true,
+        None => false
+    }
+}
+
+F option_is_none(opt: Option) -> bool {
+    M opt {
+        Some(_) => false,
+        None => true
+    }
+}
+
+F option_unwrap_or(opt: Option, default: i64) -> i64 {
+    M opt {
+        Some(v) => v,
+        None => default
+    }
+}
+
+F option_get_or_zero(opt: Option) -> i64 {
+    M opt {
+        Some(v) => v,
+        None => 0
+    }
+}
+
+F option_map(opt: Option, add_val: i64) -> Option {
+    M opt {
+        Some(v) => Some(v + add_val),
+        None => None
+    }
+}
+
+F option_or(opt1: Option, opt2: Option) -> Option {
+    M opt1 {
+        Some(_) => opt1,
+        None => opt2
+    }
+}
+
+F option_and(opt1: Option, opt2: Option) -> Option {
+    M opt1 {
+        Some(_) => opt2,
+        None => None
+    }
+}
+
+# ==================== Result Pattern Matching ====================
+
+F result_is_ok(res: Result) -> bool {
+    M res {
+        Ok(_) => true,
+        Err(_) => false
+    }
+}
+
+F result_is_err(res: Result) -> bool {
+    M res {
+        Ok(_) => false,
+        Err(_) => true
+    }
+}
+
+F result_unwrap_or(res: Result, default: i64) -> i64 {
+    M res {
+        Ok(v) => v,
+        Err(_) => default
+    }
+}
+
+F result_get_or_zero(res: Result) -> i64 {
+    M res {
+        Ok(v) => v,
+        Err(_) => 0
+    }
+}
+
+F result_map(res: Result, add_val: i64) -> Result {
+    M res {
+        Ok(v) => Ok(v + add_val),
+        Err(e) => Err(e)
+    }
+}
+
+F result_or(res1: Result, res2: Result) -> Result {
+    M res1 {
+        Ok(_) => res1,
+        Err(_) => res2
+    }
+}
+
+# ==================== Either Pattern Matching ====================
+
+F either_is_left(e: Either) -> bool {
+    M e {
+        Left(_) => true,
+        Right(_) => false
+    }
+}
+
+F either_is_right(e: Either) -> bool {
+    M e {
+        Left(_) => false,
+        Right(_) => true
+    }
+}
+
+F either_left_or(e: Either, default: i64) -> i64 {
+    M e {
+        Left(v) => v,
+        Right(_) => default
+    }
+}
+
+F either_right_or(e: Either, default: i64) -> i64 {
+    M e {
+        Left(_) => default,
+        Right(v) => v
+    }
+}
+
+F either_swap(e: Either) -> Either {
+    M e {
+        Left(v) => Right(v),
+        Right(v) => Left(v)
+    }
+}
+
+# ==================== Color Pattern Matching ====================
+
+F color_to_num(c: Color) -> i64 {
+    M c {
+        Red => 1,
+        Green => 2,
+        Blue => 3,
+        RGB(_, _, _) => 4
+    }
+}
+
+F is_primary_color(c: Color) -> bool {
+    M c {
+        Red => true,
+        Green => true,
+        Blue => true,
+        RGB(_, _, _) => false
+    }
+}
+
+# ==================== Pair Operations ====================
+
+F pair_new(a: i64, b: i64) -> Pair {
+    Pair { first: a, second: b }
+}
+
+F pair_fst(p: Pair) -> i64 {
+    p.first
+}
+
+F pair_snd(p: Pair) -> i64 {
+    p.second
+}
+
+F pair_swap(p: Pair) -> Pair {
+    Pair { first: p.second, second: p.first }
+}
+
+F pair_map_first(p: Pair, add: i64) -> Pair {
+    Pair { first: p.first + add, second: p.second }
+}
+
+F pair_map_second(p: Pair, add: i64) -> Pair {
+    Pair { first: p.first, second: p.second + add }
+}
+
+F pair_sum(p: Pair) -> i64 {
+    p.first + p.second
+}
+
+F pair_product(p: Pair) -> i64 {
+    p.first * p.second
+}
+
+# ==================== Triple Operations ====================
+
+F triple_new(a: i64, b: i64, c: i64) -> Triple {
+    Triple { first: a, second: b, third: c }
+}
+
+F triple_sum(t: Triple) -> i64 {
+    t.first + t.second + t.third
+}
+
+F triple_product(t: Triple) -> i64 {
+    t.first * t.second * t.third
+}
+
+F triple_max(t: Triple) -> i64 {
+    I t.first >= t.second && t.first >= t.third {
+        t.first
+    } E I t.second >= t.third {
+        t.second
+    } E {
+        t.third
+    }
+}
+
+F triple_min(t: Triple) -> i64 {
+    I t.first <= t.second && t.first <= t.third {
+        t.first
+    } E I t.second <= t.third {
+        t.second
+    } E {
+        t.third
+    }
+}
+
+# ==================== Point Operations ====================
+
+F point_new(x: i64, y: i64) -> Point {
+    Point { x: x, y: y }
+}
+
+F point_add(p1: Point, p2: Point) -> Point {
+    Point { x: p1.x + p2.x, y: p1.y + p2.y }
+}
+
+F point_sub(p1: Point, p2: Point) -> Point {
+    Point { x: p1.x - p2.x, y: p1.y - p2.y }
+}
+
+F point_scale(p: Point, factor: i64) -> Point {
+    Point { x: p.x * factor, y: p.y * factor }
+}
+
+F point_distance_squared(p1: Point, p2: Point) -> i64 {
+    dx := p1.x - p2.x
+    dy := p1.y - p2.y
+    dx * dx + dy * dy
+}
+
+F point_manhattan_distance(p1: Point, p2: Point) -> i64 {
+    dx := I p1.x > p2.x { p1.x - p2.x } E { p2.x - p1.x }
+    dy := I p1.y > p2.y { p1.y - p2.y } E { p2.y - p1.y }
+    dx + dy
+}
+
+# ==================== Rectangle Operations ====================
+
+F rectangle_area(r: Rectangle) -> i64 {
+    r.width * r.height
+}
+
+F rectangle_perimeter(r: Rectangle) -> i64 {
+    2 * (r.width + r.height)
+}
+
+F rectangle_contains_point(r: Rectangle, p: Point) -> bool {
+    x_in_range := p.x >= r.top_left.x && p.x <= r.top_left.x + r.width
+    y_in_range := p.y >= r.top_left.y && p.y <= r.top_left.y + r.height
+    x_in_range && y_in_range
+}
+
+# ==================== Circle Operations ====================
+
+F circle_area_approx(c: Circle) -> i64 {
+    3 * c.radius * c.radius
+}
+
+F circle_circumference_approx(c: Circle) -> i64 {
+    2 * 3 * c.radius
+}
+
+F circle_contains_point(c: Circle, p: Point) -> bool {
+    dist_sq := point_distance_squared(c.center, p)
+    dist_sq <= c.radius * c.radius
+}
+
+# ==================== Error Handling ====================
+
+F safe_divide(a: i64, b: i64) -> Result {
+    I b == 0 {
+        Err(1)
+    } E {
+        Ok(a / b)
+    }
+}
+
+F safe_modulo(a: i64, b: i64) -> Result {
+    I b == 0 {
+        Err(2)
+    } E {
+        Ok(a % b)
+    }
+}
+
+F safe_array_access(arr: *i64, len: i64, idx: i64) -> Result {
+    I idx < 0 || idx >= len {
+        Err(3)
+    } E {
+        Ok(arr[idx])
+    }
+}
+
+# ==================== Complex Compositions ====================
+
+F find_in_array(arr: *i64, len: i64, target: i64) -> Option {
+    find_in_array_helper(arr, len, target, 0)
+}
+
+F find_in_array_helper(arr: *i64, len: i64, target: i64, idx: i64) -> Option {
+    I idx >= len {
+        None
+    } E I arr[idx] == target {
+        Some(idx)
+    } E {
+        @(arr, len, target, idx + 1)
+    }
+}
+
+F sum_of_options(opt1: Option, opt2: Option) -> Option {
+    M opt1 {
+        Some(v1) => M opt2 {
+            Some(v2) => Some(v1 + v2),
+            None => Some(v1)
+        },
+        None => opt2
+    }
+}
+
+F chain_results(res1: Result, res2: Result) -> Result {
+    M res1 {
+        Ok(v1) => M res2 {
+            Ok(v2) => Ok(v1 + v2),
+            Err(e) => Err(e)
+        },
+        Err(e) => Err(e)
+    }
+}
+
+# ==================== Nested Pattern Matching ====================
+
+F nested_match(opt_res: Option) -> i64 {
+    M opt_res {
+        Some(v) => I v > 0 { v } E { 0 },
+        None => 0 - 1
+    }
+}
+
+F classify_result(res: Result) -> i64 {
+    M res {
+        Ok(v) => I v > 100 { 3 } E I v > 50 { 2 } E { 1 },
+        Err(e) => 0 - e
+    }
+}
+
+# ==================== Test Driver ====================
+
+F main() -> i64 {
+    # Test Option
+    opt1 := Some(42)
+    opt2 := None
+    v1 := option_unwrap_or(opt1, 0)
+    v2 := option_unwrap_or(opt2, 99)
+
+    # Test Result
+    res1 := safe_divide(10, 2)
+    res2 := safe_divide(10, 0)
+    r1 := result_unwrap_or(res1, 0)
+    r2 := result_unwrap_or(res2, 0 - 1)
+
+    # Test Either
+    e1 := Left(42)
+    e2 := Right(99)
+    left_val := either_left_or(e1, 0)
+
+    # Test Pair
+    p := pair_new(10, 20)
+    sum := pair_sum(p)
+
+    # Test Triple
+    t := triple_new(2, 3, 5)
+    t_sum := triple_sum(t)
+    t_max := triple_max(t)
+
+    # Test Point
+    pt1 := point_new(3, 4)
+    pt2 := point_new(0, 0)
+    dist_sq := point_distance_squared(pt1, pt2)
+
+    # Test Rectangle
+    rect := Rectangle {
+        top_left: point_new(0, 0),
+        width: 10,
+        height: 20
+    }
+    area := rectangle_area(rect)
+
+    # Test Circle
+    circ := Circle {
+        center: point_new(0, 0),
+        radius: 5
+    }
+    circ_area := circle_area_approx(circ)
+
+    # Verify results
+    I v1 == 42 && v2 == 99 && r1 == 5 && sum == 30 && t_sum == 10 {
+        I t_max == 5 && dist_sq == 25 && area == 200 {
+            0
+        } E {
+            1
+        }
+    } E {
+        2
+    }
+}

@@ -1,0 +1,345 @@
+Vais Programming Language
+Copyright 2026 Vais Team
+
+This product includes software developed by third parties, which are licensed under the following licenses:
+
+=========================================================================
+Third-Party Software Notices and Attribution
+=========================================================================
+
+DIRECT DEPENDENCIES
+===================
+
+1. anyhow v1.0.100 - MIT OR Apache-2.0
+   Flexible concrete Error type built on std::error::Error
+   https://github.com/dtolnay/anyhow
+
+2. argon2 v0.5.3 - MIT OR Apache-2.0
+   Pure Rust implementation of the Argon2 password hashing algorithm
+   https://github.com/RustCrypto/password-hashes
+
+3. async-trait v0.1.89 - MIT OR Apache-2.0
+   Type erasure for async functions
+   https://github.com/dtolnay/async-trait
+
+4. axum v0.7.9 - MIT
+   Ergonomic and modular web framework
+   https://github.com/tokio-rs/axum
+
+5. base64 v0.21.7 - MIT OR Apache-2.0
+   Base64 encoder and decoder
+   https://github.com/marshallpierce/rust-base64
+
+6. bytes v1.11.0 - MIT
+   Utilities for working with bytes
+   https://github.com/tokio-rs/bytes
+
+7. chrono v0.4.43 - MIT OR Apache-2.0
+   Date and time library
+   https://github.com/chronotope/chrono
+
+8. clap v4.5.54 - MIT OR Apache-2.0
+   Command-line argument parser
+   https://github.com/clap-rs/clap
+
+9. colored v2.2.0 - MPL-2.0
+   Coloring text in the terminal
+   https://github.com/mackwic/colored
+
+10. config v0.14.1 - MIT OR Apache-2.0
+    Configuration management library
+    https://github.com/mehcode/config-rs
+
+11. cranelift v0.115.1 - Apache-2.0 WITH LLVM-exception
+    Code generator and JIT compiler backend
+    https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
+
+12. cranelift-codegen v0.104.3 - Apache-2.0 WITH LLVM-exception
+    Cranelift code generation
+    https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
+
+13. cranelift-jit v0.115.1 - Apache-2.0 WITH LLVM-exception
+    Cranelift JIT compiler
+    https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
+
+14. cranelift-module v0.115.1 - Apache-2.0 WITH LLVM-exception
+    Cranelift module functionality
+    https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
+
+15. cranelift-native v0.104.3 - Apache-2.0 WITH LLVM-exception
+    Cranelift native code generation
+    https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
+
+16. criterion v0.5.1 - Apache-2.0 OR MIT
+    Benchmarking library
+    https://github.com/bheisler/criterion.rs
+
+17. dashmap v5.5.3 - MIT
+    Concurrent hashmap
+    https://github.com/xacrimon/dashmap
+
+18. dirs v5.0.1 - MIT OR Apache-2.0
+    Path library for project directories
+    https://github.com/dirs-dev/dirs-rs
+
+19. dotenvy v0.15.7 - MIT
+    Environment variables management
+    https://github.com/allan2/dotenvy
+
+20. flate2 v1.1.8 - MIT OR Apache-2.0
+    Gzip and DEFLATE compression
+    https://github.com/rust-lang/flate2-rs
+
+21. futures v0.3.31 - MIT OR Apache-2.0
+    Asynchronous programming library
+    https://github.com/rust-lang/futures-rs
+
+22. gimli v0.28.1 - MIT OR Apache-2.0
+    DWARF debugging information parsing
+    https://github.com/gimli-rs/gimli
+
+23. hex v0.4.3 - MIT OR Apache-2.0
+    Hexadecimal encoding and decoding
+    https://github.com/KokaKiwi/rust-hex
+
+24. inferno v0.11.21 - CDDL-1.0
+    Flamegraph visualization tool
+    https://github.com/jonhoo/inferno
+
+25. libc v0.2.180 - MIT OR Apache-2.0
+    Rust FFI bindings to libc
+    https://github.com/rust-lang/libc
+
+26. libloading v0.8.9 - ISC
+    Dynamic library loading
+    https://github.com/nagisa/rust_libloading
+
+27. logos v0.14.4 - MIT OR Apache-2.0
+    Lexer generator
+    https://github.com/maciejhirsz/logos
+
+28. miette v7.6.0 - Apache-2.0
+    Diagnostic and error reporting library
+    https://github.com/zkat/miette
+
+29. notify v6.1.1 - CC0-1.0
+    File system event notification library
+    https://github.com/notify-rs/notify
+
+30. object v0.32.2 - Apache-2.0 OR MIT
+    Object file parsing library
+    https://github.com/gimli-rs/object
+
+31. once_cell v1.21.3 - MIT OR Apache-2.0
+    Single assignment cells and lazy statics
+    https://github.com/matklad/once_cell
+
+32. parking_lot v0.12.5 - MIT OR Apache-2.0
+    Better locks and synchronization primitives
+    https://github.com/Amanieu/parking_lot
+
+33. pretty_assertions v1.4.1 - MIT OR Apache-2.0
+    Pretty assertion failure messages
+    https://github.com/pretty-assertions/rust
+
+34. rand v0.8.5 - MIT OR Apache-2.0
+    Random number generator
+    https://github.com/rust-random/rand
+
+35. rayon v1.11.0 - MIT OR Apache-2.0
+    Data-level parallelism library
+    https://github.com/rayon-rs/rayon
+
+36. regex v1.12.2 - MIT OR Apache-2.0
+    Regular expression engine
+    https://github.com/rust-lang/regex
+
+37. reqwest v0.11.27 - MIT OR Apache-2.0
+    HTTP client library
+    https://github.com/seanmonstar/reqwest
+
+38. ropey v1.6.1 - MIT
+    Rope data structure for large texts
+    https://github.com/cessen/ropey
+
+39. rustyline v13.0.0 - MIT
+    Readline-like library in pure Rust
+    https://github.com/kkawakam/rustyline
+
+40. semver v1.0.27 - MIT OR Apache-2.0
+    Semantic versioning
+    https://github.com/dtolnay/semver
+
+41. serde v1.0.228 - MIT OR Apache-2.0
+    Serialization framework
+    https://github.com/serde-rs/serde
+
+42. serde_json v1.0.149 - MIT OR Apache-2.0
+    JSON serialization
+    https://github.com/serde-rs/json
+
+43. serde_repr v0.1.20 - MIT OR Apache-2.0
+    Derive macros for serde
+    https://github.com/dtolnay/serde-repr
+
+44. sha2 v0.10.9 - MIT OR Apache-2.0
+    SHA-2 cryptographic hash functions
+    https://github.com/RustCrypto/hashes
+
+45. sqlx v0.7.4 - MIT OR Apache-2.0
+    SQL toolkit and query builder
+    https://github.com/launchbadge/sqlx
+
+46. tar v0.4.44 - MIT OR Apache-2.0
+    TAR archive reading and writing
+    https://github.com/alexcrichton/tar-rs
+
+47. target-lexicon v0.12.16 - Apache-2.0 WITH LLVM-exception
+    Target triple parsing and naming
+    https://github.com/bytecodealliance/target-lexicon
+
+48. tempfile v3.24.0 - MIT OR Apache-2.0
+    Temporary file and directory management
+    https://github.com/Stebalien/tempfile
+
+49. thiserror v1.0.69 - MIT OR Apache-2.0
+    Error handling derive macros
+    https://github.com/dtolnay/thiserror
+
+50. tokio v1.49.0 - MIT
+    Async runtime
+    https://github.com/tokio-rs/tokio
+
+51. tokio-test v0.4.5 - MIT
+    Testing utilities for Tokio
+    https://github.com/tokio-rs/tokio
+
+52. toml v0.5.11 - MIT/Apache-2.0
+    TOML configuration parsing
+    https://github.com/alexcrichton/toml-rs
+
+53. tower v0.4.13 - MIT
+    Modular and reusable components for building robust clients and servers
+    https://github.com/tower-rs/tower
+
+54. tower-http v0.5.2 - MIT
+    HTTP utilities and middleware
+    https://github.com/tower-rs/tower-http
+
+55. tower-lsp v0.20.0 - MIT OR Apache-2.0
+    Language Server Protocol implementation
+    https://github.com/ebkalderon/tower-lsp
+
+56. tracing v0.1.44 - MIT
+    Distributed tracing
+    https://github.com/tokio-rs/tracing
+
+57. tracing-subscriber v0.3.22 - MIT
+    Tracing subscriber implementation
+    https://github.com/tokio-rs/tracing
+
+58. ureq v2.12.1 - MIT OR Apache-2.0
+    Simple HTTP client
+    https://github.com/algesten/ureq
+
+59. uuid v1.20.0 - Apache-2.0 OR MIT
+    UUID generation and parsing
+    https://github.com/uuid-rs/uuid
+
+60. wasmtime v17.0.3 - Apache-2.0 WITH LLVM-exception
+    WebAssembly runtime
+    https://github.com/bytecodealliance/wasmtime
+
+=========================================================================
+LICENSE COMPATIBILITY ANALYSIS
+=========================================================================
+
+MIT License Compatible Packages:
+- All packages licensed under MIT are fully compatible
+
+Apache-2.0 Licensed Packages:
+- All packages licensed under Apache-2.0 are compatible with MIT
+- Note: Apache-2.0 WITH LLVM-exception allows additional uses
+
+Dual Licensed Packages (MIT OR Apache-2.0):
+- These offer choice between MIT and Apache-2.0, both compatible
+
+Special Licenses:
+1. MPL-2.0 (Mozilla Public License 2.0):
+   - colored v2.2.0 - File-level copyleft but compatible for use
+   - This is a weak copyleft license; modifications to colored itself must
+     be released under MPL-2.0, but this does not affect the Vais project
+     since we only use the library without modification.
+
+2. CDDL-1.0 (Common Development and Distribution License):
+   - inferno v0.11.21 - Compatible with MIT/Apache-2.0
+   - Generally considered compatible for use in MIT projects
+
+3. CC0-1.0 (Public Domain):
+   - notify v6.1.1 - Placed in public domain
+   - Most permissive, no restrictions
+
+4. ISC (Internet Software Consortium License):
+   - libloading v0.8.9 - Functionally equivalent to MIT
+   - Fully compatible
+
+5. Unicode-3.0 (Unicode License):
+   - Used by ICU and Unicode-related crates
+   - Permissive license for Unicode character properties
+   - Compatible with MIT
+
+6. CDLA-Permissive-2.0 (Community Data License Agreement):
+   - webpki-roots v0.26.11 (transitive dependency)
+   - Data license for public key roots
+   - Compatible for use
+
+7. Apache-2.0 WITH LLVM-exception:
+   - Used by Cranelift and Wasmtime components
+   - LLVM exception allows linking without requiring source disclosure
+   - Fully compatible with MIT licensing
+
+=========================================================================
+COMPLIANCE STATUS
+=========================================================================
+
+All external dependencies are compatible with the MIT License used by Vais:
+- No GPL or LGPL dependencies that would impose source code disclosure requirements
+- No AGPL dependencies
+- All licenses are permissive or have exceptions allowing use in MIT projects
+- File-level copyleft licenses (MPL-2.0) are acceptable as we don't modify those projects
+
+The project is compliant with open source licensing best practices.
+
+=========================================================================
+TRANSITIVE DEPENDENCIES
+=========================================================================
+
+This software transitively depends on many additional packages. The full
+list of all transitive dependencies with their licenses can be obtained by
+running: cargo tree --format "{p} {l}"
+
+Key transitive dependencies include:
+- All Rust standard library components
+- Platform-specific system libraries (libc, etc.)
+- Cryptographic libraries (Blake2, SHA-2, etc.)
+- Data structure and utility libraries (numerous)
+- Build tool dependencies
+
+All transitive dependencies maintain the same compatibility as direct
+dependencies - no GPL, LGPL, or AGPL licenses are present in the
+dependency tree.
+
+=========================================================================
+ATTRIBUTION
+=========================================================================
+
+Vais gratefully acknowledges all open source projects that make this
+software possible. We are committed to respecting and following the
+licenses under which this software is distributed.
+
+For more information about a specific dependency, consult:
+- The package's source repository (URLs listed above)
+- The LICENSES directory in cargo's registry
+- The LICENSE file in each package's source
+
+Generated: 2026-01-31

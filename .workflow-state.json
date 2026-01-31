@@ -1,16 +1,14 @@
 {
   "phase": 4,
-  "request": "Phase 15 P2 - 타입 시스템 강화",
+  "request": "Phase 15 P3 - 출시 준비: 최종 검증 및 릴리스",
   "tasks": [
-    { "id": 1, "name": "크로스 플랫폼 CI 전수 통과 (P0 잔여)", "status": "completed", "model": "Sonnet" },
-    { "id": 2, "name": "라이프타임 추론 엔진 구현", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "소유권 검사기 (move/borrow) 구현", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "댕글링 포인터 방지 + 라이프타임 에러 메시지", "status": "completed", "model": "Opus" },
-    { "id": 5, "name": "안정 ABI 정의 + 버전 태깅", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "FFI ABI 보장 (C ABI 호환)", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "GAT 엣지케이스 수정", "status": "in_progress", "model": "Opus" },
-    { "id": 8, "name": "Trait Object 안전성 검사", "status": "in_progress", "model": "Sonnet" },
-    { "id": 9, "name": "Negative Impl / Specialization", "status": "in_progress", "model": "Opus" }
+    { "id": 1, "name": "스트레스 테스트 (1000줄+ 프로그램 5개)", "status": "in_progress", "model": "Sonnet" },
+    { "id": 2, "name": "퍼징 테스트 (파서/타입 체커)", "status": "in_progress", "model": "Sonnet" },
+    { "id": 3, "name": "성능 회귀 테스트 (벤치마크 자동화)", "status": "in_progress", "model": "Sonnet" },
+    { "id": 4, "name": "보안 감사 (컴파일러 보안 리뷰)", "status": "pending", "model": "Opus" },
+    { "id": 5, "name": "라이선스 정리 + NOTICE 파일", "status": "pending", "model": "Haiku" },
+    { "id": 6, "name": "v1.0.0 릴리스 노트 + 안정성 선언", "status": "pending", "model": "Sonnet" },
+    { "id": 7, "name": "메모리 안전성 테스트 (ASan)", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null
 }

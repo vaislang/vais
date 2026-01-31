@@ -194,7 +194,25 @@ Visit the [online documentation](https://sswoo.github.io/vais/) or browse the in
 - [Architecture.md](docs/Architecture.md) - Compiler architecture and design
 - [INSTALLATION.md](docs/INSTALLATION.md) - Installation guide
 - [COVERAGE.md](docs/COVERAGE.md) - Test coverage measurement guide
+- [MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) - Memory safety testing and guarantees
 - [ROADMAP.md](ROADMAP.md) - Project roadmap and progress
+
+### Memory Safety Testing
+
+Vais ensures memory safety through Rust's ownership system and comprehensive testing:
+
+```bash
+# Run memory safety tests (without AddressSanitizer)
+cargo test -p vaisc --test memory_safety_tests
+
+# Run with AddressSanitizer (requires Rust nightly)
+./scripts/asan-test.sh
+
+# Run all sanitizers (ASan, UBSan, etc.)
+./scripts/run-sanitizers.sh all
+```
+
+See [MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) for detailed information on memory safety guarantees and testing.
 
 ## Legacy
 

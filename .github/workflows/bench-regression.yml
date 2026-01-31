@@ -1,0 +1,391 @@
+name: Performance Regression Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'benches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/bench-regression.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  BENCH_THRESHOLD: 10  # Percentage threshold for regressions
+
+jobs:
+  benchmark-comparison:
+    name: Benchmark PR vs Base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install jq (for JSON parsing)
+        run: sudo apt-get update && sudo apt-get install -y jq bc
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+
+      - name: Run benchmarks on PR branch
+        run: |
+          echo "::group::Running benchmarks on PR branch"
+          cargo bench -p vais-benches --bench compile_bench -- --save-baseline pr
+          cargo bench -p vais-benches --bench compiler_benchmarks -- --save-baseline pr
+          echo "::endgroup::"
+
+      - name: Save PR benchmark results
+        run: |
+          # Create a directory to store PR results
+          mkdir -p benchmark-results/pr
+          cp -r target/criterion benchmark-results/pr/
+
+      - name: Checkout base branch
+        run: |
+          echo "::group::Checking out base branch: ${{ github.base_ref }}"
+          git fetch origin ${{ github.base_ref }}
+          git checkout ${{ github.base_ref }}
+          echo "::endgroup::"
+
+      - name: Run benchmarks on base branch
+        run: |
+          echo "::group::Running benchmarks on base branch"
+          # Clean target to avoid mixing artifacts
+          cargo clean
+          cargo bench -p vais-benches --bench compile_bench -- --save-baseline base
+          cargo bench -p vais-benches --bench compiler_benchmarks -- --save-baseline base
+          echo "::endgroup::"
+
+      - name: Save base benchmark results
+        run: |
+          mkdir -p benchmark-results/base
+          cp -r target/criterion benchmark-results/base/
+
+      - name: Restore PR results and compare
+        run: |
+          # Move base results aside
+          mv target/criterion target/criterion-base
+
+          # Restore PR results
+          cp -r benchmark-results/pr/criterion target/
+
+          # Copy base results for comparison
+          mkdir -p target/criterion-base-ref
+          find target/criterion-base -name "estimates.json" | while read f; do
+            relative_path="${f#target/criterion-base/}"
+            target_path="target/criterion/${relative_path}"
+            target_dir=$(dirname "$target_path")
+            mkdir -p "$target_dir"
+            cp "$f" "${target_path/\/base\//\/main\/}"
+          done
+
+      - name: Checkout PR branch for scripts
+        run: |
+          git checkout ${{ github.head_ref }}
+
+      - name: Compare benchmark results
+        id: compare
+        continue-on-error: true
+        run: |
+          echo "::group::Comparing benchmark results"
+
+          # Create comparison script inline (in case scripts/bench-compare.sh doesn't exist in base branch)
+          cat > compare_benchmarks.py << 'EOF'
+          #!/usr/bin/env python3
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          THRESHOLD = float(os.environ.get('BENCH_THRESHOLD', '10'))
+
+          def find_benchmarks(base_dir):
+              """Find all benchmark estimate files."""
+              benchmarks = {}
+              criterion_dir = Path(base_dir)
+              for estimates in criterion_dir.rglob('estimates.json'):
+                  # Extract benchmark name from path
+                  parts = estimates.parts
+                  if 'criterion' in parts:
+                      idx = parts.index('criterion')
+                      if idx + 1 < len(parts):
+                          bench_name = '/'.join(parts[idx+1:-2])  # Exclude baseline dir and file
+                          benchmarks[bench_name] = estimates
+              return benchmarks
+
+          def load_estimate(path):
+              """Load mean estimate from JSON file."""
+              try:
+                  with open(path) as f:
+                      data = json.load(f)
+                      return data['mean']['point_estimate']
+              except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                  return None
+
+          def format_time(ns):
+              """Format nanoseconds in human-readable format."""
+              if ns < 1000:
+                  return f"{ns:.2f} ns"
+              elif ns < 1_000_000:
+                  return f"{ns/1000:.2f} µs"
+              elif ns < 1_000_000_000:
+                  return f"{ns/1_000_000:.2f} ms"
+              else:
+                  return f"{ns/1_000_000_000:.2f} s"
+
+          def main():
+              pr_benchmarks = find_benchmarks('target/criterion')
+
+              results = []
+              regressions = []
+              improvements = []
+
+              print("## 📊 Benchmark Comparison Report\n")
+              print(f"**Regression Threshold:** {THRESHOLD}%\n")
+              print("| Status | Benchmark | Base | PR | Change |")
+              print("|--------|-----------|------|-----|--------|")
+
+              for bench_name, pr_path in sorted(pr_benchmarks.items()):
+                  # Try to find corresponding base benchmark
+                  base_path = str(pr_path).replace('/base/', '/main/')
+                  if not Path(base_path).exists():
+                      # Try alternative path structure
+                      base_path = str(pr_path)
+
+                  pr_time = load_estimate(pr_path)
+
+                  # Look for main baseline
+                  main_path = str(pr_path).replace('/base/', '/main/')
+                  base_time = load_estimate(main_path)
+
+                  if pr_time and base_time:
+                      change_pct = ((pr_time - base_time) / base_time) * 100
+
+                      # Determine status
+                      if change_pct > THRESHOLD:
+                          status = "🔴"
+                          regressions.append((bench_name, change_pct))
+                      elif change_pct > 5:
+                          status = "🟡"
+                      elif change_pct < -10:
+                          status = "🟢"
+                          improvements.append((bench_name, change_pct))
+                      elif change_pct < -2:
+                          status = "🔵"
+                      else:
+                          status = "⚪"
+
+                      change_str = f"{change_pct:+.2f}%"
+                      base_str = format_time(base_time)
+                      pr_str = format_time(pr_time)
+
+                      print(f"| {status} | `{bench_name}` | {base_str} | {pr_str} | {change_str} |")
+                      results.append((bench_name, base_time, pr_time, change_pct))
+
+              print("\n---\n")
+              print("### Legend\n")
+              print("- 🔴 **Critical Regression:** >" + str(THRESHOLD) + "% slower")
+              print("- 🟡 **Minor Regression:** 5-" + str(THRESHOLD) + "% slower")
+              print("- 🔵 **Minor Improvement:** 2-10% faster")
+              print("- 🟢 **Significant Improvement:** >10% faster")
+              print("- ⚪ **Neutral:** Within ±5%\n")
+
+              if regressions:
+                  print("### ⚠️ Regressions Detected\n")
+                  for name, pct in regressions:
+                      print(f"- `{name}`: {pct:+.2f}%")
+                  print()
+
+              if improvements:
+                  print("### ✅ Improvements\n")
+                  for name, pct in improvements:
+                      print(f"- `{name}`: {pct:.2f}%")
+                  print()
+
+              # Exit with error if regressions found
+              if regressions:
+                  print(f"\n**Result:** {len(regressions)} regression(s) exceed {THRESHOLD}% threshold")
+                  sys.exit(1)
+              else:
+                  print(f"\n**Result:** No significant regressions detected ✅")
+                  sys.exit(0)
+
+          if __name__ == '__main__':
+              main()
+          EOF
+
+          chmod +x compare_benchmarks.py
+          python3 compare_benchmarks.py | tee benchmark-comparison.md
+
+          echo "::endgroup::"
+
+      - name: Post benchmark results as PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let comparisonReport = '';
+            try {
+              comparisonReport = fs.readFileSync('benchmark-comparison.md', 'utf8');
+            } catch (e) {
+              comparisonReport = '⚠️ Could not load benchmark comparison report';
+            }
+
+            const body = `${comparisonReport}
+
+            ---
+            <details>
+            <summary>📖 How to interpret these results</summary>
+
+            - **Focus on critical regressions (🔴)**: These exceed the ${process.env.BENCH_THRESHOLD}% threshold
+            - **Investigate minor regressions (🟡)**: May indicate a trend
+            - **Celebrate improvements (🟢)**: Performance got better!
+            - **Neutral changes (⚪)**: Normal variance
+
+            To reproduce locally:
+            \`\`\`bash
+            # Benchmark base branch
+            git checkout main
+            cargo bench -p vais-benches -- --save-baseline main
+
+            # Benchmark your changes
+            git checkout your-branch
+            cargo bench -p vais-benches -- --baseline main
+            \`\`\`
+            </details>
+
+            <sub>🤖 Automated benchmark comparison • Threshold: ${process.env.BENCH_THRESHOLD}%</sub>
+            `;
+
+            // Find existing benchmark comment
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('📊 Benchmark Comparison Report')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Generate job summary
+        if: always()
+        run: |
+          if [ -f benchmark-comparison.md ]; then
+            cat benchmark-comparison.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Benchmark comparison failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-results/
+            benchmark-comparison.md
+          retention-days: 30
+
+      - name: Fail on critical regressions
+        if: steps.compare.outcome == 'failure'
+        run: |
+          echo "::error::Performance regression detected (>${BENCH_THRESHOLD}%). Please investigate before merging."
+          exit 1
+
+  # Quick compile-time check for common files
+  compile-time-check:
+    name: Quick Compile Time Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build compiler
+        run: cargo build --release -p vaisc
+
+      - name: Measure compile times
+        run: |
+          cat > measure_times.sh << 'EOF'
+          #!/bin/bash
+
+          VAISC="./target/release/vaisc"
+
+          echo "# Compile Time Measurements" | tee compile-times.txt
+          echo "" | tee -a compile-times.txt
+          echo "| File | Time (ms) |" | tee -a compile-times.txt
+          echo "|------|-----------|" | tee -a compile-times.txt
+
+          for file in benches/fixtures/*.vais; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+
+              # Run 3 times and average
+              total=0
+              for i in {1..3}; do
+                start=$(date +%s%N)
+                $VAISC "$file" --emit-ir -o /tmp/out.ll 2>&1 > /dev/null || true
+                end=$(date +%s%N)
+                elapsed=$(( (end - start) / 1000000 ))
+                total=$(( total + elapsed ))
+              done
+              avg=$(( total / 3 ))
+
+              echo "| $filename | ${avg} ms |" | tee -a compile-times.txt
+            fi
+          done
+          EOF
+
+          chmod +x measure_times.sh
+          ./measure_times.sh
+
+      - name: Display results
+        run: |
+          echo "## ⏱️ Compilation Times" >> $GITHUB_STEP_SUMMARY
+          cat compile-times.txt >> $GITHUB_STEP_SUMMARY

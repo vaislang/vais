@@ -1,0 +1,389 @@
+# Stress Test 2: Algorithms
+# Testing sorting algorithms, searching, and recursive algorithms
+
+# ==================== Sorting Algorithms ====================
+
+# Bubble sort
+F bubble_sort(arr: *i64, len: i64) -> i64 {
+    I len < 2 {
+        0
+    } E {
+        bubble_pass(arr, len, 0)
+        @(arr, len - 1)
+    }
+}
+
+F bubble_pass(arr: *i64, len: i64, i: i64) -> i64 {
+    I i >= len - 1 {
+        0
+    } E {
+        I arr[i] > arr[i + 1] {
+            swap(arr, i, i + 1)
+        } E {
+            0
+        }
+        @(arr, len, i + 1)
+    }
+}
+
+F swap(arr: *i64, i: i64, j: i64) -> i64 {
+    temp := arr[i]
+    arr[i] = arr[j]
+    arr[j] = temp
+    0
+}
+
+# Insertion sort
+F insertion_sort(arr: *i64, len: i64) -> i64 {
+    insertion_sort_helper(arr, len, 1)
+}
+
+F insertion_sort_helper(arr: *i64, len: i64, i: i64) -> i64 {
+    I i >= len {
+        0
+    } E {
+        key := arr[i]
+        insert_at(arr, i, key)
+        @(arr, len, i + 1)
+    }
+}
+
+F insert_at(arr: *i64, i: i64, key: i64) -> i64 {
+    I i == 0 {
+        arr[0] = key
+        0
+    } E I arr[i - 1] > key {
+        arr[i] = arr[i - 1]
+        @(arr, i - 1, key)
+    } E {
+        arr[i] = key
+        0
+    }
+}
+
+# Selection sort
+F selection_sort(arr: *i64, len: i64) -> i64 {
+    selection_sort_helper(arr, len, 0)
+}
+
+F selection_sort_helper(arr: *i64, len: i64, i: i64) -> i64 {
+    I i >= len - 1 {
+        0
+    } E {
+        min_idx := find_min_index(arr, i, len, i)
+        swap(arr, i, min_idx)
+        @(arr, len, i + 1)
+    }
+}
+
+F find_min_index(arr: *i64, start: i64, end: i64, min_idx: i64) -> i64 {
+    I start >= end {
+        min_idx
+    } E I arr[start] < arr[min_idx] {
+        @(arr, start + 1, end, start)
+    } E {
+        @(arr, start + 1, end, min_idx)
+    }
+}
+
+# Quick sort partition
+F partition(arr: *i64, low: i64, high: i64) -> i64 {
+    pivot := arr[high]
+    partition_helper(arr, low, high, low - 1, low, pivot)
+}
+
+F partition_helper(arr: *i64, low: i64, high: i64, i: i64, j: i64, pivot: i64) -> i64 {
+    I j >= high {
+        swap(arr, i + 1, high)
+        i + 1
+    } E I arr[j] < pivot {
+        swap(arr, i + 1, j)
+        @(arr, low, high, i + 1, j + 1, pivot)
+    } E {
+        @(arr, low, high, i, j + 1, pivot)
+    }
+}
+
+# Quick sort
+F quick_sort(arr: *i64, low: i64, high: i64) -> i64 {
+    I low < high {
+        pi := partition(arr, low, high)
+        quick_sort(arr, low, pi - 1)
+        quick_sort(arr, pi + 1, high)
+        0
+    } E {
+        0
+    }
+}
+
+# ==================== Searching Algorithms ====================
+
+# Linear search
+F linear_search(arr: *i64, len: i64, target: i64) -> i64 {
+    linear_search_helper(arr, len, target, 0)
+}
+
+F linear_search_helper(arr: *i64, len: i64, target: i64, i: i64) -> i64 {
+    I i >= len {
+        0 - 1
+    } E I arr[i] == target {
+        i
+    } E {
+        @(arr, len, target, i + 1)
+    }
+}
+
+# Binary search (assumes sorted array)
+F binary_search(arr: *i64, target: i64, low: i64, high: i64) -> i64 {
+    I low > high {
+        0 - 1
+    } E {
+        mid := (low + high) / 2
+        I arr[mid] == target {
+            mid
+        } E I arr[mid] > target {
+            @(arr, target, low, mid - 1)
+        } E {
+            @(arr, target, mid + 1, high)
+        }
+    }
+}
+
+# Jump search
+F jump_search(arr: *i64, len: i64, target: i64) -> i64 {
+    jump := isqrt(len)
+    jump_search_blocks(arr, len, target, 0, jump)
+}
+
+F jump_search_blocks(arr: *i64, len: i64, target: i64, prev: i64, jump: i64) -> i64 {
+    curr := I prev + jump < len { prev + jump } E { len }
+    I curr >= len || arr[curr] >= target {
+        linear_search_range(arr, prev, curr, target)
+    } E {
+        @(arr, len, target, curr, jump)
+    }
+}
+
+F linear_search_range(arr: *i64, start: i64, end: i64, target: i64) -> i64 {
+    I start >= end {
+        0 - 1
+    } E I arr[start] == target {
+        start
+    } E {
+        @(arr, start + 1, end, target)
+    }
+}
+
+# Integer square root (for jump search)
+F isqrt(n: i64) -> i64 {
+    I n < 2 {
+        n
+    } E {
+        isqrt_helper(n, n / 2)
+    }
+}
+
+F isqrt_helper(n: i64, guess: i64) -> i64 {
+    next := (guess + n / guess) / 2
+    I next >= guess {
+        guess
+    } E {
+        @(n, next)
+    }
+}
+
+# ==================== Mathematical Algorithms ====================
+
+# Fibonacci (recursive)
+F fib(n: i64) -> i64 {
+    I n < 2 {
+        n
+    } E {
+        @(n - 1) + @(n - 2)
+    }
+}
+
+# Fibonacci (iterative)
+F fib_iter(n: i64) -> i64 {
+    fib_iter_helper(n, 0, 1, 0)
+}
+
+F fib_iter_helper(n: i64, a: i64, b: i64, i: i64) -> i64 {
+    I i >= n {
+        a
+    } E {
+        @(n, b, a + b, i + 1)
+    }
+}
+
+# Factorial
+F factorial(n: i64) -> i64 {
+    I n < 2 {
+        1
+    } E {
+        n * @(n - 1)
+    }
+}
+
+# Greatest common divisor (Euclidean algorithm)
+F gcd(a: i64, b: i64) -> i64 {
+    I b == 0 {
+        a
+    } E {
+        @(b, a % b)
+    }
+}
+
+# Least common multiple
+F lcm(a: i64, b: i64) -> i64 {
+    (a / gcd(a, b)) * b
+}
+
+# Power function
+F power(base: i64, exp: i64) -> i64 {
+    I exp == 0 {
+        1
+    } E I exp == 1 {
+        base
+    } E {
+        base * @(base, exp - 1)
+    }
+}
+
+# Sum of digits
+F sum_digits(n: i64) -> i64 {
+    I n < 10 {
+        n
+    } E {
+        (n % 10) + @(n / 10)
+    }
+}
+
+# Is prime number
+F is_prime(n: i64) -> bool {
+    I n < 2 {
+        false
+    } E I n == 2 {
+        true
+    } E I n % 2 == 0 {
+        false
+    } E {
+        is_prime_helper(n, 3)
+    }
+}
+
+F is_prime_helper(n: i64, d: i64) -> bool {
+    I d * d > n {
+        true
+    } E I n % d == 0 {
+        false
+    } E {
+        @(n, d + 2)
+    }
+}
+
+# Count primes up to n
+F count_primes(n: i64) -> i64 {
+    count_primes_helper(n, 2, 0)
+}
+
+F count_primes_helper(n: i64, current: i64, count: i64) -> i64 {
+    I current > n {
+        count
+    } E {
+        new_count := I is_prime(current) { count + 1 } E { count }
+        @(n, current + 1, new_count)
+    }
+}
+
+# Collatz sequence length
+F collatz(n: i64) -> i64 {
+    I n == 1 {
+        0
+    } E I n % 2 == 0 {
+        1 + @(n / 2)
+    } E {
+        1 + @(3 * n + 1)
+    }
+}
+
+# ==================== Array Utilities ====================
+
+# Array sum
+F array_sum(arr: *i64, len: i64) -> i64 {
+    array_sum_helper(arr, len, 0, 0)
+}
+
+F array_sum_helper(arr: *i64, len: i64, i: i64, acc: i64) -> i64 {
+    I i >= len {
+        acc
+    } E {
+        @(arr, len, i + 1, acc + arr[i])
+    }
+}
+
+# Array minimum
+F array_min(arr: *i64, len: i64) -> i64 {
+    I len == 1 {
+        arr[0]
+    } E {
+        rest_min := @(arr, len - 1)
+        I arr[len - 1] < rest_min { arr[len - 1] } E { rest_min }
+    }
+}
+
+# Array maximum
+F array_max(arr: *i64, len: i64) -> i64 {
+    I len == 1 {
+        arr[0]
+    } E {
+        rest_max := @(arr, len - 1)
+        I arr[len - 1] > rest_max { arr[len - 1] } E { rest_max }
+    }
+}
+
+# Array reverse
+F array_reverse(arr: *i64, len: i64) -> i64 {
+    array_reverse_helper(arr, 0, len - 1)
+}
+
+F array_reverse_helper(arr: *i64, left: i64, right: i64) -> i64 {
+    I left >= right {
+        0
+    } E {
+        swap(arr, left, right)
+        @(arr, left + 1, right - 1)
+    }
+}
+
+# ==================== Test Driver ====================
+
+F main() -> i64 {
+    # Test sorting
+    test_arr: *i64 = [5, 2, 8, 1, 9, 3, 7, 4, 6]
+    bubble_sort(test_arr, 9)
+
+    # Test binary search
+    sorted: *i64 = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
+    idx := binary_search(sorted, 13, 0, 9)
+
+    # Test fibonacci
+    fib_10 := fib(10)
+    fib_iter_10 := fib_iter(10)
+
+    # Test factorial
+    fact_5 := factorial(5)
+
+    # Test prime check
+    is_17_prime := is_prime(17)
+
+    # Test gcd
+    gcd_val := gcd(48, 18)
+
+    # Verify results
+    I idx == 6 && fib_10 == 55 && fact_5 == 120 && gcd_val == 6 {
+        0
+    } E {
+        1
+    }
+}
