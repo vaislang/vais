@@ -1944,6 +1944,39 @@ impl Parser {
             return Err(ParseError::UnexpectedEof { span: start..start });
         };
 
+        // Check for associated type projection: Type::Item or <Type as Trait>::Item
+        let ty = if matches!(ty, Type::Named { .. }) && self.check(&Token::ColonColon) {
+            self.advance(); // consume ::
+            let assoc_name = self.parse_ident()?;
+
+            // Parse optional GAT generic arguments: Item<'a, T>
+            let assoc_generics = if self.check(&Token::Lt) {
+                self.advance();
+                let mut generics = Vec::new();
+                while !self.check(&Token::Gt) && !self.is_at_end() {
+                    generics.push(self.parse_type()?);
+                    if !self.check(&Token::Gt) {
+                        self.expect(&Token::Comma)?;
+                    }
+                }
+                self.expect(&Token::Gt)?;
+                generics
+            } else {
+                Vec::new()
+            };
+
+            // Check if this is a qualified path: <Type as Trait>::Item
+            // For now, we'll use the type as the base
+            Type::Associated {
+                base: Box::new(Spanned::new(ty, Span::new(start, self.prev_span().end))),
+                trait_name: None, // Could be extracted if we have `as` keyword support
+                assoc_name: assoc_name.node,
+                generics: assoc_generics,
+            }
+        } else {
+            ty
+        };
+
         let end = self.prev_span().end;
         Ok(Spanned::new(ty, Span::new(start, end)))
     }

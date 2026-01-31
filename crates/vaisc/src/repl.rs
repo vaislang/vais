@@ -469,11 +469,18 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         }
         Var(id) => format!("?{}", id),
         Unknown => "unknown".to_string(),
-        Associated { base, trait_name, assoc_name } => {
-            if let Some(tn) = trait_name {
+        Associated { base, trait_name, assoc_name, generics } => {
+            let base_str = if let Some(tn) = trait_name {
                 format!("<{} as {}>::{}", format_type(base), tn, assoc_name)
             } else {
                 format!("{}::{}", format_type(base), assoc_name)
+            };
+            // Add GAT generic arguments if present
+            if generics.is_empty() {
+                base_str
+            } else {
+                let gen_strs: Vec<String> = generics.iter().map(format_type).collect();
+                format!("{}<{}>", base_str, gen_strs.join(", "))
             }
         }
         Linear(inner) => format!("linear {}", format_type(inner)),

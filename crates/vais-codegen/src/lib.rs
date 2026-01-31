@@ -17,6 +17,7 @@
 //! - `text-codegen` (default): Enable text-based IR generation
 //! - `inkwell-codegen`: Enable inkwell-based generation (requires LLVM 17+)
 
+pub mod abi;
 pub mod advanced_opt;
 pub mod debug;
 pub mod formatter;
@@ -41,6 +42,8 @@ mod type_inference;
 mod types;
 pub mod vtable;
 pub mod cross_compile;
+#[cfg(test)]
+mod abi_tests;
 #[cfg(test)]
 mod cache_tests;
 #[cfg(test)]
@@ -1388,6 +1391,14 @@ impl CodeGenerator {
             }
         }
 
+        // Add ABI version constant
+        let abi_version = crate::abi::ABI_VERSION;
+        let abi_version_len = abi_version.len() + 1; // +1 for null terminator
+        ir.push_str(&format!(
+            "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
+            abi_version_len, abi_version
+        ));
+
         // Add string constants at the top of the module
         for (name, value) in &self.string_constants {
             let escaped = value.replace('\\', "\\\\").replace('"', "\\22").replace('\n', "\\0A");
@@ -1451,6 +1462,9 @@ impl CodeGenerator {
 
         // Add debug metadata at the end
         ir.push_str(&self.debug_info.finalize());
+
+        // Add ABI version metadata
+        ir.push_str(&format!("\n!vais.abi.version = !{{!\"{}\" }}\n", crate::abi::ABI_VERSION));
 
         Ok(ir)
     }
@@ -1703,6 +1717,14 @@ impl CodeGenerator {
             }
         }
 
+        // Add ABI version constant
+        let abi_version = crate::abi::ABI_VERSION;
+        let abi_version_len = abi_version.len() + 1; // +1 for null terminator
+        ir.push_str(&format!(
+            "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
+            abi_version_len, abi_version
+        ));
+
         // Add string constants
         for (name, value) in &self.string_constants {
             let escaped = value.replace('\\', "\\\\").replace('"', "\\22").replace('\n', "\\0A");
@@ -1766,6 +1788,9 @@ impl CodeGenerator {
 
         // Add debug metadata
         ir.push_str(&self.debug_info.finalize());
+
+        // Add ABI version metadata
+        ir.push_str(&format!("\n!vais.abi.version = !{{!\"{}\" }}\n", crate::abi::ABI_VERSION));
 
         Ok(ir)
     }

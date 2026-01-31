@@ -843,11 +843,18 @@ impl Formatter {
                 let vararg_str = if *is_vararg { ", ..." } else { "" };
                 format!("fn({}{}) -> {}", ps.join(", "), vararg_str, self.format_type(&ret.node))
             }
-            Type::Associated { base, trait_name, assoc_name } => {
-                if let Some(tn) = trait_name {
+            Type::Associated { base, trait_name, assoc_name, generics } => {
+                let base_str = if let Some(tn) = trait_name {
                     format!("<{} as {}>::{}", self.format_type(&base.node), tn, assoc_name)
                 } else {
                     format!("{}::{}", self.format_type(&base.node), assoc_name)
+                };
+                // Add GAT generic arguments if present
+                if generics.is_empty() {
+                    base_str
+                } else {
+                    let gen_strs: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
+                    format!("{}<{}>", base_str, gen_strs.join(", "))
                 }
             }
             Type::Linear(inner) => format!("linear {}", self.format_type(&inner.node)),

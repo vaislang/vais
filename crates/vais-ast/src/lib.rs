@@ -739,10 +739,13 @@ pub enum Type {
         generics: Vec<Spanned<Type>>,
     },
     /// Associated type: `<T as Trait>::Item` or `Self::Item`
+    /// GAT support: `<T as Trait>::Item<'a, B>` with generic arguments
     Associated {
         base: Box<Spanned<Type>>,
         trait_name: Option<String>,  // None for Self::Item
         assoc_name: String,
+        /// GAT generic arguments (e.g., <'a, i64> in Self::Item<'a, i64>)
+        generics: Vec<Spanned<Type>>,
     },
     /// Linear type: `linear T` - must be used exactly once
     Linear(Box<Spanned<Type>>),
@@ -1170,12 +1173,24 @@ impl std::fmt::Display for Type {
                 }
                 Ok(())
             }
-            Type::Associated { base, trait_name, assoc_name } => {
+            Type::Associated { base, trait_name, assoc_name, generics } => {
                 if let Some(trait_name) = trait_name {
-                    write!(f, "<{} as {}>::{}", base.node, trait_name, assoc_name)
+                    write!(f, "<{} as {}>::{}", base.node, trait_name, assoc_name)?;
                 } else {
-                    write!(f, "{}::{}", base.node, assoc_name)
+                    write!(f, "{}::{}", base.node, assoc_name)?;
                 }
+                // Display GAT parameters if present
+                if !generics.is_empty() {
+                    write!(f, "<")?;
+                    for (i, g) in generics.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", g.node)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
             }
             Type::Linear(inner) => write!(f, "linear {}", inner.node),
             Type::Affine(inner) => write!(f, "affine {}", inner.node),

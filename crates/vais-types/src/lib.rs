@@ -8,6 +8,8 @@ pub mod exhaustiveness;
 pub mod types;
 pub mod comptime;
 pub mod effects;
+pub mod object_safety;
+pub mod specialization;
 
 // Private modules
 mod traits;
@@ -44,6 +46,7 @@ pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
 pub use comptime::{ComptimeEvaluator, ComptimeValue};
 pub use effects::EffectInferrer;
+pub use object_safety::{ObjectSafetyViolation, check_object_safety};
 use traits::TraitImpl;
 use types::VarInfo;
 
@@ -2129,6 +2132,9 @@ impl TypeChecker {
         // Set current generics for type resolution
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&t.generics);
 
+        // Add "Self" as an implicit generic parameter for trait methods
+        self.current_generics.push("Self".to_string());
+
         // Parse associated types (with GAT support)
         let mut associated_types = HashMap::new();
         for assoc in &t.associated_types {
@@ -2185,6 +2191,9 @@ impl TypeChecker {
             );
         }
 
+        // Remove "Self" from generics before restoring
+        self.current_generics.pop();
+
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         self.traits.insert(
@@ -2214,6 +2223,66 @@ impl TypeChecker {
         Ok(())
     }
 
+    /// Validate object safety for dyn Trait types
+    fn validate_dyn_trait_object_safety(&mut self, ty: &ResolvedType) {
+        match ty {
+            ResolvedType::DynTrait { trait_name, generics } => {
+                if let Some(trait_def) = self.traits.get(trait_name) {
+                    if let Err(violations) = object_safety::check_object_safety(trait_def) {
+                        let mut error_msg = format!(
+                            "trait `{}` cannot be used as a trait object (not object-safe)",
+                            trait_name
+                        );
+                        for violation in &violations {
+                            error_msg.push_str(&format!("\n  - {}", violation.description()));
+                        }
+                        self.warnings.push(error_msg);
+                    }
+                }
+                // Check generics recursively
+                for gen in generics {
+                    self.validate_dyn_trait_object_safety(gen);
+                }
+            }
+            // Recursively check compound types
+            ResolvedType::Ref(inner) |
+            ResolvedType::RefMut(inner) |
+            ResolvedType::Pointer(inner) |
+            ResolvedType::Array(inner) |
+            ResolvedType::Optional(inner) |
+            ResolvedType::Result(inner) |
+            ResolvedType::Future(inner) |
+            ResolvedType::Range(inner) => {
+                self.validate_dyn_trait_object_safety(inner);
+            }
+            ResolvedType::ConstArray { element, .. } => {
+                self.validate_dyn_trait_object_safety(element);
+            }
+            ResolvedType::Map(k, v) => {
+                self.validate_dyn_trait_object_safety(k);
+                self.validate_dyn_trait_object_safety(v);
+            }
+            ResolvedType::Tuple(types) => {
+                for t in types {
+                    self.validate_dyn_trait_object_safety(t);
+                }
+            }
+            ResolvedType::Fn { params, ret, .. } |
+            ResolvedType::FnPtr { params, ret, .. } => {
+                for p in params {
+                    self.validate_dyn_trait_object_safety(p);
+                }
+                self.validate_dyn_trait_object_safety(ret);
+            }
+            ResolvedType::Named { generics, .. } => {
+                for g in generics {
+                    self.validate_dyn_trait_object_safety(g);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Check a function body
     fn check_function(&mut self, f: &Function) -> TypeResult<()> {
         self.push_scope();
@@ -2221,9 +2290,10 @@ impl TypeChecker {
         // Set current generic parameters
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
 
-        // Add parameters to scope
+        // Add parameters to scope and validate object safety
         for param in &f.params {
             let ty = self.resolve_type(&param.ty.node);
+            self.validate_dyn_trait_object_safety(&ty);
             self.define_var(&param.name.node, ty, param.is_mut);
         }
 
@@ -2232,6 +2302,7 @@ impl TypeChecker {
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
+        self.validate_dyn_trait_object_safety(&ret_type);
         self.current_fn_ret = Some(ret_type.clone());
         self.current_fn_name = Some(f.name.node.clone());
 
@@ -3781,10 +3852,15 @@ impl TypeChecker {
                     generics: resolved_generics,
                 }
             }
-            Type::Associated { base, trait_name, assoc_name } => {
+            Type::Associated { base, trait_name, assoc_name, generics } => {
                 let resolved_base = self.resolve_type(&base.node);
+                // Resolve GAT generic arguments
+                let resolved_generics: Vec<ResolvedType> = generics
+                    .iter()
+                    .map(|g| self.resolve_type(&g.node))
+                    .collect();
                 // Try to resolve the associated type immediately if possible
-                self.resolve_associated_type(&resolved_base, trait_name.as_deref(), assoc_name)
+                self.resolve_associated_type(&resolved_base, trait_name.as_deref(), assoc_name, &resolved_generics)
             }
             Type::Linear(inner) => {
                 ResolvedType::Linear(Box::new(self.resolve_type(&inner.node)))
@@ -3822,22 +3898,25 @@ impl TypeChecker {
     }
 
     /// Resolve an associated type to its concrete type
+    /// Supports GAT (Generic Associated Types) with generic arguments
     fn resolve_associated_type(
         &self,
         base_ty: &ResolvedType,
         trait_name: Option<&str>,
         assoc_name: &str,
+        gat_args: &[ResolvedType],
     ) -> ResolvedType {
         // Get the type name from base_ty
         let type_name = match base_ty {
             ResolvedType::Named { name, .. } => name.clone(),
             ResolvedType::Generic(name) => name.clone(),
             _ => {
-                // Can't resolve, return as-is
+                // Can't resolve, return as-is with GAT arguments
                 return ResolvedType::Associated {
                     base: Box::new(base_ty.clone()),
                     trait_name: trait_name.map(|s| s.to_string()),
                     assoc_name: assoc_name.to_string(),
+                    generics: gat_args.to_vec(),
                 };
             }
         };
@@ -3853,6 +3932,23 @@ impl TypeChecker {
                 }
                 // Check if this impl has the associated type
                 if let Some(resolved) = impl_.associated_types.get(assoc_name) {
+                    // For GAT, substitute generic parameters in the resolved type
+                    if !gat_args.is_empty() {
+                        // Get the trait definition to find GAT parameter names
+                        if let Some(trait_def) = self.traits.get(&impl_.trait_name) {
+                            if let Some(assoc_def) = trait_def.associated_types.get(assoc_name) {
+                                // Build substitution map: GAT param name -> concrete type
+                                let mut substitutions = std::collections::HashMap::new();
+                                for (i, param_name) in assoc_def.generics.iter().enumerate() {
+                                    if let Some(arg) = gat_args.get(i) {
+                                        substitutions.insert(param_name.clone(), arg.clone());
+                                    }
+                                }
+                                // Substitute GAT parameters in the resolved type
+                                return crate::types::substitute_type(resolved, &substitutions);
+                            }
+                        }
+                    }
                     return resolved.clone();
                 }
             }
@@ -3869,11 +3965,12 @@ impl TypeChecker {
             }
         }
 
-        // Return unresolved associated type
+        // Return unresolved associated type with GAT arguments
         ResolvedType::Associated {
             base: Box::new(base_ty.clone()),
             trait_name: trait_name.map(|s| s.to_string()),
             assoc_name: assoc_name.to_string(),
+            generics: gat_args.to_vec(),
         }
     }
 

@@ -750,6 +750,7 @@ pub enum ResolvedType {
     },
 
     /// Associated type: `<T as Trait>::Item` or unresolved `Self::Item`
+    /// GAT support: `<T as Trait>::Item<'a, i64>` with generic arguments
     /// After resolution, this becomes the concrete type
     Associated {
         /// Base type (T in <T as Trait>::Item)
@@ -758,6 +759,8 @@ pub enum ResolvedType {
         trait_name: Option<String>,
         /// Associated type name (Item)
         assoc_name: String,
+        /// GAT generic arguments (e.g., ['a, i64] in Self::Item<'a, i64>)
+        generics: Vec<ResolvedType>,
     },
 
     /// Linear type wrapper - must be used exactly once
@@ -968,12 +971,24 @@ impl std::fmt::Display for ResolvedType {
                 }
                 Ok(())
             }
-            ResolvedType::Associated { base, trait_name, assoc_name } => {
+            ResolvedType::Associated { base, trait_name, assoc_name, generics } => {
                 if let Some(trait_name) = trait_name {
-                    write!(f, "<{} as {}>::{}", base, trait_name, assoc_name)
+                    write!(f, "<{} as {}>::{}", base, trait_name, assoc_name)?;
                 } else {
-                    write!(f, "{}::{}", base, assoc_name)
+                    write!(f, "{}::{}", base, assoc_name)?;
                 }
+                // Display GAT parameters if present
+                if !generics.is_empty() {
+                    write!(f, "<")?;
+                    for (i, g) in generics.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ",")?;
+                        }
+                        write!(f, "{}", g)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
             }
             ResolvedType::Linear(inner) => write!(f, "linear {}", inner),
             ResolvedType::Affine(inner) => write!(f, "affine {}", inner),

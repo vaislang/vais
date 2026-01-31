@@ -352,12 +352,17 @@ impl JitCompiler {
                     effects: None,
                 }
             }
-            Type::Associated { base, trait_name, assoc_name } => {
+            Type::Associated { base, trait_name, assoc_name, generics } => {
                 let resolved_base = self.resolve_type(&base.node);
+                let resolved_generics: Vec<_> = generics
+                    .iter()
+                    .map(|g| self.resolve_type(&g.node))
+                    .collect();
                 ResolvedType::Associated {
                     base: Box::new(resolved_base),
                     trait_name: trait_name.clone(),
                     assoc_name: assoc_name.clone(),
+                    generics: resolved_generics,
                 }
             }
             Type::Linear(inner) => {
