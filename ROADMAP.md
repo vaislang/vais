@@ -688,7 +688,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ## 📊 릴리즈 준비 상태 평가
 
-### 릴리즈 배포 가능 여부: ✅ 배포 가능
+### 릴리즈 배포 가능 여부: ✅ 배포 완료 (2026-02-01)
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
@@ -700,6 +700,8 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | 배포 인프라 | ✅ | Homebrew, cargo install, .deb/.rpm, Docker, GitHub Releases |
 | 문서화 | ✅ | mdBook, Quickstart, CLAUDE.md, API 문서 |
 | CI/CD | ✅ | 3-OS 매트릭스, 코드 커버리지, cargo audit |
+| GitHub Release | ✅ | v1.0.0 바이너리 4개 플랫폼 빌드 완료 (Linux/macOS Intel/macOS ARM/Windows) |
+| repo 공개 | ✅ | public 전환 완료, 오픈소스 배포 (2026-02-01) |
 
 ### 프로젝트 실사용 가능 여부: ⚠️ 조건부 사용 가능
 
@@ -719,7 +721,11 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ### 권장 사항
 
-**릴리즈 배포**: ✅ v1.0.0 GitHub Release 배포 완료 (2026-02-01). 패키지 매니페스트 전수 갱신.
+**릴리즈 배포**: ✅ v1.0.0 GitHub Release 배포 완료 (2026-02-01).
+- GitHub Release: https://github.com/sswoo88/vais/releases/tag/v1.0.0
+- 바이너리: Linux, macOS Intel, macOS ARM, Windows 4개 플랫폼
+- 패키지 매니페스트: Homebrew, PKGBUILD, RPM, DEB, Scoop, WinGet 전수 1.0.0 갱신
+- repo: public 전환 완료
 
 **실사용**: 다음 용도에 적합:
 - 교육/학습 목적의 언어 탐색
