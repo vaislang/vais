@@ -1,8 +1,8 @@
 # Vais Community Launch Strategy
 
-**Version**: 1.0
-**Last Updated**: 2026-01-31
-**Target**: Initial community outreach for Vais 0.0.1
+**Version**: 1.1
+**Last Updated**: 2026-02-01
+**Target**: v1.0.0 production release community launch
 
 ---
 

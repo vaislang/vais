@@ -57,10 +57,10 @@ crates/
 ├── vais-lsp/      # Language Server Protocol
 └── vaisc/         # CLI compiler & REPL
 
-std/               # Standard library (24 modules)
+std/               # Standard library (47 modules)
 vscode-vais/       # VSCode extension
 docs/              # Documentation
-examples/          # Example programs (40+ files)
+examples/          # Example programs (105+ files)
 ```
 
 ## Building
@@ -213,6 +213,29 @@ cargo test -p vaisc --test memory_safety_tests
 ```
 
 See [MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) for detailed information on memory safety guarantees and testing.
+
+## Installation
+
+```bash
+# macOS/Linux (Homebrew)
+brew tap sswoo88/vais
+brew install vais
+
+# From source
+git clone https://github.com/sswoo88/vais.git
+cd vais && cargo build --release
+
+# Docker
+docker run ghcr.io/sswoo88/vais:latest --help
+```
+
+Download pre-built binaries from [Releases](https://github.com/sswoo88/vais/releases/tag/v1.0.0) (Linux, macOS Intel/ARM, Windows).
+
+## Community
+
+- [GitHub Discussions](https://github.com/sswoo88/vais/discussions) - Questions, ideas, show & tell
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute
+- [CHANGELOG](CHANGELOG.md) - Release history
 
 ## Legacy
 

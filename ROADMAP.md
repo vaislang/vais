@@ -284,8 +284,9 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **Twitter/X 계정** - @vaislang (완료일: 2026-01-31)
   - 개발 진행 상황 공유
   - #PLDev #ProgrammingLanguage 해시태그 활용
-- [x] **GitHub Discussions 활성화** - 커뮤니티 Q&A (완료일: 2026-01-31)
-  - Categories: General, Ideas, Show & Tell, Q&A
+- [x] **GitHub Discussions 활성화** - 커뮤니티 Q&A (완료일: 2026-01-31, 실제 활성화: 2026-02-01)
+  - Categories: Announcements, General, Ideas, Q&A, Polls, Show & Tell
+  - 웰컴 포스트 작성 완료: https://github.com/sswoo88/vais/discussions/14
   - .github/DISCUSSION_TEMPLATE/ 4개 템플릿
 
 #### 개발자 커뮤니티
