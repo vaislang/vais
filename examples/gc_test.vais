@@ -40,10 +40,10 @@ F test_gc_stats() -> i64 {
     gc_init()
 
     # Allocate some objects
-    i := 0
+    i := mut 0
     L i < 10 {
         ptr := gc_alloc(1024, 0)
-        i := i + 1
+        i = i + 1
     }
 
     # Check stats
@@ -72,10 +72,10 @@ F test_manual_collect() -> i64 {
     gc_init()
 
     # Allocate and track initial state
-    i := 0
+    i := mut 0
     L i < 5 {
         ptr := gc_alloc(2048, 0)
-        i := i + 1
+        i = i + 1
     }
 
     before_bytes := gc_bytes_allocated()
@@ -134,10 +134,10 @@ F test_gc_threshold() -> i64 {
     before_collections := gc_collections()
 
     # Allocate enough to trigger GC
-    i := 0
+    i := mut 0
     L i < 10 {
         ptr := gc_alloc(1024, 0)
-        i := i + 1
+        i = i + 1
     }
 
     after_collections := gc_collections()
@@ -188,14 +188,14 @@ F test_memory_stress() -> i64 {
     gc_set_threshold(16384)  # 16KB threshold
 
     # Allocate many small objects
-    i := 0
+    i := mut 0
     L i < 100 {
         ptr := gc_alloc(256, 0)
         L ptr == 0 {
             puts("  FAIL: Allocation failed during stress test")
             R 1
         }
-        i := i + 1
+        i = i + 1
     }
 
     bytes := gc_bytes_allocated()
@@ -213,27 +213,27 @@ F test_memory_stress() -> i64 {
 F main() -> i64 {
     puts("=== Vais GC Test Suite ===\n")
 
-    result := 0
+    result := mut 0
 
-    result := test_basic_alloc()
+    result = test_basic_alloc()
     L result != 0 { R result }
 
-    result := test_gc_stats()
+    result = test_gc_stats()
     L result != 0 { R result }
 
-    result := test_manual_collect()
+    result = test_manual_collect()
     L result != 0 { R result }
 
-    result := test_gc_roots()
+    result = test_gc_roots()
     L result != 0 { R result }
 
-    result := test_gc_threshold()
+    result = test_gc_threshold()
     L result != 0 { R result }
 
-    result := test_large_alloc()
+    result = test_large_alloc()
     L result != 0 { R result }
 
-    result := test_memory_stress()
+    result = test_memory_stress()
     L result != 0 { R result }
 
     puts("\n=== All Tests Passed ===")

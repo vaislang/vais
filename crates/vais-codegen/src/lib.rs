@@ -2560,6 +2560,11 @@ impl CodeGenerator {
                     .map(|f| f.signature.name.clone())
                     .unwrap_or_else(|| fn_name.clone());
 
+                let is_vararg = fn_info
+                    .as_ref()
+                    .map(|f| f.signature.is_vararg)
+                    .unwrap_or(false);
+
                 if is_indirect {
                     // Check if this is a closure with captured variables
                     let closure_info = self.closures.get(&fn_name).cloned();
@@ -2772,12 +2777,29 @@ impl CodeGenerator {
 
                     // Direct void function call
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  call void @{}({}){}\n",
-                        actual_fn_name,
-                        arg_vals.join(", "),
-                        dbg_info
-                    ));
+                    if is_vararg {
+                        let param_types: Vec<String> = fn_info
+                            .as_ref()
+                            .map(|f| f.signature.params.iter()
+                                .map(|(_, ty, _)| self.type_to_llvm(ty))
+                                .collect())
+                            .unwrap_or_default();
+                        let sig = format!("void ({}, ...)", param_types.join(", "));
+                        ir.push_str(&format!(
+                            "  call {} @{}({}){}\n",
+                            sig,
+                            actual_fn_name,
+                            arg_vals.join(", "),
+                            dbg_info
+                        ));
+                    } else {
+                        ir.push_str(&format!(
+                            "  call void @{}({}){}\n",
+                            actual_fn_name,
+                            arg_vals.join(", "),
+                            dbg_info
+                        ));
+                    }
                     Ok(("void".to_string(), ir))
                 } else if ret_ty == "i32" {
                     // Check for recursive call with decreases clause
@@ -2789,13 +2811,32 @@ impl CodeGenerator {
                     // i32 return function call - convert to i64 for consistency
                     let i32_tmp = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  {} = call i32 @{}({}){}\n",
-                        i32_tmp,
-                        actual_fn_name,
-                        arg_vals.join(", "),
-                        dbg_info
-                    ));
+                    if is_vararg {
+                        // Variadic functions need explicit signature in LLVM IR call
+                        let param_types: Vec<String> = fn_info
+                            .as_ref()
+                            .map(|f| f.signature.params.iter()
+                                .map(|(_, ty, _)| self.type_to_llvm(ty))
+                                .collect())
+                            .unwrap_or_default();
+                        let sig = format!("i32 ({}, ...)", param_types.join(", "));
+                        ir.push_str(&format!(
+                            "  {} = call {} @{}({}){}\n",
+                            i32_tmp,
+                            sig,
+                            actual_fn_name,
+                            arg_vals.join(", "),
+                            dbg_info
+                        ));
+                    } else {
+                        ir.push_str(&format!(
+                            "  {} = call i32 @{}({}){}\n",
+                            i32_tmp,
+                            actual_fn_name,
+                            arg_vals.join(", "),
+                            dbg_info
+                        ));
+                    }
                     let tmp = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = sext i32 {} to i64\n",
@@ -2812,14 +2853,32 @@ impl CodeGenerator {
                     // Direct function call with return value
                     let tmp = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  {} = call {} @{}({}){}\n",
-                        tmp,
-                        ret_ty,
-                        actual_fn_name,
-                        arg_vals.join(", "),
-                        dbg_info
-                    ));
+                    if is_vararg {
+                        let param_types: Vec<String> = fn_info
+                            .as_ref()
+                            .map(|f| f.signature.params.iter()
+                                .map(|(_, ty, _)| self.type_to_llvm(ty))
+                                .collect())
+                            .unwrap_or_default();
+                        let sig = format!("{} ({}, ...)", ret_ty, param_types.join(", "));
+                        ir.push_str(&format!(
+                            "  {} = call {} @{}({}){}\n",
+                            tmp,
+                            sig,
+                            actual_fn_name,
+                            arg_vals.join(", "),
+                            dbg_info
+                        ));
+                    } else {
+                        ir.push_str(&format!(
+                            "  {} = call {} @{}({}){}\n",
+                            tmp,
+                            ret_ty,
+                            actual_fn_name,
+                            arg_vals.join(", "),
+                            dbg_info
+                        ));
+                    }
                     Ok((tmp, ir))
                 }
             }
@@ -3612,15 +3671,12 @@ impl CodeGenerator {
                     return Ok((result, ir));
                 }
 
-                // Build full method name: StructName_methodName
-                let full_method_name = if let ResolvedType::Named { name, generics } = &recv_type {
-                    // For generic types with concrete type arguments, use the mangled name
-                    if !generics.is_empty() {
-                        let mangled_name = self.mangle_struct_name(name, generics);
-                        format!("{}_{}", mangled_name, method_name)
-                    } else {
-                        format!("{}_{}", name, method_name)
-                    }
+                // Build full method name: ResolvedStructName_methodName
+                // Use resolve_struct_name to match definition naming (e.g., Pair → Pair$i64)
+                // For non-generic structs, this is a no-op (Vec → Vec)
+                let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
+                    let resolved = self.resolve_struct_name(name);
+                    format!("{}_{}", resolved, method_name)
                 } else {
                     method_name.clone()
                 };

@@ -1,60 +1,60 @@
 ; ModuleID = 'contract_macro_test'
 source_filename = "<vais>"
 
-declare i64 @fputs(i8*, i64)
-declare i64 @labs(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare void @free(i64)
-declare double @fabs(double)
-declare i32 @usleep(i64)
+declare i64 @fseek(i64, i64, i64)
+declare i32 @tolower(i32)
+declare i32 @strcmp(i8*, i8*)
 define i64 @fopen_ptr(i64 %path, i8* %mode) {
 entry:
   %0 = call i64 @fopen(i64 %path, i8* %mode)
   ret i64 %0
 }
-declare i64 @vais_gc_print_stats()
-declare i32 @isdigit(i32)
-declare i32 @isalpha(i32)
-declare double @atof(i8*)
-declare i32 @puts(i8*)
-declare i32 @fclose(i64)
-declare i64 @vais_gc_collect()
-declare i32 @tolower(i32)
-declare i64 @fopen(i8*, i8*)
-declare i64 @vais_gc_add_root(i64)
-declare i64 @strlen(i8*)
 declare i64 @strcat(i64, i8*)
 declare i64 @vais_gc_set_threshold(i64)
-declare i64 @vais_gc_collections()
-declare i32 @toupper(i32)
-declare i64 @ftell(i64)
-declare i64 @fflush(i64)
+declare i32 @rand()
+declare i64 @memcpy(i64, i64, i64)
+declare i32 @puts(i8*)
+declare double @atof(i8*)
+declare void @srand(i32)
+declare i32 @atoi(i8*)
+declare i64 @vais_gc_alloc(i64, i32)
+declare void @exit(i32)
+declare i32 @usleep(i64)
+declare i64 @fputc(i64, i64)
+declare i64 @fgetc(i64)
+declare i64 @strlen(i8*)
 declare i64 @malloc(i64)
 declare i64 @fread(i64, i64, i64, i64)
-declare i64 @atol(i64)
-declare i64 @memcpy_str(i64, i8*, i64)
-declare i64 @fputc(i64, i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i64 @feof(i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @fseek(i64, i64, i64)
-declare i64 @strcpy(i64, i8*)
-declare i64 @vais_gc_remove_root(i64)
-declare i64 @vais_gc_init()
-declare void @srand(i32)
-declare i32 @rand()
 declare i64 @fgets(i64, i64, i64)
-declare i32 @printf(i8*, ...)
-declare i64 @vais_gc_objects_count()
-declare i32 @putchar(i32)
 declare i64 @vais_gc_bytes_allocated()
-declare void @exit(i32)
+declare i32 @isdigit(i32)
+declare i64 @vais_gc_print_stats()
+declare i64 @vais_gc_init()
+declare i64 @vais_gc_objects_count()
 declare double @sqrt(double)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i32 @toupper(i32)
+declare void @free(i64)
+declare i64 @labs(i64)
+declare i64 @vais_gc_collect()
+declare i64 @strcpy(i64, i8*)
+declare i64 @fputs(i8*, i64)
+declare i64 @ftell(i64)
+declare i32 @fclose(i64)
+declare i64 @vais_gc_collections()
+declare i64 @fopen(i8*, i8*)
 declare i32 @sched_yield()
-declare i32 @atoi(i8*)
-declare i32 @strcmp(i8*, i8*)
-declare i64 @vais_gc_alloc(i64, i32)
-declare i64 @fgetc(i64)
+declare i64 @atol(i8*)
+declare i64 @fflush(i64)
+declare i64 @feof(i64)
+declare i32 @putchar(i32)
+declare double @fabs(double)
+declare i32 @printf(i8*, ...)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i32 @isalpha(i32)
+declare i64 @vais_gc_add_root(i64)
+declare i64 @memcpy_str(i64, i8*, i64)
 @__vais_abi_version = constant [6 x i8] c"1.0.0\00"
 
 define i64 @safe_divide(i64 %a, i64 %b) {
@@ -217,12 +217,12 @@ entry:
 ; Contract runtime declarations
 declare void @llvm.assume(i1)
 
-@.str.contract.1 = private unnamed_addr constant [8 x i8] c"unknown\00"
-@.str.contract.8 = private unnamed_addr constant [26 x i8] c"c != 0 (division by zero)\00"
-@.str.contract.4 = private unnamed_addr constant [32 x i8] c"divisor != 0 (division by zero)\00"
 @.str.contract.0 = private unnamed_addr constant [26 x i8] c"b != 0 (division by zero)\00"
-@.str.contract.6 = private unnamed_addr constant [31 x i8] c"modulo != 0 (division by zero)\00"
-@.str.contract.2 = private unnamed_addr constant [12 x i8] c"safe_divide\00"
-@.str.contract.5 = private unnamed_addr constant [11 x i8] c"auto_infer\00"
-@.str.contract.3 = private unnamed_addr constant [12 x i8] c"safe_modulo\00"
+@.str.contract.1 = private unnamed_addr constant [8 x i8] c"unknown\00"
 @.str.contract.7 = private unnamed_addr constant [12 x i8] c"complex_div\00"
+@.str.contract.2 = private unnamed_addr constant [12 x i8] c"safe_divide\00"
+@.str.contract.8 = private unnamed_addr constant [26 x i8] c"c != 0 (division by zero)\00"
+@.str.contract.3 = private unnamed_addr constant [12 x i8] c"safe_modulo\00"
+@.str.contract.5 = private unnamed_addr constant [11 x i8] c"auto_infer\00"
+@.str.contract.4 = private unnamed_addr constant [32 x i8] c"divisor != 0 (division by zero)\00"
+@.str.contract.6 = private unnamed_addr constant [31 x i8] c"modulo != 0 (division by zero)\00"

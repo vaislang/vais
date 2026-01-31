@@ -2062,10 +2062,6 @@ impl TypeChecker {
     /// Register a function signature
     fn register_function(&mut self, f: &Function) -> TypeResult<()> {
         let name = f.name.node.clone();
-        if self.functions.contains_key(&name) {
-            // Allow re-declaration of functions (e.g., from imports or std modules)
-            return Ok(());
-        }
 
         // Set current generics for type resolution
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
