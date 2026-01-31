@@ -359,8 +359,8 @@ examples/          # 예제 코드 (40+ 파일) ✅
 #### Async 런타임
 - [x] **경량 Async 런타임 구현** - kqueue 기반 이벤트 루프 (EventLoop + ReactorRuntime), 이벤트 소스 등록/대기/폴링, 와이커 파이프 (완료일: 2026-01-31)
 - [x] **Task Spawner** - `spawn()` 함수로 비동기 태스크 생성 및 스케줄링, reactor_spawn/reactor_block_on/reactor_run 전역 API (완료일: 2026-01-31)
-- [ ] **Async I/O 통합** - 파일/네트워크 I/O의 비동기 처리 실제 동작
-- [ ] **런타임 E2E 테스트** - async/await 코드가 실제로 비동기 실행되는지 검증 (최소 10개 테스트)
+- [x] **Async I/O 통합** - async 함수 호출 시 타입 체커가 Future<T> 반환하도록 수정, 파이프라인 전체 동작 검증 (완료일: 2026-01-31)
+- [x] **런타임 E2E 테스트** - async/await 13개 E2E 테스트 작성 (기본 await, 다중 파라미터, 순차/체인/3단계 체인, spawn, 조건문, 산술, sync/async 혼합, println 출력) (완료일: 2026-01-31)
 
 #### GC 고도화
 - [x] **세대별 GC (Generational GC)** - Young/Old 세대 분리, Minor/Major GC 구분, 카드 마킹, 리멤버드 셋, 프로모션 에이지 (완료일: 2026-01-31)

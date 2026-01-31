@@ -1504,3 +1504,237 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// ==================== Async/Await E2E Tests ====================
+
+#[test]
+fn e2e_async_basic_await() {
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x * 2
+}
+
+F main() -> i64 {
+    result := compute(21).await
+    result - 42
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_multiple_params() {
+    let source = r#"
+A F add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+F main() -> i64 {
+    result := add(30, 12).await
+    result - 42
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_sequential_awaits() {
+    let source = r#"
+A F double(x: i64) -> i64 {
+    x * 2
+}
+
+A F triple(x: i64) -> i64 {
+    x * 3
+}
+
+F main() -> i64 {
+    a := double(10).await
+    b := triple(10).await
+    a + b - 50
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_chained_await() {
+    let source = r#"
+A F double(x: i64) -> i64 {
+    x * 2
+}
+
+A F add_ten(x: i64) -> i64 {
+    x + 10
+}
+
+A F pipeline(x: i64) -> i64 {
+    doubled := double(x).await
+    result := add_ten(doubled).await
+    result
+}
+
+F main() -> i64 {
+    r := pipeline(5).await
+    r - 20
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_spawn_basic() {
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x * 3
+}
+
+F main() -> i64 {
+    r := (spawn compute(10)).await
+    r - 30
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_return_expression() {
+    let source = r#"
+A F expr_body(x: i64) -> i64 = x * x
+
+F main() -> i64 {
+    r := expr_body(7).await
+    r - 49
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_with_conditionals() {
+    let source = r#"
+A F abs_val(x: i64) -> i64 {
+    I x < 0 { 0 - x } E { x }
+}
+
+F main() -> i64 {
+    a := abs_val(-5).await
+    b := abs_val(3).await
+    a + b - 8
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_result_in_arithmetic() {
+    let source = r#"
+A F get_val(x: i64) -> i64 {
+    x + 1
+}
+
+F main() -> i64 {
+    a := get_val(10).await
+    b := get_val(20).await
+    total := a * 2 + b
+    total - 43
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_with_println() {
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x * 2
+}
+
+F main() -> i64 {
+    result := compute(21).await
+    println("result = {}", result)
+    0
+}
+"#;
+    assert_stdout_contains(source, "result = 42");
+}
+
+#[test]
+fn e2e_async_three_level_chain() {
+    let source = r#"
+A F step1(x: i64) -> i64 {
+    x + 1
+}
+
+A F step2(x: i64) -> i64 {
+    v := step1(x).await
+    v * 2
+}
+
+A F step3(x: i64) -> i64 {
+    v := step2(x).await
+    v + 100
+}
+
+F main() -> i64 {
+    r := step3(4).await
+    r - 110
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_mixed_sync_async() {
+    let source = r#"
+F sync_double(x: i64) -> i64 = x * 2
+
+A F async_add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+F main() -> i64 {
+    x := sync_double(5)
+    y := async_add(x, 3).await
+    y - 13
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_spawn_chained() {
+    let source = r#"
+A F double(x: i64) -> i64 {
+    x * 2
+}
+
+A F add_one(x: i64) -> i64 {
+    x + 1
+}
+
+F main() -> i64 {
+    a := (spawn double(10)).await
+    b := (spawn add_one(a)).await
+    b - 21
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_async_multiple_spawn_await() {
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x * x
+}
+
+F main() -> i64 {
+    a := (spawn compute(3)).await
+    b := (spawn compute(4)).await
+    c := (spawn compute(5)).await
+    a + b + c - 50
+}
+"#;
+    assert_exit_code(source, 0);
+}

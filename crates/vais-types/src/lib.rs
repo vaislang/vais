@@ -2720,6 +2720,10 @@ impl TypeChecker {
                                 self.unify(&sig.params[i].1, &arg_type)?;
                             }
                         }
+                        // For async functions, wrap the return type in Future
+                        if sig.is_async {
+                            return Ok(ResolvedType::Future(Box::new(sig.ret.clone())));
+                        }
                         return Ok(sig.ret.clone());
                     }
                 }
