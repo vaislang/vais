@@ -1446,6 +1446,41 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
     Ok(canonical_path)
 }
 
+/// Find the HTTP runtime C source file for linking.
+/// Searches: std/ relative to cwd, then next to compiler executable.
+fn find_http_runtime() -> Option<PathBuf> {
+    // Try std/ relative to current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        let http_rt = cwd.join("std").join("http_runtime.c");
+        if http_rt.exists() {
+            return Some(http_rt);
+        }
+    }
+
+    // Try next to the compiler executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // Check ../std/ relative to the binary
+            if let Some(parent) = exe_dir.parent() {
+                let http_rt = parent.join("std").join("http_runtime.c");
+                if http_rt.exists() {
+                    return Some(http_rt);
+                }
+            }
+        }
+    }
+
+    // Try VAIS_HTTP_RUNTIME environment variable
+    if let Ok(rt_path) = std::env::var("VAIS_HTTP_RUNTIME") {
+        let path = PathBuf::from(&rt_path);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 /// Find the directory containing libvais_gc.a for GC runtime linking.
 /// Searches: next to the compiler executable, then target/release/ in cwd.
 fn find_gc_library() -> Option<PathBuf> {
@@ -1578,6 +1613,14 @@ fn compile_to_native(
         args.push(static_lib.to_str().unwrap_or("libvais_gc.a").to_string());
         if verbose {
             println!("{} Linking GC runtime from: {}", "info:".blue().bold(), static_lib.display());
+        }
+    }
+
+    // Link HTTP runtime if available (for std/http.vais support)
+    if let Some(http_rt_path) = find_http_runtime() {
+        args.push(http_rt_path.to_str().unwrap_or("http_runtime.c").to_string());
+        if verbose {
+            println!("{} Linking HTTP runtime from: {}", "info:".blue().bold(), http_rt_path.display());
         }
     }
 

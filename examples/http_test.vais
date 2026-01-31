@@ -1,0 +1,111 @@
+# HTTP module API test
+# Tests the HTTP runtime functions (string utils, URL parsing, etc.)
+
+X F __strlen(s: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __str_eq_ignore_case(a: str, b: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __parse_url_host(url: str) -> str
+X F __parse_url_port(url: str) -> i64
+X F __parse_url_path(url: str) -> str
+X F __find_header_end(buffer: i64, len: i64) -> i64
+
+F main() -> i64 {
+    puts("=== HTTP Runtime Test ===")
+
+    # Test 1: __strlen
+    puts("Test 1: strlen")
+    len := __strlen("hello")
+    I len == 5 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 2: __strlen empty
+    puts("Test 2: strlen empty")
+    len2 := __strlen("")
+    I len2 == 0 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 3: __str_eq equal
+    puts("Test 3: str_eq equal")
+    I __str_eq("hello", "hello") == 1 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 4: __str_eq different
+    puts("Test 4: str_eq different")
+    I __str_eq("hello", "world") == 0 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 5: __str_eq_ignore_case
+    puts("Test 5: str_eq_ignore_case")
+    I __str_eq_ignore_case("Hello", "hello") == 1 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 6: __str_eq_ignore_case different
+    puts("Test 6: str_eq_ignore_case different")
+    I __str_eq_ignore_case("Hello", "world") == 0 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 7: __parse_url_host
+    puts("Test 7: parse_url_host")
+    host := __parse_url_host("http://example.com:8080/api")
+    I __str_eq(host, "example.com") == 1 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 8: __parse_url_port
+    puts("Test 8: parse_url_port")
+    port := __parse_url_port("http://example.com:8080/api")
+    I port == 8080 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 9: __parse_url_path
+    puts("Test 9: parse_url_path")
+    path := __parse_url_path("http://example.com:8080/api/v1")
+    I __str_eq(path, "/api/v1") == 1 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 10: __parse_url_port no port
+    puts("Test 10: parse_url_port no port")
+    port2 := __parse_url_port("http://example.com/api")
+    I port2 == 0 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 11: __parse_url_path root
+    puts("Test 11: parse_url_path root only")
+    path2 := __parse_url_path("http://example.com")
+    I __str_eq(path2, "/") == 1 { puts("  PASS") } E { puts("  FAIL") }
+
+    # Test 12: __str_copy_to
+    puts("Test 12: str_copy_to")
+    buf := __malloc(64)
+    written := __str_copy_to(buf, "test")
+    I written == 4 { puts("  PASS") } E { puts("  FAIL") }
+    __free(buf)
+
+    # Test 13: __i64_to_str
+    puts("Test 13: i64_to_str")
+    buf2 := __malloc(32)
+    w2 := __i64_to_str(buf2, 42)
+    I w2 == 2 { puts("  PASS") } E { puts("  FAIL") }
+    __free(buf2)
+
+    # Test 14: __find_header_end
+    puts("Test 14: find_header_end")
+    hdr_buf := __malloc(32)
+    __str_copy_to(hdr_buf, "GET / HTTP/1.1")
+    store_byte(hdr_buf + 14, 13)
+    store_byte(hdr_buf + 15, 10)
+    store_byte(hdr_buf + 16, 13)
+    store_byte(hdr_buf + 17, 10)
+    hdr_end := __find_header_end(hdr_buf, 18)
+    I hdr_end == 18 { puts("  PASS") } E { puts("  FAIL") }
+    __free(hdr_buf)
+
+    # Test 15: __find_header_end not found
+    puts("Test 15: find_header_end not found")
+    hdr_buf2 := __malloc(16)
+    __str_copy_to(hdr_buf2, "no headers")
+    hdr_end2 := __find_header_end(hdr_buf2, 10)
+    I hdr_end2 == -1 { puts("  PASS") } E { puts("  FAIL") }
+    __free(hdr_buf2)
+
+    # Test 16: __parse_url_host with https
+    puts("Test 16: parse_url_host https")
+    host2 := __parse_url_host("https://secure.example.com/path")
+    I __str_eq(host2, "secure.example.com") == 1 { puts("  PASS") } E { puts("  FAIL") }
+
+    puts("=== Done: 16 tests ===")
+    0
+}

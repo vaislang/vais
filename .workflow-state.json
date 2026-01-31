@@ -1,13 +1,14 @@
 {
-  "phase": 5,
+  "phase": 4,
   "request": "대형 프로젝트 도입 수준 달성",
   "tasks": [
     { "id": 1, "name": "컴파일러 안정성 - unwrap/panic 제거", "status": "completed", "model": "Opus" },
     { "id": 2, "name": "Borrow Checker 컴파일 파이프라인 통합", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "표준 라이브러리 런타임 구현 완성", "status": "pending", "model": "Opus" },
+    { "id": "3-1", "name": "HTTP C 런타임 구현", "status": "in_progress", "model": "Opus" },
+    { "id": "3-2", "name": "JSON/Regex E2E 테스트 추가", "status": "pending", "model": "Haiku" },
+    { "id": "3-3", "name": "HTTP E2E 테스트", "status": "pending", "model": "Sonnet" },
     { "id": 4, "name": "패키지 매니저 클라이언트 완성", "status": "pending", "model": "Sonnet" },
     { "id": 5, "name": "증분 컴파일 실전 적용", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": null,
-  "lastCompleted": "Borrow Checker 컴파일 파이프라인 통합"
+  "currentTask": "3-1"
 }
