@@ -5,15 +5,13 @@ F print_num(n: i64) -> i64 {
     d2 := n / 100
     I d2 > 0 {
         putchar(d2 + 48)
-        R 0
-    } E {}
+    } E { 0 }
 
     # Print tens digit
     d1 := (n / 10) % 10
     I n >= 10 {
         putchar(d1 + 48)
-        R 0
-    } E {}
+    } E { 0 }
 
     # Print ones digit
     putchar(n % 10 + 48)
