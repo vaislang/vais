@@ -230,9 +230,8 @@ impl CodeGenerator {
         }
 
         let mut ir = String::new();
-        ir.push_str("; Contract runtime function declarations\n");
-        ir.push_str("declare i64 @__contract_fail(i64, i8*, i8*, i64, i8*)\n");
-        ir.push_str("declare i64 @__panic(i8*)\n");
+        ir.push_str("; Contract runtime declarations\n");
+        // Note: __contract_fail and __panic are now defined in generate_helper_functions()
         // LLVM assume intrinsic for optimization hints (used by assume() in release mode)
         ir.push_str("declare void @llvm.assume(i1)\n");
         ir.push('\n');

@@ -65,7 +65,12 @@ impl CodeGenerator {
                     return false;
                 }
                 if let Some(local) = self.locals.get(name) {
-                    // Parameters are passed by value (even struct types)
+                    // The `self` parameter in methods is passed as a pointer (%Struct* %self),
+                    // not by value, so it should not be treated as a value expression.
+                    if name == "self" && local.is_param() && matches!(local.ty, ResolvedType::Named { .. }) {
+                        return false;
+                    }
+                    // Other parameters are passed by value (even struct types)
                     // so they produce values directly
                     if local.is_param() {
                         return true;

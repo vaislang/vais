@@ -1674,8 +1674,11 @@ impl CodeGenerator {
             }
         }
 
-        // Generate non-generic struct types
+        // Generate non-generic struct types (skip already-emitted specialized generics)
         for (name, info) in &self.structs {
+            if self.generated_structs.contains_key(name) {
+                continue;
+            }
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
@@ -2509,18 +2512,6 @@ impl CodeGenerator {
                     // Check if this is a closure with captured variables
                     let closure_info = self.closures.get(&fn_name).cloned();
 
-                    // Get the actual LLVM name for this variable
-                    let llvm_var_name = self.locals.get(&fn_name)
-                        .map(|l| l.llvm_name.clone())
-                        .unwrap_or_else(|| fn_name.clone());
-
-                    // Indirect call (lambda): load function pointer and call
-                    let ptr_tmp = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = load i64, i64* %{}\n",
-                        ptr_tmp, llvm_var_name
-                    ));
-
                     // Prepend captured values to arguments if this is a closure
                     let mut all_args = Vec::new();
                     if let Some(ref info) = closure_info {
@@ -2529,6 +2520,47 @@ impl CodeGenerator {
                         }
                     }
                     all_args.extend(arg_vals);
+
+                    // If we have closure info, we know the exact function name - call directly
+                    if let Some(ref info) = closure_info {
+                        let tmp = self.next_temp(counter);
+                        let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
+                        ir.push_str(&format!(
+                            "  {} = call i64 @{}({}){}\n",
+                            tmp, info.func_name, all_args.join(", "), dbg_info
+                        ));
+                        return Ok((tmp, ir));
+                    }
+
+                    // Get the local variable info
+                    let local_info = self.locals.get(&fn_name).cloned();
+                    let is_ssa_or_param = local_info.as_ref()
+                        .map(|l| l.is_ssa() || l.is_param())
+                        .unwrap_or(false);
+
+                    let ptr_tmp = if is_ssa_or_param {
+                        // SSA or param: the value IS the function pointer (as i64), no load needed
+                        let local = local_info.as_ref().unwrap();
+                        let val = &local.llvm_name;
+                        if local.is_ssa() {
+                            // SSA values already include the % prefix (e.g., "%5")
+                            val.clone()
+                        } else {
+                            // Param names don't include % prefix
+                            format!("%{}", val)
+                        }
+                    } else {
+                        // Alloca: load the function pointer from the stack slot
+                        let llvm_var_name = local_info.as_ref()
+                            .map(|l| l.llvm_name.clone())
+                            .unwrap_or_else(|| fn_name.clone());
+                        let tmp = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = load i64, i64* %{}\n",
+                            tmp, llvm_var_name
+                        ));
+                        tmp
+                    };
 
                     // Build function type signature for indirect call (including captures)
                     let arg_types: Vec<String> = all_args
@@ -3609,8 +3641,21 @@ impl CodeGenerator {
             Expr::Ref(inner) => {
                 // For simple references, just return the address
                 if let Expr::Ident(name) = &inner.node {
-                    if let Some(local) = self.locals.get(name.as_str()) {
-                        return Ok((format!("%{}", local.llvm_name), String::new()));
+                    if let Some(local) = self.locals.get(name.as_str()).cloned() {
+                        if local.is_alloca() {
+                            // Alloca variables already have an address
+                            return Ok((format!("%{}", local.llvm_name), String::new()));
+                        } else {
+                            // SSA/Param values need to be spilled to stack to take their address
+                            let mut ir = String::new();
+                            let llvm_ty = self.type_to_llvm(&local.ty);
+                            let (val, val_ir) = self.generate_expr(inner, counter)?;
+                            ir.push_str(&val_ir);
+                            let tmp_alloca = self.next_temp(counter);
+                            ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
+                            ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_alloca));
+                            return Ok((tmp_alloca, ir));
+                        }
                     }
                 }
                 // For complex expressions, evaluate and return
@@ -3888,6 +3933,10 @@ impl CodeGenerator {
                         if local.is_param() {
                             // Parameters are already values, use directly
                             captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
+                        } else if local.is_ssa() {
+                            // SSA values are already the value itself, use directly
+                            // llvm_name for SSA includes % prefix (e.g., "%5") or is a literal (e.g., "10")
+                            captured_vars.push((cap_name.clone(), ty, local.llvm_name.clone()));
                         } else {
                             // Load from alloca
                             let tmp = self.next_temp(counter);
@@ -3965,10 +4014,18 @@ impl CodeGenerator {
                 self.current_function = saved_function;
                 self.locals = saved_locals;
 
+                // Emit ptrtoint as a proper instruction (not a constant expression)
+                // so the result is a clean SSA temp that can be used anywhere
+                let fn_ptr_tmp = self.next_temp(counter);
+                capture_ir.push_str(&format!(
+                    "  {} = ptrtoint i64 ({})* @{} to i64\n",
+                    fn_ptr_tmp, param_types.join(", "), lambda_name
+                ));
+
                 // Store lambda info for Let statement to pick up
                 if captured_vars.is_empty() {
                     self.last_lambda_info = None;
-                    Ok((format!("ptrtoint (i64 ({})* @{} to i64)", param_types.join(", "), lambda_name), capture_ir))
+                    Ok((fn_ptr_tmp, capture_ir))
                 } else {
                     // Store closure info with captured variable values
                     self.last_lambda_info = Some(ClosureInfo {
@@ -3977,7 +4034,7 @@ impl CodeGenerator {
                             .map(|(name, _, val)| (name.clone(), val.clone()))
                             .collect(),
                     });
-                    Ok((format!("ptrtoint (i64 ({})* @{} to i64)", param_types.join(", "), lambda_name), capture_ir))
+                    Ok((fn_ptr_tmp, capture_ir))
                 }
             }
 

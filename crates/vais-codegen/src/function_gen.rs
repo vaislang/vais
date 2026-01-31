@@ -213,6 +213,45 @@ impl CodeGenerator {
     pub(crate) fn generate_helper_functions(&self) -> String {
         let mut ir = String::new();
 
+        // Declare C library functions needed by runtime helpers
+        // Note: exit and strlen are already declared by builtins
+        ir.push_str("\n; C library function declarations\n");
+        ir.push_str("declare i64 @write(i32, i8*, i64)\n");
+
+        // Global constant for newline (used by panic functions)
+        ir.push_str("\n; Global constants for runtime functions\n");
+        ir.push_str("@.panic_newline = private unnamed_addr constant [2 x i8] c\"\\0A\\00\"\n");
+
+        // __panic: runtime panic function (used by assert)
+        // Prints message to stderr (fd=2) and exits with code 1
+        ir.push_str("\n; Runtime panic function (used by assert)\n");
+        ir.push_str("define i64 @__panic(i8* %msg) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ; Calculate message length\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %msg)\n");
+        ir.push_str("  ; Write message to stderr (fd=2)\n");
+        ir.push_str("  %0 = call i64 @write(i32 2, i8* %msg, i64 %len)\n");
+        ir.push_str("  ; Write newline\n");
+        ir.push_str("  %1 = call i64 @write(i32 2, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.panic_newline, i64 0, i64 0), i64 1)\n");
+        ir.push_str("  call void @exit(i32 1)\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+
+        // __contract_fail: runtime contract failure function
+        // Prints contract failure message to stderr and exits with code 1
+        ir.push_str("\n; Runtime contract failure function\n");
+        ir.push_str("define i64 @__contract_fail(i64 %kind, i8* %condition, i8* %file, i64 %line, i8* %func) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ; Calculate message length\n");
+        ir.push_str("  %len = call i64 @strlen(i8* %condition)\n");
+        ir.push_str("  ; Write contract failure message to stderr (fd=2)\n");
+        ir.push_str("  %0 = call i64 @write(i32 2, i8* %condition, i64 %len)\n");
+        ir.push_str("  ; Write newline\n");
+        ir.push_str("  %1 = call i64 @write(i32 2, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.panic_newline, i64 0, i64 0), i64 1)\n");
+        ir.push_str("  call void @exit(i32 1)\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+
         // __load_byte: load a byte from memory address
         ir.push_str("\n; Helper function: load byte from memory\n");
         ir.push_str("define i64 @__load_byte(i64 %ptr) {\n");
@@ -715,6 +754,10 @@ impl CodeGenerator {
         f: &Function,
         span: Span,
     ) -> CodegenResult<String> {
+        // Resolve generic struct aliases (e.g., "Pair" -> "Pair$i64")
+        let resolved_struct_name = self.resolve_struct_name(struct_name);
+        let struct_name = resolved_struct_name.as_str();
+
         // Method name: StructName_methodName
         let method_name = format!("{}_{}", struct_name, f.name.node);
 

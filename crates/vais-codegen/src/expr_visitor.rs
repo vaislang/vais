@@ -319,8 +319,21 @@ impl ExprVisitor for CodeGenerator {
 
     fn visit_ref(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         if let Expr::Ident(name) = &inner.node {
-            if self.locals.contains_key(name.as_str()) {
-                return Ok((format!("%{}", name), String::new()));
+            if let Some(local) = self.locals.get(name.as_str()).cloned() {
+                if local.is_alloca() {
+                    // Alloca variables already have an address
+                    return Ok((format!("%{}", local.llvm_name), String::new()));
+                } else {
+                    // SSA/Param values need to be spilled to stack to take their address
+                    let mut ir = String::new();
+                    let llvm_ty = self.type_to_llvm(&local.ty);
+                    let (val, val_ir) = self.visit_expr(inner, counter)?;
+                    ir.push_str(&val_ir);
+                    let tmp_alloca = self.next_temp(counter);
+                    ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
+                    ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_alloca));
+                    return Ok((tmp_alloca, ir));
+                }
             }
         }
         // For complex expressions, evaluate and return

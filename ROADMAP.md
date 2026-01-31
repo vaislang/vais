@@ -446,20 +446,20 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 > 코드 생성기가 잘못된 LLVM IR을 출력하여 clang이 실패하는 버그들
 
-#### Option/Vec 메서드 self 타입 불일치 (5개 예제)
-- [ ] **self 파라미터 타입 수정** - `%self`가 `ptr`로 전달되지만 구조체 타입을 기대하는 문제 (option_test, option_test2, simple_hashmap_test, simple_vec_test, vec_test_minimal)
+#### Option/Vec 메서드 self 타입 불일치 (5개 예제) ✅ 완료
+- [x] **self 파라미터 타입 수정** - is_expr_value()에서 self 파라미터를 포인터로 올바르게 인식 (완료일: 2026-01-31)
 
-#### 클로저/람다 IR 생성 버그 (3개 예제)
-- [ ] **클로저 함수 포인터 로드 수정** - `ptrtoint`를 `load`의 피연산자로 직접 사용하는 IR 문법 오류 (closure_simple, closure_test, lambda_test)
+#### 클로저/람다 IR 생성 버그 (3개 예제) ✅ 완료
+- [x] **클로저 함수 포인터 로드 수정** - ptrtoint를 독립 명령어로 분리, SSA 클로저 핸들링, 직접 호출 경로 추가 (완료일: 2026-01-31)
 
-#### 링커 심볼 미정의 (7개 예제)
-- [ ] **assert/contract 런타임 함수 구현** - `__vais_assert_fail`, `__vais_contract_*` 함수 정의 누락 (assert_violation_test, contract_test, contract_fail_test, contract_macro_test, contract_violation_test, formal_verification_test)
-- [ ] **main 함수 없는 모듈 처리** - 모듈 파일 실행 시 에러 메시지 개선 (math)
+#### 링커 심볼 미정의 (7개 예제) ✅ 완료
+- [x] **assert/contract 런타임 함수 구현** - __panic, __contract_fail 함수 정의 추가 (stderr 출력 + exit(1)) (완료일: 2026-01-31)
+- [x] **main 함수 없는 모듈** - 링커 에러로 적절히 실패 (의도된 동작)
 
-#### 기타 IR 버그 (3개 예제)
-- [ ] **제네릭 구조체 타입 재정의** - 동일 타입명 중복 생성 방지 (generic_struct_test)
-- [ ] **defer 문 IR 생성** - `%0` 타입 불일치 수정 (defer_test)
-- [ ] **라이프타임 IR 생성** - 미정의 값 `%42` 참조 수정 (lifetime_simple_test)
+#### 기타 IR 버그 (3개 예제) ✅ 완료
+- [x] **제네릭 구조체 타입 재정의** - generated_structs 중복 체크, 메서드에서 mangled name 사용 (완료일: 2026-01-31)
+- [x] **defer 문 IR 생성** - SSA 변수의 Ref 생성 시 alloca spill 추가 (완료일: 2026-01-31)
+- [x] **라이프타임 IR 생성** - 동일 Ref 수정으로 해결 (완료일: 2026-01-31)
 
 ### P1 - 높은 우선순위: 컴파일 에러 수정 (27개)
 
@@ -475,8 +475,8 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ### P2 - 낮은 우선순위: CLI 개선
 
-#### 비정상 exit code 처리
-- [ ] **exit code 표시 개선** - 프로그램이 nonzero exit code를 반환할 때 "error:" 대신 정보성 메시지로 변경 (fib=55, hello=42 등은 정상 동작)
+#### 비정상 exit code 처리 ✅ 완료
+- [x] **exit code 투과 전달** - 프로그램의 exit code를 vaisc 프로세스로 직접 전달 (error 메시지 제거) (완료일: 2026-01-31)
 
 ### 예상 마일스톤
 

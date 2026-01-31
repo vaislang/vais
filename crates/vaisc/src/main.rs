@@ -1638,7 +1638,7 @@ fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegi
         .map_err(|e| format!("Cannot run '{}': {}", bin_path.display(), e))?;
 
     if !status.success() {
-        return Err(format!("Program exited with code {}", status.code().unwrap_or(-1)));
+        std::process::exit(status.code().unwrap_or(1));
     }
 
     Ok(())

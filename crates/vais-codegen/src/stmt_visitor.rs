@@ -143,6 +143,10 @@ impl CodeGenerator {
                 name.node.clone(),
                 LocalVar::ssa(resolved_ty.clone(), val.clone()),
             );
+            // If this was a lambda with captures, register the closure info
+            if let Some(closure_info) = self.last_lambda_info.take() {
+                self.closures.insert(name.node.clone(), closure_info);
+            }
             // Return just the expression IR, no alloca/store needed
             Ok(("void".to_string(), val_ir))
         } else {
