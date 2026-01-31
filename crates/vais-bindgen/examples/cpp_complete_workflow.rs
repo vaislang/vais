@@ -5,7 +5,6 @@
 /// 2. Generating Vais FFI bindings
 /// 3. Generating C wrapper header
 /// 4. Showing the complete integration workflow
-
 use vais_bindgen::Bindgen;
 
 fn main() {

@@ -284,7 +284,7 @@ mod tests {
         };
 
         // b should come before a in sorted order
-        let mut packages = vec![pkg_a.clone(), pkg_b.clone()];
+        let mut packages = [pkg_a.clone(), pkg_b.clone()];
         packages.sort_by(|a, b| {
             if a.dependencies.contains(&b.name) {
                 std::cmp::Ordering::Greater

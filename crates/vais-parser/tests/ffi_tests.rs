@@ -1,6 +1,6 @@
 //! FFI parsing tests
 
-use vais_ast::{Item, Type, Param};
+use vais_ast::{Item, Type};
 use vais_lexer::tokenize;
 use vais_parser::Parser;
 

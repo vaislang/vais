@@ -1046,7 +1046,7 @@ pub fn get_cache_dir(source_file: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    
     use tempfile::TempDir;
 
     #[test]

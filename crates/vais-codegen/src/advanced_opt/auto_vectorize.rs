@@ -943,7 +943,8 @@ exit:
 
         let vectorizer = analyze_vectorization(ir, VectorWidth::AVX2);
         // The loop detection should find at least one candidate
-        assert!(!vectorizer.candidates.is_empty() || true); // Simplified test
+        // Vectorizer should parse the IR without panicking
+        let _ = vectorizer.candidates.len();
     }
 
     #[test]

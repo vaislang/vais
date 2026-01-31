@@ -52,7 +52,7 @@ fn named_type(name: &str) -> Type {
 fn generic_type(name: &str, generics: Vec<Type>) -> Type {
     Type::Named {
         name: name.to_string(),
-        generics: generics.into_iter().map(|t| spanned(t)).collect(),
+        generics: generics.into_iter().map(spanned).collect(),
     }
 }
 

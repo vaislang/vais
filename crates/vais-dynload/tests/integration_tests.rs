@@ -2,7 +2,7 @@
 
 use vais_dynload::{
     DynloadError, DiscoveryConfig, HostFunctionRegistry, MemoryLimit, ModuleLoaderConfig,
-    PluginCapability, PluginDiscovery, PluginManifest, PluginFormat, ResourceLimits, SandboxConfig,
+    PluginCapability, PluginDiscovery, PluginManifest, ResourceLimits, SandboxConfig,
     TimeLimit, WasmSandbox,
 };
 
@@ -296,7 +296,7 @@ fn test_host_function_registry_standard() {
 
 #[test]
 fn test_host_function_capability_enforcement() {
-    let mut registry = HostFunctionRegistry::with_standard_functions();
+    let registry = HostFunctionRegistry::with_standard_functions();
 
     // print requires Console capability
     assert!(registry.is_call_allowed("vais", "print").is_err());

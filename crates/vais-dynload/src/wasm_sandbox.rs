@@ -638,7 +638,7 @@ mod tests {
 
         // Verify cache has the module (may have 1 or 2 depending on whether cache hit)
         let cache = sandbox.module_cache.lock();
-        assert!(cache.len() >= 1);
+        assert!(!cache.is_empty());
     }
 
     #[test]
@@ -649,7 +649,7 @@ mod tests {
         let wat = r#"(module (func (export "f")))"#;
         let _inst = sandbox.load_plugin_wat(wat, "test").unwrap();
 
-        assert!(sandbox.module_cache.lock().len() >= 1);
+        assert!(!sandbox.module_cache.lock().is_empty());
 
         sandbox.clear_cache();
         assert_eq!(sandbox.module_cache.lock().len(), 0);

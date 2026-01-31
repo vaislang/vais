@@ -5,8 +5,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-/// Native Rust implementations for comparison
-
+// Native Rust implementations for comparison
 fn rust_fibonacci(n: i64) -> i64 {
     if n <= 1 {
         n

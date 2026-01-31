@@ -54,8 +54,7 @@ mod tests {
 
     #[test]
     fn test_library_compiles() {
-        // Basic compilation test
-        assert!(true);
+        // Basic compilation test - verifies the crate links correctly
     }
 
     #[test]

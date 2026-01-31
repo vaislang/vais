@@ -925,7 +925,7 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::{Path, PathBuf};
+    
     use vais_parser::parse;
 
     #[test]

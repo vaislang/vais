@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_trait_object_creation() {
         let gen = VtableGenerator::new();
-        let trait_def = create_drawable_trait();
+        let _trait_def = create_drawable_trait();
 
         // Create mock vtable info
         let vtable_info = VtableInfo {

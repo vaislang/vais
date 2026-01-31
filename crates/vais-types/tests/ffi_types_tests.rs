@@ -1,11 +1,10 @@
 //! Type checking tests for FFI features
 
 use vais_types::{TypeChecker, ResolvedType};
-use vais_ast::*;
 
 #[test]
 fn test_function_pointer_type() {
-    let mut checker = TypeChecker::new();
+    let _checker = TypeChecker::new();
 
     // Register a function pointer type
     let fn_ptr_type = ResolvedType::FnPtr {

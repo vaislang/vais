@@ -1717,33 +1717,33 @@ impl VaisBackend {
             }
             Expr::Block(stmts) => {
                 for stmt in stmts {
-                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                    self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                 }
             }
             Expr::If { cond, then, else_ } => {
                 self.find_var_references_in_expr(cond, var_name, refs, rope);
                 for stmt in then {
-                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                    self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                 }
                 if let Some(else_branch) = else_ {
                     match else_branch {
                         IfElse::ElseIf(else_cond, else_then, else_next) => {
-                            self.find_var_references_in_expr(&else_cond, var_name, refs, rope);
+                            self.find_var_references_in_expr(else_cond, var_name, refs, rope);
                             for stmt in else_then {
-                                self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                                self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                             }
                             if let Some(next) = else_next {
                                 // Recursively handle the next else-if/else
                                 if let IfElse::Else(stmts) = next.as_ref() {
                                     for stmt in stmts {
-                                        self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                                        self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                                     }
                                 }
                             }
                         }
                         IfElse::Else(else_stmts) => {
                             for stmt in else_stmts {
-                                self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                                self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                             }
                         }
                     }
@@ -1752,7 +1752,7 @@ impl VaisBackend {
             Expr::While { condition, body } => {
                 self.find_var_references_in_expr(condition, var_name, refs, rope);
                 for stmt in body {
-                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                    self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                 }
             }
             Expr::Loop { iter, body, .. } => {
@@ -1760,7 +1760,7 @@ impl VaisBackend {
                     self.find_var_references_in_expr(iterable, var_name, refs, rope);
                 }
                 for stmt in body {
-                    self.find_var_references_in_stmt(&stmt, var_name, refs, rope);
+                    self.find_var_references_in_stmt(stmt, var_name, refs, rope);
                 }
             }
             Expr::Match { expr, arms } => {
@@ -3355,7 +3355,7 @@ impl LanguageServer for VaisBackend {
                 // Convert range.start to offset
                 let cursor_line = range.start.line as usize;
                 let cursor_char = range.start.character as usize;
-                let cursor_offset = if let Some(line_start_char) = doc.content.try_line_to_char(cursor_line).ok() {
+                let cursor_offset = if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
                     line_start_char + cursor_char
                 } else {
                     0
@@ -3442,7 +3442,7 @@ impl LanguageServer for VaisBackend {
             if let Some(ast) = &doc.ast {
                 let cursor_line = range.start.line as usize;
                 let cursor_char = range.start.character as usize;
-                let _cursor_offset = if let Some(line_start_char) = doc.content.try_line_to_char(cursor_line).ok() {
+                let _cursor_offset = if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
                     line_start_char + cursor_char
                 } else {
                     0
@@ -3580,7 +3580,7 @@ impl LanguageServer for VaisBackend {
             if let Some(ast) = &doc.ast {
                 let cursor_line = range.start.line as usize;
                 let cursor_char = range.start.character as usize;
-                let cursor_offset = if let Some(line_start_char) = doc.content.try_line_to_char(cursor_line).ok() {
+                let cursor_offset = if let Ok(line_start_char) = doc.content.try_line_to_char(cursor_line) {
                     line_start_char + cursor_char
                 } else {
                     0

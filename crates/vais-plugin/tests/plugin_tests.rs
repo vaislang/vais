@@ -82,11 +82,13 @@ impl LintPlugin for MockLintPlugin {
 }
 
 /// Mock transform plugin for testing
+#[allow(dead_code)]
 struct MockTransformPlugin {
     name: &'static str,
     should_fail: bool,
 }
 
+#[allow(dead_code)]
 impl MockTransformPlugin {
     fn new(name: &'static str) -> Self {
         Self {

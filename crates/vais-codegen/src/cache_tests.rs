@@ -113,7 +113,7 @@ mod tests {
 
         // Multiple calls should use cache
         let cache = codegen.type_to_llvm_cache.borrow();
-        assert!(cache.len() >= 1, "Cache should have entries for nested types");
+        assert!(!cache.is_empty(), "Cache should have entries for nested types");
     }
 
     #[test]

@@ -38,10 +38,10 @@ fn test_import_suggestions() {
 
     // Verify we know about these functions
     for func in &math_functions {
-        assert!(func.len() > 0);
+        assert!(!func.is_empty());
     }
 
     for func in &io_functions {
-        assert!(func.len() > 0);
+        assert!(!func.is_empty());
     }
 }

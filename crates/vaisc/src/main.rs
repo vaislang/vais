@@ -1139,6 +1139,7 @@ fn load_module_with_imports_parallel(
     }
 
     // Phase 2: Parse all imports in parallel
+    #[allow(clippy::type_complexity)]
     let parsed_results: Vec<(PathBuf, Result<(Module, String), String>)> = if import_paths.len() > 1 {
         if verbose {
             println!("  {} Parsing {} imports in parallel", "⚡".cyan(), import_paths.len());

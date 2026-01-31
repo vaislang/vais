@@ -526,8 +526,8 @@ impl Default for ModuleLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-    use std::fs;
+    
+    
 
     #[test]
     fn test_module_loader_creation() {

@@ -69,9 +69,9 @@ fn test_valid_local_import() {
 
     // This should succeed - importing from same directory
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -98,10 +98,10 @@ fn test_valid_std_import() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
         .env("VAIS_STD_PATH", &std_dir)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -124,9 +124,9 @@ fn test_path_traversal_attack_absolute() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -148,9 +148,9 @@ fn test_path_traversal_attack_relative() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -190,9 +190,9 @@ fn test_symlink_attack_outside_project() {
     fs::write(&test_file, source).unwrap();
 
     let _output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -234,9 +234,9 @@ fn test_symlink_attack_to_system_file() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "build", "--emit-ir"])
+        .args(["run", "--bin", "vaisc", "build", "--emit-ir"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -273,9 +273,9 @@ fn test_valid_relative_import_in_project() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -304,9 +304,9 @@ fn test_non_vais_file_rejection() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -328,9 +328,9 @@ fn test_empty_import_path() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -352,9 +352,9 @@ fn test_module_not_found_error_message() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "build", "--emit-ir"])
+        .args(["run", "--bin", "vaisc", "build", "--emit-ir"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 
@@ -384,9 +384,9 @@ fn test_nested_module_path() {
     fs::write(&test_file, source).unwrap();
 
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--bin", "vaisc", "check"])
+        .args(["run", "--bin", "vaisc", "check"])
         .arg(&test_file)
-        .current_dir(&get_project_root())
+        .current_dir(get_project_root())
         .output()
         .expect("Failed to execute vaisc");
 

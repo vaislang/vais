@@ -1015,7 +1015,6 @@ F add(a:i64,
             }
             Err(_) => {
                 // Expected: tokenization fails for overflow
-                assert!(true, "Tokenization correctly failed for i64 overflow");
             }
         }
     }

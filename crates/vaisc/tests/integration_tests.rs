@@ -1867,6 +1867,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn test_string_method_charAt() {
     let source = r#"
 F main() -> i64 {
@@ -1893,6 +1894,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn test_string_method_indexOf() {
     let source = r#"
 F main() -> i64 {
@@ -1916,6 +1918,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn test_string_method_startsWith() {
     let source = r#"
 F main() -> i64 {
@@ -1931,6 +1934,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn test_string_method_endsWith() {
     let source = r#"
 F main() -> i64 {
@@ -1946,6 +1950,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[allow(non_snake_case)]
 fn test_string_method_isEmpty() {
     let source = r#"
 F main() -> i64 {

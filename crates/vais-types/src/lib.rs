@@ -1604,6 +1604,7 @@ impl TypeChecker {
     }
 
     /// Set current generics with their bounds for type resolution
+    #[allow(clippy::type_complexity)]
     fn set_generics(&mut self, generics: &[GenericParam]) -> (Vec<String>, HashMap<String, Vec<String>>, HashMap<String, ResolvedType>) {
         let prev_generics = std::mem::replace(
             &mut self.current_generics,

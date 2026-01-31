@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(module.items.len(), 1);
         match &module.items[0].node {
             Item::ExternBlock(block) => {
-                assert_eq!(block.functions[0].is_vararg, true);
+                assert!(block.functions[0].is_vararg);
                 assert_eq!(block.functions[0].params.len(), 1);
             }
             _ => panic!("Expected extern block"),
@@ -219,7 +219,7 @@ mod tests {
                 assert_eq!(block.functions[0].name.node, "malloc");
                 assert_eq!(block.functions[1].name.node, "free");
                 assert_eq!(block.functions[2].name.node, "printf");
-                assert_eq!(block.functions[2].is_vararg, true);
+                assert!(block.functions[2].is_vararg);
             }
             _ => panic!("Expected extern block"),
         }
@@ -239,7 +239,7 @@ mod tests {
                 match &f.params[0].ty.node {
                     Type::FnPtr { params, is_vararg, .. } => {
                         assert_eq!(params.len(), 2);
-                        assert_eq!(*is_vararg, false);
+                        assert!(!(*is_vararg));
                     }
                     _ => panic!("Expected function pointer type"),
                 }
@@ -261,7 +261,7 @@ mod tests {
                 assert_eq!(s.fields.len(), 1);
                 match &s.fields[0].ty.node {
                     Type::FnPtr { is_vararg, .. } => {
-                        assert_eq!(*is_vararg, true);
+                        assert!(*is_vararg);
                     }
                     _ => panic!("Expected function pointer type"),
                 }

@@ -1,6 +1,6 @@
 //! Unit tests for vais-gc
 
-use vais_gc::{GcHeap, GcStats};
+use vais_gc::GcHeap;
 
 #[test]
 fn test_gc_heap_creation() {

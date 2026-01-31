@@ -233,7 +233,7 @@ fn test_many_enum_variants() {
 #[test]
 fn test_repeated_operators() {
     let source = "F add() -> i64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10";
-    let result = parse(&source);
+    let result = parse(source);
     assert!(result.is_ok());
 
     // Longer chain
@@ -281,7 +281,7 @@ fn test_type_checker_recursive() {
 fn test_token_alternation() {
     // Rapidly alternating between different token types
     let source = "F a() -> i64 = 1 + 2 - 3 * 4 / 5 % 6 < 7 > 8 == 9";
-    let result = tokenize(&source);
+    let result = tokenize(source);
     assert!(result.is_ok());
 }
 

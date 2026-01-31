@@ -11,9 +11,11 @@ fn fibonacci(n: u64) -> u64 {
 }
 
 fn main() {
-    let mut config = ProfilerConfig::default();
-    config.mode = ProfilerMode::All;
-    config.max_samples = 100_000;
+    let config = ProfilerConfig {
+        mode: ProfilerMode::All,
+        max_samples: 100_000,
+        ..ProfilerConfig::default()
+    };
 
     let profiler = Profiler::new(config);
 

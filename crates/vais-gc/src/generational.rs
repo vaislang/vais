@@ -93,7 +93,7 @@ pub struct CardTable {
 impl CardTable {
     /// Creates a new card table covering `heap_size` bytes.
     pub fn new(heap_size: usize, card_size: usize) -> Self {
-        let num_cards = (heap_size + card_size - 1) / card_size;
+        let num_cards = heap_size.div_ceil(card_size);
         Self {
             cards: vec![0u8; num_cards],
             card_size,

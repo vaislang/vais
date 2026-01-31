@@ -4,9 +4,11 @@ use std::time::Duration;
 
 #[test]
 fn test_end_to_end_profiling() {
-    let mut config = ProfilerConfig::default();
-    config.mode = ProfilerMode::All;
-    config.max_samples = 10000;
+    let config = ProfilerConfig {
+        mode: ProfilerMode::All,
+        max_samples: 10000,
+        ..ProfilerConfig::default()
+    };
 
     let profiler = Profiler::new(config);
 
@@ -162,10 +164,12 @@ fn test_flamegraph_data() {
 
 #[test]
 fn test_sampling_mode() {
-    let mut config = ProfilerConfig::default();
-    config.mode = ProfilerMode::Sampling;
-    config.track_memory = false;
-    config.build_call_graph = false;
+    let config = ProfilerConfig {
+        mode: ProfilerMode::Sampling,
+        track_memory: false,
+        build_call_graph: false,
+        ..ProfilerConfig::default()
+    };
 
     let profiler = Profiler::new(config);
     profiler.start().unwrap();
@@ -181,8 +185,10 @@ fn test_sampling_mode() {
 
 #[test]
 fn test_memory_mode() {
-    let mut config = ProfilerConfig::default();
-    config.mode = ProfilerMode::Memory;
+    let config = ProfilerConfig {
+        mode: ProfilerMode::Memory,
+        ..ProfilerConfig::default()
+    };
 
     let profiler = Profiler::new(config);
     profiler.start().unwrap();
@@ -232,8 +238,10 @@ fn test_concurrent_profiling() {
 
 #[test]
 fn test_max_samples_limit() {
-    let mut config = ProfilerConfig::default();
-    config.max_samples = 100;
+    let config = ProfilerConfig {
+        max_samples: 100,
+        ..ProfilerConfig::default()
+    };
 
     let profiler = Profiler::new(config);
     profiler.start().unwrap();

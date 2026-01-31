@@ -849,7 +849,7 @@ mod tests {
 
         // Buffer should have the entry
         {
-            let buffer = gc.write_barrier_buffer.lock().unwrap();
+            let _buffer = gc.write_barrier_buffer.lock().unwrap();
             // Entry might or might not be there depending on GC phase
             // During Idle phase, write barriers are ignored
         }

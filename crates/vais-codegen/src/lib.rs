@@ -2822,7 +2822,7 @@ impl CodeGenerator {
             // Loop expression
             Expr::Loop { pattern, iter, body } => {
                 // Check if this is a range-based for loop
-                let is_range_loop = iter.as_ref().map_or(false, |it| {
+                let is_range_loop = iter.as_ref().is_some_and(|it| {
                     matches!(&it.node, Expr::Range { .. })
                 });
 
@@ -4111,13 +4111,13 @@ impl CodeGenerator {
         match param_type {
             ResolvedType::Generic(name) => {
                 // Direct generic type parameter (e.g., T)
-                if type_params.iter().any(|tp| *tp == name) {
+                if type_params.contains(&name) {
                     inferred.entry(name.clone()).or_insert_with(|| arg_type.clone());
                 }
             }
             ResolvedType::Named { name, generics } => {
                 // Check if this is a type parameter name
-                if type_params.iter().any(|tp| *tp == name) {
+                if type_params.contains(&name) {
                     inferred.entry(name.clone()).or_insert_with(|| arg_type.clone());
                 } else if let ResolvedType::Named { generics: arg_generics, .. } = arg_type {
                     // Recurse into generic arguments
@@ -4850,7 +4850,7 @@ mod tests {
 
     #[test]
     fn test_generate_specialized_function() {
-        use vais_types::{GenericInstantiation, TypeChecker};
+        use vais_types::TypeChecker;
 
         let source = r#"
             F identity<T>(x:T)->T=x
@@ -4905,7 +4905,7 @@ mod tests {
 
     #[test]
     fn test_multiple_instantiations() {
-        use vais_types::{GenericInstantiation, TypeChecker};
+        use vais_types::TypeChecker;
 
         let source = r#"
             F identity<T>(x:T)->T=x

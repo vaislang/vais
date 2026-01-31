@@ -1,6 +1,5 @@
-use vais_hotreload::{FileWatcher, HotReloadConfig, HotReloader};
+use vais_hotreload::{FileWatcher, HotReloadConfig};
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]

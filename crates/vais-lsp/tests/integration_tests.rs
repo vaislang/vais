@@ -15,7 +15,7 @@ mod test_helpers {
 
     /// Create a test LSP service
     pub fn create_test_service() -> LspService<VaisBackend> {
-        let (service, _socket) = LspService::new(|client| VaisBackend::new(client));
+        let (service, _socket) = LspService::new(VaisBackend::new);
         service
     }
 

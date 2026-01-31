@@ -283,7 +283,7 @@ fn test_audit_vulnerable_dependency() {
 
     assert_eq!(result.status, audit::AuditStatus::Vulnerable);
     assert!(result.has_vulnerabilities());
-    assert!(result.vulnerabilities.len() > 0);
+    assert!(!result.vulnerabilities.is_empty());
 }
 
 #[test]

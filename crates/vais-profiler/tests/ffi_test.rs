@@ -117,29 +117,24 @@ fn test_ffi_custom_config() {
 }
 
 #[test]
-fn test_ffi_global_profiler_init() {
-    vais_profiler_global_destroy();
+fn test_ffi_global_profiler_all() {
+    // All global profiler tests combined into one to avoid race conditions
+    // (global state is shared across test threads)
 
+    // Part 0: Init
+    vais_profiler_global_destroy();
     assert!(vais_profiler_global_init(std::ptr::null()));
     assert!(!vais_profiler_global_init(std::ptr::null()));
-
     vais_profiler_global_destroy();
-}
 
-#[test]
-fn test_ffi_global_profiler_lifecycle() {
+    // Part 1: Lifecycle
     vais_profiler_global_destroy();
     vais_profiler_global_init(std::ptr::null());
-
     assert!(vais_profiler_global_start());
     assert!(vais_profiler_global_stop());
-
     vais_profiler_global_destroy();
-}
 
-#[test]
-fn test_ffi_global_profiler_record_samples() {
-    vais_profiler_global_destroy();
+    // Part 2: Record samples
     vais_profiler_global_init(std::ptr::null());
     vais_profiler_global_start();
 
@@ -155,11 +150,8 @@ fn test_ffi_global_profiler_record_samples() {
 
     vais_profiler_global_stop();
     vais_profiler_global_destroy();
-}
 
-#[test]
-fn test_ffi_global_profiler_memory() {
-    vais_profiler_global_destroy();
+    // Part 3: Memory tracking
     vais_profiler_global_init(std::ptr::null());
     vais_profiler_global_start();
 
@@ -177,19 +169,16 @@ fn test_ffi_global_profiler_memory() {
 
     vais_profiler_global_stop();
     vais_profiler_global_destroy();
-}
 
-#[test]
-fn test_ffi_global_profiler_call_graph() {
-    vais_profiler_global_destroy();
+    // Part 4: Call graph
     vais_profiler_global_init(std::ptr::null());
     vais_profiler_global_start();
 
-    let main = CString::new("main").unwrap();
-    let foo = CString::new("foo").unwrap();
+    let main_fn = CString::new("main").unwrap();
+    let foo_fn = CString::new("foo").unwrap();
 
-    vais_profiler_global_record_call(main.as_ptr(), foo.as_ptr());
-    vais_profiler_global_record_call(main.as_ptr(), foo.as_ptr());
+    vais_profiler_global_record_call(main_fn.as_ptr(), foo_fn.as_ptr());
+    vais_profiler_global_record_call(main_fn.as_ptr(), foo_fn.as_ptr());
 
     let stats = vais_profiler_global_get_stats();
     assert_eq!(stats.call_graph_edges, 1);
