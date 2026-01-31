@@ -374,7 +374,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 #### 라이프타임 및 소유권
 - [x] **라이프타임 추론 엔진** - 함수 시그니처 기반 자동 라이프타임 추론, Rust 3-규칙 elision, constraint solver, 스코프 기반 검증, 15개 유닛 테스트 (완료일: 2026-01-31)
-- [ ] **소유권 검사기** - move semantics, borrow checker 기본 구현
+- [x] **소유권 검사기** - move semantics (Copy/Non-Copy 구분), borrow checker (immutable/mutable 독점 규칙), 스코프 기반 borrow 해제, 에러 수집 모드, AST 전체 순회, 12개 유닛 테스트 (완료일: 2026-01-31)
 - [ ] **댕글링 포인터 방지** - 스코프 기반 참조 유효성 검증
 - [ ] **라이프타임 에러 메시지** - 사용자 친화적 에러 메시지 (원인 + 해결 가이드)
 

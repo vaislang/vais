@@ -195,6 +195,50 @@ pub enum TypeError {
         referent_lifetime: String,
         span: Option<Span>,
     },
+
+    #[error("Use of moved value: variable '{var_name}' was moved")]
+    UseAfterMove {
+        var_name: String,
+        moved_at: Option<Span>,
+        use_at: Option<Span>,
+    },
+
+    #[error("Use of partially moved value: variable '{var_name}' has moved fields: {moved_fields:?}")]
+    UseAfterPartialMove {
+        var_name: String,
+        moved_fields: Vec<String>,
+        use_at: Option<Span>,
+    },
+
+    #[error("Cannot assign to '{var_name}' while it is borrowed")]
+    AssignWhileBorrowed {
+        var_name: String,
+        borrow_at: Option<Span>,
+        assign_at: Option<Span>,
+        is_mut_borrow: bool,
+    },
+
+    #[error("Cannot borrow '{var_name}' after it was moved")]
+    BorrowAfterMove {
+        var_name: String,
+        moved_at: Option<Span>,
+        borrow_at: Option<Span>,
+    },
+
+    #[error("Cannot borrow '{var_name}': conflicting borrows")]
+    BorrowConflict {
+        var_name: String,
+        existing_borrow_at: Option<Span>,
+        new_borrow_at: Option<Span>,
+        existing_is_mut: bool,
+        new_is_mut: bool,
+    },
+
+    #[error("Cannot mutably borrow immutable variable '{var_name}'")]
+    MutBorrowOfImmutable {
+        var_name: String,
+        borrow_at: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -222,6 +266,12 @@ impl TypeError {
             TypeError::LifetimeElisionFailed { span, .. } => *span,
             TypeError::LifetimeOutlivesStatic { span, .. } => *span,
             TypeError::LifetimeTooShort { span, .. } => *span,
+            TypeError::UseAfterMove { use_at, .. } => *use_at,
+            TypeError::UseAfterPartialMove { use_at, .. } => *use_at,
+            TypeError::AssignWhileBorrowed { assign_at, .. } => *assign_at,
+            TypeError::BorrowAfterMove { borrow_at, .. } => *borrow_at,
+            TypeError::BorrowConflict { new_borrow_at, .. } => *new_borrow_at,
+            TypeError::MutBorrowOfImmutable { borrow_at, .. } => *borrow_at,
         }
     }
 
@@ -249,6 +299,12 @@ impl TypeError {
             TypeError::LifetimeElisionFailed { .. } => "E019",
             TypeError::LifetimeOutlivesStatic { .. } => "E020",
             TypeError::LifetimeTooShort { .. } => "E021",
+            TypeError::UseAfterMove { .. } => "E022",
+            TypeError::UseAfterPartialMove { .. } => "E023",
+            TypeError::AssignWhileBorrowed { .. } => "E024",
+            TypeError::BorrowAfterMove { .. } => "E025",
+            TypeError::BorrowConflict { .. } => "E026",
+            TypeError::MutBorrowOfImmutable { .. } => "E027",
         }
     }
 
@@ -319,6 +375,34 @@ impl TypeError {
             }
             TypeError::LifetimeTooShort { .. } => {
                 Some("the reference must not outlive the data it refers to".to_string())
+            }
+            TypeError::UseAfterMove { var_name, .. } => {
+                Some(format!("variable '{}' was moved and can no longer be used; consider cloning it before the move", var_name))
+            }
+            TypeError::UseAfterPartialMove { var_name, moved_fields, .. } => {
+                Some(format!("variable '{}' has partially moved fields {:?}; consider cloning before moving individual fields", var_name, moved_fields))
+            }
+            TypeError::AssignWhileBorrowed { var_name, is_mut_borrow, .. } => {
+                if *is_mut_borrow {
+                    Some(format!("cannot assign to '{}' while it is mutably borrowed; the borrow must end before assignment", var_name))
+                } else {
+                    Some(format!("cannot assign to '{}' while it is borrowed; the borrow must end before assignment", var_name))
+                }
+            }
+            TypeError::BorrowAfterMove { var_name, .. } => {
+                Some(format!("cannot borrow '{}' because it was already moved; consider cloning before the move", var_name))
+            }
+            TypeError::BorrowConflict { var_name, existing_is_mut, new_is_mut, .. } => {
+                if *existing_is_mut {
+                    Some(format!("cannot borrow '{}' because it is already mutably borrowed; mutable borrows are exclusive", var_name))
+                } else if *new_is_mut {
+                    Some(format!("cannot mutably borrow '{}' because it is already immutably borrowed", var_name))
+                } else {
+                    Some(format!("conflicting borrows on '{}'", var_name))
+                }
+            }
+            TypeError::MutBorrowOfImmutable { var_name, .. } => {
+                Some(format!("consider declaring '{}' as mutable: `V mut {}`", var_name, var_name))
             }
             _ => None,
         }
@@ -412,6 +496,24 @@ impl TypeError {
                     ("reference_lifetime", reference_lifetime),
                     ("referent_lifetime", referent_lifetime),
                 ])
+            }
+            TypeError::UseAfterMove { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::UseAfterPartialMove { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::AssignWhileBorrowed { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::BorrowAfterMove { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::BorrowConflict { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::MutBorrowOfImmutable { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
             }
         }
     }

@@ -13,6 +13,7 @@ pub mod effects;
 mod traits;
 mod inference;
 pub mod lifetime;
+pub mod ownership;
 
 // Re-export bidirectional type checking support
 pub use inference::CheckMode;
