@@ -1,60 +1,64 @@
 ; ModuleID = 'closure_test'
 source_filename = "<vais>"
 
-declare i32 @puts(i8*)
-declare void @free(i64)
-declare i64 @malloc(i64)
-declare i64 @vais_gc_print_stats()
-declare i64 @fseek(i64, i64, i64)
-declare double @fabs(double)
-declare i64 @fgets(i64, i64, i64)
-declare i64 @vais_gc_init()
-declare i64 @vais_gc_remove_root(i64)
-declare i64 @fgetc(i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i64 @vais_gc_objects_count()
-declare double @atof(i8*)
-declare double @sqrt(double)
-declare i64 @ftell(i64)
-declare i32 @strcmp(i8*, i8*)
-declare i32 @toupper(i32)
-declare i64 @fputs(i8*, i64)
-declare i32 @isalpha(i32)
-declare i64 @strcat(i64, i8*)
-declare i64 @fputc(i64, i64)
-declare i64 @atol(i8*)
-declare i64 @vais_gc_add_root(i64)
 declare void @srand(i32)
+declare i64 @vais_gc_objects_count()
+declare i32 @putchar(i32)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i32 @fclose(i64)
+declare i64 @atol(i64)
+declare i64 @strlen(i8*)
+declare double @atof(i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i32 @tolower(i32)
+declare i64 @vais_gc_set_threshold(i64)
+declare i64 @fputs(i8*, i64)
+declare double @fabs(double)
+declare void @free(i64)
+declare i64 @memcpy(i64, i64, i64)
+declare i32 @isalpha(i32)
+declare i64 @vais_gc_bytes_allocated()
+declare i32 @puts(i64)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @fgets(i64, i64, i64)
+declare i32 @atoi(i8*)
+declare i64 @fputc(i64, i64)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @fflush(i64)
+declare i64 @strcat(i64, i8*)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @malloc(i64)
+declare i64 @vais_gc_collect()
+declare i64 @fgetc(i64)
+declare i32 @sched_yield()
+declare i64 @feof(i64)
+declare i64 @vais_gc_add_root(i64)
+declare void @exit(i32)
+declare i32 @printf(i8*, ...)
+declare i64 @ftell(i64)
+declare i64 @vais_gc_collections()
+declare double @sin(double)
+declare i64 @strcpy(i64, i8*)
+declare double @cos(double)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @vais_gc_init()
+declare double @sqrt(double)
+declare i64 @vais_gc_print_stats()
 define i64 @fopen_ptr(i64 %path, i8* %mode) {
 entry:
   %0 = call i64 @fopen(i64 %path, i8* %mode)
   ret i64 %0
 }
-declare i32 @tolower(i32)
-declare i64 @vais_gc_bytes_allocated()
-declare i32 @atoi(i8*)
-declare i64 @feof(i64)
-declare i64 @fflush(i64)
-declare void @exit(i32)
-declare i32 @fclose(i64)
-declare i64 @vais_gc_collect()
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @vais_gc_collections()
-declare i64 @strlen(i8*)
-declare i64 @vais_gc_alloc(i64, i32)
-declare i64 @memcpy_str(i64, i8*, i64)
-declare i32 @rand()
-declare i64 @vais_gc_set_threshold(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i32 @sched_yield()
-declare i64 @fread(i64, i64, i64, i64)
-declare i32 @printf(i8*, ...)
 declare i32 @usleep(i64)
-declare i64 @strcpy(i64, i8*)
-declare i64 @labs(i64)
-declare i32 @isdigit(i32)
+declare double @log(double)
 declare i64 @fopen(i8*, i8*)
-declare i32 @putchar(i32)
+declare i64 @labs(i64)
+declare i32 @toupper(i32)
+declare double @exp(double)
+declare i64 @vais_gc_remove_root(i64)
+declare i32 @isdigit(i32)
+declare i32 @rand()
 @__vais_abi_version = constant [6 x i8] c"1.0.0\00"
 
 @.str.0 = private unnamed_addr constant [21 x i8] c"=== Closure Test ===\00"
@@ -78,11 +82,11 @@ then0:
   %5 = trunc i64 %4 to i32
   %6 = call i32 @putchar(i32 %5)
   %7 = sext i32 %6 to i64
-  ret i64 0
+  br label %merge2
 else1:
   br label %merge2
 merge2:
-  %8 = phi i64 [ 0, %else1 ]
+  %8 = phi i64 [ %7, %then0 ], [ 0, %else1 ]
   %9 = sdiv i64 %n, 10
   %10 = srem i64 %9, 10
   %11 = icmp sge i64 %n, 10
@@ -94,11 +98,11 @@ then3:
   %15 = trunc i64 %14 to i32
   %16 = call i32 @putchar(i32 %15)
   %17 = sext i32 %16 to i64
-  ret i64 0
+  br label %merge5
 else4:
   br label %merge5
 merge5:
-  %18 = phi i64 [ 0, %else4 ]
+  %18 = phi i64 [ %17, %then3 ], [ 0, %else4 ]
   %19 = srem i64 %n, 10
   %20 = add i64 %19, 48
   %21 = trunc i64 %20 to i32

@@ -16,7 +16,7 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         match expr {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
-            Expr::Float(n) => Ok((format!("{:e}", n), String::new())),
+            Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
                 let name = format!(".str.{}", self.string_counter);

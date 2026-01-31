@@ -389,6 +389,21 @@ impl QueryDatabase {
         self.caches.write().clear();
     }
 
+    /// Check if a source file is already registered with current content (by hash).
+    pub fn has_current_source(&self, path: impl AsRef<Path>, text: &str) -> bool {
+        let hash = Self::hash_source(text);
+        let sources = self.sources.read();
+        sources
+            .get(path.as_ref())
+            .is_some_and(|s| s.hash == hash)
+    }
+
+    /// Get the SHA-256 hash of a registered source file (returns None if not set).
+    pub fn source_hash(&self, path: impl AsRef<Path>) -> Option<[u8; 32]> {
+        let sources = self.sources.read();
+        sources.get(path.as_ref()).map(|s| s.hash)
+    }
+
     /// Clear everything (inputs and caches).
     pub fn clear_all(&self) {
         self.sources.write().clear();

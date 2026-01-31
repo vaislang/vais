@@ -503,6 +503,30 @@ impl CodeGenerator {
             ResolvedType::F64
         );
 
+        // sin: (x: f64) -> f64 - sine
+        register_extern!(self, "sin",
+            vec![("x".to_string(), ResolvedType::F64)],
+            ResolvedType::F64
+        );
+
+        // cos: (x: f64) -> f64 - cosine
+        register_extern!(self, "cos",
+            vec![("x".to_string(), ResolvedType::F64)],
+            ResolvedType::F64
+        );
+
+        // exp: (x: f64) -> f64 - exponential
+        register_extern!(self, "exp",
+            vec![("x".to_string(), ResolvedType::F64)],
+            ResolvedType::F64
+        );
+
+        // log: (x: f64) -> f64 - natural logarithm
+        register_extern!(self, "log",
+            vec![("x".to_string(), ResolvedType::F64)],
+            ResolvedType::F64
+        );
+
         // rand: () -> i32 - pseudo-random number
         register_extern!(self, "rand",
             vec![],

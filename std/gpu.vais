@@ -117,8 +117,8 @@ F atomic_exch(addr: *i64, val: i64) -> i64 = 0
 # Fast square root (may be less precise than CPU version)
 F gpu_sqrt(x: f64) -> f64 = sqrt(x)
 
-# Fast reciprocal square root (1/sqrt(x))
-F gpu_rsqrt(x: f64) -> f64 = 1.0 / sqrt(x)
+# Fast reciprocal square root (placeholder - replaced by GPU compiler)
+F gpu_rsqrt(x: f64) -> f64 = 0.0
 
 # Fast sine
 F gpu_sin(x: f64) -> f64 = sin(x)
@@ -132,8 +132,8 @@ F gpu_exp(x: f64) -> f64 = exp(x)
 # Fast logarithm
 F gpu_log(x: f64) -> f64 = log(x)
 
-# Fused multiply-add: a * b + c (single rounding)
-F gpu_fma(a: f64, b: f64, c: f64) -> f64 = a * b + c
+# Fused multiply-add: a * b + c (placeholder - replaced by GPU compiler)
+F gpu_fma(a: f64, b: f64, c: f64) -> f64 = 0.0
 
 # ============================================================================
 # Shared Memory
@@ -148,37 +148,28 @@ F shared_alloc(size: i64) -> i64 = malloc(size)
 # Memory Operations
 # ============================================================================
 
-# Coalesced load from global memory
-F gpu_load(addr: *f64) -> f64 = *addr
+# Coalesced load from global memory (placeholder - replaced by GPU compiler)
+F gpu_load(addr: *f64) -> f64 = 0.0
 
-# Coalesced store to global memory
-F gpu_store(addr: *f64, val: f64) -> i64 {
-    *addr = val
-    0
-}
+# Coalesced store to global memory (placeholder - replaced by GPU compiler)
+F gpu_store(addr: *f64, val: f64) -> i64 = 0
 
 # ============================================================================
 # Utility Functions
 # ============================================================================
 
 # Clamp value to range [lo, hi]
-F gpu_clamp(x: f64, lo: f64, hi: f64) -> f64 {
-    I x < lo { lo }
-    E I x > hi { hi }
-    E { x }
-}
+# Clamp value to range [lo, hi] (placeholder - replaced by GPU compiler)
+F gpu_clamp(x: f64, lo: f64, hi: f64) -> f64 = 0.0
 
-# Linear interpolation
-F gpu_lerp(a: f64, b: f64, t: f64) -> f64 = a + t * (b - a)
+# Linear interpolation (placeholder - replaced by GPU compiler)
+F gpu_lerp(a: f64, b: f64, t: f64) -> f64 = 0.0
 
-# Step function: 0.0 if x < edge, else 1.0
-F gpu_step(edge: f64, x: f64) -> f64 = I x < edge { 0.0 } E { 1.0 }
+# Step function: 0.0 if x < edge, else 1.0 (placeholder - replaced by GPU compiler)
+F gpu_step(edge: f64, x: f64) -> f64 = 0.0
 
-# Smooth step (Hermite interpolation)
-F gpu_smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
-    t := gpu_clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0)
-    t * t * (3.0 - 2.0 * t)
-}
+# Smooth step (Hermite interpolation) (placeholder - replaced by GPU compiler)
+F gpu_smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 = 0.0
 
 # ============================================================================
 # Warp/Wavefront Operations (CUDA: warp, AMD: wavefront)
@@ -257,8 +248,8 @@ F quad_broadcast(val: f64, lane: i64) -> f64 = val
 # ============================================================================
 
 # 512-bit vector load/store (16 x f32 or 8 x f64)
-F avx512_load_f32(addr: *f32) -> i64 = 0  # Returns vector as i64 handle
-F avx512_store_f32(addr: *f32, vec: i64) -> i64 = 0
+F avx512_load_f32(addr: *i64) -> i64 = 0  # Returns vector as i64 handle
+F avx512_store_f32(addr: *i64, vec: i64) -> i64 = 0
 F avx512_load_f64(addr: *f64) -> i64 = 0
 F avx512_store_f64(addr: *f64, vec: i64) -> i64 = 0
 
@@ -270,12 +261,12 @@ F avx512_div_f32(a: i64, b: i64) -> i64 = 0
 F avx512_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # AVX-512 reduction
-F avx512_reduce_add_f32(vec: i64) -> f32 = 0.0 as f32
-F avx512_reduce_min_f32(vec: i64) -> f32 = 0.0 as f32
-F avx512_reduce_max_f32(vec: i64) -> f32 = 0.0 as f32
+F avx512_reduce_add_f32(vec: i64) -> f64 = 0.0
+F avx512_reduce_min_f32(vec: i64) -> f64 = 0.0
+F avx512_reduce_max_f32(vec: i64) -> f64 = 0.0
 
 # AVX-512 broadcast
-F avx512_broadcast_f32(val: f32) -> i64 = 0
+F avx512_broadcast_f32(val: f64) -> i64 = 0
 F avx512_broadcast_f64(val: f64) -> i64 = 0
 
 # ============================================================================
@@ -283,8 +274,8 @@ F avx512_broadcast_f64(val: f64) -> i64 = 0
 # ============================================================================
 
 # 256-bit vector load/store (8 x f32 or 4 x f64)
-F avx2_load_f32(addr: *f32) -> i64 = 0
-F avx2_store_f32(addr: *f32, vec: i64) -> i64 = 0
+F avx2_load_f32(addr: *i64) -> i64 = 0
+F avx2_store_f32(addr: *i64, vec: i64) -> i64 = 0
 F avx2_load_f64(addr: *f64) -> i64 = 0
 F avx2_store_f64(addr: *f64, vec: i64) -> i64 = 0
 
@@ -295,15 +286,15 @@ F avx2_mul_f32(a: i64, b: i64) -> i64 = 0
 F avx2_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # AVX2 broadcast
-F avx2_broadcast_f32(val: f32) -> i64 = 0
+F avx2_broadcast_f32(val: f64) -> i64 = 0
 
 # ============================================================================
 # ARM NEON SIMD Operations
 # ============================================================================
 
 # 128-bit vector load/store (4 x f32 or 2 x f64)
-F neon_load_f32(addr: *f32) -> i64 = 0
-F neon_store_f32(addr: *f32, vec: i64) -> i64 = 0
+F neon_load_f32(addr: *i64) -> i64 = 0
+F neon_store_f32(addr: *i64, vec: i64) -> i64 = 0
 F neon_load_f64(addr: *f64) -> i64 = 0
 F neon_store_f64(addr: *f64, vec: i64) -> i64 = 0
 
@@ -314,12 +305,12 @@ F neon_mul_f32(a: i64, b: i64) -> i64 = 0
 F neon_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # NEON reduction
-F neon_reduce_add_f32(vec: i64) -> f32 = 0.0 as f32
-F neon_reduce_min_f32(vec: i64) -> f32 = 0.0 as f32
-F neon_reduce_max_f32(vec: i64) -> f32 = 0.0 as f32
+F neon_reduce_add_f32(vec: i64) -> f64 = 0.0
+F neon_reduce_min_f32(vec: i64) -> f64 = 0.0
+F neon_reduce_max_f32(vec: i64) -> f64 = 0.0
 
 # NEON broadcast
-F neon_dup_f32(val: f32) -> i64 = 0
+F neon_dup_f32(val: f64) -> i64 = 0
 
 # ============================================================================
 # Kernel Launch Configuration

@@ -29,7 +29,7 @@
 mod database;
 mod revision;
 
-pub use database::{QueryDatabase, QueryResult};
+pub use database::{QueryDatabase, QueryError, QueryResult};
 pub use revision::Revision;
 
 #[cfg(test)]

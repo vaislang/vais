@@ -80,16 +80,6 @@ F default_resource_limits() -> ResourceLimit {
     }
 }
 
-# Create restrictive limits
-F restrictive_resource_limits() -> ResourceLimit {
-    ResourceLimit {
-        max_memory: 16777216,  # 16 MB
-        max_time: 1000,        # 1 second
-        max_stack: 262144,     # 256 KB
-        max_calls: 500
-    }
-}
-
 # Check if usage exceeds limits
 F check_limits(used_memory: i64, used_time: i64, limits: ResourceLimit) -> i64 {
     I used_memory > limits.max_memory {
@@ -172,14 +162,12 @@ F is_version_compatible(plugin: PluginInfo, req_major: i64, req_minor: i64, req_
         I plugin.version_major < req_major {
             0
         } E {
-            # Major version equal, check minor
             I plugin.version_minor > req_minor {
                 1
             } E {
                 I plugin.version_minor < req_minor {
                     0
                 } E {
-                    # Minor version equal, check patch
                     I plugin.version_patch >= req_patch {
                         1
                     } E {
@@ -195,7 +183,6 @@ F is_version_compatible(plugin: PluginInfo, req_major: i64, req_minor: i64, req_
 # Test 5: Hot Reload State Machine
 # ============================================================================
 
-# Hot reload states
 C STATE_IDLE: i64 = 0
 C STATE_WATCHING: i64 = 1
 C STATE_COMPILING: i64 = 2
@@ -209,7 +196,6 @@ S HotReloadState {
     error_code: i64
 }
 
-# Create initial state
 F hot_reload_init() -> HotReloadState {
     HotReloadState {
         state: STATE_IDLE,
@@ -219,7 +205,6 @@ F hot_reload_init() -> HotReloadState {
     }
 }
 
-# Start watching
 F hot_reload_start(s: HotReloadState) -> HotReloadState {
     HotReloadState {
         state: STATE_WATCHING,
@@ -229,7 +214,6 @@ F hot_reload_start(s: HotReloadState) -> HotReloadState {
     }
 }
 
-# Simulate file change detected
 F hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
     I s.state == STATE_WATCHING {
         HotReloadState {
@@ -243,7 +227,6 @@ F hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
     }
 }
 
-# Simulate compilation success
 F hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
     I s.state == STATE_COMPILING {
         HotReloadState {
@@ -257,7 +240,6 @@ F hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
     }
 }
 
-# Simulate load success
 F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
     I s.state == STATE_LOADING {
         HotReloadState {
@@ -271,266 +253,209 @@ F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
     }
 }
 
-# Simulate error
-F hot_reload_error(s: HotReloadState, code: i64) -> HotReloadState {
-    HotReloadState {
-        state: STATE_ERROR,
-        version: s.version,
-        last_check: s.last_check,
-        error_code: code
-    }
-}
-
 # ============================================================================
-# Test Runner
+# Test Runner (using puts for output)
 # ============================================================================
 
-# External print function
-X F printf(fmt: i64, ...) -> i64
-
-# Test module loading simulation
 F test_module_loading() -> i64 {
-    printf("Testing module loading simulation...\n")
+    puts("Testing module loading simulation...")
 
-    # Create a module
     m := create_test_module(1, 0)
 
     I m.is_loaded != 1 {
-        printf("  FAIL: Module should be loaded\n")
-        B 0
+        puts("  FAIL: Module should be loaded")
+        R 0
     }
 
     I m.version != 1 {
-        printf("  FAIL: Initial version should be 1\n")
-        B 0
+        puts("  FAIL: Initial version should be 1")
+        R 0
     }
 
-    # Reload the module
     m2 := reload_test_module(m)
 
     I m2.version != 2 {
-        printf("  FAIL: Version should be 2 after reload\n")
-        B 0
+        puts("  FAIL: Version should be 2 after reload")
+        R 0
     }
 
-    # Unload
     m3 := unload_test_module(m2)
 
     I m3.is_loaded != 0 {
-        printf("  FAIL: Module should be unloaded\n")
-        B 0
+        puts("  FAIL: Module should be unloaded")
+        R 0
     }
 
-    printf("  PASS: Module loading simulation\n")
+    puts("  PASS: Module loading simulation")
     1
 }
 
-# Test resource limits
 F test_resource_limits() -> i64 {
-    printf("Testing resource limits...\n")
+    puts("Testing resource limits...")
 
     limits := default_resource_limits()
 
     I limits.max_memory != 67108864 {
-        printf("  FAIL: Default max_memory incorrect\n")
-        B 0
+        puts("  FAIL: Default max_memory incorrect")
+        R 0
     }
 
-    # Test limit checking
     I check_limits(10000000, 1000, limits) != 1 {
-        printf("  FAIL: Should be within limits\n")
-        B 0
+        puts("  FAIL: Should be within limits")
+        R 0
     }
 
     I check_limits(100000000, 1000, limits) != 0 {
-        printf("  FAIL: Should exceed memory limit\n")
-        B 0
+        puts("  FAIL: Should exceed memory limit")
+        R 0
     }
 
     I check_limits(10000000, 10000, limits) != 0 {
-        printf("  FAIL: Should exceed time limit\n")
-        B 0
+        puts("  FAIL: Should exceed time limit")
+        R 0
     }
 
-    printf("  PASS: Resource limits\n")
+    puts("  PASS: Resource limits")
     1
 }
 
-# Test capability system
 F test_capabilities() -> i64 {
-    printf("Testing capability system...\n")
+    puts("Testing capability system...")
 
     caps := CAP_CONSOLE
 
     I has_cap(caps, CAP_CONSOLE) != 1 {
-        printf("  FAIL: Should have console capability\n")
-        B 0
+        puts("  FAIL: Should have console capability")
+        R 0
     }
 
     I has_cap(caps, CAP_NETWORK) != 0 {
-        printf("  FAIL: Should not have network capability\n")
-        B 0
+        puts("  FAIL: Should not have network capability")
+        R 0
     }
 
-    # Grant network capability
     caps2 := grant_cap(caps, CAP_NETWORK)
 
     I has_cap(caps2, CAP_NETWORK) != 1 {
-        printf("  FAIL: Should have network after grant\n")
-        B 0
+        puts("  FAIL: Should have network after grant")
+        R 0
     }
 
-    # Check dangerous
     I is_dangerous(caps) != 0 {
-        printf("  FAIL: Console-only should not be dangerous\n")
-        B 0
+        puts("  FAIL: Console-only should not be dangerous")
+        R 0
     }
 
     I is_dangerous(caps2) != 1 {
-        printf("  FAIL: Network capability should be dangerous\n")
-        B 0
+        puts("  FAIL: Network capability should be dangerous")
+        R 0
     }
 
-    # Revoke
     caps3 := revoke_cap(caps2, CAP_NETWORK)
 
     I has_cap(caps3, CAP_NETWORK) != 0 {
-        printf("  FAIL: Should not have network after revoke\n")
-        B 0
+        puts("  FAIL: Should not have network after revoke")
+        R 0
     }
 
-    printf("  PASS: Capability system\n")
+    puts("  PASS: Capability system")
     1
 }
 
-# Test version compatibility
 F test_version_compatibility() -> i64 {
-    printf("Testing version compatibility...\n")
+    puts("Testing version compatibility...")
 
     plugin := create_plugin_info(0, 2, 1, 0)
 
-    # Should be compatible with 1.0.0
     I is_version_compatible(plugin, 1, 0, 0) != 1 {
-        printf("  FAIL: 2.1.0 should be compatible with 1.0.0\n")
-        B 0
+        puts("  FAIL: 2.1.0 should be compatible with 1.0.0")
+        R 0
     }
 
-    # Should be compatible with 2.0.0
     I is_version_compatible(plugin, 2, 0, 0) != 1 {
-        printf("  FAIL: 2.1.0 should be compatible with 2.0.0\n")
-        B 0
+        puts("  FAIL: 2.1.0 should be compatible with 2.0.0")
+        R 0
     }
 
-    # Should not be compatible with 2.2.0
     I is_version_compatible(plugin, 2, 2, 0) != 0 {
-        printf("  FAIL: 2.1.0 should not be compatible with 2.2.0\n")
-        B 0
+        puts("  FAIL: 2.1.0 should not be compatible with 2.2.0")
+        R 0
     }
 
-    # Should not be compatible with 3.0.0
     I is_version_compatible(plugin, 3, 0, 0) != 0 {
-        printf("  FAIL: 2.1.0 should not be compatible with 3.0.0\n")
-        B 0
+        puts("  FAIL: 2.1.0 should not be compatible with 3.0.0")
+        R 0
     }
 
-    printf("  PASS: Version compatibility\n")
+    puts("  PASS: Version compatibility")
     1
 }
 
-# Test hot reload state machine
 F test_hot_reload() -> i64 {
-    printf("Testing hot reload state machine...\n")
+    puts("Testing hot reload state machine...")
 
-    # Initialize
-    state := hot_reload_init()
+    state := mut hot_reload_init()
 
     I state.state != STATE_IDLE {
-        printf("  FAIL: Initial state should be IDLE\n")
-        B 0
+        puts("  FAIL: Initial state should be IDLE")
+        R 0
     }
 
-    # Start watching
-    state := hot_reload_start(state)
+    state = hot_reload_start(state)
 
     I state.state != STATE_WATCHING {
-        printf("  FAIL: Should be WATCHING after start\n")
-        B 0
+        puts("  FAIL: Should be WATCHING after start")
+        R 0
     }
 
-    # Simulate full reload cycle
-    state := hot_reload_change_detected(state)
+    state = hot_reload_change_detected(state)
     I state.state != STATE_COMPILING {
-        printf("  FAIL: Should be COMPILING after change detected\n")
-        B 0
+        puts("  FAIL: Should be COMPILING after change detected")
+        R 0
     }
 
-    state := hot_reload_compile_success(state)
+    state = hot_reload_compile_success(state)
     I state.state != STATE_LOADING {
-        printf("  FAIL: Should be LOADING after compile success\n")
-        B 0
+        puts("  FAIL: Should be LOADING after compile success")
+        R 0
     }
 
-    state := hot_reload_load_success(state)
+    state = hot_reload_load_success(state)
     I state.state != STATE_WATCHING {
-        printf("  FAIL: Should be WATCHING after load success\n")
-        B 0
+        puts("  FAIL: Should be WATCHING after load success")
+        R 0
     }
 
     I state.version != 1 {
-        printf("  FAIL: Version should be 1 after successful reload\n")
-        B 0
+        puts("  FAIL: Version should be 1 after successful reload")
+        R 0
     }
 
-    printf("  PASS: Hot reload state machine\n")
+    puts("  PASS: Hot reload state machine")
     1
 }
 
 # Main entry point
 F main() -> i64 {
-    printf("=== Dynamic Module Loading Tests ===\n\n")
+    puts("=== Dynamic Module Loading Tests ===")
 
-    passed := 0
-    failed := 0
+    r1 := test_module_loading()
+    r2 := test_resource_limits()
+    r3 := test_capabilities()
+    r4 := test_version_compatibility()
+    r5 := test_hot_reload()
 
-    I test_module_loading() == 1 {
-        passed := passed + 1
-    } E {
-        failed := failed + 1
-    }
+    passed := r1 + r2 + r3 + r4 + r5
+    failed := 5 - passed
 
-    I test_resource_limits() == 1 {
-        passed := passed + 1
-    } E {
-        failed := failed + 1
-    }
-
-    I test_capabilities() == 1 {
-        passed := passed + 1
-    } E {
-        failed := failed + 1
-    }
-
-    I test_version_compatibility() == 1 {
-        passed := passed + 1
-    } E {
-        failed := failed + 1
-    }
-
-    I test_hot_reload() == 1 {
-        passed := passed + 1
-    } E {
-        failed := failed + 1
-    }
-
-    printf("\n=== Results ===\n")
-    printf("Passed: %d\n", passed)
-    printf("Failed: %d\n", failed)
+    puts("")
+    puts("=== Results ===")
 
     I failed == 0 {
-        printf("\nAll tests passed!\n")
+        puts("All 5 tests passed!")
         0
     } E {
-        printf("\nSome tests failed.\n")
+        puts("Some tests failed.")
         1
     }
 }

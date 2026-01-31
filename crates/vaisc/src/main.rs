@@ -45,6 +45,7 @@ use vais_types::{TypeChecker};
 use vais_i18n::Locale;
 use vais_plugin::{PluginRegistry, PluginsConfig, find_config, Diagnostic, DiagnosticLevel};
 use vais_macro::{MacroRegistry, expand_macros, collect_macros, process_derives};
+use vais_query::QueryDatabase;
 
 #[derive(Parser)]
 #[command(name = "vaisc")]
@@ -799,13 +800,16 @@ fn cmd_build(
     let main_source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
+    // Initialize query database for memoized parsing
+    let query_db = QueryDatabase::new();
+
     // Parse main file and resolve imports
     let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let merged_ast = if use_parallel {
-        load_module_with_imports_parallel(input, &mut loaded_modules, verbose, &main_source)?
+        load_module_with_imports_parallel(input, &mut loaded_modules, verbose, &main_source, &query_db)?
     } else {
-        load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source)?
+        load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source, &query_db)?
     };
     let parse_time = parse_start.elapsed();
 
@@ -1093,10 +1097,11 @@ fn load_module_with_imports(
     path: &PathBuf,
     loaded: &mut HashSet<PathBuf>,
     verbose: bool,
+    query_db: &QueryDatabase,
 ) -> Result<Module, String> {
     let source = fs::read_to_string(path)
         .map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-    load_module_with_imports_internal(path, loaded, verbose, &source)
+    load_module_with_imports_internal(path, loaded, verbose, &source, query_db)
 }
 
 /// Internal function to load a module with source already read
@@ -1105,6 +1110,7 @@ fn load_module_with_imports_internal(
     loaded: &mut HashSet<PathBuf>,
     verbose: bool,
     source: &str,
+    query_db: &QueryDatabase,
 ) -> Result<Module, String> {
     // Canonicalize path to avoid duplicate loading
     let canonical = path.canonicalize()
@@ -1116,15 +1122,26 @@ fn load_module_with_imports_internal(
     }
     loaded.insert(canonical.clone());
 
+    // Use QueryDatabase for memoized parsing
+    let cached = query_db.has_current_source(&canonical, source);
+    query_db.set_source_text(&canonical, source);
+
     if verbose {
-        println!("{} {}", "Compiling".green().bold(), path.display());
+        let cache_tag = if cached { " (cached)" } else { "" };
+        println!("{} {}{}", "Compiling".green().bold(), path.display(), cache_tag);
     }
 
-    let _tokens = tokenize(source)
-        .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
-
-    let ast = parse(source)
-        .map_err(|e| error_formatter::format_parse_error(&e, source, path))?;
+    let ast = query_db.parse(&canonical)
+        .map_err(|e| match e {
+            vais_query::QueryError::Parse(msg) => {
+                // Try to provide formatted error using the original parser
+                match vais_parser::parse(source) {
+                    Err(parse_err) => error_formatter::format_parse_error(&parse_err, source, path),
+                    Ok(_) => msg,
+                }
+            }
+            other => format!("Error in '{}': {}", path.display(), other),
+        })?;
 
     if verbose {
         println!("  {} items", ast.items.len());
@@ -1134,7 +1151,7 @@ fn load_module_with_imports_internal(
     let mut all_items = Vec::new();
     let base_dir = path.parent().unwrap_or(Path::new("."));
 
-    for item in ast.items {
+    for item in ast.items.iter() {
         match &item.node {
             Item::Use(use_stmt) => {
                 // Resolve import path
@@ -1145,12 +1162,12 @@ fn load_module_with_imports_internal(
                 }
 
                 // Recursively load the imported module
-                let imported = load_module_with_imports(&module_path, loaded, verbose)?;
+                let imported = load_module_with_imports(&module_path, loaded, verbose, query_db)?;
                 // Filter out main functions from imported modules to avoid conflicts
                 all_items.extend(filter_imported_items(imported.items));
             }
             _ => {
-                all_items.push(item);
+                all_items.push(item.clone());
             }
         }
     }
@@ -1168,6 +1185,7 @@ fn load_module_with_imports_parallel(
     loaded: &mut HashSet<PathBuf>,
     verbose: bool,
     source: &str,
+    query_db: &QueryDatabase,
 ) -> Result<Module, String> {
     use rayon::prelude::*;
 
@@ -1180,15 +1198,17 @@ fn load_module_with_imports_parallel(
     }
     loaded.insert(canonical.clone());
 
+    // Use QueryDatabase for memoized parsing
+    let cached = query_db.has_current_source(&canonical, source);
+    query_db.set_source_text(&canonical, source);
+
     if verbose {
-        println!("{} {} (parallel)", "Compiling".green().bold(), path.display());
+        let cache_tag = if cached { " (cached)" } else { "" };
+        println!("{} {} (parallel){}", "Compiling".green().bold(), path.display(), cache_tag);
     }
 
-    let _tokens = tokenize(source)
-        .map_err(|e| format!("Lexer error in '{}': {}", path.display(), e))?;
-
-    let ast = parse(source)
-        .map_err(|e| error_formatter::format_parse_error(&e, source, path))?;
+    let ast = query_db.parse(&canonical)
+        .map_err(|e| format!("Error in '{}': {}", path.display(), e))?;
 
     if verbose {
         println!("  {} items", ast.items.len());
@@ -1213,37 +1233,39 @@ fn load_module_with_imports_parallel(
         }
     }
 
-    // Phase 2: Parse all imports in parallel
+    // Phase 2: Parse all imports in parallel using QueryDatabase
     #[allow(clippy::type_complexity)]
-    let parsed_results: Vec<(PathBuf, Result<(Module, String), String>)> = if import_paths.len() > 1 {
+    let parsed_results: Vec<(PathBuf, Result<Module, String>)> = if import_paths.len() > 1 {
         if verbose {
             println!("  {} Parsing {} imports in parallel", "⚡".cyan(), import_paths.len());
         }
         import_paths
             .par_iter()
             .map(|p| {
-                let result = (|| -> Result<(Module, String), String> {
+                let result = (|| -> Result<Module, String> {
                     let src = fs::read_to_string(p)
                         .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
-                    let _tokens = tokenize(&src)
-                        .map_err(|e| format!("Lexer error in '{}': {}", p.display(), e))?;
-                    let module = parse(&src)
-                        .map_err(|e| format!("Parse error in '{}': {:?}", p.display(), e))?;
-                    Ok((module, src))
+                    let p_canonical = p.canonicalize()
+                        .map_err(|e| format!("Cannot resolve path '{}': {}", p.display(), e))?;
+                    query_db.set_source_text(&p_canonical, &src);
+                    let module = query_db.parse(&p_canonical)
+                        .map_err(|e| format!("Error in '{}': {}", p.display(), e))?;
+                    Ok(Module { items: module.items.to_vec() })
                 })();
                 (p.clone(), result)
             })
             .collect()
     } else {
         import_paths.iter().map(|p| {
-            let result = (|| -> Result<(Module, String), String> {
+            let result = (|| -> Result<Module, String> {
                 let src = fs::read_to_string(p)
                     .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
-                let _tokens = tokenize(&src)
-                    .map_err(|e| format!("Lexer error in '{}': {}", p.display(), e))?;
-                let module = parse(&src)
-                    .map_err(|e| format!("Parse error in '{}': {:?}", p.display(), e))?;
-                Ok((module, src))
+                let p_canonical = p.canonicalize()
+                    .map_err(|e| format!("Cannot resolve path '{}': {}", p.display(), e))?;
+                query_db.set_source_text(&p_canonical, &src);
+                let module = query_db.parse(&p_canonical)
+                    .map_err(|e| format!("Error in '{}': {}", p.display(), e))?;
+                Ok(Module { items: module.items.to_vec() })
             })();
             (p.clone(), result)
         }).collect()
@@ -1253,7 +1275,7 @@ fn load_module_with_imports_parallel(
     let mut parsed_map: std::collections::HashMap<PathBuf, vais_ast::Module> =
         std::collections::HashMap::new();
     for (import_path, result) in parsed_results {
-        let (parsed_module, _src) = result?;
+        let parsed_module = result?;
         // Recursively resolve imports within each parsed module
         let sub_base = import_path.parent().unwrap_or(Path::new("."));
         let mut sub_items = Vec::new();
@@ -1261,7 +1283,7 @@ fn load_module_with_imports_parallel(
             match &item.node {
                 Item::Use(use_stmt) => {
                     let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
-                    let sub_imported = load_module_with_imports(&sub_path, loaded, verbose)?;
+                    let sub_imported = load_module_with_imports(&sub_path, loaded, verbose, query_db)?;
                     // Filter out main functions from imported modules to avoid conflicts
                     sub_items.extend(filter_imported_items(sub_imported.items));
                 }
@@ -1276,7 +1298,7 @@ fn load_module_with_imports_parallel(
     // Phase 3: Merge items in correct order
     let mut all_items = Vec::new();
     let mut import_idx = 0;
-    for (idx, item) in ast.items.into_iter().enumerate() {
+    for (idx, item) in ast.items.iter().enumerate() {
         match &item.node {
             Item::Use(_) => {
                 if import_idx < import_indices.len() && import_indices[import_idx] == idx {
@@ -1288,7 +1310,7 @@ fn load_module_with_imports_parallel(
                 }
             }
             _ => {
-                all_items.push(item);
+                all_items.push(item.clone());
             }
         }
     }
@@ -1377,14 +1399,48 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
                 return validate_and_canonicalize_import(&as_file, &canonical_base);
             } else if as_dir.exists() {
                 return validate_and_canonicalize_import(&as_dir, &canonical_base);
-            } else {
-                return Err(format!(
-                    "Cannot find module '{}': tried '{}' and '{}'",
-                    segment.node,
-                    as_file.display(),
-                    as_dir.display()
-                ));
             }
+
+            // Fall back to dependency search paths (set by pkg build)
+            if let Ok(dep_paths) = std::env::var("VAIS_DEP_PATHS") {
+                for dep_dir in dep_paths.split(':') {
+                    let dep_base = Path::new(dep_dir);
+                    if !dep_base.exists() {
+                        continue;
+                    }
+                    // Rebuild file path from the full import path segments
+                    let mut dep_file_path = dep_base.to_path_buf();
+                    for (j, seg) in path.iter().enumerate() {
+                        if j == path.len() - 1 {
+                            let dep_as_file = dep_file_path.join(format!("{}.vais", seg.node));
+                            let dep_as_dir = dep_file_path.join(&seg.node).join("mod.vais");
+                            let dep_as_lib = dep_file_path.join(&seg.node).join("lib.vais");
+                            if dep_as_file.exists() {
+                                let dep_canonical = dep_base.canonicalize()
+                                    .map_err(|_| format!("Cannot resolve dep directory: {}", dep_base.display()))?;
+                                return validate_and_canonicalize_import(&dep_as_file, &dep_canonical);
+                            } else if dep_as_dir.exists() {
+                                let dep_canonical = dep_base.canonicalize()
+                                    .map_err(|_| format!("Cannot resolve dep directory: {}", dep_base.display()))?;
+                                return validate_and_canonicalize_import(&dep_as_dir, &dep_canonical);
+                            } else if dep_as_lib.exists() {
+                                let dep_canonical = dep_base.canonicalize()
+                                    .map_err(|_| format!("Cannot resolve dep directory: {}", dep_base.display()))?;
+                                return validate_and_canonicalize_import(&dep_as_lib, &dep_canonical);
+                            }
+                        } else {
+                            dep_file_path = dep_file_path.join(&seg.node);
+                        }
+                    }
+                }
+            }
+
+            return Err(format!(
+                "Cannot find module '{}': tried '{}' and '{}'",
+                segment.node,
+                as_file.display(),
+                as_dir.display()
+            ));
         } else {
             file_path = file_path.join(&segment.node);
         }
@@ -1427,7 +1483,18 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
         .map(|root| canonical_path.starts_with(root))
         .unwrap_or(false);
 
-    if !is_within_allowed && !is_within_project && !is_within_std {
+    // Check if within dependency cache paths (set by pkg build)
+    let is_within_dep_cache = std::env::var("VAIS_DEP_PATHS").ok()
+        .map(|dep_paths| {
+            dep_paths.split(':').any(|dp| {
+                Path::new(dp).canonicalize().ok()
+                    .map(|cp| canonical_path.starts_with(&cp))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false);
+
+    if !is_within_allowed && !is_within_project && !is_within_std && !is_within_dep_cache {
         // Security: Path traversal or symlink attack detected
         return Err(format!(
             "Import path '{}' is outside allowed directories",
@@ -1928,9 +1995,13 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 println!("{} {}", "Building".cyan(), manifest.package.name);
             }
 
-            // Resolve dependencies
-            let deps = resolve_dependencies(&manifest, &pkg_dir)
-                .map_err(|e| e.to_string())?;
+            // Resolve dependencies (path + registry)
+            let cache_root = package::default_registry_cache_root();
+            let deps = resolve_all_dependencies(
+                &manifest,
+                &pkg_dir,
+                cache_root.as_deref(),
+            ).map_err(|e| e.to_string())?;
 
             if verbose && !deps.is_empty() {
                 println!("{} dependencies:", "Resolved".cyan());
@@ -1938,6 +2009,20 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                     println!("  {} -> {}", dep.name, dep.path.display());
                 }
             }
+
+            // Collect dependency source search paths for import resolution
+            let dep_search_paths: Vec<PathBuf> = deps.iter().filter_map(|dep| {
+                // Check for src/ directory in the dependency
+                let src_dir = dep.path.join("src");
+                if src_dir.exists() {
+                    Some(src_dir)
+                } else if dep.path.exists() {
+                    // Use the dependency root directly if no src/
+                    Some(dep.path.clone())
+                } else {
+                    None
+                }
+            }).collect();
 
             // Determine entry point
             let src_dir = pkg_dir.join("src");
@@ -1948,6 +2033,14 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             } else {
                 return Err("no main.vais or lib.vais found in src/".to_string());
             };
+
+            // Set dependency search paths as environment variable for import resolution
+            if !dep_search_paths.is_empty() {
+                let paths_str: Vec<String> = dep_search_paths.iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
+                std::env::set_var("VAIS_DEP_PATHS", paths_str.join(":"));
+            }
 
             // Build options
             let opt_level = if release { 2 } else { 0 };
@@ -2024,10 +2117,31 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 .ok_or_else(|| "could not find vais.toml".to_string())?;
 
             let manifest_path = pkg_dir.join("vais.toml");
+            let is_registry_dep = path.is_none();
+
             add_dependency(&manifest_path, &name, path.as_deref(), version.as_deref())
                 .map_err(|e| e.to_string())?;
 
             println!("{} Added dependency '{}'", "✓".green(), name);
+
+            if is_registry_dep {
+                // Check if the package is already installed in the cache
+                let cache_root = package::default_registry_cache_root();
+                let version_str = version.as_deref().unwrap_or("*");
+                let is_cached = cache_root
+                    .as_ref()
+                    .and_then(|root| package::find_cached_registry_dep(root, &name, version_str))
+                    .is_some();
+
+                if !is_cached {
+                    println!(
+                        "{} Run `vais pkg install` to download '{}' from the registry",
+                        "Note".yellow(),
+                        name
+                    );
+                }
+            }
+
             Ok(())
         }
 

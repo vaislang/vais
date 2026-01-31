@@ -3,6 +3,30 @@
 use vais_ast::Type;
 use vais_types::ResolvedType;
 
+/// Format an f64 value as a valid LLVM IR floating-point constant.
+/// LLVM requires format like "1.000000e+00", not Rust's "1.000000e0".
+pub(crate) fn format_llvm_float(n: f64) -> String {
+    // Use Rust's scientific notation then fix the exponent format
+    let s = format!("{:.6e}", n);
+    // Rust produces "1.000000e0", LLVM needs "1.000000e+00"
+    // Find the 'e' and fix the exponent
+    if let Some(e_pos) = s.rfind('e') {
+        let (mantissa, exp_part) = s.split_at(e_pos);
+        let exp_str = &exp_part[1..]; // skip 'e'
+        if let Ok(exp_val) = exp_str.parse::<i32>() {
+            if exp_val >= 0 {
+                format!("{}e+{:02}", mantissa, exp_val)
+            } else {
+                format!("{}e-{:02}", mantissa, exp_val.unsigned_abs())
+            }
+        } else {
+            s
+        }
+    } else {
+        s
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct LoopLabels {
     pub continue_label: String,

@@ -107,7 +107,7 @@ impl ExprVisitor for CodeGenerator {
     }
 
     fn visit_float(&mut self, n: f64) -> GenResult {
-        Ok((format!("{:e}", n), String::new()))
+        Ok((crate::types::format_llvm_float(n), String::new()))
     }
 
     fn visit_bool(&mut self, b: bool) -> GenResult {
@@ -420,7 +420,7 @@ impl ExprVisitor for CodeGenerator {
         // Return the evaluated constant as LLVM IR
         match value {
             vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
-            vais_types::ComptimeValue::Float(f) => Ok((format!("{:e}", f), String::new())),
+            vais_types::ComptimeValue::Float(f) => Ok((crate::types::format_llvm_float(f), String::new())),
             vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
             vais_types::ComptimeValue::String(s) => {
                 // Create a global string constant
@@ -441,7 +441,7 @@ impl ExprVisitor for CodeGenerator {
                 for elem in arr {
                     match elem {
                         vais_types::ComptimeValue::Int(n) => elements.push(n.to_string()),
-                        vais_types::ComptimeValue::Float(f) => elements.push(format!("{:e}", f)),
+                        vais_types::ComptimeValue::Float(f) => elements.push(crate::types::format_llvm_float(f)),
                         vais_types::ComptimeValue::Bool(b) => elements.push(if b { "1" } else { "0" }.to_string()),
                         _ => {
                             return Err(CodegenError::TypeError(
