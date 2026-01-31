@@ -1,7 +1,10 @@
 [package]
 name = "vais-bindgen"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "FFI binding generator for the Vais programming language"
 
 [dependencies]
 regex = "1.10"

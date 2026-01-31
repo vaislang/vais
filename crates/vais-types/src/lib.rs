@@ -1,4 +1,4 @@
-//! Vais 0.0.1 Type System
+//! Vais Type System
 //!
 //! Static type checking with inference for AI-optimized code generation.
 

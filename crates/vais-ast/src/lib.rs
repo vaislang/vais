@@ -1,4 +1,4 @@
-//! Vais 0.0.1 Abstract Syntax Tree
+//! Vais Abstract Syntax Tree
 //!
 //! AI-optimized AST with minimal node types for efficient parsing and code generation.
 

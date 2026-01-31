@@ -1,4 +1,4 @@
-//! Vais 0.0.1 Parser
+//! Vais Parser
 //!
 //! Recursive descent parser for AI-optimized syntax.
 

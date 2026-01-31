@@ -2,6 +2,9 @@
 name = "vais-codegen"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "LLVM IR code generator for the Vais programming language"
 
 [features]
 default = ["text-codegen"]

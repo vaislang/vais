@@ -2,6 +2,9 @@
 name = "vais-security"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Security analysis and auditing tools for the Vais programming language"
 
 [dependencies]
 vais-ast = { path = "../vais-ast" }

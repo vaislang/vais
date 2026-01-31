@@ -1,6 +1,6 @@
 [package]
 name = "vais-i18n"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 authors = ["Steve"]
 description = "Internationalization support for Vais compiler error messages"

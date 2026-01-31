@@ -2,6 +2,9 @@
 name = "vais-tutorial"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Interactive tutorial system for the Vais programming language"
 
 [dependencies]
 vais-lexer = { path = "../vais-lexer" }

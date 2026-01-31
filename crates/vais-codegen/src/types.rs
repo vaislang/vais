@@ -199,8 +199,10 @@ impl CodeGenerator {
         let result = match self.type_to_llvm_impl(ty) {
             Ok(r) => r,
             Err(e) => {
-                // On recursion error, print a warning and return a fallback type
+                // On recursion error, return a fallback type
+                #[cfg(debug_assertions)]
                 eprintln!("Warning: {}", e);
+                let _ = e;
                 "i64".to_string()
             }
         };
@@ -316,7 +318,9 @@ impl CodeGenerator {
             ResolvedType::ConstGeneric(param) => {
                 // Const generics should be resolved at monomorphization time
                 // If we reach here, it's an error, but fall back to i64
+                #[cfg(debug_assertions)]
                 eprintln!("Warning: Unresolved const generic parameter: {}", param);
+                let _ = param;
                 "i64".to_string()
             }
             ResolvedType::Vector { element, lanes } => {
@@ -402,6 +406,7 @@ impl CodeGenerator {
         // Track recursion depth
         if self.enter_type_recursion("ast_type_to_resolved").is_err() {
             // On recursion limit, return Unknown type as fallback
+            #[cfg(debug_assertions)]
             eprintln!("Warning: Type recursion limit exceeded in ast_type_to_resolved");
             return ResolvedType::Unknown;
         }

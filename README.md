@@ -1,4 +1,4 @@
-# Vais 0.0.1
+# Vais 1.0.0
 
 **AI-optimized systems programming language with token-efficient syntax.**
 

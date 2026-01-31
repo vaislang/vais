@@ -2,6 +2,9 @@
 name = "vais-types"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Type checker and inference engine for the Vais programming language"
 
 [dependencies]
 vais-ast = { path = "../vais-ast" }

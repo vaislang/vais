@@ -1,4 +1,4 @@
-//! Vais 0.0.1 Lexer
+//! Vais Lexer
 //!
 //! Token-efficient lexer using single-letter keywords for AI optimization.
 
