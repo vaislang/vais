@@ -3,9 +3,9 @@
   "request": "Phase 15 P1 - Async 런타임 및 GC 고도화",
   "tasks": [
     { "id": 1, "name": "kqueue 기반 이벤트 루프 (std/runtime.vais)", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "Async I/O + 런타임 E2E 테스트", "status": "in_progress", "model": "Opus" },
+    { "id": 2, "name": "Async I/O + 런타임 E2E 테스트", "status": "completed", "model": "Opus" },
     { "id": 3, "name": "세대별 GC 구현 (crates/vais-gc)", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "GC 튜닝 옵션 + 벤치마크", "status": "pending", "model": "Sonnet" }
+    { "id": 4, "name": "GC 튜닝 옵션 + 벤치마크", "status": "in_progress", "model": "Sonnet" }
   ],
-  "currentTask": 2
+  "currentTask": 4
 }

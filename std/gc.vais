@@ -133,3 +133,154 @@ F gc_scope_end(start_bytes: i64) -> i64 {
     gc_collect()
     0
 }
+
+# ==================== Generational GC API ====================
+
+# External C FFI declarations for Generational GC
+X F vais_gen_gc_init() -> i64
+X F vais_gen_gc_alloc(size: i64, type_id: i64) -> i64
+X F vais_gen_gc_add_root(ptr: i64) -> i64
+X F vais_gen_gc_remove_root(ptr: i64) -> i64
+X F vais_gen_gc_write_barrier(source: i64, old_target: i64, new_target: i64) -> i64
+X F vais_gen_gc_collect_minor() -> i64
+X F vais_gen_gc_collect_major() -> i64
+X F vais_gen_gc_collect_full() -> i64
+X F vais_gen_gc_young_objects() -> i64
+X F vais_gen_gc_old_objects() -> i64
+X F vais_gen_gc_minor_collections() -> i64
+X F vais_gen_gc_major_collections() -> i64
+X F vais_gen_gc_total_promoted() -> i64
+X F vais_gen_gc_set_young_threshold(threshold: i64) -> i64
+X F vais_gen_gc_set_old_threshold(threshold: i64) -> i64
+X F vais_gen_gc_set_promotion_age(age: i64) -> i64
+X F vais_gen_gc_print_stats() -> i64
+
+# Initialize the generational GC
+F gen_gc_init() -> i64 {
+    vais_gen_gc_init()
+}
+
+# Allocate memory via generational GC (new objects go to young generation)
+F gen_gc_alloc(size: i64, type_id: i64) -> i64 {
+    vais_gen_gc_alloc(size, type_id)
+}
+
+# Register a root pointer for generational GC
+F gen_gc_add_root(ptr: i64) -> i64 {
+    vais_gen_gc_add_root(ptr)
+}
+
+# Unregister a root pointer for generational GC
+F gen_gc_remove_root(ptr: i64) -> i64 {
+    vais_gen_gc_remove_root(ptr)
+}
+
+# Write barrier: notify GC that source now points to new_target
+# Must be called when modifying pointer fields in old-generation objects
+F gen_gc_write_barrier(source: i64, old_target: i64, new_target: i64) -> i64 {
+    vais_gen_gc_write_barrier(source, old_target, new_target)
+}
+
+# Force minor GC (young generation only, fast)
+F gen_gc_collect_minor() -> i64 {
+    vais_gen_gc_collect_minor()
+}
+
+# Force major GC (both generations, thorough)
+F gen_gc_collect_major() -> i64 {
+    vais_gen_gc_collect_major()
+}
+
+# Force full GC (minor + major)
+F gen_gc_collect_full() -> i64 {
+    vais_gen_gc_collect_full()
+}
+
+# Get number of young generation objects
+F gen_gc_young_objects() -> i64 {
+    vais_gen_gc_young_objects()
+}
+
+# Get number of old generation objects
+F gen_gc_old_objects() -> i64 {
+    vais_gen_gc_old_objects()
+}
+
+# Get number of minor collections performed
+F gen_gc_minor_collections() -> i64 {
+    vais_gen_gc_minor_collections()
+}
+
+# Get number of major collections performed
+F gen_gc_major_collections() -> i64 {
+    vais_gen_gc_major_collections()
+}
+
+# Get total number of objects promoted from young to old
+F gen_gc_total_promoted() -> i64 {
+    vais_gen_gc_total_promoted()
+}
+
+# Set young generation GC threshold (bytes)
+# Default: 262144 (256 KB). Smaller values = more frequent minor GCs.
+F gen_gc_set_young_threshold(threshold: i64) -> i64 {
+    vais_gen_gc_set_young_threshold(threshold)
+}
+
+# Set old generation GC threshold (bytes)
+# Default: 4194304 (4 MB). Smaller values = more frequent major GCs.
+F gen_gc_set_old_threshold(threshold: i64) -> i64 {
+    vais_gen_gc_set_old_threshold(threshold)
+}
+
+# Set promotion age (number of minor GCs before object promoted to old gen)
+# Default: 3. Higher values keep objects in young gen longer.
+F gen_gc_set_promotion_age(age: i64) -> i64 {
+    vais_gen_gc_set_promotion_age(age)
+}
+
+# Print generational GC statistics to stdout
+F gen_gc_print_stats() -> i64 {
+    vais_gen_gc_print_stats()
+}
+
+# Generational GC Statistics struct
+S GenGcStats {
+    young_objects: i64,
+    old_objects: i64,
+    minor_collections: i64,
+    major_collections: i64,
+    total_promoted: i64
+}
+
+# Get generational GC statistics as a struct
+F gen_gc_stats() -> GenGcStats {
+    GenGcStats {
+        young_objects: gen_gc_young_objects(),
+        old_objects: gen_gc_old_objects(),
+        minor_collections: gen_gc_minor_collections(),
+        major_collections: gen_gc_major_collections(),
+        total_promoted: gen_gc_total_promoted()
+    }
+}
+
+# GC tuning preset: low-latency (small young gen, frequent minor GCs)
+F gen_gc_tune_low_latency() -> i64 {
+    gen_gc_set_young_threshold(65536)
+    gen_gc_set_old_threshold(2097152)
+    gen_gc_set_promotion_age(2)
+}
+
+# GC tuning preset: throughput (large young gen, fewer GCs)
+F gen_gc_tune_throughput() -> i64 {
+    gen_gc_set_young_threshold(1048576)
+    gen_gc_set_old_threshold(16777216)
+    gen_gc_set_promotion_age(5)
+}
+
+# GC tuning preset: balanced (default settings)
+F gen_gc_tune_balanced() -> i64 {
+    gen_gc_set_young_threshold(262144)
+    gen_gc_set_old_threshold(4194304)
+    gen_gc_set_promotion_age(3)
+}

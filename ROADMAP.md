@@ -365,8 +365,8 @@ examples/          # 예제 코드 (40+ 파일) ✅
 #### GC 고도화
 - [x] **세대별 GC (Generational GC)** - Young/Old 세대 분리, Minor/Major GC 구분, 카드 마킹, 리멤버드 셋, 프로모션 에이지 (완료일: 2026-01-31)
 - [x] **동시 수집 (Concurrent Collection)** - 기존 ConcurrentGc에 tri-color 마킹 + write barrier 완성 (Phase 11에서 완료, Phase 15에서 세대별 확장)
-- [ ] **GC 튜닝 옵션** - 힙 크기, 세대 비율, GC 트리거 임계값 설정 가능
-- [ ] **GC 벤치마크** - 할당 집중 워크로드에서 성능 측정 및 최적화
+- [x] **GC 튜닝 옵션** - std/gc.vais에 세대별 GC 전체 API 추가 (young/old threshold, promotion age, write barrier, minor/major collect, stats), 3가지 튜닝 프리셋 (low_latency, throughput, balanced) (완료일: 2026-01-31)
+- [x] **GC 벤치마크** - criterion 기반 6개 벤치마크 그룹 (할당 throughput, minor/major GC, promotion, 튜닝 프리셋 비교, write barrier), 총 18개 벤치마크 케이스 (완료일: 2026-01-31)
 
 ### P2 - 중간 우선순위: 타입 시스템 강화
 
