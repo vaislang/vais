@@ -2,30 +2,62 @@
 source_filename = "<vais>"
 
 %SimpleCounter = type { i64 }
-declare i64 @fputc(i64, i64)
-declare i32 @putchar(i32)
-declare i64 @strlen(i64)
-declare i64 @ftell(i64)
-declare i64 @fputs(i8*, i64)
-declare i32 @sched_yield()
-declare i64 @malloc(i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i32 @strcmp(i8*, i8*)
-declare i32 @usleep(i64)
 declare i64 @fseek(i64, i64, i64)
-declare void @exit(i32)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i32 @puts(i64)
-declare i64 @fflush(i64)
-declare i64 @fopen(i8*, i8*)
-declare i64 @feof(i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i32 @printf(i8*)
-declare i64 @memcpy(i64, i64, i64)
-declare i32 @fclose(i64)
-declare i64 @fgets(i64, i64, i64)
+declare i32 @usleep(i64)
 declare void @free(i64)
+declare i64 @atol(i8*)
+declare double @atof(i8*)
+declare i32 @putchar(i32)
+declare i32 @puts(i8*)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @vais_gc_init()
+declare i64 @vais_gc_add_root(i64)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @fgets(i64, i64, i64)
+declare i64 @vais_gc_collect()
+declare i64 @vais_gc_set_threshold(i64)
+declare i64 @fwrite(i64, i64, i64, i64)
 declare i64 @fgetc(i64)
+declare i32 @rand()
+declare i64 @memcpy(i64, i64, i64)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @malloc(i64)
+declare i64 @labs(i64)
+declare i64 @fputs(i8*, i64)
+declare i32 @printf(i8*, ...)
+declare double @sqrt(double)
+declare i64 @vais_gc_objects_count()
+declare i64 @fopen(i8*, i8*)
+declare i64 @vais_gc_bytes_allocated()
+declare i64 @vais_gc_collections()
+declare i64 @strlen(i8*)
+declare i32 @fclose(i64)
+declare i32 @sched_yield()
+declare i64 @ftell(i64)
+declare i64 @fflush(i64)
+declare i64 @feof(i64)
+declare i32 @atoi(i8*)
+declare double @fabs(double)
+declare i64 @strcpy(i64, i8*)
+define i64 @fopen_ptr(i64 %path, i8* %mode) {
+entry:
+  %0 = call i64 @fopen(i64 %path, i8* %mode)
+  ret i64 %0
+}
+declare i64 @fread(i64, i64, i64, i64)
+declare i32 @isalpha(i32)
+declare i32 @toupper(i32)
+declare i32 @tolower(i32)
+declare i32 @isdigit(i32)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i64 @vais_gc_print_stats()
+declare void @exit(i32)
+declare void @srand(i32)
+declare i64 @fputc(i64, i64)
+declare i64 @strcat(i64, i8*)
+@__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
 @.str.0 = private unnamed_addr constant [33 x i8] c"Testing trait method resolution:\00"
 @.str.1 = private unnamed_addr constant [23 x i8] c"Calling trait methods:\00"
 @.str.2 = private unnamed_addr constant [35 x i8] c"Trait method inference successful!\00"
@@ -43,15 +75,12 @@ define i64 @SimpleCounter_next(%SimpleCounter* %self) {
 entry:
   %0 = getelementptr %SimpleCounter, %SimpleCounter* %self, i32 0, i32 0
   %1 = load i64, i64* %0
-  %current.2 = alloca i64
-  store i64 %1, i64* %current.2
-  %3 = getelementptr %SimpleCounter, %SimpleCounter* %self, i32 0, i32 0
-  %4 = load i64, i64* %3
-  %5 = add i64 %4, 1
-  %6 = getelementptr %SimpleCounter, %SimpleCounter* %self, i32 0, i32 0
-  store i64 %5, i64* %6
-  %7 = load i64, i64* %current.2
-  ret i64 %7
+  %2 = getelementptr %SimpleCounter, %SimpleCounter* %self, i32 0, i32 0
+  %3 = load i64, i64* %2
+  %4 = add i64 %3, 1
+  %5 = getelementptr %SimpleCounter, %SimpleCounter* %self, i32 0, i32 0
+  store i64 %4, i64* %5
+  ret i64 %1
 }
 
 define i64 @SimpleCounter_has_next(%SimpleCounter* %self) {
@@ -74,43 +103,43 @@ merge2:
 define i64 @main() {
 entry:
   %0 = call i32 @puts(i8* getelementptr ([33 x i8], [33 x i8]* @.str.0, i64 0, i64 0))
-  %1 = call %SimpleCounter @SimpleCounter_new(i64 0)
-  %counter.2.struct = alloca %SimpleCounter
-  store %SimpleCounter %1, %SimpleCounter* %counter.2.struct
-  %counter.2 = alloca %SimpleCounter*
-  store %SimpleCounter* %counter.2.struct, %SimpleCounter** %counter.2
-  %3 = call i32 @puts(i8* getelementptr ([23 x i8], [23 x i8]* @.str.1, i64 0, i64 0))
-  %4 = load %SimpleCounter*, %SimpleCounter** %counter.2
-  %5 = call i64 @SimpleCounter_has_next(%SimpleCounter* %4)
-  %status.6 = alloca i64
-  store i64 %5, i64* %status.6
-  %7 = load i64, i64* %status.6
+  %1 = sext i32 %0 to i64
+  %2 = call %SimpleCounter @SimpleCounter_new(i64 0)
+  %counter.3.struct = alloca %SimpleCounter
+  store %SimpleCounter %2, %SimpleCounter* %counter.3.struct
+  %counter.3 = alloca %SimpleCounter*
+  store %SimpleCounter* %counter.3.struct, %SimpleCounter** %counter.3
+  %4 = call i32 @puts(i8* getelementptr ([23 x i8], [23 x i8]* @.str.1, i64 0, i64 0))
+  %5 = sext i32 %4 to i64
+  %6 = load %SimpleCounter*, %SimpleCounter** %counter.3
+  %7 = call i64 @SimpleCounter_has_next(%SimpleCounter* %6)
   %8 = add i64 %7, 48
   %9 = trunc i64 %8 to i32
   %10 = call i32 @putchar(i32 %9)
-  %11 = trunc i64 10 to i32
-  %12 = call i32 @putchar(i32 %11)
-  %13 = load %SimpleCounter*, %SimpleCounter** %counter.2
-  %14 = call i64 @SimpleCounter_next(%SimpleCounter* %13)
-  %val.15 = alloca i64
-  store i64 %14, i64* %val.15
-  %16 = load i64, i64* %val.15
+  %11 = sext i32 %10 to i64
+  %12 = trunc i64 10 to i32
+  %13 = call i32 @putchar(i32 %12)
+  %14 = sext i32 %13 to i64
+  %15 = load %SimpleCounter*, %SimpleCounter** %counter.3
+  %16 = call i64 @SimpleCounter_next(%SimpleCounter* %15)
   %17 = add i64 %16, 48
   %18 = trunc i64 %17 to i32
   %19 = call i32 @putchar(i32 %18)
-  %20 = trunc i64 10 to i32
-  %21 = call i32 @putchar(i32 %20)
-  %22 = load %SimpleCounter*, %SimpleCounter** %counter.2
-  %23 = call i64 @SimpleCounter_next(%SimpleCounter* %22)
-  %val2.24 = alloca i64
-  store i64 %23, i64* %val2.24
-  %25 = load i64, i64* %val2.24
+  %20 = sext i32 %19 to i64
+  %21 = trunc i64 10 to i32
+  %22 = call i32 @putchar(i32 %21)
+  %23 = sext i32 %22 to i64
+  %24 = load %SimpleCounter*, %SimpleCounter** %counter.3
+  %25 = call i64 @SimpleCounter_next(%SimpleCounter* %24)
   %26 = add i64 %25, 48
   %27 = trunc i64 %26 to i32
   %28 = call i32 @putchar(i32 %27)
-  %29 = trunc i64 10 to i32
-  %30 = call i32 @putchar(i32 %29)
-  %31 = call i32 @puts(i8* getelementptr ([35 x i8], [35 x i8]* @.str.2, i64 0, i64 0))
+  %29 = sext i32 %28 to i64
+  %30 = trunc i64 10 to i32
+  %31 = call i32 @putchar(i32 %30)
+  %32 = sext i32 %31 to i64
+  %33 = call i32 @puts(i8* getelementptr ([35 x i8], [35 x i8]* @.str.2, i64 0, i64 0))
+  %34 = sext i32 %33 to i64
   ret i64 0
 }
 
@@ -146,5 +175,21 @@ define void @__store_i64(i64 %ptr, i64 %val) {
 entry:
   %0 = inttoptr i64 %ptr to i64*
   store i64 %val, i64* %0
+  ret void
+}
+
+; Helper function: load f64 from memory
+define double @__load_f64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  %1 = load double, double* %0
+  ret double %1
+}
+
+; Helper function: store f64 to memory
+define void @__store_f64(i64 %ptr, double %val) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  store double %val, double* %0
   ret void
 }

@@ -72,6 +72,18 @@ X Generator {
         Generator.i64_range(0, 100)
     }
 
+    # Create a generator for positive i64 (1 to MAX)
+    F i64_positive() -> Generator {
+        Generator.i64_range(1, 9223372036854775807)
+    }
+
+    # Create a generator for non-zero i64 (-MAX to -1, 1 to MAX)
+    F i64_nonzero() -> Generator {
+        # Note: This is a simplified version that generates in full range
+        # except zero. A more sophisticated version could use weighted selection.
+        Generator.i64_range(-9223372036854775807, 9223372036854775807)
+    }
+
     # Create a generator for boolean values
     F bool_any() -> Generator {
         Generator {

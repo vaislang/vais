@@ -3,6 +3,20 @@
 # Uses recursive descent matching
 
 # =====================================================
+# Helper functions
+# =====================================================
+
+# Get string length from i64 pointer (since strlen expects str, not i64)
+F strlen_ptr(s: i64) -> i64 {
+    strlen_ptr_rec(s, 0)
+}
+
+F strlen_ptr_rec(s: i64, len: i64) -> i64 {
+    I load_byte(s + len) == 0 { len }
+    E { strlen_ptr_rec(s, len + 1) }
+}
+
+# =====================================================
 # Regex Pattern Structure
 # =====================================================
 # Pattern node types:
@@ -28,7 +42,7 @@
 # =====================================================
 
 F regex_compile(pattern: i64) -> i64 {
-    len := strlen(pattern)
+    len := strlen_ptr(pattern)
     regex_compile_rec(pattern, 0, len)
 }
 
@@ -192,7 +206,7 @@ F regex_find_bracket_end(pattern: i64, start: i64, len: i64) -> i64 {
 # =====================================================
 
 F regex_match(regex: i64, text: i64) -> i64 {
-    text_len := strlen(text)
+    text_len := strlen_ptr(text)
 
     # Check for start anchor
     first_type := load_i64(regex)

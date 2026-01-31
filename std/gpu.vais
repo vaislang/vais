@@ -82,6 +82,9 @@ F thread_fence_block() -> i64 = 0
 # Atomic add: *addr += val, returns old value
 F atomic_add(addr: *i64, val: i64) -> i64 = 0
 
+# Atomic add for f64: *addr += val, returns old value
+F atomic_add_f64(addr: *f64, val: f64) -> f64 = 0.0
+
 # Atomic subtract: *addr -= val, returns old value
 F atomic_sub(addr: *i64, val: i64) -> i64 = 0
 
@@ -139,7 +142,7 @@ F gpu_fma(a: f64, b: f64, c: f64) -> f64 = a * b + c
 # Allocate shared memory (per-block, fast access)
 # Returns pointer to shared memory region
 # Note: size must be known at compile time
-F shared_alloc(size: i64) -> *i64 = malloc(size)
+F shared_alloc(size: i64) -> i64 = malloc(size)
 
 # ============================================================================
 # Memory Operations
@@ -267,9 +270,9 @@ F avx512_div_f32(a: i64, b: i64) -> i64 = 0
 F avx512_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # AVX-512 reduction
-F avx512_reduce_add_f32(vec: i64) -> f32 = 0.0
-F avx512_reduce_min_f32(vec: i64) -> f32 = 0.0
-F avx512_reduce_max_f32(vec: i64) -> f32 = 0.0
+F avx512_reduce_add_f32(vec: i64) -> f32 = 0.0 as f32
+F avx512_reduce_min_f32(vec: i64) -> f32 = 0.0 as f32
+F avx512_reduce_max_f32(vec: i64) -> f32 = 0.0 as f32
 
 # AVX-512 broadcast
 F avx512_broadcast_f32(val: f32) -> i64 = 0
@@ -311,9 +314,9 @@ F neon_mul_f32(a: i64, b: i64) -> i64 = 0
 F neon_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # NEON reduction
-F neon_reduce_add_f32(vec: i64) -> f32 = 0.0
-F neon_reduce_min_f32(vec: i64) -> f32 = 0.0
-F neon_reduce_max_f32(vec: i64) -> f32 = 0.0
+F neon_reduce_add_f32(vec: i64) -> f32 = 0.0 as f32
+F neon_reduce_min_f32(vec: i64) -> f32 = 0.0 as f32
+F neon_reduce_max_f32(vec: i64) -> f32 = 0.0 as f32
 
 # NEON broadcast
 F neon_dup_f32(val: f32) -> i64 = 0

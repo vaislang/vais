@@ -14,19 +14,21 @@ F main() -> i64 {
     v.push(30)
 
     result := v.get_opt(1)
-    I result.is_some() == 1 {
-        val := result.unwrap_or(0)
-        print_i64(val)
+    M result {
+        Some(_) => puts("Vec get_opt(1) = Some"),
+        None => puts("Vec get_opt(1) = None")
     }
 
     result2 := v.get_opt(99)
-    I result2.is_none() == 1 {
-        puts("Out of bounds returns None")
+    M result2 {
+        None => puts("Out of bounds returns None"),
+        Some(_) => puts("Unexpected Some value")
     }
 
     pop_val := v.pop_opt()
-    I pop_val.is_some() == 1 {
-        print_i64(pop_val.unwrap_or(0))
+    M pop_val {
+        Some(_) => puts("Vec pop_opt = Some"),
+        None => puts("Vec pop_opt = None")
     }
 
     v.drop()
@@ -36,13 +38,15 @@ F main() -> i64 {
     map.set(5, 500)
 
     map_result := map.get_opt(5)
-    I map_result.is_some() == 1 {
-        print_i64(map_result.unwrap_or(0))
+    M map_result {
+        Some(_) => puts("HashMap get_opt(5) = Some"),
+        None => puts("HashMap get_opt(5) = None")
     }
 
     map_result2 := map.get_opt(999)
-    I map_result2.is_none() == 1 {
-        puts("Key not found returns None")
+    M map_result2 {
+        None => puts("Key not found returns None"),
+        Some(_) => puts("Unexpected Some value")
     }
 
     map.drop()

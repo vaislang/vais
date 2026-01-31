@@ -41,7 +41,7 @@ F dot_product_kernel(a: *f64, b: *f64, partial: *f64, n: i64) -> i64 {
     }
 
     # Use atomic add to accumulate
-    atomic_add(partial, prod)
+    atomic_add_f64(partial, prod)
     0
 }
 

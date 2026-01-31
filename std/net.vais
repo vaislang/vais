@@ -5,6 +5,8 @@
 # Host addresses are passed as null-terminated strings (e.g., "127.0.0.1")
 # Ports are i64 integers.
 
+U std/result
+
 # ============================================================================
 # Constants
 # ============================================================================

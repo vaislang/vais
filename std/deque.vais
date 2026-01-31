@@ -3,6 +3,8 @@
 # Supports O(1) push/pop operations at both ends
 # Updated to use Option<T> for error handling
 
+U std/option
+
 # Helper function to copy one element from circular buffer to linear buffer
 # This is a recursive helper to work around loop variable mutability limitations
 F deque_copy_element(src_data: i64, dst_data: i64, head: i64, cap: i64, src_idx: i64, dst_idx: i64, remaining: i64) -> i64 {
@@ -138,7 +140,7 @@ X Deque {
 
     # Pop element from front using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F pop_front_opt(&self) -> Option {
+    F pop_front_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
         } E {
@@ -178,7 +180,7 @@ X Deque {
 
     # Pop element from back using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F pop_back_opt(&self) -> Option {
+    F pop_back_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
         } E {
@@ -209,7 +211,7 @@ X Deque {
 
     # Get element at front using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F front_opt(&self) -> Option {
+    F front_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
         } E {
@@ -235,7 +237,7 @@ X Deque {
 
     # Get element at back using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F back_opt(&self) -> Option {
+    F back_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
         } E {
@@ -267,7 +269,7 @@ X Deque {
 
     # Get element at index using Option type
     # Returns Some(value) if index is valid, None otherwise
-    F get_opt(&self, index: i64) -> Option {
+    F get_opt(&self, index: i64) -> Option<i64> {
         I index < 0 {
             None
         } E I index >= self.len {

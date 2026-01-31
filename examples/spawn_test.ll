@@ -1,30 +1,62 @@
 ; ModuleID = 'spawn_test'
 source_filename = "<vais>"
 
-declare i64 @ftell(i64)
-declare i64 @fputc(i64, i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i32 @strcmp(i8*, i8*)
-declare i64 @fgetc(i64)
-declare i64 @fseek(i64, i64, i64)
-declare i32 @usleep(i64)
-declare i64 @feof(i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i64 @fopen(i8*, i8*)
-declare i64 @memcpy(i64, i64, i64)
-declare i32 @printf(i8*)
-declare i32 @fclose(i64)
-declare i64 @fflush(i64)
-declare i64 @fgets(i64, i64, i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i32 @puts(i64)
-declare void @free(i64)
-declare i64 @malloc(i64)
-declare void @exit(i32)
-declare i64 @strlen(i64)
-declare i32 @sched_yield()
-declare i64 @fputs(i8*, i64)
+declare i32 @printf(i8*, ...)
+define i64 @fopen_ptr(i64 %path, i8* %mode) {
+entry:
+  %0 = call i64 @fopen(i64 %path, i8* %mode)
+  ret i64 %0
+}
 declare i32 @putchar(i32)
+declare void @srand(i32)
+declare i32 @isalpha(i32)
+declare i64 @memcpy(i64, i64, i64)
+declare void @exit(i32)
+declare i64 @strlen(i8*)
+declare i32 @atoi(i8*)
+declare i64 @atol(i8*)
+declare i32 @puts(i8*)
+declare void @free(i64)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @vais_gc_collect()
+declare i64 @fopen(i8*, i8*)
+declare i64 @ftell(i64)
+declare i64 @vais_gc_bytes_allocated()
+declare i64 @fgetc(i64)
+declare i64 @vais_gc_set_threshold(i64)
+declare i64 @vais_gc_init()
+declare i64 @vais_gc_print_stats()
+declare double @atof(i8*)
+declare i32 @tolower(i32)
+declare double @sqrt(double)
+declare i64 @fputc(i64, i64)
+declare i64 @fgets(i64, i64, i64)
+declare i64 @vais_gc_objects_count()
+declare i64 @vais_gc_remove_root(i64)
+declare i32 @isdigit(i32)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i32 @sched_yield()
+declare double @fabs(double)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i32 @rand()
+declare i64 @strcpy(i64, i8*)
+declare i32 @usleep(i64)
+declare i64 @vais_gc_add_root(i64)
+declare i64 @vais_gc_collections()
+declare i64 @fflush(i64)
+declare i64 @strcat(i64, i8*)
+declare i32 @toupper(i32)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @feof(i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i64 @malloc(i64)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i64 @labs(i64)
+declare i64 @fputs(i8*, i64)
+declare i32 @fclose(i64)
+@__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
 @.str.0 = private unnamed_addr constant [19 x i8] c"=== Spawn Test ===\00"
 @.str.1 = private unnamed_addr constant [34 x i8] c"Test 1: Spawn and immediate await\00"
 @.str.2 = private unnamed_addr constant [22 x i8] c"  slow_compute(10) = \00"
@@ -161,30 +193,23 @@ await_pending2:
 
 await_ready1:
   %4 = extractvalue { i64, i64 } %1, 1
-  %a.5 = alloca i64
-  store i64 %4, i64* %a.5
-  %6 = load i64, i64* %a.5
-  %7 = call i64 @fast_compute(i64 %6)
+  %6 = call i64 @fast_compute(i64 %4)
   br label %await_poll3
 
 await_poll3:
-  %8 = call { i64, i64 } @fast_compute__poll(i64 %7)
-  %9 = extractvalue { i64, i64 } %8, 0
-  %10 = icmp eq i64 %9, 1
-  br i1 %10, label %await_ready4, label %await_pending5
+  %7 = call { i64, i64 } @fast_compute__poll(i64 %6)
+  %8 = extractvalue { i64, i64 } %7, 0
+  %9 = icmp eq i64 %8, 1
+  br i1 %9, label %await_ready4, label %await_pending5
 
 await_pending5:
   br label %await_poll3
 
 await_ready4:
-  %11 = extractvalue { i64, i64 } %8, 1
-  %b.12 = alloca i64
-  store i64 %11, i64* %b.12
-  %13 = load i64, i64* %a.5
-  %14 = load i64, i64* %b.12
-  %15 = add i64 %13, %14
+  %10 = extractvalue { i64, i64 } %7, 1
+  %12 = add i64 %4, %10
   %result_ptr = getelementptr %chain_compute__AsyncState, %chain_compute__AsyncState* %state, i32 0, i32 1
-  store i64 %15, i64* %result_ptr
+  store i64 %12, i64* %result_ptr
   store i64 -1, i64* %state_field
   %ret_val = load i64, i64* %result_ptr
   %ret_0 = insertvalue { i64, i64 } undef, i64 1, 0
@@ -199,123 +224,129 @@ state_invalid:
 define i64 @main() {
 entry:
   %0 = call i32 @puts(i8* getelementptr ([19 x i8], [19 x i8]* @.str.0, i64 0, i64 0))
-  %1 = trunc i64 10 to i32
-  %2 = call i32 @putchar(i32 %1)
-  %3 = call i32 @puts(i8* getelementptr ([34 x i8], [34 x i8]* @.str.1, i64 0, i64 0))
-  %4 = call i64 @slow_compute(i64 10)
-; Spawned task at %4
+  %1 = sext i32 %0 to i64
+  %2 = trunc i64 10 to i32
+  %3 = call i32 @putchar(i32 %2)
+  %4 = sext i32 %3 to i64
+  %5 = call i32 @puts(i8* getelementptr ([34 x i8], [34 x i8]* @.str.1, i64 0, i64 0))
+  %6 = sext i32 %5 to i64
+  %7 = call i64 @slow_compute(i64 10)
+; Spawned task at %7
   br label %await_poll0
 
 await_poll0:
-  %5 = call { i64, i64 } @slow_compute__poll(i64 %4)
-  %6 = extractvalue { i64, i64 } %5, 0
-  %7 = icmp eq i64 %6, 1
-  br i1 %7, label %await_ready1, label %await_pending2
+  %8 = call { i64, i64 } @slow_compute__poll(i64 %7)
+  %9 = extractvalue { i64, i64 } %8, 0
+  %10 = icmp eq i64 %9, 1
+  br i1 %10, label %await_ready1, label %await_pending2
 
 await_pending2:
   br label %await_poll0
 
 await_ready1:
-  %8 = extractvalue { i64, i64 } %5, 1
-  %result1.9 = alloca i64
-  store i64 %8, i64* %result1.9
-  %10 = call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.str.2, i64 0, i64 0))
-  %11 = load i64, i64* %result1.9
-  %12 = sdiv i64 %11, 10
-  %13 = add i64 %12, 48
-  %14 = trunc i64 %13 to i32
-  %15 = call i32 @putchar(i32 %14)
-  %16 = load i64, i64* %result1.9
-  %17 = srem i64 %16, 10
-  %18 = add i64 %17, 48
-  %19 = trunc i64 %18 to i32
-  %20 = call i32 @putchar(i32 %19)
-  %21 = trunc i64 10 to i32
+  %11 = extractvalue { i64, i64 } %8, 1
+  %12 = call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.str.2, i64 0, i64 0))
+  %13 = sext i32 %12 to i64
+  %14 = sdiv i64 %11, 10
+  %15 = add i64 %14, 48
+  %16 = trunc i64 %15 to i32
+  %17 = call i32 @putchar(i32 %16)
+  %18 = sext i32 %17 to i64
+  %19 = srem i64 %11, 10
+  %20 = add i64 %19, 48
+  %21 = trunc i64 %20 to i32
   %22 = call i32 @putchar(i32 %21)
-  %23 = call i32 @puts(i8* getelementptr ([27 x i8], [27 x i8]* @.str.3, i64 0, i64 0))
-  %24 = call i64 @slow_compute(i64 5)
+  %23 = sext i32 %22 to i64
+  %24 = trunc i64 10 to i32
+  %25 = call i32 @putchar(i32 %24)
+  %26 = sext i32 %25 to i64
+  %27 = call i32 @puts(i8* getelementptr ([27 x i8], [27 x i8]* @.str.3, i64 0, i64 0))
+  %28 = sext i32 %27 to i64
+  %29 = call i64 @slow_compute(i64 5)
   br label %await_poll3
 
 await_poll3:
-  %25 = call { i64, i64 } @slow_compute__poll(i64 %24)
-  %26 = extractvalue { i64, i64 } %25, 0
-  %27 = icmp eq i64 %26, 1
-  br i1 %27, label %await_ready4, label %await_pending5
+  %30 = call { i64, i64 } @slow_compute__poll(i64 %29)
+  %31 = extractvalue { i64, i64 } %30, 0
+  %32 = icmp eq i64 %31, 1
+  br i1 %32, label %await_ready4, label %await_pending5
 
 await_pending5:
   br label %await_poll3
 
 await_ready4:
-  %28 = extractvalue { i64, i64 } %25, 1
-  %result_a.29 = alloca i64
-  store i64 %28, i64* %result_a.29
-  %30 = call i64 @fast_compute(i64 5)
+  %33 = extractvalue { i64, i64 } %30, 1
+  %34 = call i64 @fast_compute(i64 5)
   br label %await_poll6
 
 await_poll6:
-  %31 = call { i64, i64 } @fast_compute__poll(i64 %30)
-  %32 = extractvalue { i64, i64 } %31, 0
-  %33 = icmp eq i64 %32, 1
-  br i1 %33, label %await_ready7, label %await_pending8
+  %35 = call { i64, i64 } @fast_compute__poll(i64 %34)
+  %36 = extractvalue { i64, i64 } %35, 0
+  %37 = icmp eq i64 %36, 1
+  br i1 %37, label %await_ready7, label %await_pending8
 
 await_pending8:
   br label %await_poll6
 
 await_ready7:
-  %34 = extractvalue { i64, i64 } %31, 1
-  %result_b.35 = alloca i64
-  store i64 %34, i64* %result_b.35
-  %36 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.4, i64 0, i64 0))
-  %37 = load i64, i64* %result_a.29
-  %38 = sdiv i64 %37, 10
-  %39 = add i64 %38, 48
-  %40 = trunc i64 %39 to i32
-  %41 = call i32 @putchar(i32 %40)
-  %42 = load i64, i64* %result_a.29
-  %43 = srem i64 %42, 10
-  %44 = add i64 %43, 48
-  %45 = trunc i64 %44 to i32
-  %46 = call i32 @putchar(i32 %45)
-  %47 = trunc i64 10 to i32
-  %48 = call i32 @putchar(i32 %47)
-  %49 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.5, i64 0, i64 0))
-  %50 = load i64, i64* %result_b.35
-  %51 = add i64 %50, 48
-  %52 = trunc i64 %51 to i32
-  %53 = call i32 @putchar(i32 %52)
-  %54 = trunc i64 10 to i32
-  %55 = call i32 @putchar(i32 %54)
-  %56 = call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.str.6, i64 0, i64 0))
-  %57 = call i64 @chain_compute(i64 5)
+  %38 = extractvalue { i64, i64 } %35, 1
+  %39 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.4, i64 0, i64 0))
+  %40 = sext i32 %39 to i64
+  %41 = sdiv i64 %33, 10
+  %42 = add i64 %41, 48
+  %43 = trunc i64 %42 to i32
+  %44 = call i32 @putchar(i32 %43)
+  %45 = sext i32 %44 to i64
+  %46 = srem i64 %33, 10
+  %47 = add i64 %46, 48
+  %48 = trunc i64 %47 to i32
+  %49 = call i32 @putchar(i32 %48)
+  %50 = sext i32 %49 to i64
+  %51 = trunc i64 10 to i32
+  %52 = call i32 @putchar(i32 %51)
+  %53 = sext i32 %52 to i64
+  %54 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.5, i64 0, i64 0))
+  %55 = sext i32 %54 to i64
+  %56 = add i64 %38, 48
+  %57 = trunc i64 %56 to i32
+  %58 = call i32 @putchar(i32 %57)
+  %59 = sext i32 %58 to i64
+  %60 = trunc i64 10 to i32
+  %61 = call i32 @putchar(i32 %60)
+  %62 = sext i32 %61 to i64
+  %63 = call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.str.6, i64 0, i64 0))
+  %64 = sext i32 %63 to i64
+  %65 = call i64 @chain_compute(i64 5)
   br label %await_poll9
 
 await_poll9:
-  %58 = call { i64, i64 } @chain_compute__poll(i64 %57)
-  %59 = extractvalue { i64, i64 } %58, 0
-  %60 = icmp eq i64 %59, 1
-  br i1 %60, label %await_ready10, label %await_pending11
+  %66 = call { i64, i64 } @chain_compute__poll(i64 %65)
+  %67 = extractvalue { i64, i64 } %66, 0
+  %68 = icmp eq i64 %67, 1
+  br i1 %68, label %await_ready10, label %await_pending11
 
 await_pending11:
   br label %await_poll9
 
 await_ready10:
-  %61 = extractvalue { i64, i64 } %58, 1
-  %result3.62 = alloca i64
-  store i64 %61, i64* %result3.62
-  %63 = call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.str.7, i64 0, i64 0))
-  %64 = load i64, i64* %result3.62
-  %65 = sdiv i64 %64, 10
-  %66 = add i64 %65, 48
-  %67 = trunc i64 %66 to i32
-  %68 = call i32 @putchar(i32 %67)
-  %69 = load i64, i64* %result3.62
-  %70 = srem i64 %69, 10
-  %71 = add i64 %70, 48
-  %72 = trunc i64 %71 to i32
-  %73 = call i32 @putchar(i32 %72)
-  %74 = trunc i64 10 to i32
+  %69 = extractvalue { i64, i64 } %66, 1
+  %70 = call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.str.7, i64 0, i64 0))
+  %71 = sext i32 %70 to i64
+  %72 = sdiv i64 %69, 10
+  %73 = add i64 %72, 48
+  %74 = trunc i64 %73 to i32
   %75 = call i32 @putchar(i32 %74)
-  %76 = call i32 @puts(i8* getelementptr ([28 x i8], [28 x i8]* @.str.8, i64 0, i64 0))
+  %76 = sext i32 %75 to i64
+  %77 = srem i64 %69, 10
+  %78 = add i64 %77, 48
+  %79 = trunc i64 %78 to i32
+  %80 = call i32 @putchar(i32 %79)
+  %81 = sext i32 %80 to i64
+  %82 = trunc i64 10 to i32
+  %83 = call i32 @putchar(i32 %82)
+  %84 = sext i32 %83 to i64
+  %85 = call i32 @puts(i8* getelementptr ([28 x i8], [28 x i8]* @.str.8, i64 0, i64 0))
+  %86 = sext i32 %85 to i64
   ret i64 0
 }
 
@@ -351,5 +382,21 @@ define void @__store_i64(i64 %ptr, i64 %val) {
 entry:
   %0 = inttoptr i64 %ptr to i64*
   store i64 %val, i64* %0
+  ret void
+}
+
+; Helper function: load f64 from memory
+define double @__load_f64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  %1 = load double, double* %0
+  ret double %1
+}
+
+; Helper function: store f64 to memory
+define void @__store_f64(i64 %ptr, double %val) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  store double %val, double* %0
   ret void
 }

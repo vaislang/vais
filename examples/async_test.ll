@@ -1,30 +1,62 @@
 ; ModuleID = 'async_test'
 source_filename = "<vais>"
 
-declare i32 @fclose(i64)
-declare void @free(i64)
-declare i64 @strlen(i64)
-declare void @exit(i32)
-declare i32 @putchar(i32)
-declare i64 @fseek(i64, i64, i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare i64 @fopen(i8*, i8*)
 declare i64 @malloc(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @fflush(i64)
-declare i64 @fputc(i64, i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @fgetc(i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i32 @puts(i8*)
-declare i32 @printf(i8*)
-declare i64 @feof(i64)
+declare i32 @atoi(i8*)
+declare i32 @isalpha(i32)
+declare i32 @printf(i8*, ...)
+declare i64 @memcpy_str(i64, i8*, i64)
 declare i64 @fgets(i64, i64, i64)
+declare double @sqrt(double)
+declare i64 @strcat(i64, i8*)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @vais_gc_set_threshold(i64)
+declare i32 @toupper(i32)
+declare i64 @fopen(i8*, i8*)
+declare void @exit(i32)
+declare i32 @isdigit(i32)
 declare i64 @fputs(i8*, i64)
-declare i32 @sched_yield()
+declare i64 @fseek(i64, i64, i64)
+declare i64 @vais_gc_init()
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @vais_gc_collections()
+declare void @srand(i32)
 declare i32 @usleep(i64)
-declare i64 @ftell(i64)
+define i64 @fopen_ptr(i64 %path, i8* %mode) {
+entry:
+  %0 = call i64 @fopen(i64 %path, i8* %mode)
+  ret i64 %0
+}
+declare i64 @vais_gc_add_root(i64)
+declare i32 @putchar(i32)
+declare i64 @feof(i64)
+declare i64 @strlen(i8*)
+declare i64 @fwrite(i64, i64, i64, i64)
 declare i32 @strcmp(i8*, i8*)
+declare i32 @puts(i64)
+declare i64 @strcpy(i64, i8*)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @vais_gc_print_stats()
+declare double @atof(i8*)
+declare i32 @sched_yield()
+declare i64 @labs(i64)
+declare i64 @vais_gc_objects_count()
+declare i64 @fflush(i64)
+declare i64 @ftell(i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @fgetc(i64)
+declare i64 @atol(i8*)
+declare i32 @rand()
+declare i32 @tolower(i32)
+declare double @fabs(double)
+declare void @free(i64)
+declare i32 @fclose(i64)
+declare i64 @fputc(i64, i64)
+declare i64 @vais_gc_collect()
+declare i64 @vais_gc_bytes_allocated()
+@__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
 @.str.0 = private unnamed_addr constant [37 x i8] c"Testing async/await with coroutines:\00"
 @.str.1 = private unnamed_addr constant [20 x i8] c"compute(21).await =\00"
 @.str.2 = private unnamed_addr constant [26 x i8] c"add_values(10, 5).await =\00"
@@ -121,65 +153,67 @@ state_invalid:
 define i64 @main() {
 entry:
   %0 = call i32 @puts(i8* getelementptr ([37 x i8], [37 x i8]* @.str.0, i64 0, i64 0))
-  %1 = call i64 @compute(i64 21)
+  %1 = sext i32 %0 to i64
+  %2 = call i64 @compute(i64 21)
   br label %await_poll0
 
 await_poll0:
-  %2 = call { i64, i64 } @compute__poll(i64 %1)
-  %3 = extractvalue { i64, i64 } %2, 0
-  %4 = icmp eq i64 %3, 1
-  br i1 %4, label %await_ready1, label %await_pending2
+  %3 = call { i64, i64 } @compute__poll(i64 %2)
+  %4 = extractvalue { i64, i64 } %3, 0
+  %5 = icmp eq i64 %4, 1
+  br i1 %5, label %await_ready1, label %await_pending2
 
 await_pending2:
   br label %await_poll0
 
 await_ready1:
-  %5 = extractvalue { i64, i64 } %2, 1
-  %result.6 = alloca i64
-  store i64 %5, i64* %result.6
+  %6 = extractvalue { i64, i64 } %3, 1
   %7 = call i32 @puts(i8* getelementptr ([20 x i8], [20 x i8]* @.str.1, i64 0, i64 0))
-  %8 = load i64, i64* %result.6
-  %9 = sdiv i64 %8, 10
+  %8 = sext i32 %7 to i64
+  %9 = sdiv i64 %6, 10
   %10 = add i64 %9, 48
   %11 = trunc i64 %10 to i32
   %12 = call i32 @putchar(i32 %11)
-  %13 = load i64, i64* %result.6
-  %14 = srem i64 %13, 10
+  %13 = sext i32 %12 to i64
+  %14 = srem i64 %6, 10
   %15 = add i64 %14, 48
   %16 = trunc i64 %15 to i32
   %17 = call i32 @putchar(i32 %16)
-  %18 = trunc i64 10 to i32
-  %19 = call i32 @putchar(i32 %18)
-  %20 = call i64 @add_values(i64 10, i64 5)
+  %18 = sext i32 %17 to i64
+  %19 = trunc i64 10 to i32
+  %20 = call i32 @putchar(i32 %19)
+  %21 = sext i32 %20 to i64
+  %22 = call i64 @add_values(i64 10, i64 5)
   br label %await_poll3
 
 await_poll3:
-  %21 = call { i64, i64 } @add_values__poll(i64 %20)
-  %22 = extractvalue { i64, i64 } %21, 0
-  %23 = icmp eq i64 %22, 1
-  br i1 %23, label %await_ready4, label %await_pending5
+  %23 = call { i64, i64 } @add_values__poll(i64 %22)
+  %24 = extractvalue { i64, i64 } %23, 0
+  %25 = icmp eq i64 %24, 1
+  br i1 %25, label %await_ready4, label %await_pending5
 
 await_pending5:
   br label %await_poll3
 
 await_ready4:
-  %24 = extractvalue { i64, i64 } %21, 1
-  %sum.25 = alloca i64
-  store i64 %24, i64* %sum.25
-  %26 = call i32 @puts(i8* getelementptr ([26 x i8], [26 x i8]* @.str.2, i64 0, i64 0))
-  %27 = load i64, i64* %sum.25
-  %28 = sdiv i64 %27, 10
-  %29 = add i64 %28, 48
-  %30 = trunc i64 %29 to i32
-  %31 = call i32 @putchar(i32 %30)
-  %32 = load i64, i64* %sum.25
-  %33 = srem i64 %32, 10
-  %34 = add i64 %33, 48
-  %35 = trunc i64 %34 to i32
-  %36 = call i32 @putchar(i32 %35)
-  %37 = trunc i64 10 to i32
-  %38 = call i32 @putchar(i32 %37)
-  %39 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.3, i64 0, i64 0))
+  %26 = extractvalue { i64, i64 } %23, 1
+  %27 = call i32 @puts(i8* getelementptr ([26 x i8], [26 x i8]* @.str.2, i64 0, i64 0))
+  %28 = sext i32 %27 to i64
+  %29 = sdiv i64 %26, 10
+  %30 = add i64 %29, 48
+  %31 = trunc i64 %30 to i32
+  %32 = call i32 @putchar(i32 %31)
+  %33 = sext i32 %32 to i64
+  %34 = srem i64 %26, 10
+  %35 = add i64 %34, 48
+  %36 = trunc i64 %35 to i32
+  %37 = call i32 @putchar(i32 %36)
+  %38 = sext i32 %37 to i64
+  %39 = trunc i64 10 to i32
+  %40 = call i32 @putchar(i32 %39)
+  %41 = sext i32 %40 to i64
+  %42 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.3, i64 0, i64 0))
+  %43 = sext i32 %42 to i64
   ret i64 0
 }
 
@@ -215,5 +249,21 @@ define void @__store_i64(i64 %ptr, i64 %val) {
 entry:
   %0 = inttoptr i64 %ptr to i64*
   store i64 %val, i64* %0
+  ret void
+}
+
+; Helper function: load f64 from memory
+define double @__load_f64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  %1 = load double, double* %0
+  ret double %1
+}
+
+; Helper function: store f64 to memory
+define void @__store_f64(i64 %ptr, double %val) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  store double %val, double* %0
   ret void
 }

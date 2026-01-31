@@ -103,6 +103,53 @@ impl TypeChecker {
                 }
                 self.unify(ra, rb)
             }
+            // Allow Fn to unify with FnPtr (function values can be used as function pointers)
+            (
+                ResolvedType::Fn {
+                    params: pa,
+                    ret: ra,
+                    ..
+                },
+                ResolvedType::FnPtr {
+                    params: pb,
+                    ret: rb,
+                    ..
+                },
+            ) | (
+                ResolvedType::FnPtr {
+                    params: pa,
+                    ret: ra,
+                    ..
+                },
+                ResolvedType::Fn {
+                    params: pb,
+                    ret: rb,
+                    ..
+                },
+            ) if pa.len() == pb.len() => {
+                for (ta, tb) in pa.iter().zip(pb.iter()) {
+                    self.unify(ta, tb)?;
+                }
+                self.unify(ra, rb)
+            }
+            // FnPtr to FnPtr unification
+            (
+                ResolvedType::FnPtr {
+                    params: pa,
+                    ret: ra,
+                    ..
+                },
+                ResolvedType::FnPtr {
+                    params: pb,
+                    ret: rb,
+                    ..
+                },
+            ) if pa.len() == pb.len() => {
+                for (ta, tb) in pa.iter().zip(pb.iter()) {
+                    self.unify(ta, tb)?;
+                }
+                self.unify(ra, rb)
+            }
             // Named types with generics
             (
                 ResolvedType::Named { name: na, generics: ga },

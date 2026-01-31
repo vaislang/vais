@@ -1,30 +1,62 @@
 ; ModuleID = 'simd_test'
 source_filename = "<vais>"
 
-declare i64 @fgetc(i64)
-declare i32 @putchar(i32)
-declare i64 @malloc(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare void @free(i64)
 declare i64 @fread(i64, i64, i64, i64)
-declare i64 @fputc(i64, i64)
-declare i32 @usleep(i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i32 @sched_yield()
-declare i32 @printf(i8*)
 declare i32 @puts(i8*)
-declare i64 @strlen(i8*)
-declare i64 @feof(i64)
-declare i64 @fflush(i64)
-declare void @exit(i32)
-declare i64 @fputs(i8*, i64)
+declare i32 @rand()
+declare double @fabs(double)
+declare i32 @putchar(i32)
 declare i64 @fopen(i8*, i8*)
+declare i64 @vais_gc_collect()
+declare i64 @strlen(i8*)
+declare i64 @atol(i8*)
+declare i64 @feof(i64)
+declare i64 @fputs(i8*, i64)
+declare i64 @fflush(i64)
+declare double @atof(i8*)
+declare i64 @labs(i64)
+declare i64 @vais_gc_init()
+declare i32 @tolower(i32)
+declare i32 @isalpha(i32)
+declare void @free(i64)
+declare i64 @fputc(i64, i64)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @vais_gc_bytes_allocated()
+declare i64 @vais_gc_alloc(i64, i32)
+declare i32 @sched_yield()
 declare i64 @fseek(i64, i64, i64)
-declare i32 @fclose(i64)
+define i64 @fopen_ptr(i64 %path, i8* %mode) {
+entry:
+  %0 = call i64 @fopen(i64 %path, i8* %mode)
+  ret i64 %0
+}
+declare i32 @printf(i8*, ...)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @vais_gc_set_threshold(i64)
+declare i32 @isdigit(i32)
+declare i64 @vais_gc_collections()
 declare i64 @ftell(i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i32 @strcmp(i8*, i8*)
+declare i64 @vais_gc_objects_count()
+declare i64 @fgetc(i64)
+declare i64 @vais_gc_print_stats()
+declare void @exit(i32)
 declare i64 @fgets(i64, i64, i64)
+declare i32 @strncmp(i8*, i8*, i64)
+declare double @sqrt(double)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i32 @usleep(i64)
+declare i32 @atoi(i8*)
+declare void @srand(i32)
+declare i32 @toupper(i32)
+declare i64 @strcat(i64, i8*)
+declare i64 @malloc(i64)
+declare i64 @strcpy(i64, i8*)
+declare i32 @strcmp(i8*, i8*)
+declare i32 @fclose(i64)
+declare i64 @vais_gc_add_root(i64)
+declare i64 @vais_gc_remove_root(i64)
+@__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
 define float @dot_product(<4 x float> %a, <4 x float> %b) {
 entry:
   %0 = fmul <4 x float> %a, %b
@@ -73,28 +105,56 @@ entry:
   store <4 x i32> %16, <4 x i32>* %product.17
   %18 = load <4 x i32>, <4 x i32>* %sum.13
   %19 = call i32 @llvm.vector.reduce.add.v4i32(<4 x i32> %18)
-  %total.20 = alloca i64
-  store i64 %19, i64* %total.20
-  %21 = insertelement <2 x i64> undef, i64 100, i32 0
-  %22 = insertelement <2 x i64> %21, i64 200, i32 1
-  %v3.23 = alloca <2 x i64>
-  store <2 x i64> %22, <2 x i64>* %v3.23
-  %24 = insertelement <2 x i64> undef, i64 1, i32 0
-  %25 = insertelement <2 x i64> %24, i64 2, i32 1
-  %v4.26 = alloca <2 x i64>
-  store <2 x i64> %25, <2 x i64>* %v4.26
-  %27 = load <2 x i64>, <2 x i64>* %v3.23
-  %28 = load <2 x i64>, <2 x i64>* %v4.26
-  %29 = add <2 x i64> %27, %28
-  %sum64.30 = alloca <2 x i64>
-  store <2 x i64> %29, <2 x i64>* %sum64.30
-  %31 = load <2 x i64>, <2 x i64>* %sum64.30
-  %32 = call i64 @llvm.vector.reduce.add.v2i64(<2 x i64> %31)
-  %total64.33 = alloca i64
-  store i64 %32, i64* %total64.33
+  %20 = insertelement <2 x i64> undef, i64 100, i32 0
+  %21 = insertelement <2 x i64> %20, i64 200, i32 1
+  %v3.22 = alloca <2 x i64>
+  store <2 x i64> %21, <2 x i64>* %v3.22
+  %23 = insertelement <2 x i64> undef, i64 1, i32 0
+  %24 = insertelement <2 x i64> %23, i64 2, i32 1
+  %v4.25 = alloca <2 x i64>
+  store <2 x i64> %24, <2 x i64>* %v4.25
+  %26 = load <2 x i64>, <2 x i64>* %v3.22
+  %27 = load <2 x i64>, <2 x i64>* %v4.25
+  %28 = add <2 x i64> %26, %27
+  %sum64.29 = alloca <2 x i64>
+  store <2 x i64> %28, <2 x i64>* %sum64.29
+  %30 = load <2 x i64>, <2 x i64>* %sum64.29
+  %31 = call i64 @llvm.vector.reduce.add.v2i64(<2 x i64> %30)
   ret i32 0
 }
 
+
+; C library function declarations
+declare i64 @write(i32, i8*, i64)
+
+; Global constants for runtime functions
+@.panic_newline = private unnamed_addr constant [2 x i8] c"\0A\00"
+
+; Runtime panic function (used by assert)
+define i64 @__panic(i8* %msg) {
+entry:
+  ; Calculate message length
+  %len = call i64 @strlen(i8* %msg)
+  ; Write message to stderr (fd=2)
+  %0 = call i64 @write(i32 2, i8* %msg, i64 %len)
+  ; Write newline
+  %1 = call i64 @write(i32 2, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.panic_newline, i64 0, i64 0), i64 1)
+  call void @exit(i32 1)
+  unreachable
+}
+
+; Runtime contract failure function
+define i64 @__contract_fail(i64 %kind, i8* %condition, i8* %file, i64 %line, i8* %func) {
+entry:
+  ; Calculate message length
+  %len = call i64 @strlen(i8* %condition)
+  ; Write contract failure message to stderr (fd=2)
+  %0 = call i64 @write(i32 2, i8* %condition, i64 %len)
+  ; Write newline
+  %1 = call i64 @write(i32 2, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.panic_newline, i64 0, i64 0), i64 1)
+  call void @exit(i32 1)
+  unreachable
+}
 
 ; Helper function: load byte from memory
 define i64 @__load_byte(i64 %ptr) {
@@ -127,5 +187,21 @@ define void @__store_i64(i64 %ptr, i64 %val) {
 entry:
   %0 = inttoptr i64 %ptr to i64*
   store i64 %val, i64* %0
+  ret void
+}
+
+; Helper function: load f64 from memory
+define double @__load_f64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  %1 = load double, double* %0
+  ret double %1
+}
+
+; Helper function: store f64 to memory
+define void @__store_f64(i64 %ptr, double %val) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  store double %val, double* %0
   ret void
 }

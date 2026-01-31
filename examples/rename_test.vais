@@ -13,8 +13,8 @@ F create_point(a: i64, b: i64) -> Point {
 
 # Function with local variables
 F calculate(value: i64) -> i64 {
-    let result = value * 2;
-    let temp = result + 10;
+    result := value * 2
+    temp := result + 10
     R temp
 }
 
@@ -28,20 +28,20 @@ E Color {
 # Function using enum
 F get_color_value(color: Color) -> i64 {
     M color {
-        Color::Red => R 1,
-        Color::Green => R 2,
-        Color::Blue => R 3
+        Red => 1,
+        Green => 2,
+        Blue => 3
     }
 }
 
 # Main function
 F main() -> i64 {
-    let point = create_point(10, 20);
-    let x_val = point.x;
-    let computed = calculate(x_val);
+    point := create_point(10, 20)
+    x_val := point.x
+    computed := calculate(x_val)
 
-    let my_color = Color::Red;
-    let color_val = get_color_value(my_color);
+    my_color := Red
+    color_val := get_color_value(my_color)
 
     R computed + color_val
 }

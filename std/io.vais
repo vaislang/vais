@@ -10,6 +10,9 @@
 # - Buffers passed to read_line/prompt_line are pre-allocated with at least max_len bytes
 # - max_len values are positive and within reasonable bounds (1..=1048576)
 
+U std/option
+# U std/string  # Temporarily disabled due to String type issues
+
 # Buffer size for input operations
 C INPUT_BUFFER_SIZE: i64 = 1024
 
@@ -29,13 +32,13 @@ X F fgets(buffer: i64, size: i64, stream: i64) -> i64
 X F get_stdin() -> i64
 
 # String to integer conversion
-X F atoi(str: i64) -> i64
+X F atoi(s: i64) -> i64
 
 # String to long integer conversion
-X F atol(str: i64) -> i64
+X F atol(s: i64) -> i64
 
 # String to double conversion
-X F atof(str: i64) -> f64
+X F atof(s: i64) -> f64
 
 # Read a line from stdin into a buffer
 # Returns pointer to buffer on success, 0 on EOF/error
@@ -73,67 +76,69 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
 }
 
 # Read a line from stdin using Option type
+# TEMPORARILY DISABLED due to loop variable issues
 # Returns Some(buffer_ptr) on success, None on EOF/error
 # SAFETY: Caller must ensure buffer has at least max_len bytes allocated
-F read_line_opt(buffer: i64, max_len: i64) -> Option {
-    # Validate max_len range
-    I max_len <= 0 {
-        None
-    }
-    I max_len > 1048576 {
-        max_len = 1048576
-    }
-    stdin := get_stdin()
-    result := fgets(buffer, max_len, stdin)
-    I result == 0 {
-        None
-    } E {
-        # Remove trailing newline if present
-        i := 0
-        L i < max_len {
-            c := load_byte(buffer + i)
-            I c == 0 {
-                B Some(buffer)
-            }
-            I c == 10 {  # newline character '\n'
-                store_byte(buffer + i, 0)
-                B Some(buffer)
-            }
-            i = i + 1
-        }
-        Some(buffer)
-    }
-}
+# F read_line_opt(buffer: i64, max_len: i64) -> Option<i64> {
+#     # Validate max_len range
+#     I max_len <= 0 {
+#         None
+#     }
+#     I max_len > 1048576 {
+#         max_len = 1048576
+#     }
+#     stdin := get_stdin()
+#     result := fgets(buffer, max_len, stdin)
+#     I result == 0 {
+#         None
+#     } E {
+#         # Remove trailing newline if present
+#         i := 0
+#         L i < max_len {
+#             c := load_byte(buffer + i)
+#             I c == 0 {
+#                 B Some(buffer)
+#             }
+#             I c == 10 {  # newline character '\n'
+#                 store_byte(buffer + i, 0)
+#                 B Some(buffer)
+#             }
+#             i = i + 1
+#         }
+#         Some(buffer)
+#     }
+# }
 
 # Read a line from stdin and return as String
+# TEMPORARILY DISABLED due to String type issues
 # max_len: maximum length to read (default 1024, max 1048576)
 # SAFETY: Allocates a temporary buffer of max_len bytes internally
-F read_line_string(max_len: i64) -> String {
-    I max_len <= 0 {
-        max_len = INPUT_BUFFER_SIZE
-    }
-    I max_len > 1048576 {
-        max_len = 1048576
-    }
-
-    # Allocate temporary buffer
-    buffer := malloc(max_len)
-    result := read_line(buffer, max_len)
-
-    I result == 0 {
-        free(buffer)
-        String.with_capacity(0)
-    } E {
-        # Convert to String
-        len := strlen(buffer)
-        s := String.with_capacity(len + 1)
-        memcpy(s.data, buffer, len)
-        s.len = len
-        store_byte(s.data + len, 0)
-        free(buffer)
-        s
-    }
-}
+# F read_line_string(max_len: i64) -> String {
+#     I max_len <= 0 {
+#         max_len = INPUT_BUFFER_SIZE
+#     }
+#     I max_len > 1048576 {
+#         max_len = 1048576
+#     }
+#
+#     # Allocate temporary buffer
+#     buffer := malloc(max_len)
+#     result := read_line(buffer, max_len)
+#
+#     I result == 0 {
+#         free(buffer)
+#         String.with_capacity(0)
+#     } E {
+#         # Convert to String
+#         len := strlen(buffer)
+#         s := String.with_capacity(len + 1)
+#         memcpy(s.data, buffer, len)
+#         s.len = len
+#         store_byte(s.data + len, 0)
+#         free(buffer)
+#         s
+#     }
+# }
 
 # Read an i64 integer from stdin
 # Returns the integer value, or 0 if invalid input
@@ -184,45 +189,46 @@ F read_f64() -> f64 {
 }
 
 # Read a word (space-delimited) from stdin
+# TEMPORARILY DISABLED - string literal type issue
 # Returns pointer to allocated string (caller must free)
 # Returns 0 on EOF/error
-F read_word() -> i64 {
-    buffer := malloc(INPUT_BUFFER_SIZE)
-    stdin := get_stdin()
-
-    # Use scanf to read one word
-    format := "%s"
-    count := scanf(format, buffer)
-
-    I count == 1 {
-        # Success - return the buffer
-        buffer
-    } E {
-        # Failed
-        free(buffer)
-        0
-    }
-}
+# F read_word() -> i64 {
+#     buffer := malloc(INPUT_BUFFER_SIZE)
+#     stdin := get_stdin()
+#
+#     # Use scanf to read one word
+#     count := scanf("%s", buffer)
+#
+#     I count == 1 {
+#         # Success - return the buffer
+#         buffer
+#     } E {
+#         # Failed
+#         free(buffer)
+#         0
+#     }
+# }
 
 # Read a word using Option type
+# TEMPORARILY DISABLED
 # Returns Some(buffer_ptr) on success (caller must free), None on EOF/error
-F read_word_opt() -> Option {
-    buffer := malloc(INPUT_BUFFER_SIZE)
-    stdin := get_stdin()
-
-    # Use scanf to read one word
-    format := "%s"
-    count := scanf(format, buffer)
-
-    I count == 1 {
-        # Success - return the buffer
-        Some(buffer)
-    } E {
-        # Failed
-        free(buffer)
-        None
-    }
-}
+# F read_word_opt() -> Option<i64> {
+#     buffer := malloc(INPUT_BUFFER_SIZE)
+#     stdin := get_stdin()
+#
+#     # Use scanf to read one word
+#     format := "%s"
+#     count := scanf(format, buffer)
+#
+#     I count == 1 {
+#         # Success - return the buffer
+#         Some(buffer)
+#     } E {
+#         # Failed
+#         free(buffer)
+#         None
+#     }
+# }
 
 # Read a single character from stdin
 # Returns the character as i64, or -1 on EOF

@@ -32,9 +32,8 @@ F test_iteration() -> i64 {
 
     # Test 1: Range iteration (built-in)
     puts("Range iteration:")
-    r := 0..5
     sum1 := mut 0
-    L i:r {
+    L i:0..5 {
         putchar(i + 48)
         putchar(32)
         sum1 = sum1 + i

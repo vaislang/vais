@@ -15,6 +15,16 @@
 # Helper functions (recursive style)
 # =====================================================
 
+# Get string length from i64 pointer (since strlen expects str, not i64)
+F strlen_ptr(s: i64) -> i64 {
+    strlen_ptr_rec(s, 0)
+}
+
+F strlen_ptr_rec(s: i64, len: i64) -> i64 {
+    I load_byte(s + len) == 0 { len }
+    E { strlen_ptr_rec(s, len + 1) }
+}
+
 # Initialize memory to zero recursively
 F init_mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
     I idx >= count { 0 } E {
@@ -529,7 +539,7 @@ F json_stringify_scaled(n: i64) -> i64 {
     start_pos := I n < 0 { store_byte(buf, 45); 1 } E { 0 }
 
     int_str := json_stringify_int(int_part)
-    int_len := strlen(int_str)
+    int_len := strlen_ptr(int_str)
     memcpy(buf + start_pos, int_str, int_len)
     free(int_str)
 
@@ -596,7 +606,7 @@ F stringify_arr_rec(buf: i64, data: i64, len: i64, idx: i64, pos: i64) -> i64 {
         } E { pos }
         elem := load_i64(data + idx * 8)
         elem_str := json_stringify(elem)
-        elem_len := strlen(elem_str)
+        elem_len := strlen_ptr(elem_str)
         memcpy(buf + new_pos, elem_str, elem_len)
         free(elem_str)
         stringify_arr_rec(buf, data, len, idx + 1, new_pos + elem_len)
@@ -641,7 +651,7 @@ F stringify_obj_entries(buf: i64, node: i64, pos: i64, first: i64) -> i64 {
         key := load_i64(node)
         key_len := load_i64(node + 8)
         key_str := json_stringify_string(key, key_len)
-        key_str_len := strlen(key_str)
+        key_str_len := strlen_ptr(key_str)
         memcpy(buf + comma_pos, key_str, key_str_len)
         free(key_str)
 
@@ -651,7 +661,7 @@ F stringify_obj_entries(buf: i64, node: i64, pos: i64, first: i64) -> i64 {
         colon_pos := after_key + 1
         value := load_i64(node + 16)
         value_str := json_stringify(value)
-        value_len := strlen(value_str)
+        value_len := strlen_ptr(value_str)
         memcpy(buf + colon_pos, value_str, value_len)
         free(value_str)
 
@@ -668,7 +678,7 @@ F stringify_obj_entries(buf: i64, node: i64, pos: i64, first: i64) -> i64 {
 # Note: json_parse accepts i64 pointer to null-terminated string
 # Use json_parse_str for direct string literal parsing
 F json_parse(input: i64) -> i64 {
-    len := strlen(input)
+    len := strlen_ptr(input)
     p := parser_new(input, len)
     result := parser_parse(p)
     free(p)
@@ -726,7 +736,7 @@ F json_array_get(v: i64, index: i64) -> i64 {
     }
 }
 
-F json_object_get(v: i64, key: i64) -> i64 {
+F json_object_get(v: i64, key: str) -> i64 {
     I v == 0 || load_i64(v) != 6 {
         0
     } E {
@@ -736,10 +746,11 @@ F json_object_get(v: i64, key: i64) -> i64 {
         I cap == 0 {
             0
         } E {
+            key_ptr := str_to_ptr(key)
             key_len := strlen(key)
-            h := json_hash_string(key, key_len) % cap
+            h := json_hash_string(key_ptr, key_len) % cap
             node := load_i64(buckets + h * 8)
-            json_object_get_rec(node, key, key_len)
+            json_object_get_rec(node, key_ptr, key_len)
         }
     }
 }
@@ -773,7 +784,7 @@ F json_int(n: i64) -> i64 {
 }
 
 F json_string_new(s: i64) -> i64 {
-    len := strlen(s)
+    len := strlen_ptr(s)
     buf := malloc(len + 1)
     memcpy(buf, s, len + 1)
 
@@ -814,13 +825,14 @@ F json_object_create() -> i64 {
     v
 }
 
-F json_object_put(obj_v: i64, key: i64, value: i64) -> i64 {
+F json_object_put(obj_v: i64, key: str, value: i64) -> i64 {
     I load_i64(obj_v) != 6 {
         0
     } E {
         obj := load_i64(obj_v + 8)
+        key_ptr := str_to_ptr(key)
         key_len := strlen(key)
-        json_object_set(obj, key, key_len, value)
+        json_object_set(obj, key_ptr, key_len, value)
         size := load_i64(obj + 8)
         store_i64(obj_v + 16, size)
         1

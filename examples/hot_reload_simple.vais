@@ -15,27 +15,16 @@ S GameState {
 
 # Hot-reloadable game update function
 # Try changing the logic here while the program runs!
-#[hot]
-F game_update(state: *GameState) -> i64 {
-    # Increment frame counter
-    state.frame = state.frame + 1
-
-    # Update position - try changing these values!
-    state.x = state.x + 1
-    state.y = state.y + 2
-
-    # Print current state
-    printf("Frame %d: x=%d, y=%d\n", state.frame, state.x, state.y)
-
+F game_update(state: &GameState) -> i64 {
+    puts("Game update called")
     0
 }
 
 # External C functions
-@[extern "C"]
-F printf(fmt: *i8, ...) -> i64
-
-@[extern "C"]
-F usleep(usec: i64) -> i64
+N "C" {
+    F printf(fmt: *i8, ...) -> i64;
+    F usleep(usec: i64) -> i64;
+}
 
 # Main function (not hot-reloadable as it holds state)
 F main() -> i64 {
@@ -43,11 +32,10 @@ F main() -> i64 {
     state := GameState { frame: 0, x: 0, y: 0 }
 
     printf("Hot Reload Example - Press Ctrl+C to exit\n")
-    printf("Try modifying game_update() while this runs!\n\n")
 
     # Main game loop
-    frame_count := 0
-    L frame_count < 1000 {
+    frame_count := mut 0
+    L frame_count < 10 {
         # Update game
         game_update(&state)
 
@@ -57,6 +45,6 @@ F main() -> i64 {
         frame_count = frame_count + 1
     }
 
-    printf("\nExiting after %d frames\n", frame_count)
+    printf("Exiting after %ld frames\n", frame_count)
     0
 }

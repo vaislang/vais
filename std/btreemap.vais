@@ -3,6 +3,8 @@
 # Uses recursive approach to avoid mutable loop variables
 # Updated to use Option<T> for error handling
 
+U std/option
+
 # =====================================================
 # B-Tree Node Structure
 # =====================================================
@@ -172,7 +174,7 @@ F btreemap_get(map: i64, key: i64) -> i64 {
 
 # Get value for key using Option type
 # Returns Some(value) if found, None if not found
-F btreemap_get_opt(map: i64, key: i64) -> Option {
+F btreemap_get_opt(map: i64, key: i64) -> Option<i64> {
     root := btreemap_root(map)
     result := btree_search(root, key)
     I result == 0 { None } E { Some(result - 1) }

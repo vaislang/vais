@@ -178,6 +178,16 @@ X HashMap<K, V> {
         }
     }
 
+    # Get value for key using Option type
+    # Returns Some(value) if found, None if not found
+    F get_opt(&self, key: K) -> Option<V> {
+        I @.contains(key) == 1 {
+            Some(@.get(key))
+        } E {
+            None
+        }
+    }
+
     # Check if key exists
     F contains(&self, key: K) -> i64 {
         idx := @.hash(key)
@@ -251,6 +261,16 @@ X HashMap<K, V> {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         @.remove_from_chain(idx, 0, entry_ptr, key)
+    }
+
+    # Remove key-value pair using Option type
+    # Returns Some(value) if found and removed, None if not found
+    F remove_opt(&self, key: K) -> Option<V> {
+        I @.contains(key) == 1 {
+            Some(@.remove(key))
+        } E {
+            None
+        }
     }
 
     # Helper to remove from chain
@@ -367,7 +387,6 @@ F hashmap_rehash_entries_raw(m_buckets: i64, m_cap: i64, entry_ptr: i64) -> i64 
 }
 
 # Create new HashMap with default capacity (backward compatibility)
-# NOTE: Temporarily disabled due to code generation issues with generic return types
-# F hashmap_new() -> HashMap<i64, i64> {
-#     HashMap.with_capacity(16)
-# }
+F hashmap_new() -> HashMap<i64, i64> {
+    HashMap.with_capacity(16)
+}

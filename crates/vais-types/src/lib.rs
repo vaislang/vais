@@ -229,7 +229,7 @@ impl TypeChecker {
                 params: vec![("format".to_string(), ResolvedType::Str, false)],
                 ret: ResolvedType::I32,
                 is_async: false,
-                is_vararg: false,
+                is_vararg: true,
                 required_params: None,
                 contracts: None,
                 effect_annotation: EffectAnnotation::Infer,
@@ -3169,7 +3169,7 @@ impl TypeChecker {
                 let func_type = self.check_expr(func)?;
 
                 match func_type {
-                    ResolvedType::Fn { params, ret, .. } => {
+                    ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                         if params.len() != args.len() {
                             return Err(TypeError::ArgCount {
                                 expected: params.len(),

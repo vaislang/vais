@@ -25,14 +25,16 @@ F main() -> i64 {
 
     # Test get_opt with valid index
     opt := v.get_opt(0)
-    I opt.is_some() == 1 {
-        result := result + 1  # 251 + 1 = 252
+    result := M opt {
+        Some(_) => result + 1,  # 251 + 1 = 252
+        None => result
     }
 
     # Test get_opt with invalid index
     opt2 := v.get_opt(99)
-    I opt2.is_none() == 1 {
-        result := result + 1  # 252 + 1 = 253
+    result := M opt2 {
+        None => result + 1,  # 252 + 1 = 253
+        Some(_) => result
     }
 
     # Clean up

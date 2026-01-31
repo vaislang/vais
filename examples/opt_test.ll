@@ -2,92 +2,115 @@
 source_filename = "<vais>"
 
 declare void @free(i64)
-declare i32 @fclose(i64)
-declare i64 @fgets(i64, i64, i64)
-declare i32 @strcmp(i8*, i8*)
-declare i64 @malloc(i64)
-declare i64 @fopen(i8*, i8*)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i64 @fgetc(i64)
-declare i64 @fflush(i64)
-declare i64 @ftell(i64)
-declare i32 @puts(i8*)
-declare i64 @fread(i64, i64, i64, i64)
-declare i32 @printf(i8*)
+declare i32 @usleep(i64)
+declare i64 @vais_gc_init()
+declare i32 @puts(i64)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @atol(i8*)
 declare i64 @fseek(i64, i64, i64)
-declare i64 @fputc(i64, i64)
-declare i32 @putchar(i32)
-declare void @exit(i32)
-declare i64 @strlen(i64)
+declare i64 @vais_gc_add_root(i64)
+declare i64 @vais_gc_bytes_allocated()
+declare i32 @printf(i8*, ...)
+declare i64 @vais_gc_collections()
+declare i64 @vais_gc_set_threshold(i64)
+declare double @sqrt(double)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @strlen(i8*)
+declare i64 @vais_gc_collect()
+declare i64 @strcpy(i64, i8*)
+declare i64 @fflush(i64)
+declare i32 @tolower(i32)
+declare i32 @atoi(i8*)
+declare void @srand(i32)
+declare double @atof(i8*)
+declare i32 @toupper(i32)
+define i64 @fopen_ptr(i64 %path, i8* %mode) {
+entry:
+  %0 = call i64 @fopen(i64 %path, i8* %mode)
+  ret i64 %0
+}
 declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @feof(i64)
-declare i64 @fputs(i8*, i64)
+declare i64 @fopen(i8*, i8*)
 declare i64 @memcpy(i64, i64, i64)
+declare i64 @fgetc(i64)
+declare i32 @isdigit(i32)
+declare i32 @sched_yield()
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i64 @labs(i64)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @vais_gc_print_stats()
+declare i64 @fputc(i64, i64)
+declare i64 @vais_gc_objects_count()
+declare i32 @isalpha(i32)
+declare i64 @ftell(i64)
+declare double @fabs(double)
+declare i64 @strcat(i64, i8*)
+declare i64 @malloc(i64)
+declare i64 @fputs(i8*, i64)
+declare i64 @feof(i64)
+declare i32 @putchar(i32)
+declare i64 @fgets(i64, i64, i64)
+declare i32 @rand()
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare void @exit(i32)
+declare i32 @fclose(i64)
+@__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
 @.str.0 = private unnamed_addr constant [23 x i8] c"Testing optimizations:\00"
 @.str.1 = private unnamed_addr constant [23 x i8] c"constant_fold_test() =\00"
 @.str.2 = private unnamed_addr constant [27 x i8] c"strength_reduce_test(10) =\00"
 
 define i64 @constant_fold_test() {
 entry:
-  %0 = add i64 0, 30  ; folded from 10 add 20
-  %a.1 = alloca i64
-  store i64 %0, i64* %a.1
-  %2 = load i64, i64* %a.1
-  %3 = shl i64 %2, 1  ; strength reduced from mul by 2
-  %b.4 = alloca i64
-  store i64 %3, i64* %b.4
-  %5 = load i64, i64* %b.4
-  ret i64 %5
+  %0 = add i64 10, 20
+  %1 = mul i64 %0, 2
+  ret i64 %1
 }
 
 define i64 @strength_reduce_test(i64 %x) {
 entry:
-  %0 = shl i64 %x, 3  ; strength reduced from mul by 8
-  %y.1 = alloca i64
-  store i64 %0, i64* %y.1
-  %2 = load i64, i64* %y.1
-  %3 = ashr i64 %2, 2  ; strength reduced from div by 4
-  %z.4 = alloca i64
-  store i64 %3, i64* %z.4
-  %5 = load i64, i64* %z.4
-  ret i64 %5
+  %0 = mul i64 %x, 8
+  %1 = sdiv i64 %0, 4
+  ret i64 %1
 }
 
 define i64 @main() {
 entry:
   %0 = call i32 @puts(i8* getelementptr ([23 x i8], [23 x i8]* @.str.0, i64 0, i64 0))
-  %1 = call i64 @constant_fold_test()
-  %r1.2 = alloca i64
-  store i64 %1, i64* %r1.2
+  %1 = sext i32 %0 to i64
+  %2 = call i64 @constant_fold_test()
   %3 = call i32 @puts(i8* getelementptr ([23 x i8], [23 x i8]* @.str.1, i64 0, i64 0))
-  %4 = load i64, i64* %r1.2
-  %5 = sdiv i64 %4, 10
+  %4 = sext i32 %3 to i64
+  %5 = sdiv i64 %2, 10
   %6 = add i64 %5, 48
   %7 = trunc i64 %6 to i32
   %8 = call i32 @putchar(i32 %7)
-  %9 = load i64, i64* %r1.2
-  %10 = srem i64 %9, 10
+  %9 = sext i32 %8 to i64
+  %10 = srem i64 %2, 10
   %11 = add i64 %10, 48
   %12 = trunc i64 %11 to i32
   %13 = call i32 @putchar(i32 %12)
-  %14 = trunc i64 10 to i32
-  %15 = call i32 @putchar(i32 %14)
-  %16 = call i64 @strength_reduce_test(i64 10)
-  %r2.17 = alloca i64
-  store i64 %16, i64* %r2.17
-  %18 = call i32 @puts(i8* getelementptr ([27 x i8], [27 x i8]* @.str.2, i64 0, i64 0))
-  %19 = load i64, i64* %r2.17
-  %20 = sdiv i64 %19, 10
-  %21 = add i64 %20, 48
-  %22 = trunc i64 %21 to i32
-  %23 = call i32 @putchar(i32 %22)
-  %24 = load i64, i64* %r2.17
-  %25 = srem i64 %24, 10
-  %26 = add i64 %25, 48
-  %27 = trunc i64 %26 to i32
-  %28 = call i32 @putchar(i32 %27)
-  %29 = trunc i64 10 to i32
-  %30 = call i32 @putchar(i32 %29)
+  %14 = sext i32 %13 to i64
+  %15 = trunc i64 10 to i32
+  %16 = call i32 @putchar(i32 %15)
+  %17 = sext i32 %16 to i64
+  %18 = call i64 @strength_reduce_test(i64 10)
+  %19 = call i32 @puts(i8* getelementptr ([27 x i8], [27 x i8]* @.str.2, i64 0, i64 0))
+  %20 = sext i32 %19 to i64
+  %21 = sdiv i64 %18, 10
+  %22 = add i64 %21, 48
+  %23 = trunc i64 %22 to i32
+  %24 = call i32 @putchar(i32 %23)
+  %25 = sext i32 %24 to i64
+  %26 = srem i64 %18, 10
+  %27 = add i64 %26, 48
+  %28 = trunc i64 %27 to i32
+  %29 = call i32 @putchar(i32 %28)
+  %30 = sext i32 %29 to i64
+  %31 = trunc i64 10 to i32
+  %32 = call i32 @putchar(i32 %31)
+  %33 = sext i32 %32 to i64
   ret i64 0
 }
 
@@ -123,5 +146,21 @@ define void @__store_i64(i64 %ptr, i64 %val) {
 entry:
   %0 = inttoptr i64 %ptr to i64*
   store i64 %val, i64* %0
+  ret void
+}
+
+; Helper function: load f64 from memory
+define double @__load_f64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  %1 = load double, double* %0
+  ret double %1
+}
+
+; Helper function: store f64 to memory
+define void @__store_f64(i64 %ptr, double %val) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  store double %val, double* %0
   ret void
 }

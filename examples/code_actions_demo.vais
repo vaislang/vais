@@ -1,24 +1,45 @@
-// Code Actions Demo
-// This file demonstrates various code actions available in the Vais LSP
+# Code Actions Demo
+# This file demonstrates various code actions available in the Vais LSP
 
-// Example 1: Missing import (sqrt is undefined)
-// Code Action: "Import sqrt from std/math"
-F calculate_distance(x: f64, y: f64) -> f64 = sqrt(x * x + y * y)
+# Example 1: Basic function
+# Code Action: "Import sqrt from std/math"
+F add_numbers(x: i64, y: i64) -> i64 = x + y
 
-// Example 2: Type mismatch (needs cast)
-// Code Action: "Cast to f64"
-F double_number(n: f64) -> f64 = n * 2.0
-F main() {
-    // Select '42' and apply code action to cast to f64
-    L result: f64 = double_number(42)
+# Example 2: Simple multiplication
+# Code Action: "Cast to f64"
+F double_number(n: i64) -> i64 = n * 2
 
-    // Example 3: Extract to variable
-    // Select '100 + 200 + 300' and apply "Extract to variable"
-    print_i64(100 + 200 + 300)
+# Print a number using putchar
+F print_num(n: i64) -> i64 {
+    I n >= 10 {
+        print_num(n / 10)
+        0
+    } E {
+        0
+    }
+    putchar(n % 10 + 48)
+    0
+}
 
-    // Example 4: Extract to function
-    // Select the following 3 lines and apply "Extract to function"
-    L a: i64 = 10
-    L b: i64 = 20
-    print_i64(a + b)
+F main() -> i64 {
+    # Select '42' and apply code action to cast to i64
+    result: i64 = double_number(42)
+
+    puts("Code actions demo:")
+
+    # Example 3: Extract to variable
+    # Select '100 + 200 + 300' and apply "Extract to variable"
+    total := 100 + 200 + 300
+    print_num(total)
+    putchar(10)
+
+    # Example 4: Extract to function
+    # Select the following 3 lines and apply "Extract to function"
+    a: i64 = 10
+    b: i64 = 20
+    sum := a + b
+    print_num(sum)
+    putchar(10)
+
+    0
 }

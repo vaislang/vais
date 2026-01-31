@@ -1,16 +1,15 @@
 {
-  "phase": 4,
-  "request": "Phase 16 P1 - 컴파일 에러 28개 + 런타임 비정상 18개 수정",
+  "phase": 5,
+  "request": "Phase 16 P1 - 컴파일 에러 25개 수정 (성공률 76% → 90%+)",
   "tasks": [
     { "id": 1, "name": "ROADMAP 업데이트 + 커밋 (P0)", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "중복 정의 + 불변 할당 에러 수정 (7개)", "status": "in_progress", "model": "Sonnet" },
-    { "id": 3, "name": "기타 에러 수정 (code_actions, iterator, math 링커)", "status": "pending", "model": "Sonnet" },
-    { "id": 4, "name": "미정의 변수/함수 에러 수정 (6개)", "status": "pending", "model": "Sonnet" },
-    { "id": 5, "name": "타입 불일치 에러 수정 (4개)", "status": "pending", "model": "Sonnet" },
-    { "id": 6, "name": "파서 에러 수정 Part 1 (defer, io, math_test)", "status": "pending", "model": "Sonnet" },
-    { "id": 7, "name": "파서 에러 수정 Part 2 (comptime, hot_reload, rename)", "status": "pending", "model": "Sonnet" },
-    { "id": 8, "name": "런타임 비정상 exit 수정 (18개)", "status": "pending", "model": "Opus" },
-    { "id": 9, "name": "검증 + ROADMAP 업데이트 + 커밋", "status": "pending", "model": "Opus" }
+    { "id": 2, "name": "예제 코드 수정: None/is_some 미등록 (5개)", "status": "completed", "model": "Sonnet" },
+    { "id": 3, "name": "타입 불일치 에러 수정 (5개)", "status": "completed", "model": "Sonnet" },
+    { "id": 4, "name": "함수 인자/호출 에러 수정 (5개)", "status": "completed", "model": "Sonnet" },
+    { "id": 5, "name": "미정의 변수/함수 수정 (3개)", "status": "completed", "model": "Sonnet" },
+    { "id": 6, "name": "파서 에러 수정 (5개)", "status": "completed", "model": "Sonnet" },
+    { "id": 7, "name": "기타 에러 수정 (2개)", "status": "completed", "model": "Sonnet" },
+    { "id": 8, "name": "검증 + ROADMAP 업데이트 + 커밋", "status": "in_progress", "model": "Opus" }
   ],
-  "currentTask": 2
+  "currentTask": 8
 }

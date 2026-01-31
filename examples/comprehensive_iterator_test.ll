@@ -3,30 +3,62 @@ source_filename = "<vais>"
 
 %FibIter = type { i64, i64, i64, i64 }
 %RangeIter = type { i64, i64 }
-declare i64 @fputc(i64, i64)
-declare i64 @fflush(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @fgets(i64, i64, i64)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @vais_gc_bytes_allocated()
+declare i32 @isdigit(i32)
+declare void @exit(i32)
+declare void @free(i64)
+declare i64 @labs(i64)
+declare i64 @memcpy_str(i64, i8*, i64)
 declare i64 @fseek(i64, i64, i64)
-declare i64 @feof(i64)
-declare i64 @fopen(i8*, i8*)
-declare i32 @printf(i8*)
-declare i64 @strlen(i64)
 declare i64 @fwrite(i64, i64, i64, i64)
+define i64 @fopen_ptr(i64 %path, i8* %mode) {
+entry:
+  %0 = call i64 @fopen(i64 %path, i8* %mode)
+  ret i64 %0
+}
+declare i64 @fputs(i8*, i64)
+declare i32 @isalpha(i32)
+declare i32 @printf(i8*, ...)
+declare i32 @usleep(i64)
+declare i64 @strlen(i8*)
+declare i32 @rand()
+declare i32 @puts(i8*)
+declare i64 @fopen(i8*, i8*)
+declare i64 @vais_gc_collections()
+declare i64 @vais_gc_collect()
+declare i32 @toupper(i32)
+declare double @fabs(double)
+declare i64 @fflush(i64)
+declare i32 @sched_yield()
+declare i64 @strcat(i64, i8*)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @malloc(i64)
+declare i64 @vais_gc_objects_count()
+declare i64 @strcpy(i64, i8*)
+declare i64 @atol(i8*)
+declare i32 @fclose(i64)
+declare i32 @atoi(i8*)
+declare i64 @ftell(i64)
+declare i32 @strncmp(i8*, i8*, i64)
+declare double @sqrt(double)
+declare i32 @tolower(i32)
 declare i32 @putchar(i32)
 declare i64 @fread(i64, i64, i64, i64)
-declare i32 @puts(i64)
-declare void @exit(i32)
+declare i64 @vais_gc_add_root(i64)
+declare double @atof(i8*)
+declare i64 @feof(i64)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @vais_gc_set_threshold(i64)
+declare i64 @vais_gc_print_stats()
+declare i64 @fgets(i64, i64, i64)
+declare i64 @fputc(i64, i64)
 declare i64 @fgetc(i64)
-declare i64 @fputs(i8*, i64)
-declare i64 @ftell(i64)
-declare i32 @fclose(i64)
-declare void @free(i64)
-declare i32 @strcmp(i8*, i8*)
-declare i32 @usleep(i64)
-declare i64 @malloc(i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i32 @sched_yield()
+declare void @srand(i32)
+declare i64 @vais_gc_init()
+@__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
 @.str.0 = private unnamed_addr constant [11 x i8] c"RangeIter:\00"
 @.str.1 = private unnamed_addr constant [5 x i8] c" to \00"
 @.str.2 = private unnamed_addr constant [36 x i8] c"=== Comprehensive Iterator Test ===\00"
@@ -52,21 +84,18 @@ entry:
 then0:
   %7 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
   %8 = load i64, i64* %7
-  %val.9 = alloca i64
-  store i64 %8, i64* %val.9
-  %10 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
-  %11 = load i64, i64* %10
-  %12 = add i64 %11, 1
-  %13 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
-  store i64 %12, i64* %13
-  %14 = load i64, i64* %val.9
+  %9 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
+  %10 = load i64, i64* %9
+  %11 = add i64 %10, 1
+  %12 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
+  store i64 %11, i64* %12
   br label %merge2
 else1:
-  %15 = sub i64 0, 1
+  %13 = sub i64 0, 1
   br label %merge2
 merge2:
-  %16 = phi i64 [ %14, %then0 ], [ %15, %else1 ]
-  ret i64 %16
+  %14 = phi i64 [ %8, %then0 ], [ %13, %else1 ]
+  ret i64 %14
 }
 
 define i64 @RangeIter_has_more(%RangeIter* %self) {
@@ -91,19 +120,24 @@ merge2:
 define i64 @RangeIter_print(%RangeIter* %self) {
 entry:
   %0 = call i32 @puts(i8* getelementptr ([11 x i8], [11 x i8]* @.str.0, i64 0, i64 0))
-  %1 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
-  %2 = load i64, i64* %1
-  %3 = add i64 %2, 48
-  %4 = trunc i64 %3 to i32
-  %5 = call i32 @putchar(i32 %4)
-  %6 = call i32 @puts(i8* getelementptr ([5 x i8], [5 x i8]* @.str.1, i64 0, i64 0))
-  %7 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 1
-  %8 = load i64, i64* %7
-  %9 = add i64 %8, 48
-  %10 = trunc i64 %9 to i32
-  %11 = call i32 @putchar(i32 %10)
-  %12 = trunc i64 10 to i32
-  %13 = call i32 @putchar(i32 %12)
+  %1 = sext i32 %0 to i64
+  %2 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 0
+  %3 = load i64, i64* %2
+  %4 = add i64 %3, 48
+  %5 = trunc i64 %4 to i32
+  %6 = call i32 @putchar(i32 %5)
+  %7 = sext i32 %6 to i64
+  %8 = call i32 @puts(i8* getelementptr ([5 x i8], [5 x i8]* @.str.1, i64 0, i64 0))
+  %9 = sext i32 %8 to i64
+  %10 = getelementptr %RangeIter, %RangeIter* %self, i32 0, i32 1
+  %11 = load i64, i64* %10
+  %12 = add i64 %11, 48
+  %13 = trunc i64 %12 to i32
+  %14 = call i32 @putchar(i32 %13)
+  %15 = sext i32 %14 to i64
+  %16 = trunc i64 10 to i32
+  %17 = call i32 @putchar(i32 %16)
+  %18 = sext i32 %17 to i64
   ret i64 0
 }
 
@@ -134,28 +168,24 @@ then0:
 else1:
   %8 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 0
   %9 = load i64, i64* %8
-  %current.10 = alloca i64
-  store i64 %9, i64* %current.10
-  %11 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 1
-  %12 = load i64, i64* %11
-  %13 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 0
-  store i64 %12, i64* %13
-  %14 = load i64, i64* %current.10
-  %15 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 1
-  %16 = load i64, i64* %15
-  %17 = add i64 %14, %16
-  %18 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 1
-  store i64 %17, i64* %18
-  %19 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 2
-  %20 = load i64, i64* %19
-  %21 = add i64 %20, 1
-  %22 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 2
-  store i64 %21, i64* %22
-  %23 = load i64, i64* %current.10
+  %10 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 1
+  %11 = load i64, i64* %10
+  %12 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 0
+  store i64 %11, i64* %12
+  %13 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 1
+  %14 = load i64, i64* %13
+  %15 = add i64 %9, %14
+  %16 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 1
+  store i64 %15, i64* %16
+  %17 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 2
+  %18 = load i64, i64* %17
+  %19 = add i64 %18, 1
+  %20 = getelementptr %FibIter, %FibIter* %self, i32 0, i32 2
+  store i64 %19, i64* %20
   br label %merge2
 merge2:
-  %24 = phi i64 [ %7, %then0 ], [ %23, %else1 ]
-  ret i64 %24
+  %21 = phi i64 [ %7, %then0 ], [ %9, %else1 ]
+  ret i64 %21
 }
 
 define i64 @FibIter_has_more(%FibIter* %self) {
@@ -195,138 +225,149 @@ entry:
 define i64 @main() {
 entry:
   %0 = call i32 @puts(i8* getelementptr ([36 x i8], [36 x i8]* @.str.2, i64 0, i64 0))
-  %1 = trunc i64 10 to i32
-  %2 = call i32 @putchar(i32 %1)
-  %3 = call i32 @puts(i8* getelementptr ([23 x i8], [23 x i8]* @.str.3, i64 0, i64 0))
-  %4 = call %RangeIter @RangeIter_new(i64 0, i64 5)
-  %r.5.struct = alloca %RangeIter
-  store %RangeIter %4, %RangeIter* %r.5.struct
-  %r.5 = alloca %RangeIter*
-  store %RangeIter* %r.5.struct, %RangeIter** %r.5
-  %6 = load %RangeIter*, %RangeIter** %r.5
-  %7 = call i64 @RangeIter_print(%RangeIter* %6)
-  %8 = trunc i64 10 to i32
-  %9 = call i32 @putchar(i32 %8)
-  %10 = call i32 @puts(i8* getelementptr ([31 x i8], [31 x i8]* @.str.4, i64 0, i64 0))
-  %11 = call i32 @puts(i8* getelementptr ([10 x i8], [10 x i8]* @.str.5, i64 0, i64 0))
-  %12 = load %RangeIter*, %RangeIter** %r.5
-  %13 = call i64 @RangeIter_has_more(%RangeIter* %12)
-  %status.14 = alloca i64
-  store i64 %13, i64* %status.14
-  %15 = load i64, i64* %status.14
-  %16 = add i64 %15, 48
-  %17 = trunc i64 %16 to i32
-  %18 = call i32 @putchar(i32 %17)
-  %19 = trunc i64 10 to i32
-  %20 = call i32 @putchar(i32 %19)
-  %21 = call i32 @puts(i8* getelementptr ([13 x i8], [13 x i8]* @.str.6, i64 0, i64 0))
+  %1 = sext i32 %0 to i64
+  %2 = trunc i64 10 to i32
+  %3 = call i32 @putchar(i32 %2)
+  %4 = sext i32 %3 to i64
+  %5 = call i32 @puts(i8* getelementptr ([23 x i8], [23 x i8]* @.str.3, i64 0, i64 0))
+  %6 = sext i32 %5 to i64
+  %7 = call %RangeIter @RangeIter_new(i64 0, i64 5)
+  %r.8.struct = alloca %RangeIter
+  store %RangeIter %7, %RangeIter* %r.8.struct
+  %r.8 = alloca %RangeIter*
+  store %RangeIter* %r.8.struct, %RangeIter** %r.8
+  %9 = load %RangeIter*, %RangeIter** %r.8
+  %10 = call i64 @RangeIter_print(%RangeIter* %9)
+  %11 = trunc i64 10 to i32
+  %12 = call i32 @putchar(i32 %11)
+  %13 = sext i32 %12 to i64
+  %14 = call i32 @puts(i8* getelementptr ([31 x i8], [31 x i8]* @.str.4, i64 0, i64 0))
+  %15 = sext i32 %14 to i64
+  %16 = call i32 @puts(i8* getelementptr ([10 x i8], [10 x i8]* @.str.5, i64 0, i64 0))
+  %17 = sext i32 %16 to i64
+  %18 = load %RangeIter*, %RangeIter** %r.8
+  %19 = call i64 @RangeIter_has_more(%RangeIter* %18)
+  %20 = add i64 %19, 48
+  %21 = trunc i64 %20 to i32
+  %22 = call i32 @putchar(i32 %21)
+  %23 = sext i32 %22 to i64
+  %24 = trunc i64 10 to i32
+  %25 = call i32 @putchar(i32 %24)
+  %26 = sext i32 %25 to i64
+  %27 = call i32 @puts(i8* getelementptr ([13 x i8], [13 x i8]* @.str.6, i64 0, i64 0))
+  %28 = sext i32 %27 to i64
   br label %loop.start0
 loop.start0:
-  %22 = load %RangeIter*, %RangeIter** %r.5
-  %23 = call i64 @RangeIter_next(%RangeIter* %22)
-  %val.24 = alloca i64
-  store i64 %23, i64* %val.24
-  %25 = load i64, i64* %val.24
-  %26 = icmp slt i64 %25, 0
-  %27 = zext i1 %26 to i64
-  %28 = icmp ne i64 %27, 0
-  br i1 %28, label %then3, label %else4
+  %29 = load %RangeIter*, %RangeIter** %r.8
+  %30 = call i64 @RangeIter_next(%RangeIter* %29)
+  %31 = icmp slt i64 %30, 0
+  %32 = zext i1 %31 to i64
+  %33 = icmp ne i64 %32, 0
+  br i1 %33, label %then3, label %else4
 then3:
   br label %loop.end2
 else4:
   br label %merge5
 merge5:
-  %29 = add i64 0, 0
-  %30 = load i64, i64* %val.24
-  %31 = add i64 %30, 48
-  %32 = trunc i64 %31 to i32
-  %33 = call i32 @putchar(i32 %32)
-  %34 = trunc i64 32 to i32
-  %35 = call i32 @putchar(i32 %34)
+  %34 = add i64 0, 0
+  %35 = add i64 %30, 48
+  %36 = trunc i64 %35 to i32
+  %37 = call i32 @putchar(i32 %36)
+  %38 = sext i32 %37 to i64
+  %39 = trunc i64 32 to i32
+  %40 = call i32 @putchar(i32 %39)
+  %41 = sext i32 %40 to i64
   br label %loop.start0
 loop.end2:
-  %36 = trunc i64 10 to i32
-  %37 = call i32 @putchar(i32 %36)
-  %38 = trunc i64 10 to i32
-  %39 = call i32 @putchar(i32 %38)
-  %40 = call i32 @puts(i8* getelementptr ([27 x i8], [27 x i8]* @.str.7, i64 0, i64 0))
-  %41 = call %FibIter @FibIter_new(i64 8)
-  %fib.42.struct = alloca %FibIter
-  store %FibIter %41, %FibIter* %fib.42.struct
-  %fib.42 = alloca %FibIter*
-  store %FibIter* %fib.42.struct, %FibIter** %fib.42
+  %42 = trunc i64 10 to i32
+  %43 = call i32 @putchar(i32 %42)
+  %44 = sext i32 %43 to i64
+  %45 = trunc i64 10 to i32
+  %46 = call i32 @putchar(i32 %45)
+  %47 = sext i32 %46 to i64
+  %48 = call i32 @puts(i8* getelementptr ([27 x i8], [27 x i8]* @.str.7, i64 0, i64 0))
+  %49 = sext i32 %48 to i64
+  %50 = call %FibIter @FibIter_new(i64 8)
+  %fib.51.struct = alloca %FibIter
+  store %FibIter %50, %FibIter* %fib.51.struct
+  %fib.51 = alloca %FibIter*
+  store %FibIter* %fib.51.struct, %FibIter** %fib.51
   br label %loop.start6
 loop.start6:
-  %43 = load %FibIter*, %FibIter** %fib.42
-  %44 = call i64 @FibIter_has_more(%FibIter* %43)
-  %45 = icmp eq i64 %44, 0
-  %46 = zext i1 %45 to i64
-  %47 = icmp ne i64 %46, 0
-  br i1 %47, label %then9, label %else10
+  %52 = load %FibIter*, %FibIter** %fib.51
+  %53 = call i64 @FibIter_has_more(%FibIter* %52)
+  %54 = icmp eq i64 %53, 0
+  %55 = zext i1 %54 to i64
+  %56 = icmp ne i64 %55, 0
+  br i1 %56, label %then9, label %else10
 then9:
   br label %loop.end8
 else10:
   br label %merge11
 merge11:
-  %48 = add i64 0, 0
-  %49 = load %FibIter*, %FibIter** %fib.42
-  %50 = call i64 @FibIter_next(%FibIter* %49)
-  %val.51 = alloca i64
-  store i64 %50, i64* %val.51
-  %52 = load i64, i64* %val.51
-  %53 = add i64 %52, 48
-  %54 = trunc i64 %53 to i32
-  %55 = call i32 @putchar(i32 %54)
-  %56 = trunc i64 32 to i32
-  %57 = call i32 @putchar(i32 %56)
+  %57 = add i64 0, 0
+  %58 = load %FibIter*, %FibIter** %fib.51
+  %59 = call i64 @FibIter_next(%FibIter* %58)
+  %60 = add i64 %59, 48
+  %61 = trunc i64 %60 to i32
+  %62 = call i32 @putchar(i32 %61)
+  %63 = sext i32 %62 to i64
+  %64 = trunc i64 32 to i32
+  %65 = call i32 @putchar(i32 %64)
+  %66 = sext i32 %65 to i64
   br label %loop.start6
 loop.end8:
-  %58 = trunc i64 10 to i32
-  %59 = call i32 @putchar(i32 %58)
-  %60 = trunc i64 10 to i32
-  %61 = call i32 @putchar(i32 %60)
-  %62 = call i32 @puts(i8* getelementptr ([34 x i8], [34 x i8]* @.str.8, i64 0, i64 0))
-  %63 = call %RangeIter @RangeIter_new(i64 5, i64 8)
-  %r2.64.struct = alloca %RangeIter
-  store %RangeIter %63, %RangeIter* %r2.64.struct
-  %r2.64 = alloca %RangeIter*
-  store %RangeIter* %r2.64.struct, %RangeIter** %r2.64
-  %sum.65 = alloca i64
-  store i64 0, i64* %sum.65
+  %67 = trunc i64 10 to i32
+  %68 = call i32 @putchar(i32 %67)
+  %69 = sext i32 %68 to i64
+  %70 = trunc i64 10 to i32
+  %71 = call i32 @putchar(i32 %70)
+  %72 = sext i32 %71 to i64
+  %73 = call i32 @puts(i8* getelementptr ([34 x i8], [34 x i8]* @.str.8, i64 0, i64 0))
+  %74 = sext i32 %73 to i64
+  %75 = call %RangeIter @RangeIter_new(i64 5, i64 8)
+  %r2.76.struct = alloca %RangeIter
+  store %RangeIter %75, %RangeIter* %r2.76.struct
+  %r2.76 = alloca %RangeIter*
+  store %RangeIter* %r2.76.struct, %RangeIter** %r2.76
+  %sum.77 = alloca i64
+  store i64 0, i64* %sum.77
   br label %loop.start12
 loop.start12:
-  %66 = load %RangeIter*, %RangeIter** %r2.64
-  %67 = call i64 @RangeIter_has_more(%RangeIter* %66)
-  %68 = icmp eq i64 %67, 0
-  %69 = zext i1 %68 to i64
-  %70 = icmp ne i64 %69, 0
-  br i1 %70, label %then15, label %else16
+  %78 = load %RangeIter*, %RangeIter** %r2.76
+  %79 = call i64 @RangeIter_has_more(%RangeIter* %78)
+  %80 = icmp eq i64 %79, 0
+  %81 = zext i1 %80 to i64
+  %82 = icmp ne i64 %81, 0
+  br i1 %82, label %then15, label %else16
 then15:
   br label %loop.end14
 else16:
   br label %merge17
 merge17:
-  %71 = add i64 0, 0
-  %72 = load %RangeIter*, %RangeIter** %r2.64
-  %73 = call i64 @RangeIter_next(%RangeIter* %72)
-  %val.74 = alloca i64
-  store i64 %73, i64* %val.74
-  %75 = load i64, i64* %sum.65
-  %76 = load i64, i64* %val.74
-  %77 = add i64 %75, %76
-  store i64 %77, i64* %sum.65
+  %83 = add i64 0, 0
+  %84 = load %RangeIter*, %RangeIter** %r2.76
+  %85 = call i64 @RangeIter_next(%RangeIter* %84)
+  %86 = load i64, i64* %sum.77
+  %87 = add i64 %86, %85
+  store i64 %87, i64* %sum.77
   br label %loop.start12
 loop.end14:
-  %78 = call i32 @puts(i8* getelementptr ([6 x i8], [6 x i8]* @.str.9, i64 0, i64 0))
-  %79 = load i64, i64* %sum.65
-  %80 = add i64 %79, 48
-  %81 = trunc i64 %80 to i32
-  %82 = call i32 @putchar(i32 %81)
-  %83 = trunc i64 10 to i32
-  %84 = call i32 @putchar(i32 %83)
-  %85 = trunc i64 10 to i32
-  %86 = call i32 @putchar(i32 %85)
-  %87 = call i32 @puts(i8* getelementptr ([25 x i8], [25 x i8]* @.str.10, i64 0, i64 0))
+  %88 = call i32 @puts(i8* getelementptr ([6 x i8], [6 x i8]* @.str.9, i64 0, i64 0))
+  %89 = sext i32 %88 to i64
+  %90 = load i64, i64* %sum.77
+  %91 = add i64 %90, 48
+  %92 = trunc i64 %91 to i32
+  %93 = call i32 @putchar(i32 %92)
+  %94 = sext i32 %93 to i64
+  %95 = trunc i64 10 to i32
+  %96 = call i32 @putchar(i32 %95)
+  %97 = sext i32 %96 to i64
+  %98 = trunc i64 10 to i32
+  %99 = call i32 @putchar(i32 %98)
+  %100 = sext i32 %99 to i64
+  %101 = call i32 @puts(i8* getelementptr ([25 x i8], [25 x i8]* @.str.10, i64 0, i64 0))
+  %102 = sext i32 %101 to i64
   ret i64 0
 }
 
@@ -362,5 +403,21 @@ define void @__store_i64(i64 %ptr, i64 %val) {
 entry:
   %0 = inttoptr i64 %ptr to i64*
   store i64 %val, i64* %0
+  ret void
+}
+
+; Helper function: load f64 from memory
+define double @__load_f64(i64 %ptr) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  %1 = load double, double* %0
+  ret double %1
+}
+
+; Helper function: store f64 to memory
+define void @__store_f64(i64 %ptr, double %val) {
+entry:
+  %0 = inttoptr i64 %ptr to double*
+  store double %val, double* %0
   ret void
 }

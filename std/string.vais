@@ -2,6 +2,8 @@
 # Stores: data pointer, length, capacity
 # Updated to use Option<T> for error handling
 
+U std/option
+
 S String {
     data: i64,      # Pointer to char array (i8*)
     len: i64,       # Current length (excluding null terminator)
@@ -43,7 +45,7 @@ X String {
 
     # Get character at index using Option type
     # Returns Some(char) if index is valid, None otherwise
-    F char_at_opt(&self, index: i64) -> Option {
+    F char_at_opt(&self, index: i64) -> Option<i64> {
         I index < 0 || index >= self.len {
             None
         } E {
@@ -56,7 +58,7 @@ X String {
     F push_char(&self, c: i64) -> i64 {
         # Check if we need to grow
         I self.len >= self.cap - 1 {
-            @ .grow()
+            @.grow()
         }
         # Store character
         ptr := self.data + self.len
