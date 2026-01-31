@@ -643,6 +643,9 @@ pub struct CodeGenerator {
     // Struct definitions
     structs: HashMap<String, StructInfo>,
 
+    // Generic struct AST definitions (before monomorphization)
+    generic_struct_defs: HashMap<String, vais_ast::Struct>,
+
     // Enum definitions
     enums: HashMap<String, EnumInfo>,
 
@@ -804,6 +807,7 @@ impl CodeGenerator {
             target,
             functions: HashMap::new(),
             structs: HashMap::new(),
+            generic_struct_defs: HashMap::new(),
             enums: HashMap::new(),
             unions: HashMap::new(),
             current_function: None,
@@ -1558,6 +1562,8 @@ impl CodeGenerator {
                     if !s.generics.is_empty() {
                         // Store generic struct for later specialization
                         generic_structs.insert(s.name.node.clone(), s.clone());
+                        // Also store in the generic_struct_defs for type inference
+                        self.generic_struct_defs.insert(s.name.node.clone(), s.clone());
                     } else {
                         self.register_struct(s)?;
                         for method in &s.methods {
@@ -3607,8 +3613,14 @@ impl CodeGenerator {
                 }
 
                 // Build full method name: StructName_methodName
-                let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
-                    format!("{}_{}", name, method_name)
+                let full_method_name = if let ResolvedType::Named { name, generics } = &recv_type {
+                    // For generic types with concrete type arguments, use the mangled name
+                    if !generics.is_empty() {
+                        let mangled_name = self.mangle_struct_name(name, generics);
+                        format!("{}_{}", mangled_name, method_name)
+                    } else {
+                        format!("{}_{}", name, method_name)
+                    }
                 } else {
                     method_name.clone()
                 };

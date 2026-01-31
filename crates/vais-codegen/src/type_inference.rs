@@ -161,8 +161,89 @@ impl CodeGenerator {
                 ResolvedType::RefMut(inner) => *inner,
                 _ => ResolvedType::I64,
             },
-            Expr::StructLit { name, .. } => {
-                // Return Named type for struct literals
+            Expr::StructLit { name, fields } => {
+                // First try to get the struct from non-generic structs
+                if let Some(struct_info) = self.structs.get(&name.node) {
+                    // Collect generic parameters from struct fields
+                    let mut generic_params = Vec::new();
+                    for (_, field_ty) in &struct_info.fields {
+                        if let ResolvedType::Generic(param) = field_ty {
+                            if !generic_params.contains(param) {
+                                generic_params.push(param.clone());
+                            }
+                        }
+                    }
+
+                    // If the struct is generic, infer concrete types from the field values
+                    if !generic_params.is_empty() {
+                        let mut inferred_types = Vec::new();
+
+                        // For each generic parameter, find the first field that uses it and infer from the value
+                        for param in &generic_params {
+                            let mut inferred = None;
+                            for (field_name, field_expr) in fields {
+                                // Find the field info
+                                if let Some((_, field_ty)) = struct_info.fields.iter()
+                                    .find(|(name, _)| name == &field_name.node) {
+                                    // If this field uses the generic parameter, infer from the expression
+                                    if let ResolvedType::Generic(p) = field_ty {
+                                        if p == param {
+                                            inferred = Some(self.infer_expr_type(field_expr));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            inferred_types.push(inferred.unwrap_or(ResolvedType::I64));
+                        }
+
+                        return ResolvedType::Named {
+                            name: name.node.clone(),
+                            generics: inferred_types,
+                        };
+                    }
+                }
+
+                // Try to get from generic struct definitions (AST)
+                if let Some(generic_struct) = self.generic_struct_defs.get(&name.node) {
+                    // Infer generic type arguments from field values
+                    if !generic_struct.generics.is_empty() {
+                        let mut inferred_types = Vec::new();
+
+                        // For each generic parameter, find a field that uses it and infer from the value
+                        for generic_param in &generic_struct.generics {
+                            // Skip lifetime parameters
+                            if matches!(generic_param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                                continue;
+                            }
+
+                            let param_name = &generic_param.name.node;
+                            let mut inferred = None;
+
+                            // Look through the struct fields to find one that uses this generic parameter
+                            for struct_field in &generic_struct.fields {
+                                if let vais_ast::Type::Named { name: field_type_name, .. } = &struct_field.ty.node {
+                                    if field_type_name == param_name {
+                                        // This field uses the generic parameter - find the corresponding field value
+                                        if let Some((_, field_expr)) = fields.iter().find(|(field_name, _)| field_name.node == struct_field.name.node) {
+                                            inferred = Some(self.infer_expr_type(field_expr));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            inferred_types.push(inferred.unwrap_or(ResolvedType::I64));
+                        }
+
+                        return ResolvedType::Named {
+                            name: name.node.clone(),
+                            generics: inferred_types,
+                        };
+                    }
+                }
+
+                // Return Named type for struct literals (non-generic case)
                 ResolvedType::Named {
                     name: name.node.clone(),
                     generics: vec![],

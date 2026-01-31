@@ -2,66 +2,66 @@
 source_filename = "<vais>"
 
 %Pair$i64 = type { i64, i64 }
-declare i64 @strcpy(i64, i8*)
-declare i64 @labs(i64)
-declare i64 @vais_gc_remove_root(i64)
-declare i64 @vais_gc_set_threshold(i64)
-declare i64 @fseek(i64, i64, i64)
-declare i64 @fflush(i64)
-declare i32 @puts(i64)
-declare i64 @fgetc(i64)
-declare i64 @fgets(i64, i64, i64)
-declare double @atof(i8*)
-declare i64 @fputs(i8*, i64)
-declare i64 @atol(i8*)
-declare i32 @isdigit(i32)
-declare i64 @fread(i64, i64, i64, i64)
-declare i64 @feof(i64)
-declare i32 @sched_yield()
-declare i32 @isalpha(i32)
-declare double @sqrt(double)
-declare i32 @putchar(i32)
-declare i64 @vais_gc_init()
-declare i64 @vais_gc_alloc(i64, i32)
-declare i64 @ftell(i64)
-declare i32 @usleep(i64)
 declare i32 @fclose(i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare void @srand(i32)
+declare double @sqrt(double)
+declare i32 @printf(i8*, ...)
+declare i32 @usleep(i64)
+declare i64 @fgets(i64, i64, i64)
+declare i32 @puts(i64)
+declare double @fabs(double)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @vais_gc_alloc(i64, i32)
+declare i64 @atol(i8*)
+declare void @exit(i32)
+declare double @atof(i64)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @fgetc(i64)
+declare i32 @sched_yield()
+declare void @free(i64)
+declare i32 @tolower(i32)
+declare i64 @ftell(i64)
+declare i64 @fflush(i64)
+declare i64 @vais_gc_collect()
+declare i64 @vais_gc_bytes_allocated()
+declare i32 @rand()
+declare i64 @vais_gc_set_threshold(i64)
+declare i64 @vais_gc_print_stats()
+declare i64 @fread(i64, i64, i64, i64)
+declare i32 @putchar(i32)
+declare i32 @isdigit(i32)
 declare i64 @fopen(i8*, i8*)
 define i64 @fopen_ptr(i64 %path, i8* %mode) {
 entry:
   %0 = call i64 @fopen(i64 %path, i8* %mode)
   ret i64 %0
 }
-declare i32 @toupper(i32)
-declare i32 @atoi(i8*)
-declare i64 @vais_gc_add_root(i64)
-declare i64 @malloc(i64)
-declare i64 @vais_gc_print_stats()
-declare i32 @strcmp(i8*, i8*)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @memcpy_str(i64, i8*, i64)
-declare void @free(i64)
-declare i64 @vais_gc_bytes_allocated()
-declare i32 @printf(i8*, ...)
-declare i64 @fputc(i64, i64)
-declare void @exit(i32)
-declare double @fabs(double)
-declare i32 @rand()
-declare i64 @strcat(i64, i8*)
-declare i64 @vais_gc_collections()
-declare i64 @vais_gc_collect()
-declare i64 @vais_gc_objects_count()
-declare i32 @strncmp(i8*, i8*, i64)
 declare i64 @strlen(i8*)
-declare i32 @tolower(i32)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @vais_gc_init()
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @strcat(i64, i8*)
+declare i64 @vais_gc_objects_count()
+declare i64 @labs(i64)
+declare i64 @malloc(i64)
+declare void @srand(i32)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @feof(i64)
+declare i32 @isalpha(i32)
+declare i64 @strcpy(i64, i8*)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @vais_gc_collections()
+declare i32 @atoi(i8*)
+declare i32 @toupper(i32)
+declare i64 @fputs(i8*, i64)
+declare i64 @fputc(i64, i64)
+declare i64 @vais_gc_add_root(i64)
 @__vais_abi_version = constant [6 x i8] c"1.0.0\00"
 
 @.str.0 = private unnamed_addr constant [24 x i8] c"Testing generic struct:\00"
 @.str.1 = private unnamed_addr constant [21 x i8] c"Pair{10, 20}.sum() =\00"
 
-define i64 @Pair_sum(%Pair* %self) {
+define i64 @Pair$i64_sum(%Pair$i64* %self) {
 entry:
   %0 = getelementptr %Pair$i64, %Pair$i64* %self, i32 0, i32 0
   %1 = load i64, i64* %0
@@ -80,10 +80,10 @@ entry:
   store i64 10, i64* %3
   %4 = getelementptr %Pair$i64, %Pair$i64* %2, i32 0, i32 1
   store i64 20, i64* %4
-  %p.5 = alloca %Pair*
-  store %Pair* %2, %Pair** %p.5
-  %6 = load %Pair*, %Pair** %p.5
-  %7 = call i64 @Pair_sum(%Pair* %6)
+  %p.5 = alloca %Pair$i64*
+  store %Pair$i64* %2, %Pair$i64** %p.5
+  %6 = load %Pair$i64*, %Pair$i64** %p.5
+  %7 = call i64 @Pair$i64_sum(%Pair$i64* %6)
   %8 = call i32 @puts(i8* getelementptr ([21 x i8], [21 x i8]* @.str.1, i64 0, i64 0))
   %9 = sext i32 %8 to i64
   %10 = sdiv i64 %7, 10

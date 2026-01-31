@@ -2,138 +2,132 @@
 source_filename = "<vais>"
 
 %Option = type { i32, { i64 } }
-declare i64 @vais_gc_print_stats()
-declare i64 @vais_gc_alloc(i64, i32)
-declare i64 @atol(i8*)
-declare i64 @vais_gc_bytes_allocated()
-declare i64 @fseek(i64, i64, i64)
-declare i64 @vais_gc_collect()
-declare i32 @sched_yield()
-declare void @free(i64)
-declare i64 @fputc(i64, i64)
-declare i64 @fflush(i64)
-declare i64 @memcpy(i64, i64, i64)
-declare i64 @feof(i64)
-declare i32 @puts(i8*)
-declare i64 @fputs(i8*, i64)
-declare i32 @strncmp(i8*, i8*, i64)
-declare i32 @fclose(i64)
-declare i64 @labs(i64)
-declare i32 @isalpha(i32)
-declare void @exit(i32)
-declare i64 @vais_gc_collections()
-declare i32 @toupper(i32)
-declare i64 @vais_gc_remove_root(i64)
-declare i64 @vais_gc_add_root(i64)
-declare i32 @putchar(i32)
-declare i32 @strcmp(i8*, i8*)
 declare i32 @rand()
-declare i64 @fread(i64, i64, i64, i64)
-declare i64 @strcpy(i64, i8*)
-declare i64 @vais_gc_objects_count()
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i32 @tolower(i32)
-declare i64 @fgetc(i64)
-declare double @sqrt(double)
-declare i64 @strcat(i64, i8*)
-declare i64 @memcpy_str(i64, i8*, i64)
-declare i64 @vais_gc_set_threshold(i64)
-declare void @srand(i32)
+declare i64 @fputc(i64, i64)
+declare i64 @vais_gc_alloc(i64, i32)
 declare i32 @printf(i8*, ...)
-declare i64 @fgets(i64, i64, i64)
-declare i64 @strlen(i8*)
-declare double @fabs(double)
-declare i32 @isdigit(i32)
+declare i64 @ftell(i64)
+declare i32 @atoi(i8*)
+declare i32 @putchar(i32)
+declare void @exit(i32)
+declare i64 @labs(i64)
+declare double @sqrt(double)
+declare i32 @strncmp(i8*, i8*, i64)
 define i64 @fopen_ptr(i64 %path, i8* %mode) {
 entry:
   %0 = call i64 @fopen(i64 %path, i8* %mode)
   ret i64 %0
 }
+declare i64 @fgets(i64, i64, i64)
+declare i32 @isdigit(i32)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @atol(i64)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i32 @isalpha(i32)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @strcpy(i64, i8*)
+declare i64 @strcat(i64, i8*)
 declare i64 @vais_gc_init()
-declare i64 @ftell(i64)
-declare i32 @atoi(i8*)
-declare double @atof(i8*)
+declare i64 @vais_gc_add_root(i64)
+declare double @atof(i64)
+declare double @fabs(double)
+declare i64 @fgetc(i64)
+declare i64 @vais_gc_objects_count()
+declare i64 @vais_gc_print_stats()
+declare i32 @tolower(i32)
+declare i32 @sched_yield()
+declare void @srand(i32)
 declare i64 @malloc(i64)
-declare i32 @usleep(i64)
 declare i64 @fopen(i8*, i8*)
+declare i64 @fseek(i64, i64, i64)
+declare i64 @feof(i64)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @fflush(i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i32 @puts(i64)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @vais_gc_bytes_allocated()
+declare i64 @vais_gc_set_threshold(i64)
+declare i32 @fclose(i64)
+declare i64 @fputs(i8*, i64)
+declare i32 @usleep(i64)
+declare i64 @vais_gc_collect()
+declare void @free(i64)
+declare i32 @toupper(i32)
+declare i64 @strlen(i8*)
+declare i64 @vais_gc_collections()
 @__vais_abi_version = constant [6 x i8] c"1.0.0\00"
 
 define i64 @Option_is_some(%Option* %self) {
 entry:
-  %0 = alloca %Option
-  store %Option %self, %Option* %0
   br label %match.check1
 match.check1:
-  %1 = getelementptr { i32 }, { i32 }* %0, i32 0, i32 0
-  %2 = load i32, i32* %1
-  %3 = icmp eq i32 %2, 1
-  br i1 %3, label %match.arm3, label %match.check2
+  %0 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %1 = load i32, i32* %0
+  %2 = icmp eq i32 %1, 1
+  br i1 %2, label %match.arm3, label %match.check2
 match.arm3:
-  %4 = getelementptr { i32, i64 }, { i32, i64 }* %0, i32 0, i32 1
-  %5 = load i64, i64* %4
+  %3 = getelementptr { i32, i64 }, { i32, i64 }* %self, i32 0, i32 1
+  %4 = load i64, i64* %3
   br label %match.merge0
 match.check2:
-  %6 = getelementptr { i32 }, { i32 }* %0, i32 0, i32 0
-  %7 = load i32, i32* %6
-  %8 = icmp eq i32 %7, 0
-  br i1 %8, label %match.arm4, label %match.merge0
+  %5 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %6 = load i32, i32* %5
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %match.arm4, label %match.merge0
 match.arm4:
   br label %match.merge0
 match.merge0:
-  %9 = phi i64 [ 1, %match.arm3 ], [ 0, %match.arm4 ]
-  ret i64 %9
+  %8 = phi i64 [ 1, %match.arm3 ], [ 0, %match.arm4 ]
+  ret i64 %8
 }
 
 define i64 @Option_is_none(%Option* %self) {
 entry:
-  %0 = alloca %Option
-  store %Option %self, %Option* %0
   br label %match.check1
 match.check1:
-  %1 = getelementptr { i32 }, { i32 }* %0, i32 0, i32 0
-  %2 = load i32, i32* %1
-  %3 = icmp eq i32 %2, 1
-  br i1 %3, label %match.arm3, label %match.check2
+  %0 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %1 = load i32, i32* %0
+  %2 = icmp eq i32 %1, 1
+  br i1 %2, label %match.arm3, label %match.check2
 match.arm3:
-  %4 = getelementptr { i32, i64 }, { i32, i64 }* %0, i32 0, i32 1
-  %5 = load i64, i64* %4
+  %3 = getelementptr { i32, i64 }, { i32, i64 }* %self, i32 0, i32 1
+  %4 = load i64, i64* %3
   br label %match.merge0
 match.check2:
-  %6 = getelementptr { i32 }, { i32 }* %0, i32 0, i32 0
+  %5 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %6 = load i32, i32* %5
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %match.arm4, label %match.merge0
+match.arm4:
+  br label %match.merge0
+match.merge0:
+  %8 = phi i64 [ 0, %match.arm3 ], [ 1, %match.arm4 ]
+  ret i64 %8
+}
+
+define i64 @Option_unwrap_or(%Option* %self, i64 %default) {
+entry:
+  br label %match.check1
+match.check1:
+  %0 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
+  %1 = load i32, i32* %0
+  %2 = icmp eq i32 %1, 1
+  br i1 %2, label %match.arm3, label %match.check2
+match.arm3:
+  %3 = getelementptr { i32, i64 }, { i32, i64 }* %self, i32 0, i32 1
+  %4 = load i64, i64* %3
+  br label %match.merge0
+match.check2:
+  %6 = getelementptr { i32 }, { i32 }* %self, i32 0, i32 0
   %7 = load i32, i32* %6
   %8 = icmp eq i32 %7, 0
   br i1 %8, label %match.arm4, label %match.merge0
 match.arm4:
   br label %match.merge0
 match.merge0:
-  %9 = phi i64 [ 0, %match.arm3 ], [ 1, %match.arm4 ]
+  %9 = phi i64 [ %4, %match.arm3 ], [ %default, %match.arm4 ]
   ret i64 %9
-}
-
-define i64 @Option_unwrap_or(%Option* %self, i64 %default) {
-entry:
-  %0 = alloca %Option
-  store %Option %self, %Option* %0
-  br label %match.check1
-match.check1:
-  %1 = getelementptr { i32 }, { i32 }* %0, i32 0, i32 0
-  %2 = load i32, i32* %1
-  %3 = icmp eq i32 %2, 1
-  br i1 %3, label %match.arm3, label %match.check2
-match.arm3:
-  %4 = getelementptr { i32, i64 }, { i32, i64 }* %0, i32 0, i32 1
-  %5 = load i64, i64* %4
-  br label %match.merge0
-match.check2:
-  %7 = getelementptr { i32 }, { i32 }* %0, i32 0, i32 0
-  %8 = load i32, i32* %7
-  %9 = icmp eq i32 %8, 0
-  br i1 %9, label %match.arm4, label %match.merge0
-match.arm4:
-  br label %match.merge0
-match.merge0:
-  %10 = phi i64 [ %5, %match.arm3 ], [ %default, %match.arm4 ]
-  ret i64 %10
 }
 
 define i64 @main() {
@@ -168,6 +162,38 @@ match.merge0:
   ret i64 %14
 }
 
+
+; C library function declarations
+declare i64 @write(i32, i8*, i64)
+
+; Global constants for runtime functions
+@.panic_newline = private unnamed_addr constant [2 x i8] c"\0A\00"
+
+; Runtime panic function (used by assert)
+define i64 @__panic(i8* %msg) {
+entry:
+  ; Calculate message length
+  %len = call i64 @strlen(i8* %msg)
+  ; Write message to stderr (fd=2)
+  %0 = call i64 @write(i32 2, i8* %msg, i64 %len)
+  ; Write newline
+  %1 = call i64 @write(i32 2, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.panic_newline, i64 0, i64 0), i64 1)
+  call void @exit(i32 1)
+  unreachable
+}
+
+; Runtime contract failure function
+define i64 @__contract_fail(i64 %kind, i8* %condition, i8* %file, i64 %line, i8* %func) {
+entry:
+  ; Calculate message length
+  %len = call i64 @strlen(i8* %condition)
+  ; Write contract failure message to stderr (fd=2)
+  %0 = call i64 @write(i32 2, i8* %condition, i64 %len)
+  ; Write newline
+  %1 = call i64 @write(i32 2, i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.panic_newline, i64 0, i64 0), i64 1)
+  call void @exit(i32 1)
+  unreachable
+}
 
 ; Helper function: load byte from memory
 define i64 @__load_byte(i64 %ptr) {

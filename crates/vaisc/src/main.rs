@@ -19,7 +19,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
-use vais_ast::{Item, Module};
+use vais_ast::{Item, Module, Spanned};
 use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
@@ -1033,6 +1033,15 @@ fn cmd_build(
 // They are now re-exported through error_formatter::format_type_error and error_formatter::format_parse_error
 // This provides a centralized location for error handling logic
 
+/// Filter out main functions from imported module items
+/// Main functions should only exist in the top-level module being compiled,
+/// not in imported modules (which may have their own test main functions)
+fn filter_imported_items(items: Vec<Spanned<Item>>) -> Vec<Spanned<Item>> {
+    items.into_iter().filter(|item| {
+        !matches!(&item.node, Item::Function(f) if f.name.node == "main")
+    }).collect()
+}
+
 /// Load a module and recursively resolve its imports
 fn load_module_with_imports(
     path: &PathBuf,
@@ -1091,7 +1100,8 @@ fn load_module_with_imports_internal(
 
                 // Recursively load the imported module
                 let imported = load_module_with_imports(&module_path, loaded, verbose)?;
-                all_items.extend(imported.items);
+                // Filter out main functions from imported modules to avoid conflicts
+                all_items.extend(filter_imported_items(imported.items));
             }
             _ => {
                 all_items.push(item);
@@ -1206,7 +1216,8 @@ fn load_module_with_imports_parallel(
                 Item::Use(use_stmt) => {
                     let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
                     let sub_imported = load_module_with_imports(&sub_path, loaded, verbose)?;
-                    sub_items.extend(sub_imported.items);
+                    // Filter out main functions from imported modules to avoid conflicts
+                    sub_items.extend(filter_imported_items(sub_imported.items));
                 }
                 _ => {
                     sub_items.push(item);
@@ -1224,7 +1235,8 @@ fn load_module_with_imports_parallel(
             Item::Use(_) => {
                 if import_idx < import_indices.len() && import_indices[import_idx] == idx {
                     if let Some(imported_module) = parsed_map.remove(&import_paths[import_idx]) {
-                        all_items.extend(imported_module.items);
+                        // Filter out main functions from imported modules to avoid conflicts
+                        all_items.extend(filter_imported_items(imported_module.items));
                     }
                     import_idx += 1;
                 }
@@ -1388,6 +1400,43 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
     Ok(canonical_path)
 }
 
+/// Find the directory containing libvais_gc.a for GC runtime linking.
+/// Searches: next to the compiler executable, then target/release/ in cwd.
+fn find_gc_library() -> Option<PathBuf> {
+    // Try next to the compiler executable (e.g. target/release/)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let gc_lib = exe_dir.join("libvais_gc.a");
+            if gc_lib.exists() {
+                return Some(exe_dir.to_path_buf());
+            }
+        }
+    }
+
+    // Try target/release/ relative to current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        let release_dir = cwd.join("target").join("release");
+        if release_dir.join("libvais_gc.a").exists() {
+            return Some(release_dir);
+        }
+        // Also try target/debug/
+        let debug_dir = cwd.join("target").join("debug");
+        if debug_dir.join("libvais_gc.a").exists() {
+            return Some(debug_dir);
+        }
+    }
+
+    // Try VAIS_GC_LIB_DIR environment variable
+    if let Ok(gc_dir) = std::env::var("VAIS_GC_LIB_DIR") {
+        let path = PathBuf::from(&gc_dir);
+        if path.join("libvais_gc.a").exists() {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compile_ir_to_binary(
     ir_path: &Path,
@@ -1475,6 +1524,16 @@ fn compile_to_native(
     args.push(ir_path.to_str()
         .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
         .to_string());
+
+    // Link against libvais_gc if available (for GC runtime support)
+    // Use the static library directly to avoid dylib path dependencies
+    if let Some(gc_lib_path) = find_gc_library() {
+        let static_lib = gc_lib_path.join("libvais_gc.a");
+        args.push(static_lib.to_str().unwrap_or("libvais_gc.a").to_string());
+        if verbose {
+            println!("{} Linking GC runtime from: {}", "info:".blue().bold(), static_lib.display());
+        }
+    }
 
     if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled()) {
         let mut features = vec![];

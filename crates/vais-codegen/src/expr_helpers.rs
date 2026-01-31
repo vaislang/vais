@@ -1446,8 +1446,48 @@ impl CodeGenerator {
         if let Some(struct_info) = self.structs.get(type_name).cloned() {
             let mut ir = String::new();
 
+            // Check if this struct has generic parameters
+            // Collect generic parameters from struct fields
+            let mut generic_params = Vec::new();
+            for (_, field_ty) in &struct_info.fields {
+                if let ResolvedType::Generic(param) = field_ty {
+                    if !generic_params.contains(param) {
+                        generic_params.push(param.clone());
+                    }
+                }
+            }
+
+            // If the struct is generic, infer concrete types from the field values
+            let final_type_name = if !generic_params.is_empty() {
+                let mut inferred_types = Vec::new();
+
+                // For each generic parameter, find the first field that uses it and infer from the value
+                for param in &generic_params {
+                    let mut inferred = None;
+                    for (field_name, field_expr) in fields {
+                        // Find the field info
+                        if let Some((_, field_ty)) = struct_info.fields.iter()
+                            .find(|(name, _)| name == &field_name.node) {
+                            // If this field uses the generic parameter, infer from the expression
+                            if let ResolvedType::Generic(p) = field_ty {
+                                if p == param {
+                                    inferred = Some(self.infer_expr_type(field_expr));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    inferred_types.push(inferred.unwrap_or(ResolvedType::I64));
+                }
+
+                // Generate the mangled name with inferred types
+                self.mangle_struct_name(type_name, &inferred_types)
+            } else {
+                type_name.to_string()
+            };
+
             let struct_ptr = self.next_temp(counter);
-            ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, type_name));
+            ir.push_str(&format!("  {} = alloca %{}\n", struct_ptr, final_type_name));
 
             for (field_name, field_expr) in fields {
                 let field_idx = struct_info.fields.iter()
@@ -1462,7 +1502,7 @@ impl CodeGenerator {
                 let field_ptr = self.next_temp(counter);
                 ir.push_str(&format!(
                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}\n",
-                    field_ptr, type_name, type_name, struct_ptr, field_idx
+                    field_ptr, final_type_name, final_type_name, struct_ptr, field_idx
                 ));
 
                 let field_ty = &struct_info.fields[field_idx].1;
@@ -1670,8 +1710,14 @@ impl CodeGenerator {
             );
         }
 
-        let full_method_name = if let ResolvedType::Named { name, .. } = &recv_type {
-            format!("{}_{}", name, method_name)
+        let full_method_name = if let ResolvedType::Named { name, generics } = &recv_type {
+            // For generic types with concrete type arguments, use the mangled name
+            if !generics.is_empty() {
+                let mangled_name = self.mangle_struct_name(name, generics);
+                format!("{}_{}", mangled_name, method_name)
+            } else {
+                format!("{}_{}", name, method_name)
+            }
         } else {
             method_name.clone()
         };

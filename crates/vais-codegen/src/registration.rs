@@ -211,6 +211,18 @@ impl CodeGenerator {
     }
 
     pub(crate) fn register_extern_function(&mut self, func: &ExternFunction, abi: &str) -> CodegenResult<()> {
+        let func_name = func.name.node.to_string();
+
+        // Check if this is already registered as a builtin helper function
+        // Builtin helpers have is_extern=false and should not be overridden
+        if let Some(existing) = self.functions.get(&func_name) {
+            if !existing.is_extern {
+                // This is a builtin helper function - don't override it
+                // Just skip the registration silently
+                return Ok(());
+            }
+        }
+
         let params: Vec<_> = func
             .params
             .iter()
@@ -227,7 +239,7 @@ impl CodeGenerator {
             .unwrap_or(ResolvedType::Unit);
 
         self.functions.insert(
-            func.name.node.to_string(),
+            func_name,
             FunctionInfo {
                 signature: FunctionSig {
                     name: func.name.node.to_string(),

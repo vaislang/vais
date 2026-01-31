@@ -1,61 +1,66 @@
 ; ModuleID = 'math'
 source_filename = "<vais>"
 
-declare i32 @strcmp(i8*, i8*)
-declare i64 @vais_gc_set_threshold(i64)
-declare void @exit(i32)
-declare i64 @strlen(i8*)
-declare double @fabs(double)
-declare i32 @rand()
-declare void @srand(i32)
-declare i64 @fgets(i64, i64, i64)
-declare i64 @fputs(i8*, i64)
-declare i64 @fputc(i64, i64)
-declare i32 @putchar(i32)
-declare i64 @memcpy_str(i64, i8*, i64)
-declare i32 @atoi(i8*)
-declare i32 @puts(i64)
-declare i64 @vais_gc_collect()
-declare i64 @vais_gc_print_stats()
-declare i32 @usleep(i64)
-declare i64 @feof(i64)
-declare i64 @fread(i64, i64, i64, i64)
-declare double @atof(i8*)
-declare i64 @ftell(i64)
-declare i32 @isalpha(i32)
-declare i64 @fgetc(i64)
-declare i32 @fclose(i64)
-declare i64 @vais_gc_init()
-declare i64 @atol(i8*)
-declare i64 @fseek(i64, i64, i64)
-declare i64 @malloc(i64)
-declare double @sqrt(double)
-declare i32 @printf(i8*, ...)
-declare i32 @sched_yield()
-declare i64 @vais_gc_add_root(i64)
-declare i64 @vais_gc_remove_root(i64)
 declare i32 @isdigit(i32)
-declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @vais_gc_objects_count()
+declare i64 @vais_gc_bytes_allocated()
+declare i32 @atoi(i8*)
+declare i32 @tolower(i32)
+declare double @fabs(double)
+declare i64 @malloc(i64)
+declare i32 @strcmp(i8*, i8*)
+declare i64 @atol(i64)
+declare i32 @puts(i64)
+declare void @exit(i32)
+declare i32 @sched_yield()
+declare i64 @labs(i64)
+declare double @sqrt(double)
 define i64 @fopen_ptr(i64 %path, i8* %mode) {
 entry:
   %0 = call i64 @fopen(i64 %path, i8* %mode)
   ret i64 %0
 }
-declare i64 @strcat(i64, i8*)
-declare i64 @vais_gc_alloc(i64, i32)
-declare i64 @vais_gc_bytes_allocated()
+declare i64 @ftell(i64)
+declare i32 @usleep(i64)
+declare i64 @fflush(i64)
+declare i64 @fread(i64, i64, i64, i64)
+declare i64 @fgets(i64, i64, i64)
+declare i32 @fclose(i64)
+declare i64 @fgetc(i64)
+declare i64 @vais_gc_remove_root(i64)
+declare i64 @fopen(i8*, i8*)
+declare i32 @isalpha(i32)
+declare i32 @toupper(i32)
 declare void @free(i64)
 declare i64 @strcpy(i64, i8*)
-declare i64 @fopen(i8*, i8*)
-declare i64 @fflush(i64)
-declare i32 @toupper(i32)
-declare i32 @tolower(i32)
-declare i64 @labs(i64)
-declare i64 @fwrite(i64, i64, i64, i64)
-declare i64 @vais_gc_objects_count()
-declare i64 @memcpy(i64, i64, i64)
+declare i32 @strncmp(i8*, i8*, i64)
+declare i64 @fputs(i8*, i64)
+declare i64 @feof(i64)
+declare i32 @printf(i8*, ...)
+declare i32 @rand()
+declare i64 @vais_gc_alloc(i64, i32)
 declare i64 @vais_gc_collections()
+declare double @atof(i8*)
+declare i64 @memcpy(i64, i64, i64)
+declare i64 @memcpy_str(i64, i8*, i64)
+declare i64 @fputc(i64, i64)
+declare i64 @fwrite(i64, i64, i64, i64)
+declare i64 @vais_gc_collect()
+declare i32 @putchar(i32)
+declare i64 @vais_gc_set_threshold(i64)
+declare i64 @vais_gc_print_stats()
+declare i64 @fseek(i64, i64, i64)
+declare i64 @strcat(i64, i8*)
+declare void @srand(i32)
+declare i64 @vais_gc_add_root(i64)
+declare i64 @strlen(i8*)
+declare i64 @vais_gc_init()
 @__vais_abi_version = constant [6 x i8] c"1.0.0\00"
+
+@.str.0 = private unnamed_addr constant [18 x i8] c"Math module test:\00"
+@.str.1 = private unnamed_addr constant [17 x i8] c"add(3, 4) = %ld\0A\00"
+@.str.2 = private unnamed_addr constant [17 x i8] c"mul(5, 6) = %ld\0A\00"
+@.str.3 = private unnamed_addr constant [17 x i8] c"square(7) = %ld\0A\00"
 
 define i64 @add(i64 %a, i64 %b) {
 entry:
@@ -73,6 +78,22 @@ define i64 @square(i64 %x) {
 entry:
   %0 = mul i64 %x, %x
   ret i64 %0
+}
+
+define i64 @main() {
+entry:
+  %0 = call i32 @puts(i8* getelementptr ([18 x i8], [18 x i8]* @.str.0, i64 0, i64 0))
+  %1 = sext i32 %0 to i64
+  %2 = call i64 @add(i64 3, i64 4)
+  %3 = call i32 @printf(i8* getelementptr ([17 x i8], [17 x i8]* @.str.1, i64 0, i64 0), i64 %2)
+  %4 = sext i32 %3 to i64
+  %5 = call i64 @mul(i64 5, i64 6)
+  %6 = call i32 @printf(i8* getelementptr ([17 x i8], [17 x i8]* @.str.2, i64 0, i64 0), i64 %5)
+  %7 = sext i32 %6 to i64
+  %8 = call i64 @square(i64 7)
+  %9 = call i32 @printf(i8* getelementptr ([17 x i8], [17 x i8]* @.str.3, i64 0, i64 0), i64 %8)
+  %10 = sext i32 %9 to i64
+  ret i64 0
 }
 
 
