@@ -38,6 +38,11 @@ struct RunResult {
 
 /// Compile source, build executable with clang, run it, return exit code + output
 fn compile_and_run(source: &str) -> Result<RunResult, String> {
+    compile_and_run_with_extra_sources(source, &[])
+}
+
+/// Compile source with additional C source files linked in
+fn compile_and_run_with_extra_sources(source: &str, extra_c_sources: &[&str]) -> Result<RunResult, String> {
     let ir = compile_to_ir(source)?;
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
@@ -47,12 +52,17 @@ fn compile_and_run(source: &str) -> Result<RunResult, String> {
     fs::write(&ll_path, &ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 
     // Compile LLVM IR to executable with clang
-    let clang_output = Command::new("clang")
-        .arg(&ll_path)
+    let mut cmd = Command::new("clang");
+    cmd.arg(&ll_path)
         .arg("-o")
         .arg(&exe_path)
-        .arg("-Wno-override-module")
-        .output()
+        .arg("-Wno-override-module");
+
+    for c_source in extra_c_sources {
+        cmd.arg(c_source);
+    }
+
+    let clang_output = cmd.output()
         .map_err(|e| format!("Failed to run clang: {}", e))?;
 
     if !clang_output.status.success() {
@@ -1872,4 +1882,192 @@ F main() -> i64 {
 }
 "#;
     assert_exit_code(source, 0);
+}
+
+// ==================== HTTP Runtime Tests ====================
+
+/// Helper to find the HTTP runtime C file path
+fn find_http_runtime_path() -> Option<String> {
+    // Try relative to workspace root (when running via cargo test)
+    let candidates = [
+        "std/http_runtime.c",
+        "../std/http_runtime.c",
+        "../../std/http_runtime.c",
+    ];
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    // Try from CARGO_MANIFEST_DIR
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let p = std::path::Path::new(&manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("std").join("http_runtime.c"));
+        if let Some(path) = p {
+            if path.exists() {
+                return Some(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn e2e_http_strlen() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __strlen(s: str) -> i64
+F main() -> i64 {
+    len := __strlen("hello world")
+    I len == 11 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "strlen test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_str_eq() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __str_eq(a: str, b: str) -> i64
+F main() -> i64 {
+    r1 := __str_eq("abc", "abc")
+    r2 := __str_eq("abc", "xyz")
+    I r1 == 1 {
+        I r2 == 0 { 0 } E { 2 }
+    } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "str_eq test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_str_eq_ignore_case() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __str_eq_ignore_case(a: str, b: str) -> i64
+F main() -> i64 {
+    r1 := __str_eq_ignore_case("Hello", "hello")
+    r2 := __str_eq_ignore_case("WORLD", "world")
+    I r1 == 1 {
+        I r2 == 1 { 0 } E { 2 }
+    } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "str_eq_ignore_case test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_parse_url_port() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __parse_url_port(url: str) -> i64
+F main() -> i64 {
+    port := __parse_url_port("http://example.com:3000/api")
+    I port == 3000 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "parse_url_port test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_parse_url_host() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __parse_url_host(url: str) -> str
+X F __str_eq(a: str, b: str) -> i64
+F main() -> i64 {
+    host := __parse_url_host("http://localhost:8080/path")
+    I __str_eq(host, "localhost") == 1 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "parse_url_host test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_parse_url_path() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __parse_url_path(url: str) -> str
+X F __str_eq(a: str, b: str) -> i64
+F main() -> i64 {
+    path := __parse_url_path("http://example.com:8080/api/users")
+    I __str_eq(path, "/api/users") == 1 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "parse_url_path test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_find_header_end() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __find_header_end(buffer: i64, len: i64) -> i64
+F main() -> i64 {
+    buf := __malloc(32)
+    __str_copy_to(buf, "HEAD")
+    store_byte(buf + 4, 13)
+    store_byte(buf + 5, 10)
+    store_byte(buf + 6, 13)
+    store_byte(buf + 7, 10)
+    result := __find_header_end(buf, 8)
+    __free(buf)
+    I result == 8 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "find_header_end test failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_http_i64_to_str() {
+    let rt = match find_http_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+    };
+    let source = r#"
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+F main() -> i64 {
+    buf := __malloc(32)
+    written := __i64_to_str(buf, 12345)
+    __free(buf)
+    I written == 5 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "i64_to_str test failed: {}", result.stderr);
 }
