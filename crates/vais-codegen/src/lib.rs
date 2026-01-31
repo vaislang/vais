@@ -2014,6 +2014,9 @@ impl CodeGenerator {
                     }
                     // Fallback if not found (shouldn't happen)
                     Ok((format!("@{}", name), String::new()))
+                } else if let Some(const_info) = self.constants.get(name).cloned() {
+                    // Constant reference - inline the constant value
+                    self.generate_expr(&const_info.value, counter)
                 } else if self.functions.contains_key(name.as_str()) {
                     // Function reference
                     Ok((format!("@{}", name), String::new()))
@@ -2304,6 +2307,49 @@ impl CodeGenerator {
                     // Check if this is a SIMD intrinsic
                     if Self::is_simd_intrinsic(name) {
                         return self.generate_simd_intrinsic(name, args, counter);
+                    }
+
+                    // Handle print_i64/print_f64 builtins: emit printf call
+                    if name == "print_i64" && args.len() == 1 {
+                        let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                        let mut ir = arg_ir;
+                        let fmt_str = "%ld";
+                        let fmt_name = format!(".str.{}", self.string_counter);
+                        self.string_counter += 1;
+                        self.string_constants.push((fmt_name.clone(), fmt_str.to_string()));
+                        let fmt_len = fmt_str.len() + 1;
+                        let fmt_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
+                            fmt_ptr, fmt_len, fmt_len, fmt_name
+                        ));
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = call i32 (i8*, ...) @printf(i8* {}, i64 {})\n",
+                            result, fmt_ptr, arg_val
+                        ));
+                        return Ok((result, ir));
+                    }
+
+                    if name == "print_f64" && args.len() == 1 {
+                        let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
+                        let mut ir = arg_ir;
+                        let fmt_str = "%f";
+                        let fmt_name = format!(".str.{}", self.string_counter);
+                        self.string_counter += 1;
+                        self.string_constants.push((fmt_name.clone(), fmt_str.to_string()));
+                        let fmt_len = fmt_str.len() + 1;
+                        let fmt_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr [{} x i8], [{} x i8]* @{}, i64 0, i64 0\n",
+                            fmt_ptr, fmt_len, fmt_len, fmt_name
+                        ));
+                        let result = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = call i32 (i8*, ...) @printf(i8* {}, double {})\n",
+                            result, fmt_ptr, arg_val
+                        ));
+                        return Ok((result, ir));
                     }
                 }
 

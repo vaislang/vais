@@ -1,15 +1,12 @@
 {
   "phase": 5,
-  "request": "Phase 16 P1 - 컴파일 에러 25개 수정 (성공률 76% → 90%+)",
+  "request": "Phase 17 - 잔여 실패 수정 (성공률 90% → 92.5%)",
   "tasks": [
-    { "id": 1, "name": "ROADMAP 업데이트 + 커밋 (P0)", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "예제 코드 수정: None/is_some 미등록 (5개)", "status": "completed", "model": "Sonnet" },
-    { "id": 3, "name": "타입 불일치 에러 수정 (5개)", "status": "completed", "model": "Sonnet" },
-    { "id": 4, "name": "함수 인자/호출 에러 수정 (5개)", "status": "completed", "model": "Sonnet" },
-    { "id": 5, "name": "미정의 변수/함수 수정 (3개)", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "파서 에러 수정 (5개)", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "기타 에러 수정 (2개)", "status": "completed", "model": "Sonnet" },
-    { "id": 8, "name": "검증 + ROADMAP 업데이트 + 커밋", "status": "in_progress", "model": "Opus" }
+    { "id": 1, "name": "예제 파일 수정 (import/main 추가)", "status": "done", "model": "Sonnet" },
+    { "id": 2, "name": "C 상수 코드젠 수정 (dynload_test, math_test)", "status": "done", "model": "Sonnet" },
+    { "id": 3, "name": "std/io API 수정 + io_test 해결", "status": "done", "model": "Sonnet" },
+    { "id": 4, "name": "GC C 런타임 라이브러리 구현", "status": "skipped", "model": "Opus" },
+    { "id": 5, "name": "검증 + ROADMAP 업데이트 + 커밋", "status": "in_progress", "model": "Opus" }
   ],
-  "currentTask": 8
+  "currentTask": 5
 }

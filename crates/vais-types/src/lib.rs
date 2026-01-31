@@ -613,6 +613,64 @@ impl TypeChecker {
             },
         );
 
+        // fgets_ptr: (buffer: i64, size: i64, stream: i64) -> i64 - fgets with raw pointer params
+        self.functions.insert(
+            "fgets_ptr".to_string(),
+            FunctionSig {
+                name: "fgets_ptr".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("buffer".to_string(), ResolvedType::I64, false),
+                    ("size".to_string(), ResolvedType::I64, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // atol_ptr: (s: i64) -> i64 - atol with raw pointer param
+        self.functions.insert(
+            "atol_ptr".to_string(),
+            FunctionSig {
+                name: "atol_ptr".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // atof_ptr: (s: i64) -> f64 - atof with raw pointer param
+        self.functions.insert(
+            "atof_ptr".to_string(),
+            FunctionSig {
+                name: "atof_ptr".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::F64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // labs: (x: i64) -> i64 - absolute value (long integer)
         self.functions.insert(
             "labs".to_string(),

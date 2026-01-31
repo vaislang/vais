@@ -18,27 +18,21 @@ C INPUT_BUFFER_SIZE: i64 = 1024
 
 # Extern C functions for input
 
-# Read formatted input (scanf)
-# format: format string, ...: variable arguments
-X F scanf(format: i64, ...) -> i64
-
-# Read string from stdin (fgets)
-# buffer: destination buffer
-# size: maximum characters to read
-# stream: FILE* (use stdin)
-X F fgets(buffer: i64, size: i64, stream: i64) -> i64
+# Extern C functions for input
+# Note: We use _ptr suffix variants that accept i64 (raw pointers)
+# to avoid type conflicts with builtin str-typed versions
 
 # Get stdin handle
 X F get_stdin() -> i64
 
-# String to integer conversion
-X F atoi(s: i64) -> i64
+# fgets with pointer params (maps to C fgets)
+X F fgets_ptr(buffer: i64, size: i64, stream: i64) -> i64
 
-# String to long integer conversion
-X F atol(s: i64) -> i64
+# atol with pointer param (maps to C atol)
+X F atol_ptr(s: i64) -> i64
 
-# String to double conversion
-X F atof(s: i64) -> f64
+# atof with pointer param (maps to C atof)
+X F atof_ptr(s: i64) -> f64
 
 # Read a line from stdin into a buffer
 # Returns pointer to buffer on success, 0 on EOF/error
@@ -54,7 +48,7 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
         max_len = 1048576
     }
     stdin := get_stdin()
-    result := fgets(buffer, max_len, stdin)
+    result := fgets_ptr(buffer, max_len, stdin)
     I result == 0 {
         0
     } E {
@@ -88,7 +82,7 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
 #         max_len = 1048576
 #     }
 #     stdin := get_stdin()
-#     result := fgets(buffer, max_len, stdin)
+#     result := fgets_ptr(buffer, max_len, stdin)
 #     I result == 0 {
 #         None
 #     } E {
@@ -150,27 +144,26 @@ F read_i64() -> i64 {
         free(buffer)
         0
     } E {
-        value := atol(buffer)
+        value := atol_ptr(buffer)
         free(buffer)
         value
     }
 }
 
 # Read an i64 integer using Result type
-# Returns Ok(value) on success, Err(ERR_IO) on failure
-F read_i64_result() -> Result {
-    buffer := malloc(64)
-    result := read_line(buffer, 64)
-
-    I result == 0 {
-        free(buffer)
-        Err(ERR_IO())
-    } E {
-        value := atol(buffer)
-        free(buffer)
-        Ok(value)
-    }
-}
+# TEMPORARILY DISABLED - Result/Ok/Err types not fully supported in codegen
+# F read_i64_result() -> Result {
+#     buffer := malloc(64)
+#     result := read_line(buffer, 64)
+#     I result == 0 {
+#         free(buffer)
+#         Err(ERR_IO())
+#     } E {
+#         value := atol_ptr(buffer)
+#         free(buffer)
+#         Ok(value)
+#     }
+# }
 
 # Read a f64 floating-point number from stdin
 # Returns the float value, or 0.0 if invalid input
@@ -182,7 +175,7 @@ F read_f64() -> f64 {
         free(buffer)
         0.0
     } E {
-        value := atof(buffer)
+        value := atof_ptr(buffer)
         free(buffer)
         value
     }

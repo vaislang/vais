@@ -354,6 +354,16 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
+        // fgets_ptr: (i64, i64, i64) -> i64 - fgets with raw pointer params (for std/io.vais)
+        register_extern!(self, "fgets_ptr" => "fgets",
+            vec![
+                ("buffer".to_string(), ResolvedType::I64),
+                ("n".to_string(), ResolvedType::I64),
+                ("stream".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
         // fgets: (str, n, FILE*) -> char*
         register_extern!(self, "fgets",
             vec![
@@ -455,9 +465,21 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
+        // atol_ptr: (s: i64) -> i64 - atol with raw pointer param (for std/io.vais)
+        register_extern!(self, "atol_ptr" => "atol",
+            vec![("s".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
         // atof: (s: str) -> f64 - string to double
         register_extern!(self, "atof",
             vec![("s".to_string(), ResolvedType::Str)],
+            ResolvedType::F64
+        );
+
+        // atof_ptr: (s: i64) -> f64 - atof with raw pointer param (for std/io.vais)
+        register_extern!(self, "atof_ptr" => "atof",
+            vec![("s".to_string(), ResolvedType::I64)],
             ResolvedType::F64
         );
 

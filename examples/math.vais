@@ -4,3 +4,11 @@ F add(a: i64, b: i64) -> i64 = a + b
 F mul(a: i64, b: i64) -> i64 = a * b
 
 F square(x: i64) -> i64 = x * x
+
+F main() -> i64 {
+    puts("Math module test:")
+    printf("add(3, 4) = %ld\n", add(3, 4))
+    printf("mul(5, 6) = %ld\n", mul(5, 6))
+    printf("square(7) = %ld\n", square(7))
+    0
+}
