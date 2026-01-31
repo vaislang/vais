@@ -19,7 +19,24 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
+use std::sync::OnceLock;
 use vais_ast::{Item, Module, Spanned};
+
+/// Global ownership checking configuration
+/// None = warn-only (default), Some(true) = strict errors, Some(false) = disabled
+static OWNERSHIP_MODE: OnceLock<Option<bool>> = OnceLock::new();
+
+fn get_ownership_mode() -> Option<bool> {
+    OWNERSHIP_MODE.get().copied().unwrap_or(Some(false))
+}
+
+fn configure_type_checker(checker: &mut TypeChecker) {
+    match get_ownership_mode() {
+        Some(true) => checker.set_strict_ownership(true),
+        Some(false) => {} // default: warn-only
+        None => checker.disable_ownership_check(),
+    }
+}
 use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_codegen::optimize::{optimize_ir, OptLevel};
 use vais_lexer::tokenize;
@@ -94,6 +111,14 @@ struct Cli {
     /// Allow loading plugins (plugins execute arbitrary native code)
     #[arg(long, global = true)]
     allow_plugins: bool,
+
+    /// Enable strict ownership/borrow checking (errors instead of warnings)
+    #[arg(long, global = true)]
+    strict_ownership: bool,
+
+    /// Disable ownership/borrow checking entirely
+    #[arg(long, global = true)]
+    no_ownership_check: bool,
 }
 
 #[derive(Subcommand)]
@@ -430,6 +455,16 @@ enum CacheAction {
 
 fn main() {
     let cli = Cli::parse();
+
+    // Configure ownership checking mode
+    let ownership_mode = if cli.no_ownership_check {
+        None // disabled
+    } else if cli.strict_ownership {
+        Some(true) // strict (errors)
+    } else {
+        Some(false) // warn-only (default)
+    };
+    let _ = OWNERSHIP_MODE.set(ownership_mode);
 
     // Initialize i18n system
     let locale = cli.locale
@@ -825,6 +860,7 @@ fn cmd_build(
     // Type check
     let typecheck_start = std::time::Instant::now();
     let mut checker = TypeChecker::new();
+    configure_type_checker(&mut checker);
     if let Err(e) = checker.check_module(&final_ast) {
         // If suggest_fixes is enabled, print suggested fixes
         if suggest_fixes {
@@ -834,6 +870,16 @@ fn cmd_build(
         return Err(error_formatter::format_type_error(&e, &main_source, input));
     }
     let typecheck_time = typecheck_start.elapsed();
+
+    // Print ownership warnings if any
+    let ownership_warnings: Vec<_> = checker.get_warnings().iter()
+        .filter(|w| w.starts_with("[ownership]"))
+        .collect();
+    if !ownership_warnings.is_empty() {
+        for w in &ownership_warnings {
+            eprintln!("{} {}", "warning:".yellow().bold(), w);
+        }
+    }
 
     if verbose {
         println!("  {}", "Type check passed".green());
@@ -1735,8 +1781,19 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
 
     // Type check
     let mut checker = TypeChecker::new();
+    configure_type_checker(&mut checker);
     if let Err(e) = checker.check_module(&ast) {
         return Err(error_formatter::format_type_error(&e, &source, input));
+    }
+
+    // Print ownership warnings if any
+    let ownership_warnings: Vec<_> = checker.get_warnings().iter()
+        .filter(|w| w.starts_with("[ownership]"))
+        .collect();
+    if !ownership_warnings.is_empty() {
+        for w in &ownership_warnings {
+            println!("{} {}", "warning:".yellow().bold(), w);
+        }
     }
 
     println!("{} No errors found", "OK".green().bold());

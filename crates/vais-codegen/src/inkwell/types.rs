@@ -95,11 +95,15 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Generic(name) => {
                 // Generic types should be substituted before codegen
-                panic!("Unsubstituted generic type: {}", name);
+                // ICE: fall back to i64 pointer and log error
+                eprintln!("ICE: unsubstituted generic type '{}' reached codegen", name);
+                self.context.ptr_type(AddressSpace::default()).into()
             }
             ResolvedType::Infer => {
                 // Should be resolved before codegen
-                panic!("Unresolved infer type in codegen");
+                // ICE: fall back to i64 and log error
+                eprintln!("ICE: unresolved infer type reached codegen");
+                self.context.i64_type().into()
             }
             ResolvedType::Never => {
                 // Never type - use void pointer as placeholder

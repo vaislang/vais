@@ -1944,7 +1944,9 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         match &expr.node {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
-            Expr::Float(n) => Ok((format!("{:e}", n), String::new())),
+            Expr::Float(n) => {
+                Ok((crate::types::format_llvm_float(*n), String::new()))
+            }
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
                 // Create a global string constant
@@ -2117,22 +2119,42 @@ impl CodeGenerator {
                     Ok((result, ir))
                 } else if is_comparison {
                     // Comparison returns i1, extend to i64
-                    let op_str = match op {
-                        BinOp::Lt => "icmp slt",
-                        BinOp::Lte => "icmp sle",
-                        BinOp::Gt => "icmp sgt",
-                        BinOp::Gte => "icmp sge",
-                        BinOp::Eq => "icmp eq",
-                        BinOp::Neq => "icmp ne",
-                        _ => unreachable!(),
-                    };
+                    let right_type = self.infer_expr_type(right);
+                    let is_float_cmp = matches!(left_type, ResolvedType::F64)
+                        || matches!(right_type, ResolvedType::F64);
 
                     let cmp_tmp = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  {} = {} i64 {}, {}{}\n",
-                        cmp_tmp, op_str, left_val, right_val, dbg_info
-                    ));
+
+                    if is_float_cmp {
+                        let op_str = match op {
+                            BinOp::Lt => "fcmp olt",
+                            BinOp::Lte => "fcmp ole",
+                            BinOp::Gt => "fcmp ogt",
+                            BinOp::Gte => "fcmp oge",
+                            BinOp::Eq => "fcmp oeq",
+                            BinOp::Neq => "fcmp one",
+                            _ => unreachable!(),
+                        };
+                        ir.push_str(&format!(
+                            "  {} = {} double {}, {}{}\n",
+                            cmp_tmp, op_str, left_val, right_val, dbg_info
+                        ));
+                    } else {
+                        let op_str = match op {
+                            BinOp::Lt => "icmp slt",
+                            BinOp::Lte => "icmp sle",
+                            BinOp::Gt => "icmp sgt",
+                            BinOp::Gte => "icmp sge",
+                            BinOp::Eq => "icmp eq",
+                            BinOp::Neq => "icmp ne",
+                            _ => unreachable!(),
+                        };
+                        ir.push_str(&format!(
+                            "  {} = {} i64 {}, {}{}\n",
+                            cmp_tmp, op_str, left_val, right_val, dbg_info
+                        ));
+                    }
 
                     // Extend i1 to i64
                     let result = self.next_temp(counter);
@@ -2144,25 +2166,48 @@ impl CodeGenerator {
                 } else {
                     // Arithmetic and bitwise operations
                     let tmp = self.next_temp(counter);
-                    let op_str = match op {
-                        BinOp::Add => "add",
-                        BinOp::Sub => "sub",
-                        BinOp::Mul => "mul",
-                        BinOp::Div => "sdiv",
-                        BinOp::Mod => "srem",
-                        BinOp::BitAnd => "and",
-                        BinOp::BitOr => "or",
-                        BinOp::BitXor => "xor",
-                        BinOp::Shl => "shl",
-                        BinOp::Shr => "ashr",
-                        _ => unreachable!(),
-                    };
 
-                    let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  {} = {} i64 {}, {}{}\n",
-                        tmp, op_str, left_val, right_val, dbg_info
-                    ));
+                    // Check if either operand is a float type
+                    let right_type = self.infer_expr_type(right);
+                    let is_float = matches!(left_type, ResolvedType::F64)
+                        || matches!(right_type, ResolvedType::F64);
+
+                    if is_float && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod) {
+                        let op_str = match op {
+                            BinOp::Add => "fadd",
+                            BinOp::Sub => "fsub",
+                            BinOp::Mul => "fmul",
+                            BinOp::Div => "fdiv",
+                            BinOp::Mod => "frem",
+                            _ => unreachable!(),
+                        };
+
+                        let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
+                        ir.push_str(&format!(
+                            "  {} = {} double {}, {}{}\n",
+                            tmp, op_str, left_val, right_val, dbg_info
+                        ));
+                    } else {
+                        let op_str = match op {
+                            BinOp::Add => "add",
+                            BinOp::Sub => "sub",
+                            BinOp::Mul => "mul",
+                            BinOp::Div => "sdiv",
+                            BinOp::Mod => "srem",
+                            BinOp::BitAnd => "and",
+                            BinOp::BitOr => "or",
+                            BinOp::BitXor => "xor",
+                            BinOp::Shl => "shl",
+                            BinOp::Shr => "ashr",
+                            _ => unreachable!(),
+                        };
+
+                        let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
+                        ir.push_str(&format!(
+                            "  {} = {} i64 {}, {}{}\n",
+                            tmp, op_str, left_val, right_val, dbg_info
+                        ));
+                    }
                     Ok((tmp, ir))
                 }
             }
@@ -2597,7 +2642,10 @@ impl CodeGenerator {
 
                     let ptr_tmp = if is_ssa_or_param {
                         // SSA or param: the value IS the function pointer (as i64), no load needed
-                        let local = local_info.as_ref().unwrap();
+                        let local = match local_info.as_ref() {
+                            Some(l) => l,
+                            None => return Err(CodegenError::TypeError(format!("missing local info for '{}'", fn_name))),
+                        };
                         let val = &local.llvm_name;
                         if local.is_ssa() {
                             // SSA values already include the % prefix (e.g., "%5")
@@ -3023,9 +3071,11 @@ impl CodeGenerator {
                     matches!(&it.node, Expr::Range { .. })
                 });
 
-                if is_range_loop && pattern.is_some() {
-                    // Range-based for loop: L pattern : start..end { body }
-                    return self.generate_range_for_loop(pattern.as_ref().unwrap(), iter.as_ref().unwrap(), body, counter);
+                if is_range_loop {
+                    if let (Some(pat), Some(it)) = (pattern.as_ref(), iter.as_ref()) {
+                        // Range-based for loop: L pattern : start..end { body }
+                        return self.generate_range_for_loop(pat, it, body, counter);
+                    }
                 }
 
                 // Conditional or infinite loop
@@ -3157,10 +3207,28 @@ impl CodeGenerator {
                     if let Some(local) = self.locals.get(name).cloned() {
                         if !local.is_param() {
                             let llvm_ty = self.type_to_llvm(&local.ty);
-                            ir.push_str(&format!(
-                                "  store {} {}, {}* %{}\n",
-                                llvm_ty, val, llvm_ty, local.llvm_name
-                            ));
+                            // For struct types (Named), the local is a double pointer (%Type**).
+                            // We need to alloca a new struct, store the value, then update the pointer.
+                            if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
+                                let tmp_ptr = self.next_temp(counter);
+                                ir.push_str(&format!(
+                                    "  {} = alloca {}\n",
+                                    tmp_ptr, llvm_ty
+                                ));
+                                ir.push_str(&format!(
+                                    "  store {} {}, {}* {}\n",
+                                    llvm_ty, val, llvm_ty, tmp_ptr
+                                ));
+                                ir.push_str(&format!(
+                                    "  store {}* {}, {}** %{}\n",
+                                    llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
+                                ));
+                            } else {
+                                ir.push_str(&format!(
+                                    "  store {} {}, {}* %{}\n",
+                                    llvm_ty, val, llvm_ty, local.llvm_name
+                                ));
+                            }
                         }
                     }
                 } else if let Expr::Deref(inner) = &target.node {
@@ -3926,7 +3994,7 @@ impl CodeGenerator {
                 // Return the evaluated constant
                 match value {
                     vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
-                    vais_types::ComptimeValue::Float(f) => Ok((format!("{:e}", f), String::new())),
+                    vais_types::ComptimeValue::Float(f) => Ok((crate::types::format_llvm_float(f), String::new())),
                     vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
                     vais_types::ComptimeValue::String(s) => {
                         // Create a global string constant
@@ -3947,7 +4015,7 @@ impl CodeGenerator {
                         for elem in arr {
                             match elem {
                                 vais_types::ComptimeValue::Int(n) => elements.push(n.to_string()),
-                                vais_types::ComptimeValue::Float(f) => elements.push(format!("{:e}", f)),
+                                vais_types::ComptimeValue::Float(f) => elements.push(crate::types::format_llvm_float(f)),
                                 vais_types::ComptimeValue::Bool(b) => elements.push(if b { "1" } else { "0" }.to_string()),
                                 _ => {
                                     return Err(CodegenError::TypeError(

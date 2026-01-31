@@ -476,7 +476,10 @@ impl CodeGenerator {
 
             let ptr_tmp = if is_ssa_or_param {
                 // SSA or param: the value IS the function pointer (as i64), no load needed
-                let local = local_info.as_ref().unwrap();
+                let local = match local_info.as_ref() {
+                    Some(l) => l,
+                    None => return Err(CodegenError::TypeError(format!("missing local info for '{}'", fn_name))),
+                };
                 let val = &local.llvm_name;
                 if local.is_ssa() {
                     // SSA values already include the % prefix (e.g., "%5")
@@ -1306,10 +1309,28 @@ impl CodeGenerator {
             if let Some(local) = self.locals.get(name).cloned() {
                 if !local.is_param() {
                     let llvm_ty = self.type_to_llvm(&local.ty);
-                    ir.push_str(&format!(
-                        "  store {} {}, {}* %{}\n",
-                        llvm_ty, val, llvm_ty, local.llvm_name
-                    ));
+                    // For struct types (Named), the local is a double pointer (%Type**).
+                    // We need to alloca a new struct, store the value, then update the pointer.
+                    if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
+                        let tmp_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = alloca {}\n",
+                            tmp_ptr, llvm_ty
+                        ));
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* {}\n",
+                            llvm_ty, val, llvm_ty, tmp_ptr
+                        ));
+                        ir.push_str(&format!(
+                            "  store {}* {}, {}** %{}\n",
+                            llvm_ty, tmp_ptr, llvm_ty, local.llvm_name
+                        ));
+                    } else {
+                        ir.push_str(&format!(
+                            "  store {} {}, {}* %{}\n",
+                            llvm_ty, val, llvm_ty, local.llvm_name
+                        ));
+                    }
                 }
             }
         } else if let Expr::Field { expr: obj_expr, field } = &target.node {

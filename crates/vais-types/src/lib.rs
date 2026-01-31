@@ -43,6 +43,7 @@ pub use types::{
     Linearity,
 };
 pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
+pub use ownership::OwnershipChecker;
 pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
 pub use comptime::{ComptimeEvaluator, ComptimeValue};
 pub use effects::EffectInferrer;
@@ -117,6 +118,9 @@ pub struct TypeChecker {
 
     // Lifetime inference engine
     lifetime_inferencer: lifetime::LifetimeInferencer,
+
+    // Ownership checking mode: None = disabled, Some(true) = strict (errors), Some(false) = warn only
+    ownership_check_mode: Option<bool>,
 }
 
 impl TypeChecker {
@@ -144,9 +148,20 @@ impl TypeChecker {
             generic_instantiations: Vec::new(),
             substitute_cache: RefCell::new(HashMap::new()),
             lifetime_inferencer: lifetime::LifetimeInferencer::new(),
+            ownership_check_mode: Some(false), // warn-only by default
         };
         checker.register_builtins();
         checker
+    }
+
+    /// Enable strict ownership checking (errors instead of warnings)
+    pub fn set_strict_ownership(&mut self, strict: bool) {
+        self.ownership_check_mode = Some(strict);
+    }
+
+    /// Disable ownership checking entirely
+    pub fn disable_ownership_check(&mut self) {
+        self.ownership_check_mode = None;
     }
 
     /// Get warnings collected during type checking
@@ -1966,6 +1981,26 @@ impl TypeChecker {
                     }
                 }
                 _ => {}
+            }
+        }
+
+        // Third pass: ownership and borrow checking
+        if let Some(strict) = self.ownership_check_mode {
+            let mut ownership_checker = ownership::OwnershipChecker::new_collecting();
+            // Run ownership check in collecting mode (never fails, collects all errors)
+            let _ = ownership_checker.check_module(module);
+            let ownership_errors = ownership_checker.take_errors();
+
+            if !ownership_errors.is_empty() {
+                if strict {
+                    // Strict mode: return first error
+                    return Err(ownership_errors.into_iter().next().unwrap());
+                } else {
+                    // Warn mode: add to warnings
+                    for err in &ownership_errors {
+                        self.warnings.push(format!("[ownership] {}", err));
+                    }
+                }
             }
         }
 

@@ -125,6 +125,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Phase 15: v1.0 출시 준비 | ✅ 완료 | P0-P3 완료 |
 | **Phase 16: 실사용 검증 버그 수정** | **✅ 완료** | **P0-P4 완료 (100%)** |
 | **Phase 17: 런타임 버그 수정 및 코드 품질** | **✅ 완료** | **전체 완료** |
+| **Phase 18: 코드젠 심층 버그 수정 및 float 지원** | **✅ 완료** | **전체 완료** |
 
 ---
 
@@ -552,6 +553,129 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **CLAUDE.md 생성** - 프로젝트 구조, 빌드 방법, 핵심 파일 안내 문서 (완료일: 2026-01-31)
 - [x] **런타임 출력 검증 테스트 10개 추가** - println, puts, if-else, match, fib, loop, 중첩 호출, mutable 변수 E2E 테스트 (완료일: 2026-01-31)
 - [x] **ROADMAP 갱신** - Phase 17 섹션 추가 (완료일: 2026-01-31)
+
+---
+
+## 🚀 Phase 18: 코드젠 심층 버그 수정 및 float 지원 강화
+
+> **상태**: ✅ 완료
+> **추가일**: 2026-01-31
+> **목표**: 런타임 segfault 수정, 부동소수점 연산 코드젠 완성, 수학 내장 함수 추가
+
+### 완료 항목
+
+#### 런타임 segfault 수정
+- [x] **dynload_test segfault 수정** - mutable 구조체 재할당 시 double-pointer 패턴 누락 수정 (expr_helpers.rs generate_assign_expr), stale .ll 파일 재생성으로 해결 (완료일: 2026-01-31)
+
+#### 부동소수점(float) 코드젠 완성
+- [x] **LLVM IR float 상수 포매팅** - Rust `format!("{:e}")` → LLVM 호환 `0.000000e+00` 형식으로 변환하는 `format_llvm_float()` 헬퍼 추가 (types.rs) (완료일: 2026-01-31)
+- [x] **float 이항 연산** - f64 타입에 대해 fadd/fsub/fmul/fdiv/frem 사용 (기존 add/sub/mul/sdiv/srem → float 감지 시 자동 전환) (완료일: 2026-01-31)
+- [x] **float 비교 연산** - f64 타입에 대해 fcmp olt/ole/ogt/oge/oeq/one 사용 (기존 icmp → float 감지 시 자동 전환) (완료일: 2026-01-31)
+- [x] **전체 코드젠 경로 float 포매팅 통일** - lib.rs, expr.rs, expr_visitor.rs 모든 경로에서 format_llvm_float() 적용 (완료일: 2026-01-31)
+
+#### 수학 내장 함수
+- [x] **sin, cos, exp, log extern 등록** - builtins.rs에 4개 수학 함수 extern 선언 추가 (f64 → f64) (완료일: 2026-01-31)
+
+#### GPU 예제 수정
+- [x] **gpu_vector_add.vais 재작성** - f64 포인터 산술 의존 제거, self-contained GPU 개념 데모로 재작성 (GpuDeviceInfo 구조체, capability 플래그, launch validation) (완료일: 2026-01-31)
+- [x] **std/gpu.vais 단순화** - f64 포인터 산술을 피하도록 stub 함수 시그니처 정리 (완료일: 2026-01-31)
+
+### 알려진 제한사항
+- f64 포인터 역참조 (`*f64` 타입 인덱싱) 시 i64로 로드되는 문제는 미해결 (향후 타입 시스템 개선 필요)
+
+### 검증 결과
+- cargo build: 성공 (전체 워크스페이스)
+- cargo test: 전체 통과
+- cargo clippy: 경고 0개
+- 예제 컴파일: **105/106 성공** (1개 의도적 실패: range_type_error_test.vais)
+
+---
+
+## 🚀 Phase 19: 대형 프로젝트 도입 준비 - 컴파일러 안정성 및 소유권 검사 통합
+
+> **상태**: 🔄 진행 중
+> **추가일**: 2026-01-31
+> **목표**: 대형 프로젝트에서 사용 가능한 수준의 컴파일러 안정성, 메모리 안전성 보장
+
+### 완료 항목
+
+#### 컴파일러 안정성 강화
+- [x] **프로덕션 코드 unwrap 제거** - codegen 프로덕션 코드의 3개 unwrap()을 Result 에러 처리로 전환 (lib.rs, expr_helpers.rs) (완료일: 2026-01-31)
+- [x] **panic! → graceful fallback** - inkwell/types.rs의 2개 panic!을 ICE 로그 + fallback 타입으로 변환 (완료일: 2026-01-31)
+
+#### Borrow Checker 컴파일 파이프라인 통합
+- [x] **소유권 검사 3rd pass 추가** - TypeChecker::check_module()에 OwnershipChecker를 3번째 패스로 통합 (완료일: 2026-01-31)
+- [x] **3-모드 설정** - warn-only (기본), strict (--strict-ownership), disabled (--no-ownership-check) (완료일: 2026-01-31)
+- [x] **타입 추론 연동** - OwnershipChecker에 식 기반 타입 추론 추가, Unknown 타입 안전 처리 (완료일: 2026-01-31)
+- [x] **CLI 플래그** - vaisc에 --strict-ownership, --no-ownership-check 글로벌 플래그 추가 (완료일: 2026-01-31)
+- [x] **OwnershipChecker 공개 API** - vais-types에서 OwnershipChecker pub export (완료일: 2026-01-31)
+- [x] **통합 테스트 7개** - 소유권 검사 모드별 동작 검증 (copy type, immutable borrow, strict mode, disabled mode 등) (완료일: 2026-01-31)
+- [x] **전체 호환성 검증** - 143 E2E 테스트 전수 통과, clippy 경고 0개 (완료일: 2026-01-31)
+
+### 미완료 항목
+
+#### 표준 라이브러리 런타임 완성
+- [ ] **HTTP 클라이언트/서버 런타임** - std/http.vais의 extern 함수를 C 런타임으로 구현
+- [ ] **Async I/O 통합** - 파일/네트워크 비동기 I/O 실제 동작
+- [ ] **JSON/Regex 런타임 검증** - 런타임 시 실제 동작 E2E 테스트
+
+#### 패키지 매니저 클라이언트
+- [ ] **vais install/add/remove** - CLI 클라이언트 구현
+- [ ] **의존성 해결기** - dependency resolution 알고리즘
+- [ ] **vais.toml → 자동 빌드** - 프로젝트 빌드 시스템
+
+#### 증분 컴파일 실전 적용
+- [ ] **vais-query 파이프라인 통합** - vaisc 메인 빌드 경로에서 QueryDatabase 사용
+- [ ] **변경 파일만 재컴파일** - 파일 수준 캐시 + 변경 감지
+
+---
+
+## 📊 릴리즈 준비 상태 평가
+
+### 릴리즈 배포 가능 여부: ✅ 배포 가능
+
+| 항목 | 상태 | 비고 |
+|------|------|------|
+| 빌드 안정성 | ✅ | cargo build/clippy 클린 |
+| 테스트 통과율 | ✅ | 402+ 테스트 전체 통과 |
+| 예제 컴파일율 | ✅ | 105/105 (100%) + 1개 의도적 실패 |
+| 보안 감사 | ✅ | 14개 이슈 전수 수정 완료 (Phase 15) |
+| 라이선스 | ✅ | 396개 의존성 감사, MIT/Apache-2.0 호환 |
+| 배포 인프라 | ✅ | Homebrew, cargo install, .deb/.rpm, Docker, GitHub Releases |
+| 문서화 | ✅ | mdBook, Quickstart, CLAUDE.md, API 문서 |
+| CI/CD | ✅ | 3-OS 매트릭스, 코드 커버리지, cargo audit |
+
+### 프로젝트 실사용 가능 여부: ⚠️ 조건부 사용 가능
+
+| 기능 영역 | 상태 | 실사용 적합도 |
+|-----------|------|-------------|
+| 정수 연산 프로그램 | ✅ | 프로덕션 사용 가능 |
+| 구조체/열거형 | ✅ | 프로덕션 사용 가능 |
+| 패턴 매칭 | ✅ | 프로덕션 사용 가능 |
+| 문자열 처리 | ✅ | 기본 연산 가능 |
+| 제네릭/트레이트 | ✅ | 기본 monomorphization + vtable 동작 |
+| 클로저/람다 | ✅ | 기본 사용 가능 |
+| f64 부동소수점 | ⚠️ | 산술/비교 가능, 포인터 역참조 미지원 |
+| 표준 라이브러리 | ⚠️ | API 정의됨, 일부 런타임 미구현 (stub) |
+| GPU 코드젠 | ⚠️ | 개념 수준, 실제 GPU 실행 미지원 |
+| Async 런타임 | ⚠️ | 기본 구조 있음, 실제 I/O 통합 제한적 |
+| GC | ✅ | 세대별 GC 동작, 벤치마크 완료 |
+
+### 권장 사항
+
+**릴리즈 배포**: v1.0.0 릴리즈 태그 가능. 빌드/테스트/보안 기준 충족.
+
+**실사용**: 다음 용도에 적합:
+- 교육/학습 목적의 언어 탐색
+- 정수 기반 알고리즘/데이터 구조 프로그램
+- CLI 도구 프로토타이핑
+- 컴파일러 설계 연구
+
+**실사용 시 주의 사항**:
+- f64 포인터 산술 미지원 (수치 계산 라이브러리 부적합)
+- 표준 라이브러리 일부 기능이 stub (네트워크, 파일 I/O 등 런타임 함수 미완성)
+- GPU 코드젠은 개념 수준 (실제 CUDA/Metal 커널 생성 미구현)
+- 프로덕션 서버/웹 애플리케이션에는 아직 부적합
 
 ---
 

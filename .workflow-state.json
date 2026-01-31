@@ -1,15 +1,13 @@
 {
   "phase": 5,
-  "request": "Phase 17 - 런타임 버그 수정 및 코드 품질 개선",
+  "request": "대형 프로젝트 도입 수준 달성",
   "tasks": [
-    { "id": 1, "name": "printf 포맷 문자열 런타임 버그 수정", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "if-else 타입 체커 버그 수정", "status": "completed", "model": "Sonnet" },
-    { "id": 3, "name": "GC 예제 런타임 검증", "status": "completed", "model": "Sonnet" },
-    { "id": 4, "name": "clippy 경고 2개 수정", "status": "completed", "model": "Haiku" },
-    { "id": 5, "name": "CLAUDE.md 생성", "status": "completed", "model": "Haiku" },
-    { "id": 6, "name": "런타임 출력 검증 테스트 추가", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "ROADMAP 갱신 + 커밋", "status": "completed", "model": "Opus" }
+    { "id": 1, "name": "컴파일러 안정성 - unwrap/panic 제거", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "Borrow Checker 컴파일 파이프라인 통합", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "표준 라이브러리 런타임 구현 완성", "status": "pending", "model": "Opus" },
+    { "id": 4, "name": "패키지 매니저 클라이언트 완성", "status": "pending", "model": "Sonnet" },
+    { "id": 5, "name": "증분 컴파일 실전 적용", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "ROADMAP 갱신 + 커밋"
+  "lastCompleted": "Borrow Checker 컴파일 파이프라인 통합"
 }
