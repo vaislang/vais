@@ -128,6 +128,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | **Phase 18: 코드젠 심층 버그 수정 및 float 지원** | **✅ 완료** | **전체 완료** |
 | **Phase 19: 대형 프로젝트 도입 준비** | **✅ 완료** | **전체 완료** |
 | **Phase 20: 근본적 문제 해결** | **✅ 완료** | **전체 완료** |
+| **Phase 21: 실사용 완성도 강화** | **🔄 진행 중** | **0%** |
 
 ---
 
@@ -655,6 +656,32 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ### 파서 재귀 깊이 안전장치 강화 ✅ 완료
 - [x] **누락된 depth check 추가** - parse_unary, parse_else_branch, parse_pattern, parse_block_contents에 enter_depth/exit_depth 추가 (완료일: 2026-02-01)
 - [x] **스택 오버플로우 방지** - 250+ 레벨 중첩 시 "maximum nesting depth of 256 exceeded" 에러 반환 (완료일: 2026-02-01)
+
+---
+
+## 🚀 Phase 21: 실사용 완성도 강화 - 동기화 런타임 및 codegen 안정성
+
+> **상태**: 🔄 진행 중
+> **추가일**: 2026-02-01
+> **목표**: 멀티스레드 프로그래밍 완성, codegen 안정성 개선, 런타임 검증 테스트 보강
+
+### Sync C 런타임 구현
+- [ ] **std/sync_runtime.c 구현** - pthread_mutex/rwlock/cond 기반 Mutex, RwLock, Condvar, Barrier, Once
+- [ ] **vaisc 자동 링킹** - sync_runtime.c 자동 탐색 및 링킹
+- [ ] **E2E 테스트** - mutex lock/unlock, rwlock read/write, condvar wait/signal 검증
+
+### Codegen 안정성 개선
+- [ ] **void phi 노드 버그 수정** - if-else 표현식에서 void 반환 시 phi 노드 생성 방지
+- [ ] **E2E 테스트** - if-else void 표현식, 중첩 조건문 등 검증
+
+### 런타임 검증 테스트 보강
+- [ ] **thread 런타임 E2E** - 다중 스레드 spawn/join, TLS, thread pool 검증
+- [ ] **f64 역참조 E2E** - f64 배열 생성/인덱싱/연산 검증
+- [ ] **통합 런타임 테스트** - thread + sync + f64 복합 시나리오
+
+### 문서 및 릴리즈 평가 갱신
+- [ ] **ROADMAP 실사용 평가 업데이트** - f64 지원, thread/sync 상태 반영
+- [ ] **알려진 제한사항 갱신** - 해결된 항목 정리, 잔여 제한사항 명시
 
 ---
 

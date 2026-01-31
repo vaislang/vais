@@ -1,12 +1,12 @@
 {
-  "phase": 5,
-  "request": "근본적 문제 해결 - 런타임 갭 및 codegen 수정",
+  "phase": 3,
+  "request": "실사용 완성도 강화 - 동기화 런타임 및 codegen 안정성",
   "tasks": [
-    { "id": 1, "name": "Thread C 런타임 구현", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "f64 포인터 역참조 codegen 수정", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "Stub API 명시적 표기", "status": "completed", "model": "Haiku" },
-    { "id": 4, "name": "파서 재귀 깊이 안전장치 강화", "status": "completed", "model": "Sonnet" }
+    { "id": 1, "name": "Sync C 런타임 구현 (Mutex/RwLock/Condvar)", "status": "pending", "model": "Opus" },
+    { "id": 2, "name": "void phi 노드 codegen 버그 수정", "status": "pending", "model": "Sonnet" },
+    { "id": 3, "name": "E2E 테스트 보강 - 런타임 검증", "status": "pending", "model": "Sonnet" },
+    { "id": 4, "name": "릴리즈 상태 평가 문서 갱신", "status": "pending", "model": "Haiku" }
   ],
   "currentTask": null,
-  "lastCompleted": "파서 재귀 깊이 안전장치 강화"
+  "lastCompleted": null
 }
