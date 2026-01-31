@@ -235,6 +235,571 @@ X F call_poll(poll_fn: i64, future_ptr: i64) -> i64
 X F extract_poll_status(poll_result: i64) -> i64
 X F extract_poll_value(poll_result: i64) -> i64
 
+# Platform syscall externs (kqueue/kevent on macOS, epoll on Linux)
+X F kqueue() -> i64
+X F kevent_register(kq: i64, fd: i64, filter: i64, flags: i64) -> i64
+X F kevent_wait(kq: i64, events_buf: i64, max_events: i64, timeout_ms: i64) -> i64
+X F kevent_get_fd(events_buf: i64, index: i64) -> i64
+X F kevent_get_filter(events_buf: i64, index: i64) -> i64
+X F close(fd: i64) -> i64
+X F pipe(fds_buf: i64) -> i64
+X F write_byte(fd: i64, value: i64) -> i64
+X F read_byte(fd: i64) -> i64
+X F time_now_ms() -> i64
+
+# ============================================
+# Event Loop - kqueue/epoll based I/O reactor
+# ============================================
+
+# Event filter constants (matching kqueue EVFILT_*)
+C EVFILT_READ: i64 = -1
+C EVFILT_WRITE: i64 = -2
+C EVFILT_TIMER: i64 = -7
+
+# Event flags
+C EV_ADD: i64 = 1
+C EV_DELETE: i64 = 2
+C EV_ONESHOT: i64 = 16
+
+# Maximum events per kevent() call
+C MAX_EVENTS: i64 = 64
+
+# Waker token - special fd used to wake up the event loop
+C WAKER_TOKEN: i64 = -999
+
+# Event source types
+C SOURCE_FD_READ: i64 = 1
+C SOURCE_FD_WRITE: i64 = 2
+C SOURCE_TIMER: i64 = 3
+
+# EventSource - tracks what a task is waiting on
+S EventSource {
+    source_type: i64,   # SOURCE_FD_READ, SOURCE_FD_WRITE, SOURCE_TIMER
+    fd: i64,            # File descriptor or timer ID
+    task_ptr: i64,      # Pointer to the waiting TaskNode
+    deadline_ms: i64,   # Deadline for timers (absolute time in ms)
+    next: i64           # Linked list pointer
+}
+
+# EventLoop - the I/O reactor using kqueue
+S EventLoop {
+    kq: i64,                # kqueue file descriptor
+    waker_read_fd: i64,     # Pipe read end (for waking up the loop)
+    waker_write_fd: i64,    # Pipe write end
+    sources_head: i64,      # Head of event source linked list
+    sources_tail: i64,      # Tail of event source linked list
+    source_count: i64,      # Number of registered event sources
+    events_buf: i64,        # Buffer for kevent results
+    running: i64            # 1 if event loop is active
+}
+
+X EventLoop {
+    F new() -> EventLoop {
+        # Create kqueue instance
+        kq := kqueue()
+
+        # Create wake-up pipe
+        pipe_buf := malloc(16)  # Space for 2 i64 fds
+        pipe(pipe_buf)
+        read_fd := load_i64(pipe_buf)
+        write_fd := load_i64(pipe_buf + 8)
+        free(pipe_buf)
+
+        # Register waker pipe with kqueue
+        kevent_register(kq, read_fd, EVFILT_READ, EV_ADD)
+
+        # Allocate events buffer (MAX_EVENTS * 16 bytes each: fd + filter)
+        events_buf := malloc(MAX_EVENTS * 16)
+
+        EventLoop {
+            kq: kq,
+            waker_read_fd: read_fd,
+            waker_write_fd: write_fd,
+            sources_head: 0,
+            sources_tail: 0,
+            source_count: 0,
+            events_buf: events_buf,
+            running: 0
+        }
+    }
+
+    # Register interest in a file descriptor for reading
+    F register_read(&self, fd: i64, task_ptr: i64) -> i64 {
+        kevent_register(self.kq, fd, EVFILT_READ, EV_ADD)
+        self.add_source(SOURCE_FD_READ, fd, task_ptr, 0)
+    }
+
+    # Register interest in a file descriptor for writing
+    F register_write(&self, fd: i64, task_ptr: i64) -> i64 {
+        kevent_register(self.kq, fd, EVFILT_WRITE, EV_ADD)
+        self.add_source(SOURCE_FD_WRITE, fd, task_ptr, 0)
+    }
+
+    # Register a timer (deadline in milliseconds from now)
+    F register_timer(&self, timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
+        deadline := time_now_ms() + delay_ms
+        kevent_register(self.kq, timer_id, EVFILT_TIMER, EV_ADD)
+        self.add_source(SOURCE_TIMER, timer_id, task_ptr, deadline)
+    }
+
+    # Deregister an event source by fd
+    F deregister(&self, fd: i64, filter: i64) -> i64 {
+        kevent_register(self.kq, fd, filter, EV_DELETE)
+        self.remove_source(fd)
+    }
+
+    # Add an event source to the linked list
+    F add_source(&self, source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64) -> i64 {
+        # Allocate EventSource (5 fields * 8 bytes = 40 bytes)
+        src_ptr := malloc(40)
+        store_i64(src_ptr, source_type)
+        store_i64(src_ptr + 8, fd)
+        store_i64(src_ptr + 16, task_ptr)
+        store_i64(src_ptr + 24, deadline_ms)
+        store_i64(src_ptr + 32, 0)  # next = null
+
+        L self.sources_tail == 0 {
+            self.sources_head = src_ptr
+            self.sources_tail = src_ptr
+        } ! {
+            store_i64(self.sources_tail + 32, src_ptr)
+            self.sources_tail = src_ptr
+        }
+
+        self.source_count = self.source_count + 1
+        src_ptr
+    }
+
+    # Remove an event source by fd
+    F remove_source(&self, fd: i64) -> i64 {
+        prev := 0
+        current := self.sources_head
+
+        L current != 0 {
+            src_fd := load_i64(current + 8)
+            next := load_i64(current + 32)
+
+            L src_fd == fd {
+                # Unlink from list
+                L prev == 0 {
+                    self.sources_head = next
+                } ! {
+                    store_i64(prev + 32, next)
+                }
+
+                L next == 0 {
+                    self.sources_tail = prev
+                }
+
+                free(current)
+                self.source_count = self.source_count - 1
+                R 1
+            }
+
+            prev = current
+            current = next
+        }
+        0
+    }
+
+    # Find the task waiting on a given fd
+    F find_task_for_fd(&self, fd: i64) -> i64 {
+        current := self.sources_head
+        L current != 0 {
+            src_fd := load_i64(current + 8)
+            L src_fd == fd {
+                R load_i64(current + 16)  # task_ptr
+            }
+            current = load_i64(current + 32)
+        }
+        0
+    }
+
+    # Wake up the event loop from another context
+    F wake(&self) -> i64 {
+        write_byte(self.waker_write_fd, 1)
+    }
+
+    # Drain the waker pipe (consume wake-up signal)
+    F drain_waker(&self) -> i64 {
+        read_byte(self.waker_read_fd)
+    }
+
+    # Poll for I/O events with timeout
+    # Returns number of ready events
+    F poll_events(&self, timeout_ms: i64) -> i64 {
+        kevent_wait(self.kq, self.events_buf, MAX_EVENTS, timeout_ms)
+    }
+
+    # Get fd from event at index
+    F event_fd(&self, index: i64) -> i64 {
+        kevent_get_fd(self.events_buf, index)
+    }
+
+    # Get filter from event at index
+    F event_filter(&self, index: i64) -> i64 {
+        kevent_get_filter(self.events_buf, index)
+    }
+
+    # Cleanup all resources
+    F cleanup(&self) -> i64 {
+        # Free all event sources
+        current := self.sources_head
+        L current != 0 {
+            next := load_i64(current + 32)
+            free(current)
+            current = next
+        }
+
+        # Close kqueue fd
+        close(self.kq)
+        # Close waker pipe
+        close(self.waker_read_fd)
+        close(self.waker_write_fd)
+        # Free events buffer
+        free(self.events_buf)
+
+        0
+    }
+}
+
+# ============================================
+# Reactor Runtime - combines executor + event loop
+# ============================================
+
+# ReactorRuntime - async executor with I/O event loop
+S ReactorRuntime {
+    task_count: i64,
+    next_task_id: i64,
+    head: i64,
+    tail: i64,
+    current_task: i64,
+    event_loop: i64,       # Pointer to EventLoop
+    next_timer_id: i64     # Counter for timer IDs
+}
+
+X ReactorRuntime {
+    F new() -> ReactorRuntime {
+        # Allocate EventLoop on heap (8 fields * 8 bytes = 64 bytes)
+        el_ptr := malloc(64)
+
+        # Create the event loop
+        kq := kqueue()
+        pipe_buf := malloc(16)
+        pipe(pipe_buf)
+        read_fd := load_i64(pipe_buf)
+        write_fd := load_i64(pipe_buf + 8)
+        free(pipe_buf)
+
+        kevent_register(kq, read_fd, EVFILT_READ, EV_ADD)
+
+        events_buf := malloc(MAX_EVENTS * 16)
+
+        # Store EventLoop fields
+        store_i64(el_ptr, kq)
+        store_i64(el_ptr + 8, read_fd)
+        store_i64(el_ptr + 16, write_fd)
+        store_i64(el_ptr + 24, 0)  # sources_head
+        store_i64(el_ptr + 32, 0)  # sources_tail
+        store_i64(el_ptr + 40, 0)  # source_count
+        store_i64(el_ptr + 48, events_buf)
+        store_i64(el_ptr + 56, 0)  # running
+
+        ReactorRuntime {
+            task_count: 0,
+            next_task_id: 0,
+            head: 0,
+            tail: 0,
+            current_task: 0,
+            event_loop: el_ptr,
+            next_timer_id: 1000
+        }
+    }
+
+    # Get the event loop pointer (for registering I/O)
+    F get_event_loop(&self) -> i64 {
+        self.event_loop
+    }
+
+    # Spawn a new task
+    F spawn(&self, future_ptr: i64, poll_fn: i64) -> JoinHandle {
+        task_ptr := malloc(48)
+        task_id := self.next_task_id
+        self.next_task_id = self.next_task_id + 1
+
+        store_i64(task_ptr, task_id)
+        store_i64(task_ptr + 8, future_ptr)
+        store_i64(task_ptr + 16, poll_fn)
+        store_i64(task_ptr + 24, TASK_PENDING)
+        store_i64(task_ptr + 32, 0)
+        store_i64(task_ptr + 40, 0)
+
+        L self.tail == 0 {
+            self.head = task_ptr
+            self.tail = task_ptr
+        } ! {
+            store_i64(self.tail + 40, task_ptr)
+            self.tail = task_ptr
+        }
+
+        self.task_count = self.task_count + 1
+        JoinHandle::new(task_id, task_ptr)
+    }
+
+    # Register a read interest for the current task
+    F wait_readable(&self, fd: i64) -> i64 {
+        el := self.event_loop as *EventLoop
+        el.register_read(fd, self.current_task)
+    }
+
+    # Register a write interest for the current task
+    F wait_writable(&self, fd: i64) -> i64 {
+        el := self.event_loop as *EventLoop
+        el.register_write(fd, self.current_task)
+    }
+
+    # Sleep for delay_ms milliseconds (registers timer)
+    F sleep_ms(&self, delay_ms: i64) -> i64 {
+        el := self.event_loop as *EventLoop
+        timer_id := self.next_timer_id
+        self.next_timer_id = self.next_timer_id + 1
+        el.register_timer(timer_id, delay_ms, self.current_task)
+        timer_id
+    }
+
+    # Run all tasks to completion using event-driven scheduling
+    F run(&self) -> i64 {
+        el := self.event_loop as *EventLoop
+
+        L self.task_count > 0 {
+            # Phase 1: Poll all ready/pending tasks
+            made_progress := 0
+            current := self.head
+            L current != 0 {
+                status := load_i64(current + 24)
+
+                L status == TASK_PENDING {
+                    self.current_task = current
+                    store_i64(current + 24, TASK_RUNNING)
+
+                    future_ptr := load_i64(current + 8)
+                    poll_fn := load_i64(current + 16)
+
+                    poll_result := call_poll(poll_fn, future_ptr)
+                    poll_status := extract_poll_status(poll_result)
+                    poll_value := extract_poll_value(poll_result)
+
+                    L poll_status == 1 {
+                        store_i64(current + 24, TASK_COMPLETED)
+                        store_i64(current + 32, poll_value)
+                        self.task_count = self.task_count - 1
+                        made_progress = 1
+                    } ! {
+                        # Task is waiting for I/O - mark as pending
+                        store_i64(current + 24, TASK_PENDING)
+                    }
+                }
+
+                L status == TASK_READY {
+                    # Task was woken by an event - poll it
+                    self.current_task = current
+                    store_i64(current + 24, TASK_RUNNING)
+
+                    future_ptr := load_i64(current + 8)
+                    poll_fn := load_i64(current + 16)
+
+                    poll_result := call_poll(poll_fn, future_ptr)
+                    poll_status := extract_poll_status(poll_result)
+                    poll_value := extract_poll_value(poll_result)
+
+                    L poll_status == 1 {
+                        store_i64(current + 24, TASK_COMPLETED)
+                        store_i64(current + 32, poll_value)
+                        self.task_count = self.task_count - 1
+                        made_progress = 1
+                    } ! {
+                        store_i64(current + 24, TASK_PENDING)
+                    }
+                }
+
+                current = load_i64(current + 40)
+            }
+
+            # Phase 2: If no progress, wait for I/O events
+            L made_progress == 0 {
+                # Calculate timeout: if we have pending tasks, use short timeout
+                # Otherwise wait indefinitely (-1)
+                timeout := 100  # 100ms default timeout
+
+                n_events := el.poll_events(timeout)
+
+                # Process events and wake corresponding tasks
+                i := 0
+                L i < n_events {
+                    ev_fd := el.event_fd(i)
+
+                    # Check if it's the waker pipe
+                    L ev_fd == el.waker_read_fd {
+                        el.drain_waker()
+                    } ! {
+                        # Find the task waiting on this fd and mark it ready
+                        task_ptr := el.find_task_for_fd(ev_fd)
+                        L task_ptr != 0 {
+                            store_i64(task_ptr + 24, TASK_READY)
+                        }
+                    }
+
+                    i = i + 1
+                }
+            }
+        }
+
+        # Cleanup
+        el.cleanup()
+        0
+    }
+
+    # Block on a single future until completion (event-driven)
+    F block_on(&self, future_ptr: i64, poll_fn: i64) -> i64 {
+        el := self.event_loop as *EventLoop
+
+        # Allocate a temporary task node
+        task_ptr := malloc(48)
+        store_i64(task_ptr, 0)          # id
+        store_i64(task_ptr + 8, future_ptr)
+        store_i64(task_ptr + 16, poll_fn)
+        store_i64(task_ptr + 24, TASK_PENDING)
+        store_i64(task_ptr + 32, 0)
+        store_i64(task_ptr + 40, 0)
+
+        self.current_task = task_ptr
+
+        result := 0
+        done := 0
+
+        L done == 0 {
+            poll_result := call_poll(poll_fn, future_ptr)
+            poll_status := extract_poll_status(poll_result)
+            poll_value := extract_poll_value(poll_result)
+
+            L poll_status == 1 {
+                result = poll_value
+                done = 1
+            } ! {
+                # Wait for events instead of busy-polling
+                n_events := el.poll_events(100)
+
+                i := 0
+                L i < n_events {
+                    ev_fd := el.event_fd(i)
+                    L ev_fd == el.waker_read_fd {
+                        el.drain_waker()
+                    }
+                    i = i + 1
+                }
+            }
+        }
+
+        free(task_ptr)
+        el.cleanup()
+        result
+    }
+}
+
+# ============================================
+# Global Reactor Runtime
+# ============================================
+
+V __GLOBAL_REACTOR: i64 = 0
+
+# Initialize global reactor runtime
+F reactor_init() -> i64 {
+    L __GLOBAL_REACTOR == 0 {
+        __GLOBAL_REACTOR = malloc(56)  # Size of ReactorRuntime struct (7 fields)
+
+        # Create EventLoop on heap
+        el_ptr := malloc(64)
+        kq := kqueue()
+        pipe_buf := malloc(16)
+        pipe(pipe_buf)
+        read_fd := load_i64(pipe_buf)
+        write_fd := load_i64(pipe_buf + 8)
+        free(pipe_buf)
+
+        kevent_register(kq, read_fd, EVFILT_READ, EV_ADD)
+        events_buf := malloc(MAX_EVENTS * 16)
+
+        store_i64(el_ptr, kq)
+        store_i64(el_ptr + 8, read_fd)
+        store_i64(el_ptr + 16, write_fd)
+        store_i64(el_ptr + 24, 0)
+        store_i64(el_ptr + 32, 0)
+        store_i64(el_ptr + 40, 0)
+        store_i64(el_ptr + 48, events_buf)
+        store_i64(el_ptr + 56, 0)
+
+        # Initialize ReactorRuntime fields
+        store_i64(__GLOBAL_REACTOR, 0)         # task_count
+        store_i64(__GLOBAL_REACTOR + 8, 0)     # next_task_id
+        store_i64(__GLOBAL_REACTOR + 16, 0)    # head
+        store_i64(__GLOBAL_REACTOR + 24, 0)    # tail
+        store_i64(__GLOBAL_REACTOR + 32, 0)    # current_task
+        store_i64(__GLOBAL_REACTOR + 40, el_ptr)  # event_loop
+        store_i64(__GLOBAL_REACTOR + 48, 1000) # next_timer_id
+    }
+    __GLOBAL_REACTOR
+}
+
+# Get global reactor runtime
+F get_reactor() -> i64 {
+    L __GLOBAL_REACTOR == 0 {
+        reactor_init()
+    }
+    __GLOBAL_REACTOR
+}
+
+# Spawn a task on the reactor runtime
+F reactor_spawn(future_ptr: i64, poll_fn: i64) -> JoinHandle {
+    rt := get_reactor()
+    rt_ptr := rt as *ReactorRuntime
+    rt_ptr.spawn(future_ptr, poll_fn)
+}
+
+# Block on a future using the reactor runtime
+F reactor_block_on(future_ptr: i64, poll_fn: i64) -> i64 {
+    rt := get_reactor()
+    rt_ptr := rt as *ReactorRuntime
+    rt_ptr.block_on(future_ptr, poll_fn)
+}
+
+# Run all spawned tasks on the reactor
+F reactor_run() -> i64 {
+    rt := get_reactor()
+    rt_ptr := rt as *ReactorRuntime
+    rt_ptr.run()
+}
+
+# Wait for a file descriptor to become readable
+F wait_readable(fd: i64) -> i64 {
+    rt := get_reactor()
+    rt_ptr := rt as *ReactorRuntime
+    rt_ptr.wait_readable(fd)
+}
+
+# Wait for a file descriptor to become writable
+F wait_writable(fd: i64) -> i64 {
+    rt := get_reactor()
+    rt_ptr := rt as *ReactorRuntime
+    rt_ptr.wait_writable(fd)
+}
+
+# Sleep for the specified number of milliseconds
+F sleep_ms(delay_ms: i64) -> i64 {
+    rt := get_reactor()
+    rt_ptr := rt as *ReactorRuntime
+    rt_ptr.sleep_ms(delay_ms)
+}
+
 # ============================================
 # Structured Concurrency - TaskGroup
 # ============================================

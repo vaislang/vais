@@ -36,6 +36,7 @@ mod allocator;
 mod concurrent;
 mod ffi;
 mod gc;
+mod generational;
 
 pub use allocator::{GcAllocator, GcStats};
 pub use concurrent::{
@@ -44,6 +45,10 @@ pub use concurrent::{
 };
 pub use ffi::*;
 pub use gc::{GcHeap, GcObject, GcRoot};
+pub use generational::{
+    CardTable, CollectionType, GenGcConfig, GenGcObject, GenGcObjectHeader, GenGcStats,
+    Generation, GenerationalGc, RememberedSet,
+};
 
 use std::sync::{Arc, Mutex, OnceLock};
 

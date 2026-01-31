@@ -357,14 +357,14 @@ examples/          # 예제 코드 (40+ 파일) ✅
 > 실제 프로그램 개발에 필수적인 런타임 인프라 구축
 
 #### Async 런타임
-- [ ] **경량 Async 런타임 구현** - Tokio-style 이벤트 루프 (epoll/kqueue 기반)
-- [ ] **Task Spawner** - `spawn()` 함수로 비동기 태스크 생성 및 스케줄링
+- [x] **경량 Async 런타임 구현** - kqueue 기반 이벤트 루프 (EventLoop + ReactorRuntime), 이벤트 소스 등록/대기/폴링, 와이커 파이프 (완료일: 2026-01-31)
+- [x] **Task Spawner** - `spawn()` 함수로 비동기 태스크 생성 및 스케줄링, reactor_spawn/reactor_block_on/reactor_run 전역 API (완료일: 2026-01-31)
 - [ ] **Async I/O 통합** - 파일/네트워크 I/O의 비동기 처리 실제 동작
 - [ ] **런타임 E2E 테스트** - async/await 코드가 실제로 비동기 실행되는지 검증 (최소 10개 테스트)
 
 #### GC 고도화
-- [ ] **세대별 GC (Generational GC)** - Young/Old 세대 분리, Minor/Major GC 구분
-- [ ] **동시 수집 (Concurrent Collection)** - Stop-the-world 시간 최소화
+- [x] **세대별 GC (Generational GC)** - Young/Old 세대 분리, Minor/Major GC 구분, 카드 마킹, 리멤버드 셋, 프로모션 에이지 (완료일: 2026-01-31)
+- [x] **동시 수집 (Concurrent Collection)** - 기존 ConcurrentGc에 tri-color 마킹 + write barrier 완성 (Phase 11에서 완료, Phase 15에서 세대별 확장)
 - [ ] **GC 튜닝 옵션** - 힙 크기, 세대 비율, GC 트리거 임계값 설정 가능
 - [ ] **GC 벤치마크** - 할당 집중 워크로드에서 성능 측정 및 최적화
 

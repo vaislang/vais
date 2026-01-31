@@ -1,10 +1,12 @@
 {
   "phase": 5,
-  "request": "Phase 15 P0 - 기존 버그 수정 및 빌드 안정화",
+  "request": "Phase 15 P1 - Async 런타임 및 GC 고도화",
   "tasks": [
-    { "id": 1, "name": "Box<T>/Rc<T>/Future<T> 제네릭 struct codegen 수정", "status": "done", "model": "Opus" },
-    { "id": 2, "name": "Python 바인딩 release 빌드 수정", "status": "done", "model": "Sonnet" }
+    { "id": 1, "name": "kqueue 기반 이벤트 루프 (std/runtime.vais)", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "Async I/O + 런타임 E2E 테스트", "status": "pending", "model": "Opus" },
+    { "id": 3, "name": "세대별 GC 구현 (crates/vais-gc)", "status": "completed", "model": "Opus" },
+    { "id": 4, "name": "GC 튜닝 옵션 + 벤치마크", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "Phase 15 P0 완료"
+  "lastCompleted": "작업 1 + 작업 3 병렬 완료"
 }
