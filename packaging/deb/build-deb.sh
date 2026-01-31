@@ -4,7 +4,7 @@ set -e
 # Vais .deb Package Builder
 # Builds a Debian package for the Vais programming language
 
-VERSION="0.2.0"
+VERSION="1.0.0"
 ARCH="amd64"
 PACKAGE_NAME="vais_${VERSION}_${ARCH}"
 BUILD_DIR="build/${PACKAGE_NAME}"

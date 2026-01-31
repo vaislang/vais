@@ -1,6 +1,6 @@
 # Maintainer: Steve <steve@vais-lang.org>
 pkgname=vais
-pkgver=0.2.0
+pkgver=1.0.0
 pkgrel=1
 pkgdesc="AI-optimized systems programming language with LLVM backend"
 arch=('x86_64')

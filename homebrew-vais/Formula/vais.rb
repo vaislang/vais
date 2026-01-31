@@ -1,7 +1,7 @@
 class Vais < Formula
   desc "AI-optimized systems programming language with LLVM backend"
   homepage "https://github.com/sswoo88/vais"
-  url "https://github.com/sswoo88/vais/archive/refs/tags/v0.1.0.tar.gz"
+  url "https://github.com/sswoo88/vais/archive/refs/tags/v1.0.0.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   license "MIT"
   head "https://github.com/sswoo88/vais.git", branch: "main"

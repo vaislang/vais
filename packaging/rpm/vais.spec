@@ -1,5 +1,5 @@
 Name:           vais
-Version:        0.2.0
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        AI-optimized systems programming language
 
@@ -44,6 +44,12 @@ cp -r std/* %{buildroot}%{_datadir}/vais/std/
 %{_datadir}/vais/
 
 %changelog
+* Sat Feb 01 2026 Steve <steve@vais-lang.org> - 1.0.0-1
+- Production-ready release with stable API and frozen language specification
+- Ownership/borrow checker, lifetime inference, ABI stability
+- Thread/sync/HTTP runtime, generational GC, 165 E2E tests
+- Security audit complete (14 issues resolved)
+
 * Thu Jan 30 2026 Steve <steve@vais-lang.org> - 0.2.0-1
 - Implement array mutation, format function, and stdlib utilities
 - Add first-class string operations with runtime support

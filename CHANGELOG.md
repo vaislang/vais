@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Thread C runtime (pthread-based spawn/join/detach, TLS, yield/sleep)
+- Sync C runtime (Mutex, RwLock, Condvar, Barrier, Semaphore, Atomics)
+- f64 pointer dereference codegen fix (visit_deref/generate_index_expr type inference)
+- Parser recursion depth safety (parse_unary, parse_else_branch, parse_pattern, parse_block_contents)
+- Stub API explicit marking for GPU/hot/dynload modules
+- Void phi node fix for if-else expressions returning Unit type
+- Query-based incremental compilation (SHA-256 file hash cache)
+- Package manager registry dependency resolution
+- Phase 22 adoption strategy with prototype verification (11 core features, 5 E2E tests)
+- 165 E2E tests (up from 128), all passing
+- Packaging manifests updated to v1.0.0
+
 ## [1.0.0] - 2026-02-01
 
 ### Highlights
