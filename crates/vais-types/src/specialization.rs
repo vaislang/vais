@@ -107,17 +107,18 @@ pub fn check_impl_overlap(
         }
 
         // Check for positive impl overlap (only if both are positive)
-        if !existing.is_negative && !new_impl.is_negative {
-            if types_overlap(&existing.impl_type, &new_impl.impl_type).is_some() {
-                // Overlap is allowed if one impl is more specific (specialization)
-                // But we still return the error with information about the overlap
-                // The caller can decide whether to allow it based on specialization rules
-                return Some(OverlapError::ConflictingImpls {
-                    trait_name: existing.trait_name.clone(),
-                    type1: format_impl_type(&existing.impl_type),
-                    type2: format_impl_type(&new_impl.impl_type),
-                });
-            }
+        if !existing.is_negative
+            && !new_impl.is_negative
+            && types_overlap(&existing.impl_type, &new_impl.impl_type).is_some()
+        {
+            // Overlap is allowed if one impl is more specific (specialization)
+            // But we still return the error with information about the overlap
+            // The caller can decide whether to allow it based on specialization rules
+            return Some(OverlapError::ConflictingImpls {
+                trait_name: existing.trait_name.clone(),
+                type1: format_impl_type(&existing.impl_type),
+                type2: format_impl_type(&new_impl.impl_type),
+            });
         }
     }
 
@@ -156,7 +157,7 @@ fn format_impl_type(impl_type: &ImplTargetType) -> String {
     match impl_type {
         ImplTargetType::Concrete(name) => name.clone(),
         ImplTargetType::Generic(param, bounds) if bounds.is_empty() => {
-            format!("{}", param)
+            param.to_string()
         }
         ImplTargetType::Generic(param, bounds) => {
             format!("{}: {}", param, bounds.join(" + "))

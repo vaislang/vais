@@ -335,7 +335,7 @@ impl OwnershipChecker {
             | ResolvedType::RefMutLifetime { .. } => false,
 
             // Tuples are Copy if all elements are Copy
-            ResolvedType::Tuple(elems) => elems.iter().all(|t| Self::is_copy_type(t)),
+            ResolvedType::Tuple(elems) => elems.iter().all(Self::is_copy_type),
 
             // Const arrays are Copy if element type is Copy
             ResolvedType::ConstArray { element, .. } => Self::is_copy_type(element),

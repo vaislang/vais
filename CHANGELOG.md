@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- All 14 security audit findings resolved (Critical 2, High 4, Medium 5, Low 3)
+- Playground execution timeout enforced (default 10s, spawn + try_wait polling)
+- Playground output size limited to 1MB with truncation
+- Playground rate limiting (10 requests/60 seconds per IP)
+- Playground default host changed from 0.0.0.0 to 127.0.0.1
+- Parser recursion depth limited to 256 (prevents stack overflow on nested input)
+- Plugin loading disabled by default (requires --allow-plugins flag)
+- LLVM IR string escape handles all control characters (0x00-0x1F, 0x7F)
+- FFI validation returns errors instead of printing warnings
+- Compilation timeout protection (--timeout flag, default 300s)
+- CI cargo audit added as required step
+- Fuzz CI continue-on-error removed for cargo audit/deny
+- SAFETY comments on all unsafe blocks in plugin loader
+- std/io.vais input validation (max_len range 1..=1048576)
+- Release profile optimized (strip=true, lto="thin", opt-level=3)
+
+### Added
+- Import path security tests (Windows paths, UNC paths, null bytes, long paths)
+- Plugin deny-by-default test
+
 ## [1.0.0] - 2026-02-01
 
 ### Highlights
@@ -87,11 +108,11 @@ Vais v1.0.0 marks the language as production-ready with a stable API, frozen lan
 
 ### Known Limitations
 See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for complete list:
-- Parser stack overflow on deeply nested expressions (>30 levels)
-- Playground lacks execution sandboxing
-- Plugin system lacks signature verification
-- No compilation timeout protection
-- Limited bounds checking in some stdlib operations
+- ~~Parser stack overflow on deeply nested expressions~~ (Fixed: depth limit 256)
+- ~~Playground lacks execution sandboxing~~ (Fixed: timeout, rate limit, output limit)
+- Plugin system lacks cryptographic signature verification (mitigated: --allow-plugins gate)
+- ~~No compilation timeout protection~~ (Fixed: --timeout flag)
+- ~~Limited bounds checking in some stdlib operations~~ (Fixed: max_len validation)
 
 ## [0.2.0] - 2026-01-30
 

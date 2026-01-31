@@ -101,6 +101,10 @@ pub enum SyncPoint {
 /// Converts a token stream into an Abstract Syntax Tree (AST).
 /// Uses predictive parsing with single-token lookahead.
 /// Supports error recovery to report multiple errors at once.
+/// Maximum nesting depth for recursive parsing to prevent stack overflow
+/// from deeply nested or malicious input.
+const MAX_PARSE_DEPTH: usize = 256;
+
 pub struct Parser {
     /// Token stream to parse
     tokens: Vec<SpannedToken>,
@@ -113,6 +117,8 @@ pub struct Parser {
     /// Whether struct literals (Name{...}) are allowed in current context.
     /// Disabled when parsing loop/if conditions to avoid ambiguity with block start.
     allow_struct_literal: bool,
+    /// Current recursion depth for nested expression parsing
+    depth: usize,
 }
 
 impl Parser {
@@ -124,6 +130,7 @@ impl Parser {
             errors: Vec::new(),
             recovery_mode: false,
             allow_struct_literal: true,
+            depth: 0,
         }
     }
 
@@ -138,7 +145,28 @@ impl Parser {
             errors: Vec::new(),
             recovery_mode: true,
             allow_struct_literal: true,
+            depth: 0,
         }
+    }
+
+    /// Increment the recursion depth, returning an error if MAX_PARSE_DEPTH is exceeded.
+    fn enter_depth(&mut self) -> ParseResult<()> {
+        self.depth += 1;
+        if self.depth > MAX_PARSE_DEPTH {
+            let span = self.current_span();
+            Err(ParseError::UnexpectedToken {
+                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".to_string())),
+                span,
+                expected: format!("expression (maximum nesting depth of {} exceeded)", MAX_PARSE_DEPTH),
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Decrement the recursion depth.
+    fn exit_depth(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
     }
 
     /// Returns all errors collected during parsing.

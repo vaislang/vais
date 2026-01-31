@@ -402,6 +402,21 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **v1.0.0 릴리스 노트** - 625줄 종합 릴리스 노트, 전 기능 목록, 마이그레이션 가이드, 알려진 제한사항 (완료일: 2026-01-31)
 - [x] **안정성 선언** - 언어 사양 freeze, 하위 호환성 정책, 2년 LTS, 6개월 deprecation 정책 (완료일: 2026-01-31)
 - [x] **보안 감사** - 14개 발견 (Critical 2, High 4, Medium 5, Low 3), SECURITY.md 정책, docs/SECURITY_AUDIT.md 보고서 (완료일: 2026-01-31)
+- [x] **보안 감사 이슈 수정** - 14개 전체 수정 완료 (완료일: 2026-01-31)
+  - C-1: Playground 실행 타임아웃 + 출력 크기 제한 + 리소스 제한
+  - C-2: 플러그인 로드 기본 거부 (--allow-plugins 필요)
+  - H-1: 파서 재귀 깊이 제한 (MAX_DEPTH=256)
+  - H-2: LLVM IR 문자열 이스케이프 완전화 (제어 문자 전체)
+  - H-3: unwrap → 에러 처리 전환 (서버/CLI)
+  - H-4: 컴파일 타임아웃 (--timeout, 기본 300초)
+  - M-1: FFI 검증 경고→에러 반환으로 강화
+  - M-3: std/io.vais 입력 검증 (max_len 범위 체크)
+  - M-4: Playground 레이트 리밋 (IP당 10req/60초)
+  - M-5: CI cargo audit 추가, fuzz.yml continue-on-error 제거
+  - L-1: unsafe 블록 SAFETY 주석 추가
+  - L-2: 기본 호스트 127.0.0.1, 포트 검증
+  - L-3: release 프로파일 (strip, lto, opt-level=3)
+  - M-2: 임포트 경로 보안 테스트 5개 추가
 - [x] **라이선스 정리** - 396개 의존성 감사, NOTICE 파일 생성, 전체 MIT/Apache-2.0 호환 확인 (완료일: 2026-01-31)
 
 ### 예상 마일스톤

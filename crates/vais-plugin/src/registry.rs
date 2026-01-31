@@ -16,13 +16,29 @@ use vais_ast::Module;
 pub struct PluginRegistry {
     /// All loaded plugins
     plugins: Vec<LoadedPlugin>,
+    /// Whether plugin loading is allowed (requires --allow-plugins flag)
+    allow_plugins: bool,
 }
 
 impl PluginRegistry {
-    /// Create an empty registry
+    /// Create an empty registry with plugins disabled by default
     pub fn new() -> Self {
         Self {
             plugins: Vec::new(),
+            allow_plugins: false,
+        }
+    }
+
+    /// Set whether plugin loading is allowed
+    pub fn set_allow_plugins(&mut self, allow: bool) {
+        self.allow_plugins = allow;
+    }
+
+    /// Create a new registry with plugin loading explicitly allowed
+    pub fn new_with_plugins_allowed() -> Self {
+        Self {
+            plugins: Vec::new(),
+            allow_plugins: true,
         }
     }
 
@@ -138,7 +154,7 @@ impl PluginRegistry {
 
     /// Load a plugin from a file
     pub fn load_plugin_file(&mut self, path: &Path, config: &PluginsConfig) -> Result<(), String> {
-        let mut loaded = load_plugin(path)?;
+        let mut loaded = load_plugin(path, self.allow_plugins)?;
 
         // Get plugin-specific config
         let plugin_name = loaded.plugin.info().name;
@@ -171,7 +187,7 @@ impl PluginRegistry {
     ///
     /// Returns the plugin info on success.
     pub fn load_from_path(&mut self, path: &Path) -> Result<crate::traits::PluginInfo, String> {
-        let mut loaded = load_plugin(path)?;
+        let mut loaded = load_plugin(path, self.allow_plugins)?;
         let info = loaded.plugin.info();
 
         // Initialize with empty config
@@ -383,6 +399,15 @@ impl PluginRegistry {
 impl Default for PluginRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Debug for PluginRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginRegistry")
+            .field("plugin_count", &self.plugins.len())
+            .field("allow_plugins", &self.allow_plugins)
+            .finish()
     }
 }
 

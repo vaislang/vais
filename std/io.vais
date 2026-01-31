@@ -2,8 +2,13 @@
 # Provides functions for reading from stdin
 # Updated to use Option<T> and Result<T, E> for error handling
 #
-# Note: This module uses builtin functions (malloc, free, load_byte, store_byte, puts_ptr, strlen, memcpy)
+# SAFETY: This module uses builtin functions (malloc, free, load_byte, store_byte, puts_ptr, strlen, memcpy)
 # that are provided by the compiler. String type requires importing std/string.vais separately.
+#
+# All input functions validate their buffer parameters and enforce size limits
+# to prevent buffer overflow and memory corruption. Callers must ensure:
+# - Buffers passed to read_line/prompt_line are pre-allocated with at least max_len bytes
+# - max_len values are positive and within reasonable bounds (1..=1048576)
 
 # Buffer size for input operations
 C INPUT_BUFFER_SIZE: i64 = 1024
@@ -35,8 +40,16 @@ X F atof(str: i64) -> f64
 # Read a line from stdin into a buffer
 # Returns pointer to buffer on success, 0 on EOF/error
 # buffer: destination buffer (must be pre-allocated)
-# max_len: maximum length including null terminator
+# max_len: maximum length including null terminator (must be 1..=1048576)
+# SAFETY: Caller must ensure buffer has at least max_len bytes allocated
 F read_line(buffer: i64, max_len: i64) -> i64 {
+    # Validate max_len range to prevent buffer overflow
+    I max_len <= 0 {
+        0
+    }
+    I max_len > 1048576 {
+        max_len = 1048576
+    }
     stdin := get_stdin()
     result := fgets(buffer, max_len, stdin)
     I result == 0 {
@@ -61,7 +74,15 @@ F read_line(buffer: i64, max_len: i64) -> i64 {
 
 # Read a line from stdin using Option type
 # Returns Some(buffer_ptr) on success, None on EOF/error
+# SAFETY: Caller must ensure buffer has at least max_len bytes allocated
 F read_line_opt(buffer: i64, max_len: i64) -> Option {
+    # Validate max_len range
+    I max_len <= 0 {
+        None
+    }
+    I max_len > 1048576 {
+        max_len = 1048576
+    }
     stdin := get_stdin()
     result := fgets(buffer, max_len, stdin)
     I result == 0 {
@@ -85,10 +106,14 @@ F read_line_opt(buffer: i64, max_len: i64) -> Option {
 }
 
 # Read a line from stdin and return as String
-# max_len: maximum length to read (default 1024)
+# max_len: maximum length to read (default 1024, max 1048576)
+# SAFETY: Allocates a temporary buffer of max_len bytes internally
 F read_line_string(max_len: i64) -> String {
     I max_len <= 0 {
         max_len = INPUT_BUFFER_SIZE
+    }
+    I max_len > 1048576 {
+        max_len = 1048576
     }
 
     # Allocate temporary buffer

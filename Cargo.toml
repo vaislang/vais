@@ -92,6 +92,11 @@ colored = "2.1"
 # Testing
 pretty_assertions = "1.4"
 
+[profile.release]
+strip = true
+lto = "thin"
+opt-level = 3
+
 [profile.coverage]
 inherits = "dev"
 opt-level = 0

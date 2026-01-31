@@ -86,6 +86,14 @@ struct Cli {
     /// Set GC threshold in bytes (default: 1048576 = 1MB)
     #[arg(long, value_name = "BYTES", global = true)]
     gc_threshold: Option<usize>,
+
+    /// Compilation timeout in seconds (0 = no timeout, default: 300)
+    #[arg(long, value_name = "SECS", default_value = "300", global = true)]
+    timeout: u64,
+
+    /// Allow loading plugins (plugins execute arbitrary native code)
+    #[arg(long, global = true)]
+    allow_plugins: bool,
 }
 
 #[derive(Subcommand)]
@@ -433,8 +441,19 @@ fn main() {
     let plugins = if cli.no_plugins {
         PluginRegistry::new()
     } else {
-        load_plugins(&cli.plugin, cli.verbose)
+        load_plugins(&cli.plugin, cli.verbose, cli.allow_plugins)
     };
+
+    // Set up compilation timeout
+    let timeout_secs = cli.timeout;
+    if timeout_secs > 0 {
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+        std::thread::spawn(move || {
+            std::thread::sleep(timeout);
+            eprintln!("error: compilation timed out after {} seconds", timeout_secs);
+            exit(124);
+        });
+    }
 
     let result = match cli.command {
         Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
@@ -2712,8 +2731,9 @@ fn walkdir(dir: &PathBuf, ext: &str) -> Vec<PathBuf> {
 }
 
 /// Load plugins from configuration and CLI arguments
-fn load_plugins(extra_plugins: &[PathBuf], verbose: bool) -> PluginRegistry {
+fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -> PluginRegistry {
     let mut registry = PluginRegistry::new();
+    registry.set_allow_plugins(allow_plugins);
 
     // Load configuration file if present
     let config = if let Some(config_path) = find_config() {

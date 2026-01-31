@@ -60,6 +60,12 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Security audit dependencies
+        run: cargo audit
+
       - name: Run tests
         run: cargo test
 

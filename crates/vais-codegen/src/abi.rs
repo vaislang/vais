@@ -67,7 +67,7 @@ impl CallingConvention {
     }
 
     /// Get the calling convention from a string (ABI string from extern block)
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_abi(s: &str) -> Option<Self> {
         match s {
             "C" | "ccc" => Some(CallingConvention::C),
             "Vais" | "vais" => Some(CallingConvention::Vais),
@@ -103,9 +103,7 @@ pub mod alignment {
 
     /// Get alignment for a type size (power of 2)
     pub fn for_size(size: usize) -> usize {
-        if size == 0 {
-            1
-        } else if size <= 1 {
+        if size <= 1 {
             1
         } else if size <= 2 {
             2
@@ -138,29 +136,30 @@ pub mod struct_layout {
     /// Calculate struct field offset with padding
     pub fn calculate_field_offset(current_offset: usize, field_align: usize) -> usize {
         // Align to field alignment
-        (current_offset + field_align - 1) / field_align * field_align
+        current_offset.div_ceil(field_align) * field_align
     }
 
     /// Calculate total struct size with tail padding
     pub fn calculate_struct_size(fields_end: usize, struct_align: usize) -> usize {
         // Round up to struct alignment
-        (fields_end + struct_align - 1) / struct_align * struct_align
+        fields_end.div_ceil(struct_align) * struct_align
     }
 }
 
-/// VTable layout specification
 pub mod vtable {
-    /// VTable structure format:
-    /// ```text
-    /// struct VTable {
-    ///     drop_fn: void(i8*)*,  // Slot 0: Destructor function pointer
-    ///     size: i64,            // Slot 1: Size of concrete type in bytes
-    ///     align: i64,           // Slot 2: Alignment of concrete type in bytes
-    ///     method_0: fn*,        // Slot 3: First method
-    ///     method_1: fn*,        // Slot 4: Second method
-    ///     ...                   // Additional methods in declaration order
-    /// }
-    /// ```
+    //! VTable layout specification
+    //!
+    //! VTable structure format:
+    //! ```text
+    //! struct VTable {
+    //!     drop_fn: void(i8*)*,  // Slot 0: Destructor function pointer
+    //!     size: i64,            // Slot 1: Size of concrete type in bytes
+    //!     align: i64,           // Slot 2: Alignment of concrete type in bytes
+    //!     method_0: fn*,        // Slot 3: First method
+    //!     method_1: fn*,        // Slot 4: Second method
+    //!     ...                   // Additional methods in declaration order
+    //! }
+    //! ```
 
     /// VTable slot indices
     pub const SLOT_DROP_FN: usize = 0;
@@ -333,15 +332,15 @@ mod tests {
 
     #[test]
     fn test_calling_convention_from_str() {
-        assert_eq!(CallingConvention::from_str("C"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::from_str("ccc"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::from_str("Vais"), Some(CallingConvention::Vais));
-        assert_eq!(CallingConvention::from_str("Fast"), Some(CallingConvention::Fast));
-        assert_eq!(CallingConvention::from_str("fastcc"), Some(CallingConvention::Fast));
-        assert_eq!(CallingConvention::from_str("stdcall"), Some(CallingConvention::StdCall));
-        assert_eq!(CallingConvention::from_str("fastcall"), Some(CallingConvention::FastCall));
-        assert_eq!(CallingConvention::from_str("system"), Some(CallingConvention::System));
-        assert_eq!(CallingConvention::from_str("invalid"), None);
+        assert_eq!(CallingConvention::parse_abi("C"), Some(CallingConvention::C));
+        assert_eq!(CallingConvention::parse_abi("ccc"), Some(CallingConvention::C));
+        assert_eq!(CallingConvention::parse_abi("Vais"), Some(CallingConvention::Vais));
+        assert_eq!(CallingConvention::parse_abi("Fast"), Some(CallingConvention::Fast));
+        assert_eq!(CallingConvention::parse_abi("fastcc"), Some(CallingConvention::Fast));
+        assert_eq!(CallingConvention::parse_abi("stdcall"), Some(CallingConvention::StdCall));
+        assert_eq!(CallingConvention::parse_abi("fastcall"), Some(CallingConvention::FastCall));
+        assert_eq!(CallingConvention::parse_abi("system"), Some(CallingConvention::System));
+        assert_eq!(CallingConvention::parse_abi("invalid"), None);
     }
 
     #[test]

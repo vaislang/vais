@@ -73,6 +73,29 @@ use vais_types::ResolvedType;
 /// This limit protects against infinite recursive types like: type A = B; type B = A;
 const MAX_TYPE_RECURSION_DEPTH: usize = 128;
 
+/// Escape a string for use in LLVM IR string constants.
+///
+/// Handles all control characters (0x00-0x1F, 0x7F) and special characters
+/// that need escaping in LLVM IR constant strings.
+fn escape_llvm_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        match byte {
+            b'\\' => result.push_str("\\5C"),
+            b'"' => result.push_str("\\22"),
+            b'\n' => result.push_str("\\0A"),
+            b'\r' => result.push_str("\\0D"),
+            b'\t' => result.push_str("\\09"),
+            b'\0' => result.push_str("\\00"),
+            0x01..=0x08 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
+                result.push_str(&format!("\\{:02X}", byte));
+            }
+            _ => result.push(byte as char),
+        }
+    }
+    result
+}
+
 /// Target architecture for code generation
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetTriple {
@@ -1165,6 +1188,11 @@ impl CodeGenerator {
     }
 
     fn next_label(&mut self, prefix: &str) -> String {
+        debug_assert!(
+            !prefix.is_empty() && prefix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_'),
+            "Invalid label prefix: '{}'. Must be non-empty and contain only alphanumeric, '.', or '_' characters.",
+            prefix
+        );
         let label = format!("{}{}", prefix, self.label_counter);
         self.label_counter += 1;
         label
@@ -1401,7 +1429,7 @@ impl CodeGenerator {
 
         // Add string constants at the top of the module
         for (name, value) in &self.string_constants {
-            let escaped = value.replace('\\', "\\\\").replace('"', "\\22").replace('\n', "\\0A");
+            let escaped = escape_llvm_string(value);
             let len = value.len() + 1; // +1 for null terminator
             ir.push_str(&format!(
                 "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
@@ -1464,7 +1492,7 @@ impl CodeGenerator {
         ir.push_str(&self.debug_info.finalize());
 
         // Add ABI version metadata
-        ir.push_str(&format!("\n!vais.abi.version = !{{!\"{}\" }}\n", crate::abi::ABI_VERSION));
+        // ABI version is stored in @__vais_abi_version global constant
 
         Ok(ir)
     }
@@ -1727,7 +1755,7 @@ impl CodeGenerator {
 
         // Add string constants
         for (name, value) in &self.string_constants {
-            let escaped = value.replace('\\', "\\\\").replace('"', "\\22").replace('\n', "\\0A");
+            let escaped = escape_llvm_string(value);
             let len = value.len() + 1;
             ir.push_str(&format!(
                 "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
@@ -1790,7 +1818,7 @@ impl CodeGenerator {
         ir.push_str(&self.debug_info.finalize());
 
         // Add ABI version metadata
-        ir.push_str(&format!("\n!vais.abi.version = !{{!\"{}\" }}\n", crate::abi::ABI_VERSION));
+        // ABI version is stored in @__vais_abi_version global constant
 
         Ok(ir)
     }

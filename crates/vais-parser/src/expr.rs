@@ -16,7 +16,10 @@ use crate::{ParseError, ParseResult, Parser};
 impl Parser {
     /// Parse expression
     pub fn parse_expr(&mut self) -> ParseResult<Spanned<Expr>> {
-        self.parse_assignment()
+        self.enter_depth()?;
+        let result = self.parse_assignment();
+        self.exit_depth();
+        result
     }
 
     /// Parse assignment expression
@@ -763,6 +766,13 @@ impl Parser {
 
     /// Parse primary expression
     pub(crate) fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
+        self.enter_depth()?;
+        let result = self.parse_primary_inner();
+        self.exit_depth();
+        result
+    }
+
+    fn parse_primary_inner(&mut self) -> ParseResult<Spanned<Expr>> {
         let start = self.current_span().start;
         let span = self.current_span();
         let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;

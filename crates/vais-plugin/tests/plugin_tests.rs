@@ -585,16 +585,26 @@ fn test_opt_level_equality() {
 
 #[test]
 fn test_load_nonexistent_plugin() {
-    let mut registry = PluginRegistry::new();
+    let mut registry = PluginRegistry::new_with_plugins_allowed();
     let result = registry.load_from_path(PathBuf::from("/nonexistent/plugin.dylib").as_path());
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("Failed to load plugin"));
+    let err = result.unwrap_err();
+    assert!(err.contains("Failed to load plugin") || err.contains("not found"));
+}
+
+#[test]
+fn test_load_plugin_denied_without_allow() {
+    let mut registry = PluginRegistry::new();
+    let result = registry.load_from_path(PathBuf::from("/some/plugin.dylib").as_path());
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Plugin loading is disabled"));
 }
 
 #[test]
 fn test_load_from_config_with_invalid_path() {
-    let mut registry = PluginRegistry::new();
+    let mut registry = PluginRegistry::new_with_plugins_allowed();
 
     let config = PluginsConfig {
         plugins: PluginsSection {

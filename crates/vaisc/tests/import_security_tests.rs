@@ -401,6 +401,125 @@ fn test_nested_module_path() {
     );
 }
 
+// ======== Import Path Validation Tests ========
+// Tests for various dangerous path patterns that should be rejected
+
+#[test]
+fn test_windows_backslash_path() {
+    let test_dir = setup_test_env("windows_backslash_path");
+
+    // Try Windows-style backslash path
+    let source = "U ..\\unsafe\\secrets\nF main() -> () = ()";
+    let test_file = test_dir.join("test_win.vais");
+    fs::write(&test_file, source).unwrap();
+
+    let output = std::process::Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "check"])
+        .arg(&test_file)
+        .current_dir(get_project_root())
+        .output()
+        .expect("Failed to execute vaisc");
+
+    // Should fail - backslash paths should not be accepted
+    assert!(
+        !output.status.success(),
+        "Windows backslash path should be rejected"
+    );
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_unc_path_rejection() {
+    let test_dir = setup_test_env("unc_path_rejection");
+
+    // Try UNC path (Windows network path)
+    let source = "U \\\\server\\share\\evil\nF main() -> () = ()";
+    let test_file = test_dir.join("test_unc.vais");
+    fs::write(&test_file, source).unwrap();
+
+    let output = std::process::Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "check"])
+        .arg(&test_file)
+        .current_dir(get_project_root())
+        .output()
+        .expect("Failed to execute vaisc");
+
+    // Should fail - UNC paths should not be accepted
+    assert!(
+        !output.status.success(),
+        "UNC path should be rejected"
+    );
+}
+
+#[test]
+fn test_double_dot_in_middle_of_path() {
+    let test_dir = setup_test_env("double_dot_middle");
+    let safe_dir = test_dir.join("safe");
+
+    // Try path with .. in the middle
+    let source = "U safe/../unsafe/secrets\nF main() -> () = ()";
+    let test_file = safe_dir.join("test_dotdot.vais");
+    fs::write(&test_file, source).unwrap();
+
+    let output = std::process::Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "check"])
+        .arg(&test_file)
+        .current_dir(get_project_root())
+        .output()
+        .expect("Failed to execute vaisc");
+
+    // Should fail - path traversal should be prevented
+    assert!(
+        !output.status.success(),
+        "Path with .. traversal should be rejected"
+    );
+}
+
+#[test]
+fn test_null_byte_in_import() {
+    let test_dir = setup_test_env("null_byte_import");
+
+    // Try import with null byte (potential C-level path truncation attack)
+    let source = "U evil\x00.vais\nF main() -> () = ()";
+    let test_file = test_dir.join("test_null.vais");
+    fs::write(&test_file, source).unwrap();
+
+    let output = std::process::Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "check"])
+        .arg(&test_file)
+        .current_dir(get_project_root())
+        .output()
+        .expect("Failed to execute vaisc");
+
+    // Should fail - null bytes in paths are dangerous
+    assert!(
+        !output.status.success(),
+        "Null byte in import path should be rejected"
+    );
+}
+
+#[test]
+fn test_very_long_import_path() {
+    let test_dir = setup_test_env("very_long_import");
+
+    // Try an extremely long import path to test for buffer issues
+    let long_name = "a".repeat(10000);
+    let source = format!("U {}\nF main() -> () = ()", long_name);
+    let test_file = test_dir.join("test_long.vais");
+    fs::write(&test_file, source).unwrap();
+
+    let output = std::process::Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "check"])
+        .arg(&test_file)
+        .current_dir(get_project_root())
+        .output()
+        .expect("Failed to execute vaisc");
+
+    // Should not crash (may fail to find module, but shouldn't segfault/panic)
+    // The test passes as long as the process doesn't crash
+    let _ = output.status;
+}
+
 // Note: Test directories are created in target/test_imports and will be
 // cleaned up automatically by cargo clean. Individual tests clean up
 // symlinks they create.

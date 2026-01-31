@@ -30,7 +30,7 @@ impl CodeGenerator {
     /// - "fastcall" → x86 fastcall
     /// - "system" → platform-dependent (stdcall on Windows x86, cdecl elsewhere)
     fn parse_calling_convention(abi: &str) -> CallingConvention {
-        CallingConvention::from_str(abi).unwrap_or(CallingConvention::C)
+        CallingConvention::parse_abi(abi).unwrap_or(CallingConvention::C)
     }
 
     /// Validate that a type is FFI-safe
@@ -74,9 +74,11 @@ impl CodeGenerator {
                     // Struct is valid for FFI
                     Ok(())
                 } else {
-                    // Unknown type - might be an issue
-                    eprintln!("Warning: FFI parameter '{}' uses unknown type '{}'", param_name, name);
-                    Ok(())
+                    // Unknown type - reject for FFI safety
+                    Err(CodegenError::TypeError(format!(
+                        "FFI parameter '{}' uses unknown type '{}' which has not been validated as FFI-safe",
+                        param_name, name
+                    )))
                 }
             }
 
@@ -99,13 +101,12 @@ impl CodeGenerator {
             // Unit type is FFI-safe (void in C)
             ResolvedType::Unit => Ok(()),
 
-            // Tuples should be avoided in FFI but we'll allow them
-            ResolvedType::Tuple(elements) => {
-                eprintln!("Warning: FFI parameter '{}' is a tuple - consider using a struct instead", param_name);
-                for (i, elem) in elements.iter().enumerate() {
-                    self.validate_ffi_type(elem, &format!("{}[{}]", param_name, i))?;
-                }
-                Ok(())
+            // Tuples are not FFI-safe - use a struct instead
+            ResolvedType::Tuple(_) => {
+                Err(CodegenError::TypeError(format!(
+                    "FFI parameter '{}' is a tuple type. Tuples are not FFI-safe; use a struct with named fields instead",
+                    param_name
+                )))
             }
 
             // Arrays are FFI-safe but size matters
@@ -115,14 +116,18 @@ impl CodeGenerator {
 
             // String types are not directly FFI-safe
             ResolvedType::Str => {
-                eprintln!("Warning: FFI parameter '{}' is 'str' - use *const i8 or *mut i8 instead", param_name);
-                Ok(())
+                Err(CodegenError::TypeError(format!(
+                    "FFI parameter '{}' is 'str' which is not FFI-safe. Use *const i8 or *mut i8 instead",
+                    param_name
+                )))
             }
 
-            // Other types
+            // Other types are not verified as FFI-safe
             _ => {
-                eprintln!("Warning: FFI parameter '{}' has type {:?} which may not be FFI-safe", param_name, ty);
-                Ok(())
+                Err(CodegenError::TypeError(format!(
+                    "FFI parameter '{}' has type {:?} which is not verified as FFI-safe",
+                    param_name, ty
+                )))
             }
         }
     }

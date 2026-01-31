@@ -122,35 +122,35 @@ mod tests {
 
     #[test]
     fn test_calling_convention_from_str_valid() {
-        assert_eq!(CallingConvention::from_str("C"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::from_str("ccc"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::from_str("Vais"), Some(CallingConvention::Vais));
-        assert_eq!(CallingConvention::from_str("vais"), Some(CallingConvention::Vais));
-        assert_eq!(CallingConvention::from_str("Fast"), Some(CallingConvention::Fast));
-        assert_eq!(CallingConvention::from_str("fastcc"), Some(CallingConvention::Fast));
+        assert_eq!(CallingConvention::parse_abi("C"), Some(CallingConvention::C));
+        assert_eq!(CallingConvention::parse_abi("ccc"), Some(CallingConvention::C));
+        assert_eq!(CallingConvention::parse_abi("Vais"), Some(CallingConvention::Vais));
+        assert_eq!(CallingConvention::parse_abi("vais"), Some(CallingConvention::Vais));
+        assert_eq!(CallingConvention::parse_abi("Fast"), Some(CallingConvention::Fast));
+        assert_eq!(CallingConvention::parse_abi("fastcc"), Some(CallingConvention::Fast));
     }
 
     #[test]
     fn test_calling_convention_from_str_invalid() {
-        assert_eq!(CallingConvention::from_str("invalid"), None);
-        assert_eq!(CallingConvention::from_str(""), None);
-        assert_eq!(CallingConvention::from_str("cdecl"), None);
-        assert_eq!(CallingConvention::from_str("unknown"), None);
+        assert_eq!(CallingConvention::parse_abi("invalid"), None);
+        assert_eq!(CallingConvention::parse_abi(""), None);
+        assert_eq!(CallingConvention::parse_abi("cdecl"), None);
+        assert_eq!(CallingConvention::parse_abi("unknown"), None);
     }
 
     #[test]
     fn test_calling_convention_roundtrip() {
         // Note: C and Vais both map to "ccc", so they're not uniquely roundtrippable
         // This test checks that parsing llvm_str yields a valid convention
-        assert_eq!(CallingConvention::from_str("ccc"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::from_str("fastcc"), Some(CallingConvention::Fast));
+        assert_eq!(CallingConvention::parse_abi("ccc"), Some(CallingConvention::C));
+        assert_eq!(CallingConvention::parse_abi("fastcc"), Some(CallingConvention::Fast));
 
         // Test that to_llvm_str produces parseable strings
         let c_str = CallingConvention::C.to_llvm_str();
-        assert!(CallingConvention::from_str(c_str).is_some());
+        assert!(CallingConvention::parse_abi(c_str).is_some());
 
         let fast_str = CallingConvention::Fast.to_llvm_str();
-        assert_eq!(CallingConvention::from_str(fast_str), Some(CallingConvention::Fast));
+        assert_eq!(CallingConvention::parse_abi(fast_str), Some(CallingConvention::Fast));
     }
 
     // ============================================================================

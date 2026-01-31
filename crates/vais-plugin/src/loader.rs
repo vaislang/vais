@@ -128,13 +128,48 @@ impl LoadedPlugin {
 ///     Box::into_raw(Box::new(MyLintPlugin::new()))
 /// }
 /// ```
-pub fn load_plugin(path: &Path) -> Result<LoadedPlugin, String> {
+pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, String> {
+    // Check if plugin loading is allowed
+    if !allow_plugins {
+        return Err(format!(
+            "Plugin loading is disabled. Use --allow-plugins to enable loading '{}'.\n\
+             WARNING: Plugins execute arbitrary native code. Only load plugins you trust.",
+            path.display()
+        ));
+    }
+
+    // Validate file exists and has correct extension
+    if !path.exists() {
+        return Err(format!("Plugin file not found: '{}'", path.display()));
+    }
+    if !path.is_file() {
+        return Err(format!("Plugin path is not a file: '{}'", path.display()));
+    }
+    if !is_plugin_library(path) {
+        let expected_ext = library_extension();
+        return Err(format!(
+            "Plugin '{}' does not have expected extension '.{}'",
+            path.display(),
+            expected_ext
+        ));
+    }
+
+    eprintln!(
+        "Warning: Loading plugin '{}'. Plugins run arbitrary native code.",
+        path.display()
+    );
+
     // Load the library
+    // SAFETY: Loading a shared library is inherently unsafe as it executes
+    // native code from the library's initialization routines. We validate
+    // the file exists and has the correct extension above.
     let library = unsafe {
         Library::new(path).map_err(|e| format!("Failed to load plugin '{}': {}", path.display(), e))?
     };
 
     // Get the plugin type
+    // SAFETY: We call a known symbol from the loaded library. The function
+    // signature is guaranteed by the plugin ABI contract.
     let plugin_type = unsafe {
         let get_type: Symbol<GetPluginTypeFn> = library
             .get(b"get_plugin_type")
@@ -143,6 +178,9 @@ pub fn load_plugin(path: &Path) -> Result<LoadedPlugin, String> {
     };
 
     // Create the base plugin for info/init
+    // SAFETY: We call create_plugin which returns a heap-allocated Plugin trait object.
+    // We check for null before calling Box::from_raw. The caller is responsible for
+    // ensuring the plugin library remains loaded while the Box is alive.
     let plugin = unsafe {
         let create: Symbol<CreatePluginFn> = library
             .get(b"create_plugin")
@@ -156,6 +194,9 @@ pub fn load_plugin(path: &Path) -> Result<LoadedPlugin, String> {
     };
 
     // Create the type-specific plugin
+    // SAFETY: Each branch below calls a type-specific creation function from the plugin.
+    // The raw pointer is checked for null before being converted to a Box.
+    // The library handle is kept alive in the LoadedPlugin struct to prevent unloading.
     let plugin_impl = match plugin_type {
         PluginType::Lint => unsafe {
             let create: Symbol<CreateLintPluginFn> = library
