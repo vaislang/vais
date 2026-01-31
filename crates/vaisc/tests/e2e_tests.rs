@@ -2517,3 +2517,143 @@ F main() -> i64 {
     assert!(result.stdout.contains("a > b: 1"), "Expected 'a > b: 1' in output");
     assert!(result.stdout.contains("a == c: 1"), "Expected 'a == c: 1' in output");
 }
+
+// ==================== Phase 22: 대형 프로젝트 도입 전략 - Stage 2 (Medium Scale) ====================
+
+#[test]
+fn test_adoption_generic_trait_integration() {
+    let source = r#"
+S Container<T> {
+    value: T,
+    count: i64
+}
+X Container {
+    F get_count(&self) -> i64 = self.count
+}
+E Status {
+    Active,
+    Inactive
+}
+F check(s: i64) -> i64 {
+    M s {
+        0 => 0,
+        _ => 1
+    }
+}
+F main() -> i64 {
+    c := Container { value: 42, count: 3 }
+    I c.get_count() == 3 {
+        println("Container: OK")
+    }
+    check(0)
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+               result.exit_code, result.stdout, result.stderr);
+    assert!(result.stdout.contains("Container: OK"),
+            "Expected stdout to contain 'Container: OK', got: {}", result.stdout);
+}
+
+#[test]
+fn test_adoption_closure_recursion() {
+    let source = r#"
+F fib(n: i64) -> i64 {
+    I n < 2 { R n }
+    @(n - 1) + @(n - 2)
+}
+F main() -> i64 {
+    scale := |x: i64| x * 2
+    result := scale(fib(10))
+    I result == 110 {
+        println("Closure+Recursion: OK")
+        R 0
+    }
+    1
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+               result.exit_code, result.stdout, result.stderr);
+    assert!(result.stdout.contains("Closure+Recursion: OK"),
+            "Expected stdout to contain 'Closure+Recursion: OK', got: {}", result.stdout);
+}
+
+#[test]
+fn test_adoption_mutable_loop() {
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    i := mut 0
+    L {
+        I i >= 10 { B }
+        sum = sum + i
+        i = i + 1
+    }
+    I sum == 45 {
+        println("MutableLoop: OK")
+        R 0
+    }
+    1
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+               result.exit_code, result.stdout, result.stderr);
+    assert!(result.stdout.contains("MutableLoop: OK"),
+            "Expected stdout to contain 'MutableLoop: OK', got: {}", result.stdout);
+}
+
+#[test]
+fn test_adoption_f64_arithmetic() {
+    let source = r#"
+F main() -> i64 {
+    x := 3.14
+    y := 2.0
+    z := x * y
+    I z > 6.0 {
+        println("F64 Arithmetic: OK")
+        R 0
+    }
+    1
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+               result.exit_code, result.stdout, result.stderr);
+    assert!(result.stdout.contains("F64 Arithmetic: OK"),
+            "Expected stdout to contain 'F64 Arithmetic: OK', got: {}", result.stdout);
+}
+
+#[test]
+fn test_adoption_complex_struct() {
+    let source = r#"
+S Point {
+    x: i64,
+    y: i64
+}
+X Point {
+    F distance_sq(&self) -> i64 = self.x * self.x + self.y * self.y
+}
+S Line {
+    start_x: i64,
+    start_y: i64,
+    end_x: i64,
+    end_y: i64
+}
+F main() -> i64 {
+    p := Point { x: 3, y: 4 }
+    d := p.distance_sq()
+    I d == 25 {
+        println("Complex Struct: OK")
+        R 0
+    }
+    1
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+               result.exit_code, result.stdout, result.stderr);
+    assert!(result.stdout.contains("Complex Struct: OK"),
+            "Expected stdout to contain 'Complex Struct: OK', got: {}", result.stdout);
+}
