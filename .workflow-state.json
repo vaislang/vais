@@ -1,14 +1,14 @@
 {
-  "phase": 4,
-  "request": "Phase 15 P3 - 출시 준비: 최종 검증 및 릴리스",
+  "phase": 3,
+  "request": "실사용 검증에서 발견된 45개 버그 수정 (Phase 16)",
   "tasks": [
-    { "id": 1, "name": "스트레스 테스트 (1000줄+ 프로그램 5개)", "status": "in_progress", "model": "Sonnet" },
-    { "id": 2, "name": "퍼징 테스트 (파서/타입 체커)", "status": "in_progress", "model": "Sonnet" },
-    { "id": 3, "name": "성능 회귀 테스트 (벤치마크 자동화)", "status": "in_progress", "model": "Sonnet" },
-    { "id": 4, "name": "보안 감사 (컴파일러 보안 리뷰)", "status": "pending", "model": "Opus" },
-    { "id": 5, "name": "라이선스 정리 + NOTICE 파일", "status": "pending", "model": "Haiku" },
-    { "id": 6, "name": "v1.0.0 릴리스 노트 + 안정성 선언", "status": "pending", "model": "Sonnet" },
-    { "id": 7, "name": "메모리 안전성 테스트 (ASan)", "status": "pending", "model": "Sonnet" }
+    { "id": 1, "name": "ROADMAP 업데이트 + 커밋", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "Option/Vec self 타입 IR 버그 수정", "status": "pending", "model": "Opus" },
+    { "id": 3, "name": "클로저/람다 IR 생성 버그 수정", "status": "pending", "model": "Opus" },
+    { "id": 4, "name": "assert/contract 링커 심볼 수정", "status": "pending", "model": "Sonnet" },
+    { "id": 5, "name": "기타 IR 버그 (generic/defer/lifetime)", "status": "pending", "model": "Opus" },
+    { "id": 6, "name": "exit code 표시 개선", "status": "pending", "model": "Haiku" },
+    { "id": 7, "name": "검증 + 최종 커밋", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": null
+  "currentTask": 1
 }

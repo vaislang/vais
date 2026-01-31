@@ -1,9 +1,9 @@
 # Vais - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
-> **버전**: 0.1.0
+> **버전**: 1.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-01-30
+> **최종 업데이트**: 2026-01-31
 
 ---
 
@@ -120,9 +120,10 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | Phase | 상태 | 진행률 |
 |-------|------|--------|
 | Phase 1~12 | ✅ 완료 | 100% |
-| Phase 13: 품질 보증 및 프로덕션 검증 | 🔄 진행 중 | P0-P2 완료, P3 진행 중 |
-| **Phase 14: 배포 및 커뮤니티** | **✅ 완료** | **P0-P4 완료** |
-| **Phase 15: v1.0 출시 준비** | **✅ 완료** | **P0-P3 완료** |
+| Phase 13: 품질 보증 및 프로덕션 검증 | ✅ 완료 | P0-P3 완료 |
+| Phase 14: 배포 및 커뮤니티 | ✅ 완료 | P0-P4 완료 |
+| Phase 15: v1.0 출시 준비 | ✅ 완료 | P0-P3 완료 |
+| **Phase 16: 실사용 검증 버그 수정** | **🔄 진행 중** | **P0 진행 중** |
 
 ---
 
@@ -427,6 +428,63 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | M2 | P1 완료 - Async 런타임 동작, GC 고도화 |
 | M3 | P2 완료 - 라이프타임/소유권, ABI 안정화, 트레이트 완성 |
 | M4 | P3 완료 - 종합 검증 통과, v1.0.0 정식 릴리스 |
+
+---
+
+## 🚀 Phase 16: 실사용 검증 버그 수정
+
+> **상태**: 🔄 진행 중
+> **추가일**: 2026-01-31
+> **목표**: 106개 예제 프로그램 전수 테스트에서 발견된 45개 실패를 수정하여 실사용 가능 수준 달성
+>
+> **검증 결과 (2026-01-31):**
+> - 정상 실행: 49개 (46%) + 의도적 nonzero exit: 12개 (11%) = 61개 성공 (58%)
+> - LLVM IR 코드젠 버그: 18개 (17%)
+> - 컴파일 에러 (파서/타입체커): 27개 (25%)
+
+### P0 - 긴급: LLVM IR 코드젠 버그 수정 (18개)
+
+> 코드 생성기가 잘못된 LLVM IR을 출력하여 clang이 실패하는 버그들
+
+#### Option/Vec 메서드 self 타입 불일치 (5개 예제)
+- [ ] **self 파라미터 타입 수정** - `%self`가 `ptr`로 전달되지만 구조체 타입을 기대하는 문제 (option_test, option_test2, simple_hashmap_test, simple_vec_test, vec_test_minimal)
+
+#### 클로저/람다 IR 생성 버그 (3개 예제)
+- [ ] **클로저 함수 포인터 로드 수정** - `ptrtoint`를 `load`의 피연산자로 직접 사용하는 IR 문법 오류 (closure_simple, closure_test, lambda_test)
+
+#### 링커 심볼 미정의 (7개 예제)
+- [ ] **assert/contract 런타임 함수 구현** - `__vais_assert_fail`, `__vais_contract_*` 함수 정의 누락 (assert_violation_test, contract_test, contract_fail_test, contract_macro_test, contract_violation_test, formal_verification_test)
+- [ ] **main 함수 없는 모듈 처리** - 모듈 파일 실행 시 에러 메시지 개선 (math)
+
+#### 기타 IR 버그 (3개 예제)
+- [ ] **제네릭 구조체 타입 재정의** - 동일 타입명 중복 생성 방지 (generic_struct_test)
+- [ ] **defer 문 IR 생성** - `%0` 타입 불일치 수정 (defer_test)
+- [ ] **라이프타임 IR 생성** - 미정의 값 `%42` 참조 수정 (lifetime_simple_test)
+
+### P1 - 높은 우선순위: 컴파일 에러 수정 (27개)
+
+> 파서 또는 타입 체커에서 거부되는 프로그램 수정
+
+#### 파서 에러 (7개 예제)
+- [ ] **미구현 문법 지원 확인** - defer, hot_reload, comptime, io_test, math_test, rename_test, code_actions_demo에서 사용하는 문법이 파서에서 거부됨
+
+#### 타입 체커 에러 (12개 예제)
+- [ ] **미정의 변수/함수** - btreemap, deque, gpu, ipv6, option_result_simple 등에서 std 라이브러리 함수 미등록
+- [ ] **타입 불일치** - json, option_result, regex, range_type_error 등에서 std 타입과 실제 타입 불일치
+- [ ] **기타** - 중복 정의, 불변 할당 등
+
+### P2 - 낮은 우선순위: CLI 개선
+
+#### 비정상 exit code 처리
+- [ ] **exit code 표시 개선** - 프로그램이 nonzero exit code를 반환할 때 "error:" 대신 정보성 메시지로 변경 (fib=55, hello=42 등은 정상 동작)
+
+### 예상 마일스톤
+
+| 마일스톤 | 목표 |
+|----------|------|
+| M1 | P0 완료 - IR 버그 수정, 성공률 75%+ |
+| M2 | P1 완료 - 컴파일 에러 수정, 성공률 90%+ |
+| M3 | P2 완료 - CLI 개선, 사용자 경험 향상 |
 
 ---
 
