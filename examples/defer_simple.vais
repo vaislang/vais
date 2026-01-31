@@ -1,7 +1,7 @@
-F test(): i64 {
+F test() -> i64 {
     R 0
 }
 
-F main(): i64 {
+F main() -> i64 {
     R 0
 }

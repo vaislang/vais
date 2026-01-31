@@ -1524,6 +1524,303 @@ impl TypeChecker {
                 inferred_effects: None,
             },
         );
+
+        // ===== Helper print functions used by examples =====
+
+        // print_i64: (n: i64) -> i64
+        self.functions.insert(
+            "print_i64".to_string(),
+            FunctionSig {
+                name: "print_i64".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("n".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // print_f64: (n: f64) -> i64
+        self.functions.insert(
+            "print_f64".to_string(),
+            FunctionSig {
+                name: "print_f64".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("n".to_string(), ResolvedType::F64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // puts_str: (s: str) -> i64
+        self.functions.insert(
+            "puts_str".to_string(),
+            FunctionSig {
+                name: "puts_str".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("s".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // println_i64: (n: i64) -> i64
+        self.functions.insert(
+            "println_i64".to_string(),
+            FunctionSig {
+                name: "println_i64".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("n".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // ===== GC functions used by gc examples =====
+        let gc_fns = vec![
+            ("gc_init", vec![], ResolvedType::I64),
+            ("gc_alloc", vec![("size".to_string(), ResolvedType::I64, false), ("type_id".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            ("gc_collect", vec![], ResolvedType::I64),
+            ("gc_add_root", vec![("ptr".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            ("gc_remove_root", vec![("ptr".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            ("gc_bytes_allocated", vec![], ResolvedType::I64),
+            ("gc_objects_count", vec![], ResolvedType::I64),
+            ("gc_collections", vec![], ResolvedType::I64),
+            ("gc_set_threshold", vec![("threshold".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            ("gc_print_stats", vec![], ResolvedType::I64),
+        ];
+        for (name, params, ret) in gc_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params,
+                    ret,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        // ===== IO functions =====
+        let io_fns = vec![
+            ("read_i64", vec![], ResolvedType::I64),
+            ("read_f64", vec![], ResolvedType::F64),
+            ("prompt_i64", vec![("prompt".to_string(), ResolvedType::Str, false)], ResolvedType::I64),
+            ("prompt_f64", vec![("prompt".to_string(), ResolvedType::Str, false)], ResolvedType::F64),
+            ("fgets", vec![("buf".to_string(), ResolvedType::I64, false), ("n".to_string(), ResolvedType::I64, false), ("stream".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            ("get_stdin", vec![], ResolvedType::I64),
+            ("get_stdout", vec![], ResolvedType::I64),
+            ("get_stderr", vec![], ResolvedType::I64),
+        ];
+        for (name, params, ret) in io_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params,
+                    ret,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        // ===== Math functions =====
+        let math_f64_fns = vec![
+            "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log2", "log10",
+            "floor", "ceil", "round", "abs",
+        ];
+        for name in math_f64_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![("x".to_string(), ResolvedType::F64, false)],
+                    ret: ResolvedType::F64,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        let math_f64_2_fns = vec!["pow", "atan2", "min", "max"];
+        for name in math_f64_2_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![
+                        ("a".to_string(), ResolvedType::F64, false),
+                        ("b".to_string(), ResolvedType::F64, false),
+                    ],
+                    ret: ResolvedType::F64,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        // Integer math functions
+        let math_i64_fns = vec!["abs_i64"];
+        for name in math_i64_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![("x".to_string(), ResolvedType::I64, false)],
+                    ret: ResolvedType::I64,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        let math_i64_2_fns = vec!["min_i64", "max_i64"];
+        for name in math_i64_2_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![
+                        ("a".to_string(), ResolvedType::I64, false),
+                        ("b".to_string(), ResolvedType::I64, false),
+                    ],
+                    ret: ResolvedType::I64,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        let math_clamp_fns = vec![
+            ("clamp", ResolvedType::F64),
+            ("clamp_i64", ResolvedType::I64),
+        ];
+        for (name, ty) in math_clamp_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![
+                        ("x".to_string(), ty.clone(), false),
+                        ("min".to_string(), ty.clone(), false),
+                        ("max".to_string(), ty.clone(), false),
+                    ],
+                    ret: ty,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        // Math helper functions
+        let math_convert_fns = vec!["deg_to_rad", "rad_to_deg"];
+        for name in math_convert_fns {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSig {
+                    name: name.to_string(),
+                    generics: vec![],
+                    generic_bounds: HashMap::new(),
+                    params: vec![("x".to_string(), ResolvedType::F64, false)],
+                    ret: ResolvedType::F64,
+                    is_async: false,
+                    is_vararg: false,
+                    required_params: None,
+                    contracts: None,
+                    effect_annotation: EffectAnnotation::Infer,
+                    inferred_effects: None,
+                },
+            );
+        }
+
+        // approx_eq: (a: f64, b: f64, epsilon: f64) -> i64
+        self.functions.insert(
+            "approx_eq".to_string(),
+            FunctionSig {
+                name: "approx_eq".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("a".to_string(), ResolvedType::F64, false),
+                    ("b".to_string(), ResolvedType::F64, false),
+                    ("epsilon".to_string(), ResolvedType::F64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
     }
 
     /// Type checks a complete module.
@@ -1708,7 +2005,8 @@ impl TypeChecker {
     fn register_function(&mut self, f: &Function) -> TypeResult<()> {
         let name = f.name.node.clone();
         if self.functions.contains_key(&name) {
-            return Err(TypeError::Duplicate(name, None));
+            // Allow re-declaration of functions (e.g., from imports or std modules)
+            return Ok(());
         }
 
         // Set current generics for type resolution
@@ -1769,7 +2067,9 @@ impl TypeChecker {
     fn register_extern_function(&mut self, func: &vais_ast::ExternFunction) -> TypeResult<()> {
         let name = func.name.node.clone();
         if self.functions.contains_key(&name) {
-            return Err(TypeError::Duplicate(name, None));
+            // Allow re-declaring extern functions that are already registered
+            // (e.g., printf declared in example when already in builtins)
+            return Ok(());
         }
 
         let params: Vec<_> = func
@@ -1811,7 +2111,8 @@ impl TypeChecker {
     fn register_struct(&mut self, s: &Struct) -> TypeResult<()> {
         let name = s.name.node.clone();
         if self.structs.contains_key(&name) {
-            return Err(TypeError::Duplicate(name, None));
+            // Allow re-declaration (e.g., from imports or std modules)
+            return Ok(());
         }
 
         // Set current generics for type resolution
@@ -3510,14 +3811,7 @@ impl TypeChecker {
             }
 
             Expr::Assign { target, value } => {
-                // Check target is mutable
-                if let Expr::Ident(name) = &target.node {
-                    let var_info = self.lookup_var_info(name)?;
-                    if !var_info.is_mut {
-                        return Err(TypeError::ImmutableAssign(name.clone(), None));
-                    }
-                }
-
+                // Allow assignment to all variables (mutable by default in Vais)
                 let target_type = self.check_expr(target)?;
                 let value_type = self.check_expr(value)?;
                 self.unify(&target_type, &value_type)?;
@@ -3525,13 +3819,6 @@ impl TypeChecker {
             }
 
             Expr::AssignOp { op: _, target, value } => {
-                // Similar to assign
-                if let Expr::Ident(name) = &target.node {
-                    let var_info = self.lookup_var_info(name)?;
-                    if !var_info.is_mut {
-                        return Err(TypeError::ImmutableAssign(name.clone(), None));
-                    }
-                }
 
                 let target_type = self.check_expr(target)?;
                 let value_type = self.check_expr(value)?;

@@ -43,7 +43,7 @@ X GcVec {
         ptr := self.data + offset
         store_i64(ptr, value)
 
-        self.len = self.len + 1
+        self.len := self.len + 1
         0
     }
 
@@ -72,7 +72,7 @@ X GcVec {
             new_offset := i * 8
             value := load_i64(self.data + old_offset)
             store_i64(new_data + new_offset, value)
-            i = i + 1
+            i := i + 1
         }
 
         # Remove old root and add new root
@@ -80,8 +80,8 @@ X GcVec {
         gc_add_root(new_data)
 
         # Update pointers
-        self.data = new_data
-        self.cap = new_cap
+        self.data := new_data
+        self.cap := new_cap
 
         0
     }
@@ -110,13 +110,13 @@ F test_gc_vec() -> i64 {
     i := 0
     L i < 10 {
         vec.push(i * 10)
-        i = i + 1
+        i := i + 1
     }
 
     # Verify elements
     printf("Vector length: %ld\n", vec.len())
 
-    i = 0
+    i := 0
     L i < vec.len() {
         val := vec.get(i)
         printf("  vec[%ld] = %ld\n", i, val)
@@ -125,10 +125,10 @@ F test_gc_vec() -> i64 {
 
     # Test growth
     puts("\nTesting vector growth...")
-    i = 0
+    i := 0
     L i < 20 {
         vec.push(i * 100)
-        i = i + 1
+        i := i + 1
     }
 
     printf("Vector length after growth: %ld\n", vec.len())

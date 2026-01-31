@@ -3,7 +3,7 @@
 
 # Mathematical constants
 C PI: f64 = 3.141592653589793
-C E: f64 = 2.718281828459045
+C EULER: f64 = 2.718281828459045
 C TAU: f64 = 6.283185307179586
 
 # Absolute value of i64

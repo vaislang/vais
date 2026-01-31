@@ -30,7 +30,7 @@ F test_mul_zero(x: i64) -> i64 {
 F test_abs_nonnegative(x: i64) -> i64 {
     abs_x := x
     I x < 0 {
-        abs_x = 0 - x
+        abs_x := 0 - x
     }
     I abs_x >= 0 {
         0

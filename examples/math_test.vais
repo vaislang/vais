@@ -11,8 +11,8 @@ F main() -> i64 {
     print_f64(PI)
     putchar(10)
 
-    puts("E = ")
-    print_f64(E)
+    puts("EULER = ")
+    print_f64(EULER)
     putchar(10)
 
     puts("TAU = ")
@@ -153,8 +153,8 @@ F main() -> i64 {
 
     # Test logarithmic and exponential functions
     puts("--- Logarithmic and Exponential ---")
-    puts("log(E) = ")
-    print_f64(log(E))
+    puts("log(EULER) = ")
+    print_f64(log(EULER))
     putchar(10)
 
     puts("log10(100.0) = ")
