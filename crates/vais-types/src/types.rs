@@ -175,6 +175,26 @@ pub enum TypeError {
         predicate: String,
         span: Option<Span>,
     },
+
+    #[error("Lifetime inference failed for function '{function_name}': cannot determine output lifetime with {input_count} input lifetimes (use explicit lifetime annotations)")]
+    LifetimeElisionFailed {
+        function_name: String,
+        input_count: usize,
+        span: Option<Span>,
+    },
+
+    #[error("Lifetime '{lifetime_name}' does not live long enough: cannot outlive 'static")]
+    LifetimeOutlivesStatic {
+        lifetime_name: String,
+        span: Option<Span>,
+    },
+
+    #[error("Reference lifetime {reference_lifetime} outlives referent lifetime {referent_lifetime}")]
+    LifetimeTooShort {
+        reference_lifetime: String,
+        referent_lifetime: String,
+        span: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -199,6 +219,9 @@ impl TypeError {
             TypeError::MoveAfterUse { move_at, .. } => *move_at,
             TypeError::DependentPredicateNotBool { span, .. } => *span,
             TypeError::RefinementViolation { span, .. } => *span,
+            TypeError::LifetimeElisionFailed { span, .. } => *span,
+            TypeError::LifetimeOutlivesStatic { span, .. } => *span,
+            TypeError::LifetimeTooShort { span, .. } => *span,
         }
     }
 
@@ -223,6 +246,9 @@ impl TypeError {
             TypeError::MoveAfterUse { .. } => "E016",
             TypeError::DependentPredicateNotBool { .. } => "E017",
             TypeError::RefinementViolation { .. } => "E018",
+            TypeError::LifetimeElisionFailed { .. } => "E019",
+            TypeError::LifetimeOutlivesStatic { .. } => "E020",
+            TypeError::LifetimeTooShort { .. } => "E021",
         }
     }
 
@@ -280,6 +306,19 @@ impl TypeError {
             }
             TypeError::MoveAfterUse { var_name, .. } => {
                 Some(format!("variable '{}' was already moved, consider cloning before the first use", var_name))
+            }
+            TypeError::LifetimeElisionFailed { input_count, .. } => {
+                if *input_count > 1 {
+                    Some("add an explicit lifetime parameter to the return type, e.g., -> &'a T".to_string())
+                } else {
+                    Some("add explicit lifetime annotations to clarify the relationship".to_string())
+                }
+            }
+            TypeError::LifetimeOutlivesStatic { lifetime_name, .. } => {
+                Some(format!("consider using 'static instead of '{}', or restructure to avoid the 'static requirement", lifetime_name))
+            }
+            TypeError::LifetimeTooShort { .. } => {
+                Some("the reference must not outlive the data it refers to".to_string())
             }
             _ => None,
         }
@@ -358,6 +397,21 @@ impl TypeError {
             }
             TypeError::RefinementViolation { predicate, .. } => {
                 vais_i18n::get(&key, &[("predicate", predicate)])
+            }
+            TypeError::LifetimeElisionFailed { function_name, input_count, .. } => {
+                vais_i18n::get(&key, &[
+                    ("function_name", function_name),
+                    ("input_count", &input_count.to_string()),
+                ])
+            }
+            TypeError::LifetimeOutlivesStatic { lifetime_name, .. } => {
+                vais_i18n::get(&key, &[("lifetime_name", lifetime_name)])
+            }
+            TypeError::LifetimeTooShort { reference_lifetime, referent_lifetime, .. } => {
+                vais_i18n::get(&key, &[
+                    ("reference_lifetime", reference_lifetime),
+                    ("referent_lifetime", referent_lifetime),
+                ])
             }
         }
     }

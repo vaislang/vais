@@ -12,6 +12,7 @@ pub mod effects;
 // Private modules
 mod traits;
 mod inference;
+pub mod lifetime;
 
 // Re-export bidirectional type checking support
 pub use inference::CheckMode;
@@ -109,6 +110,9 @@ pub struct TypeChecker {
     // Memoization cache for substitute_generics
     // Key: (type hash, substitution map hash) -> Result type
     substitute_cache: RefCell<HashMap<(u64, u64), ResolvedType>>,
+
+    // Lifetime inference engine
+    lifetime_inferencer: lifetime::LifetimeInferencer,
 }
 
 impl TypeChecker {
@@ -135,6 +139,7 @@ impl TypeChecker {
             warnings: Vec::new(),
             generic_instantiations: Vec::new(),
             substitute_cache: RefCell::new(HashMap::new()),
+            lifetime_inferencer: lifetime::LifetimeInferencer::new(),
         };
         checker.register_builtins();
         checker
@@ -201,6 +206,11 @@ impl TypeChecker {
     /// Get the union definition (for codegen)
     pub fn get_union(&self, name: &str) -> Option<&UnionDef> {
         self.unions.get(name)
+    }
+
+    /// Get the lifetime inferencer (for external analysis)
+    pub fn get_lifetime_inferencer(&self) -> &lifetime::LifetimeInferencer {
+        &self.lifetime_inferencer
     }
 
     /// Register built-in functions (libc wrappers)
@@ -2277,10 +2287,64 @@ impl TypeChecker {
             func_sig.contracts = contracts;
         }
 
+        // Lifetime inference: check reference lifetimes in the function signature
+        self.check_function_lifetimes(f)?;
+
         self.current_fn_ret = None;
         self.current_fn_name = None;
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
         self.pop_scope();
+
+        Ok(())
+    }
+
+    /// Run lifetime inference on a function's signature
+    fn check_function_lifetimes(&mut self, f: &Function) -> TypeResult<()> {
+        // Reset the lifetime inferencer for this function
+        self.lifetime_inferencer.reset();
+
+        // Build parameter list with resolved types
+        let params: Vec<(String, ResolvedType, bool)> = f.params.iter()
+            .map(|p| {
+                let ty = self.resolve_type(&p.ty.node);
+                (p.name.node.clone(), ty, p.is_mut)
+            })
+            .collect();
+
+        let ret_type = f.ret_type
+            .as_ref()
+            .map(|t| self.resolve_type(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        // Check if the function has any reference types at all
+        let has_ref_params = params.iter().any(|(_, ty, _)| {
+            matches!(ty,
+                ResolvedType::Ref(_) | ResolvedType::RefMut(_) |
+                ResolvedType::RefLifetime { .. } | ResolvedType::RefMutLifetime { .. }
+            )
+        });
+        let has_ref_return = matches!(ret_type,
+            ResolvedType::Ref(_) | ResolvedType::RefMut(_) |
+            ResolvedType::RefLifetime { .. } | ResolvedType::RefMutLifetime { .. }
+        );
+
+        // Only run lifetime inference if there are references
+        if !has_ref_params && !has_ref_return {
+            return Ok(());
+        }
+
+        // Extract lifetime parameters and bounds from generics
+        let lifetime_params = lifetime::LifetimeInferencer::extract_lifetime_params(&f.generics);
+        let lifetime_bounds = lifetime::LifetimeInferencer::extract_lifetime_bounds(&f.generics);
+
+        // Run lifetime inference
+        let _resolution = self.lifetime_inferencer.infer_function_lifetimes(
+            &f.name.node,
+            &params,
+            &ret_type,
+            &lifetime_params,
+            &lifetime_bounds,
+        )?;
 
         Ok(())
     }
