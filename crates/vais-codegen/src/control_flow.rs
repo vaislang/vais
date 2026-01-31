@@ -143,8 +143,15 @@ impl CodeGenerator {
                 self.current_block = local_merge.clone();
                 let result = self.next_temp(counter);
 
-                // Build phi node only from non-terminated predecessors
-                if !then_from_label.is_empty() && !else_from_label.is_empty() {
+                // Check if the block type is void/unit - if so, don't generate phi nodes
+                // (phi nodes cannot have void type in LLVM IR)
+                let is_void_type = matches!(block_type, ResolvedType::Unit);
+
+                // Build phi node only from non-terminated predecessors and non-void types
+                if is_void_type {
+                    // Void type: value is not used, just use 0
+                    ir.push_str(&format!("  {} = add i64 0, 0\n", result));
+                } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     ir.push_str(&format!(
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
                         result, llvm_type, then_val_for_phi, then_from_label, else_val_for_phi,

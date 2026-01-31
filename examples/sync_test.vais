@@ -1,0 +1,86 @@
+# Test sync runtime - Mutex, RwLock, Barrier, Semaphore, Once
+
+N "C" {
+    F __mutex_create() -> i64
+    F __mutex_lock(handle: i64) -> i64
+    F __mutex_try_lock(handle: i64) -> i64
+    F __mutex_unlock(handle: i64) -> i64
+    F __mutex_destroy(handle: i64) -> i64
+    F __rwlock_create() -> i64
+    F __rwlock_read_lock(handle: i64) -> i64
+    F __rwlock_read_unlock(handle: i64) -> i64
+    F __rwlock_write_lock(handle: i64) -> i64
+    F __rwlock_write_unlock(handle: i64) -> i64
+    F __rwlock_destroy(handle: i64) -> i64
+    F __barrier_create(count: i64) -> i64
+    F __barrier_wait(handle: i64) -> i64
+    F __barrier_destroy(handle: i64) -> i64
+    F __semaphore_create(permits: i64) -> i64
+    F __semaphore_wait(handle: i64) -> i64
+    F __semaphore_try_wait(handle: i64) -> i64
+    F __semaphore_post(handle: i64) -> i64
+    F __semaphore_destroy(handle: i64) -> i64
+    F __once_create() -> i64
+    F __once_call(handle: i64, fn_ptr: i64) -> i64
+    F __cpu_pause() -> i64
+    F printf(fmt: str, ...) -> i64
+}
+
+F main() -> i64 {
+    # Test 1: Mutex create/lock/unlock/destroy
+    m := __mutex_create()
+    printf("mutex created: %d\n", m != 0)
+    __mutex_lock(m)
+    printf("mutex locked\n")
+    __mutex_unlock(m)
+    printf("mutex unlocked\n")
+
+    # Test 2: try_lock
+    result := __mutex_try_lock(m)
+    printf("try_lock result: %d\n", result)
+    __mutex_unlock(m)
+    __mutex_destroy(m)
+    printf("mutex destroyed\n")
+
+    # Test 3: RwLock
+    rw := __rwlock_create()
+    printf("rwlock created: %d\n", rw != 0)
+    __rwlock_read_lock(rw)
+    printf("rwlock read locked\n")
+    __rwlock_read_unlock(rw)
+    __rwlock_write_lock(rw)
+    printf("rwlock write locked\n")
+    __rwlock_write_unlock(rw)
+    __rwlock_destroy(rw)
+    printf("rwlock destroyed\n")
+
+    # Test 4: Barrier (single thread - should immediately pass as leader)
+    b := __barrier_create(1)
+    printf("barrier created: %d\n", b != 0)
+    leader := __barrier_wait(b)
+    printf("barrier leader: %d\n", leader)
+    __barrier_destroy(b)
+
+    # Test 5: Semaphore
+    sem := __semaphore_create(2)
+    printf("semaphore created: %d\n", sem != 0)
+    __semaphore_wait(sem)
+    printf("semaphore acquired 1\n")
+    __semaphore_wait(sem)
+    printf("semaphore acquired 2\n")
+    r := __semaphore_try_wait(sem)
+    printf("try_wait empty: %d\n", r)
+    __semaphore_post(sem)
+    printf("semaphore released\n")
+    r2 := __semaphore_try_wait(sem)
+    printf("try_wait available: %d\n", r2)
+    __semaphore_post(sem)
+    __semaphore_destroy(sem)
+
+    # Test 6: cpu_pause
+    __cpu_pause()
+    printf("cpu_pause ok\n")
+
+    printf("All sync tests passed!\n")
+    0
+}

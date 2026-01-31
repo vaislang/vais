@@ -1,0 +1,28 @@
+N "C" {
+    F printf(fmt: str, ...) -> i64
+}
+
+F main() -> i64 {
+    x := 5
+
+    # if-else with assert (Unit type) in both branches
+    I x > 3 {
+        assert(x > 0)
+    } E {
+        assert(x >= 0)
+    }
+
+    # Nested case
+    I x > 10 {
+        assert(x > 10)
+    } E {
+        I x > 0 {
+            assert(x > 0)
+        } E {
+            assert(x >= 0)
+        }
+    }
+
+    printf("done\n")
+    0
+}

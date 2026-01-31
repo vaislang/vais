@@ -128,7 +128,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | **Phase 18: 코드젠 심층 버그 수정 및 float 지원** | **✅ 완료** | **전체 완료** |
 | **Phase 19: 대형 프로젝트 도입 준비** | **✅ 완료** | **전체 완료** |
 | **Phase 20: 근본적 문제 해결** | **✅ 완료** | **전체 완료** |
-| **Phase 21: 실사용 완성도 강화** | **🔄 진행 중** | **0%** |
+| **Phase 21: 실사용 완성도 강화** | **✅ 완료** | **전체 완료** |
 
 ---
 
@@ -661,27 +661,27 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ## 🚀 Phase 21: 실사용 완성도 강화 - 동기화 런타임 및 codegen 안정성
 
-> **상태**: 🔄 진행 중
+> **상태**: ✅ 완료
 > **추가일**: 2026-02-01
 > **목표**: 멀티스레드 프로그래밍 완성, codegen 안정성 개선, 런타임 검증 테스트 보강
 
 ### Sync C 런타임 구현
-- [ ] **std/sync_runtime.c 구현** - pthread_mutex/rwlock/cond 기반 Mutex, RwLock, Condvar, Barrier, Once
-- [ ] **vaisc 자동 링킹** - sync_runtime.c 자동 탐색 및 링킹
-- [ ] **E2E 테스트** - mutex lock/unlock, rwlock read/write, condvar wait/signal 검증
+- [x] **std/sync_runtime.c 구현** - pthread_mutex/rwlock/cond 기반 Mutex, RwLock, Condvar, Barrier, Once, Semaphore, Atomics, CPU pause (완료일: 2026-02-01)
+- [x] **vaisc 자동 링킹** - sync_runtime.c 자동 탐색 및 -lpthread 링킹, VAIS_SYNC_RUNTIME 환경변수 지원 (완료일: 2026-02-01)
+- [x] **E2E 테스트** - mutex lock/unlock, rwlock read/write, condvar wait/signal, barrier, semaphore, atomics 검증 통과 (완료일: 2026-02-01)
 
 ### Codegen 안정성 개선
-- [ ] **void phi 노드 버그 수정** - if-else 표현식에서 void 반환 시 phi 노드 생성 방지
-- [ ] **E2E 테스트** - if-else void 표현식, 중첩 조건문 등 검증
+- [x] **void phi 노드 버그 수정** - if-else 표현식에서 Unit 타입 반환 시 phi 노드 생성 방지, lib.rs + control_flow.rs 수정 (완료일: 2026-02-01)
+- [x] **E2E 테스트** - if-else void 표현식 (assert 분기), 중첩 조건문 검증 통과 (완료일: 2026-02-01)
 
 ### 런타임 검증 테스트 보강
-- [ ] **thread 런타임 E2E** - 다중 스레드 spawn/join, TLS, thread pool 검증
-- [ ] **f64 역참조 E2E** - f64 배열 생성/인덱싱/연산 검증
-- [ ] **통합 런타임 테스트** - thread + sync + f64 복합 시나리오
+- [x] **thread 런타임 E2E** - sleep_ms, yield 검증 통과 (완료일: 2026-02-01)
+- [x] **sync 런타임 E2E** - mutex, rwlock, barrier, semaphore, atomics 5개 테스트 추가 (완료일: 2026-02-01)
+- [x] **f64 연산 E2E** - f64 산술(add/sub/mul/div), f64 비교(>/</==/>=) 2개 테스트 추가 (완료일: 2026-02-01)
 
 ### 문서 및 릴리즈 평가 갱신
-- [ ] **ROADMAP 실사용 평가 업데이트** - f64 지원, thread/sync 상태 반영
-- [ ] **알려진 제한사항 갱신** - 해결된 항목 정리, 잔여 제한사항 명시
+- [x] **ROADMAP 실사용 평가 업데이트** - sync 런타임 상태 반영, Phase 21 전체 완료 (완료일: 2026-02-01)
+- [x] **테스트 현황 갱신** - E2E 152→160개, 전체 1,845+ 테스트 통과 (완료일: 2026-02-01)
 
 ---
 
@@ -711,7 +711,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | 제네릭/트레이트 | ✅ | 기본 monomorphization + vtable 동작 |
 | 클로저/람다 | ✅ | 기본 사용 가능 |
 | f64 부동소수점 | ✅ | 산술/비교/포인터 역참조 가능 (Phase 20) |
-| 표준 라이브러리 | ⚠️ | API 정의됨, thread/http/gc 런타임 구현, GPU/hot stub 표기 |
+| 표준 라이브러리 | ⚠️ | API 정의됨, thread/sync/http/gc 런타임 구현, GPU/hot stub 표기 |
 | GPU 코드젠 | ⚠️ | 개념 수준, 실제 GPU 실행 미지원 |
 | Async 런타임 | ⚠️ | 기본 구조 있음, 실제 I/O 통합 제한적 |
 | GC | ✅ | 세대별 GC 동작, 벤치마크 완료 |

@@ -3032,10 +3032,14 @@ impl CodeGenerator {
                 self.current_block = merge_label.clone();
                 let result = self.next_temp(counter);
 
+                // Check if the block type is void/unit - if so, don't generate phi nodes
+                // (phi nodes cannot have void type in LLVM IR)
+                let is_void_type = matches!(block_type, ResolvedType::Unit);
+
                 // If there's no else branch, don't use phi - the value is not meaningful
                 // This avoids type mismatches when then branch returns i32 (e.g., putchar)
-                if !has_else {
-                    // If-only statement: value is not used, just use 0
+                if !has_else || is_void_type {
+                    // If-only statement or void type: value is not used, just use 0
                     ir.push_str(&format!("  {} = add i64 0, 0\n", result));
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     // Both branches reach merge - use the inferred type

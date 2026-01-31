@@ -1579,6 +1579,37 @@ fn find_thread_runtime() -> Option<PathBuf> {
     None
 }
 
+/// Find the sync runtime C source file for linking.
+/// Searches: std/ relative to cwd, then next to compiler executable.
+fn find_sync_runtime() -> Option<PathBuf> {
+    if let Ok(cwd) = std::env::current_dir() {
+        let sync_rt = cwd.join("std").join("sync_runtime.c");
+        if sync_rt.exists() {
+            return Some(sync_rt);
+        }
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            if let Some(parent) = exe_dir.parent() {
+                let sync_rt = parent.join("std").join("sync_runtime.c");
+                if sync_rt.exists() {
+                    return Some(sync_rt);
+                }
+            }
+        }
+    }
+
+    if let Ok(rt_path) = std::env::var("VAIS_SYNC_RUNTIME") {
+        let path = PathBuf::from(&rt_path);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 /// Find the directory containing libvais_gc.a for GC runtime linking.
 /// Searches: next to the compiler executable, then target/release/ in cwd.
 fn find_gc_library() -> Option<PathBuf> {
@@ -1728,6 +1759,15 @@ fn compile_to_native(
         args.push("-lpthread".to_string());
         if verbose {
             println!("{} Linking thread runtime from: {}", "info:".blue().bold(), thread_rt_path.display());
+        }
+    }
+
+    // Link sync runtime if available (for std/sync.vais support)
+    if let Some(sync_rt_path) = find_sync_runtime() {
+        args.push(sync_rt_path.to_str().unwrap_or("sync_runtime.c").to_string());
+        args.push("-lpthread".to_string());
+        if verbose {
+            println!("{} Linking sync runtime from: {}", "info:".blue().bold(), sync_rt_path.display());
         }
     }
 
