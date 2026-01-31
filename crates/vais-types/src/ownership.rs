@@ -65,16 +65,35 @@ pub struct OwnershipInfo {
     pub defined_at: Option<Span>,
 }
 
+/// Information about a reference variable and what it points to
+#[derive(Debug, Clone)]
+pub struct ReferenceInfo {
+    /// The variable being referenced
+    pub source_var: String,
+    /// The scope depth where the source lives
+    pub source_scope_depth: u32,
+    /// Where the source was defined
+    pub source_defined_at: Option<Span>,
+    /// Whether the reference is mutable
+    pub is_mut: bool,
+}
+
 /// The ownership and borrow checker
 pub struct OwnershipChecker {
     /// Stack of scopes, each mapping variable names to ownership info
     scopes: Vec<HashMap<String, OwnershipInfo>>,
     /// Active borrows: borrower variable -> borrow info
     active_borrows: HashMap<String, BorrowInfo>,
+    /// Reference tracking: ref variable name -> what it references
+    reference_sources: HashMap<String, ReferenceInfo>,
     /// Current scope ID counter
     next_scope_id: u32,
     /// Current scope ID
     current_scope: u32,
+    /// Scope depth (increments on push, decrements on pop)
+    scope_depth: u32,
+    /// Whether the current function returns a reference type
+    function_returns_ref: bool,
     /// Collected errors (non-fatal mode)
     errors: Vec<TypeError>,
     /// Whether to collect errors instead of returning immediately
@@ -92,8 +111,11 @@ impl OwnershipChecker {
         Self {
             scopes: vec![HashMap::new()],
             active_borrows: HashMap::new(),
+            reference_sources: HashMap::new(),
             next_scope_id: 1,
             current_scope: 0,
+            scope_depth: 0,
+            function_returns_ref: false,
             errors: Vec::new(),
             collect_errors: false,
         }
@@ -122,16 +144,61 @@ impl OwnershipChecker {
         let _id = self.next_scope_id;
         self.next_scope_id += 1;
         self.current_scope = _id;
+        self.scope_depth += 1;
         self.scopes.push(HashMap::new());
     }
 
     fn pop_scope(&mut self) {
+        // Check for dangling references: references in outer scopes that point to
+        // variables being dropped in this scope
+        if let Some(dying_scope) = self.scopes.last() {
+            let dying_vars: HashSet<String> = dying_scope.keys().cloned().collect();
+            let current_depth = self.scope_depth;
+
+            // Find references that point to variables in the dying scope
+            let dangling: Vec<(String, ReferenceInfo)> = self.reference_sources.iter()
+                .filter(|(_, ref_info)| {
+                    dying_vars.contains(&ref_info.source_var)
+                        && ref_info.source_scope_depth >= current_depth
+                })
+                .map(|(name, info)| (name.clone(), info.clone()))
+                .collect();
+
+            for (ref_var, ref_info) in dangling {
+                // Only report if the reference itself is in an outer scope
+                if let Some(ref_owner) = self.lookup_var(&ref_var) {
+                    if ref_owner.defined_in_scope < self.current_scope {
+                        let err = TypeError::DanglingReference {
+                            ref_var: ref_var.clone(),
+                            source_var: ref_info.source_var.clone(),
+                            ref_scope_depth: ref_owner.defined_in_scope,
+                            source_scope_depth: ref_info.source_scope_depth,
+                            ref_at: ref_owner.defined_at,
+                            source_defined_at: ref_info.source_defined_at,
+                        };
+                        let _ = self.report_error(err);
+                    }
+                }
+                // Clean up the dangling reference tracking
+                self.reference_sources.remove(&ref_var);
+            }
+        }
+
         // Invalidate borrows from this scope
         let scope_id = self.current_scope;
         self.active_borrows.retain(|_, info| info.scope_id != scope_id);
 
+        // Clean up reference tracking for variables going out of scope
+        if let Some(dying_scope) = self.scopes.last() {
+            let dying_vars: HashSet<String> = dying_scope.keys().cloned().collect();
+            self.reference_sources.retain(|name, _| !dying_vars.contains(name));
+        }
+
         // Remove variables from the scope
         self.scopes.pop();
+        if self.scope_depth > 0 {
+            self.scope_depth -= 1;
+        }
         if self.current_scope > 0 {
             self.current_scope -= 1;
         }
@@ -159,6 +226,62 @@ impl OwnershipChecker {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name.to_string(), info);
         }
+    }
+
+    /// Register that a variable holds a reference to another variable
+    pub fn register_reference(&mut self, ref_var: &str, source_var: &str, is_mut: bool) {
+        let (source_scope, source_defined_at) = if let Some(info) = self.lookup_var(source_var) {
+            (info.defined_in_scope, info.defined_at)
+        } else {
+            return; // Source not tracked
+        };
+        self.reference_sources.insert(ref_var.to_string(), ReferenceInfo {
+            source_var: source_var.to_string(),
+            source_scope_depth: source_scope,
+            source_defined_at,
+            is_mut,
+        });
+    }
+
+    /// Check if returning a reference expression would create a dangling pointer
+    pub fn check_return_ref(&mut self, expr: &Spanned<Expr>, return_at: Option<Span>) -> TypeResult<()> {
+        if let Expr::Ref(inner) | Expr::Deref(inner) = &expr.node {
+            if let Expr::Ident(name) = &inner.node {
+                return self.check_return_local_ref(name, return_at);
+            }
+        }
+        if let Expr::Ident(name) = &expr.node {
+            // Check if this ident is a reference-tracked variable pointing to a local
+            if let Some(ref_info) = self.reference_sources.get(name).cloned() {
+                // If the source is in the function scope (depth > 0), it's a dangling ref
+                if ref_info.source_scope_depth > 0 {
+                    let err = TypeError::ReturnLocalRef {
+                        var_name: ref_info.source_var,
+                        return_at,
+                        defined_at: ref_info.source_defined_at,
+                    };
+                    return self.report_error(err);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Check if returning a reference to a local variable
+    fn check_return_local_ref(&mut self, var_name: &str, return_at: Option<Span>) -> TypeResult<()> {
+        if let Some(info) = self.lookup_var(var_name) {
+            // If the variable is defined in the function scope (not a parameter at scope 0)
+            // and is not 'static, it's a dangling reference
+            if info.defined_in_scope > 0 {
+                let err = TypeError::ReturnLocalRef {
+                    var_name: var_name.to_string(),
+                    return_at,
+                    defined_at: info.defined_at,
+                };
+                return self.report_error(err);
+            }
+        }
+        Ok(())
     }
 
     /// Look up a variable's ownership info
@@ -461,7 +584,14 @@ impl OwnershipChecker {
     fn check_function(&mut self, f: &Function) -> TypeResult<()> {
         self.push_scope();
 
-        // Register parameters
+        // Check if function returns a reference type
+        let returns_ref = f.ret_type.as_ref().is_some_and(|rt| {
+            self.is_ref_ast_type(&rt.node)
+        });
+        let prev_returns_ref = self.function_returns_ref;
+        self.function_returns_ref = returns_ref;
+
+        // Register parameters (at function scope depth, treated as "parameter" scope)
         for param in &f.params {
             let ty = self.ast_type_to_resolved(&param.ty.node);
             self.define_var(
@@ -481,11 +611,21 @@ impl OwnershipChecker {
             }
             FunctionBody::Expr(expr) => {
                 self.check_expr_ownership(expr)?;
+                // If function returns a reference, check the return expression
+                if returns_ref {
+                    self.check_return_ref(expr, Some(expr.span))?;
+                }
             }
         }
 
+        self.function_returns_ref = prev_returns_ref;
         self.pop_scope();
         Ok(())
+    }
+
+    /// Check if an AST type is a reference type
+    fn is_ref_ast_type(&self, ty: &Type) -> bool {
+        matches!(ty, Type::Ref(_) | Type::RefMut(_))
     }
 
     /// Check a statement for ownership violations
@@ -520,12 +660,23 @@ impl OwnershipChecker {
                     Some(name.span),
                 );
 
+                // Track reference sources for dangling pointer detection
+                if let Expr::Ref(inner) = &value.node {
+                    if let Expr::Ident(source_name) = &inner.node {
+                        self.register_reference(&name.node, source_name, false);
+                    }
+                }
+
                 Ok(())
             }
             Stmt::Expr(expr) => self.check_expr_ownership(expr),
             Stmt::Return(Some(expr)) => {
                 self.check_expr_ownership(expr)?;
                 self.check_move_from_expr(expr)?;
+                // Check for returning references to locals
+                if self.function_returns_ref {
+                    self.check_return_ref(expr, Some(stmt.span))?;
+                }
                 Ok(())
             }
             Stmt::Return(None) => Ok(()),
@@ -582,6 +733,7 @@ impl OwnershipChecker {
                 self.check_expr_ownership(inner)?;
                 Ok(())
             }
+
 
             Expr::Deref(inner) => {
                 self.check_expr_ownership(inner)?;
@@ -990,5 +1142,143 @@ mod tests {
 
         // Should have collected 2 errors
         assert_eq!(checker.errors().len(), 2);
+    }
+
+    // --- Dangling reference tests ---
+
+    #[test]
+    fn test_reference_to_outer_scope_is_ok() {
+        // V x = 42
+        // {
+        //   V r = &x  -- x is in outer scope, reference is valid
+        // }
+        let mut checker = OwnershipChecker::new();
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+
+        checker.push_scope();
+        checker.define_var("r", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+        checker.register_reference("r", "x", false);
+        checker.pop_scope(); // r goes out of scope, no error since x outlives r
+
+        // No errors expected
+    }
+
+    #[test]
+    fn test_dangling_reference_detected() {
+        // r is in outer scope, x is in inner scope -> dangling after inner scope ends
+        let mut checker = OwnershipChecker::new_collecting();
+
+        // Define r in the outer scope
+        checker.define_var("r", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+
+        checker.push_scope();
+        // Define x in inner scope
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+        // r references x (which lives in inner scope)
+        checker.register_reference("r", "x", false);
+        checker.pop_scope(); // x is dropped, but r still references it
+
+        assert!(!checker.errors().is_empty());
+        let err = &checker.errors()[0];
+        assert!(matches!(err, TypeError::DanglingReference { .. }));
+    }
+
+    #[test]
+    fn test_return_local_ref_detected() {
+        let mut checker = OwnershipChecker::new();
+        checker.push_scope(); // function scope
+
+        // Define a local variable in function scope
+        checker.define_var("local_val", ResolvedType::I64, false, Some(make_span()));
+
+        // Trying to return a reference to a local should fail
+        let result = checker.check_return_local_ref("local_val", Some(make_span()));
+        assert!(result.is_err());
+        if let Err(TypeError::ReturnLocalRef { var_name, .. }) = result {
+            assert_eq!(var_name, "local_val");
+        } else {
+            panic!("Expected ReturnLocalRef error");
+        }
+
+        checker.pop_scope();
+    }
+
+    #[test]
+    fn test_return_param_ref_is_ok() {
+        let mut checker = OwnershipChecker::new();
+
+        // Parameters are defined at scope 0 (before push_scope for function body)
+        checker.define_var("param", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+
+        checker.push_scope(); // function body scope
+
+        // Returning a reference to a parameter should be fine
+        let result = checker.check_return_local_ref("param", Some(make_span()));
+        assert!(result.is_ok());
+
+        checker.pop_scope();
+    }
+
+    #[test]
+    fn test_reference_tracking() {
+        let mut checker = OwnershipChecker::new();
+        checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
+
+        // Register a reference: r -> x
+        checker.register_reference("r", "x", false);
+
+        // Verify reference is tracked
+        assert!(checker.reference_sources.contains_key("r"));
+        assert_eq!(checker.reference_sources["r"].source_var, "x");
+        assert!(!checker.reference_sources["r"].is_mut);
+    }
+
+    #[test]
+    fn test_nested_scope_dangling() {
+        // Test deeply nested scope dangling detection
+        let mut checker = OwnershipChecker::new_collecting();
+
+        // outer_ref in scope 0
+        checker.define_var("outer_ref", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+
+        checker.push_scope(); // scope 1
+        checker.push_scope(); // scope 2
+
+        checker.define_var("deep_local", ResolvedType::I64, false, Some(make_span()));
+        checker.register_reference("outer_ref", "deep_local", false);
+
+        checker.pop_scope(); // scope 2 ends - deep_local is dropped
+
+        assert!(!checker.errors().is_empty());
+        assert!(matches!(checker.errors()[0], TypeError::DanglingReference { .. }));
+
+        checker.pop_scope(); // scope 1 ends
+    }
+
+    #[test]
+    fn test_error_messages_have_help() {
+        // Verify all new error types provide help messages
+        let err1 = TypeError::DanglingReference {
+            ref_var: "r".to_string(),
+            source_var: "x".to_string(),
+            ref_scope_depth: 0,
+            source_scope_depth: 1,
+            ref_at: Some(make_span()),
+            source_defined_at: Some(make_span()),
+        };
+        assert!(err1.help().is_some());
+        assert!(err1.help().unwrap().contains("outlives"));
+
+        let err2 = TypeError::ReturnLocalRef {
+            var_name: "local".to_string(),
+            return_at: Some(make_span()),
+            defined_at: Some(make_span()),
+        };
+        assert!(err2.help().is_some());
+        assert!(err2.help().unwrap().contains("owned value"));
+
+        // Verify error codes
+        assert_eq!(err1.error_code(), "E028");
+        assert_eq!(err2.error_code(), "E029");
     }
 }

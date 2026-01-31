@@ -239,6 +239,23 @@ pub enum TypeError {
         var_name: String,
         borrow_at: Option<Span>,
     },
+
+    #[error("Dangling reference: '{ref_var}' references '{source_var}' which does not live long enough")]
+    DanglingReference {
+        ref_var: String,
+        source_var: String,
+        ref_scope_depth: u32,
+        source_scope_depth: u32,
+        ref_at: Option<Span>,
+        source_defined_at: Option<Span>,
+    },
+
+    #[error("Cannot return reference to local variable '{var_name}'")]
+    ReturnLocalRef {
+        var_name: String,
+        return_at: Option<Span>,
+        defined_at: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -272,6 +289,8 @@ impl TypeError {
             TypeError::BorrowAfterMove { borrow_at, .. } => *borrow_at,
             TypeError::BorrowConflict { new_borrow_at, .. } => *new_borrow_at,
             TypeError::MutBorrowOfImmutable { borrow_at, .. } => *borrow_at,
+            TypeError::DanglingReference { ref_at, .. } => *ref_at,
+            TypeError::ReturnLocalRef { return_at, .. } => *return_at,
         }
     }
 
@@ -305,6 +324,8 @@ impl TypeError {
             TypeError::BorrowAfterMove { .. } => "E025",
             TypeError::BorrowConflict { .. } => "E026",
             TypeError::MutBorrowOfImmutable { .. } => "E027",
+            TypeError::DanglingReference { .. } => "E028",
+            TypeError::ReturnLocalRef { .. } => "E029",
         }
     }
 
@@ -403,6 +424,24 @@ impl TypeError {
             }
             TypeError::MutBorrowOfImmutable { var_name, .. } => {
                 Some(format!("consider declaring '{}' as mutable: `V mut {}`", var_name, var_name))
+            }
+            TypeError::DanglingReference { ref_var, source_var, .. } => {
+                Some(format!(
+                    "reference '{}' outlives '{}'; consider:\n  \
+                     1. Move the data to an outer scope so it lives long enough\n  \
+                     2. Clone the data instead of borrowing\n  \
+                     3. Use an owned type instead of a reference",
+                    ref_var, source_var
+                ))
+            }
+            TypeError::ReturnLocalRef { var_name, .. } => {
+                Some(format!(
+                    "cannot return a reference to local variable '{}' because it is dropped at the end of the function; consider:\n  \
+                     1. Return an owned value instead of a reference\n  \
+                     2. Take the value as a parameter with a lifetime annotation\n  \
+                     3. Use 'static data or a heap-allocated type (Box, Rc)",
+                    var_name
+                ))
             }
             _ => None,
         }
@@ -513,6 +552,12 @@ impl TypeError {
                 vais_i18n::get(&key, &[("var_name", var_name)])
             }
             TypeError::MutBorrowOfImmutable { var_name, .. } => {
+                vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::DanglingReference { ref_var, source_var, .. } => {
+                vais_i18n::get(&key, &[("ref_var", ref_var), ("source_var", source_var)])
+            }
+            TypeError::ReturnLocalRef { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
             }
         }
