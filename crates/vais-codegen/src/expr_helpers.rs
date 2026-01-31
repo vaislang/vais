@@ -1639,16 +1639,24 @@ impl CodeGenerator {
         let mut ir = arr_ir;
         ir.push_str(&idx_ir);
 
+        // Infer element type for correct LLVM IR generation
+        let arr_ty = self.infer_expr_type(array);
+        let elem_llvm_ty = match arr_ty {
+            vais_types::ResolvedType::Pointer(ref elem) => self.type_to_llvm(elem),
+            vais_types::ResolvedType::Array(ref elem) => self.type_to_llvm(elem),
+            _ => "i64".to_string(),
+        };
+
         let elem_ptr = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = getelementptr i64, i64* {}, i64 {}\n",
-            elem_ptr, arr_val, idx_val
+            "  {} = getelementptr {}, {}* {}, i64 {}\n",
+            elem_ptr, elem_llvm_ty, elem_llvm_ty, arr_val, idx_val
         ));
 
         let result = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = load i64, i64* {}\n",
-            result, elem_ptr
+            "  {} = load {}, {}* {}\n",
+            result, elem_llvm_ty, elem_llvm_ty, elem_ptr
         ));
 
         Ok((result, ir))

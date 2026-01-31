@@ -1,0 +1,57 @@
+# Thread runtime test
+# Tests basic thread functions via extern calls directly
+
+X F __thread_spawn(fn_ptr: i64, arg: i64, result_ptr: i64) -> i64
+X F __thread_join(handle: i64) -> i64
+X F __thread_yield() -> i64
+X F __thread_sleep_ms(ms: i64) -> i64
+X F __cpu_count() -> i64
+X F __load_result(ptr: i64) -> i64
+X F malloc(size: i64) -> i64
+
+F worker(arg: i64) -> i64 {
+    arg * 2
+}
+
+F check_cpus() -> i64 {
+    cpus := __cpu_count()
+    I cpus > 0 {
+        R 0
+    }
+    R 1
+}
+
+F main() -> i64 {
+    # Test CPU count
+    rc := check_cpus()
+    I rc != 0 {
+        R 1
+    }
+    println("CPU cores: OK")
+
+    # Test sleep
+    __thread_sleep_ms(10)
+    println("Sleep: OK")
+
+    # Test yield
+    __thread_yield()
+    println("Yield: OK")
+
+    # Test thread spawn + join
+    result_ptr := malloc(8)
+    handle := __thread_spawn(worker as i64, 21, result_ptr)
+    I handle == 0 {
+        println("Thread spawn: FAIL")
+        R 1
+    }
+    __thread_join(handle)
+    result := __load_result(result_ptr)
+    I result != 42 {
+        println("Thread result: FAIL")
+        R 1
+    }
+    println("Thread spawn+join: OK")
+
+    println("All thread tests passed!")
+    0
+}

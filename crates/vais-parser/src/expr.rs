@@ -472,12 +472,14 @@ impl Parser {
 
     /// Parse unary expression
     pub(crate) fn parse_unary(&mut self) -> ParseResult<Spanned<Expr>> {
+        self.enter_depth()?;
         let start = self.current_span().start;
 
         if self.check(&Token::Minus) {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Unary {
                     op: UnaryOp::Neg,
@@ -491,6 +493,7 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Unary {
                     op: UnaryOp::Not,
@@ -504,6 +507,7 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Unary {
                     op: UnaryOp::BitNot,
@@ -517,6 +521,7 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(Expr::Ref(Box::new(expr)), Span::new(start, end)));
         }
 
@@ -524,6 +529,7 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Deref(Box::new(expr)),
                 Span::new(start, end),
@@ -535,6 +541,7 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Lazy(Box::new(expr)),
                 Span::new(start, end),
@@ -546,13 +553,16 @@ impl Parser {
             self.advance();
             let expr = self.parse_unary()?;
             let end = expr.span.end;
+            self.exit_depth();
             return Ok(Spanned::new(
                 Expr::Force(Box::new(expr)),
                 Span::new(start, end),
             ));
         }
 
-        self.parse_postfix()
+        let result = self.parse_postfix();
+        self.exit_depth();
+        result
     }
 
     /// Parse postfix expressions (calls, field access, etc.)
@@ -984,6 +994,7 @@ impl Parser {
 
     /// Parse else branch
     pub(crate) fn parse_else_branch(&mut self) -> ParseResult<IfElse> {
+        self.enter_depth()?;
         if self.check(&Token::If) {
             // else if
             self.advance();
@@ -1004,12 +1015,14 @@ impl Parser {
                 None
             };
 
+            self.exit_depth();
             Ok(IfElse::ElseIf(Box::new(cond), then, else_))
         } else {
             // else
             self.expect(&Token::LBrace)?;
             let stmts = self.parse_block_contents()?;
             self.expect(&Token::RBrace)?;
+            self.exit_depth();
             Ok(IfElse::Else(stmts))
         }
     }
@@ -1193,6 +1206,7 @@ impl Parser {
 
     /// Parse pattern
     pub(crate) fn parse_pattern(&mut self) -> ParseResult<Spanned<Pattern>> {
+        self.enter_depth()?;
         let start = self.current_span().start;
 
         if let Some(tok) = self.peek() {
@@ -1269,17 +1283,22 @@ impl Parser {
                     Pattern::Tuple(patterns)
                 }
                 _ => {
+                    let found = tok.token.clone();
+                    let span = tok.span.clone();
+                    self.exit_depth();
                     return Err(ParseError::UnexpectedToken {
-                        found: tok.token.clone(),
-                        span: tok.span.clone(),
+                        found,
+                        span,
                         expected: "pattern".into(),
                     });
                 }
             };
 
             let end = self.prev_span().end;
+            self.exit_depth();
             Ok(Spanned::new(pattern, Span::new(start, end)))
         } else {
+            self.exit_depth();
             Err(ParseError::UnexpectedEof { span: self.current_span() })
         }
     }

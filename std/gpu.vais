@@ -1,6 +1,12 @@
 # GPU Runtime Module for Vais
 # Provides GPU kernel definition and execution support
 #
+# WARNING: STUB - not implemented
+# GPU functions are stub implementations returning placeholder values.
+# These functions require actual GPU compiler backend (CUDA/HIP/Metal/etc.)
+# to generate proper GPU code. When using GPU kernels, mark functions with
+# #[gpu] attribute to trigger GPU codegen.
+#
 # Usage:
 #   U std/gpu
 #
@@ -18,21 +24,27 @@
 # ============================================================================
 
 # Get thread index within block (x dimension)
+# STUB: not implemented - returns placeholder value
 F thread_idx_x() -> i64 = 0  # Replaced by GPU compiler
 
 # Get thread index within block (y dimension)
+# STUB: not implemented - returns placeholder value
 F thread_idx_y() -> i64 = 0
 
 # Get thread index within block (z dimension)
+# STUB: not implemented - returns placeholder value
 F thread_idx_z() -> i64 = 0
 
 # Get block index within grid (x dimension)
+# STUB: not implemented - returns placeholder value
 F block_idx_x() -> i64 = 0
 
 # Get block index within grid (y dimension)
+# STUB: not implemented - returns placeholder value
 F block_idx_y() -> i64 = 0
 
 # Get block index within grid (z dimension)
+# STUB: not implemented - returns placeholder value
 F block_idx_z() -> i64 = 0
 
 # Get block dimension (threads per block, x dimension)
@@ -67,12 +79,15 @@ F global_idx_y() -> i64 = thread_idx_y() + block_idx_y() * block_dim_y()
 # ============================================================================
 
 # Synchronize all threads within a block
+# STUB: not implemented - returns placeholder value
 F sync_threads() -> i64 = 0  # Replaced by GPU compiler
 
 # Memory fence for global memory
+# STUB: not implemented - returns placeholder value
 F thread_fence() -> i64 = 0
 
 # Memory fence for shared (local) memory
+# STUB: not implemented - returns placeholder value
 F thread_fence_block() -> i64 = 0
 
 # ============================================================================
@@ -80,34 +95,44 @@ F thread_fence_block() -> i64 = 0
 # ============================================================================
 
 # Atomic add: *addr += val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_add(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic add for f64: *addr += val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_add_f64(addr: *f64, val: f64) -> f64 = 0.0
 
 # Atomic subtract: *addr -= val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_sub(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic minimum: *addr = min(*addr, val), returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_min(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic maximum: *addr = max(*addr, val), returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_max(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic AND: *addr &= val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_and(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic OR: *addr |= val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_or(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic XOR: *addr ^= val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_xor(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic compare-and-swap: if *addr == compare then *addr = val
 # Returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_cas(addr: *i64, compare: i64, val: i64) -> i64 = 0
 
 # Atomic exchange: swap *addr with val, returns old value
+# STUB: not implemented - returns placeholder value
 F atomic_exch(addr: *i64, val: i64) -> i64 = 0
 
 # ============================================================================
@@ -118,6 +143,7 @@ F atomic_exch(addr: *i64, val: i64) -> i64 = 0
 F gpu_sqrt(x: f64) -> f64 = sqrt(x)
 
 # Fast reciprocal square root (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_rsqrt(x: f64) -> f64 = 0.0
 
 # Fast sine
@@ -133,6 +159,7 @@ F gpu_exp(x: f64) -> f64 = exp(x)
 F gpu_log(x: f64) -> f64 = log(x)
 
 # Fused multiply-add: a * b + c (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_fma(a: f64, b: f64, c: f64) -> f64 = 0.0
 
 # ============================================================================
@@ -149,9 +176,11 @@ F shared_alloc(size: i64) -> i64 = malloc(size)
 # ============================================================================
 
 # Coalesced load from global memory (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_load(addr: *f64) -> f64 = 0.0
 
 # Coalesced store to global memory (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_store(addr: *f64, val: f64) -> i64 = 0
 
 # ============================================================================
@@ -160,15 +189,19 @@ F gpu_store(addr: *f64, val: f64) -> i64 = 0
 
 # Clamp value to range [lo, hi]
 # Clamp value to range [lo, hi] (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_clamp(x: f64, lo: f64, hi: f64) -> f64 = 0.0
 
 # Linear interpolation (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_lerp(a: f64, b: f64, t: f64) -> f64 = 0.0
 
 # Step function: 0.0 if x < edge, else 1.0 (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_step(edge: f64, x: f64) -> f64 = 0.0
 
 # Smooth step (Hermite interpolation) (placeholder - replaced by GPU compiler)
+# STUB: not implemented - returns placeholder value
 F gpu_smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 = 0.0
 
 # ============================================================================
@@ -228,9 +261,11 @@ F calc_threads(n: i64, block_size: i64) -> i64 = calc_blocks(n, block_size) * bl
 # ============================================================================
 
 # Threadgroup memory barrier
+# STUB: not implemented - returns placeholder value
 F threadgroup_barrier() -> i64 = 0  # Replaced by Metal compiler
 
 # Device memory barrier
+# STUB: not implemented - returns placeholder value
 F device_barrier() -> i64 = 0
 
 # SIMD group (simdgroup) operations
@@ -248,25 +283,39 @@ F quad_broadcast(val: f64, lane: i64) -> f64 = val
 # ============================================================================
 
 # 512-bit vector load/store (16 x f32 or 8 x f64)
+# STUB: not implemented - returns placeholder value
 F avx512_load_f32(addr: *i64) -> i64 = 0  # Returns vector as i64 handle
+# STUB: not implemented - returns placeholder value
 F avx512_store_f32(addr: *i64, vec: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_load_f64(addr: *f64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_store_f64(addr: *f64, vec: i64) -> i64 = 0
 
 # AVX-512 arithmetic
+# STUB: not implemented - returns placeholder value
 F avx512_add_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_sub_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_mul_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_div_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # AVX-512 reduction
+# STUB: not implemented - returns placeholder value
 F avx512_reduce_add_f32(vec: i64) -> f64 = 0.0
+# STUB: not implemented - returns placeholder value
 F avx512_reduce_min_f32(vec: i64) -> f64 = 0.0
+# STUB: not implemented - returns placeholder value
 F avx512_reduce_max_f32(vec: i64) -> f64 = 0.0
 
 # AVX-512 broadcast
+# STUB: not implemented - returns placeholder value
 F avx512_broadcast_f32(val: f64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx512_broadcast_f64(val: f64) -> i64 = 0
 
 # ============================================================================
@@ -274,18 +323,27 @@ F avx512_broadcast_f64(val: f64) -> i64 = 0
 # ============================================================================
 
 # 256-bit vector load/store (8 x f32 or 4 x f64)
+# STUB: not implemented - returns placeholder value
 F avx2_load_f32(addr: *i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx2_store_f32(addr: *i64, vec: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx2_load_f64(addr: *f64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx2_store_f64(addr: *f64, vec: i64) -> i64 = 0
 
 # AVX2 arithmetic
+# STUB: not implemented - returns placeholder value
 F avx2_add_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx2_sub_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx2_mul_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F avx2_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # AVX2 broadcast
+# STUB: not implemented - returns placeholder value
 F avx2_broadcast_f32(val: f64) -> i64 = 0
 
 # ============================================================================
@@ -293,23 +351,35 @@ F avx2_broadcast_f32(val: f64) -> i64 = 0
 # ============================================================================
 
 # 128-bit vector load/store (4 x f32 or 2 x f64)
+# STUB: not implemented - returns placeholder value
 F neon_load_f32(addr: *i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F neon_store_f32(addr: *i64, vec: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F neon_load_f64(addr: *f64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F neon_store_f64(addr: *f64, vec: i64) -> i64 = 0
 
 # NEON arithmetic
+# STUB: not implemented - returns placeholder value
 F neon_add_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F neon_sub_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F neon_mul_f32(a: i64, b: i64) -> i64 = 0
+# STUB: not implemented - returns placeholder value
 F neon_fma_f32(a: i64, b: i64, c: i64) -> i64 = 0
 
 # NEON reduction
+# STUB: not implemented - returns placeholder value
 F neon_reduce_add_f32(vec: i64) -> f64 = 0.0
+# STUB: not implemented - returns placeholder value
 F neon_reduce_min_f32(vec: i64) -> f64 = 0.0
+# STUB: not implemented - returns placeholder value
 F neon_reduce_max_f32(vec: i64) -> f64 = 0.0
 
 # NEON broadcast
+# STUB: not implemented - returns placeholder value
 F neon_dup_f32(val: f64) -> i64 = 0
 
 # ============================================================================

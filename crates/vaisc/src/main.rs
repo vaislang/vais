@@ -1548,6 +1548,37 @@ fn find_http_runtime() -> Option<PathBuf> {
     None
 }
 
+/// Find the thread runtime C source file for linking.
+/// Searches: std/ relative to cwd, then next to compiler executable.
+fn find_thread_runtime() -> Option<PathBuf> {
+    if let Ok(cwd) = std::env::current_dir() {
+        let thread_rt = cwd.join("std").join("thread_runtime.c");
+        if thread_rt.exists() {
+            return Some(thread_rt);
+        }
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            if let Some(parent) = exe_dir.parent() {
+                let thread_rt = parent.join("std").join("thread_runtime.c");
+                if thread_rt.exists() {
+                    return Some(thread_rt);
+                }
+            }
+        }
+    }
+
+    if let Ok(rt_path) = std::env::var("VAIS_THREAD_RUNTIME") {
+        let path = PathBuf::from(&rt_path);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 /// Find the directory containing libvais_gc.a for GC runtime linking.
 /// Searches: next to the compiler executable, then target/release/ in cwd.
 fn find_gc_library() -> Option<PathBuf> {
@@ -1688,6 +1719,15 @@ fn compile_to_native(
         args.push(http_rt_path.to_str().unwrap_or("http_runtime.c").to_string());
         if verbose {
             println!("{} Linking HTTP runtime from: {}", "info:".blue().bold(), http_rt_path.display());
+        }
+    }
+
+    // Link thread runtime if available (for std/thread.vais support)
+    if let Some(thread_rt_path) = find_thread_runtime() {
+        args.push(thread_rt_path.to_str().unwrap_or("thread_runtime.c").to_string());
+        args.push("-lpthread".to_string());
+        if verbose {
+            println!("{} Linking thread runtime from: {}", "info:".blue().bold(), thread_rt_path.display());
         }
     }
 

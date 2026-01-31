@@ -15,6 +15,7 @@ impl Parser {
     /// In recovery mode, errors are collected and Error nodes are inserted
     /// into the AST. Parsing continues to find as many errors as possible.
     pub(crate) fn parse_block_contents(&mut self) -> ParseResult<Vec<Spanned<Stmt>>> {
+        self.enter_depth()?;
         let mut stmts = Vec::new();
 
         while !self.check(&Token::RBrace) && !self.is_at_end() {
@@ -60,6 +61,7 @@ impl Parser {
             }
         }
 
+        self.exit_depth();
         Ok(stmts)
     }
 

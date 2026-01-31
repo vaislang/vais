@@ -127,6 +127,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | **Phase 17: 런타임 버그 수정 및 코드 품질** | **✅ 완료** | **전체 완료** |
 | **Phase 18: 코드젠 심층 버그 수정 및 float 지원** | **✅ 완료** | **전체 완료** |
 | **Phase 19: 대형 프로젝트 도입 준비** | **✅ 완료** | **전체 완료** |
+| **Phase 20: 근본적 문제 해결** | **✅ 완료** | **전체 완료** |
 
 ---
 
@@ -582,7 +583,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **std/gpu.vais 단순화** - f64 포인터 산술을 피하도록 stub 함수 시그니처 정리 (완료일: 2026-01-31)
 
 ### 알려진 제한사항
-- f64 포인터 역참조 (`*f64` 타입 인덱싱) 시 i64로 로드되는 문제는 미해결 (향후 타입 시스템 개선 필요)
+- ~~f64 포인터 역참조 (`*f64` 타입 인덱싱) 시 i64로 로드되는 문제~~ → Phase 20에서 해결 (visit_deref/generate_index_expr 타입 추론 적용)
 
 ### 검증 결과
 - cargo build: 성공 (전체 워크스페이스)
@@ -630,6 +631,33 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ---
 
+## 🚀 Phase 20: 근본적 문제 해결 - 런타임 갭 및 안전성 강화
+
+> **상태**: ✅ 완료
+> **추가일**: 2026-02-01
+> **목표**: 표준 라이브러리 런타임 갭 해소, codegen 타입 안전성 개선, 파서 안전성 강화
+
+### Thread C 런타임 구현 ✅ 완료
+- [x] **std/thread_runtime.c 구현** - pthread 기반 스레드 생성/조인/분리, TLS, yield/sleep/park, CPU 코어 수 조회, 함수 포인터 호출 헬퍼 (완료일: 2026-02-01)
+- [x] **vaisc 자동 링킹** - thread_runtime.c 자동 탐색 + -lpthread 링킹, VAIS_THREAD_RUNTIME 환경변수 지원 (완료일: 2026-02-01)
+- [x] **std/thread.vais 버그 수정** - 전역 변수 `V` → `G` 키워드, `U std/option` import 추가 (완료일: 2026-02-01)
+- [x] **E2E 테스트** - thread_test.vais: CPU 코어, sleep, yield, spawn+join 검증 통과 (완료일: 2026-02-01)
+
+### f64 포인터 역참조 codegen 수정 ✅ 완료
+- [x] **visit_deref 타입 추론** - 포인터 역참조 시 infer_expr_type으로 내부 타입 판별, i64 하드코딩 → 타입별 load 생성 (완료일: 2026-02-01)
+- [x] **generate_index_expr 타입 추론** - 배열 인덱싱 시 요소 타입 판별, getelementptr/load에 올바른 LLVM 타입 사용 (완료일: 2026-02-01)
+
+### Stub API 명시적 표기 ✅ 완료
+- [x] **std/gpu.vais** - 57개 stub 함수에 `# STUB` 경고 주석, 모듈 상단 WARNING 블록 추가 (완료일: 2026-02-01)
+- [x] **std/hot.vais** - 6개 stub 함수 표기, 모듈 상단 WARNING 블록 추가 (완료일: 2026-02-01)
+- [x] **std/dynload.vais** - 2개 stub 함수 표기 (완료일: 2026-02-01)
+
+### 파서 재귀 깊이 안전장치 강화 ✅ 완료
+- [x] **누락된 depth check 추가** - parse_unary, parse_else_branch, parse_pattern, parse_block_contents에 enter_depth/exit_depth 추가 (완료일: 2026-02-01)
+- [x] **스택 오버플로우 방지** - 250+ 레벨 중첩 시 "maximum nesting depth of 256 exceeded" 에러 반환 (완료일: 2026-02-01)
+
+---
+
 ## 📊 릴리즈 준비 상태 평가
 
 ### 릴리즈 배포 가능 여부: ✅ 배포 가능
@@ -655,8 +683,8 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | 문자열 처리 | ✅ | 기본 연산 가능 |
 | 제네릭/트레이트 | ✅ | 기본 monomorphization + vtable 동작 |
 | 클로저/람다 | ✅ | 기본 사용 가능 |
-| f64 부동소수점 | ⚠️ | 산술/비교 가능, 포인터 역참조 미지원 |
-| 표준 라이브러리 | ⚠️ | API 정의됨, 일부 런타임 미구현 (stub) |
+| f64 부동소수점 | ✅ | 산술/비교/포인터 역참조 가능 (Phase 20) |
+| 표준 라이브러리 | ⚠️ | API 정의됨, thread/http/gc 런타임 구현, GPU/hot stub 표기 |
 | GPU 코드젠 | ⚠️ | 개념 수준, 실제 GPU 실행 미지원 |
 | Async 런타임 | ⚠️ | 기본 구조 있음, 실제 I/O 통합 제한적 |
 | GC | ✅ | 세대별 GC 동작, 벤치마크 완료 |

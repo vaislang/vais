@@ -1,15 +1,12 @@
 {
   "phase": 5,
-  "request": "대형 프로젝트 도입 수준 달성",
+  "request": "근본적 문제 해결 - 런타임 갭 및 codegen 수정",
   "tasks": [
-    { "id": 1, "name": "컴파일러 안정성 - unwrap/panic 제거", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "Borrow Checker 컴파일 파이프라인 통합", "status": "completed", "model": "Opus" },
-    { "id": "3-1", "name": "HTTP C 런타임 구현", "status": "completed", "model": "Opus" },
-    { "id": "3-2", "name": "JSON/Regex E2E 테스트 추가", "status": "completed", "model": "Haiku" },
-    { "id": "3-3", "name": "HTTP E2E 테스트", "status": "completed", "model": "Sonnet" },
-    { "id": 4, "name": "패키지 매니저 클라이언트 완성", "status": "completed", "model": "Sonnet" },
-    { "id": 5, "name": "증분 컴파일 실전 적용", "status": "completed", "model": "Opus" }
+    { "id": 1, "name": "Thread C 런타임 구현", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "f64 포인터 역참조 codegen 수정", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "Stub API 명시적 표기", "status": "completed", "model": "Haiku" },
+    { "id": 4, "name": "파서 재귀 깊이 안전장치 강화", "status": "completed", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "증분 컴파일 실전 적용"
+  "lastCompleted": "파서 재귀 깊이 안전장치 강화"
 }

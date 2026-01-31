@@ -344,8 +344,17 @@ impl ExprVisitor for CodeGenerator {
         let (ptr_val, ptr_ir) = self.visit_expr(inner, counter)?;
         let mut ir = ptr_ir;
 
+        // Infer the pointed-to type to generate correct load instruction
+        let deref_ty = self.infer_expr_type(inner);
+        let llvm_ty = match deref_ty {
+            vais_types::ResolvedType::Pointer(ref inner_ty) => self.type_to_llvm(inner_ty),
+            vais_types::ResolvedType::Ref(ref inner_ty) => self.type_to_llvm(inner_ty),
+            vais_types::ResolvedType::RefMut(ref inner_ty) => self.type_to_llvm(inner_ty),
+            _ => "i64".to_string(),
+        };
+
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", result, ptr_val));
+        ir.push_str(&format!("  {} = load {}, {}* {}\n", result, llvm_ty, llvm_ty, ptr_val));
 
         Ok((result, ir))
     }

@@ -1,5 +1,10 @@
 # Hot Reload Runtime Module
 #
+# WARNING: STUB - not implemented
+# Hot reload functions are stub implementations that will be replaced by actual
+# hot reload runtime. These stubs return fixed values (0, 1, etc.) and do not
+# perform actual file watching, recompilation, or dynamic loading.
+#
 # Provides runtime support for hot reloading Vais programs.
 # Functions marked with #[hot] can be reloaded at runtime.
 #
@@ -28,6 +33,7 @@ G hot_ctx: *HotReloadContext = 0 as *HotReloadContext
 # Initialize hot reload system
 # path: Source file path to watch
 # Returns: 0 on success, error code otherwise
+# STUB: not implemented - returns placeholder value
 @[extern "C"]
 F hot_init(path: *i8) -> i64 {
     # This is implemented in the runtime
@@ -43,6 +49,7 @@ F hot_init(path: *i8) -> i64 {
 
 # Check for source changes and reload if necessary
 # Returns: 1 if code was reloaded, 0 if no changes, negative on error
+# STUB: not implemented - returns placeholder value
 @[extern "C"]
 F hot_check() -> i64 {
     # This is implemented in the runtime
@@ -58,6 +65,7 @@ F hot_check() -> i64 {
 
 # Manually trigger a reload
 # Returns: 1 if successful, 0 if no changes, negative on error
+# STUB: not implemented - returns placeholder value
 @[extern "C"]
 F hot_reload() -> i64 {
     # Force a reload regardless of file changes
@@ -69,6 +77,7 @@ F hot_reload() -> i64 {
 
 # Get the current version number of loaded code
 # Returns: Version number (increments with each reload)
+# STUB: not implemented - returns placeholder value
 @[extern "C"]
 F hot_version() -> i64 {
     # Returns the current version of the loaded dylib
@@ -80,6 +89,7 @@ F hot_version() -> i64 {
 
 # Set a callback to be called when code is reloaded
 # callback: Function pointer to call on reload (signature: F(version: i64) -> void)
+# STUB: not implemented - returns placeholder value
 @[extern "C"]
 F hot_on_reload(callback: fn(i64) -> void) -> i64 {
     # Register a callback function to be called when code is reloaded
@@ -91,6 +101,7 @@ F hot_on_reload(callback: fn(i64) -> void) -> i64 {
 
 # Cleanup hot reload system
 # Should be called before program exit
+# STUB: not implemented - returns placeholder value
 @[extern "C"]
 F hot_cleanup() -> i64 {
     # Clean up resources:

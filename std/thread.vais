@@ -1,6 +1,8 @@
 # Thread - OS-level threading support
 # Provides spawn, join, and thread-local storage
 
+U std/option
+
 # Thread state constants
 C THREAD_NEW: i64 = 0
 C THREAD_RUNNING: i64 = 1
@@ -245,7 +247,7 @@ F park_timeout(ms: i64) -> i64 {
 # ============================================
 
 # Global thread ID counter
-V __NEXT_THREAD_ID: i64 = 1
+G __NEXT_THREAD_ID: i64 = 1
 
 # Get next thread ID (atomic increment)
 F __next_thread_id() -> i64 {

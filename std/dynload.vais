@@ -509,6 +509,7 @@ F hot_reloader_version(r: HotReloader) -> i64 {
 
 # Get platform-specific library extension
 # Returns: Pointer to extension string ("dylib", "so", or "dll")
+# STUB: not implemented - returns placeholder value
 F get_library_extension() -> i64 {
     # This would be implemented based on compile-time target
     # For now, return a placeholder
@@ -519,6 +520,7 @@ F get_library_extension() -> i64 {
 # Check if a file looks like a plugin library
 # path: File path (null-terminated string)
 # Returns: 1 if it's a plugin library, 0 otherwise
+# STUB: not implemented - returns placeholder value
 F is_plugin_library(path: i64) -> i64 {
     # Check file extension
     # This is a simplified check - real implementation would parse the path
