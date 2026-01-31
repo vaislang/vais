@@ -67,6 +67,36 @@ examples/advanced_opt_test_o3
 examples/inline_test_debug*
 examples/lazy_simple
 
+# Compiled binaries in examples/ (no extension = binary)
+examples/closure_simple
+examples/code_actions_demo
+examples/comptime_simple
+examples/defer_simple
+examples/gc_simple_demo
+examples/hot_reload_advanced
+examples/hot_reload_simple
+examples/ipv6_dual_stack
+examples/match_binding
+examples/math
+examples/option_test2
+examples/option_test3
+examples/proptest_example
+examples/test_import
+examples/vec_test_minimal
+
+# Test binaries in root
+test_*
+!test_*.rs
+!test_*.vais
+
+# Backup files
+*.bak
+*.bak2
+
+# Temporary reports
+COMPILATION_STATUS_REPORT.md
+DETAILED_ERRORS.txt
+
 # Other common build and test artifacts
 *.tmp
 *.log
