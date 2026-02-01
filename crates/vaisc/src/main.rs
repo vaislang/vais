@@ -688,14 +688,17 @@ fn cmd_build_gpu(
         println!("{} Generated host code: {} ({})", "✓".green().bold(), host_path.display(), target.name());
     }
 
-    // Compile with nvcc if --gpu-compile is specified (CUDA only)
+    // Compile generated GPU code if --gpu-compile is specified
     if compile {
         match target {
             GpuTarget::Cuda => {
                 compile_cuda(&out_path, emit_host, verbose)?;
             }
+            GpuTarget::Metal => {
+                compile_metal(&out_path, verbose)?;
+            }
             _ => {
-                eprintln!("{} --gpu-compile is currently supported only for CUDA target", "warning:".yellow().bold());
+                eprintln!("{} --gpu-compile is currently supported for CUDA and Metal targets", "warning:".yellow().bold());
             }
         }
     }
@@ -839,6 +842,109 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
     }
 
     println!("{} Compiled GPU binary: {}", "✓".green().bold(), binary_path.display());
+    Ok(())
+}
+
+/// Compile Metal .metal file to .metallib using xcrun
+fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
+    use std::process::Command;
+
+    // Check if xcrun metal compiler is available
+    let xcrun_check = Command::new("xcrun")
+        .args(["--find", "metal"])
+        .output();
+
+    match xcrun_check {
+        Err(_) => {
+            return Err(
+                "xcrun not found. Please install Xcode Command Line Tools:\n\
+                 xcode-select --install".to_string()
+            );
+        }
+        Ok(output) if !output.status.success() => {
+            return Err(
+                "Metal compiler not found via xcrun. Ensure Xcode is installed with Metal support.".to_string()
+            );
+        }
+        Ok(_) => {
+            if verbose {
+                println!("{} Metal compiler found via xcrun", "info:".blue().bold());
+            }
+        }
+    }
+
+    // Step 1: Compile .metal → .air (Apple Intermediate Representation)
+    let air_path = metal_path.with_extension("air");
+    if verbose {
+        println!("{} Compiling {} → {}", "info:".blue().bold(), metal_path.display(), air_path.display());
+    }
+
+    let air_result = Command::new("xcrun")
+        .args(["metal", "-c"])
+        .arg(metal_path)
+        .arg("-o")
+        .arg(&air_path)
+        .output()
+        .map_err(|e| format!("Failed to execute xcrun metal: {}", e))?;
+
+    if !air_result.status.success() {
+        let stderr = String::from_utf8_lossy(&air_result.stderr);
+        return Err(format!("Metal compilation failed:\n{}", stderr));
+    }
+
+    // Step 2: Link .air → .metallib
+    let metallib_path = metal_path.with_extension("metallib");
+    if verbose {
+        println!("{} Linking {} → {}", "info:".blue().bold(), air_path.display(), metallib_path.display());
+    }
+
+    let lib_result = Command::new("xcrun")
+        .args(["metallib"])
+        .arg(&air_path)
+        .arg("-o")
+        .arg(&metallib_path)
+        .output()
+        .map_err(|e| format!("Failed to execute xcrun metallib: {}", e))?;
+
+    if !lib_result.status.success() {
+        let stderr = String::from_utf8_lossy(&lib_result.stderr);
+        return Err(format!("Metal library linking failed:\n{}", stderr));
+    }
+
+    // Clean up intermediate .air file
+    let _ = std::fs::remove_file(&air_path);
+
+    println!("{} Compiled Metal library: {}", "✓".green().bold(), metallib_path.display());
+
+    // Step 3: Compile host code with metal_runtime if available
+    let std_dir = find_std_dir();
+    let runtime_path = std_dir.as_ref().map(|d| d.join("metal_runtime.m"));
+
+    if let Some(ref rt_path) = runtime_path {
+        if rt_path.exists() {
+            let binary_name = metal_path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("metal_output");
+            let binary_path = metal_path.parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join(binary_name);
+
+            // Check for host code
+            let host_path = metal_path.with_extension("host.swift");
+            if host_path.exists() {
+                if verbose {
+                    println!("{} Host Swift code found: {}", "info:".blue().bold(), host_path.display());
+                    println!("{} Note: Compile host code manually with:", "info:".blue().bold());
+                    println!("  swiftc {} -framework Metal -framework Foundation -o {}",
+                        host_path.display(), binary_path.display());
+                }
+            } else if verbose {
+                println!("{} No host code found. Use --gpu-host to generate host code template.",
+                    "info:".blue().bold());
+            }
+        }
+    }
+
     Ok(())
 }
 

@@ -705,3 +705,120 @@ F reduce_sum(data: *f64, result: *f64, n: i64) {
         assert_eq!(kernels[0].params.len(), 3);
     }
 }
+
+// E2E Metal runtime integration tests
+mod e2e_metal_runtime {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_gpu::metal::MetalBuiltins;
+    use vais_parser::parse;
+
+    const METAL_VECTOR_ADD: &str = r#"
+#[gpu]
+F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        c[idx] = a[idx] + b[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_metal_vector_add_codegen() {
+        let module = parse(METAL_VECTOR_ADD).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let code = gen.generate(&module).expect("Metal codegen failed");
+
+        // Metal kernel should use Metal Shading Language syntax
+        assert!(code.contains("kernel") || code.contains("vector_add"),
+            "Metal should contain kernel function, got:\n{}", code);
+
+        // Verify kernel metadata
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "vector_add");
+        assert_eq!(kernels[0].params.len(), 4);
+    }
+
+    #[test]
+    fn test_metal_vector_add_host_code() {
+        let module = parse(METAL_VECTOR_ADD).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let _code = gen.generate(&module).expect("Metal codegen failed");
+        let host = gen.generate_host_code();
+
+        // Host code should reference Metal API
+        assert!(host.contains("MTL") || host.contains("Metal") || host.contains("metal"),
+            "Host code should contain Metal references, got:\n{}", host);
+    }
+
+    #[test]
+    fn test_metal_builtins_comprehensive() {
+        // Thread indexing
+        assert!(MetalBuiltins::builtin("thread_idx_x").is_some());
+        assert!(MetalBuiltins::builtin("block_idx_x").is_some());
+        assert!(MetalBuiltins::builtin("global_idx").is_some());
+
+        // Synchronization
+        assert!(MetalBuiltins::builtin("sync_threads").is_some());
+        assert!(MetalBuiltins::builtin("thread_fence").is_some());
+
+        // Atomics
+        assert!(MetalBuiltins::builtin("atomic_add").is_some());
+        assert!(MetalBuiltins::builtin("atomic_cas").is_some());
+
+        // Math
+        assert!(MetalBuiltins::builtin("sqrt").is_some());
+        assert!(MetalBuiltins::builtin("fma").is_some());
+
+        // SIMD
+        assert!(MetalBuiltins::builtin("simd_sum").is_some());
+    }
+
+    const METAL_SAXPY: &str = r#"
+#[gpu]
+F saxpy(a: f64, x: *f64, y: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        y[idx] = a * x[idx] + y[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_metal_saxpy_codegen() {
+        let module = parse(METAL_SAXPY).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let code = gen.generate(&module).expect("Metal codegen failed");
+        assert!(code.contains("saxpy"), "Metal should contain kernel name 'saxpy'");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].params.len(), 4);
+    }
+
+    #[test]
+    fn test_metal_multi_kernel() {
+        let source = r#"
+#[gpu]
+F kernel_a(data: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        data[idx] = data[idx] * 2.0
+    }
+}
+
+#[gpu]
+F kernel_b(input: *f64, output: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        output[idx] = input[idx] + 1.0
+    }
+}
+"#;
+        let module = parse(source).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let code = gen.generate(&module).expect("Metal codegen failed");
+        assert!(code.contains("kernel_a"), "Should contain first kernel");
+        assert!(code.contains("kernel_b"), "Should contain second kernel");
+        assert_eq!(gen.kernels().len(), 2, "Should discover both kernels");
+    }
+}

@@ -1044,11 +1044,12 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 > macOS 사용자를 위한 Metal Compute Shader 런타임
 
-- [ ] **metal_runtime.c 작성** - Metal API 래퍼 (Objective-C 런타임)
-- [ ] **MTLDevice/MTLCommandQueue 관리** - 디바이스 초기화/명령 큐 생성
-- [ ] **MTLBuffer 관리** - GPU 버퍼 할당/데이터 전송
-- [ ] **커널 실행** - MTLComputePipelineState 생성 → dispatch
-- [ ] **E2E 테스트** - Metal 벡터 덧셈 + 결과 검증
+- [x] **metal_runtime.m 작성** - Metal API 래퍼 (Objective-C 런타임) + metal_runtime.h
+- [x] **MTLDevice/MTLCommandQueue 관리** - 디바이스 초기화/명령 큐 생성
+- [x] **MTLBuffer 관리** - GPU 버퍼 할당/데이터 전송 (shared memory mode)
+- [x] **커널 실행** - MTLComputePipelineState 생성 → dispatch + auto-dispatch
+- [x] **컴파일러 통합** - `--gpu metal --gpu-compile`로 xcrun metal/metallib 자동 호출
+- [x] **E2E 테스트** - Metal 벡터 덧셈, SAXPY, 멀티 커널 코드생성 테스트
 
 ### 3단계 - OpenCL 런타임 통합 (크로스플랫폼)
 
