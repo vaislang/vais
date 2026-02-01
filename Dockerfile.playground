@@ -1,6 +1,6 @@
 # Multi-stage build for Vais Playground Server
 # Stage 1: Build the playground server and vaisc compiler
-FROM rust:1.83-bookworm AS builder
+FROM rust:1.85-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
     clang \
