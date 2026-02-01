@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'website/**'
+      - 'docs-site/**'
+      - 'playground/**'
       - '.github/workflows/website.yml'
   workflow_dispatch:
 
@@ -21,9 +23,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: website
 
     steps:
       - name: Checkout code
@@ -36,11 +35,35 @@ jobs:
           cache: 'npm'
           cache-dependency-path: website/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install mdBook
+        run: |
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          sudo mv mdbook /usr/local/bin/
 
+      # Build main website
       - name: Build website
-        run: npm run build
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      # Build docs (mdBook)
+      - name: Build docs
+        working-directory: docs-site
+        run: mdbook build
+
+      # Build playground
+      - name: Build playground
+        working-directory: playground
+        run: |
+          npm install
+          npm run build
+
+      # Combine all outputs into website/dist
+      - name: Combine builds
+        run: |
+          cp -r docs-site/book website/dist/docs
+          cp -r playground/dist website/dist/playground
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4

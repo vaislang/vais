@@ -17,7 +17,7 @@ default-theme = "dark"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/sswoo/vais"
 edit-url-template = "https://github.com/sswoo/vais/edit/main/{path}"
-site-url = "/vais/"
+site-url = "/docs/"
 
 [output.html.search]
 enable = true
