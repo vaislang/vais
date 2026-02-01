@@ -1,11 +1,11 @@
 {
-  "phase": 4,
+  "phase": 5,
   "request": "플레이그라운드 배포해서 확인",
   "tasks": [
-    { "id": 1, "name": "Fly.io 백엔드 배포", "status": "in_progress", "model": "Sonnet" },
-    { "id": 2, "name": "플레이그라운드 동작 확인", "status": "pending", "model": "Sonnet" },
-    { "id": 3, "name": "ROADMAP 업데이트", "status": "pending", "model": "Opus" }
+    { "id": 1, "name": "Fly.io 백엔드 배포", "status": "completed", "model": "Sonnet" },
+    { "id": 2, "name": "플레이그라운드 동작 확인", "status": "completed", "model": "Sonnet" },
+    { "id": 3, "name": "ROADMAP 업데이트", "status": "completed", "model": "Opus" }
   ],
-  "currentTask": 1,
-  "lastCompleted": null
+  "currentTask": null,
+  "lastCompleted": "플레이그라운드 동작 확인"
 }
