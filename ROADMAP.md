@@ -135,6 +135,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | **Phase 25: Vararg float 타입 추론 버그 수정** | **✅ 완료** | **전체 완료** |
 | **Phase 26: 기술 부채 해결 - 타입 추론 일관성** | **✅ 완료** | **전체 완료** |
 | **Phase 27: GPU 코드젠 & Async 런타임 완성** | **✅ 완료** | **전체 완료** |
+| **Phase 28: GPU 런타임 실행 지원** | **🔄 진행 중** | **계획 수립 완료, 구현 대기** |
 
 ---
 
@@ -994,6 +995,90 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ### 기능 현황 테이블 갱신 ✅ 완료
 - [x] **GPU 코드젠 ⚠️→✅** - CLI 통합 + E2E 테스트 기반 상태 전환 (완료일: 2026-02-01)
 - [x] **Async 런타임 ⚠️→✅** - 빌트인 등록 + cooperative yield 기반 상태 전환 (완료일: 2026-02-01)
+
+---
+
+## 🚀 Phase 28: GPU 런타임 실행 지원
+
+> **상태**: 🔄 진행 중
+> **추가일**: 2026-02-01
+> **목표**: 현재 코드 생성만 지원하는 GPU 파이프라인에 실제 런타임 실행 기능을 추가하여, Vais에서 GPU 커널을 엔드투엔드로 실행 가능하게 함
+
+### 배경
+
+현재 GPU 코드젠은 CUDA/OpenCL/WebGPU/Metal 4개 백엔드의 **커널 코드 텍스트 생성**만 지원:
+- `--gpu cuda` → `.cu` 파일 생성 (nvcc 수동 컴파일 필요)
+- `--gpu-host` → 호스트 코드 템플릿 생성 (실제 API 호출 없음)
+- `std/gpu.vais` → 57개 함수 전부 stub (placeholder 반환)
+- GPU 런타임 API (cudaMalloc, clCreateContext 등) 연동 없음
+- 메모리 관리 (호스트↔디바이스 전송) 미구현
+
+### 1단계 - CUDA 런타임 통합 (우선순위: 최고)
+
+> CUDA를 첫 번째 타겟으로 엔드투엔드 실행 파이프라인 구축
+
+#### 런타임 라이브러리 구현
+- [ ] **gpu_runtime.c 작성** - CUDA Runtime API 래퍼 (cudaMalloc, cudaMemcpy, cudaFree, cudaLaunchKernel)
+- [ ] **메모리 관리 API** - `gpu_alloc(size) -> *void`, `gpu_free(ptr)`, `gpu_memcpy_h2d(dst, src, size)`, `gpu_memcpy_d2h(dst, src, size)`
+- [ ] **커널 실행 API** - `gpu_launch_kernel(name, grid, block, args)`, `gpu_synchronize()`
+- [ ] **디바이스 관리** - `gpu_device_count()`, `gpu_set_device(id)`, `gpu_get_properties(id)`
+
+#### 컴파일러 통합
+- [ ] **nvcc 자동 호출** - `vaisc build file.vais --gpu cuda` 시 생성된 .cu를 nvcc로 자동 컴파일
+- [ ] **링킹 통합** - GPU 오브젝트와 호스트 코드 자동 링킹
+- [ ] **에러 처리** - nvcc 미설치, CUDA 드라이버 없음 등 사용자 친화적 에러 메시지
+
+#### std/gpu.vais stub 교체
+- [ ] **코어 함수 구현** - `thread_idx_x/y/z`, `block_idx_x/y/z`, `block_dim_x/y/z`, `grid_dim_x/y/z`
+- [ ] **동기화 함수** - `syncthreads()`, `threadfence()`
+- [ ] **Atomic 함수** - `atomic_add`, `atomic_cas`, `atomic_exchange`
+- [ ] **수학 함수** - `gpu_sqrt`, `gpu_rsqrt`, `gpu_exp`, `gpu_log`
+
+#### E2E 테스트
+- [ ] **벡터 덧셈** - 호스트 데이터 → GPU 전송 → 커널 실행 → 결과 회수 → 검증
+- [ ] **행렬 곱셈** - shared memory 활용 타일링 커널
+- [ ] **리덕션** - parallel reduction 패턴
+
+### 2단계 - Metal 런타임 통합 (macOS)
+
+> macOS 사용자를 위한 Metal Compute Shader 런타임
+
+- [ ] **metal_runtime.c 작성** - Metal API 래퍼 (Objective-C 런타임)
+- [ ] **MTLDevice/MTLCommandQueue 관리** - 디바이스 초기화/명령 큐 생성
+- [ ] **MTLBuffer 관리** - GPU 버퍼 할당/데이터 전송
+- [ ] **커널 실행** - MTLComputePipelineState 생성 → dispatch
+- [ ] **E2E 테스트** - Metal 벡터 덧셈 + 결과 검증
+
+### 3단계 - OpenCL 런타임 통합 (크로스플랫폼)
+
+> NVIDIA/AMD/Intel 범용 GPU 지원
+
+- [ ] **opencl_runtime.c 작성** - OpenCL API 래퍼
+- [ ] **플랫폼/디바이스 탐색** - 사용 가능한 GPU 자동 탐색
+- [ ] **커널 JIT 컴파일** - OpenCL 런타임 커널 컴파일
+- [ ] **E2E 테스트** - OpenCL 벡터 연산 + 결과 검증
+
+### 4단계 - 고급 기능
+
+- [ ] **통합 메모리 (Unified Memory)** - CUDA managed memory / Metal shared memory
+- [ ] **스트림/비동기 실행** - 커널 실행과 데이터 전송 오버랩
+- [ ] **다중 GPU** - 멀티 디바이스 디스패치
+- [ ] **프로파일링 통합** - GPU 커널 실행 시간 측정
+
+### 검증 기준
+
+| 단계 | 검증 항목 |
+|------|----------|
+| 1단계 | CUDA 벡터 덧셈 E2E 통과 (호스트→GPU→실행→결과→검증) |
+| 2단계 | Metal 벡터 덧셈 E2E 통과 (macOS) |
+| 3단계 | OpenCL 벡터 덧셈 E2E 통과 (크로스플랫폼) |
+| 4단계 | Unified Memory + 비동기 실행 벤치마크 |
+
+### 의존성
+
+- CUDA Toolkit (nvcc, libcudart)
+- Metal Framework (macOS 전용, Xcode)
+- OpenCL SDK (platform별)
 
 ---
 

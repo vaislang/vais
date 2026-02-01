@@ -1,15 +1,9 @@
 {
   "phase": 5,
-  "request": "GPU 코드젠 ⚠️ + Async 런타임 ⚠️ 해결",
+  "request": "GPU 런타임 실행 지원 ROADMAP Phase 28 추가",
   "tasks": [
-    { "id": 1, "name": "GPU-1: GPU 코드젠 빌트인 등록 & CLI 통합", "status": "completed", "model": "Sonnet" },
-    { "id": 2, "name": "GPU-2: GPU 코드젠 E2E 테스트 작성", "status": "completed", "model": "Sonnet" },
-    { "id": 3, "name": "GPU-3: ROADMAP GPU 항목 업데이트", "status": "completed", "model": "Haiku" },
-    { "id": 4, "name": "ASYNC-1: Async 빌트인 함수 등록", "status": "completed", "model": "Opus" },
-    { "id": 5, "name": "ASYNC-2: Async await 코드젠 개선", "status": "completed", "model": "Opus" },
-    { "id": 6, "name": "ASYNC-3: Async E2E 테스트 작성", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "ASYNC-4: ROADMAP Async 항목 업데이트", "status": "completed", "model": "Haiku" }
+    { "id": 1, "name": "ROADMAP에 Phase 28 GPU 런타임 실행 지원 추가", "status": "completed", "model": "Opus" }
   ],
   "currentTask": null,
-  "lastCompleted": "Phase 27: GPU 코드젠 & Async 런타임 완성"
+  "lastCompleted": "ROADMAP Phase 28 추가"
 }
