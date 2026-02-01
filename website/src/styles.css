@@ -110,6 +110,12 @@ code {
   color: white;
 }
 
+.logo-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
 .logo-text {
   font-family: var(--font-mono);
 }
