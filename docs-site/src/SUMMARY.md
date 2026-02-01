@@ -4,6 +4,7 @@
 
 # 시작하기
 
+- [팀 온보딩 가이드](./onboarding.md)
 - [설치](./getting-started/installation.md)
 - [튜토리얼](./getting-started/tutorial.md)
 - [빠른 시작](./getting-started/quick-start.md)

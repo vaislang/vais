@@ -1,0 +1,254 @@
+# Number Converter CLI Tool - A real-world Vais utility
+# Demonstrates: structs, mutable variables, recursion, self-recursion (@)
+#
+# Converts numbers between decimal, binary, octal, and hexadecimal
+# Also provides: digit sum, digit count, palindrome check, reverse number
+
+# === Output Helpers ===
+
+F print_digit(d: i64) -> i64 {
+    putchar(d + 48)
+    0
+}
+
+F print_num_helper(n: i64) -> i64 =
+    I n < 10 { print_digit(n) }
+    E { print_num_helper(n / 10); print_digit(n % 10) }
+
+F print_num(n: i64) -> i64 =
+    I n < 0 { putchar(45); print_num_helper(0 - n) }
+    E I n == 0 { print_digit(0) }
+    E { print_num_helper(n) }
+
+F nl() -> i64 { putchar(10); 0 }
+
+# === Number Analysis Structure ===
+
+S NumInfo {
+    value: i64,
+    digit_count: i64,
+    digit_sum: i64,
+    is_palindrome: i64
+}
+
+# === Core Functions ===
+
+F count_digits(n: i64) -> i64 =
+    I n < 0 { count_digits(0 - n) }
+    E I n < 10 { 1 }
+    E { 1 + @(n / 10) }
+
+F digit_sum(n: i64) -> i64 =
+    I n < 0 { digit_sum(0 - n) }
+    E I n < 10 { n }
+    E { n % 10 + @(n / 10) }
+
+F reverse_helper(n: i64, acc: i64) -> i64 =
+    I n == 0 { acc }
+    E { @(n / 10, acc * 10 + n % 10) }
+
+F reverse_num(n: i64) -> i64 =
+    I n < 0 { 0 - reverse_helper(0 - n, 0) }
+    E { reverse_helper(n, 0) }
+
+F is_palindrome(n: i64) -> i64 =
+    I n < 0 { 0 }
+    E I n == reverse_num(n) { 1 }
+    E { 0 }
+
+F analyze(n: i64) -> NumInfo =
+    NumInfo {
+        value: n,
+        digit_count: count_digits(n),
+        digit_sum: digit_sum(n),
+        is_palindrome: is_palindrome(n)
+    }
+
+# === Binary Conversion ===
+
+F print_binary_helper(n: i64) -> i64 =
+    I n < 2 { print_digit(n) }
+    E { print_binary_helper(n / 2); print_digit(n % 2) }
+
+F print_binary(n: i64) -> i64 {
+    I n == 0 { putchar(48); 0 }
+    E I n < 0 { putchar(45); print_binary_helper(0 - n) }
+    E { print_binary_helper(n) }
+}
+
+F bit_length(n: i64) -> i64 =
+    I n < 0 { bit_length(0 - n) }
+    E I n < 2 { 1 }
+    E { 1 + @(n / 2) }
+
+F popcount(n: i64) -> i64 =
+    I n == 0 { 0 }
+    E { n % 2 + @(n / 2) }
+
+# === Octal Conversion ===
+
+F print_octal_helper(n: i64) -> i64 =
+    I n < 8 { print_digit(n) }
+    E { print_octal_helper(n / 8); print_digit(n % 8) }
+
+F print_octal(n: i64) -> i64 {
+    I n == 0 { putchar(48); 0 }
+    E I n < 0 { putchar(45); print_octal_helper(0 - n) }
+    E { print_octal_helper(n) }
+}
+
+# === Hexadecimal Conversion ===
+
+F print_hex_digit(d: i64) -> i64 =
+    I d < 10 { putchar(d + 48) }
+    E { putchar(d - 10 + 65) }
+
+F print_hex_helper(n: i64) -> i64 =
+    I n < 16 { print_hex_digit(n) }
+    E { print_hex_helper(n / 16); print_hex_digit(n % 16) }
+
+F print_hex(n: i64) -> i64 {
+    I n == 0 { putchar(48); 0 }
+    E I n < 0 { putchar(45); print_hex_helper(0 - n) }
+    E { print_hex_helper(n) }
+}
+
+# === Power of Two Check ===
+
+F is_power_of_two(n: i64) -> i64 =
+    I n <= 0 { 0 }
+    E I n == 1 { 1 }
+    E I n % 2 != 0 { 0 }
+    E { @(n / 2) }
+
+# === Formatted Output Helpers ===
+
+F print_labeled_num(value: i64) -> i64 {
+    print_num(value)
+    nl()
+}
+
+F print_yn(flag: i64) -> i64 {
+    I flag == 1 { puts("yes") } E { puts("no") }
+    0
+}
+
+# === Demo Suite ===
+
+F print_conversion_header(n: i64) -> i64 {
+    printf("--- %ld ---\n", n)
+    0
+}
+
+F demo_conversion(n: i64) -> i64 {
+    print_conversion_header(n)
+    printf("  Dec:       %ld\n", n)
+
+    printf("  Binary:    0b")
+    print_binary(n)
+    nl()
+
+    printf("  Octal:     0o")
+    print_octal(n)
+    nl()
+
+    printf("  Hex:       0x")
+    print_hex(n)
+    nl()
+
+    printf("  Digits:    %ld\n", count_digits(n))
+    printf("  Digit Sum: %ld\n", digit_sum(n))
+    printf("  Reversed:  %ld\n", reverse_num(n))
+
+    printf("  Palindrome: ")
+    print_yn(is_palindrome(n))
+
+    printf("  Bit Length: %ld\n", bit_length(n))
+    printf("  Set Bits:   %ld\n", popcount(n))
+
+    printf("  Power of 2: ")
+    print_yn(is_power_of_two(n))
+    0
+}
+
+F demo_analysis() -> i64 {
+    puts("=== Struct Analysis ===")
+    info := analyze(12321)
+    printf("  analyze(12321).value:        %ld\n", info.value)
+    printf("  analyze(12321).digit_count:  %ld\n", info.digit_count)
+    printf("  analyze(12321).digit_sum:    %ld\n", info.digit_sum)
+    printf("  analyze(12321).palindrome:   ")
+    print_yn(info.is_palindrome)
+    0
+}
+
+F demo_verification() -> i64 {
+    puts("=== Verification Tests ===")
+    pass := mut 0
+    total := mut 0
+
+    total = total + 1
+    I digit_sum(123) == 6 { pass = pass + 1; puts("[PASS] digit_sum(123) == 6") } E { puts("[FAIL] digit_sum(123)") }
+
+    total = total + 1
+    I digit_sum(999) == 27 { pass = pass + 1; puts("[PASS] digit_sum(999) == 27") } E { puts("[FAIL] digit_sum(999)") }
+
+    total = total + 1
+    I count_digits(0) == 1 { pass = pass + 1; puts("[PASS] count_digits(0) == 1") } E { puts("[FAIL] count_digits(0)") }
+
+    total = total + 1
+    I count_digits(99999) == 5 { pass = pass + 1; puts("[PASS] count_digits(99999) == 5") } E { puts("[FAIL] count_digits(99999)") }
+
+    total = total + 1
+    I reverse_num(1234) == 4321 { pass = pass + 1; puts("[PASS] reverse_num(1234) == 4321") } E { puts("[FAIL] reverse_num(1234)") }
+
+    total = total + 1
+    I reverse_num(100) == 1 { pass = pass + 1; puts("[PASS] reverse_num(100) == 1") } E { puts("[FAIL] reverse_num(100)") }
+
+    total = total + 1
+    I is_palindrome(121) == 1 { pass = pass + 1; puts("[PASS] is_palindrome(121) == 1") } E { puts("[FAIL] is_palindrome(121)") }
+
+    total = total + 1
+    I is_palindrome(123) == 0 { pass = pass + 1; puts("[PASS] is_palindrome(123) == 0") } E { puts("[FAIL] is_palindrome(123)") }
+
+    total = total + 1
+    I popcount(255) == 8 { pass = pass + 1; puts("[PASS] popcount(255) == 8") } E { puts("[FAIL] popcount(255)") }
+
+    total = total + 1
+    I popcount(1024) == 1 { pass = pass + 1; puts("[PASS] popcount(1024) == 1") } E { puts("[FAIL] popcount(1024)") }
+
+    total = total + 1
+    I is_power_of_two(64) == 1 { pass = pass + 1; puts("[PASS] is_power_of_two(64) == 1") } E { puts("[FAIL] is_power_of_two(64)") }
+
+    total = total + 1
+    I is_power_of_two(100) == 0 { pass = pass + 1; puts("[PASS] is_power_of_two(100) == 0") } E { puts("[FAIL] is_power_of_two(100)") }
+
+    printf("\nResults: %ld/%ld passed\n", pass, total)
+    I pass == total { puts("All tests PASSED!") } E { puts("Some tests FAILED!") }
+    0
+}
+
+# === Main Entry Point ===
+
+F main() -> i64 {
+    puts("=== Number Converter CLI v1.0 - Written in Vais ===")
+    puts("")
+
+    puts("=== Decimal/Binary/Octal/Hex Conversions ===")
+    demo_conversion(42)
+    puts("")
+    demo_conversion(255)
+    puts("")
+    demo_conversion(1024)
+    puts("")
+    demo_conversion(12321)
+    puts("")
+
+    demo_analysis()
+    puts("")
+
+    demo_verification()
+    puts("")
+    puts("All operations completed successfully!")
+    0
+}
