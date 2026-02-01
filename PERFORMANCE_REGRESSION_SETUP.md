@@ -431,12 +431,12 @@ Vais Benchmark Comparison
 ### Monitoring
 
 **GitHub Actions:**
-- Check workflow runs: https://github.com/sswoo88/vais/actions
+- Check workflow runs: https://github.com/vaislang/vais/actions
 - Review failed runs for patterns
 - Monitor execution time
 
 **Benchmark Dashboard:**
-- View trends: https://sswoo88.github.io/vais/dev/bench/
+- View trends: https://vaislang.github.io/vais/dev/bench/
 - Look for gradual degradation
 - Validate optimizations
 

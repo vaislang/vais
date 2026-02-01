@@ -6,7 +6,7 @@ Fast-track guide to deploy Vais web properties.
 
 ### 1. Enable GitHub Pages
 ```
-https://github.com/sswoo88/vais/settings/pages
+https://github.com/vaislang/vais/settings/pages
 → Source: GitHub Actions
 → Custom domain: vais-lang.org
 → Enforce HTTPS: ✓
@@ -23,7 +23,7 @@ A Records:
 185.199.111.153
 
 CNAME:
-www → sswoo88.github.io
+www → vaislang.github.io
 ```
 
 ### 3. That's It!
@@ -92,17 +92,17 @@ npm run preview
 
 ### Check Website Build Status
 ```
-https://github.com/sswoo88/vais/actions/workflows/website.yml
+https://github.com/vaislang/vais/actions/workflows/website.yml
 ```
 
 ### Check Docs Build Status
 ```
-https://github.com/sswoo88/vais/actions/workflows/docs.yml
+https://github.com/vaislang/vais/actions/workflows/docs.yml
 ```
 
 ### Check Playground Build Status
 ```
-https://github.com/sswoo88/vais/actions/workflows/playground.yml
+https://github.com/vaislang/vais/actions/workflows/playground.yml
 ```
 
 ---

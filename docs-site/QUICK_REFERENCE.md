@@ -278,7 +278,7 @@ autocmd FileType markdown setlocal spell spelllang=ko,en
 ## 도움말
 
 문제가 있나요?
-- [이슈 생성](https://github.com/sswoo88/vais/issues)
-- [토론 포럼](https://github.com/sswoo88/vais/discussions)
+- [이슈 생성](https://github.com/vaislang/vais/issues)
+- [토론 포럼](https://github.com/vaislang/vais/discussions)
 - README.md 참조
 - CONTRIBUTING.md 참조

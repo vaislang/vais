@@ -203,5 +203,5 @@ To update the version number:
 ## Support
 
 For issues with packaging or installation:
-- GitHub Issues: https://github.com/sswoo88/vais/issues
-- Repository: https://github.com/sswoo88/vais
+- GitHub Issues: https://github.com/vaislang/vais/issues
+- Repository: https://github.com/vaislang/vais

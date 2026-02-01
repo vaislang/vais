@@ -36,7 +36,7 @@ This document outlines the comprehensive social media strategy for **Vais**, an 
 🚀 AI-optimized systems programming language
 ⚡ Single-letter keywords • LLVM backend • Rust-like safety
 🤖 Token-efficient for LLM code generation
-📚 Open source • GitHub: github.com/sswoo88/vais
+📚 Open source • GitHub: github.com/vaislang/vais
 🔗 Docs: docs.vaislang.dev
 ```
 
@@ -135,7 +135,7 @@ Release/Announcement:
 The AI-optimized systems programming language 🚀
 Single-letter keywords • LLVM backend • Built for token efficiency
 Official account: news, updates, community
-GitHub: github.com/sswoo88/vais | Docs: docs.vaislang.dev
+GitHub: github.com/vaislang/vais | Docs: docs.vaislang.dev
 ```
 
 #### Twitter Content Types
@@ -233,7 +233,7 @@ That's 66x faster than Python and on par with compiled languages 🔥
 From Phase 1 core compiler to Phase 14 deployment system,
 we've built something amazing.
 
-Join us: github.com/sswoo88/vais
+Join us: github.com/vaislang/vais
 
 Let's build the future of AI-optimized programming languages together 🚀
 

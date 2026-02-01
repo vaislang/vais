@@ -30,8 +30,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sswoo88/vais"
-Repository = "https://github.com/sswoo88/vais"
+Homepage = "https://github.com/vaislang/vais"
+Repository = "https://github.com/vaislang/vais"
 
 [tool.maturin]
 python-source = "python"

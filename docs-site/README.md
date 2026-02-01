@@ -131,7 +131,7 @@ cargo install mdbook
 문서 개선을 환영합니다! 다음을 참조하세요:
 
 1. [기여 가이드](../CONTRIBUTING.md)
-2. 이슈 생성: [GitHub Issues](https://github.com/sswoo88/vais/issues)
+2. 이슈 생성: [GitHub Issues](https://github.com/vaislang/vais/issues)
 3. Pull Request 제출
 
 ## 라이센스

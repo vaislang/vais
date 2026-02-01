@@ -521,9 +521,9 @@ MIT License - Vais 프로젝트와 동일
 
 ## 연락처
 
-- **GitHub**: https://github.com/sswoo88/vais
-- **Issues**: https://github.com/sswoo88/vais/issues
-- **Discussions**: https://github.com/sswoo88/vais/discussions
+- **GitHub**: https://github.com/vaislang/vais
+- **Issues**: https://github.com/vaislang/vais/issues
+- **Discussions**: https://github.com/vaislang/vais/discussions
 
 ---
 

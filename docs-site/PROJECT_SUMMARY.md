@@ -299,7 +299,7 @@ Vais 문서 사이트는 프로젝트의 모든 문서를 통합하여 개발자
 - [mdBook 공식 문서](https://rust-lang.github.io/mdBook/)
 - [GitHub Pages 설정](https://docs.github.com/en/pages)
 - [마크다운 가이드](https://www.markdownguide.org/)
-- [Vais 프로젝트](https://github.com/sswoo88/vais)
+- [Vais 프로젝트](https://github.com/vaislang/vais)
 
 ---
 

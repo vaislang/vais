@@ -1,10 +1,10 @@
 class Vais < Formula
   desc "AI-optimized systems programming language with LLVM backend"
-  homepage "https://github.com/sswoo88/vais"
-  url "https://github.com/sswoo88/vais/archive/refs/tags/v1.0.0.tar.gz"
+  homepage "https://github.com/vaislang/vais"
+  url "https://github.com/vaislang/vais/archive/refs/tags/v1.0.0.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   license "MIT"
-  head "https://github.com/sswoo88/vais.git", branch: "main"
+  head "https://github.com/vaislang/vais.git", branch: "main"
 
   depends_on "rust" => :build
   depends_on "llvm@17"

@@ -29,7 +29,7 @@ Thank you for your interest in contributing to Vais! This document provides guid
 
 ```bash
 # Clone the repository
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 
 # Build the project

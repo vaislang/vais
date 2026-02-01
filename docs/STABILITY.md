@@ -438,7 +438,7 @@ This system is **not active** in Vais 1.x but may be introduced in 2.0.
 ### Release Announcements
 
 - **Blog**: https://vaislang.dev/blog
-- **GitHub Releases**: https://github.com/sswoo88/vais/releases
+- **GitHub Releases**: https://github.com/vaislang/vais/releases
 - **Twitter/X**: [@vaislang](https://twitter.com/vaislang)
 - **Discord**: https://discord.gg/vais (announcements channel)
 
@@ -450,7 +450,7 @@ This system is **not active** in Vais 1.x but may be introduced in 2.0.
 
 ### Security Advisories
 
-- **GitHub Security Advisories**: https://github.com/sswoo88/vais/security/advisories
+- **GitHub Security Advisories**: https://github.com/vaislang/vais/security/advisories
 - **Email**: security@vaislang.dev
 - **CVE Database**: Common Vulnerabilities and Exposures
 
@@ -487,7 +487,7 @@ Thank you for choosing Vais for your projects.
 ---
 
 **Questions?** Contact the team:
-- **GitHub Discussions**: https://github.com/sswoo88/vais/discussions
+- **GitHub Discussions**: https://github.com/vaislang/vais/discussions
 - **Email**: team@vaislang.dev
 - **Discord**: https://discord.gg/vais
 

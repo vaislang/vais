@@ -37,7 +37,7 @@ choco install llvm cmake
 ## 2. Build the Compiler
 
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 cargo build --release
 ```

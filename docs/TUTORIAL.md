@@ -31,7 +31,7 @@ Welcome to Vais! This tutorial will guide you through the basics of programming 
 
 ```bash
 # Clone the repository
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 
 # Build the compiler

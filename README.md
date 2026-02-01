@@ -2,8 +2,8 @@
 
 **AI-optimized systems programming language with token-efficient syntax.**
 
-[![CI](https://github.com/sswoo88/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sswoo88/vais/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/sswoo88/vais/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/sswoo88/vais)
+[![CI](https://github.com/vaislang/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vaislang/vais/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/vaislang/vais/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/vaislang/vais)
 
 Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
 
@@ -218,28 +218,28 @@ See [MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) for detailed information on memory
 
 ```bash
 # macOS/Linux (Homebrew)
-brew tap sswoo88/vais
+brew tap vaislang/vais
 brew install vais
 
 # From source
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais && cargo build --release
 
 # Docker
-docker run ghcr.io/sswoo88/vais:latest --help
+docker run ghcr.io/vaislang/vais:latest --help
 ```
 
-Download pre-built binaries from [Releases](https://github.com/sswoo88/vais/releases/tag/v1.0.0) (Linux, macOS Intel/ARM, Windows).
+Download pre-built binaries from [Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0) (Linux, macOS Intel/ARM, Windows).
 
 ## Community
 
-- [GitHub Discussions](https://github.com/sswoo88/vais/discussions) - Questions, ideas, show & tell
+- [GitHub Discussions](https://github.com/vaislang/vais/discussions) - Questions, ideas, show & tell
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute
 - [CHANGELOG](CHANGELOG.md) - Release history
 
 ## Legacy
 
-The prototype implementation is available on the [`proto`](https://github.com/sswoo88/vais/tree/proto) branch.
+The prototype implementation is available on the [`proto`](https://github.com/vaislang/vais/tree/proto) branch.
 
 ## License
 

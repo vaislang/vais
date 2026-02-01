@@ -29,9 +29,9 @@
 
 ### 공식 리소스
 
-- [GitHub 저장소](https://github.com/sswoo88/vais)
-- [이슈 트래커](https://github.com/sswoo88/vais/issues)
-- [토론 포럼](https://github.com/sswoo88/vais/discussions)
+- [GitHub 저장소](https://github.com/vaislang/vais)
+- [이슈 트래커](https://github.com/vaislang/vais/issues)
+- [토론 포럼](https://github.com/vaislang/vais/discussions)
 
 ### 관련 프로젝트
 

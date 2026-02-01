@@ -19,7 +19,7 @@ GitHub Pages is the simplest and most cost-effective option for static sites. It
 #### Setup for Main Website
 
 1. **Enable GitHub Pages**
-   - Go to https://github.com/sswoo88/vais
+   - Go to https://github.com/vaislang/vais
    - Navigate to Settings → Pages
    - Under "Build and deployment":
      - Source: Deploy from a branch
@@ -72,7 +72,7 @@ GitHub Pages is the simplest and most cost-effective option for static sites. It
    ```
    Type: CNAME
    Name: www
-   Value: sswoo88.github.io
+   Value: vaislang.github.io
    ```
 
 4. **SSL/HTTPS**
@@ -274,7 +274,7 @@ npm run preview
 
 **vais-lang.org setup:**
 1. Add A records pointing to GitHub Pages IPs (see GitHub Pages section)
-2. Add CNAME record for www.vais-lang.org → sswoo88.github.io
+2. Add CNAME record for www.vais-lang.org → vaislang.github.io
 
 **Subdomains (docs, play):**
 1. Add CNAME records for docs and play subdomains

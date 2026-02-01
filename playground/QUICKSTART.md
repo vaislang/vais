@@ -129,9 +129,9 @@ Output is in the `dist/` directory.
 
 ## Support
 
-- 🐛 [Report Issues](https://github.com/sswoo88/vais/issues)
-- 💬 [Discussions](https://github.com/sswoo88/vais/discussions)
-- 📚 [Full Documentation](https://github.com/sswoo88/vais)
+- 🐛 [Report Issues](https://github.com/vaislang/vais/issues)
+- 💬 [Discussions](https://github.com/vaislang/vais/discussions)
+- 📚 [Full Documentation](https://github.com/vaislang/vais)
 
 ---
 

@@ -83,7 +83,7 @@ Compilation speed: ~7.5ms per 1K LOC (full pipeline)
 **Current Status:**
 
 - 402+ test cases, self-hosting verified
-- Documentation: https://github.com/sswoo88/vais
+- Documentation: https://github.com/vaislang/vais
 - Interactive tutorial + mdBook documentation site
 - Examples: 100+ working code samples
 
@@ -95,7 +95,7 @@ Compilation speed: ~7.5ms per 1K LOC (full pipeline)
 
 I'd love feedback on the language design, especially from folks working with LLMs or building DSLs. Is token efficiency a worthwhile optimization target, or am I over-optimizing for AI at the expense of human readability?
 
-GitHub: https://github.com/sswoo88/vais
+GitHub: https://github.com/vaislang/vais
 Playground: https://vais-lang.org/playground
 
 **FAQ:**
@@ -183,7 +183,7 @@ The `@` operator is self-recursion (calls current function). Tokens: Rust ~25, V
 
 I'm not trying to replace Rust (it's amazing!), but explore the design space for AI-first languages. Your feedback would be invaluable.
 
-GitHub: https://github.com/sswoo88/vais
+GitHub: https://github.com/vaislang/vais
 Docs: https://sswoo.github.io/vais/
 
 **TL;DR**: Built a Rust-inspired language with single-letter keywords (F/S/E/I/L/M) that uses 40% fewer tokens for LLM code generation. Self-hosting works, performance is good, looking for feedback on safety/ergonomics tradeoffs.
@@ -326,8 +326,8 @@ Compile time: ~7.5ms per 1K LOC (full pipeline)
 2. Better approaches to closure analysis than escape analysis?
 3. Trade-offs between MIR-level and LLVM-level optimizations?
 
-GitHub: https://github.com/sswoo88/vais
-Architecture doc: https://github.com/sswoo88/vais/blob/main/docs/Architecture.md
+GitHub: https://github.com/vaislang/vais
+Architecture doc: https://github.com/vaislang/vais/blob/main/docs/Architecture.md
 
 Would love to hear about similar challenges you've faced, especially around self-hosting and LLVM integration.
 
@@ -339,7 +339,7 @@ Would love to hear about similar challenges you've faced, especially around self
 
 **Title**: Show HN: Vais - AI-optimized systems language with single-char keywords
 
-**URL to submit**: https://github.com/sswoo88/vais
+**URL to submit**: https://github.com/vaislang/vais
 
 **Comment text** (300 words):
 
@@ -376,7 +376,7 @@ F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)
 
 Open to feedback! Especially curious if others see value in token-optimized syntax, or if I'm solving a non-problem.
 
-GitHub: https://github.com/sswoo88/vais
+GitHub: https://github.com/vaislang/vais
 Docs: https://sswoo.github.io/vais/
 
 ---
@@ -452,7 +452,7 @@ Think of this as "alpha" software - functional but evolving. Feedback welcome!
 
 **Title**: Vais: Token-efficient systems language with LLVM backend and self-hosting compiler
 
-**URL to submit**: https://github.com/sswoo88/vais
+**URL to submit**: https://github.com/vaislang/vais
 
 **Tags**: `compilers`, `plt`, `rust`, `show`
 
@@ -1024,7 +1024,7 @@ Response template:
 
 ## Resources & Links
 
-- GitHub: https://github.com/sswoo88/vais
+- GitHub: https://github.com/vaislang/vais
 - Documentation: https://sswoo.github.io/vais/
 - Playground: https://vais-lang.org/playground
 - Reddit: r/ProgrammingLanguages, r/rust, r/compilers

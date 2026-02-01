@@ -70,7 +70,7 @@ version = "1.0.0"
 edition = "2021"
 authors = ["Vais Team"]
 license = "MIT"
-repository = "https://github.com/sswoo88/vais"
+repository = "https://github.com/vaislang/vais"
 description = "Vais - AI-optimized systems programming language with LLVM backend"
 
 [workspace.dependencies]

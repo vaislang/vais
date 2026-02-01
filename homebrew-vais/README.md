@@ -17,7 +17,7 @@ Vais is an AI-optimized systems programming language with an LLVM backend. It co
 
 ```bash
 # Add the tap
-brew tap sswoo88/vais
+brew tap vaislang/vais
 
 # Install Vais
 brew install vais
@@ -71,20 +71,20 @@ brew upgrade vais
 
 ```bash
 brew uninstall vais
-brew untap sswoo88/vais
+brew untap vaislang/vais
 ```
 
 ## Links
 
-- [GitHub Repository](https://github.com/sswoo88/vais)
-- [Documentation](https://github.com/sswoo88/vais/tree/main/docs)
-- [Examples](https://github.com/sswoo88/vais/tree/main/examples)
+- [GitHub Repository](https://github.com/vaislang/vais)
+- [Documentation](https://github.com/vaislang/vais/tree/main/docs)
+- [Examples](https://github.com/vaislang/vais/tree/main/examples)
 
 ## Support
 
 For issues, feature requests, or questions:
-- [Issue Tracker](https://github.com/sswoo88/vais/issues)
-- [Discussions](https://github.com/sswoo88/vais/discussions)
+- [Issue Tracker](https://github.com/vaislang/vais/issues)
+- [Discussions](https://github.com/vaislang/vais/discussions)
 
 ## License
 

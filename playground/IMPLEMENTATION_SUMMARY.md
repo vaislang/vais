@@ -514,7 +514,7 @@ style-src 'self' 'unsafe-inline';
 
 ```bash
 # Clone repository
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais/playground
 
 # Install dependencies
@@ -559,9 +559,9 @@ MIT License - See [LICENSE](../LICENSE)
 
 ## Contact
 
-- GitHub: https://github.com/sswoo88/vais
-- Issues: https://github.com/sswoo88/vais/issues
-- Discussions: https://github.com/sswoo88/vais/discussions
+- GitHub: https://github.com/vaislang/vais
+- Issues: https://github.com/vaislang/vais/issues
+- Discussions: https://github.com/vaislang/vais/discussions
 
 ---
 

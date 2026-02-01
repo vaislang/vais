@@ -10,7 +10,7 @@
 |----------|--------|--------|------|
 | Instagram | @vaislang | Ready to Setup | https://instagram.com/vaislang |
 | Twitter/X | @vaislang | Ready to Setup | https://twitter.com/vaislang |
-| GitHub | sswoo88/vais | Active | https://github.com/sswoo88/vais |
+| GitHub | vaislang/vais | Active | https://github.com/vaislang/vais |
 | Website | vaislang.dev | Active | https://vaislang.dev |
 | Docs | docs.vaislang.dev | Active | https://docs.vaislang.dev |
 
@@ -25,7 +25,7 @@
 🚀 AI-optimized systems programming language
 ⚡ Token-efficient • LLVM • Rust-like safety
 🤖 Perfect for LLM code generation
-📚 Docs: docs.vaislang.dev | GitHub: github.com/sswoo88/vais
+📚 Docs: docs.vaislang.dev | GitHub: github.com/vaislang/vais
 ```
 
 **Profile Picture**:
@@ -35,7 +35,7 @@
 **Link in Bio Options**
 1. **Linktree Setup**:
    - Official Documentation → docs.vaislang.dev
-   - GitHub Repository → github.com/sswoo88/vais
+   - GitHub Repository → github.com/vaislang/vais
    - Installation Guide → docs.vaislang.dev/install
    - Playground Demo → playground.vaislang.dev
    - Discord Community → discord.gg/vaislang (when available)
@@ -93,7 +93,7 @@ Collection 4 - Community & Open Source
 ```
 The AI-optimized systems programming language 🚀
 Single-letter keywords • LLVM backend • Token efficient
-GitHub: github.com/sswoo88/vais | Docs: docs.vaislang.dev
+GitHub: github.com/vaislang/vais | Docs: docs.vaislang.dev
 ```
 
 **Profile Picture**:
@@ -360,10 +360,10 @@ GitHub: github.com/sswoo88/vais | Docs: docs.vaislang.dev
 - Email: Newsletter templates (for future use)
 
 ### Useful Links
-- Vais GitHub: https://github.com/sswoo88/vais
+- Vais GitHub: https://github.com/vaislang/vais
 - Official Docs: https://docs.vaislang.dev
 - Playground: https://playground.vaislang.dev
-- Roadmap: https://github.com/sswoo88/vais/blob/main/ROADMAP.md
+- Roadmap: https://github.com/vaislang/vais/blob/main/ROADMAP.md
 
 ---
 

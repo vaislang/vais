@@ -4,7 +4,7 @@
 
 ### Installation
 ```bash
-brew tap sswoo88/vais
+brew tap vaislang/vais
 brew install vais
 ```
 
@@ -27,7 +27,7 @@ brew upgrade vais
 ### Uninstall
 ```bash
 brew uninstall vais
-brew untap sswoo88/vais
+brew untap vaislang/vais
 ```
 
 ## For Maintainers
@@ -44,7 +44,7 @@ brew untap sswoo88/vais
 2. **Calculate SHA256**
    ```bash
    VERSION=0.2.0
-   curl -L https://github.com/sswoo88/vais/archive/refs/tags/v${VERSION}.tar.gz | shasum -a 256
+   curl -L https://github.com/vaislang/vais/archive/refs/tags/v${VERSION}.tar.gz | shasum -a 256
    ```
 
 3. **Update formula**
@@ -116,14 +116,14 @@ brew test --verbose vais
 
 ## File Locations
 
-- Formula: `/usr/local/Homebrew/Library/Taps/sswoo88/homebrew-vais/Formula/vais.rb`
+- Formula: `/usr/local/Homebrew/Library/Taps/vaislang/homebrew-vais/Formula/vais.rb`
 - Binary: `/usr/local/bin/vaisc`
 - Std lib: `/usr/local/share/vais/std/`
 - Config: `/usr/local/lib/vais/config.toml`
 
 ## Useful Links
 
-- Main repo: https://github.com/sswoo88/vais
-- Tap repo: https://github.com/sswoo88/homebrew-vais
+- Main repo: https://github.com/vaislang/vais
+- Tap repo: https://github.com/vaislang/homebrew-vais
 - Homebrew docs: https://docs.brew.sh
 - Formula cookbook: https://docs.brew.sh/Formula-Cookbook

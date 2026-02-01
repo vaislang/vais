@@ -59,7 +59,7 @@ Instead, please report security vulnerabilities to:
 **Email:** security@vais.dev (if not available, create a GitHub Security Advisory)
 
 **GitHub Security Advisory:**
-1. Go to https://github.com/sswoo88/vais/security/advisories
+1. Go to https://github.com/vaislang/vais/security/advisories
 2. Click "New draft security advisory"
 3. Fill out the form with details
 
@@ -141,7 +141,7 @@ We believe in giving credit where it's due:
 
 ### How to Stay Informed
 
-- **GitHub Security Advisories:** https://github.com/sswoo88/vais/security/advisories
+- **GitHub Security Advisories:** https://github.com/vaislang/vais/security/advisories
 - **Release Notes:** Check CHANGELOG.md for security fixes
 - **Mailing List:** (TBD) Subscribe to security-announce@vais.dev
 

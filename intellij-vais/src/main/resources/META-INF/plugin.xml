@@ -2,7 +2,7 @@
 <idea-plugin>
     <id>com.vais.intellij</id>
     <name>Vais Language Support</name>
-    <vendor email="support@vais-lang.org" url="https://github.com/sswoo88/vais">Vais Team</vendor>
+    <vendor email="support@vais-lang.org" url="https://github.com/vaislang/vais">Vais Team</vendor>
 
     <description><![CDATA[
     Vais language support for IntelliJ IDEA.

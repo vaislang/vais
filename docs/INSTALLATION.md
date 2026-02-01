@@ -53,7 +53,7 @@ export PATH="/usr/local/opt/llvm@17/bin:$PATH"
 #### 3. Clone and Build
 
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 cargo build --release
 ```
@@ -91,7 +91,7 @@ export PATH="/usr/lib/llvm-17/bin:$PATH"
 #### 4. Clone and Build
 
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 cargo build --release
 ```
@@ -127,7 +127,7 @@ export PATH="/usr/lib64/llvm-17/bin:$PATH"
 #### 4. Clone and Build
 
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 cargo build --release
 ```
@@ -159,7 +159,7 @@ Ensure CMake is added to PATH.
 #### 5. Clone and Build
 
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 cargo build --release
 ```
@@ -365,8 +365,8 @@ After successful installation:
 
 ## Getting Help
 
-- GitHub Issues: https://github.com/sswoo88/vais/issues
-- Documentation: https://github.com/sswoo88/vais/tree/main/docs
+- GitHub Issues: https://github.com/vaislang/vais/issues
+- Documentation: https://github.com/vaislang/vais/tree/main/docs
 - Contributing: See `CONTRIBUTING.md`
 
 ## Version Information

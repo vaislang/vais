@@ -176,7 +176,7 @@ See [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) for complete list:
 - JIT compiler (Cranelift)
 - Self-hosting bootstrap (Stage 1+2, 17,397 lines verified)
 
-[Unreleased]: https://github.com/sswoo88/vais/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/sswoo88/vais/compare/v0.2.0...v1.0.0
-[0.2.0]: https://github.com/sswoo88/vais/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/sswoo88/vais/releases/tag/v0.1.0
+[Unreleased]: https://github.com/vaislang/vais/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/vaislang/vais/compare/v0.2.0...v1.0.0
+[0.2.0]: https://github.com/vaislang/vais/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/vaislang/vais/releases/tag/v0.1.0

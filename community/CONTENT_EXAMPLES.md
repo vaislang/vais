@@ -161,7 +161,7 @@ Their work:
 • [Achievement 3]
 
 Contributing to Vais is open to everyone.
-Join us on GitHub: github.com/sswoo88/vais
+Join us on GitHub: github.com/vaislang/vais
 
 #OpenSourceCommunity #Contributors #VaisProgramming
 #DeveloperCommunity #OpenSource #GitHub #TeamVais
@@ -296,7 +296,7 @@ we've built something special.
 Whether it's code, docs, issues, or ideas:
 your work matters.
 
-Join us: github.com/sswoo88/vais
+Join us: github.com/vaislang/vais
 
 #OpenSourceCommunity #VaisProgramming #GitHub
 ```

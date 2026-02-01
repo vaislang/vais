@@ -877,7 +877,7 @@ Requires Permission:
 When using Vais branding, include:
 ```
 "Vais" and the Vais logo are associated with the Vais programming language project.
-Visit https://github.com/sswoo88/vais
+Visit https://github.com/vaislang/vais
 ```
 
 ---
@@ -893,9 +893,9 @@ Visit https://github.com/sswoo88/vais
 ## 10. Contact & Support
 
 For brand guideline questions or permission requests:
-- GitHub Issues: https://github.com/sswoo88/vais/issues
+- GitHub Issues: https://github.com/vaislang/vais/issues
 - Email: community@vaislang.dev (when available)
-- Discussions: https://github.com/sswoo88/vais/discussions
+- Discussions: https://github.com/vaislang/vais/discussions
 
 For brand asset requests:
 - Check the official repository: `/community/brand-assets/`

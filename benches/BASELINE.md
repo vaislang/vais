@@ -310,7 +310,7 @@ Every PR automatically runs benchmarks and:
 
 ### Benchmark Dashboard
 
-Historical benchmark data is tracked on the [GitHub Pages benchmark dashboard](https://sswoo88.github.io/vais/dev/bench/).
+Historical benchmark data is tracked on the [GitHub Pages benchmark dashboard](https://vaislang.github.io/vais/dev/bench/).
 
 View trends over time to:
 - Identify gradual performance degradation

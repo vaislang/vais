@@ -4,15 +4,15 @@ This guide explains how to set up and publish the Vais Homebrew tap.
 
 ## Prerequisites
 
-- GitHub account (sswoo88)
+- GitHub account (vaislang)
 - Homebrew installed on macOS
 - Access to the vais repository
 
 ## Step 1: Create the Tap Repository
 
-1. Create a new GitHub repository named `homebrew-vais` under the `sswoo88` account
+1. Create a new GitHub repository named `homebrew-vais` under the `vaislang` account
 2. The repository name MUST be `homebrew-vais` (Homebrew convention)
-3. Repository URL: https://github.com/sswoo88/homebrew-vais
+3. Repository URL: https://github.com/vaislang/homebrew-vais
 
 ## Step 2: Push the Tap Files
 
@@ -25,7 +25,7 @@ git add .
 git commit -m "Initial commit: Add Vais formula"
 
 # Add remote and push
-git remote add origin https://github.com/sswoo88/homebrew-vais.git
+git remote add origin https://github.com/vaislang/homebrew-vais.git
 git branch -M main
 git push -u origin main
 ```
@@ -42,11 +42,11 @@ Before the first release, you need to:
    ```
 
 2. GitHub will automatically create a tarball at:
-   `https://github.com/sswoo88/vais/archive/refs/tags/v0.1.0.tar.gz`
+   `https://github.com/vaislang/vais/archive/refs/tags/v0.1.0.tar.gz`
 
 3. Calculate the SHA256 of the tarball:
    ```bash
-   curl -L https://github.com/sswoo88/vais/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256
+   curl -L https://github.com/vaislang/vais/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256
    ```
 
 4. Update the formula with the real SHA256:
@@ -62,7 +62,7 @@ Before the first release, you need to:
 
 ```bash
 # Add the tap
-brew tap sswoo88/vais
+brew tap vaislang/vais
 
 # Install from the tap
 brew install vais
@@ -80,7 +80,7 @@ brew audit --strict vais
 
 # Uninstall when done testing
 brew uninstall vais
-brew untap sswoo88/vais
+brew untap vaislang/vais
 ```
 
 ## Step 5: Automate Updates (Optional)
@@ -101,12 +101,12 @@ Add this to the main vais repository's release workflow:
 - name: Notify Homebrew tap
   run: |
     VERSION=$(echo ${{ github.ref }} | sed 's/refs\/tags\/v//')
-    SHA256=$(curl -L https://github.com/sswoo88/vais/archive/refs/tags/v${VERSION}.tar.gz | shasum -a 256 | cut -d' ' -f1)
+    SHA256=$(curl -L https://github.com/vaislang/vais/archive/refs/tags/v${VERSION}.tar.gz | shasum -a 256 | cut -d' ' -f1)
 
     curl -X POST \
       -H "Authorization: token ${{ secrets.TAP_UPDATE_TOKEN }}" \
       -H "Accept: application/vnd.github.v3+json" \
-      https://api.github.com/repos/sswoo88/homebrew-vais/dispatches \
+      https://api.github.com/repos/vaislang/homebrew-vais/dispatches \
       -d "{\"event_type\":\"new-release\",\"client_payload\":{\"version\":\"${VERSION}\",\"sha256\":\"${SHA256}\"}}"
 ```
 
@@ -120,7 +120,7 @@ Once everything is working:
 
    ### macOS (Homebrew)
    ```bash
-   brew tap sswoo88/vais
+   brew tap vaislang/vais
    brew install vais
    ```
    ```

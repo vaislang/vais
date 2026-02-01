@@ -281,11 +281,11 @@ Before posting any content:
 ## 🔗 Important Links
 
 ### Official Resources
-- **GitHub Repository**: https://github.com/sswoo88/vais
+- **GitHub Repository**: https://github.com/vaislang/vais
 - **Official Docs**: https://docs.vaislang.dev
 - **Playground**: https://playground.vaislang.dev
 - **Website**: https://vaislang.dev
-- **Roadmap**: https://github.com/sswoo88/vais/blob/main/ROADMAP.md
+- **Roadmap**: https://github.com/vaislang/vais/blob/main/ROADMAP.md
 
 ### Community Channels (When Ready)
 - **Discord**: [To be created]
@@ -403,7 +403,7 @@ The Vais programming language has tremendous potential. This community resource 
 
 Start with the basics, use the templates provided, stay consistent, and watch the community grow!
 
-For the latest updates and discussions, join us on GitHub: https://github.com/sswoo88/vais
+For the latest updates and discussions, join us on GitHub: https://github.com/vaislang/vais
 
 ---
 

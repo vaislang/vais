@@ -9,7 +9,7 @@ When updating the Vais formula for a new release:
 1. Update the `url` field to point to the new release tarball
 2. Download the tarball and calculate its SHA256:
    ```bash
-   curl -L https://github.com/sswoo88/vais/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256
+   curl -L https://github.com/vaislang/vais/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256
    ```
 3. Update the `sha256` field with the calculated hash
 4. Test the formula locally:
@@ -54,4 +54,4 @@ brew uninstall vais
 
 ## Questions?
 
-Open an issue in the [main Vais repository](https://github.com/sswoo88/vais/issues).
+Open an issue in the [main Vais repository](https://github.com/vaislang/vais/issues).

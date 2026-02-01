@@ -370,7 +370,7 @@ making it ideal for AI-assisted development and LLM code generation.
 5. Ask questions in #help whenever you need
 
 🔗 Important Links:
-- GitHub: https://github.com/sswoo88/vais
+- GitHub: https://github.com/vaislang/vais
 - Documentation: https://sswoo.github.io/vais/
 - Getting Started: https://sswoo.github.io/vais/tutorial/
 
@@ -409,7 +409,7 @@ Happy coding with Vais! 🚀
 5. Ask questions in #help
 
 **Important Links:**
-- [Official Repository](https://github.com/sswoo88/vais)
+- [Official Repository](https://github.com/vaislang/vais)
 - [Online Documentation](https://sswoo.github.io/vais/)
 - [Language Specification](https://sswoo.github.io/vais/language-spec/)
 - [Standard Library Reference](https://sswoo.github.io/vais/stdlib/)
@@ -652,7 +652,7 @@ Before asking a question:
 ## Additional Resources
 
 - **Discord Server Management Guide**: https://support.discord.com/hc/articles/204849977
-- **Vais GitHub**: https://github.com/sswoo88/vais
+- **Vais GitHub**: https://github.com/vaislang/vais
 - **Official Documentation**: https://sswoo.github.io/vais/
 - **Community Guidelines**: See #rules in Discord server
 

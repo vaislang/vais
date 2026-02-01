@@ -8,7 +8,7 @@ Vais 문서 개선에 관심을 가져주셔서 감사합니다! 이 가이드�
 
 1. 저장소 클론:
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais/docs-site
 ```
 
@@ -244,7 +244,7 @@ mdbook build
 
 문서에서 문제를 발견했지만 직접 수정할 수 없는 경우:
 
-1. [GitHub Issues](https://github.com/sswoo88/vais/issues)에 이슈 생성
+1. [GitHub Issues](https://github.com/vaislang/vais/issues)에 이슈 생성
 2. `documentation` 라벨 추가
 3. 문제를 명확히 설명:
    - 어떤 페이지인지
@@ -255,7 +255,7 @@ mdbook build
 
 질문이 있으신가요?
 
-- [GitHub Discussions](https://github.com/sswoo88/vais/discussions)
+- [GitHub Discussions](https://github.com/vaislang/vais/discussions)
 - [Discord 채널](#) (준비 중)
 - 이슈에 질문 태그로 문의
 
@@ -274,6 +274,6 @@ PR을 제출하기 전에 확인하세요:
 
 ## 감사의 말
 
-문서 기여자 목록은 [Contributors](https://github.com/sswoo88/vais/graphs/contributors)에서 확인할 수 있습니다.
+문서 기여자 목록은 [Contributors](https://github.com/vaislang/vais/graphs/contributors)에서 확인할 수 있습니다.
 
 모든 기여에 감사드립니다! 🙏

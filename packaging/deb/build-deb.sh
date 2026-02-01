@@ -26,7 +26,7 @@ Maintainer: Steve <steve@vais-lang.org>
 Depends: clang
 Section: devel
 Priority: optional
-Homepage: https://github.com/sswoo88/vais
+Homepage: https://github.com/vaislang/vais
 Description: AI-optimized systems programming language
  Vais is a modern systems programming language with an LLVM backend,
  designed for AI-assisted development. It combines low-level control

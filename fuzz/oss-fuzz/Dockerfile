@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone the repository
-RUN git clone --depth 1 https://github.com/sswoo88/vais.git $SRC/vais
+RUN git clone --depth 1 https://github.com/vaislang/vais.git $SRC/vais
 
 # Set working directory
 WORKDIR $SRC/vais

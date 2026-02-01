@@ -59,7 +59,7 @@ GitHub provides four A record IP addresses:
 
 | Type | Host | Value | TTL |
 |------|------|-------|-----|
-| CNAME | www | sswoo88.github.io | 3600 |
+| CNAME | www | vaislang.github.io | 3600 |
 
 ### Step 4: Configure Subdomains (GitHub Pages)
 
@@ -69,13 +69,13 @@ If deploying docs and playground to same GitHub Pages site:
 
 | Type | Host | Value | TTL |
 |------|------|-------|-----|
-| CNAME | docs | sswoo88.github.io | 3600 |
+| CNAME | docs | vaislang.github.io | 3600 |
 
 **Playground Subdomain:**
 
 | Type | Host | Value | TTL |
 |------|------|-------|-----|
-| CNAME | play | sswoo88.github.io | 3600 |
+| CNAME | play | vaislang.github.io | 3600 |
 
 **Note:** These would require separate branches/deployments configured in GitHub Pages settings.
 
@@ -105,7 +105,7 @@ vais-lang.org has address 185.199.111.153
 
 Expected output for CNAME:
 ```
-www.vais-lang.org canonical name = sswoo88.github.io
+www.vais-lang.org canonical name = vaislang.github.io
 ```
 
 ## Vercel DNS Configuration
@@ -176,7 +176,7 @@ vais-lang.org (main website)
   → GitHub Pages A records
 
 www.vais-lang.org (also main website)
-  → GitHub Pages CNAME (www.sswoo88.github.io)
+  → GitHub Pages CNAME (www.vaislang.github.io)
 
 docs.vais-lang.org (documentation)
   → Vercel CNAME (cname.vercel.com)
@@ -197,7 +197,7 @@ play.vais-lang.org (playground)
 | AAAA | @ | 2606:50c0:8001::153 | GitHub | 3600 |
 | AAAA | @ | 2606:50c0:8002::153 | GitHub | 3600 |
 | AAAA | @ | 2606:50c0:8003::153 | GitHub | 3600 |
-| CNAME | www | sswoo88.github.io | GitHub | 3600 |
+| CNAME | www | vaislang.github.io | GitHub | 3600 |
 | CNAME | docs | cname.vercel.com | Vercel | 3600 |
 | CNAME | play | cname.vercel.com | Vercel | 3600 |
 
@@ -403,7 +403,7 @@ vais-lang.org:
 - AAAA: 2606:50c0:8000::153 / 2606:50c0:8001::153 / 2606:50c0:8002::153 / 2606:50c0:8003::153
 
 www.vais-lang.org:
-- CNAME: sswoo88.github.io
+- CNAME: vaislang.github.io
 
 docs.vais-lang.org:
 - CNAME: cname.vercel.com

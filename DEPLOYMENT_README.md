@@ -52,7 +52,7 @@ Start here based on your needs:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    GitHub Repository                │
-│                    (sswoo88/vais)                   │
+│                    (vaislang/vais)                   │
 ├─────────────────────────────────────────────────────┤
 │  website/          docs-site/         playground/  │
 │  ├── src/          ├── src/           ├── src/     │
@@ -94,7 +94,7 @@ Start here based on your needs:
    ```
    Add to your registrar:
    - A records: GitHub Pages IPs (see DNS_CONFIGURATION.md)
-   - CNAME (www): sswoo88.github.io
+   - CNAME (www): vaislang.github.io
    ```
 
 3. **Done!**
@@ -231,7 +231,7 @@ npm run preview
 
 **GitHub Pages:**
 ```
-https://github.com/sswoo88/vais/actions
+https://github.com/vaislang/vais/actions
 ```
 
 **Vercel:**
@@ -328,7 +328,7 @@ Dashboard → Deployments → Find previous successful deployment
 
 ```bash
 # View GitHub Actions status
-https://github.com/sswoo88/vais/actions
+https://github.com/vaislang/vais/actions
 
 # Or via command line
 gh run list --branch main --limit 10
@@ -455,11 +455,11 @@ git push origin main
 
 ### GitHub Issues
 
-Report issues at: https://github.com/sswoo88/vais/issues
+Report issues at: https://github.com/vaislang/vais/issues
 
 ### Community
 
-- [Vais GitHub Discussions](https://github.com/sswoo88/vais/discussions)
+- [Vais GitHub Discussions](https://github.com/vaislang/vais/discussions)
 - [GitHub Pages Support](https://github.com/contact/github-pages)
 - [Vercel Support](https://vercel.com/support)
 

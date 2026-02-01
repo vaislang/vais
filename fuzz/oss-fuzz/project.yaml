@@ -1,12 +1,12 @@
 # OSS-Fuzz project configuration for Vais compiler
 # https://google.github.io/oss-fuzz/getting-started/new-project-guide/
 
-homepage: "https://github.com/sswoo88/vais"
+homepage: "https://github.com/vaislang/vais"
 language: rust
 primary_contact: "vais-security@example.com"
 auto_ccs:
   - "vais-dev@example.com"
-main_repo: "https://github.com/sswoo88/vais.git"
+main_repo: "https://github.com/vaislang/vais.git"
 
 # Fuzzing configurations
 fuzzing_engines:

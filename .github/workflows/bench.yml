@@ -58,7 +58,7 @@ jobs:
           comment-on-alert: true
           fail-on-alert: false
           # Show benchmark chart
-          alert-comment-cc-users: '@sswoo88'
+          alert-comment-cc-users: '@vaislang'
 
       - name: Compare benchmarks (PR only)
         if: github.event_name == 'pull_request'

@@ -167,7 +167,7 @@ The project is configured to automatically upload coverage reports to codecov.io
 1. Get your repository token from [codecov.io](https://codecov.io)
 2. Add to GitHub secrets as `CODECOV_TOKEN`
 3. The CI workflow automatically uploads coverage reports in multiple formats
-4. View trends at: `https://codecov.io/gh/sswoo88/vais`
+4. View trends at: `https://codecov.io/gh/vaislang/vais`
 
 The CI coverage job includes:
 - Automated coverage generation with HTML, Lcov, and JSON formats

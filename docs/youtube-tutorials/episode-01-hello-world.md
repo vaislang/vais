@@ -22,7 +22,7 @@ Before we start, make sure you have:
 Let's clone and build the Vais compiler:
 
 ```bash
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais
 cargo build --release
 ```
@@ -174,7 +174,7 @@ Hint: You'll need recursion and string output!
 
 ## Resources
 
-- Vais GitHub: https://github.com/sswoo88/vais
+- Vais GitHub: https://github.com/vaislang/vais
 - Quickstart Guide: `docs/QUICKSTART.md`
 - Tutorial: `docs/TUTORIAL.md`
 - Examples: `examples/` directory

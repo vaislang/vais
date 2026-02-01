@@ -288,7 +288,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
   - #PLDev #ProgrammingLanguage 해시태그 활용
 - [x] **GitHub Discussions 활성화** - 커뮤니티 Q&A (완료일: 2026-01-31, 실제 활성화: 2026-02-01)
   - Categories: Announcements, General, Ideas, Q&A, Polls, Show & Tell
-  - 웰컴 포스트 작성 완료: https://github.com/sswoo88/vais/discussions/14
+  - 웰컴 포스트 작성 완료: https://github.com/vaislang/vais/discussions/14
   - .github/DISCUSSION_TEMPLATE/ 4개 템플릿
 
 #### 개발자 커뮤니티
@@ -725,7 +725,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ### 권장 사항
 
 **릴리즈 배포**: ✅ v1.0.0 GitHub Release 배포 완료 (2026-02-01).
-- GitHub Release: https://github.com/sswoo88/vais/releases/tag/v1.0.0
+- GitHub Release: https://github.com/vaislang/vais/releases/tag/v1.0.0
 - 바이너리: Linux, macOS Intel, macOS ARM, Windows 4개 플랫폼
 - 패키지 매니페스트: Homebrew, PKGBUILD, RPM, DEB, Scoop, WinGet 전수 1.0.0 갱신
 - repo: public 전환 완료
@@ -857,7 +857,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - [x] **Linux `-lm` 링킹 추가** - Linux에서 수학 함수(sqrt, sin, cos 등) 사용 시 필요한 `-lm` 플래그 자동 추가 (main.rs) (완료일: 2026-02-01)
 
 ### 웹사이트 GitHub username 통일 ✅ 완료
-- [x] **잘못된 username 수정** - `siho-song` → `sswoo88`로 웹사이트 3개 파일 전수 수정 (website/index.html, website/blog/why-vais.html, website/blog/index.html) (완료일: 2026-02-01)
+- [x] **잘못된 username 수정** - `siho-song` → `vaislang`로 웹사이트 3개 파일 전수 수정 (website/index.html, website/blog/why-vais.html, website/blog/index.html) (완료일: 2026-02-01)
 
 ### Fly.io 배포 및 검증 ✅ 완료
 - [x] **5회 반복 배포** - 각 수정 후 배포 → 테스트 → 수정 반복 (완료일: 2026-02-01)
@@ -867,6 +867,14 @@ examples/          # 예제 코드 (40+ 파일) ✅
 - Fly.io 배포: https://vais-playground.fly.dev/ 정상 동작
 - E2E 테스트: 165개 전체 통과
 - cargo clippy: 경고 0개
+
+### GitHub Organization 이전 ✅ 완료
+- [x] **vaislang org 생성** - GitHub organization `vaislang` 생성 (완료일: 2026-02-01)
+- [x] **저장소 이전** - `sswoo88/vais` → `vaislang/vais`로 Transfer ownership (완료일: 2026-02-01)
+- [x] **전체 참조 업데이트** - 60개 파일의 `sswoo88` → `vaislang` 일괄 변경 (완료일: 2026-02-01)
+  - GitHub URL, Homebrew tap, Docker 이미지, Cargo.toml repository, WinGet/Scoop manifest, CI 워크플로우, 문서, 웹사이트, IDE 플러그인 등 전수 반영
+- [x] **WinGet manifest 파일명 변경** - `sswoo88.Vais.yaml` → `vaislang.Vais.yaml` (완료일: 2026-02-01)
+- [x] **git remote 업데이트** - origin URL을 `github.com/vaislang/vais.git`로 변경 (완료일: 2026-02-01)
 
 ---
 

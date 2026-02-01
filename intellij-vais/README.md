@@ -35,7 +35,7 @@ IntelliJ IDEA plugin providing language support for the Vais programming languag
 
 ```bash
 # Clone the repository
-git clone https://github.com/sswoo88/vais.git
+git clone https://github.com/vaislang/vais.git
 cd vais/intellij-vais
 
 # Build the plugin

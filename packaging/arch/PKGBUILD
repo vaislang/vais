@@ -4,11 +4,11 @@ pkgver=1.0.0
 pkgrel=1
 pkgdesc="AI-optimized systems programming language with LLVM backend"
 arch=('x86_64')
-url="https://github.com/sswoo88/vais"
+url="https://github.com/vaislang/vais"
 license=('MIT')
 depends=('clang' 'llvm>=17')
 makedepends=('rust' 'cargo')
-source=("${pkgname}-${pkgver}.tar.gz::https://github.com/sswoo88/vais/archive/refs/tags/v${pkgver}.tar.gz")
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/vaislang/vais/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')  # TODO: Update with actual checksum after release
 
 build() {

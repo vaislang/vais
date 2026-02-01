@@ -42,4 +42,4 @@ F main() {
 
 - [튜토리얼](./tutorial.md)에서 더 자세한 내용을 확인하세요
 - [언어 사양](../language/language-spec.md)에서 전체 문법을 배우세요
-- [예제 코드](https://github.com/sswoo88/vais/tree/main/examples)를 살펴보세요
+- [예제 코드](https://github.com/vaislang/vais/tree/main/examples)를 살펴보세요

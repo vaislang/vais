@@ -177,18 +177,18 @@ Values:
 ```
 Type: CNAME
 Name: www
-Value: sswoo88.github.io
+Value: vaislang.github.io
 ```
 
 **Subdomains (if using GitHub Pages):**
 ```
 Type: CNAME
 Name: docs
-Value: sswoo88.github.io  (if separate repo: docs-repo.github.io)
+Value: vaislang.github.io  (if separate repo: docs-repo.github.io)
 
 Type: CNAME
 Name: play
-Value: sswoo88.github.io  (if separate repo: playground-repo.github.io)
+Value: vaislang.github.io  (if separate repo: playground-repo.github.io)
 ```
 
 ### For Vercel Hosting

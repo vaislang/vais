@@ -141,7 +141,7 @@ Located in `benches/fixtures/`:
 4. Alert on significant changes
 
 **Output:**
-- Benchmark dashboard at `https://sswoo88.github.io/vais/dev/bench/`
+- Benchmark dashboard at `https://vaislang.github.io/vais/dev/bench/`
 - Performance trends over time
 - Downloadable results artifacts
 

@@ -351,7 +351,7 @@ docker run -it vaislang/vais:1.0.0 vaisc repl
 
 ### From Source
 ```bash
-git clone https://github.com/sswoo88/vais
+git clone https://github.com/vaislang/vais
 cd vais
 cargo build --release
 ./target/release/vaisc --version
@@ -510,8 +510,8 @@ See [docs/benchmarks.md](./benchmarks.md) for comprehensive benchmark results.
 
 ## Community
 
-- **GitHub Repository** - https://github.com/sswoo88/vais
-- **GitHub Discussions** - https://github.com/sswoo88/vais/discussions
+- **GitHub Repository** - https://github.com/vaislang/vais
+- **GitHub Discussions** - https://github.com/vaislang/vais/discussions
 - **Discord Server** - https://discord.gg/vais (coming soon)
 - **Twitter/X** - [@vaislang](https://twitter.com/vaislang)
 - **Instagram** - [@vaislang](https://instagram.com/vaislang)
@@ -526,8 +526,8 @@ We welcome contributions! See:
 
 ### Reporting Issues
 
-- **Bug Reports** - https://github.com/sswoo88/vais/issues/new?template=bug_report.md
-- **Feature Requests** - https://github.com/sswoo88/vais/issues/new?template=feature_request.md
+- **Bug Reports** - https://github.com/vaislang/vais/issues/new?template=bug_report.md
+- **Feature Requests** - https://github.com/vaislang/vais/issues/new?template=feature_request.md
 - **Security Issues** - See [SECURITY.md](../SECURITY.md) for responsible disclosure
 
 ---
@@ -617,7 +617,7 @@ See [ROADMAP.md](../ROADMAP.md) for detailed future plans.
 
 ---
 
-**Download:** https://github.com/sswoo88/vais/releases/tag/v1.0.0
+**Download:** https://github.com/vaislang/vais/releases/tag/v1.0.0
 **Website:** https://vaislang.dev
 **Documentation:** https://docs.vaislang.dev
 **Playground:** https://playground.vaislang.dev
