@@ -1,5 +1,5 @@
 # Multi-stage build for Vais Playground Server
-# Stage 1: Build the playground server binary
+# Stage 1: Build the playground server and vaisc compiler
 FROM rust:1.83-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 COPY . .
 
-RUN cargo build --release -p vais-playground-server
+RUN cargo build --release -p vais-playground-server -p vaisc
 
 # Stage 2: Runtime image
 FROM debian:bookworm-slim
@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/target/release/vais-playground /usr/local/bin/vais-playground
+COPY --from=builder /build/target/release/vaisc /usr/local/bin/vaisc
 COPY --from=builder /build/std /usr/local/share/vais/std
 
 ENV VAIS_STD_PATH=/usr/local/share/vais/std

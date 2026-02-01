@@ -280,55 +280,49 @@ async fn compile(
 
 fn compile_and_run(
     source: &str,
-    optimize: bool,
+    _optimize: bool,
     emit_ir: bool,
     execute: bool,
     timeout_secs: u64,
     max_output_bytes: usize,
 ) -> CompileResponse {
     let start = std::time::Instant::now();
-    let mut errors = Vec::new();
-    let mut warnings = Vec::new();
 
-    // Step 1: Tokenize
-    let tokens = match vais_lexer::tokenize(source) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            errors.push(DiagnosticItem {
-                line: 1,
-                column: 1,
-                message: format!("Lexer error: {}", e),
-                severity: Some("error".to_string()),
-            });
-            return CompileResponse {
-                success: false,
-                errors,
-                warnings,
-                ir: None,
-                output: None,
-                exit_code: None,
-                compile_time_ms: Some(start.elapsed().as_millis() as u64),
-            };
-        }
+    // Use the vaisc CLI binary for compilation - it handles all linking correctly
+    let tmp_dir = match tempfile::tempdir() {
+        Ok(d) => d,
+        Err(e) => return make_error_response(format!("Failed to create temp dir: {}", e)),
     };
 
-    // Check for error tokens
-    for token in &tokens {
-        if format!("{:?}", token.token).contains("Error") {
-            errors.push(DiagnosticItem {
-                line: 1,
-                column: 1,
-                message: format!("Lexer error: unexpected token {:?}", token.token),
-                severity: Some("error".to_string()),
-            });
-        }
+    let source_path = tmp_dir.path().join("playground.vais");
+    let bin_path = tmp_dir.path().join("playground");
+
+    if let Err(e) = std::fs::write(&source_path, source) {
+        return make_error_response(format!("Failed to write source: {}", e));
     }
 
-    if !errors.is_empty() {
+    // Compile using vaisc CLI
+    let compile_output = Command::new("vaisc")
+        .arg(source_path.to_str().unwrap())
+        .arg("-o")
+        .arg(bin_path.to_str().unwrap())
+        .output();
+
+    let compile_output = match compile_output {
+        Ok(o) => o,
+        Err(e) => return make_error_response(format!("Failed to run vaisc: {}", e)),
+    };
+
+    let compile_stderr = String::from_utf8_lossy(&compile_output.stderr).to_string();
+    let compile_stdout = String::from_utf8_lossy(&compile_output.stdout).to_string();
+
+    if !compile_output.status.success() {
+        let msg = if !compile_stderr.is_empty() { &compile_stderr } else { &compile_stdout };
+        let errors = parse_compiler_errors(msg);
         return CompileResponse {
             success: false,
             errors,
-            warnings,
+            warnings: vec![],
             ir: None,
             output: None,
             exit_code: None,
@@ -336,260 +330,46 @@ fn compile_and_run(
         };
     }
 
-    // Step 2: Parse
-    let mut ast = match vais_parser::parse(source) {
-        Ok(ast) => ast,
-        Err(parse_error) => {
-            let err_str = format!("{}", parse_error);
-            errors.push(DiagnosticItem {
-                line: extract_line(&err_str),
-                column: extract_column(&err_str),
-                message: err_str,
-                severity: Some("error".to_string()),
-            });
-            return CompileResponse {
-                success: false,
-                errors,
-                warnings,
-                ir: None,
-                output: None,
-                exit_code: None,
-                compile_time_ms: Some(start.elapsed().as_millis() as u64),
-            };
-        }
-    };
-
-    // Step 3: Macro expansion
-    let mut registry = vais_macro::MacroRegistry::new();
-    vais_macro::collect_macros(&ast, &mut registry);
-    ast = match vais_macro::expand_macros(ast, &registry) {
-        Ok(expanded) => expanded,
-        Err(_) => {
-            // Macro expansion failed, but we already have the AST from before move
-            // This shouldn't happen in practice for playground code
-            return CompileResponse {
-                success: false,
-                errors: vec![DiagnosticItem {
-                    line: 0,
-                    column: 0,
-                    message: "Macro expansion failed".to_string(),
-                    severity: Some("error".to_string()),
-                }],
-                warnings,
-                ir: None,
-                output: None,
-                exit_code: None,
-                compile_time_ms: Some(start.elapsed().as_millis() as u64),
-            };
-        }
-    };
-    let _ = vais_macro::process_derives(&mut ast);
-
-    // Step 4: Type checking
-    let mut type_checker = vais_types::TypeChecker::new();
-    if let Err(type_error) = type_checker.check_module(&ast) {
-        let err_str = format!("{}", type_error);
-        // Treat type errors as warnings in playground mode to allow partial compilation
-        warnings.push(DiagnosticItem {
-            line: extract_line(&err_str),
-            column: extract_column(&err_str),
-            message: err_str,
-            severity: Some("warning".to_string()),
-        });
-    }
-
-    // Step 5: Code generation
-    let opt_level = if optimize {
-        vais_codegen::optimize::OptLevel::O2
-    } else {
-        vais_codegen::optimize::OptLevel::O0
-    };
-    let target = vais_codegen::TargetTriple::Native;
-
-    let mut codegen = vais_codegen::CodeGenerator::new_with_target("playground", target);
-    let ir_string = match codegen.generate_module(&ast) {
-        Ok(raw_ir) => {
-            if optimize {
-                vais_codegen::optimize::optimize_ir(&raw_ir, opt_level)
-            } else {
-                raw_ir
-            }
-        }
-        Err(e) => {
-            errors.push(DiagnosticItem {
-                line: 0,
-                column: 0,
-                message: format!("Codegen error: {}", e),
-                severity: Some("error".to_string()),
-            });
-            return CompileResponse {
-                success: false,
-                errors,
-                warnings,
-                ir: None,
-                output: None,
-                exit_code: None,
-                compile_time_ms: Some(start.elapsed().as_millis() as u64),
-            };
-        }
-    };
-
+    // Read IR if requested
     let ir_output = if emit_ir {
-        Some(ir_string.clone())
+        let ir_path = tmp_dir.path().join("playground.ll");
+        std::fs::read_to_string(&ir_path).ok()
     } else {
         None
     };
 
-    // Step 6: Compile and execute (if requested)
-    if execute {
-        match compile_ir_and_execute(&ir_string, timeout_secs, max_output_bytes) {
-            Ok((output, exit_code)) => CompileResponse {
-                success: true,
-                errors,
-                warnings,
-                ir: ir_output,
-                output: Some(output),
-                exit_code: Some(exit_code),
-                compile_time_ms: Some(start.elapsed().as_millis() as u64),
-            },
-            Err(e) => {
-                errors.push(DiagnosticItem {
-                    line: 0,
-                    column: 0,
-                    message: e,
-                    severity: Some("error".to_string()),
-                });
-                CompileResponse {
-                    success: false,
-                    errors,
-                    warnings,
-                    ir: ir_output,
-                    output: None,
-                    exit_code: None,
-                    compile_time_ms: Some(start.elapsed().as_millis() as u64),
-                }
-            }
-        }
-    } else {
-        CompileResponse {
+    if !execute {
+        return CompileResponse {
             success: true,
-            errors,
-            warnings,
+            errors: vec![],
+            warnings: vec![],
             ir: ir_output,
             output: Some("Compilation successful".to_string()),
             exit_code: None,
             compile_time_ms: Some(start.elapsed().as_millis() as u64),
-        }
-    }
-}
-
-/// Truncate output to max_bytes, appending a truncation notice if needed.
-fn truncate_output(s: &str, max_bytes: usize) -> String {
-    if s.len() <= max_bytes {
-        s.to_string()
-    } else {
-        let truncated = &s[..max_bytes];
-        format!("{}\n... (output truncated at {} bytes)", truncated, max_bytes)
-    }
-}
-
-/// Remove the buggy fopen_ptr function definition from IR.
-/// The codegen emits `define i64 @fopen_ptr(i64 %path, i8* %mode)` which calls
-/// `@fopen(i64 %path, ...)` but fopen is declared as `i64 (i8*, i8*)`, causing
-/// a type mismatch on Linux. This function is unused in playground programs.
-fn strip_buggy_fopen_ptr(ir: &str) -> String {
-    let mut result = String::with_capacity(ir.len());
-    let mut skip = false;
-    for line in ir.lines() {
-        if line.starts_with("define") && line.contains("@fopen_ptr") {
-            skip = true;
-            continue;
-        }
-        if skip {
-            if line == "}" {
-                skip = false;
-                continue;
-            }
-            continue;
-        }
-        result.push_str(line);
-        result.push('\n');
-    }
-    result
-}
-
-fn compile_ir_and_execute(
-    ir: &str,
-    timeout_secs: u64,
-    max_output_bytes: usize,
-) -> Result<(String, i32), String> {
-    let tmp_dir = tempfile::tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?;
-    let ir_path = tmp_dir.path().join("playground.ll");
-    let bin_path = tmp_dir.path().join("playground");
-
-    // Strip the fopen_ptr wrapper function which has a type mismatch bug
-    // (calls fopen with i64 first arg instead of i8*). This is unused in most programs.
-    let cleaned_ir = strip_buggy_fopen_ptr(ir);
-    std::fs::write(&ir_path, &cleaned_ir).map_err(|e| format!("Failed to write IR: {}", e))?;
-
-    let ir_path_str = ir_path.to_str()
-        .ok_or_else(|| "IR path contains invalid UTF-8".to_string())?;
-    let bin_path_str = bin_path.to_str()
-        .ok_or_else(|| "Binary path contains invalid UTF-8".to_string())?;
-
-    // Collect stdlib C runtime files to link
-    let std_path = std::env::var("VAIS_STD_PATH")
-        .unwrap_or_else(|_| "/usr/local/share/vais/std".to_string());
-    let runtime_files: Vec<String> = ["http_runtime.c", "thread_runtime.c", "sync_runtime.c"]
-        .iter()
-        .map(|f| format!("{}/{}", std_path, f))
-        .filter(|p| std::path::Path::new(p).exists())
-        .collect();
-
-    let mut clang_args = vec![
-        "-o".to_string(),
-        bin_path_str.to_string(),
-        ir_path_str.to_string(),
-    ];
-    clang_args.extend(runtime_files);
-    clang_args.extend(["-lm".to_string(), "-lpthread".to_string(), "-O0".to_string()]);
-
-    let compile_output = Command::new("clang")
-        .args(&clang_args)
-        .output()
-        .map_err(|e| format!("Failed to run clang: {}", e))?;
-
-    if !compile_output.status.success() {
-        let stderr = String::from_utf8_lossy(&compile_output.stderr);
-        return Err(format!("Linking failed: {}", stderr));
+        };
     }
 
-    // Execute with timeout using spawn + try_wait loop
-    let mut child = Command::new(bin_path_str)
+    // Execute the compiled binary with timeout
+    let bin_path_str = bin_path.to_str().unwrap();
+    let mut child = match Command::new(bin_path_str)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Execution failed: {}", e))?;
-
-    // Apply resource limits on Linux
-    #[cfg(target_os = "linux")]
     {
-        use std::process::Stdio;
-        let _ = Stdio::null(); // suppress unused import on non-linux
-        // Resource limits are set via ulimit wrapper if available
-        // For additional security, the binary runs in a temp directory with env_clear()
-    }
+        Ok(c) => c,
+        Err(e) => return make_error_response(format!("Execution failed: {}", e)),
+    };
 
     let timeout = std::time::Duration::from_secs(timeout_secs);
-    let start = std::time::Instant::now();
+    let exec_start = std::time::Instant::now();
     let poll_interval = std::time::Duration::from_millis(50);
 
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Process finished
                 let mut stdout_bytes = Vec::new();
                 let mut stderr_bytes = Vec::new();
                 if let Some(mut out) = child.stdout.take() {
@@ -603,33 +383,69 @@ fn compile_ir_and_execute(
 
                 let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
                 let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
-                let combined = if stderr.is_empty() {
-                    stdout
-                } else {
-                    format!("{}{}", stdout, stderr)
-                };
+                let combined = if stderr.is_empty() { stdout } else { format!("{}{}", stdout, stderr) };
                 let combined = truncate_output(&combined, max_output_bytes);
                 let exit_code = status.code().unwrap_or(-1);
-                return Ok((combined, exit_code));
+
+                return CompileResponse {
+                    success: true,
+                    errors: vec![],
+                    warnings: vec![],
+                    ir: ir_output,
+                    output: Some(combined),
+                    exit_code: Some(exit_code),
+                    compile_time_ms: Some(start.elapsed().as_millis() as u64),
+                };
             }
             Ok(None) => {
-                // Still running
-                if start.elapsed() >= timeout {
+                if exec_start.elapsed() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err(format!(
-                        "Execution timed out after {} seconds",
-                        timeout_secs
-                    ));
+                    return make_error_response(format!("Execution timed out after {} seconds", timeout_secs));
                 }
                 std::thread::sleep(poll_interval);
             }
             Err(e) => {
-                return Err(format!("Error waiting for process: {}", e));
+                return make_error_response(format!("Error waiting for process: {}", e));
             }
         }
     }
 }
+
+fn parse_compiler_errors(output: &str) -> Vec<DiagnosticItem> {
+    let mut errors = Vec::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            errors.push(DiagnosticItem {
+                line: extract_line(trimmed),
+                column: extract_column(trimmed),
+                message: trimmed.to_string(),
+                severity: Some("error".to_string()),
+            });
+        }
+    }
+    if errors.is_empty() {
+        errors.push(DiagnosticItem {
+            line: 0,
+            column: 0,
+            message: "Compilation failed".to_string(),
+            severity: Some("error".to_string()),
+        });
+    }
+    errors
+}
+
+/// Truncate output to max_bytes, appending a truncation notice if needed.
+fn truncate_output(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        s.to_string()
+    } else {
+        let truncated = &s[..max_bytes];
+        format!("{}\n... (output truncated at {} bytes)", truncated, max_bytes)
+    }
+}
+
 
 fn extract_line(err: &str) -> usize {
     if let Some(pos) = err.find("line ") {
