@@ -1,9 +1,11 @@
 {
-  "phase": 5,
-  "request": "GPU 런타임 실행 지원 ROADMAP Phase 28 추가",
+  "phase": 4,
+  "request": "Phase 28 CUDA 런타임 통합 구현",
   "tasks": [
-    { "id": 1, "name": "ROADMAP에 Phase 28 GPU 런타임 실행 지원 추가", "status": "completed", "model": "Opus" }
+    { "id": 1, "name": "gpu_runtime.c CUDA 런타임 라이브러리 작성", "status": "in_progress", "model": "Sonnet" },
+    { "id": 2, "name": "컴파일러 nvcc 자동 호출 & 링킹 통합", "status": "pending", "model": "Opus" },
+    { "id": 3, "name": "std/gpu.vais stub 교체", "status": "pending", "model": "Sonnet" },
+    { "id": 4, "name": "E2E 테스트: 벡터 덧셈", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": null,
-  "lastCompleted": "ROADMAP Phase 28 추가"
+  "currentTask": 1
 }

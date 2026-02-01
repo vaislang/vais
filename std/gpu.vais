@@ -1,11 +1,13 @@
 # GPU Runtime Module for Vais
 # Provides GPU kernel definition and execution support
 #
-# WARNING: STUB - not implemented
-# GPU functions are stub implementations returning placeholder values.
-# These functions require actual GPU compiler backend (CUDA/HIP/Metal/etc.)
-# to generate proper GPU code. When using GPU kernels, mark functions with
-# #[gpu] attribute to trigger GPU codegen.
+# Two categories of functions:
+# 1. Kernel-side intrinsics (thread_idx, sync_threads, atomics, etc.)
+#    - These are replaced by the GPU codegen backend when compiling with --gpu
+#    - Host-side placeholders return dummy values for type checking
+# 2. Host-side runtime API (gpu_alloc, gpu_launch_kernel, etc.)
+#    - These are extern functions linked from gpu_runtime.c
+#    - Use with: vaisc build file.vais --gpu cuda --gpu-compile
 #
 # Usage:
 #   U std/gpu
@@ -24,27 +26,27 @@
 # ============================================================================
 
 # Get thread index within block (x dimension)
-# STUB: not implemented - returns placeholder value
-F thread_idx_x() -> i64 = 0  # Replaced by GPU compiler
+# GPU intrinsic: replaced by threadIdx.x (CUDA) / get_local_id(0) (OpenCL)
+F thread_idx_x() -> i64 = 0
 
 # Get thread index within block (y dimension)
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by threadIdx.y (CUDA) / get_local_id(1) (OpenCL)
 F thread_idx_y() -> i64 = 0
 
 # Get thread index within block (z dimension)
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by threadIdx.z (CUDA) / get_local_id(2) (OpenCL)
 F thread_idx_z() -> i64 = 0
 
 # Get block index within grid (x dimension)
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by blockIdx.x (CUDA) / get_group_id(0) (OpenCL)
 F block_idx_x() -> i64 = 0
 
 # Get block index within grid (y dimension)
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by blockIdx.y (CUDA) / get_group_id(1) (OpenCL)
 F block_idx_y() -> i64 = 0
 
 # Get block index within grid (z dimension)
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by blockIdx.z (CUDA) / get_group_id(2) (OpenCL)
 F block_idx_z() -> i64 = 0
 
 # Get block dimension (threads per block, x dimension)
@@ -79,15 +81,15 @@ F global_idx_y() -> i64 = thread_idx_y() + block_idx_y() * block_dim_y()
 # ============================================================================
 
 # Synchronize all threads within a block
-# STUB: not implemented - returns placeholder value
-F sync_threads() -> i64 = 0  # Replaced by GPU compiler
+# GPU intrinsic: replaced by __syncthreads() (CUDA) / barrier() (OpenCL)
+F sync_threads() -> i64 = 0
 
 # Memory fence for global memory
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by __threadfence() (CUDA) / mem_fence() (OpenCL)
 F thread_fence() -> i64 = 0
 
 # Memory fence for shared (local) memory
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by __threadfence_block() (CUDA)
 F thread_fence_block() -> i64 = 0
 
 # ============================================================================
@@ -95,7 +97,7 @@ F thread_fence_block() -> i64 = 0
 # ============================================================================
 
 # Atomic add: *addr += val, returns old value
-# STUB: not implemented - returns placeholder value
+# GPU intrinsic: replaced by atomicAdd() (CUDA) / atomic_add() (OpenCL)
 F atomic_add(addr: *i64, val: i64) -> i64 = 0
 
 # Atomic add for f64: *addr += val, returns old value
@@ -142,9 +144,9 @@ F atomic_exch(addr: *i64, val: i64) -> i64 = 0
 # Fast square root (may be less precise than CPU version)
 F gpu_sqrt(x: f64) -> f64 = sqrt(x)
 
-# Fast reciprocal square root (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_rsqrt(x: f64) -> f64 = 0.0
+# Fast reciprocal square root
+# GPU intrinsic: replaced by rsqrtf() (CUDA) / native_rsqrt() (OpenCL)
+F gpu_rsqrt(x: f64) -> f64 = 1.0 / sqrt(x)
 
 # Fast sine
 F gpu_sin(x: f64) -> f64 = sin(x)
@@ -158,9 +160,9 @@ F gpu_exp(x: f64) -> f64 = exp(x)
 # Fast logarithm
 F gpu_log(x: f64) -> f64 = log(x)
 
-# Fused multiply-add: a * b + c (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_fma(a: f64, b: f64, c: f64) -> f64 = 0.0
+# Fused multiply-add: a * b + c
+# GPU intrinsic: replaced by fma() (CUDA/OpenCL)
+F gpu_fma(a: f64, b: f64, c: f64) -> f64 = a * b + c
 
 # ============================================================================
 # Shared Memory
@@ -175,34 +177,39 @@ F shared_alloc(size: i64) -> i64 = malloc(size)
 # Memory Operations
 # ============================================================================
 
-# Coalesced load from global memory (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_load(addr: *f64) -> f64 = 0.0
+# Coalesced load from global memory
+# GPU intrinsic: direct pointer dereference with coalescing optimization
+F gpu_load(addr: *f64) -> f64 = addr[0]
 
-# Coalesced store to global memory (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_store(addr: *f64, val: f64) -> i64 = 0
+# Coalesced store to global memory
+# GPU intrinsic: direct pointer store with coalescing optimization
+F gpu_store(addr: *f64, val: f64) -> i64 {
+    addr[0] = val
+    0
+}
 
 # ============================================================================
 # Utility Functions
 # ============================================================================
 
 # Clamp value to range [lo, hi]
-# Clamp value to range [lo, hi] (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_clamp(x: f64, lo: f64, hi: f64) -> f64 = 0.0
+F gpu_clamp(x: f64, lo: f64, hi: f64) -> f64 {
+    I x < lo { R lo }
+    I x > hi { R hi }
+    x
+}
 
-# Linear interpolation (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_lerp(a: f64, b: f64, t: f64) -> f64 = 0.0
+# Linear interpolation: a + t * (b - a)
+F gpu_lerp(a: f64, b: f64, t: f64) -> f64 = a + t * (b - a)
 
-# Step function: 0.0 if x < edge, else 1.0 (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_step(edge: f64, x: f64) -> f64 = 0.0
+# Step function: 0.0 if x < edge, else 1.0
+F gpu_step(edge: f64, x: f64) -> f64 = x < edge ? 0.0 : 1.0
 
-# Smooth step (Hermite interpolation) (placeholder - replaced by GPU compiler)
-# STUB: not implemented - returns placeholder value
-F gpu_smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 = 0.0
+# Smooth step (Hermite interpolation)
+F gpu_smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    t := gpu_clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0)
+    t * t * (3.0 - 2.0 * t)
+}
 
 # ============================================================================
 # Warp/Wavefront Operations (CUDA: warp, AMD: wavefront)
@@ -429,3 +436,127 @@ F kernel_config_2d(width: i64, height: i64, block_x: i64, block_y: i64) -> Kerne
     block_z: 1,
     shared_memory: 0,
 }
+
+# ============================================================================
+# Host-side GPU Runtime API (linked from gpu_runtime.c)
+# These functions manage GPU memory, launch kernels, and query devices.
+# Requires: vaisc build --gpu cuda --gpu-compile
+# ============================================================================
+
+# --- Memory Management ---
+
+# Allocate GPU device memory (returns device pointer, NULL on failure)
+@[extern "C"]
+F gpu_alloc(size: i64) -> *i64 { 0 }
+
+# Free GPU device memory
+@[extern "C"]
+F gpu_free(ptr: *i64) -> i64 { 0 }
+
+# Copy host memory to device
+@[extern "C"]
+F gpu_memcpy_h2d(dst: *i64, src: *i64, size: i64) -> i64 { 0 }
+
+# Copy device memory to host
+@[extern "C"]
+F gpu_memcpy_d2h(dst: *i64, src: *i64, size: i64) -> i64 { 0 }
+
+# Copy between device buffers
+@[extern "C"]
+F gpu_memcpy_d2d(dst: *i64, src: *i64, size: i64) -> i64 { 0 }
+
+# Set device memory to a byte value
+@[extern "C"]
+F gpu_memset(ptr: *i64, value: i64, size: i64) -> i64 { 0 }
+
+# Allocate unified (managed) memory accessible from host and device
+@[extern "C"]
+F gpu_alloc_managed(size: i64) -> *i64 { 0 }
+
+# --- Kernel Execution ---
+
+# Launch a CUDA kernel
+# kernel_func: function pointer, grid/block x/y/z: launch dimensions
+# shared_mem: shared memory bytes, args: argument pointer array, arg_count: number of args
+@[extern "C"]
+F gpu_launch_kernel(kernel_func: *i64, grid_x: i64, grid_y: i64, grid_z: i64, block_x: i64, block_y: i64, block_z: i64, shared_mem: i64, args: *i64, arg_count: i64) -> i64 { 0 }
+
+# Synchronize device - wait for all pending GPU operations
+@[extern "C"]
+F gpu_synchronize() -> i64 { 0 }
+
+# --- Stream Management ---
+
+# Create a new CUDA stream (returns stream handle)
+@[extern "C"]
+F gpu_stream_create() -> *i64 { 0 }
+
+# Destroy a CUDA stream
+@[extern "C"]
+F gpu_stream_destroy(stream: *i64) -> i64 { 0 }
+
+# Synchronize a specific stream
+@[extern "C"]
+F gpu_stream_synchronize(stream: *i64) -> i64 { 0 }
+
+# --- Device Management ---
+
+# Get number of CUDA-capable devices
+@[extern "C"]
+F gpu_device_count() -> i64 { 0 }
+
+# Set the active CUDA device
+@[extern "C"]
+F gpu_set_device(device_id: i64) -> i64 { 0 }
+
+# Get the current active device ID
+@[extern "C"]
+F gpu_get_device() -> i64 { 0 }
+
+# Get device name (returns string pointer)
+@[extern "C"]
+F gpu_device_name(device_id: i64) -> *i8 { 0 }
+
+# Get total device memory in bytes
+@[extern "C"]
+F gpu_device_total_mem(device_id: i64) -> i64 { 0 }
+
+# Get max threads per block for device
+@[extern "C"]
+F gpu_device_max_threads(device_id: i64) -> i64 { 0 }
+
+# --- Event Timing ---
+
+# Create a CUDA event (returns event handle)
+@[extern "C"]
+F gpu_event_create() -> *i64 { 0 }
+
+# Destroy a CUDA event
+@[extern "C"]
+F gpu_event_destroy(event: *i64) -> i64 { 0 }
+
+# Record an event
+@[extern "C"]
+F gpu_event_record(event: *i64) -> i64 { 0 }
+
+# Synchronize on an event
+@[extern "C"]
+F gpu_event_synchronize(event: *i64) -> i64 { 0 }
+
+# Get elapsed time between two events (milliseconds)
+@[extern "C"]
+F gpu_event_elapsed(start: *i64, end: *i64) -> f64 { 0.0 }
+
+# --- Error Handling ---
+
+# Get the last CUDA error code (0 = success)
+@[extern "C"]
+F gpu_last_error() -> i64 { 0 }
+
+# Get the last CUDA error as string
+@[extern "C"]
+F gpu_last_error_string() -> *i8 { 0 }
+
+# Reset/clear the last error
+@[extern "C"]
+F gpu_reset_error() -> i64 { 0 }

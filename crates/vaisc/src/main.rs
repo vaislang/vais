@@ -167,6 +167,11 @@ enum Commands {
         #[arg(long)]
         gpu_host: bool,
 
+        /// Compile generated GPU code with nvcc (CUDA) and link with gpu_runtime
+        /// Produces a ready-to-run executable instead of just .cu/.cl source
+        #[arg(long)]
+        gpu_compile: bool,
+
         /// Enable Link-Time Optimization
         /// Values: thin, full, none
         /// Default: thin for O2/O3, none for O0/O1
@@ -496,10 +501,10 @@ fn main() {
     }
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, gpu_compile, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
-                cmd_build_gpu(&input, output, gpu_target_str, gpu_host, cli.verbose)
+                cmd_build_gpu(&input, output, gpu_target_str, gpu_host, gpu_compile, cli.verbose)
             } else {
 
             let target_triple = target.as_ref()
@@ -610,6 +615,7 @@ fn cmd_build_gpu(
     output: Option<PathBuf>,
     gpu_target: &str,
     emit_host: bool,
+    compile: bool,
     verbose: bool,
 ) -> Result<(), String> {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
@@ -682,6 +688,157 @@ fn cmd_build_gpu(
         println!("{} Generated host code: {} ({})", "✓".green().bold(), host_path.display(), target.name());
     }
 
+    // Compile with nvcc if --gpu-compile is specified (CUDA only)
+    if compile {
+        match target {
+            GpuTarget::Cuda => {
+                compile_cuda(&out_path, emit_host, verbose)?;
+            }
+            _ => {
+                eprintln!("{} --gpu-compile is currently supported only for CUDA target", "warning:".yellow().bold());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Find the Vais standard library directory (for gpu_runtime.c etc.)
+fn find_std_dir() -> Option<PathBuf> {
+    // Check relative to executable
+    if let Ok(exe) = std::env::current_exe() {
+        let exe_dir = exe.parent()?;
+        // Check ../std/ (installed layout)
+        let std_dir = exe_dir.join("../std");
+        if std_dir.exists() {
+            return Some(std_dir.canonicalize().unwrap_or(std_dir));
+        }
+        // Check ../../std/ (cargo build layout)
+        let std_dir = exe_dir.join("../../std");
+        if std_dir.exists() {
+            return Some(std_dir.canonicalize().unwrap_or(std_dir));
+        }
+    }
+    // Check VAIS_STD_DIR environment variable
+    if let Ok(dir) = std::env::var("VAIS_STD_DIR") {
+        let path = PathBuf::from(&dir);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    // Check current directory's std/
+    let cwd_std = PathBuf::from("std");
+    if cwd_std.exists() {
+        return Some(cwd_std.canonicalize().unwrap_or(cwd_std));
+    }
+    None
+}
+
+/// Compile CUDA .cu file with nvcc and link with gpu_runtime
+fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), String> {
+    use std::process::Command;
+
+    // Check if nvcc is available
+    let nvcc_check = Command::new("nvcc")
+        .arg("--version")
+        .output();
+
+    match nvcc_check {
+        Err(_) => {
+            return Err(format!(
+                "nvcc not found. Please install the CUDA Toolkit:\n\
+                 - Linux: https://developer.nvidia.com/cuda-downloads\n\
+                 - macOS: CUDA is no longer supported on macOS (use Metal instead)\n\
+                 - Set CUDA_PATH or add nvcc to PATH"
+            ));
+        }
+        Ok(output) if !output.status.success() => {
+            return Err("nvcc found but failed to run. Check CUDA Toolkit installation.".to_string());
+        }
+        Ok(output) => {
+            if verbose {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!("{} {}", "nvcc:".blue().bold(), version.lines().last().unwrap_or("unknown"));
+            }
+        }
+    }
+
+    // Determine output binary name
+    let binary_name = cu_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("gpu_output");
+    let binary_path = cu_path.parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(binary_name);
+
+    // Find gpu_runtime.c
+    let std_dir = find_std_dir();
+    let runtime_path = std_dir.as_ref().map(|d| d.join("gpu_runtime.c"));
+
+    // Build nvcc command
+    let mut cmd = Command::new("nvcc");
+
+    // Add the .cu source file
+    cmd.arg(cu_path);
+
+    // Add host code if generated
+    if has_host {
+        let host_path = cu_path.with_extension("host.cu");
+        if host_path.exists() {
+            cmd.arg(&host_path);
+            if verbose {
+                println!("{} Including host code: {}", "info:".blue().bold(), host_path.display());
+            }
+        }
+    }
+
+    // Add gpu_runtime.c if found
+    if let Some(ref rt_path) = runtime_path {
+        if rt_path.exists() {
+            cmd.arg(rt_path);
+            if verbose {
+                println!("{} Linking gpu_runtime: {}", "info:".blue().bold(), rt_path.display());
+            }
+        } else if verbose {
+            println!("{} gpu_runtime.c not found at {}", "warning:".yellow().bold(), rt_path.display());
+        }
+    }
+
+    // Output binary
+    cmd.arg("-o").arg(&binary_path);
+
+    // Standard flags
+    cmd.arg("-lcudart");
+
+    if verbose {
+        println!("{} Running: nvcc {} -o {}", "info:".blue().bold(), cu_path.display(), binary_path.display());
+    }
+
+    // Execute nvcc
+    let result = cmd.output()
+        .map_err(|e| format!("Failed to execute nvcc: {}", e))?;
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        return Err(format!(
+            "nvcc compilation failed:\n{}{}",
+            stderr,
+            if stderr.contains("No CUDA capable device") || stderr.contains("no CUDA-capable device") {
+                "\n\nHint: No CUDA GPU detected. Ensure NVIDIA drivers are installed."
+            } else if stderr.contains("unsupported gpu architecture") {
+                "\n\nHint: Try specifying a GPU architecture, e.g., --gpu-arch sm_70"
+            } else {
+                ""
+            }
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    if !stdout.is_empty() && verbose {
+        println!("{}", stdout);
+    }
+
+    println!("{} Compiled GPU binary: {}", "✓".green().bold(), binary_path.display());
     Ok(())
 }
 

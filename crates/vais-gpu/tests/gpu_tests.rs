@@ -558,3 +558,150 @@ mod simd_tests {
         assert_eq!(f64_any.type_name(SimdTarget::Sve), "svfloat64_t");
     }
 }
+
+// E2E GPU runtime integration tests
+// These verify the full pipeline: .vais source → GPU codegen → host code with runtime API calls
+mod e2e_gpu_runtime {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const VECTOR_ADD_KERNEL: &str = r#"
+#[gpu]
+F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        c[idx] = a[idx] + b[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_e2e_vector_add_cuda_generates_kernel() {
+        let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+
+        // Verify kernel structure
+        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+        assert!(code.contains("vector_add"), "Should contain kernel name");
+        assert!(code.contains("double*"), "Should have double* parameters for f64");
+
+        // Verify thread indexing is emitted
+        assert!(code.contains("threadIdx.x") || code.contains("threadIdx"),
+            "Should contain CUDA thread indexing");
+        assert!(code.contains("blockIdx.x") || code.contains("blockIdx"),
+            "Should contain CUDA block indexing");
+        assert!(code.contains("blockDim.x") || code.contains("blockDim"),
+            "Should contain CUDA block dimension");
+    }
+
+    #[test]
+    fn test_e2e_vector_add_cuda_host_code_has_runtime_calls() {
+        let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let host = gen.generate_host_code();
+
+        // Host code should reference CUDA runtime API functions
+        assert!(host.contains("cudaDeviceSynchronize") || host.contains("launch_"),
+            "Host code should contain CUDA runtime calls, got:\n{}", host);
+    }
+
+    #[test]
+    fn test_e2e_vector_add_kernel_metadata() {
+        let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "vector_add");
+        assert_eq!(kernels[0].params.len(), 4, "vector_add should have 4 params (a, b, c, n)");
+
+        // Verify param types
+        let param_names: Vec<&str> = kernels[0].params.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(param_names, &["a", "b", "c", "n"]);
+    }
+
+    #[test]
+    fn test_e2e_vector_add_all_backends() {
+        let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
+        let targets = vec![
+            (GpuTarget::Cuda, "__global__"),
+            (GpuTarget::OpenCL, "__kernel"),
+        ];
+        for (target, expected_keyword) in targets {
+            let mut gen = GpuCodeGenerator::new(target);
+            let code = gen.generate(&module)
+                .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
+            assert!(code.contains(expected_keyword),
+                "{:?} should contain '{}', got:\n{}", target, expected_keyword, code);
+            assert!(code.contains("vector_add"),
+                "{:?} should contain kernel name", target);
+        }
+    }
+
+    #[test]
+    fn test_e2e_vector_add_metal_codegen() {
+        let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let code = gen.generate(&module).expect("Metal codegen failed");
+        assert!(code.contains("kernel") || code.contains("vector_add"),
+            "Metal should generate kernel function");
+    }
+
+    #[test]
+    fn test_e2e_vector_add_webgpu_codegen() {
+        let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
+        let code = gen.generate(&module).expect("WebGPU codegen failed");
+        assert!(code.contains("vector_add") || code.contains("@compute"),
+            "WebGPU should generate compute shader");
+    }
+
+    const MATRIX_MUL_KERNEL: &str = r#"
+#[gpu]
+F matrix_mul(a: *f64, b: *f64, c: *f64, n: i64) {
+    row := block_idx_y() * block_dim_y() + thread_idx_y()
+    col := block_idx_x() * block_dim_x() + thread_idx_x()
+    I row < n {
+        I col < n {
+            sum := 0.0
+            c[row * n + col] = sum
+        }
+    }
+}
+"#;
+
+    #[test]
+    fn test_e2e_matrix_mul_cuda_2d_indexing() {
+        let module = parse(MATRIX_MUL_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("matrix_mul"), "Should contain kernel name");
+        // 2D indexing should reference y-dimension
+        assert!(code.contains("threadIdx.y") || code.contains("blockIdx.y") || code.contains("thread"),
+            "Should contain 2D thread indexing");
+    }
+
+    const REDUCTION_KERNEL: &str = r#"
+#[gpu]
+F reduce_sum(data: *f64, result: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        result[0] = result[0] + data[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_e2e_reduction_kernel() {
+        let module = parse(REDUCTION_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("reduce_sum"), "Should contain kernel name");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].params.len(), 3);
+    }
+}
