@@ -2348,17 +2348,16 @@ impl CodeGenerator {
                             tag, tag_ptr
                         ));
 
-                        // Store payload (for single-field tuple variants)
-                        if !arg_vals.is_empty() {
-                            let payload_ptr = self.next_temp(counter);
+                        // Store payload fields into the payload sub-struct
+                        for (i, arg_val) in arg_vals.iter().enumerate() {
+                            let payload_field_ptr = self.next_temp(counter);
                             ir.push_str(&format!(
-                                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1\n",
-                                payload_ptr, enum_name, enum_name, enum_ptr
+                                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}\n",
+                                payload_field_ptr, enum_name, enum_name, enum_ptr, i
                             ));
-                            // For single-field, store directly; for multi-field, need nested getelementptr
                             ir.push_str(&format!(
                                 "  store i64 {}, i64* {}\n",
-                                arg_vals[0], payload_ptr
+                                arg_val, payload_field_ptr
                             ));
                         }
 
@@ -4346,7 +4345,7 @@ impl CodeGenerator {
     }
 
     fn next_temp(&self, counter: &mut usize) -> String {
-        let tmp = format!("%{}", counter);
+        let tmp = format!("%t.{}", counter);
         *counter += 1;
         tmp
     }

@@ -1,11 +1,11 @@
 {
-  "phase": 5,
-  "request": "로컬에서 예제 컴파일 및 로드맵 업데이트",
+  "phase": 4,
+  "request": "플레이그라운드 배포해서 확인",
   "tasks": [
-    { "id": 1, "name": "struct/enum 예제 로컬 컴파일 검증", "status": "completed", "model": "Sonnet" },
-    { "id": 2, "name": "전체 examples/ 디렉토리 컴파일 검증", "status": "completed", "model": "Haiku" },
-    { "id": 3, "name": "ROADMAP.md Phase 23 업데이트", "status": "completed", "model": "Opus" }
+    { "id": 1, "name": "Fly.io 백엔드 배포", "status": "in_progress", "model": "Sonnet" },
+    { "id": 2, "name": "플레이그라운드 동작 확인", "status": "pending", "model": "Sonnet" },
+    { "id": 3, "name": "ROADMAP 업데이트", "status": "pending", "model": "Opus" }
   ],
-  "currentTask": null,
-  "lastCompleted": "ROADMAP.md Phase 23 업데이트"
+  "currentTask": 1,
+  "lastCompleted": null
 }

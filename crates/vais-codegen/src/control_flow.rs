@@ -305,12 +305,14 @@ impl CodeGenerator {
         } else {
             // Fall back to chained conditional branches for complex patterns
             let mut current_label = self.next_label("match.check");
+            // Create a default fallthrough block so all check-fail paths have a phi entry
+            let default_label = self.next_label("match.default");
             ir.push_str(&format!("  br label %{}\n", current_label));
 
             for (i, arm) in arms.iter().enumerate() {
                 let is_last = i == arms.len() - 1;
                 let next_label = if is_last {
-                    merge_label.clone()
+                    default_label.clone()
                 } else {
                     self.next_label("match.check")
                 };
@@ -381,10 +383,10 @@ impl CodeGenerator {
                 current_label = next_label;
             }
 
-            // If no arm matched (for non-exhaustive patterns)
-            if !arms.is_empty() {
-                // The last next_label becomes merge_label, so we don't need extra handling
-            }
+            // Default fallthrough block (no arm matched)
+            ir.push_str(&format!("{}:\n", default_label));
+            arm_values.push(("0".to_string(), default_label.clone()));
+            ir.push_str(&format!("  br label %{}\n", merge_label));
         }
 
         // Merge block with phi node

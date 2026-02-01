@@ -1735,6 +1735,10 @@ fn compile_to_native(
         .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
         .to_string());
 
+    // Link math library (required on Linux for sqrt, sin, cos, etc.)
+    #[cfg(not(target_os = "macos"))]
+    args.push("-lm".to_string());
+
     // Link against libvais_gc if available (for GC runtime support)
     // Use the static library directly to avoid dylib path dependencies
     if let Some(gc_lib_path) = find_gc_library() {
