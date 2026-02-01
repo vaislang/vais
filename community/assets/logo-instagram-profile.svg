@@ -1,0 +1,41 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Instagram profile picture: V logo centered on dark background -->
+  <defs>
+    <linearGradient id="vais-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48BB78;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#38A169;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A202C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D3748;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dark background (circle-safe for Instagram crop) -->
+  <rect width="512" height="512" rx="64" fill="url(#bg-gradient)"/>
+
+  <!-- V logo scaled and centered -->
+  <g transform="translate(136, 96) scale(2.4)">
+    <!-- Left path of V (green) -->
+    <path d="M 30 20 L 60 100 L 48 100 L 20 25 Z"
+          fill="url(#vais-gradient)"
+          stroke="none"/>
+
+    <!-- Right path of V (blue) -->
+    <path d="M 90 20 L 72 100 L 60 100 L 100 25 Z"
+          fill="#667EEA"
+          stroke="none"/>
+
+    <!-- Center accent line -->
+    <path d="M 56 80 L 64 80 L 60 100 L 56 80 Z"
+          fill="#FFFFFF"
+          opacity="0.9"/>
+  </g>
+
+  <!-- "vais" text below the V -->
+  <text x="256" y="430" text-anchor="middle"
+        font-family="Inter, -apple-system, sans-serif"
+        font-size="52" font-weight="700"
+        fill="#E2E8F0"
+        letter-spacing="8">vais</text>
+</svg>

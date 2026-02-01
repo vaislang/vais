@@ -1,13 +1,12 @@
 {
-  "phase": 6,
-  "request": "홍보 실행 로드맵 문서 작성 및 ROADMAP 업데이트",
+  "phase": 5,
+  "request": "다음 할일 도출 및 실행 (홍보 Phase 1 완성)",
   "tasks": [
-    { "id": 1, "name": "홍보 로드맵 Part 1 (Phase 1~3)", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "홍보 로드맵 Part 2 (Phase 4~6)", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "홍보 로드맵 Part 3 (Phase 7~9)", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "ROADMAP.md에 홍보 섹션 추가", "status": "completed", "model": "Sonnet" },
-    { "id": 5, "name": "커밋", "status": "completed", "model": "Haiku" }
+    { "id": 1, "name": "빌드/테스트 상태 점검", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "프로필 완성 가이드 업데이트", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "코드 카드 템플릿 개선 (html2canvas + 프리셋)", "status": "completed", "model": "Opus" },
+    { "id": 4, "name": "첫 3개 게시물 캡션 제작", "status": "completed", "model": "Opus" }
   ],
   "currentTask": null,
-  "lastCompleted": "홍보 실행 로드맵 전체 작성 완료"
+  "lastCompleted": "홍보 Phase 1 자동화 가능 항목 전체 완료"
 }

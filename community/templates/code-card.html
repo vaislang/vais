@@ -369,6 +369,16 @@
                 <h2 class="panel-title">Edit Card</h2>
 
                 <div class="form-group">
+                    <label for="presetSelect">Preset (First 3 Posts)</label>
+                    <select id="presetSelect" onchange="loadPreset()">
+                        <option value="">-- Custom --</option>
+                        <option value="post1">Post 1: Fibonacci in Vais</option>
+                        <option value="post2">Post 2: Vais vs Rust</option>
+                        <option value="post3">Post 3: Why Single-Letter Keywords?</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label for="cardType">Card Type</label>
                     <select id="cardType" onchange="updateCardType()">
                         <option value="type1">Type 1: Single Code Snippet</option>
@@ -576,35 +586,59 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
         }
 
         function downloadCard() {
-            alert('To enable PNG download, include the html2canvas library:\n\n<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"><\/script>\n\nThen add this function:\n\nhtml2canvas(document.getElementById("codeCard")).then(canvas => {\n  const link = document.createElement("a");\n  link.download = "vais-code-card.png";\n  link.href = canvas.toDataURL();\n  link.click();\n});');
+            const card = document.getElementById('codeCard');
+            if (typeof html2canvas !== 'undefined') {
+                html2canvas(card, {
+                    backgroundColor: null,
+                    scale: 2
+                }).then(canvas => {
+                    const link = document.createElement('a');
+                    const title = document.getElementById('cardTitle').value.replace(/\s+/g, '-').toLowerCase();
+                    link.download = `vais-code-card-${title}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                });
+            } else {
+                alert('html2canvas is loading or unavailable.\n\nAlternative: Take a screenshot:\n- macOS: Cmd+Shift+4\n- Windows: Win+Shift+S');
+            }
+        }
 
-            // For now, show alternative method
-            console.log('Alternative: Take a screenshot of the preview panel using your OS screenshot tool');
-            console.log('macOS: Cmd+Shift+4, then Space, then click the preview');
-            console.log('Windows: Win+Shift+S');
+        const PRESETS = {
+            post1: {
+                type: 'type1',
+                title: 'Fibonacci in Vais',
+                code: 'F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)\n\nF main()->i64 = fib(10)  # Returns 55'
+            },
+            post2: {
+                type: 'type2',
+                title: 'Fibonacci: Vais vs Rust',
+                code: 'F fib(n:i64)->i64 =\n  n<2 ? n : @(n-1) + @(n-2)',
+                code2: 'fn fib(n: i64) -> i64 {\n    if n < 2 {\n        n\n    } else {\n        fib(n - 1) + fib(n - 2)\n    }\n}',
+                compLang: 'Rust'
+            },
+            post3: {
+                type: 'type3',
+                title: 'Why Single-Letter Keywords?',
+                code: 'F  = function\nS  = struct\nE  = enum\nI  = if\nL  = loop\nM  = match\nR  = return\n@  = self-recursion'
+            }
+        };
+
+        function loadPreset() {
+            const key = document.getElementById('presetSelect').value;
+            if (!key) return;
+            const p = PRESETS[key];
+            document.getElementById('cardType').value = p.type;
+            document.getElementById('cardTitle').value = p.title;
+            document.getElementById('cardCode').value = p.code;
+            if (p.code2) document.getElementById('cardCode2').value = p.code2;
+            if (p.compLang) document.getElementById('compLang').value = p.compLang;
+            updateCardType();
         }
 
         // Initialize card on load
         updateCard();
     </script>
 
-    <!--
-    Uncomment below to enable PNG download functionality:
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script>
-        function downloadCard() {
-            const card = document.getElementById('codeCard');
-            html2canvas(card, {
-                backgroundColor: null,
-                scale: 2 // Higher quality
-            }).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'vais-code-card.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            });
-        }
-    </script>
-    -->
 </body>
 </html>

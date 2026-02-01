@@ -43,12 +43,12 @@
   - Dark: #1A202C / #2D3748
   - 참조: `community/BRAND_GUIDE.md`
 
-- [ ] **코드 카드 템플릿 준비**
-  - [ ] Canva 또는 Figma로 기본 템플릿 3종 제작
+- [x] **코드 카드 템플릿 준비** ✅
+  - [x] HTML 코드 카드 생성기 완성 (3종: 스니펫/비교/팁)
     - 코드 스니펫 카드 (1080x1080)
     - 언어 비교 카드 (1080x1080)
     - 팁/정보 카드 (1080x1080)
-  - [ ] `community/templates/code-card.html` 도구 테스트
+  - [x] `community/templates/code-card.html` 도구 완성 (html2canvas PNG 다운로드 + 프리셋 3종)
   - 참조: `community/CODE_CARD_TEMPLATES.md`
 
 ### 1.2 계정 설정 (인스타그램)
@@ -75,21 +75,22 @@
 
 ### 1.3 콘텐츠 사전 제작
 
-- [ ] **첫 주 게시물 3개 사전 제작**
-  - [ ] 게시물 1: "Vais 소개" - 한 줄로 Fibonacci (코드 카드)
-  - [ ] 게시물 2: "Vais vs Rust" - 토큰 효율 비교 (비교 카드)
-  - [ ] 게시물 3: "왜 단일 문자 키워드인가?" - 교육 콘텐츠
+- [x] **첫 주 게시물 3개 사전 제작** ✅
+  - [x] 게시물 1: "Vais 소개" - Fibonacci 코드 카드 + 캡션
+  - [x] 게시물 2: "Vais vs Rust" - 토큰 효율 비교 카드 + 캡션
+  - [x] 게시물 3: "왜 단일 문자 키워드인가?" - 교육 콘텐츠 + 캡션
+  - 참조: `community/FIRST_3_POSTS.md` (캡션 + 게시 가이드)
   - 참조: `community/CONTENT_EXAMPLES.md`
 
-- [ ] **해시태그 세트 준비**
-  - [ ] 기본 세트 저장 (복사-붙여넣기용):
+- [x] **해시태그 세트 준비** ✅
+  - [x] 기본 세트 저장 (복사-붙여넣기용):
     ```
-    #VaisLang #ProgrammingLanguage #SystemsProgramming
+    #VaisProgrammingLanguage #VaisLang #SystemsProgramming
     #LLVM #Rust #AIOptimized #TokenEfficient
-    #Coding #Developer #OpenSource #CompilerDesign
-    #CodeSnippet #TechCommunity #DeveloperLife
+    #OpenSourceLanguage #DeveloperCommunity #ProgrammingLanguage
     ```
-  - 참조: `community/SNS_ACCOUNTS.md` 해시태그 컬렉션
+  - 참조: `community/SNS_ACCOUNTS.md` 해시태그 컬렉션 4종
+  - 참조: `community/FIRST_3_POSTS.md` 게시물별 해시태그
 
 ### 1.4 도구 설정
 
@@ -102,10 +103,10 @@
   - [ ] 구글 애널리틱스 소셜 트래픽 추적 설정
 
 ### Phase 1 완료 기준
-- [ ] 프로필 사진 + 바이오 완성
-- [ ] 코드 카드 템플릿 최소 1종 준비
-- [ ] 첫 3개 게시물 제작 완료
-- [ ] 해시태그 세트 저장
+- [ ] 프로필 사진 + 바이오 완성 (수동 작업 - SNS_ACCOUNTS.md 참조)
+- [x] 코드 카드 템플릿 최소 1종 준비 ✅ (3종 완성)
+- [x] 첫 3개 게시물 제작 완료 ✅ (FIRST_3_POSTS.md)
+- [x] 해시태그 세트 저장 ✅ (SNS_ACCOUNTS.md 4개 컬렉션)
 ---
 
 ## Phase 2: 인스타그램 런칭 (Week 2-6)

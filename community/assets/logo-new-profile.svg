@@ -1,0 +1,49 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Left arm: green gradient -->
+    <linearGradient id="left-arm-p" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#B8E986;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#68D391;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4FD1C5;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Right arm: blue-purple gradient -->
+    <linearGradient id="right-arm-p" x1="100%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#90CDF4;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#A3BFFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#B794F4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- White circle background (Instagram crops to circle) -->
+  <circle cx="256" cy="256" r="256" fill="#FFFFFF" />
+
+  <!-- V shape - Left arm -->
+  <path d="M 130 100
+           C 130 82, 148 72, 165 85
+           L 260 290
+           C 270 310, 258 328, 242 328
+           C 226 328, 214 310, 224 290
+           Z"
+        fill="url(#left-arm-p)" />
+
+  <!-- V shape - Right arm -->
+  <path d="M 382 100
+           C 382 82, 364 72, 347 85
+           L 260 290
+           C 250 310, 262 328, 278 328
+           C 294 328, 306 310, 296 290
+           Z"
+        fill="url(#right-arm-p)" />
+
+  <!-- Overlap blend -->
+  <ellipse cx="261" cy="302" rx="24" ry="20"
+           fill="#B794F4" opacity="0.3" />
+
+  <!-- "vais" text -->
+  <text x="256" y="420" text-anchor="middle"
+        font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+        font-size="64" font-weight="700"
+        fill="#2D3748"
+        letter-spacing="3">vais</text>
+</svg>
