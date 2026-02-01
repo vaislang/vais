@@ -2482,10 +2482,13 @@ impl CodeGenerator {
                         .and_then(|f| f.signature.params.get(i))
                         .map(|(_, ty, _)| ty.clone());
 
-                    let arg_ty = param_ty
-                        .as_ref()
-                        .map(|ty| self.type_to_llvm(ty))
-                        .unwrap_or_else(|| "i64".to_string());
+                    let arg_ty = if let Some(ref ty) = param_ty {
+                        self.type_to_llvm(ty)
+                    } else {
+                        // For vararg arguments, infer the type from the expression
+                        let inferred_ty = self.infer_expr_type(arg);
+                        self.type_to_llvm(&inferred_ty)
+                    };
 
                     // For struct arguments, load the value if we have a pointer
                     // (struct literals generate alloca+stores, returning pointers)

@@ -370,6 +370,27 @@ impl CodeGenerator {
             Expr::Unary { expr: inner, .. } => {
                 self.infer_expr_type(inner)
             }
+            Expr::Ternary { then, .. } => {
+                // Ternary returns the type of its then branch
+                self.infer_expr_type(then)
+            }
+            Expr::If { then, .. } => {
+                // If-else returns the type of its then block
+                self.infer_block_type(then)
+            }
+            Expr::Match { arms, .. } => {
+                // Match returns the type of its first arm body
+                if let Some(arm) = arms.first() {
+                    self.infer_expr_type(&arm.body)
+                } else {
+                    ResolvedType::I64
+                }
+            }
+            Expr::Cast { ty, .. } => {
+                // Cast returns the target type
+                self.ast_type_to_resolved(&ty.node)
+            }
+            Expr::Unit => ResolvedType::Unit,
             _ => ResolvedType::I64, // Default fallback
         }
     }

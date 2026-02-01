@@ -2657,3 +2657,69 @@ F main() -> i64 {
     assert!(result.stdout.contains("Complex Struct: OK"),
             "Expected stdout to contain 'Complex Struct: OK', got: {}", result.stdout);
 }
+
+// ==================== Float Printf Tests ====================
+
+#[test]
+fn test_float_printf_simple() {
+    let source = r#"
+F main() -> i64 {
+    x := 3.14
+    printf("%f\n", x)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("3.14"),
+            "Expected stdout to contain '3.14', got: {}", result.stdout);
+}
+
+#[test]
+fn test_float_printf_binop() {
+    let source = r#"
+F main() -> i64 {
+    x := 3.14
+    result := x + 1.0
+    printf("result = %f\n", result)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("4.14"),
+            "Expected stdout to contain '4.14', got: {}", result.stdout);
+}
+
+#[test]
+fn test_float_printf_multiple_args() {
+    let source = r#"
+F main() -> i64 {
+    a := 2.71828
+    b := 3.14159
+    printf("%f %f\n", a, b)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("2.71"),
+            "Expected stdout to contain '2.71', got: {}", result.stdout);
+    assert!(result.stdout.contains("3.14"),
+            "Expected stdout to contain '3.14', got: {}", result.stdout);
+}
+
+#[test]
+fn test_float_printf_math_functions() {
+    let source = r#"
+F main() -> i64 {
+    x := sqrt(4.0)
+    printf("%f\n", x)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("2.0"),
+            "Expected stdout to contain '2.0', got: {}", result.stdout);
+}

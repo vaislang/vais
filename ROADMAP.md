@@ -132,6 +132,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | **Phase 22: 대형 프로젝트 도입 전략** | **🔄 진행 중** | **1~3단계 대부분 완료 (6개월 모니터링 제외)** |
 | **Phase 23: 코드젠 크로스플랫폼 호환성** | **✅ 완료** | **전체 완료** |
 | **Phase 24: Playground Linux 배포 호환성** | **✅ 완료** | **전체 완료** |
+| **Phase 25: Vararg float 타입 추론 버그 수정** | **✅ 완료** | **전체 완료** |
 
 ---
 
@@ -875,6 +876,28 @@ examples/          # 예제 코드 (40+ 파일) ✅
   - GitHub URL, Homebrew tap, Docker 이미지, Cargo.toml repository, WinGet/Scoop manifest, CI 워크플로우, 문서, 웹사이트, IDE 플러그인 등 전수 반영
 - [x] **WinGet manifest 파일명 변경** - `sswoo88.Vais.yaml` → `vaislang.Vais.yaml` (완료일: 2026-02-01)
 - [x] **git remote 업데이트** - origin URL을 `github.com/vaislang/vais.git`로 변경 (완료일: 2026-02-01)
+
+---
+
+## 🔧 Phase 25: Vararg float 타입 추론 버그 수정
+
+> **상태**: ✅ 완료
+> **완료일**: 2026-02-01
+> **목표**: printf 등 vararg 함수에서 float 인수 타입이 i64로 잘못 추론되는 버그 수정
+
+### 버그 수정 ✅ 완료
+- [x] **vararg float 타입 추론** - `lib.rs`의 `Expr::Call` 처리에서 vararg 인수의 타입을 하드코딩 `"i64"` 대신 `infer_expr_type`으로 추론하도록 수정 (완료일: 2026-02-01)
+  - 근본 원인: `param_ty.unwrap_or_else(|| "i64".to_string())` → float 값도 i64로 전달
+  - 수정: `infer_expr_type(arg)`로 실제 타입 추론 후 `type_to_llvm` 변환
+
+### 타입 추론 보완 ✅ 완료
+- [x] **Ternary 표현식** - `cond ? a : b`의 반환 타입 추론 추가 (완료일: 2026-02-01)
+- [x] **If 표현식** - `I cond { ... } E { ... }`의 반환 타입 추론 추가 (완료일: 2026-02-01)
+- [x] **Match 표현식** - `M expr { ... }`의 반환 타입 추론 추가 (완료일: 2026-02-01)
+- [x] **Cast 표현식** - 타입 캐스트의 대상 타입 반환 추가 (완료일: 2026-02-01)
+
+### E2E 테스트 ✅ 완료
+- [x] **float printf 테스트 4개 추가** - 단순 float, BinOp, 다중 인수, math 함수 호출 (완료일: 2026-02-01)
 
 ---
 
