@@ -1,4 +1,4 @@
-# Vais - AI-Optimized Programming Language
+# Vais (Vibe AI Language for Systems) - AI-Optimized Programming Language
 ## 프로젝트 로드맵
 
 > **버전**: 1.0.0

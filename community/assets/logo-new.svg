@@ -1,0 +1,66 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background frame gradient -->
+    <linearGradient id="frame-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#A3BFFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#90CDF4;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Left arm: green gradient -->
+    <linearGradient id="left-arm" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#B8E986;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#68D391;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4FD1C5;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Right arm: blue-purple gradient -->
+    <linearGradient id="right-arm" x1="100%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#90CDF4;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#A3BFFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#B794F4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer frame (rounded rectangle) -->
+  <rect x="16" y="16" width="480" height="480" rx="64" ry="64"
+        fill="url(#frame-gradient)" />
+
+  <!-- Inner white area -->
+  <rect x="36" y="36" width="440" height="440" rx="48" ry="48"
+        fill="#FFFFFF" />
+
+  <!-- V shape - Left arm (rounded capsule style) -->
+  <path d="M 145 120
+           C 145 105, 160 95, 175 105
+           L 260 280
+           C 268 296, 258 310, 245 310
+           C 232 310, 222 296, 230 280
+           Z"
+        fill="url(#left-arm)" />
+
+  <!-- V shape - Right arm (rounded capsule style) -->
+  <path d="M 367 120
+           C 367 105, 352 95, 337 105
+           L 260 280
+           C 252 296, 262 310, 275 310
+           C 288 310, 298 296, 290 280
+           Z"
+        fill="url(#right-arm)" />
+
+  <!-- Overlap blend area -->
+  <ellipse cx="262" cy="290" rx="22" ry="18"
+           fill="#B794F4" opacity="0.3" />
+
+  <!-- "vais" text -->
+  <text x="256" y="390" text-anchor="middle"
+        font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+        font-size="60" font-weight="700"
+        fill="#2D3748"
+        letter-spacing="2">vais</text>
+
+  <!-- "Vibe AI Language for Systems" tagline -->
+  <text x="256" y="430" text-anchor="middle"
+        font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+        font-size="28" font-weight="400"
+        fill="#718096">Vibe AI Language for Systems</text>
+</svg>

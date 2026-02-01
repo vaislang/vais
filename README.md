@@ -1,4 +1,4 @@
-# Vais 1.0.0
+# Vais 1.0.0 (Vibe AI Language for Systems)
 
 **AI-optimized systems programming language with token-efficient syntax.**
 

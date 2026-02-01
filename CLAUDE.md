@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vais is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust.
+Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust.
 
 ## Build & Test
 

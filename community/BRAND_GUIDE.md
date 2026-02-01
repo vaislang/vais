@@ -10,6 +10,13 @@
 
 This document establishes the visual identity and brand standards for **Vais**, the AI-optimized systems programming language. These guidelines ensure consistent representation across all platforms, materials, and communications.
 
+### Official Name
+
+- **Full Name**: Vibe AI Language for Systems
+- **Abbreviation**: Vais
+- **Usage**: 첫 소개 시 "Vais (Vibe AI Language for Systems)"로 병기하고, 이후에는 "Vais"만 사용
+- **설명문**: "AI-optimized systems programming language"는 기능 설명이며 약자 풀이가 아님. 함께 사용 가능
+
 ### Brand Essence
 
 **Vais** embodies:
