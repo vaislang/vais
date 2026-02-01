@@ -1085,6 +1085,23 @@ impl Formatter {
             }
             Expr::Bool(b) => if *b { "true" } else { "false" }.to_string(),
             Expr::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+            Expr::StringInterp(parts) => {
+                let mut result = String::from("\"");
+                for part in parts {
+                    match part {
+                        vais_ast::StringInterpPart::Lit(s) => {
+                            result.push_str(&s.replace('\\', "\\\\").replace('"', "\\\""));
+                        }
+                        vais_ast::StringInterpPart::Expr(e) => {
+                            result.push('{');
+                            result.push_str(&self.format_expr(&e.node));
+                            result.push('}');
+                        }
+                    }
+                }
+                result.push('"');
+                result
+            }
             Expr::Unit => "()".to_string(),
             Expr::Ident(name) => name.to_string(),
             Expr::SelfCall => "@".to_string(),

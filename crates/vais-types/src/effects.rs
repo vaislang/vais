@@ -400,6 +400,15 @@ impl EffectInferrer {
 
             // Force expression - evaluates lazy value
             Expr::Force(inner) => self.infer_expr_effects(&inner.node, functions),
+            Expr::StringInterp(parts) => {
+                let mut effects = EffectSet::pure();
+                for part in parts {
+                    if let vais_ast::StringInterpPart::Expr(e) = part {
+                        effects = effects.union(&self.infer_expr_effects(&e.node, functions));
+                    }
+                }
+                effects
+            }
         }
     }
 

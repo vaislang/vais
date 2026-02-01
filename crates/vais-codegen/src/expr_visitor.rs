@@ -15,6 +15,10 @@ impl ExprVisitor for CodeGenerator {
             Expr::Float(n) => self.visit_float(*n),
             Expr::Bool(b) => self.visit_bool(*b),
             Expr::String(s) => self.visit_string(s, counter),
+            Expr::StringInterp(_) => {
+                // Delegate to main generate_expr which handles desugaring
+                self.generate_expr(expr, counter)
+            }
             Expr::Unit => self.visit_unit(),
             Expr::Ident(name) => self.visit_ident(name, counter),
             Expr::SelfCall => self.visit_self_call(),

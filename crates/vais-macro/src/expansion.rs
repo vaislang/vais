@@ -418,6 +418,18 @@ impl<'a> AstExpander<'a> {
             // Lazy evaluation expressions
             Expr::Lazy(inner) => Expr::Lazy(Box::new(self.expand_expr(*inner)?)),
             Expr::Force(inner) => Expr::Force(Box::new(self.expand_expr(*inner)?)),
+            Expr::StringInterp(parts) => {
+                let expanded_parts = parts
+                    .into_iter()
+                    .map(|part| match part {
+                        StringInterpPart::Lit(s) => Ok(StringInterpPart::Lit(s)),
+                        StringInterpPart::Expr(e) => {
+                            Ok(StringInterpPart::Expr(Box::new(self.expand_expr(*e)?)))
+                        }
+                    })
+                    .collect::<ExpansionResult<Vec<_>>>()?;
+                Expr::StringInterp(expanded_parts)
+            }
             // Leaf expressions - no expansion needed
             e @ (Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) |
                  Expr::Ident(_) | Expr::Unit | Expr::SelfCall |

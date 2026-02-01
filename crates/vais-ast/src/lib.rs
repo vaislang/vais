@@ -795,6 +795,15 @@ pub enum Stmt {
     },
 }
 
+/// Part of a string interpolation expression.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StringInterpPart {
+    /// Literal text segment
+    Lit(String),
+    /// Interpolated expression: `{expr}`
+    Expr(Box<Spanned<Expr>>),
+}
+
 /// Expressions
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -806,6 +815,8 @@ pub enum Expr {
     Bool(bool),
     /// String literal
     String(String),
+    /// String interpolation: `"hello {name}, {x + 1}"`
+    StringInterp(Vec<StringInterpPart>),
     /// Unit literal: `()`
     Unit,
     /// Identifier

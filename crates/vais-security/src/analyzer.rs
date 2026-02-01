@@ -343,6 +343,13 @@ impl SecurityAnalyzer {
                 self.analyze_expr(&expr.node, expr.span);
             },
             // Literals and simple expressions
+            Expr::StringInterp(parts) => {
+                for part in parts {
+                    if let vais_ast::StringInterpPart::Expr(e) = part {
+                        self.analyze_expr(&e.node, e.span);
+                    }
+                }
+            },
             Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::Unit |
             Expr::Ident(_) | Expr::SelfCall | Expr::MacroInvoke(_) | Expr::Error { .. } => {},
         }

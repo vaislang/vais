@@ -92,7 +92,7 @@ impl CodeGenerator {
             Expr::Int(_) => ResolvedType::I64,
             Expr::Float(_) => ResolvedType::F64,
             Expr::Bool(_) => ResolvedType::Bool,
-            Expr::String(_) => ResolvedType::Str,
+            Expr::String(_) | Expr::StringInterp(_) => ResolvedType::Str,
             // @ refers to self in methods
             Expr::SelfCall => {
                 if let Some(local) = self.locals.get("self") {

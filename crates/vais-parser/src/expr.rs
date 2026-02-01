@@ -13,6 +13,42 @@ use vais_lexer::Token;
 
 use crate::{ParseError, ParseResult, Parser};
 
+/// Check if a string contains interpolation syntax: `{<non-empty>}`.
+/// Empty `{}` is NOT interpolation (backward compat with format strings).
+/// `{{` is an escaped brace, not interpolation.
+fn has_interpolation(s: &str) -> bool {
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            if chars.peek() == Some(&'{') {
+                // Escaped {{ - skip
+                chars.next();
+            } else if chars.peek() != Some(&'}') {
+                // Non-empty content inside braces - this is interpolation
+                // Verify there's a closing brace
+                let mut depth = 1;
+                for c in chars.by_ref() {
+                    if c == '{' {
+                        depth += 1;
+                    } else if c == '}' {
+                        depth -= 1;
+                        if depth == 0 {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                // Empty {} - skip
+                chars.next();
+            }
+        } else if ch == '}' && chars.peek() == Some(&'}') {
+            // Escaped }}
+            chars.next();
+        }
+    }
+    false
+}
+
 impl Parser {
     /// Parse expression
     pub fn parse_expr(&mut self) -> ParseResult<Spanned<Expr>> {
@@ -782,6 +818,77 @@ impl Parser {
         result
     }
 
+    /// Parse a string with interpolation into `Expr::StringInterp`.
+    /// Scans the string char-by-char, splitting into literal and expression parts.
+    /// `{{`/`}}` are escaped to literal `{`/`}`.
+    /// `{expr}` is sub-lexed and sub-parsed.
+    fn parse_string_interpolation(&self, s: &str) -> ParseResult<Expr> {
+        let mut parts: Vec<StringInterpPart> = Vec::new();
+        let mut literal = String::new();
+        let mut chars = s.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                if chars.peek() == Some(&'{') {
+                    // Escaped {{ -> literal {
+                    chars.next();
+                    literal.push('{');
+                } else if chars.peek() == Some(&'}') {
+                    // Empty {} -> literal {} (backward compat)
+                    chars.next();
+                    literal.push('{');
+                    literal.push('}');
+                } else {
+                    // Interpolated expression
+                    if !literal.is_empty() {
+                        parts.push(StringInterpPart::Lit(std::mem::take(&mut literal)));
+                    }
+                    // Collect expression text until matching }
+                    let mut expr_text = String::new();
+                    let mut depth = 1;
+                    for c in chars.by_ref() {
+                        if c == '{' {
+                            depth += 1;
+                            expr_text.push(c);
+                        } else if c == '}' {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                            expr_text.push(c);
+                        } else {
+                            expr_text.push(c);
+                        }
+                    }
+                    // Sub-lex and sub-parse the expression
+                    let tokens = vais_lexer::tokenize(&expr_text).map_err(|_| {
+                        ParseError::InvalidExpression
+                    })?;
+                    let mut sub_parser = crate::Parser::new(tokens);
+                    let expr = sub_parser.parse_expr()?;
+                    parts.push(StringInterpPart::Expr(Box::new(expr)));
+                }
+            } else if ch == '}' {
+                if chars.peek() == Some(&'}') {
+                    // Escaped }} -> literal }
+                    chars.next();
+                    literal.push('}');
+                } else {
+                    literal.push(ch);
+                }
+            } else {
+                literal.push(ch);
+            }
+        }
+
+        // Flush remaining literal
+        if !literal.is_empty() {
+            parts.push(StringInterpPart::Lit(literal));
+        }
+
+        Ok(Expr::StringInterp(parts))
+    }
+
     fn parse_primary_inner(&mut self) -> ParseResult<Spanned<Expr>> {
         let start = self.current_span().start;
         let span = self.current_span();
@@ -792,7 +899,13 @@ impl Parser {
             Token::Float(n) => Expr::Float(n),
             Token::True => Expr::Bool(true),
             Token::False => Expr::Bool(false),
-            Token::String(s) => Expr::String(s),
+            Token::String(s) => {
+                if has_interpolation(&s) {
+                    self.parse_string_interpolation(&s)?
+                } else {
+                    Expr::String(s)
+                }
+            }
             Token::At => Expr::SelfCall,
             Token::SelfLower => Expr::Ident("self".to_string()),
             Token::Ident(name) => {

@@ -789,6 +789,30 @@ impl CodeGenerator {
             return Ok(("void".to_string(), ir));
         }
 
+        // If first arg is a StringInterp, flatten it into format string + args
+        if let Expr::StringInterp(parts) = &args[0].node {
+            let mut fmt_parts = Vec::new();
+            let mut interp_args = Vec::new();
+            for part in parts {
+                match part {
+                    vais_ast::StringInterpPart::Lit(s) => {
+                        fmt_parts.push(s.clone());
+                    }
+                    vais_ast::StringInterpPart::Expr(e) => {
+                        fmt_parts.push("{}".to_string());
+                        interp_args.push(e.as_ref().clone());
+                    }
+                }
+            }
+            let fmt_string = fmt_parts.join("");
+            let mut synthetic_args: Vec<Spanned<Expr>> = Vec::new();
+            synthetic_args.push(Spanned::new(Expr::String(fmt_string), args[0].span));
+            synthetic_args.extend(interp_args);
+            // Also include any additional args after the interpolated string
+            synthetic_args.extend_from_slice(&args[1..]);
+            return self.generate_print_call(fn_name, &synthetic_args, counter, span);
+        }
+
         // First argument must be a string literal (format string)
         let format_str = match &args[0].node {
             Expr::String(s) => s.clone(),

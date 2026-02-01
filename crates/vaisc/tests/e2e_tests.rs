@@ -2859,3 +2859,79 @@ F main() -> i64 {
     assert!(result.stdout.contains("2.0"),
             "Expected stdout to contain '2.0', got: {}", result.stdout);
 }
+
+// ===== String Interpolation Tests =====
+
+#[test]
+fn test_string_interp_basic() {
+    let source = r#"
+F main() -> i64 {
+    name := "world"
+    println("hello {name}")
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("hello world"),
+            "Expected 'hello world', got: {}", result.stdout);
+}
+
+#[test]
+fn test_string_interp_arithmetic() {
+    let source = r#"
+F main() -> i64 {
+    x := 5
+    println("x+1={x + 1}")
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("x+1=6"),
+            "Expected 'x+1=6', got: {}", result.stdout);
+}
+
+#[test]
+fn test_string_interp_escaped_braces() {
+    let source = r#"
+F main() -> i64 {
+    println("literal {{braces}}")
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("literal {braces}"),
+            "Expected 'literal {{braces}}', got: {}", result.stdout);
+}
+
+#[test]
+fn test_string_interp_backward_compat() {
+    let source = r#"
+F main() -> i64 {
+    println("x = {}", 42)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("x = 42"),
+            "Expected 'x = 42', got: {}", result.stdout);
+}
+
+#[test]
+fn test_string_interp_multiple_exprs() {
+    let source = r#"
+F main() -> i64 {
+    a := 10
+    b := 20
+    println("{a} + {b} = {a + b}")
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("10 + 20 = 30"),
+            "Expected '10 + 20 = 30', got: {}", result.stdout);
+}

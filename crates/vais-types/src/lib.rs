@@ -2970,6 +2970,15 @@ impl TypeChecker {
             Expr::Float(_) => Ok(ResolvedType::F64),
             Expr::Bool(_) => Ok(ResolvedType::Bool),
             Expr::String(_) => Ok(ResolvedType::Str),
+            Expr::StringInterp(parts) => {
+                // Type-check each interpolated expression
+                for part in parts {
+                    if let StringInterpPart::Expr(expr) = part {
+                        self.check_expr(expr)?;
+                    }
+                }
+                Ok(ResolvedType::Str)
+            }
             Expr::Unit => Ok(ResolvedType::Unit),
 
             Expr::Ident(name) => {
