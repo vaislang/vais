@@ -767,6 +767,9 @@ pub struct CodeGenerator {
 
     // Generic function templates stored for specialization (base_name -> Function)
     generic_function_templates: HashMap<String, Function>,
+
+    // Resolved function signatures from type checker (for inferred parameter types)
+    resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
 }
 
 /// Information about a function's decreases clause for termination proof
@@ -849,6 +852,7 @@ impl CodeGenerator {
             type_recursion_depth: std::cell::Cell::new(0),
             generic_fn_instantiations: HashMap::new(),
             generic_function_templates: HashMap::new(),
+            resolved_function_sigs: HashMap::new(),
         };
 
         // Register built-in extern functions
@@ -904,6 +908,12 @@ impl CodeGenerator {
     /// Check if release mode is enabled
     pub fn is_release_mode(&self) -> bool {
         self.release_mode
+    }
+
+    /// Set resolved function signatures from the type checker.
+    /// Used to provide inferred parameter types for functions with Type::Infer parameters.
+    pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
+        self.resolved_function_sigs = resolved;
     }
 
     /// Set current source file for error messages

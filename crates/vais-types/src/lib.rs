@@ -212,6 +212,11 @@ impl TypeChecker {
         self.functions.get(name)
     }
 
+    /// Get all function signatures (for passing resolved types to codegen)
+    pub fn get_all_functions(&self) -> &HashMap<String, FunctionSig> {
+        &self.functions
+    }
+
     /// Get the struct definition (for codegen)
     pub fn get_struct(&self, name: &str) -> Option<&StructDef> {
         self.structs.get(name)
@@ -2681,8 +2686,18 @@ impl TypeChecker {
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&f.generics);
 
         // Add parameters to scope and validate object safety
-        for param in &f.params {
-            let ty = self.resolve_type(&param.ty.node);
+        // Use types from the registered FunctionSig to share type variables
+        // (important for Type::Infer parameters that become Var(id))
+        let registered_param_types: Vec<_> = self.functions
+            .get(&f.name.node)
+            .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
+            .unwrap_or_default();
+        for (i, param) in f.params.iter().enumerate() {
+            let ty = if i < registered_param_types.len() {
+                registered_param_types[i].clone()
+            } else {
+                self.resolve_type(&param.ty.node)
+            };
             self.validate_dyn_trait_object_safety(&ty);
             self.define_var(&param.name.node, ty, param.is_mut);
         }
@@ -2723,6 +2738,33 @@ impl TypeChecker {
         let expected_ret = self.current_fn_ret.clone()
             .expect("Internal compiler error: current_fn_ret should be set during function checking");
         self.unify(&expected_ret, &body_type)?;
+
+        // Resolve inferred parameter types after body type checking.
+        // Parameters declared without type annotations (Type::Infer) get Var(id) types
+        // which may have been resolved through unification during body checking.
+        // Update the FunctionSig with the resolved types, defaulting unresolved vars to i64.
+        if f.params.iter().any(|p| matches!(p.ty.node, Type::Infer)) {
+            let resolved_params: Vec<_> = {
+                let sig = self.functions.get(&f.name.node);
+                if let Some(sig) = sig {
+                    sig.params.iter().map(|(name, ty, is_mut)| {
+                        let resolved = self.apply_substitutions(ty);
+                        let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
+                            // Unresolved type variable: default to i64
+                            ResolvedType::I64
+                        } else {
+                            resolved
+                        };
+                        (name.clone(), final_ty, *is_mut)
+                    }).collect()
+                } else {
+                    vec![]
+                }
+            };
+            if let Some(sig) = self.functions.get_mut(&f.name.node) {
+                sig.params = resolved_params;
+            }
+        }
 
         // Type check ensures clauses (postconditions)
         // Add 'return' variable to scope for ensures expressions
@@ -2834,7 +2876,13 @@ impl TypeChecker {
             .collect();
 
         // Add parameters to scope
-        for param in &method.params {
+        // Use registered method signature types when available (for Type::Infer support)
+        let registered_method_params: Vec<_> = self.structs
+            .get(&self_type_name)
+            .and_then(|s| s.methods.get(&method.name.node))
+            .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
+            .unwrap_or_default();
+        for (i, param) in method.params.iter().enumerate() {
             // Handle &self parameter specially
             if param.name.node == "self" {
                 // self is a reference to the target type with generics
@@ -2844,7 +2892,11 @@ impl TypeChecker {
                 }));
                 self.define_var("self", self_ty, param.is_mut);
             } else {
-                let ty = self.resolve_type(&param.ty.node);
+                let ty = if i < registered_method_params.len() {
+                    registered_method_params[i].clone()
+                } else {
+                    self.resolve_type(&param.ty.node)
+                };
                 self.define_var(&param.name.node, ty, param.is_mut);
             }
         }
@@ -2869,6 +2921,34 @@ impl TypeChecker {
         let expected_ret = self.current_fn_ret.clone()
             .expect("Internal compiler error: current_fn_ret should be set during function checking");
         self.unify(&expected_ret, &body_type)?;
+
+        // Resolve inferred parameter types for impl methods (same as check_function)
+        if method.params.iter().any(|p| matches!(p.ty.node, Type::Infer)) {
+            let resolved_params: Vec<_> = {
+                let sig = self.structs.get(&self_type_name)
+                    .and_then(|s| s.methods.get(&method.name.node));
+                if let Some(sig) = sig {
+                    sig.params.iter().map(|(name, ty, is_mut)| {
+                        let resolved = self.apply_substitutions(ty);
+                        let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
+                            ResolvedType::I64
+                        } else {
+                            resolved
+                        };
+                        (name.clone(), final_ty, *is_mut)
+                    }).collect()
+                } else {
+                    vec![]
+                }
+            };
+            if !resolved_params.is_empty() {
+                if let Some(struct_def) = self.structs.get_mut(&self_type_name) {
+                    if let Some(sig) = struct_def.methods.get_mut(&method.name.node) {
+                        sig.params = resolved_params;
+                    }
+                }
+            }
+        }
 
         self.current_fn_ret = None;
         self.current_fn_name = None;

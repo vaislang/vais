@@ -1,0 +1,38 @@
+# Test: Advanced function parameter type inference
+# Tests various inference scenarios
+
+# Recursive function with inferred params and @ operator
+F factorial(n) -> i64 {
+    I n <= 1 {
+        R 1
+    }
+    R n * @(n - 1)
+}
+
+# Multiple inferred params with different usage patterns
+F clamp(val, lo, hi) -> i64 {
+    I val < lo {
+        R lo
+    }
+    I val > hi {
+        R hi
+    }
+    R val
+}
+
+# f64 inference from float operations
+F area(w, h) -> f64 = w * h
+
+# Entry point
+F main() -> i64 {
+    # Test recursive with inference
+    println("{factorial(5)}")
+    println("{factorial(10)}")
+
+    # Test multi-param inference
+    println("{clamp(15, 0, 10)}")
+    println("{clamp(-3, 0, 10)}")
+    println("{clamp(5, 0, 10)}")
+
+    R 0
+}

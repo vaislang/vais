@@ -531,11 +531,22 @@ impl CodeGenerator {
             self.debug_info
                 .create_function_debug_info(&f.name.node, func_line, true);
 
+        // Get registered function signature for resolved param types (supports Type::Infer)
+        let registered_param_types: Vec<_> = self.functions
+            .get(&f.name.node)
+            .map(|info| info.signature.params.iter().map(|(_, ty, _)| ty.clone()).collect())
+            .unwrap_or_default();
+
         let params: Vec<_> = f
             .params
             .iter()
-            .map(|p| {
-                let ty = self.ast_type_to_resolved(&p.ty.node);
+            .enumerate()
+            .map(|(i, p)| {
+                let ty = if i < registered_param_types.len() {
+                    registered_param_types[i].clone()
+                } else {
+                    self.ast_type_to_resolved(&p.ty.node)
+                };
                 let llvm_ty = self.type_to_llvm(&ty);
 
                 // Register parameter as local (SSA value, not alloca)
@@ -579,8 +590,12 @@ impl CodeGenerator {
 
         // For struct parameters, allocate stack space and store the value
         // This allows field access to work via getelementptr
-        for p in &f.params {
-            let ty = self.ast_type_to_resolved(&p.ty.node);
+        for (i, p) in f.params.iter().enumerate() {
+            let ty = if i < registered_param_types.len() {
+                registered_param_types[i].clone()
+            } else {
+                self.ast_type_to_resolved(&p.ty.node)
+            };
             if matches!(ty, ResolvedType::Named { .. }) {
                 let llvm_ty = self.type_to_llvm(&ty);
                 let param_ptr_name = format!("__{}_ptr", p.name.node);

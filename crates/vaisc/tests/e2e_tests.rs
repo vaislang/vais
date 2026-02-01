@@ -23,6 +23,8 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
         .check_module(&module)
         .map_err(|e| format!("Type error: {:?}", e))?;
     let mut gen = CodeGenerator::new("e2e_test");
+    // Pass resolved function signatures for inferred parameter type support
+    gen.set_resolved_functions(checker.get_all_functions().clone());
     let ir = gen
         .generate_module(&module)
         .map_err(|e| format!("Codegen error: {:?}", e))?;
@@ -2934,4 +2936,72 @@ F main() -> i64 {
     assert_eq!(result.exit_code, 0);
     assert!(result.stdout.contains("10 + 20 = 30"),
             "Expected '10 + 20 = 30', got: {}", result.stdout);
+}
+
+// ===== Parameter Type Inference Tests =====
+
+#[test]
+fn test_param_type_infer_simple() {
+    let source = r#"
+F add(a, b) -> i64 = a + b
+F main() -> i64 {
+    R add(3, 4)
+}
+"#;
+    assert_exit_code(source, 7);
+}
+
+#[test]
+fn test_param_type_infer_block_body() {
+    let source = r#"
+F multiply(x, y) -> i64 {
+    R x * y
+}
+F main() -> i64 {
+    R multiply(5, 6)
+}
+"#;
+    assert_exit_code(source, 30);
+}
+
+#[test]
+fn test_param_type_infer_mixed() {
+    let source = r#"
+F mixed(a: i64, b) -> i64 = a + b
+F main() -> i64 {
+    R mixed(10, 20)
+}
+"#;
+    assert_exit_code(source, 30);
+}
+
+#[test]
+fn test_param_type_infer_recursive() {
+    let source = r#"
+F factorial(n) -> i64 {
+    I n <= 1 { R 1 }
+    R n * @(n - 1)
+}
+F main() -> i64 {
+    I factorial(5) == 120 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_param_type_infer_multi_param() {
+    let source = r#"
+F clamp(val, lo, hi) -> i64 {
+    I val < lo { R lo }
+    I val > hi { R hi }
+    R val
+}
+F main() -> i64 {
+    I clamp(15, 0, 10) == 10 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
 }

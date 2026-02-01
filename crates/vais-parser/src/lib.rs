@@ -1751,8 +1751,15 @@ impl Parser {
             }
 
             let name = self.parse_ident()?;
-            self.expect(&Token::Colon)?;
-            let ty = self.parse_type()?;
+
+            // Type annotation is optional: `F add(a, b) = a + b`
+            // If colon is present, parse the type; otherwise use Type::Infer
+            let ty = if self.check(&Token::Colon) {
+                self.advance();
+                self.parse_type()?
+            } else {
+                Spanned::new(Type::Infer, name.span)
+            };
 
             // Parse optional default value: `= expr`
             let default_value = if self.check(&Token::Eq) {

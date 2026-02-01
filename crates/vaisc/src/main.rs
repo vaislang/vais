@@ -1328,6 +1328,9 @@ fn cmd_build(
         }
     }
 
+    // Pass resolved function signatures to codegen (for inferred parameter types)
+    codegen.set_resolved_functions(checker.get_all_functions().clone());
+
     let codegen_start = std::time::Instant::now();
     let instantiations = checker.get_generic_instantiations();
     let raw_ir = if instantiations.is_empty() {

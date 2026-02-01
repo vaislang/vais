@@ -10,14 +10,29 @@ use vais_types::{ResolvedType, FunctionSig};
 
 impl CodeGenerator {
     pub(crate) fn register_function(&mut self, f: &Function) -> CodegenResult<()> {
-        let params: Vec<_> = f
-            .params
-            .iter()
-            .map(|p| {
+        // Use resolved function signatures from type checker when available
+        // (needed for functions with inferred parameter types - Type::Infer)
+        let has_inferred = f.params.iter().any(|p| matches!(p.ty.node, vais_ast::Type::Infer));
+        let params: Vec<_> = if has_inferred {
+            if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
+                resolved_sig.params.clone()
+            } else {
+                f.params.iter().map(|p| {
+                    let ty = self.ast_type_to_resolved(&p.ty.node);
+                    let ty = if matches!(ty, ResolvedType::Unknown) && matches!(p.ty.node, vais_ast::Type::Infer) {
+                        ResolvedType::I64 // default to i64 for unresolved inferred types
+                    } else {
+                        ty
+                    };
+                    (p.name.node.to_string(), ty, p.is_mut)
+                }).collect()
+            }
+        } else {
+            f.params.iter().map(|p| {
                 let ty = self.ast_type_to_resolved(&p.ty.node);
                 (p.name.node.to_string(), ty, p.is_mut)
-            })
-            .collect();
+            }).collect()
+        };
 
         let ret_type = f
             .ret_type

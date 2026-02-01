@@ -1,0 +1,27 @@
+# Test: Function parameter type inference
+# Parameters without type annotations are inferred from usage
+
+# Simple arithmetic - inferred as i64 from + operator and return type
+F add(a, b) -> i64 = a + b
+
+# Inferred from function body operations
+F multiply(x, y) -> i64 {
+    R x * y
+}
+
+# Mixed: some annotated, some inferred
+F mixed(a: i64, b) -> i64 = a + b
+
+# Entry point
+F main() -> i64 {
+    result := add(3, 4)
+    println("{result}")
+
+    m := multiply(5, 6)
+    println("{m}")
+
+    mx := mixed(10, 20)
+    println("{mx}")
+
+    R 0
+}
