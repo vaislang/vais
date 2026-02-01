@@ -1466,8 +1466,17 @@ impl CodeGenerator {
         let mut ir = String::new();
         let len = elements.len();
 
+        // Infer element type from first element (default to i64)
+        let elem_ty = if let Some(first) = elements.first() {
+            let resolved = self.infer_expr_type(first);
+            self.type_to_llvm(&resolved)
+        } else {
+            "i64".to_string()
+        };
+        let arr_ty = format!("[{}  x {}]", len, elem_ty);
+
         let arr_ptr = self.next_temp(counter);
-        ir.push_str(&format!("  {} = alloca [{}  x i64]\n", arr_ptr, len));
+        ir.push_str(&format!("  {} = alloca {}\n", arr_ptr, arr_ty));
 
         for (i, elem) in elements.iter().enumerate() {
             let (val, elem_ir) = self.generate_expr(elem, counter)?;
@@ -1475,16 +1484,16 @@ impl CodeGenerator {
 
             let elem_ptr = self.next_temp(counter);
             ir.push_str(&format!(
-                "  {} = getelementptr [{}  x i64], [{}  x i64]* {}, i64 0, i64 {}\n",
-                elem_ptr, len, len, arr_ptr, i
+                "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+                elem_ptr, arr_ty, arr_ty, arr_ptr, i
             ));
-            ir.push_str(&format!("  store i64 {}, i64* {}\n", val, elem_ptr));
+            ir.push_str(&format!("  store {} {}, {}* {}\n", elem_ty, val, elem_ty, elem_ptr));
         }
 
         let result = self.next_temp(counter);
         ir.push_str(&format!(
-            "  {} = getelementptr [{}  x i64], [{}  x i64]* {}, i64 0, i64 0\n",
-            result, len, len, arr_ptr
+            "  {} = getelementptr {}, {}* {}, i64 0, i64 0\n",
+            result, arr_ty, arr_ty, arr_ptr
         ));
 
         Ok((result, ir))

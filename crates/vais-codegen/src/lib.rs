@@ -3264,14 +3264,23 @@ impl CodeGenerator {
                     let (idx_val, idx_ir) = self.generate_expr(index, counter)?;
                     ir.push_str(&idx_ir);
 
+                    // Determine element type from array type
+                    let arr_type = self.infer_expr_type(arr_expr);
+                    let elem_llvm_type = match &arr_type {
+                        ResolvedType::Array(inner) => self.type_to_llvm(inner),
+                        ResolvedType::ConstArray { element, .. } => self.type_to_llvm(element),
+                        ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
+                        _ => "i64".to_string(),
+                    };
+
                     let elem_ptr = self.next_temp(counter);
                     ir.push_str(&format!(
-                        "  {} = getelementptr i64, i64* {}, i64 {}\n",
-                        elem_ptr, arr_val, idx_val
+                        "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                        elem_ptr, elem_llvm_type, elem_llvm_type, arr_val, idx_val
                     ));
                     ir.push_str(&format!(
-                        "  store i64 {}, i64* {}\n",
-                        val, elem_ptr
+                        "  store {} {}, {}* {}\n",
+                        elem_llvm_type, val, elem_llvm_type, elem_ptr
                     ));
                 } else if let Expr::Field { expr: obj_expr, field } = &target.node {
                     // Field assignment: obj.field = value
@@ -3378,11 +3387,20 @@ impl CodeGenerator {
                 let mut ir = String::new();
                 let len = elements.len();
 
+                // Infer element type from first element (default to i64)
+                let elem_ty = if let Some(first) = elements.first() {
+                    let resolved = self.infer_expr_type(first);
+                    self.type_to_llvm(&resolved)
+                } else {
+                    "i64".to_string()
+                };
+                let arr_ty = format!("[{}  x {}]", len, elem_ty);
+
                 // Allocate array on stack
                 let arr_ptr = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = alloca [{}  x i64]\n",
-                    arr_ptr, len
+                    "  {} = alloca {}\n",
+                    arr_ptr, arr_ty
                 ));
 
                 // Store each element
@@ -3392,20 +3410,20 @@ impl CodeGenerator {
 
                     let elem_ptr = self.next_temp(counter);
                     ir.push_str(&format!(
-                        "  {} = getelementptr [{}  x i64], [{}  x i64]* {}, i64 0, i64 {}\n",
-                        elem_ptr, len, len, arr_ptr, i
+                        "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
+                        elem_ptr, arr_ty, arr_ty, arr_ptr, i
                     ));
                     ir.push_str(&format!(
-                        "  store i64 {}, i64* {}\n",
-                        val, elem_ptr
+                        "  store {} {}, {}* {}\n",
+                        elem_ty, val, elem_ty, elem_ptr
                     ));
                 }
 
                 // Return pointer to first element
                 let result = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = getelementptr [{}  x i64], [{}  x i64]* {}, i64 0, i64 0\n",
-                    result, len, len, arr_ptr
+                    "  {} = getelementptr {}, {}* {}, i64 0, i64 0\n",
+                    result, arr_ty, arr_ty, arr_ptr
                 ));
 
                 Ok((result, ir))
@@ -3587,18 +3605,26 @@ impl CodeGenerator {
                 let mut ir = arr_ir;
                 ir.push_str(&idx_ir);
 
+                // Determine element type from array type
+                let elem_llvm_type = match &arr_type {
+                    ResolvedType::Array(inner) => self.type_to_llvm(inner),
+                    ResolvedType::ConstArray { element, .. } => self.type_to_llvm(element),
+                    ResolvedType::Pointer(inner) => self.type_to_llvm(inner),
+                    _ => "i64".to_string(),
+                };
+
                 // Get element pointer
                 let elem_ptr = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = getelementptr i64, i64* {}, i64 {}\n",
-                    elem_ptr, arr_val, idx_val
+                    "  {} = getelementptr {}, {}* {}, i64 {}\n",
+                    elem_ptr, elem_llvm_type, elem_llvm_type, arr_val, idx_val
                 ));
 
                 // Load element
                 let result = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = load i64, i64* {}\n",
-                    result, elem_ptr
+                    "  {} = load {}, {}* {}\n",
+                    result, elem_llvm_type, elem_llvm_type, elem_ptr
                 ));
 
                 Ok((result, ir))

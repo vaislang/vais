@@ -135,6 +135,92 @@ fn test_gpu_type_void() {
     assert_eq!(ty.wgsl_name(), "");
 }
 
+mod cuda_codegen_tests {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget, GpuType};
+    use vais_ast::*;
+
+    fn spanned<T>(node: T) -> Spanned<T> {
+        Spanned { node, span: Span { start: 0, end: 0 } }
+    }
+
+    fn make_kernel(name: &str, params: Vec<Param>, body: Vec<Spanned<Stmt>>) -> Module {
+        Module {
+            items: vec![spanned(Item::Function(Function {
+                name: spanned(name.to_string()),
+                generics: vec![],
+                params,
+                ret_type: None,
+                body: FunctionBody::Block(body),
+                is_pub: false,
+                is_async: false,
+                attributes: vec![Attribute { name: "gpu".to_string(), args: vec![], expr: None }],
+            }))]
+        }
+    }
+
+    fn make_param(name: &str, ty: Type) -> Param {
+        Param {
+            name: spanned(name.to_string()),
+            ty: spanned(ty),
+            is_mut: false,
+            is_vararg: false,
+            ownership: Ownership::Regular,
+            default_value: None,
+        }
+    }
+
+    #[test]
+    fn test_cuda_kernel_i32_ptr_param() {
+        let module = make_kernel("add_i32", vec![
+            make_param("a", Type::Pointer(Box::new(spanned(Type::Named { name: "i32".to_string(), generics: vec![] })))),
+            make_param("b", Type::Pointer(Box::new(spanned(Type::Named { name: "i32".to_string(), generics: vec![] })))),
+        ], vec![]);
+
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("should generate CUDA code");
+        assert!(code.contains("int* a"), "Expected 'int* a' in CUDA output, got:\n{}", code);
+        assert!(code.contains("int* b"), "Expected 'int* b' in CUDA output, got:\n{}", code);
+
+        // Verify kernel metadata has correct types
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].params[0].1, GpuType::Ptr(Box::new(GpuType::I32)));
+        assert_eq!(kernels[0].params[1].1, GpuType::Ptr(Box::new(GpuType::I32)));
+    }
+
+    #[test]
+    fn test_cuda_kernel_f64_ptr_param() {
+        let module = make_kernel("add_f64", vec![
+            make_param("data", Type::Pointer(Box::new(spanned(Type::Named { name: "f64".to_string(), generics: vec![] })))),
+        ], vec![]);
+
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("should generate CUDA code");
+        assert!(code.contains("double* data"), "Expected 'double* data' in CUDA output, got:\n{}", code);
+
+        let kernels = gen.kernels();
+        assert_eq!(kernels[0].params[0].1, GpuType::Ptr(Box::new(GpuType::F64)));
+    }
+
+    #[test]
+    fn test_cuda_kernel_mixed_param_types() {
+        let module = make_kernel("mixed", vec![
+            make_param("floats", Type::Pointer(Box::new(spanned(Type::Named { name: "f32".to_string(), generics: vec![] })))),
+            make_param("ints", Type::Pointer(Box::new(spanned(Type::Named { name: "i64".to_string(), generics: vec![] })))),
+            make_param("n", Type::Named { name: "i32".to_string(), generics: vec![] }),
+        ], vec![]);
+
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("should generate CUDA code");
+
+        let kernels = gen.kernels();
+        assert_eq!(kernels[0].params.len(), 3);
+        assert_eq!(kernels[0].params[0].1, GpuType::Ptr(Box::new(GpuType::F32)));
+        assert_eq!(kernels[0].params[1].1, GpuType::Ptr(Box::new(GpuType::I64)));
+        assert_eq!(kernels[0].params[2].1, GpuType::I32);
+    }
+}
+
 mod common_tests {
     use vais_gpu::cuda;
     use vais_gpu::opencl;

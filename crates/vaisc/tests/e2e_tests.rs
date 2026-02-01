@@ -2430,6 +2430,76 @@ F main() -> i64 {
     assert!(result.stdout.contains("after fetch_add 5"), "Expected fetch_add result");
 }
 
+// ==================== Condvar Runtime E2E Tests ====================
+
+#[test]
+fn e2e_sync_condvar_create_destroy() {
+    let rt = match find_sync_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+    };
+    let source = r#"
+N "C" {
+    F printf(fmt: str, ...) -> i64
+}
+
+X F __condvar_create() -> i64
+X F __condvar_destroy(h: i64) -> i64
+
+F main() -> i64 {
+    cv := __condvar_create()
+    printf("condvar created: %lld\n", cv)
+
+    rc := __condvar_destroy(cv)
+    printf("condvar destroyed: %lld\n", rc)
+
+    I cv > 0 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "condvar create/destroy test failed: {}", result.stderr);
+    assert!(result.stdout.contains("condvar created"), "Expected 'condvar created' in output");
+    assert!(result.stdout.contains("condvar destroyed"), "Expected 'condvar destroyed' in output");
+}
+
+#[test]
+fn e2e_sync_condvar_signal() {
+    let rt = match find_sync_runtime_path() {
+        Some(p) => p,
+        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+    };
+    let source = r#"
+N "C" {
+    F printf(fmt: str, ...) -> i64
+}
+
+X F __condvar_create() -> i64
+X F __condvar_signal(h: i64) -> i64
+X F __condvar_broadcast(h: i64) -> i64
+X F __condvar_destroy(h: i64) -> i64
+
+F main() -> i64 {
+    cv := __condvar_create()
+
+    rc1 := __condvar_signal(cv)
+    printf("signal: %lld\n", rc1)
+
+    rc2 := __condvar_broadcast(cv)
+    printf("broadcast: %lld\n", rc2)
+
+    __condvar_destroy(cv)
+
+    I rc1 == 0 {
+        I rc2 == 0 { 0 } E { 2 }
+    } E { 1 }
+}
+"#;
+    let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
+    assert_eq!(result.exit_code, 0, "condvar signal/broadcast test failed: {}", result.stderr);
+    assert!(result.stdout.contains("signal: 0"), "Expected 'signal: 0' in output");
+    assert!(result.stdout.contains("broadcast: 0"), "Expected 'broadcast: 0' in output");
+}
+
 // ==================== f64 Arithmetic E2E Tests ====================
 
 #[test]
@@ -2707,6 +2777,72 @@ F main() -> i64 {
             "Expected stdout to contain '2.71', got: {}", result.stdout);
     assert!(result.stdout.contains("3.14"),
             "Expected stdout to contain '3.14', got: {}", result.stdout);
+}
+
+// ==================== f64 Array / Pointer Arithmetic ====================
+
+#[test]
+fn e2e_f64_array_access() {
+    let source = r#"
+F main() -> i64 {
+    arr: *f64 = [1.5, 2.5, 3.5, 42.0]
+    x := arr[3]
+    printf("%f\n", x)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("42.0"),
+            "Expected stdout to contain '42.0', got: {}", result.stdout);
+}
+
+#[test]
+fn e2e_f64_array_mutation() {
+    let source = r#"
+F main() -> i64 {
+    arr: *f64 = [0.0, 0.0, 0.0]
+    arr[1] = 3.14
+    printf("%f\n", arr[1])
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("3.14"),
+            "Expected stdout to contain '3.14', got: {}", result.stdout);
+}
+
+#[test]
+fn e2e_f64_array_sum() {
+    let source = r#"
+F main() -> i64 {
+    arr: *f64 = [1.0, 2.0, 3.0]
+    sum := arr[0] + arr[1] + arr[2]
+    printf("%f\n", sum)
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("6.0"),
+            "Expected stdout to contain '6.0', got: {}", result.stdout);
+}
+
+#[test]
+fn e2e_f64_array_with_variable_index() {
+    let source = r#"
+F main() -> i64 {
+    arr: *f64 = [10.0, 20.0, 30.0, 40.0, 50.0]
+    i := 3
+    printf("%f\n", arr[i])
+    0
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0);
+    assert!(result.stdout.contains("40.0"),
+            "Expected stdout to contain '40.0', got: {}", result.stdout);
 }
 
 #[test]

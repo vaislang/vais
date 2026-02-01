@@ -79,10 +79,10 @@ impl CudaGenerator {
         self.emit(name);
         self.emit("(");
 
-        // Parameters
+        // Parameters - infer types from AST
         let param_types: Vec<(String, GpuType)> = func.params
             .iter()
-            .map(|p| (p.name.node.clone(), GpuType::Ptr(Box::new(GpuType::F64))))
+            .map(|p| (p.name.node.clone(), self.vais_type_to_gpu(&p.ty.node)))
             .collect();
 
         for (i, param) in func.params.iter().enumerate() {
@@ -313,6 +313,18 @@ impl CudaGenerator {
                 }
                 self.emit_line("; i++) {");
             }
+            Expr::Ternary { cond, then, else_ } => {
+                self.emit("(");
+                self.generate_expr(&cond.node)?;
+                self.emit(" ? ");
+                self.generate_expr(&then.node)?;
+                self.emit(" : ");
+                self.generate_expr(&else_.node)?;
+                self.emit(")");
+            }
+            Expr::String(s) => {
+                self.emit(&format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")));
+            }
             _ => {
                 return Err(GpuError::UnsupportedOperation(format!(
                     "Expression not supported in CUDA: {:?}",
@@ -393,6 +405,23 @@ impl CudaGenerator {
             _ => {}
         }
         Ok(())
+    }
+
+    fn vais_type_to_gpu(&self, ty: &Type) -> GpuType {
+        match ty {
+            Type::Named { name, .. } => {
+                match name.as_str() {
+                    "i32" => GpuType::I32,
+                    "i64" => GpuType::I64,
+                    "f32" => GpuType::F32,
+                    "f64" => GpuType::F64,
+                    "bool" => GpuType::Bool,
+                    _ => GpuType::Void,
+                }
+            }
+            Type::Pointer(inner) => GpuType::Ptr(Box::new(self.vais_type_to_gpu(&inner.node))),
+            _ => GpuType::Void,
+        }
     }
 
     fn type_to_cuda(&self, ty: &Type) -> String {

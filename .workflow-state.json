@@ -1,12 +1,12 @@
 {
   "phase": 5,
-  "request": "다음 할일 도출 및 실행 (홍보 Phase 1 완성)",
+  "request": "기술 부채 해결 (f64 포인터 산술, GPU 타입 추론, stdlib 검증, ROADMAP 갱신)",
   "tasks": [
-    { "id": 1, "name": "빌드/테스트 상태 점검", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "프로필 완성 가이드 업데이트", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "코드 카드 템플릿 개선 (html2canvas + 프리셋)", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "첫 3개 게시물 캡션 제작", "status": "completed", "model": "Opus" }
+    { "id": 1, "name": "f64 배열 코드젠 타입 추론 수정", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "GPU 코드젠 커널 파라미터 타입 추론 수정", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "표준 라이브러리 런타임 E2E 검증", "status": "completed", "model": "Opus" },
+    { "id": 4, "name": "ROADMAP 실사용 주의사항 갱신", "status": "completed", "model": "Opus" }
   ],
   "currentTask": null,
-  "lastCompleted": "홍보 Phase 1 자동화 가능 항목 전체 완료"
+  "lastCompleted": "ROADMAP Phase 26 추가 및 기능 현황 테이블 갱신"
 }
