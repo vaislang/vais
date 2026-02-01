@@ -180,14 +180,16 @@ class Playground {
 
     this.isRunning = true;
     this.updateStatus('running', 'Running...');
-    this.clearOutput();
-    this.appendOutput('Compiling...', 'info');
+    this.setRunLoading(true);
+    this.showOutputLoading();
 
     try {
       const code = this.editor.getValue();
 
       // Compile and run
       const result = await this.compiler.compileAndRun(code);
+
+      this.clearOutput();
 
       if (result.success) {
         this.appendOutput('Compilation successful!', 'success');
@@ -227,11 +229,29 @@ class Playground {
         this.updateStatus('error', 'Compilation failed');
       }
     } catch (error) {
+      this.clearOutput();
       this.appendOutput(`Runtime error: ${error.message}`, 'error');
       this.updateStatus('error', 'Error');
     } finally {
       this.isRunning = false;
+      this.setRunLoading(false);
     }
+  }
+
+  setRunLoading(loading) {
+    const runBtn = document.getElementById('run-btn');
+    if (loading) {
+      runBtn.classList.add('loading');
+      runBtn.innerHTML = '<span class="btn-spinner"></span> Compiling...';
+    } else {
+      runBtn.classList.remove('loading');
+      runBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg> Run';
+    }
+  }
+
+  showOutputLoading() {
+    const output = document.getElementById('output');
+    output.innerHTML = '<div class="output-loading"><div class="output-loading-spinner"></div><span class="output-loading-text">Compiling and running...</span></div>';
   }
 
   formatCode() {

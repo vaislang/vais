@@ -282,6 +282,25 @@ kbd {
   transform: translateY(0);
 }
 
+.btn-primary.loading {
+  background: var(--secondary-color);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.btn-primary.loading svg {
+  display: none;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
 .btn-secondary {
   background: var(--surface-hover);
   color: var(--text-primary);
@@ -427,6 +446,30 @@ kbd {
   border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+.output-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.output-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.output-loading-text {
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes spin {
