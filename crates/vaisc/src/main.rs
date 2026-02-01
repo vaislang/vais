@@ -159,9 +159,13 @@ enum Commands {
         hot: bool,
 
         /// Generate GPU code instead of LLVM IR
-        /// Targets: cuda, opencl, webgpu
+        /// Targets: cuda, opencl, webgpu, metal
         #[arg(long, value_name = "GPU_TARGET")]
         gpu: Option<String>,
+
+        /// Also generate host code template for GPU kernel dispatch
+        #[arg(long)]
+        gpu_host: bool,
 
         /// Enable Link-Time Optimization
         /// Values: thin, full, none
@@ -492,10 +496,10 @@ fn main() {
     }
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
-                cmd_build_gpu(&input, output, gpu_target_str, cli.verbose)
+                cmd_build_gpu(&input, output, gpu_target_str, gpu_host, cli.verbose)
             } else {
 
             let target_triple = target.as_ref()
@@ -600,18 +604,19 @@ fn main() {
     }
 }
 
-/// Build GPU code (CUDA, OpenCL, or WebGPU)
+/// Build GPU code (CUDA, OpenCL, WebGPU, or Metal)
 fn cmd_build_gpu(
     input: &PathBuf,
     output: Option<PathBuf>,
     gpu_target: &str,
+    emit_host: bool,
     verbose: bool,
 ) -> Result<(), String> {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
 
     // Parse GPU target
     let target = GpuTarget::parse(gpu_target)
-        .ok_or_else(|| format!("Unknown GPU target: '{}'. Valid targets: cuda, opencl, webgpu", gpu_target))?;
+        .ok_or_else(|| format!("Unknown GPU target: '{}'. Valid targets: cuda, opencl, webgpu, metal", gpu_target))?;
 
     if verbose {
         println!("{} Compiling for GPU target: {}", "info:".blue().bold(), target.name());
@@ -655,6 +660,26 @@ fn cmd_build_gpu(
                 kernel.block_size
             );
         }
+    }
+
+    // Generate host code template if requested
+    if emit_host {
+        let host_code = generator.generate_host_code();
+        let host_ext = match target {
+            GpuTarget::Cuda => "host.cu",
+            GpuTarget::OpenCL => "host.c",
+            GpuTarget::WebGPU => "host.ts",
+            GpuTarget::Metal => "host.swift",
+        };
+        let host_path = input.file_stem()
+            .and_then(|s| s.to_str())
+            .map(|stem| PathBuf::from(format!("{}.{}", stem, host_ext)))
+            .unwrap_or_else(|| PathBuf::from(format!("output.{}", host_ext)));
+
+        fs::write(&host_path, &host_code)
+            .map_err(|e| format!("Failed to write host code {}: {}", host_path.display(), e))?;
+
+        println!("{} Generated host code: {} ({})", "✓".green().bold(), host_path.display(), target.name());
     }
 
     Ok(())

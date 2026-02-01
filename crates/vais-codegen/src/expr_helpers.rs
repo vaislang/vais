@@ -1951,6 +1951,8 @@ impl CodeGenerator {
         ));
 
         ir.push_str(&format!("{}:\n", poll_pending));
+        // Yield CPU cooperatively instead of busy-waiting
+        ir.push_str("  call i32 @sched_yield()\n");
         ir.push_str(&format!("  br label %{}\n\n", poll_start));
 
         ir.push_str(&format!("{}:\n", poll_ready));

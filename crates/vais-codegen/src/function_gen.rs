@@ -308,6 +308,161 @@ impl CodeGenerator {
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
 
+        // === Async runtime helper functions ===
+
+        // __call_poll: call an indirect function pointer (poll_fn) with future_ptr
+        // poll_fn is a function pointer: i64 (i64) -> i64
+        // Returns packed i64 with status in high 32 bits, value in low 32 bits
+        ir.push_str("\n; Async helper: call indirect poll function\n");
+        ir.push_str("define i64 @__call_poll(i64 %poll_fn, i64 %future_ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %poll_fn to i64 (i64)*\n");
+        ir.push_str("  %1 = call i64 %0(i64 %future_ptr)\n");
+        ir.push_str("  ret i64 %1\n");
+        ir.push_str("}\n");
+
+        // __extract_poll_status: extract status from packed poll result
+        // status = result >> 32 (high 32 bits: 0=Pending, 1=Ready)
+        ir.push_str("\n; Async helper: extract poll status from packed result\n");
+        ir.push_str("define i64 @__extract_poll_status(i64 %poll_result) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = lshr i64 %poll_result, 32\n");
+        ir.push_str("  %1 = and i64 %0, 4294967295\n");
+        ir.push_str("  ret i64 %1\n");
+        ir.push_str("}\n");
+
+        // __extract_poll_value: extract value from packed poll result
+        // value = result & 0xFFFFFFFF (low 32 bits)
+        ir.push_str("\n; Async helper: extract poll value from packed result\n");
+        ir.push_str("define i64 @__extract_poll_value(i64 %poll_result) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = and i64 %poll_result, 4294967295\n");
+        ir.push_str("  ret i64 %0\n");
+        ir.push_str("}\n");
+
+        // __time_now_ms: get current time in milliseconds using gettimeofday
+        ir.push_str("\n; Async helper: current time in milliseconds\n");
+        ir.push_str("declare i32 @gettimeofday(i8*, i8*)\n");
+        ir.push_str("define i64 @__time_now_ms() {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %tv = alloca [16 x i8], align 8\n");
+        ir.push_str("  %tvptr = bitcast [16 x i8]* %tv to i8*\n");
+        ir.push_str("  %0 = call i32 @gettimeofday(i8* %tvptr, i8* null)\n");
+        ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
+        ir.push_str("  %sec = load i64, i64* %secptr\n");
+        ir.push_str("  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n");
+        ir.push_str("  %usecptr64 = bitcast i8* %usecptr to i64*\n");
+        ir.push_str("  %usec = load i64, i64* %usecptr64\n");
+        ir.push_str("  %ms_sec = mul i64 %sec, 1000\n");
+        ir.push_str("  %ms_usec = sdiv i64 %usec, 1000\n");
+        ir.push_str("  %ms = add i64 %ms_sec, %ms_usec\n");
+        ir.push_str("  ret i64 %ms\n");
+        ir.push_str("}\n");
+
+        // __kevent_register: wrapper around kevent syscall for registration
+        ir.push_str("\n; Async helper: kqueue event registration\n");
+        ir.push_str("declare i32 @kevent(i32, i8*, i32, i8*, i32, i8*)\n");
+        ir.push_str("define i64 @__kevent_register(i64 %kq, i64 %fd, i64 %filter, i64 %flags) {\n");
+        ir.push_str("entry:\n");
+        // Allocate kevent struct (sizeof(struct kevent) = 64 bytes on macOS)
+        ir.push_str("  %ev = alloca [64 x i8], align 8\n");
+        ir.push_str("  %evptr = bitcast [64 x i8]* %ev to i8*\n");
+        // Set ident (fd) at offset 0
+        ir.push_str("  %identptr = bitcast [64 x i8]* %ev to i64*\n");
+        ir.push_str("  store i64 %fd, i64* %identptr\n");
+        // Set filter at offset 8 (i16)
+        ir.push_str("  %filterptr = getelementptr inbounds [64 x i8], [64 x i8]* %ev, i64 0, i64 8\n");
+        ir.push_str("  %filterptr16 = bitcast i8* %filterptr to i16*\n");
+        ir.push_str("  %filter16 = trunc i64 %filter to i16\n");
+        ir.push_str("  store i16 %filter16, i16* %filterptr16\n");
+        // Set flags at offset 10 (u16)
+        ir.push_str("  %flagsptr = getelementptr inbounds [64 x i8], [64 x i8]* %ev, i64 0, i64 10\n");
+        ir.push_str("  %flagsptr16 = bitcast i8* %flagsptr to i16*\n");
+        ir.push_str("  %flags16 = trunc i64 %flags to i16\n");
+        ir.push_str("  store i16 %flags16, i16* %flagsptr16\n");
+        // Call kevent
+        ir.push_str("  %kq32 = trunc i64 %kq to i32\n");
+        ir.push_str("  %ret = call i32 @kevent(i32 %kq32, i8* %evptr, i32 1, i8* null, i32 0, i8* null)\n");
+        ir.push_str("  %retval = sext i32 %ret to i64\n");
+        ir.push_str("  ret i64 %retval\n");
+        ir.push_str("}\n");
+
+        // __kevent_wait: wait for events with timeout
+        ir.push_str("\n; Async helper: kqueue event wait\n");
+        ir.push_str("define i64 @__kevent_wait(i64 %kq, i64 %events_buf, i64 %max_events, i64 %timeout_ms) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %bufptr = inttoptr i64 %events_buf to i8*\n");
+        ir.push_str("  %kq32 = trunc i64 %kq to i32\n");
+        ir.push_str("  %max32 = trunc i64 %max_events to i32\n");
+        // Allocate timespec for timeout
+        ir.push_str("  %ts = alloca [16 x i8], align 8\n");
+        ir.push_str("  %tsptr = bitcast [16 x i8]* %ts to i8*\n");
+        ir.push_str("  %secval = sdiv i64 %timeout_ms, 1000\n");
+        ir.push_str("  %nsval = mul i64 %timeout_ms, 1000000\n");
+        ir.push_str("  %nsrem = srem i64 %nsval, 1000000000\n");
+        ir.push_str("  %secptr = bitcast [16 x i8]* %ts to i64*\n");
+        ir.push_str("  store i64 %secval, i64* %secptr\n");
+        ir.push_str("  %nsptr = getelementptr inbounds [16 x i8], [16 x i8]* %ts, i64 0, i64 8\n");
+        ir.push_str("  %nsptr64 = bitcast i8* %nsptr to i64*\n");
+        ir.push_str("  store i64 %nsrem, i64* %nsptr64\n");
+        ir.push_str("  %ret = call i32 @kevent(i32 %kq32, i8* null, i32 0, i8* %bufptr, i32 %max32, i8* %tsptr)\n");
+        ir.push_str("  %retval = sext i32 %ret to i64\n");
+        ir.push_str("  ret i64 %retval\n");
+        ir.push_str("}\n");
+
+        // __kevent_get_fd: get fd from kevent result at index
+        ir.push_str("\n; Async helper: get fd from kevent result\n");
+        ir.push_str("define i64 @__kevent_get_fd(i64 %events_buf, i64 %index) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %base = inttoptr i64 %events_buf to i8*\n");
+        // sizeof(struct kevent) = 64 on macOS
+        ir.push_str("  %offset = mul i64 %index, 64\n");
+        ir.push_str("  %evptr = getelementptr inbounds i8, i8* %base, i64 %offset\n");
+        ir.push_str("  %identptr = bitcast i8* %evptr to i64*\n");
+        ir.push_str("  %ident = load i64, i64* %identptr\n");
+        ir.push_str("  ret i64 %ident\n");
+        ir.push_str("}\n");
+
+        // __kevent_get_filter: get filter from kevent result at index
+        ir.push_str("\n; Async helper: get filter from kevent result\n");
+        ir.push_str("define i64 @__kevent_get_filter(i64 %events_buf, i64 %index) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %base = inttoptr i64 %events_buf to i8*\n");
+        ir.push_str("  %offset = mul i64 %index, 64\n");
+        ir.push_str("  %evptr = getelementptr inbounds i8, i8* %base, i64 %offset\n");
+        // filter is at offset 8 (i16)
+        ir.push_str("  %filterptr = getelementptr inbounds i8, i8* %evptr, i64 8\n");
+        ir.push_str("  %filterptr16 = bitcast i8* %filterptr to i16*\n");
+        ir.push_str("  %filter16 = load i16, i16* %filterptr16\n");
+        ir.push_str("  %filter = sext i16 %filter16 to i64\n");
+        ir.push_str("  ret i64 %filter\n");
+        ir.push_str("}\n");
+
+        // __write_byte: write a single byte to file descriptor
+        ir.push_str("\n; Async helper: write byte to fd\n");
+        ir.push_str("define i64 @__write_byte(i64 %fd, i64 %value) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %buf = alloca i8\n");
+        ir.push_str("  %byte = trunc i64 %value to i8\n");
+        ir.push_str("  store i8 %byte, i8* %buf\n");
+        ir.push_str("  %fd32 = trunc i64 %fd to i32\n");
+        ir.push_str("  %ret = call i64 @write(i32 %fd32, i8* %buf, i64 1)\n");
+        ir.push_str("  ret i64 %ret\n");
+        ir.push_str("}\n");
+
+        // __read_byte: read a single byte from file descriptor
+        ir.push_str("\n; Async helper: read byte from fd\n");
+        ir.push_str("declare i64 @read(i32, i8*, i64)\n");
+        ir.push_str("define i64 @__read_byte(i64 %fd) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %buf = alloca i8\n");
+        ir.push_str("  %fd32 = trunc i64 %fd to i32\n");
+        ir.push_str("  %ret = call i64 @read(i32 %fd32, i8* %buf, i64 1)\n");
+        ir.push_str("  %byte = load i8, i8* %buf\n");
+        ir.push_str("  %val = zext i8 %byte to i64\n");
+        ir.push_str("  ret i64 %val\n");
+        ir.push_str("}\n");
+
         ir
     }
 

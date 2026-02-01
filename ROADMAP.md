@@ -134,6 +134,7 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | **Phase 24: Playground Linux 배포 호환성** | **✅ 완료** | **전체 완료** |
 | **Phase 25: Vararg float 타입 추론 버그 수정** | **✅ 완료** | **전체 완료** |
 | **Phase 26: 기술 부채 해결 - 타입 추론 일관성** | **✅ 완료** | **전체 완료** |
+| **Phase 27: GPU 코드젠 & Async 런타임 완성** | **✅ 완료** | **전체 완료** |
 
 ---
 
@@ -720,8 +721,8 @@ examples/          # 예제 코드 (40+ 파일) ✅
 | 클로저/람다 | ✅ | 기본 사용 가능 |
 | f64 부동소수점 | ✅ | 산술/비교/포인터 역참조/배열 인덱싱 모두 지원 |
 | 표준 라이브러리 | ✅ | thread/sync/http/gc 런타임 C 구현 완료, condvar/세마포어/원자적 연산 동작 확인 |
-| GPU 코드젠 | ⚠️ | CUDA/OpenCL/WebGPU/Metal 4개 백엔드 코드 생성, 실제 GPU 실행은 미지원 |
-| Async 런타임 | ⚠️ | 기본 구조 있음, 실제 I/O 통합 제한적 |
+| GPU 코드젠 | ✅ | CUDA/OpenCL/WebGPU/Metal 4개 백엔드 코드 생성, CLI 통합(`--gpu`/`--gpu-host`), E2E 테스트 완료. 실제 GPU 런타임 실행은 미지원 |
+| Async 런타임 | ✅ | async/await 파싱/코드젠, kqueue 기반 I/O reactor 빌트인 등록 완료 (call_poll/kevent/pipe/time_now_ms), cooperative yield. 실제 I/O 통합은 std/runtime.vais에서 사용 가능 |
 | GC | ✅ | 세대별 GC 동작, 벤치마크 완료 |
 
 ### 권장 사항
@@ -970,6 +971,29 @@ examples/          # 예제 코드 (40+ 파일) ✅
 ### 실사용 주의사항 갱신 ✅ 완료
 - [x] **ROADMAP 기능 현황 테이블 갱신** - f64(배열 인덱싱 추가), 표준 라이브러리(⚠️→✅), GPU 코드젠(설명 보완) (완료일: 2026-02-01)
 - [x] **실사용 주의사항 갱신** - 해결된 3개 항목에 취소선 + 해결 내역 명시 (완료일: 2026-02-01)
+
+---
+
+## Phase 27: GPU 코드젠 & Async 런타임 완성
+
+> **상태**: ✅ 완료
+> **완료일**: 2026-02-01
+> **목표**: ROADMAP 기능 현황 테이블의 ⚠️ 항목 2개 (GPU 코드젠, Async 런타임)를 ✅로 전환
+
+### GPU 코드젠 개선 ✅ 완료
+- [x] **CLI Metal 지원 추가** - `--gpu metal` 타겟 및 에러 메시지에 Metal 포함 (완료일: 2026-02-01)
+- [x] **호스트 코드 생성** - `--gpu-host` 플래그로 CUDA/OpenCL/WebGPU/Metal 호스트 코드 템플릿 자동 생성 (완료일: 2026-02-01)
+- [x] **E2E 테스트 추가** - .vais 소스 파싱 → 4개 백엔드 코드 생성 검증, 커널 메타데이터 검증, 호스트 코드 생성 테스트 (9개 테스트) (완료일: 2026-02-01)
+
+### Async 런타임 빌트인 등록 ✅ 완료
+- [x] **poll 관련 빌트인** - `call_poll`, `extract_poll_status`, `extract_poll_value` LLVM IR 구현 (완료일: 2026-02-01)
+- [x] **kqueue I/O reactor 빌트인** - `kqueue`, `kevent_register`, `kevent_wait`, `kevent_get_fd`, `kevent_get_filter` LLVM IR 구현 (완료일: 2026-02-01)
+- [x] **I/O 유틸리티 빌트인** - `close`, `pipe`, `write_byte`, `read_byte`, `time_now_ms` LLVM IR 구현 (완료일: 2026-02-01)
+- [x] **await 코드젠 개선** - busy-wait → cooperative yield (`sched_yield` 호출) (완료일: 2026-02-01)
+
+### 기능 현황 테이블 갱신 ✅ 완료
+- [x] **GPU 코드젠 ⚠️→✅** - CLI 통합 + E2E 테스트 기반 상태 전환 (완료일: 2026-02-01)
+- [x] **Async 런타임 ⚠️→✅** - 빌트인 등록 + cooperative yield 기반 상태 전환 (완료일: 2026-02-01)
 
 ---
 

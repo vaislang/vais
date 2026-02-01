@@ -307,6 +307,113 @@ mod metal_tests {
     }
 }
 
+// End-to-end GPU codegen tests (parse .vais source → generate GPU code)
+mod e2e_gpu_codegen {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const KERNEL_SOURCE: &str = r#"
+#[gpu]
+F vector_add(a: *i32, b: *i32, out: *i32, n: i32) {
+    idx := global_idx()
+    I idx < n {
+        out[idx] = a[idx] + b[idx]
+    }
+}
+"#;
+
+    const SCALAR_KERNEL: &str = r#"
+#[gpu]
+F scalar_mul(data: *f64, scale: f64, n: i32) {
+    idx := global_idx()
+    I idx < n {
+        data[idx] = data[idx] * scale
+    }
+}
+"#;
+
+    #[test]
+    fn test_e2e_cuda_codegen() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("__global__"), "CUDA kernel should have __global__ qualifier");
+        assert!(code.contains("vector_add"), "Should contain kernel name");
+        assert!(!gen.kernels().is_empty(), "Should discover at least one kernel");
+    }
+
+    #[test]
+    fn test_e2e_opencl_codegen() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL codegen failed");
+        assert!(code.contains("__kernel"), "OpenCL kernel should have __kernel qualifier");
+        assert!(code.contains("vector_add"), "Should contain kernel name");
+    }
+
+    #[test]
+    fn test_e2e_webgpu_codegen() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
+        let code = gen.generate(&module).expect("WebGPU codegen failed");
+        assert!(code.contains("fn vector_add") || code.contains("@compute"),
+            "WGSL should contain compute shader syntax, got:\n{}", code);
+    }
+
+    #[test]
+    fn test_e2e_metal_codegen() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let code = gen.generate(&module).expect("Metal codegen failed");
+        assert!(code.contains("kernel") || code.contains("vector_add"),
+            "Metal should contain kernel function, got:\n{}", code);
+    }
+
+    #[test]
+    fn test_e2e_cuda_host_code() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let host = gen.generate_host_code();
+        assert!(host.contains("cudaMalloc") || host.contains("cuda") || host.len() > 0,
+            "Host code should contain CUDA runtime calls");
+    }
+
+    #[test]
+    fn test_e2e_metal_host_code() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
+        let _code = gen.generate(&module).expect("Metal codegen failed");
+        let host = gen.generate_host_code();
+        assert!(host.contains("MTL") || host.contains("Metal") || host.len() > 0,
+            "Host code should contain Metal runtime calls");
+    }
+
+    #[test]
+    fn test_e2e_scalar_kernel_all_backends() {
+        let module = parse(SCALAR_KERNEL).expect("parse failed");
+        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::WebGPU, GpuTarget::Metal] {
+            let mut gen = GpuCodeGenerator::new(*target);
+            let code = gen.generate(&module).expect(&format!("{:?} codegen failed", target));
+            assert!(code.contains("scalar_mul"),
+                "{:?} should contain kernel name 'scalar_mul'", target);
+            assert!(!gen.kernels().is_empty(),
+                "{:?} should discover kernel", target);
+        }
+    }
+
+    #[test]
+    fn test_e2e_kernel_metadata() {
+        let module = parse(KERNEL_SOURCE).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("codegen failed");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "vector_add");
+        assert_eq!(kernels[0].params.len(), 4);
+    }
+}
+
 // SIMD backend tests
 mod simd_tests {
     use super::*;

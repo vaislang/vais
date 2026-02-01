@@ -588,6 +588,109 @@ impl CodeGenerator {
             vec![],
             ResolvedType::I32
         );
+
+        // call_poll: call an indirect poll function pointer with a future pointer
+        // Returns an i64 encoding {status, value} as a packed struct
+        register_helper!(self, "call_poll" => "__call_poll",
+            vec![
+                ("poll_fn".to_string(), ResolvedType::I64),
+                ("future_ptr".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // extract_poll_status: extract status (0=Pending, 1=Ready) from poll result
+        register_helper!(self, "extract_poll_status" => "__extract_poll_status",
+            vec![("poll_result".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // extract_poll_value: extract value from poll result
+        register_helper!(self, "extract_poll_value" => "__extract_poll_value",
+            vec![("poll_result".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // time_now_ms: current time in milliseconds
+        register_helper!(self, "time_now_ms" => "__time_now_ms",
+            vec![],
+            ResolvedType::I64
+        );
+
+        // === Platform I/O syscalls for async reactor ===
+
+        // kqueue: create kqueue instance (macOS)
+        register_extern!(self, "kqueue",
+            vec![],
+            ResolvedType::I64
+        );
+
+        // kevent_register: register event with kqueue
+        register_helper!(self, "kevent_register" => "__kevent_register",
+            vec![
+                ("kq".to_string(), ResolvedType::I64),
+                ("fd".to_string(), ResolvedType::I64),
+                ("filter".to_string(), ResolvedType::I64),
+                ("flags".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // kevent_wait: wait for events
+        register_helper!(self, "kevent_wait" => "__kevent_wait",
+            vec![
+                ("kq".to_string(), ResolvedType::I64),
+                ("events_buf".to_string(), ResolvedType::I64),
+                ("max_events".to_string(), ResolvedType::I64),
+                ("timeout_ms".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // kevent_get_fd: get fd from event at index
+        register_helper!(self, "kevent_get_fd" => "__kevent_get_fd",
+            vec![
+                ("events_buf".to_string(), ResolvedType::I64),
+                ("index".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // kevent_get_filter: get filter from event at index
+        register_helper!(self, "kevent_get_filter" => "__kevent_get_filter",
+            vec![
+                ("events_buf".to_string(), ResolvedType::I64),
+                ("index".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // close: close file descriptor
+        register_extern!(self, "close",
+            vec![("fd".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // pipe: create pipe (takes buffer pointer for two fds)
+        register_extern!(self, "pipe" => "pipe",
+            vec![("fds_buf".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // write_byte: write a single byte to fd
+        register_helper!(self, "write_byte" => "__write_byte",
+            vec![
+                ("fd".to_string(), ResolvedType::I64),
+                ("value".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // read_byte: read a single byte from fd
+        register_helper!(self, "read_byte" => "__read_byte",
+            vec![("fd".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
     }
 
     fn register_simd_functions(&mut self) {
