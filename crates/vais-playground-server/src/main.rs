@@ -509,8 +509,25 @@ fn compile_ir_and_execute(
     let bin_path_str = bin_path.to_str()
         .ok_or_else(|| "Binary path contains invalid UTF-8".to_string())?;
 
+    // Collect stdlib C runtime files to link
+    let std_path = std::env::var("VAIS_STD_PATH")
+        .unwrap_or_else(|_| "/usr/local/share/vais/std".to_string());
+    let runtime_files: Vec<String> = ["http_runtime.c", "thread_runtime.c", "sync_runtime.c"]
+        .iter()
+        .map(|f| format!("{}/{}", std_path, f))
+        .filter(|p| std::path::Path::new(p).exists())
+        .collect();
+
+    let mut clang_args = vec![
+        "-o".to_string(),
+        bin_path_str.to_string(),
+        ir_path_str.to_string(),
+    ];
+    clang_args.extend(runtime_files);
+    clang_args.extend(["-lm".to_string(), "-lpthread".to_string(), "-O0".to_string()]);
+
     let compile_output = Command::new("clang")
-        .args(["-o", bin_path_str, ir_path_str, "-lm", "-O0"])
+        .args(&clang_args)
         .output()
         .map_err(|e| format!("Failed to run clang: {}", e))?;
 
