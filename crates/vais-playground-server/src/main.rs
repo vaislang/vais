@@ -493,6 +493,31 @@ fn truncate_output(s: &str, max_bytes: usize) -> String {
     }
 }
 
+/// Remove the buggy fopen_ptr function definition from IR.
+/// The codegen emits `define i64 @fopen_ptr(i64 %path, i8* %mode)` which calls
+/// `@fopen(i64 %path, ...)` but fopen is declared as `i64 (i8*, i8*)`, causing
+/// a type mismatch on Linux. This function is unused in playground programs.
+fn strip_buggy_fopen_ptr(ir: &str) -> String {
+    let mut result = String::with_capacity(ir.len());
+    let mut skip = false;
+    for line in ir.lines() {
+        if line.starts_with("define") && line.contains("@fopen_ptr") {
+            skip = true;
+            continue;
+        }
+        if skip {
+            if line == "}" {
+                skip = false;
+                continue;
+            }
+            continue;
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+    result
+}
+
 fn compile_ir_and_execute(
     ir: &str,
     timeout_secs: u64,
@@ -502,7 +527,10 @@ fn compile_ir_and_execute(
     let ir_path = tmp_dir.path().join("playground.ll");
     let bin_path = tmp_dir.path().join("playground");
 
-    std::fs::write(&ir_path, ir).map_err(|e| format!("Failed to write IR: {}", e))?;
+    // Strip the fopen_ptr wrapper function which has a type mismatch bug
+    // (calls fopen with i64 first arg instead of i8*). This is unused in most programs.
+    let cleaned_ir = strip_buggy_fopen_ptr(ir);
+    std::fs::write(&ir_path, &cleaned_ir).map_err(|e| format!("Failed to write IR: {}", e))?;
 
     let ir_path_str = ir_path.to_str()
         .ok_or_else(|| "IR path contains invalid UTF-8".to_string())?;
