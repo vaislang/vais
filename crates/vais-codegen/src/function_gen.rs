@@ -324,14 +324,14 @@ impl CodeGenerator {
         // Special handling for fopen_ptr: generate wrapper that calls fopen
         if info.signature.name == "fopen_ptr" {
             // Generate a wrapper function that forwards to fopen
+            // Both path and mode are i8* (strings) to match fopen's declaration
+            let str_ty = self.type_to_llvm(&ResolvedType::Str);
             return format!(
                 "define {} @fopen_ptr({} %path, {} %mode) {{\nentry:\n  %0 = call {} @fopen({} %path, {} %mode)\n  ret {} %0\n}}",
                 ret,
-                self.type_to_llvm(&ResolvedType::I64),
-                self.type_to_llvm(&ResolvedType::Str),
+                str_ty, str_ty,
                 ret,
-                self.type_to_llvm(&ResolvedType::I64),  // ptr type
-                self.type_to_llvm(&ResolvedType::Str),
+                str_ty, str_ty,
                 ret
             );
         }

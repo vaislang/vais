@@ -1374,9 +1374,15 @@ impl CodeGenerator {
         }
 
         // Generate function declarations (deduplicate by actual function name)
+        // Prioritize non-aliased functions (key == name) over aliased ones (key != name)
+        // to ensure correct C type signatures in declare statements
         let mut declared_fns = std::collections::HashSet::new();
-        for info in self.functions.values() {
-            if info.is_extern && !declared_fns.contains(&info.signature.name) {
+        let mut sorted_fns: Vec<_> = self.functions.iter()
+            .filter(|(_, info)| info.is_extern)
+            .collect();
+        sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
+        for (_, info) in &sorted_fns {
+            if !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
                 declared_fns.insert(info.signature.name.clone());
@@ -1702,9 +1708,14 @@ impl CodeGenerator {
         }
 
         // Generate function declarations (extern functions)
+        // Prioritize non-aliased functions (key == name) over aliased ones (key != name)
         let mut declared_fns = std::collections::HashSet::new();
-        for info in self.functions.values() {
-            if info.is_extern && !declared_fns.contains(&info.signature.name) {
+        let mut sorted_fns: Vec<_> = self.functions.iter()
+            .filter(|(_, info)| info.is_extern)
+            .collect();
+        sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
+        for (_, info) in &sorted_fns {
+            if !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
                 declared_fns.insert(info.signature.name.clone());
