@@ -1,11 +1,12 @@
 {
   "phase": 5,
-  "request": "Vais 제약사항 해결 - codegen float 타입 추론 버그 수정",
+  "request": "홍보 실행 로드맵 문서 작성 및 ROADMAP 업데이트",
   "tasks": [
-    { "id": 1, "name": "BinOp float 타입 추론 수정", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "기타 미처리 Expr 타입 추론 보완", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "E2E 테스트 추가 및 검증", "status": "completed", "model": "Opus" }
+    { "id": 1, "name": "홍보 로드맵 Part 1 (Phase 1~3)", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "홍보 로드맵 Part 2 (Phase 4~6)", "status": "completed", "model": "Opus" },
+    { "id": 3, "name": "홍보 로드맵 Part 3 (Phase 7~9)", "status": "completed", "model": "Opus" },
+    { "id": 4, "name": "ROADMAP.md에 홍보 섹션 추가", "status": "completed", "model": "Sonnet" },
+    { "id": 5, "name": "커밋", "status": "in_progress", "model": "Haiku" }
   ],
-  "currentTask": null,
-  "lastCompleted": "Phase 25 전체 완료"
+  "currentTask": 5
 }

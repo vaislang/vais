@@ -901,4 +901,48 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 ---
 
+## 📣 Phase 26: 홍보 & 커뮤니티 성장
+
+> **상태**: 🔄 진행 중
+> **시작일**: 2026-02-01
+> **목표**: Vais 프로그래밍 언어의 인지도 확보 및 개발자 커뮤니티 구축
+
+### 실행 로드맵: `community/PROMOTION_ROADMAP.md`
+
+| Phase | 이름 | 기간 | 상태 |
+|-------|------|------|------|
+| Phase 1 | 기반 준비 (브랜드 에셋, 프로필, 콘텐츠) | Week 1-2 | 🔄 진행 중 |
+| Phase 2 | 인스타그램 런칭 | Week 2-6 | ⏳ 대기 |
+| Phase 3 | 트위터/X 런칭 | Week 4-8 | ⏳ 대기 |
+| Phase 4 | Reddit/HN 커뮤니티 런칭 | Week 6-10 | ⏳ 대기 |
+| Phase 5 | 디스코드 커뮤니티 구축 | Week 8-12 | ⏳ 대기 |
+| Phase 6 | 블로그/콘텐츠 마케팅 | Week 10-14 | ⏳ 대기 |
+| Phase 7 | 개발자 커뮤니티 참여 | Week 12-20 | ⏳ 대기 |
+| Phase 8 | 지속 성장 & 분석 | Week 16+ | ⏳ 대기 |
+
+### 현재 진행 상황
+- [x] 인스타그램 계정 생성 (완료일: 2026-02-01)
+- [ ] 프로필 완성 (로고, 바이오, 링크)
+- [ ] 코드 카드 템플릿 제작
+- [ ] 첫 3개 게시물 사전 제작
+
+### 3개월 목표
+
+| 지표 | 목표 |
+|------|------|
+| GitHub Stars | 200+ |
+| 인스타그램 팔로워 | 500+ |
+| 트위터/X 팔로워 | 1,000+ |
+| 디스코드 멤버 | 100+ |
+
+### 관련 문서
+- `community/PROMOTION_ROADMAP.md` - 실행 체크리스트 (메인 가이드)
+- `community/BRAND_GUIDE.md` - 브랜드 아이덴티티
+- `community/SOCIAL_MEDIA_PLAN.md` - SNS 전략
+- `community/LAUNCH_STRATEGY.md` - Reddit/HN 런칭 전략
+- `community/CONTENT_EXAMPLES.md` - 게시물 템플릿
+- `community/DISCORD_SETUP.md` - 디스코드 가이드
+
+---
+
 **메인테이너**: Steve
