@@ -1,0 +1,32 @@
+# Multi-stage build for Vais Playground Server
+# Stage 1: Build the playground server binary
+FROM rust:1.83-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    clang \
+    llvm-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+
+RUN cargo build --release -p vais-playground-server
+
+# Stage 2: Runtime image
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    clang \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/vais-playground /usr/local/bin/vais-playground
+COPY --from=builder /build/std /usr/local/share/vais/std
+
+ENV VAIS_STD_PATH=/usr/local/share/vais/std
+ENV PLAYGROUND_HOST=0.0.0.0
+ENV PLAYGROUND_PORT=8080
+
+EXPOSE 8080
+
+CMD ["vais-playground"]
