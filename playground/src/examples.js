@@ -165,16 +165,26 @@ F main() -> i64 {
     }
     putchar(10)
 
-    # While-style loop with break
+    # While-style loop with B (break)
     puts("While-style loop:")
-    counter := 0
-    L {
-        I counter >= 5 {
-            break
-        }
+    counter := mut 0
+    L counter < 5 {
         putchar(counter + 48)
         putchar(32)
-        counter += 1
+        counter = counter + 1
+    }
+    putchar(10)
+
+    # Infinite loop with break
+    puts("Loop with break:")
+    n := mut 0
+    L {
+        I n >= 3 {
+            B
+        }
+        putchar(n + 65)
+        putchar(32)
+        n = n + 1
     }
     putchar(10)
 
