@@ -14,5 +14,5 @@
     { "id": 10, "name": "벤치마크 스위트 확장 & 성능 검증", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "Phase 28 Stage 3 OpenCL 런타임 통합 완료"
+  "lastCompleted": "ROADMAP.md 전체 구조 리팩토링"
 }
