@@ -216,20 +216,36 @@ See [MEMORY_SAFETY.md](docs/MEMORY_SAFETY.md) for detailed information on memory
 
 ## Installation
 
+### Homebrew (macOS/Linux) - No Rust required
+
 ```bash
-# macOS/Linux (Homebrew)
-brew tap vaislang/vais
+brew tap vaislang/tap
 brew install vais
-
-# From source
-git clone https://github.com/vaislang/vais.git
-cd vais && cargo build --release
-
-# Docker
-docker run ghcr.io/vaislang/vais:latest --help
 ```
 
-Download pre-built binaries from [Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0) (Linux, macOS Intel/ARM, Windows).
+### Pre-built Binaries
+
+Download from [Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0) (Linux, macOS Intel/ARM, Windows):
+
+```bash
+# macOS ARM
+curl -LO https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz
+tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
+./vais/vaisc --version
+```
+
+### From Source (requires Rust)
+
+```bash
+git clone https://github.com/vaislang/vais.git
+cd vais && cargo build --release
+```
+
+### Docker
+
+```bash
+docker run ghcr.io/vaislang/vais:latest --help
+```
 
 ## Community
 

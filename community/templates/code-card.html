@@ -450,29 +450,52 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
 
     <script>
         // Vais syntax highlighting
-        function highlightVais(code) {
-            // Keywords: F, S, E, I, L, M, R, U
+        function highlightVais(rawCode) {
+            // Step 1: Extract comments and strings first, replace with placeholders
+            const placeholders = [];
+            let code = rawCode;
+
+            // Comments
+            code = code.replace(/#(.*)$/gm, function(m) {
+                placeholders.push('<span class="comment">' + escHtml(m) + '</span>');
+                return '\x00P' + (placeholders.length - 1) + '\x00';
+            });
+
+            // Strings
+            code = code.replace(/"([^"]*)"/g, function(m) {
+                placeholders.push('<span class="string">' + escHtml(m) + '</span>');
+                return '\x00P' + (placeholders.length - 1) + '\x00';
+            });
+
+            // Step 2: Escape HTML on remaining code
+            code = escHtml(code);
+
+            // Step 3: Apply highlighting (order matters)
+            // Operators (multi-char first)
+            code = code.replace(/(-&gt;|:=|=&gt;|\?\?)/g, '<span class="operator">$1</span>');
+
+            // Types
+            code = code.replace(/\b(i64|i32|i16|i8|u64|u32|u16|u8|f64|f32|bool|String)\b/g, '<span class="type">$1</span>');
+
+            // Keywords (single char, word boundary)
             code = code.replace(/\b([FSILMRUE])\b/g, '<span class="keyword">$1</span>');
 
             // Self-recursion operator
             code = code.replace(/@/g, '<span class="operator">@</span>');
 
-            // Other operators
-            code = code.replace(/(->|:=|=>|\?\?)/g, '<span class="operator">$1</span>');
-
-            // Types
-            code = code.replace(/\b(i64|i32|i16|i8|u64|u32|u16|u8|f64|f32|bool|String)\b/g, '<span class="type">$1</span>');
-
             // Numbers
             code = code.replace(/\b(\d+)\b/g, '<span class="number">$1</span>');
 
-            // Strings
-            code = code.replace(/"([^"]*)"/g, '<span class="string">"$1"</span>');
-
-            // Comments
-            code = code.replace(/#(.*)$/gm, '<span class="comment">#$1</span>');
+            // Step 4: Restore placeholders
+            code = code.replace(/\x00P(\d+)\x00/g, function(_, i) {
+                return placeholders[parseInt(i)];
+            });
 
             return code;
+        }
+
+        function escHtml(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
         function updateCardType() {
@@ -511,7 +534,7 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
 
         function updateType1(title, code) {
             const card = document.getElementById('codeCard');
-            const highlighted = highlightVais(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+            const highlighted = highlightVais(code);
 
             card.innerHTML = `
                 <div class="card-logo">Vais</div>
@@ -529,12 +552,12 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
             const code2 = document.getElementById('cardCode2').value;
             const compLang = document.getElementById('compLang').value;
 
-            const vaisHighlighted = highlightVais(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-            const otherCode = code2.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const vaisHighlighted = highlightVais(code);
+            const otherCode = escHtml(code2);
 
-            // Simple token count (split by spaces and symbols)
-            const vaisTokens = code.split(/[\s\(\)\{\}\[\];,]+/).filter(t => t.length > 0).length;
-            const otherTokens = code2.split(/[\s\(\)\{\}\[\];,]+/).filter(t => t.length > 0).length;
+            // Character count (excluding whitespace) - more accurate metric for token efficiency
+            const vaisTokens = code.replace(/\s+/g, '').length;
+            const otherTokens = code2.replace(/\s+/g, '').length;
             const maxTokens = Math.max(vaisTokens, otherTokens);
 
             card.innerHTML = `
@@ -542,17 +565,17 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
                 <div class="comparison-header">Vais vs ${compLang}</div>
                 <div class="comparison-container">
                     <div class="comparison-block vais">
-                        <div class="comparison-label" style="color: var(--vais-green);">Vais (${vaisTokens} tokens)</div>
+                        <div class="comparison-label" style="color: var(--vais-green);">Vais (${vaisTokens} chars)</div>
                         <div class="comparison-code"><pre>${vaisHighlighted}</pre></div>
                     </div>
                     <div class="comparison-block">
-                        <div class="comparison-label" style="color: var(--text-secondary);">${compLang} (${otherTokens} tokens)</div>
+                        <div class="comparison-label" style="color: var(--text-secondary);">${compLang} (${otherTokens} chars)</div>
                         <div class="comparison-code"><pre>${otherCode}</pre></div>
                     </div>
                 </div>
                 <div class="comparison-stats">
                     <div style="color: var(--vais-green); font-weight: 600; margin-bottom: 8px;">
-                        ${Math.round((1 - vaisTokens/otherTokens) * 100)}% fewer tokens
+                        ${Math.round((1 - vaisTokens/otherTokens) * 100)}% fewer characters
                     </div>
                     <div class="token-bar">
                         <div class="token-fill" style="width: ${(vaisTokens/maxTokens)*100}%"></div>
@@ -566,7 +589,7 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
             const card = document.getElementById('codeCard');
             card.classList.add('type-tip');
 
-            const highlighted = highlightVais(code.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+            const highlighted = highlightVais(code);
 
             card.innerHTML = `
                 <div class="card-logo">Vais</div>
@@ -607,7 +630,9 @@ F main()->i64 = fib(10)  # Returns 55</textarea>
             post1: {
                 type: 'type1',
                 title: 'Fibonacci in Vais',
-                code: 'F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)\n\nF main()->i64 = fib(10)  # Returns 55'
+                code: 'F fib(n:i64)->i64 = n<2 ? n : @(n-1) + @(n-2)',
+                code2: 'fn fib(n: i64) -> i64 {\n    if n < 2 {\n        n\n    } else {\n        fib(n - 1) + fib(n - 2)\n    }\n}',
+                compLang: 'Rust'
             },
             post2: {
                 type: 'type2',

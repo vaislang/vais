@@ -17,7 +17,7 @@ Vais is an AI-optimized systems programming language with an LLVM backend. It co
 
 ```bash
 # Add the tap
-brew tap vaislang/vais
+brew tap vaislang/tap
 
 # Install Vais
 brew install vais
@@ -71,7 +71,7 @@ brew upgrade vais
 
 ```bash
 brew uninstall vais
-brew untap vaislang/vais
+brew untap vaislang/tap
 ```
 
 ## Links

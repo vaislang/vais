@@ -2,6 +2,50 @@
 
 Welcome to the Vais compiler installation guide. This document will walk you through setting up Vais on your system, from prerequisites to verification.
 
+## Quick Install (Recommended)
+
+The fastest way to install Vais. No Rust required.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap vaislang/tap
+brew install vais
+```
+
+### Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0):
+
+| Platform | Download |
+|----------|----------|
+| macOS ARM (Apple Silicon) | [vais-v1.0.0-aarch64-apple-darwin.tar.gz](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz) |
+| macOS Intel | [vais-v1.0.0-x86_64-apple-darwin.tar.gz](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-apple-darwin.tar.gz) |
+| Linux x86_64 | [vais-v1.0.0-x86_64-unknown-linux-gnu.tar.gz](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-unknown-linux-gnu.tar.gz) |
+| Windows x86_64 | [vais-v1.0.0-x86_64-pc-windows-msvc.zip](https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-pc-windows-msvc.zip) |
+
+```bash
+# Example: macOS ARM
+curl -LO https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz
+tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
+sudo cp vais/vaisc /usr/local/bin/
+```
+
+### Prerequisite: clang
+
+Vais uses `clang` to compile generated LLVM IR to native binaries:
+- **macOS**: `xcode-select --install`
+- **Linux**: `sudo apt install clang` or `sudo dnf install clang`
+- **Windows**: Install from https://releases.llvm.org
+
+After installation, verify: `vaisc --version`
+
+---
+
+## Build from Source
+
+If you want to build from source or contribute to development.
+
 ## System Requirements
 
 ### Required Software

@@ -62,7 +62,7 @@ Before the first release, you need to:
 
 ```bash
 # Add the tap
-brew tap vaislang/vais
+brew tap vaislang/tap
 
 # Install from the tap
 brew install vais
@@ -120,7 +120,7 @@ Once everything is working:
 
    ### macOS (Homebrew)
    ```bash
-   brew tap vaislang/vais
+   brew tap vaislang/tap
    brew install vais
    ```
    ```

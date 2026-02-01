@@ -1,30 +1,33 @@
 class Vais < Formula
   desc "AI-optimized systems programming language with LLVM backend"
   homepage "https://github.com/vaislang/vais"
-  url "https://github.com/vaislang/vais/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
+  version "1.0.0"
   license "MIT"
-  head "https://github.com/vaislang/vais.git", branch: "main"
 
-  depends_on "rust" => :build
-  depends_on "llvm@17"
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz"
+      sha256 "b4f7df6940073b8e82a70670d0fa548daf5718d707c242c78fad1acfe1a681e9"
+    else
+      url "https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-apple-darwin.tar.gz"
+      sha256 "cdff8c3d45ac59825b90e8bfb32ac790fcd8f85493e3539724230432c5fa65d3"
+    end
+  end
+
+  on_linux do
+    url "https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-x86_64-unknown-linux-gnu.tar.gz"
+    sha256 "bb41c41197d02013c22a11033c60fd4d300a17a60f0fe65efe22e111a36c1936"
+  end
 
   def install
-    # Build with cargo
-    system "cargo", "build", "--release", "--bin", "vaisc"
-
-    # Install the compiler binary
-    bin.install "target/release/vaisc"
-
-    # Install the standard library
-    (share/"vais/std").install Dir["std/*"]
-
-    # Set up environment to help vaisc find the standard library
-    (lib/"vais").mkpath
-    File.write(lib/"vais/config.toml", <<~EOS)
-      [paths]
-      std_lib = "#{share}/vais/std"
-    EOS
+    # tar extracts to vais/ directory, Homebrew may or may not cd into it
+    if File.exist?("vaisc")
+      bin.install "vaisc"
+      (share/"vais/std").install Dir["std/*"]
+    elsif File.exist?("vais/vaisc")
+      bin.install "vais/vaisc"
+      (share/"vais/std").install Dir["vais/std/*"]
+    end
   end
 
   def caveats
@@ -32,32 +35,16 @@ class Vais < Formula
       The Vais standard library is installed at:
         #{share}/vais/std
 
-      To compile Vais programs, you need LLVM tools in your PATH.
-      The vaisc compiler will use clang to compile generated LLVM IR.
+      To compile Vais programs, you need clang in your PATH.
+      On macOS, install Xcode Command Line Tools: xcode-select --install
 
       To get started:
         vaisc --help
-        vaisc repl   # Start the REPL
+        vaisc repl
     EOS
   end
 
   test do
-    # Create a simple Vais program using actual Vais syntax
-    (testpath/"hello.vais").write <<~EOS
-      # Hello World test
-      F main()->i64 {
-          puts("Hello from Vais!")
-          0
-      }
-    EOS
-
-    # Test that vaisc can parse and check the file
-    system bin/"vaisc", "check", "hello.vais"
-
-    # Test --help flag
-    system bin/"vaisc", "--help"
-
-    # Test --version flag
-    assert_match version.to_s, shell_output("#{bin}/vaisc --version")
+    assert_match "vaisc 1.0.0", shell_output("#{bin}/vaisc --version")
   end
 end

@@ -4,7 +4,7 @@
 
 ### Installation
 ```bash
-brew tap vaislang/vais
+brew tap vaislang/tap
 brew install vais
 ```
 

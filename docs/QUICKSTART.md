@@ -2,49 +2,46 @@
 
 Get started with Vais in 5 minutes. This guide takes you from zero to running your first program.
 
-## 1. Install Prerequisites
+## 1. Install Vais
 
-### macOS
-
-```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-
-# Install LLVM and Clang
-brew install llvm@17 cmake
-```
-
-### Linux (Ubuntu/Debian)
+### Option A: Homebrew (macOS/Linux) - Recommended
 
 ```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-
-# Install LLVM and Clang
-sudo apt install llvm-17 clang-17 cmake
+brew tap vaislang/tap
+brew install vais
 ```
 
-### Windows
+No Rust installation required. The pre-built binary includes the compiler and standard library.
 
-```powershell
-# Install Rust from https://rustup.rs
-# Install LLVM from https://releases.llvm.org or:
-choco install llvm cmake
+### Option B: Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/vaislang/vais/releases/tag/v1.0.0):
+
+```bash
+# macOS ARM
+curl -LO https://github.com/vaislang/vais/releases/download/v1.0.0/vais-v1.0.0-aarch64-apple-darwin.tar.gz
+tar -xzf vais-v1.0.0-aarch64-apple-darwin.tar.gz
+export PATH="$PWD/vais:$PATH"
 ```
 
-## 2. Build the Compiler
+### Option C: From Source (requires Rust 1.70+ and LLVM 17)
 
 ```bash
 git clone https://github.com/vaislang/vais.git
-cd vais
-cargo build --release
+cd vais && cargo build --release
 ```
 
 The compiler binary is at `./target/release/vaisc`.
 
-## 3. Write Your First Program
+### Prerequisite: clang
+
+Vais compiles to LLVM IR and uses `clang` to produce native binaries.
+
+- **macOS**: `xcode-select --install` (Xcode Command Line Tools)
+- **Linux**: `sudo apt install clang` or `sudo dnf install clang`
+- **Windows**: Install LLVM from https://releases.llvm.org
+
+## 2. Write Your First Program
 
 Create `hello.vais`:
 
@@ -55,17 +52,11 @@ F main() -> i64 {
 }
 ```
 
-## 4. Compile and Run
+## 3. Compile and Run
 
 ```bash
-# Compile to LLVM IR
-./target/release/vaisc hello.vais --emit-ir -o hello.ll
-
-# Build executable
-clang hello.ll -o hello
-
-# Run
-./hello
+vaisc hello.vais    # Compiles to native binary
+./hello             # Run it
 # Output: Hello, Vais!
 ```
 
