@@ -1055,10 +1055,11 @@ examples/          # 예제 코드 (40+ 파일) ✅
 
 > NVIDIA/AMD/Intel 범용 GPU 지원
 
-- [ ] **opencl_runtime.c 작성** - OpenCL API 래퍼
-- [ ] **플랫폼/디바이스 탐색** - 사용 가능한 GPU 자동 탐색
-- [ ] **커널 JIT 컴파일** - OpenCL 런타임 커널 컴파일
-- [ ] **E2E 테스트** - OpenCL 벡터 연산 + 결과 검증
+- [x] **opencl_runtime.c 작성** - OpenCL API 래퍼 + opencl_runtime.h
+- [x] **플랫폼/디바이스 탐색** - 사용 가능한 GPU 자동 탐색 (GPU 우선, CPU 폴백)
+- [x] **커널 JIT 컴파일** - OpenCL 런타임 커널 컴파일 (소스/파일 기반)
+- [x] **컴파일러 통합** - `--gpu opencl --gpu-compile`로 자동 빌드 + 링킹
+- [x] **E2E 테스트** - OpenCL 벡터 연산, SAXPY, 멀티커널 코드생성 테스트
 
 ### 4단계 - 고급 기능
 

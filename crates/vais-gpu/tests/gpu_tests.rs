@@ -706,6 +706,118 @@ F reduce_sum(data: *f64, result: *f64, n: i64) {
     }
 }
 
+// E2E OpenCL runtime integration tests
+mod e2e_opencl_runtime {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const OPENCL_VECTOR_ADD: &str = r#"
+#[gpu]
+F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        c[idx] = a[idx] + b[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_opencl_vector_add_codegen() {
+        let module = parse(OPENCL_VECTOR_ADD).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL codegen failed");
+
+        // OpenCL kernel should use __kernel qualifier
+        assert!(code.contains("__kernel"), "OpenCL should have __kernel qualifier, got:\n{}", code);
+        assert!(code.contains("vector_add"), "Should contain kernel name");
+
+        // Verify kernel metadata
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "vector_add");
+        assert_eq!(kernels[0].params.len(), 4);
+    }
+
+    #[test]
+    fn test_opencl_vector_add_host_code() {
+        let module = parse(OPENCL_VECTOR_ADD).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let _code = gen.generate(&module).expect("OpenCL codegen failed");
+        let host = gen.generate_host_code();
+
+        // Host code should reference OpenCL API
+        assert!(host.contains("cl") || host.contains("OpenCL") || host.contains("CL"),
+            "Host code should contain OpenCL references, got:\n{}", host);
+    }
+
+    const OPENCL_SAXPY: &str = r#"
+#[gpu]
+F saxpy(a: f64, x: *f64, y: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        y[idx] = a * x[idx] + y[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_opencl_saxpy_codegen() {
+        let module = parse(OPENCL_SAXPY).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL codegen failed");
+        assert!(code.contains("__kernel"), "Should have __kernel qualifier");
+        assert!(code.contains("saxpy"), "Should contain kernel name 'saxpy'");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].params.len(), 4);
+    }
+
+    #[test]
+    fn test_opencl_multi_kernel() {
+        let source = r#"
+#[gpu]
+F kernel_a(data: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        data[idx] = data[idx] * 2.0
+    }
+}
+
+#[gpu]
+F kernel_b(input: *f64, output: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        output[idx] = input[idx] + 1.0
+    }
+}
+"#;
+        let module = parse(source).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL codegen failed");
+        assert!(code.contains("kernel_a"), "Should contain first kernel");
+        assert!(code.contains("kernel_b"), "Should contain second kernel");
+        assert_eq!(gen.kernels().len(), 2, "Should discover both kernels");
+    }
+
+    #[test]
+    fn test_opencl_generates_global_qualifier_for_pointers() {
+        let module = parse(OPENCL_VECTOR_ADD).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL codegen failed");
+        // OpenCL requires __global qualifier for pointer parameters
+        assert!(code.contains("__global"), "OpenCL should use __global for pointer params, got:\n{}", code);
+    }
+
+    #[test]
+    fn test_opencl_fp64_extension() {
+        let module = parse(OPENCL_VECTOR_ADD).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
+        let code = gen.generate(&module).expect("OpenCL codegen failed");
+        // OpenCL should enable fp64 extension for double precision
+        assert!(code.contains("cl_khr_fp64"), "OpenCL should enable fp64 extension, got:\n{}", code);
+    }
+}
+
 // E2E Metal runtime integration tests
 mod e2e_metal_runtime {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};

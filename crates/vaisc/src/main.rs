@@ -697,8 +697,11 @@ fn cmd_build_gpu(
             GpuTarget::Metal => {
                 compile_metal(&out_path, verbose)?;
             }
+            GpuTarget::OpenCL => {
+                compile_opencl(&out_path, emit_host, verbose)?;
+            }
             _ => {
-                eprintln!("{} --gpu-compile is currently supported for CUDA and Metal targets", "warning:".yellow().bold());
+                eprintln!("{} --gpu-compile is currently supported for CUDA, Metal, and OpenCL targets", "warning:".yellow().bold());
             }
         }
     }
@@ -945,6 +948,114 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+/// Compile OpenCL .cl file and link with opencl_runtime
+fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), String> {
+    use std::process::Command;
+
+    // Determine output binary name
+    let binary_name = cl_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("opencl_output");
+    let binary_path = cl_path.parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(binary_name);
+
+    // Find opencl_runtime.c
+    let std_dir = find_std_dir();
+    let runtime_path = std_dir.as_ref().map(|d| d.join("opencl_runtime.c"));
+
+    let rt_path = match runtime_path {
+        Some(ref p) if p.exists() => p.clone(),
+        _ => {
+            return Err(
+                "opencl_runtime.c not found. Ensure the std/ directory is accessible.".to_string()
+            );
+        }
+    };
+
+    if verbose {
+        println!("{} Linking opencl_runtime: {}", "info:".blue().bold(), rt_path.display());
+    }
+
+    // Build with cc (clang/gcc)
+    let compiler = if cfg!(target_os = "macos") { "clang" } else { "cc" };
+
+    // Check compiler availability
+    let cc_check = Command::new(compiler)
+        .arg("--version")
+        .output();
+
+    if cc_check.is_err() {
+        return Err(format!(
+            "{} not found. Please install a C compiler (clang or gcc).", compiler
+        ));
+    }
+
+    let mut cmd = Command::new(compiler);
+
+    // Add opencl_runtime.c
+    cmd.arg(&rt_path);
+
+    // Add host code if generated
+    if has_host {
+        let host_path = cl_path.with_extension("host.c");
+        if host_path.exists() {
+            cmd.arg(&host_path);
+            if verbose {
+                println!("{} Including host code: {}", "info:".blue().bold(), host_path.display());
+            }
+        }
+    }
+
+    // Output binary
+    cmd.arg("-o").arg(&binary_path);
+
+    // OpenCL framework/library linking
+    if cfg!(target_os = "macos") {
+        cmd.arg("-framework").arg("OpenCL");
+    } else {
+        cmd.arg("-lOpenCL");
+    }
+
+    // Embed the .cl kernel source path as a define
+    let cl_abs = std::fs::canonicalize(cl_path)
+        .unwrap_or_else(|_| cl_path.clone());
+    cmd.arg(format!("-DVAIS_OPENCL_KERNEL_PATH=\"{}\"", cl_abs.display()));
+
+    if verbose {
+        println!("{} Running: {} {} -o {}", "info:".blue().bold(),
+            compiler, rt_path.display(), binary_path.display());
+    }
+
+    // Execute compiler
+    let result = cmd.output()
+        .map_err(|e| format!("Failed to execute {}: {}", compiler, e))?;
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        return Err(format!(
+            "OpenCL compilation failed:\n{}{}",
+            stderr,
+            if stderr.contains("opencl") || stderr.contains("OpenCL") || stderr.contains("CL/cl.h") {
+                "\n\nHint: Ensure OpenCL SDK is installed.\n\
+                 - macOS: OpenCL is built-in (no extra install needed)\n\
+                 - Linux: Install ocl-icd-opencl-dev or vendor SDK\n\
+                 - Windows: Install GPU vendor OpenCL SDK"
+            } else {
+                ""
+            }
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    if !stdout.is_empty() && verbose {
+        println!("{}", stdout);
+    }
+
+    println!("{} Compiled OpenCL binary: {}", "✓".green().bold(), binary_path.display());
     Ok(())
 }
 
