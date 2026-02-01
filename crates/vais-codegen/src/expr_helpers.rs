@@ -105,22 +105,42 @@ impl CodeGenerator {
             Ok((result, ir))
         } else if is_comparison {
             // Comparison returns i1, extend to i64
-            let op_str = match op {
-                BinOp::Lt => "icmp slt",
-                BinOp::Lte => "icmp sle",
-                BinOp::Gt => "icmp sgt",
-                BinOp::Gte => "icmp sge",
-                BinOp::Eq => "icmp eq",
-                BinOp::Neq => "icmp ne",
-                _ => unreachable!(),
-            };
+            let right_type = self.infer_expr_type(right);
+            let is_float_cmp = matches!(left_type, ResolvedType::F64 | ResolvedType::F32)
+                || matches!(right_type, ResolvedType::F64 | ResolvedType::F32);
 
             let cmp_tmp = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            ir.push_str(&format!(
-                "  {} = {} i64 {}, {}{}\n",
-                cmp_tmp, op_str, left_val, right_val, dbg_info
-            ));
+
+            if is_float_cmp {
+                let op_str = match op {
+                    BinOp::Lt => "fcmp olt",
+                    BinOp::Lte => "fcmp ole",
+                    BinOp::Gt => "fcmp ogt",
+                    BinOp::Gte => "fcmp oge",
+                    BinOp::Eq => "fcmp oeq",
+                    BinOp::Neq => "fcmp one",
+                    _ => unreachable!(),
+                };
+                ir.push_str(&format!(
+                    "  {} = {} double {}, {}{}\n",
+                    cmp_tmp, op_str, left_val, right_val, dbg_info
+                ));
+            } else {
+                let op_str = match op {
+                    BinOp::Lt => "icmp slt",
+                    BinOp::Lte => "icmp sle",
+                    BinOp::Gt => "icmp sgt",
+                    BinOp::Gte => "icmp sge",
+                    BinOp::Eq => "icmp eq",
+                    BinOp::Neq => "icmp ne",
+                    _ => unreachable!(),
+                };
+                ir.push_str(&format!(
+                    "  {} = {} i64 {}, {}{}\n",
+                    cmp_tmp, op_str, left_val, right_val, dbg_info
+                ));
+            }
 
             // Extend i1 to i64
             let result = self.next_temp(counter);
@@ -132,25 +152,46 @@ impl CodeGenerator {
         } else {
             // Arithmetic and bitwise operations
             let tmp = self.next_temp(counter);
-            let op_str = match op {
-                BinOp::Add => "add",
-                BinOp::Sub => "sub",
-                BinOp::Mul => "mul",
-                BinOp::Div => "sdiv",
-                BinOp::Mod => "srem",
-                BinOp::BitAnd => "and",
-                BinOp::BitOr => "or",
-                BinOp::BitXor => "xor",
-                BinOp::Shl => "shl",
-                BinOp::Shr => "ashr",
-                _ => unreachable!(),
-            };
+
+            // Check if either operand is a float type
+            let right_type = self.infer_expr_type(right);
+            let is_float = matches!(left_type, ResolvedType::F64 | ResolvedType::F32)
+                || matches!(right_type, ResolvedType::F64 | ResolvedType::F32);
 
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            ir.push_str(&format!(
-                "  {} = {} i64 {}, {}{}\n",
-                tmp, op_str, left_val, right_val, dbg_info
-            ));
+
+            if is_float && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod) {
+                let op_str = match op {
+                    BinOp::Add => "fadd",
+                    BinOp::Sub => "fsub",
+                    BinOp::Mul => "fmul",
+                    BinOp::Div => "fdiv",
+                    BinOp::Mod => "frem",
+                    _ => unreachable!(),
+                };
+                ir.push_str(&format!(
+                    "  {} = {} double {}, {}{}\n",
+                    tmp, op_str, left_val, right_val, dbg_info
+                ));
+            } else {
+                let op_str = match op {
+                    BinOp::Add => "add",
+                    BinOp::Sub => "sub",
+                    BinOp::Mul => "mul",
+                    BinOp::Div => "sdiv",
+                    BinOp::Mod => "srem",
+                    BinOp::BitAnd => "and",
+                    BinOp::BitOr => "or",
+                    BinOp::BitXor => "xor",
+                    BinOp::Shl => "shl",
+                    BinOp::Shr => "ashr",
+                    _ => unreachable!(),
+                };
+                ir.push_str(&format!(
+                    "  {} = {} i64 {}, {}{}\n",
+                    tmp, op_str, left_val, right_val, dbg_info
+                ));
+            }
             Ok((tmp, ir))
         }
     }
@@ -625,13 +666,14 @@ impl CodeGenerator {
         ));
         ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
 
-        if !arg_vals.is_empty() {
-            let payload_ptr = self.next_temp(counter);
+        // Store payload fields
+        for (i, arg_val) in arg_vals.iter().enumerate() {
+            let payload_field_ptr = self.next_temp(counter);
             ir.push_str(&format!(
-                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1\n",
-                payload_ptr, enum_name, enum_name, enum_ptr
+                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}\n",
+                payload_field_ptr, enum_name, enum_name, enum_ptr, i
             ));
-            ir.push_str(&format!("  store i64 {}, i64* {}\n", arg_vals[0], payload_ptr));
+            ir.push_str(&format!("  store i64 {}, i64* {}\n", arg_val, payload_field_ptr));
         }
 
         Ok((enum_ptr, ir))

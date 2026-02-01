@@ -426,11 +426,15 @@ impl CodeGenerator {
                     // Generate discriminant check for unit enum variant
                     let mut ir = String::new();
 
+                    // Get the enum type name for proper LLVM type reference
+                    let enum_name = self.get_enum_name_for_variant(name)
+                        .unwrap_or_else(|| "Unknown".to_string());
+
                     // Get the tag from the enum value (first field at index 0)
                     let tag_ptr = self.next_temp(counter);
                     ir.push_str(&format!(
-                        "  {} = getelementptr {{ i32 }}, {{ i32 }}* {}, i32 0, i32 0\n",
-                        tag_ptr, match_val
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                        tag_ptr, enum_name, enum_name, match_val
                     ));
 
                     let tag_val = self.next_temp(counter);
@@ -600,22 +604,26 @@ impl CodeGenerator {
             }
             Pattern::Variant { name, fields: _ } => {
                 // Enum variant pattern: check the tag matches
-                // Enum value is a struct { i32 tag, ... payload }
+                // Enum value is a struct %EnumName { i32 tag, ... payload }
                 // Extract the tag and compare
                 let mut ir = String::new();
+                let variant_name = &name.node;
+
+                // Get the enum type name for proper LLVM type reference
+                let enum_name = self.get_enum_name_for_variant(variant_name)
+                    .unwrap_or_else(|| "Unknown".to_string());
 
                 // Get the tag from the enum value (first field at index 0)
                 let tag_ptr = self.next_temp(counter);
                 ir.push_str(&format!(
-                    "  {} = getelementptr {{ i32 }}, {{ i32 }}* {}, i32 0, i32 0\n",
-                    tag_ptr, match_val
+                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
+                    tag_ptr, enum_name, enum_name, match_val
                 ));
 
                 let tag_val = self.next_temp(counter);
                 ir.push_str(&format!("  {} = load i32, i32* {}\n", tag_val, tag_ptr));
 
                 // Find the expected tag value for this variant
-                let variant_name = &name.node;
                 let expected_tag = self.get_enum_variant_tag(variant_name);
 
                 // Compare tag
@@ -692,6 +700,18 @@ impl CodeGenerator {
             }
         }
         0 // Default to 0 if not found
+    }
+
+    /// Get the enum name that contains a given variant
+    pub(crate) fn get_enum_name_for_variant(&self, variant_name: &str) -> Option<String> {
+        for enum_info in self.enums.values() {
+            for variant in &enum_info.variants {
+                if variant.name == variant_name {
+                    return Some(enum_info.name.clone());
+                }
+            }
+        }
+        None
     }
 
     /// Check if a name is a unit enum variant (not a binding)
@@ -771,42 +791,49 @@ impl CodeGenerator {
 
                 Ok(ir)
             }
-            Pattern::Variant { name: _, fields } => {
+            Pattern::Variant { name, fields } => {
                 // Bind fields from enum variant payload
                 let mut ir = String::new();
+                let variant_name = &name.node;
+
+                // Get the enum type name for proper LLVM type reference
+                let enum_name = self.get_enum_name_for_variant(variant_name)
+                    .unwrap_or_else(|| "Unknown".to_string());
 
                 for (i, field_pat) in fields.iter().enumerate() {
-                    // Extract payload field (starting at offset 1, after the tag)
-                    // For tuple variants: { i32 tag, i64 field0, i64 field1, ... }
-                    //
-                    // If match_val is a pointer, use getelementptr + load
-                    // Otherwise use extractvalue
+                    // Extract payload field from enum variant
+                    // Enum layout: %EnumName = type { i32 tag, { payload_types... } }
+                    // First get pointer to payload struct (index 1), then get field within it
 
                     if match_val.starts_with('%') {
-                        // Assume it's a pointer - use getelementptr to access the field
-                        // Enum layout: { i32 tag, { i64, i64, ... } payload }
-                        // For single-field tuple variants, payload is at index 1 in { i32, i64 } structure
-                        let field_ptr = self.next_temp(counter);
+                        // match_val is a pointer to the enum - use getelementptr
+                        // Access payload field: first get to the payload (index 1),
+                        // then get the specific field within the payload
+                        let payload_ptr = self.next_temp(counter);
                         ir.push_str(&format!(
-                            "  {} = getelementptr {{ i32, i64 }}, {{ i32, i64 }}* {}, i32 0, i32 {}\n",
-                            field_ptr,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}\n",
+                            payload_ptr,
+                            enum_name,
+                            enum_name,
                             match_val,
-                            i + 1
+                            i
                         ));
                         let field_val = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = load i64, i64* {}\n", field_val, field_ptr));
+                        ir.push_str(&format!("  {} = load i64, i64* {}\n", field_val, payload_ptr));
                         let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
                         ir.push_str(&bind_ir);
                     } else {
                         // It's a value - use extractvalue
-                        let field_val = self.next_temp(counter);
+                        // Extract from payload sub-struct: index 1 for payload, then i for field
+                        let payload_val = self.next_temp(counter);
                         ir.push_str(&format!(
-                            "  {} = extractvalue {{ i32, i64 }} {}, {}\n",
-                            field_val,
+                            "  {} = extractvalue %{} {}, 1, {}\n",
+                            payload_val,
+                            enum_name,
                             match_val,
-                            i + 1
+                            i
                         ));
-                        let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
+                        let bind_ir = self.generate_pattern_bindings(field_pat, &payload_val, counter)?;
                         ir.push_str(&bind_ir);
                     }
                 }

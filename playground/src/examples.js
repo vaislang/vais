@@ -78,9 +78,9 @@ S Point {
 }
 
 # Method on struct
-I Point {
-    F distance_from_origin() -> f64 {
-        sqrt(@.x * @.x + @.y * @.y)
+X Point {
+    F distance_from_origin(&self) -> f64 {
+        sqrt(self.x * self.x + self.y * self.y)
     }
 }
 
@@ -88,8 +88,8 @@ F main() -> i64 {
     p := Point { x: 3.0, y: 4.0 }
     puts("Point created")
 
-    # Access fields
-    # dist := p.distance_from_origin()
+    # Access fields and call method
+    dist := p.distance_from_origin()
 
     0
 }`

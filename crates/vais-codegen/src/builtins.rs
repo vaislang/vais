@@ -135,7 +135,7 @@ impl CodeGenerator {
 
         // puts_ptr: print string from pointer (maps to C puts)
         register_extern!(self, "puts_ptr" => "puts",
-            vec![("s".to_string(), ResolvedType::I64)],
+            vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I32
         );
 
@@ -231,16 +231,6 @@ impl CodeGenerator {
             vec![
                 ("dest".to_string(), ResolvedType::I64),
                 ("src".to_string(), ResolvedType::I64),
-                ("n".to_string(), ResolvedType::I64),
-            ],
-            ResolvedType::I64
-        );
-
-        // memcpy_str: same as memcpy but accepts str as src
-        register_extern!(self, "memcpy_str" => "memcpy",
-            vec![
-                ("dest".to_string(), ResolvedType::I64),
-                ("src".to_string(), ResolvedType::Str),
                 ("n".to_string(), ResolvedType::I64),
             ],
             ResolvedType::I64
@@ -354,12 +344,12 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
-        // fgets_ptr: (i64, i64, i64) -> i64 - fgets with raw pointer params (for std/io.vais)
+        // fgets_ptr: (str, i32, str) -> i64 - fgets with correct pointer types
         register_extern!(self, "fgets_ptr" => "fgets",
             vec![
-                ("buffer".to_string(), ResolvedType::I64),
-                ("n".to_string(), ResolvedType::I64),
-                ("stream".to_string(), ResolvedType::I64),
+                ("buffer".to_string(), ResolvedType::Str),
+                ("n".to_string(), ResolvedType::I32),
+                ("stream".to_string(), ResolvedType::Str),
             ],
             ResolvedType::I64
         );
@@ -438,15 +428,15 @@ impl CodeGenerator {
             ResolvedType::I32
         );
 
-        // memcpy_str: (dest: i64, src: str, len: i64) -> i64
-        // Copies len bytes from str src to i64 dest pointer
-        register_extern!(self, "memcpy_str",
+        // memcpy_str: (dest: str, src: str, len: i64) -> str
+        // Copies len bytes from str src to str dest pointer
+        register_extern!(self, "memcpy_str" => "memcpy",
             vec![
-                ("dest".to_string(), ResolvedType::I64),
+                ("dest".to_string(), ResolvedType::Str),
                 ("src".to_string(), ResolvedType::Str),
                 ("len".to_string(), ResolvedType::I64),
             ],
-            ResolvedType::I64
+            ResolvedType::Str
         );
     }
 
@@ -465,9 +455,9 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
-        // atol_ptr: (s: i64) -> i64 - atol with raw pointer param (for std/io.vais)
+        // atol_ptr: (s: str) -> i64 - atol with pointer param
         register_extern!(self, "atol_ptr" => "atol",
-            vec![("s".to_string(), ResolvedType::I64)],
+            vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
 
@@ -477,9 +467,9 @@ impl CodeGenerator {
             ResolvedType::F64
         );
 
-        // atof_ptr: (s: i64) -> f64 - atof with raw pointer param (for std/io.vais)
+        // atof_ptr: (s: str) -> f64 - atof with pointer param
         register_extern!(self, "atof_ptr" => "atof",
-            vec![("s".to_string(), ResolvedType::I64)],
+            vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::F64
         );
 

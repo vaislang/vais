@@ -1,11 +1,11 @@
 {
-  "phase": 4,
-  "request": "배포하고 싶은데 어떻게 해야되?",
+  "phase": 5,
+  "request": "로컬에서 예제 컴파일 및 로드맵 업데이트",
   "tasks": [
-    { "id": 5, "name": "패키지 매니페스트 버전 1.1.0 갱신", "status": "in_progress", "model": "Haiku" },
-    { "id": 6, "name": "Cargo.toml 버전 + CHANGELOG 갱신", "status": "in_progress", "model": "Haiku" },
-    { "id": 7, "name": "v1.1.0 태그 + GitHub Release 생성", "status": "pending", "model": "Sonnet" },
-    { "id": 8, "name": "ROADMAP 배포 상태 갱신", "status": "pending", "model": "Haiku" }
+    { "id": 1, "name": "struct/enum 예제 로컬 컴파일 검증", "status": "completed", "model": "Sonnet" },
+    { "id": 2, "name": "전체 examples/ 디렉토리 컴파일 검증", "status": "completed", "model": "Haiku" },
+    { "id": 3, "name": "ROADMAP.md Phase 23 업데이트", "status": "completed", "model": "Opus" }
   ],
-  "currentTask": 5
+  "currentTask": null,
+  "lastCompleted": "ROADMAP.md Phase 23 업데이트"
 }

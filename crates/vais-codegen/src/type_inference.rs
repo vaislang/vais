@@ -4,7 +4,7 @@
 //! and blocks during code generation.
 
 use crate::CodeGenerator;
-use vais_ast::{Expr, Spanned, Stmt};
+use vais_ast::{BinOp, Expr, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -349,6 +349,26 @@ impl CodeGenerator {
                 }
                 // Default fallback if field not found
                 ResolvedType::I64
+            }
+            Expr::Binary { left, right, op } => {
+                // For comparison/logical ops, result is always integer (i64)
+                if matches!(op, BinOp::Lt | BinOp::Lte | BinOp::Gt | BinOp::Gte
+                    | BinOp::Eq | BinOp::Neq | BinOp::And | BinOp::Or) {
+                    return ResolvedType::I64;
+                }
+                // For arithmetic, propagate float type from either operand
+                let left_ty = self.infer_expr_type(left);
+                let right_ty = self.infer_expr_type(right);
+                if matches!(left_ty, ResolvedType::F64) || matches!(right_ty, ResolvedType::F64) {
+                    ResolvedType::F64
+                } else if matches!(left_ty, ResolvedType::F32) || matches!(right_ty, ResolvedType::F32) {
+                    ResolvedType::F32
+                } else {
+                    left_ty
+                }
+            }
+            Expr::Unary { expr: inner, .. } => {
+                self.infer_expr_type(inner)
             }
             _ => ResolvedType::I64, // Default fallback
         }

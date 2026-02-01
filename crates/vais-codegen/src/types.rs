@@ -551,8 +551,8 @@ impl CodeGenerator {
                 }
             };
 
-            // Estimate size (rough: each i64 = 8 bytes)
-            let size = variant_types.len() * 8;
+            // Estimate size based on actual field types
+            let size: usize = variant_types.iter().map(|t| self.estimate_type_size(t)).sum();
             if size > max_payload_size {
                 max_payload_size = size;
                 payload_types = variant_types;
