@@ -1276,7 +1276,7 @@ impl Formatter {
                 s
             }
 
-            Expr::Await(expr) => format!("{}.A", self.format_expr(&expr.node)),
+            Expr::Await(expr) => format!("{}.Y", self.format_expr(&expr.node)),
             Expr::Try(expr) => format!("{}?", self.format_expr(&expr.node)),
             Expr::Unwrap(expr) => format!("{}!", self.format_expr(&expr.node)),
             Expr::Ref(expr) => format!("&{}", self.format_expr(&expr.node)),

@@ -1751,6 +1751,74 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
+// ==================== Y (await abbreviation) ====================
+
+#[test]
+fn e2e_y_basic_await_abbreviation() {
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x * 2
+}
+
+F main() -> i64 {
+    result := compute(21).Y
+    result - 42
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_y_sequential_awaits() {
+    let source = r#"
+A F double(x: i64) -> i64 {
+    x * 2
+}
+
+A F add_one(x: i64) -> i64 {
+    x + 1
+}
+
+F main() -> i64 {
+    a := double(10).Y
+    b := add_one(a).Y
+    b - 21
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_y_spawn_with_y() {
+    let source = r#"
+A F square(x: i64) -> i64 {
+    x * x
+}
+
+F main() -> i64 {
+    result := (spawn square(7)).Y
+    result - 49
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_y_mixed_await_and_y() {
+    let source = r#"
+A F compute(x: i64) -> i64 {
+    x + 10
+}
+
+F main() -> i64 {
+    a := compute(5).await
+    b := compute(5).Y
+    a - b
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
 // ==================== Runtime Output Verification ====================
 
 #[test]

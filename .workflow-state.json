@@ -1,5 +1,5 @@
 {
-  "phase": 5,
+  "phase": 4,
   "request": "토큰 절감 + 성능 개선 로드맵 구성",
   "tasks": [
     { "id": 1, "name": "Phase 29-30 로드맵 설계 & ROADMAP.md 작성", "status": "completed", "model": "Opus" },
@@ -7,12 +7,13 @@
     { "id": 3, "name": "함수 파라미터 타입 추론 확장", "status": "completed", "model": "Opus" },
     { "id": 4, "name": "mut → ~ 축약 키워드", "status": "completed", "model": "Haiku" },
     { "id": 5, "name": "파이프 연산자 |> 구현", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "TCO 구현", "status": "pending", "model": "Opus" },
-    { "id": 7, "name": "인라이닝 임계값 상향 & PGO 연동", "status": "pending", "model": "Sonnet" },
-    { "id": 8, "name": "MIR 기반 최적화 파이프라인 활성화", "status": "pending", "model": "Opus" },
-    { "id": 9, "name": "경계 검사 제거", "status": "pending", "model": "Sonnet" },
-    { "id": 10, "name": "벤치마크 스위트 확장 & 성능 검증", "status": "pending", "model": "Sonnet" }
+    { "id": 6, "name": "await → Y 키워드 축약", "status": "in_progress", "model": "Sonnet" },
+    { "id": 7, "name": "스프레드 문법 .. 구현", "status": "pending", "model": "Sonnet" },
+    { "id": 8, "name": "암시적 self 생략", "status": "pending", "model": "Sonnet" },
+    { "id": 9, "name": "범위 연산자 0..n 구현", "status": "pending", "model": "Sonnet" },
+    { "id": 10, "name": "컬렉션 리터럴 [] / {} 구현", "status": "pending", "model": "Sonnet" },
+    { "id": 11, "name": "디스트럭처링 (a,b) := expr", "status": "pending", "model": "Opus" }
   ],
-  "currentTask": null,
+  "currentTask": 6,
   "lastCompleted": "파이프 연산자 |> 구현"
 }

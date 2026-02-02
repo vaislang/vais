@@ -2434,7 +2434,7 @@ impl Parser {
             Token::Use => "use keyword 'U'".to_string(),
             Token::Pub => "pub keyword 'P'".to_string(),
             Token::Async => "async keyword 'A'".to_string(),
-            Token::Await => "'await' keyword".to_string(),
+            Token::Await => "await keyword 'Y'".to_string(),
             Token::Spawn => "'spawn' keyword".to_string(),
             Token::True => "'true'".to_string(),
             Token::False => "'false'".to_string(),

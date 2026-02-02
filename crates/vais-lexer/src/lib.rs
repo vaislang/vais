@@ -85,6 +85,7 @@ pub enum Token {
     #[token("spawn")]
     Spawn,
     #[token("await")]
+    #[token("Y", priority = 3)]
     Await,
     #[token("weak")]
     Weak,
@@ -375,7 +376,7 @@ impl fmt::Display for Token {
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
             Token::Spawn => write!(f, "spawn"),
-            Token::Await => write!(f, "await"),
+            Token::Await => write!(f, "Y"),
             Token::Weak => write!(f, "weak"),
             Token::Clone => write!(f, "clone"),
             Token::Const => write!(f, "const"),
@@ -1231,6 +1232,23 @@ F add(a:i64,
         assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
         assert!(tokens.iter().any(|t| t.token == Token::Bang));
         assert!(tokens.iter().any(|t| t.token == Token::LParen));
+    }
+
+    #[test]
+    fn test_y_await_abbreviation() {
+        let source = "expr.Y";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Ident("expr".to_string()));
+        assert_eq!(tokens[1].token, Token::Dot);
+        assert_eq!(tokens[2].token, Token::Await);
+    }
+
+    #[test]
+    fn test_y_and_await_both_work() {
+        let tokens_y = tokenize("x.Y").unwrap();
+        let tokens_await = tokenize("x.await").unwrap();
+        assert_eq!(tokens_y[2].token, Token::Await);
+        assert_eq!(tokens_await[2].token, Token::Await);
     }
 
     #[test]
