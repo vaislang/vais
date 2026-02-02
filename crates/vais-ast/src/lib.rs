@@ -912,6 +912,8 @@ pub enum Expr {
     Try(Box<Spanned<Expr>>),
     /// Unwrap: `expr!`
     Unwrap(Box<Spanned<Expr>>),
+    /// Spread: `..expr` in array literals
+    Spread(Box<Spanned<Expr>>),
     /// Reference: `&expr`
     Ref(Box<Spanned<Expr>>),
     /// Dereference: `*expr`

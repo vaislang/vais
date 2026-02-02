@@ -290,7 +290,7 @@ impl SecurityAnalyzer {
             Expr::Unwrap(expr) => {
                 self.analyze_expr(&expr.node, expr.span);
             },
-            Expr::Ref(expr) => {
+            Expr::Ref(expr) | Expr::Spread(expr) => {
                 self.analyze_expr(&expr.node, expr.span);
             },
             Expr::Deref(expr) => {

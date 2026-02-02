@@ -3729,9 +3729,24 @@ impl TypeChecker {
                     return Ok(ResolvedType::Pointer(Box::new(var)));
                 }
 
-                let first_type = self.check_expr(&exprs[0])?;
+                // Helper: get element type from an array element (handles Spread)
+                let get_elem_type = |checker: &mut Self, e: &Spanned<Expr>| -> TypeResult<ResolvedType> {
+                    if let Expr::Spread(inner) = &e.node {
+                        let inner_type = checker.check_expr(inner)?;
+                        // Spread must be on a pointer/array type
+                        match inner_type {
+                            ResolvedType::Pointer(elem) => Ok(*elem),
+                            ResolvedType::Array(elem) => Ok(*elem),
+                            _ => Ok(inner_type),
+                        }
+                    } else {
+                        checker.check_expr(e)
+                    }
+                };
+
+                let first_type = get_elem_type(self, &exprs[0])?;
                 for expr in &exprs[1..] {
-                    let t = self.check_expr(expr)?;
+                    let t = get_elem_type(self, expr)?;
                     self.unify(&first_type, &t)?;
                 }
 
@@ -3958,6 +3973,11 @@ impl TypeChecker {
                         span: None,
                     }),
                 }
+            }
+
+            Expr::Spread(inner) => {
+                // Spread is valid inside array literals; standalone spread just checks inner
+                self.check_expr(inner)
             }
 
             Expr::Ref(inner) => {
@@ -4740,6 +4760,20 @@ impl TypeChecker {
         }
     }
 
+    /// Look up "self" variable directly from scopes (no fallback)
+    fn lookup_self_var_info(&self) -> TypeResult<VarInfo> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(info) = scope.get("self") {
+                return Ok(info.clone());
+            }
+        }
+        Err(TypeError::UndefinedVar {
+            name: "self".to_string(),
+            span: None,
+            suggestion: None,
+        })
+    }
+
     fn lookup_var(&self, name: &str) -> Option<ResolvedType> {
         self.lookup_var_info(name).ok().map(|v| v.ty)
     }
@@ -4851,6 +4885,29 @@ impl TypeChecker {
                 use_count: 0,
                 defined_at: None,
             });
+        }
+
+        // Implicit self: if in a method context, check struct fields
+        if let Ok(self_info) = self.lookup_self_var_info() {
+            let inner_type = match &self_info.ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => Some(inner.as_ref()),
+                _ => Some(&self_info.ty),
+            };
+            if let Some(ResolvedType::Named { name: struct_name, generics: _ }) = inner_type {
+                if let Some(struct_def) = self.structs.get(struct_name).cloned() {
+                    for (fname, ftype) in &struct_def.fields {
+                        if fname == name {
+                            return Ok(VarInfo {
+                                ty: ftype.clone(),
+                                is_mut: self_info.is_mut,
+                                linearity: Linearity::Unrestricted,
+                                use_count: 0,
+                                defined_at: None,
+                            });
+                        }
+                    }
+                }
+            }
         }
 
         // Collect all available names for did-you-mean suggestion

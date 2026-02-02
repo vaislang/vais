@@ -63,6 +63,50 @@ impl CodeGenerator {
             Ok(("%self".to_string(), String::new()))
         } else if self.functions.contains_key(name) {
             Ok((format!("@{}", name), String::new()))
+        } else if let Some(self_local) = self.locals.get("self").cloned() {
+            // Implicit self: check if name is a field of the self struct
+            let self_type = match &self_local.ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+                other => other.clone(),
+            };
+            if let ResolvedType::Named { name: type_name, .. } = &self_type {
+                let resolved_name = self.resolve_struct_name(type_name);
+                if let Some(struct_info) = self.structs.get(&resolved_name).cloned() {
+                    if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == name) {
+                        let field_ty = &struct_info.fields[field_idx].1;
+                        let llvm_ty = self.type_to_llvm(field_ty);
+                        let mut ir = String::new();
+                        // Generate: getelementptr from %self
+                        let field_ptr = self.next_temp(counter);
+                        ir.push_str(&format!(
+                            "  {} = getelementptr %{}, %{}* %self, i32 0, i32 {}\n",
+                            field_ptr, resolved_name, resolved_name, field_idx
+                        ));
+                        if matches!(field_ty, ResolvedType::Named { .. }) {
+                            return Ok((field_ptr, ir));
+                        } else {
+                            let result = self.next_temp(counter);
+                            ir.push_str(&format!(
+                                "  {} = load {}, {}* {}\n",
+                                result, llvm_ty, llvm_ty, field_ptr
+                            ));
+                            return Ok((result, ir));
+                        }
+                    }
+                }
+            }
+            // Not a field, fall through to error
+            let mut candidates: Vec<&str> = Vec::new();
+            for var_name in self.locals.keys() {
+                candidates.push(var_name.as_str());
+            }
+            for func_name in self.functions.keys() {
+                candidates.push(func_name.as_str());
+            }
+            candidates.push("self");
+            let suggestions = crate::suggest_similar(name, &candidates, 3);
+            let suggestion_text = crate::format_did_you_mean(&suggestions);
+            Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
         } else {
             // Collect all available symbols for suggestions
             let mut candidates: Vec<&str> = Vec::new();

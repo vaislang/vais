@@ -1024,7 +1024,19 @@ impl Parser {
             Token::LBracket => {
                 let mut exprs = Vec::new();
                 while !self.check(&Token::RBracket) && !self.is_at_end() {
-                    exprs.push(self.parse_expr()?);
+                    // Check for spread syntax: ..expr
+                    if self.check(&Token::DotDot) {
+                        let spread_start = self.current_span().start;
+                        self.advance();
+                        let inner = self.parse_expr()?;
+                        let spread_end = self.prev_span().end;
+                        exprs.push(Spanned::new(
+                            Expr::Spread(Box::new(inner)),
+                            Span::new(spread_start, spread_end),
+                        ));
+                    } else {
+                        exprs.push(self.parse_expr()?);
+                    }
                     if !self.check(&Token::RBracket) {
                         self.expect(&Token::Comma)?;
                     }

@@ -355,7 +355,7 @@ impl EffectInferrer {
             }
 
             // Reference is pure
-            Expr::Ref(inner) => {
+            Expr::Ref(inner) | Expr::Spread(inner) => {
                 self.infer_expr_effects(&inner.node, functions)
             }
 

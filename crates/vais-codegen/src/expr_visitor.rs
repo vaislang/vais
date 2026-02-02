@@ -71,6 +71,10 @@ impl ExprVisitor for CodeGenerator {
             Expr::StaticMethodCall { type_name, method, args } => {
                 self.visit_static_method_call(type_name, method, args, counter)
             }
+            Expr::Spread(inner) => {
+                // Spread is handled within array generation; standalone spread generates inner
+                self.generate_expr(inner, counter)
+            }
             Expr::Ref(inner) => self.visit_ref(inner, counter),
             Expr::Deref(inner) => self.visit_deref(inner, counter),
             Expr::Cast { expr, ty } => self.visit_cast(expr, ty, counter),

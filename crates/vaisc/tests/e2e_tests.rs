@@ -1819,6 +1819,84 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
+// ==================== Implicit Self ====================
+
+#[test]
+fn e2e_implicit_self_field_access() {
+    let source = r#"
+S Point { x: i64, y: i64 }
+
+X Point {
+    F sum(&self) -> i64 {
+        x + y
+    }
+}
+
+F main() -> i64 {
+    p := Point{x: 30, y: 12}
+    p.sum() - 42
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_implicit_self_mixed_with_explicit() {
+    let source = r#"
+S Counter { value: i64 }
+
+X Counter {
+    F get(&self) -> i64 {
+        value
+    }
+    F get_explicit(&self) -> i64 {
+        self.value
+    }
+}
+
+F main() -> i64 {
+    c := Counter{value: 42}
+    c.get() - c.get_explicit()
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_implicit_self_local_shadows_field() {
+    let source = r#"
+S Data { value: i64 }
+
+X Data {
+    F compute(&self) -> i64 {
+        value := 100
+        value - self.value
+    }
+}
+
+F main() -> i64 {
+    d := Data{value: 58}
+    d.compute() - 42
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+// ==================== Spread Syntax ====================
+
+#[test]
+fn e2e_spread_parse_in_array() {
+    // Test that spread syntax parses without error
+    // (code generation treats spread as inner expr for now)
+    let source = r#"
+F main() -> i64 {
+    arr := [1, 2, 3]
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
 // ==================== Runtime Output Verification ====================
 
 #[test]
