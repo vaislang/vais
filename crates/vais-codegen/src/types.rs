@@ -390,6 +390,10 @@ impl CodeGenerator {
                 // This shouldn't normally be reached in codegen
                 "i64".to_string()
             }
+            ResolvedType::Map(key, _val) => {
+                // Map is represented as a pointer to key array (parallel arrays)
+                format!("{}*", self.type_to_llvm_impl(key)?)
+            }
             ResolvedType::Lazy(inner) => {
                 // Lazy<T> is represented as a struct with:
                 // - computed: i1 (has been evaluated)

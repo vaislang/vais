@@ -350,6 +350,12 @@ impl SecurityAnalyzer {
                     }
                 }
             },
+            Expr::MapLit(pairs) => {
+                for (k, v) in pairs {
+                    self.analyze_expr(&k.node, k.span);
+                    self.analyze_expr(&v.node, v.span);
+                }
+            },
             Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::Unit |
             Expr::Ident(_) | Expr::SelfCall | Expr::MacroInvoke(_) | Expr::Error { .. } => {},
         }

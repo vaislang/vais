@@ -1253,6 +1253,13 @@ impl Formatter {
                 format!("{} {{ {} }}", name.node, fields_str.join(", "))
             }
 
+            Expr::MapLit(pairs) => {
+                let pairs_str: Vec<String> = pairs.iter().map(|(k, v)| {
+                    format!("{}: {}", self.format_expr(&k.node), self.format_expr(&v.node))
+                }).collect();
+                format!("{{{}}}", pairs_str.join(", "))
+            }
+
             Expr::Range { start, end, inclusive } => {
                 let mut s = String::new();
                 if let Some(st) = start {

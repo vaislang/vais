@@ -912,6 +912,8 @@ pub enum Expr {
     Try(Box<Spanned<Expr>>),
     /// Unwrap: `expr!`
     Unwrap(Box<Spanned<Expr>>),
+    /// Map literal: `{k1: v1, k2: v2}`
+    MapLit(Vec<(Spanned<Expr>, Spanned<Expr>)>),
     /// Spread: `..expr` in array literals
     Spread(Box<Spanned<Expr>>),
     /// Reference: `&expr`

@@ -85,6 +85,12 @@ impl CodeGenerator {
                     self.collect_free_vars_in_expr(&e.node, bound, free);
                 }
             }
+            Expr::MapLit(pairs) => {
+                for (k, v) in pairs {
+                    self.collect_free_vars_in_expr(&k.node, bound, free);
+                    self.collect_free_vars_in_expr(&v.node, bound, free);
+                }
+            }
             Expr::StructLit { fields, .. } => {
                 for (_, e) in fields {
                     self.collect_free_vars_in_expr(&e.node, bound, free);

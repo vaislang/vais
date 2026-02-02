@@ -400,6 +400,16 @@ impl EffectInferrer {
 
             // Force expression - evaluates lazy value
             Expr::Force(inner) => self.infer_expr_effects(&inner.node, functions),
+
+            // Map literal is pure
+            Expr::MapLit(pairs) => {
+                let mut effects = EffectSet::pure();
+                for (k, v) in pairs {
+                    effects = effects.union(&self.infer_expr_effects(&k.node, functions));
+                    effects = effects.union(&self.infer_expr_effects(&v.node, functions));
+                }
+                effects
+            }
             Expr::StringInterp(parts) => {
                 let mut effects = EffectSet::pure();
                 for part in parts {

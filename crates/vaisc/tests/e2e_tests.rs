@@ -3269,3 +3269,50 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 11);
 }
+
+// ===== Map Literal Tests =====
+
+#[test]
+fn test_map_literal_basic() {
+    let source = r#"
+F main() -> i64 {
+    m := {1: 10, 2: 20, 3: 30}
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_map_literal_single_entry() {
+    let source = r#"
+F main() -> i64 {
+    m := {42: 100}
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_map_literal_trailing_comma() {
+    let source = r#"
+F main() -> i64 {
+    m := {1: 10, 2: 20,}
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_map_literal_with_expressions() {
+    let source = r#"
+F main() -> i64 {
+    a := 5
+    m := {a: a * 2, 10: 20 + 30}
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}

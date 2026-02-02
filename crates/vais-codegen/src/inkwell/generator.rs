@@ -323,6 +323,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
             // Array/Tuple/Index
             Expr::Array(elements) => self.generate_array(elements),
+            Expr::MapLit(_pairs) => {
+                // Map literals not yet supported in inkwell backend
+                Ok(self.context.i64_type().const_int(0, false).into())
+            }
             Expr::Tuple(elements) => self.generate_tuple(elements),
             Expr::Index { expr: arr, index } => self.generate_index(&arr.node, &index.node),
 

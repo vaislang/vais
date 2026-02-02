@@ -3759,6 +3759,23 @@ impl TypeChecker {
                 Ok(ResolvedType::Tuple(types?))
             }
 
+            Expr::MapLit(pairs) => {
+                if pairs.is_empty() {
+                    let k = self.fresh_type_var();
+                    let v = self.fresh_type_var();
+                    return Ok(ResolvedType::Map(Box::new(k), Box::new(v)));
+                }
+                let first_key_type = self.check_expr(&pairs[0].0)?;
+                let first_val_type = self.check_expr(&pairs[0].1)?;
+                for (k, v) in &pairs[1..] {
+                    let kt = self.check_expr(k)?;
+                    let vt = self.check_expr(v)?;
+                    self.unify(&first_key_type, &kt)?;
+                    self.unify(&first_val_type, &vt)?;
+                }
+                Ok(ResolvedType::Map(Box::new(first_key_type), Box::new(first_val_type)))
+            }
+
             Expr::StructLit { name, fields } => {
                 // First check for struct
                 if let Some(struct_def) = self.structs.get(&name.node).cloned() {
@@ -5129,6 +5146,12 @@ impl TypeChecker {
             Expr::StructLit { fields, .. } => {
                 for (_, e) in fields {
                     self.collect_free_vars(&e.node, bound, free);
+                }
+            }
+            Expr::MapLit(pairs) => {
+                for (k, v) in pairs {
+                    self.collect_free_vars(&k.node, bound, free);
+                    self.collect_free_vars(&v.node, bound, free);
                 }
             }
             Expr::Assign { target, value } => {

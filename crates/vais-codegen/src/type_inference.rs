@@ -151,6 +151,16 @@ impl CodeGenerator {
                     ResolvedType::Pointer(Box::new(ResolvedType::I64))
                 }
             }
+            Expr::MapLit(pairs) => {
+                if let Some((k, v)) = pairs.first() {
+                    ResolvedType::Map(
+                        Box::new(self.infer_expr_type(k)),
+                        Box::new(self.infer_expr_type(v)),
+                    )
+                } else {
+                    ResolvedType::Map(Box::new(ResolvedType::I64), Box::new(ResolvedType::I64))
+                }
+            }
             Expr::Tuple(elements) => {
                 ResolvedType::Tuple(elements.iter().map(|e| self.infer_expr_type(e)).collect())
             }

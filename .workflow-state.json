@@ -1,18 +1,11 @@
 {
-  "phase": 4,
-  "request": "토큰 절감 + 성능 개선 로드맵 구성",
+  "phase": 5,
+  "request": "Phase 29 잔여 작업 완료",
   "tasks": [
-    { "id": 1, "name": "Phase 29-30 로드맵 설계 & ROADMAP.md 작성", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "문자열 보간 구현 (렉서+파서+코드젠)", "status": "completed", "model": "Opus" },
-    { "id": 3, "name": "함수 파라미터 타입 추론 확장", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "mut → ~ 축약 키워드", "status": "completed", "model": "Haiku" },
-    { "id": 5, "name": "파이프 연산자 |> 구현", "status": "completed", "model": "Sonnet" },
-    { "id": 6, "name": "await → Y 키워드 축약", "status": "completed", "model": "Sonnet" },
-    { "id": 7, "name": "스프레드 문법 .. 구현", "status": "in_progress", "model": "Sonnet" },
-    { "id": 8, "name": "암시적 self 생략", "status": "pending", "model": "Sonnet" },
-    { "id": 9, "name": "맵 리터럴 {k:v} 구현", "status": "pending", "model": "Sonnet" },
-    { "id": 10, "name": "디스트럭처링 (a,b) := expr", "status": "pending", "model": "Opus" }
+    { "id": 1, "name": "skip_to_closing 근본 수정 (파서 에러 복구 버그)", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "맵 리터럴 {k:v} 구현", "status": "completed", "model": "Sonnet" },
+    { "id": 3, "name": "디스트럭처링 (a,b) := expr 구현", "status": "pending", "model": "Opus" }
   ],
-  "currentTask": 7,
-  "lastCompleted": "await → Y 키워드 축약"
+  "currentTask": null,
+  "lastCompleted": "맵 리터럴 {k:v} 구현"
 }

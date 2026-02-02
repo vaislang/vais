@@ -353,6 +353,13 @@ impl<'a> AstExpander<'a> {
                     .collect::<ExpansionResult<Vec<_>>>()?;
                 Expr::Tuple(expanded)
             }
+            Expr::MapLit(pairs) => {
+                let expanded = pairs
+                    .into_iter()
+                    .map(|(k, v)| Ok((self.expand_expr(k)?, self.expand_expr(v)?)))
+                    .collect::<ExpansionResult<Vec<_>>>()?;
+                Expr::MapLit(expanded)
+            }
             Expr::Range { start, end, inclusive } => {
                 let expanded_start = if let Some(s) = start {
                     Some(Box::new(self.expand_expr(*s)?))

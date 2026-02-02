@@ -1046,6 +1046,38 @@ impl Parser {
                 return Ok(Spanned::new(Expr::Array(exprs), Span::new(start, end)));
             }
             Token::LBrace => {
+                // Disambiguate map literal {k: v, ...} from block {stmts}
+                // Try to detect map literal pattern: save pos, parse expr, check for ':'
+                if !self.check(&Token::RBrace) && !self.is_at_end() {
+                    let saved_pos = self.pos;
+                    let saved_errors_len = self.errors.len();
+                    // Try parsing an expression as potential map key
+                    let maybe_key = self.parse_expr();
+                    if maybe_key.is_ok() && self.check(&Token::Colon) {
+                        // This looks like a map literal: {key: value, ...}
+                        self.advance(); // consume ':'
+                        let key = maybe_key.unwrap();
+                        let value = self.parse_expr()?;
+                        let mut pairs = vec![(key, value)];
+                        while self.check(&Token::Comma) {
+                            self.advance(); // consume ','
+                            if self.check(&Token::RBrace) {
+                                break; // trailing comma
+                            }
+                            let k = self.parse_expr()?;
+                            self.expect(&Token::Colon)?;
+                            let v = self.parse_expr()?;
+                            pairs.push((k, v));
+                        }
+                        self.expect(&Token::RBrace)?;
+                        let end = self.prev_span().end;
+                        return Ok(Spanned::new(Expr::MapLit(pairs), Span::new(start, end)));
+                    } else {
+                        // Not a map literal, restore position and parse as block
+                        self.pos = saved_pos;
+                        self.errors.truncate(saved_errors_len);
+                    }
+                }
                 let stmts = self.parse_block_contents()?;
                 self.expect(&Token::RBrace)?;
                 let end = self.prev_span().end;

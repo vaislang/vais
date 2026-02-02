@@ -51,6 +51,10 @@ impl ExprVisitor for CodeGenerator {
                 self.visit_assign_op(op, target, value, counter)
             }
             Expr::Array(elements) => self.visit_array(elements, counter),
+            Expr::MapLit(_) => {
+                // Delegate to main generate_expr for map literals
+                self.generate_expr(expr, counter)
+            }
             Expr::Tuple(elements) => self.visit_tuple(elements, counter),
             Expr::StructLit { name, fields } => {
                 self.visit_struct_lit(name, fields, counter)
