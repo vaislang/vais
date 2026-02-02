@@ -21,6 +21,14 @@ impl StmtVisitor for CodeGenerator {
             } => {
                 self.generate_let_stmt(name, ty.as_ref(), value, *is_mut, counter)
             }
+            Stmt::LetDestructure {
+                pattern,
+                value,
+                is_mut,
+                ..
+            } => {
+                self.generate_let_destructure(pattern, value, *is_mut, counter)
+            }
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
                 self.generate_return_stmt(expr.as_ref().map(|e| &**e), counter)

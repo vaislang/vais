@@ -402,6 +402,12 @@ impl CodeGenerator {
                 // For simplicity, we use a pointer to struct
                 format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner)?)
             }
+            ResolvedType::Tuple(elems) => {
+                let elem_types: Vec<String> = elems.iter()
+                    .map(|e| self.type_to_llvm_impl(e))
+                    .collect::<Result<_, _>>()?;
+                format!("{{ {} }}", elem_types.join(", "))
+            }
             _ => "i64".to_string(), // Default fallback
         })
     }
@@ -511,6 +517,11 @@ impl CodeGenerator {
                     lifetime: lifetime.clone(),
                     inner: Box::new(self.ast_type_to_resolved_impl(&inner.node)),
                 }
+            }
+            Type::Tuple(elems) => {
+                ResolvedType::Tuple(
+                    elems.iter().map(|e| self.ast_type_to_resolved_impl(&e.node)).collect(),
+                )
             }
             Type::Unit => ResolvedType::Unit,
             Type::DynTrait { trait_name, generics } => {

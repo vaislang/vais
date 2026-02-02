@@ -3012,6 +3012,15 @@ impl TypeChecker {
                 );
                 Ok(ResolvedType::Unit)
             }
+            Stmt::LetDestructure {
+                pattern,
+                value,
+                is_mut,
+            } => {
+                let value_type = self.check_expr(value)?;
+                self.check_destructure_pattern(&pattern, &value_type, *is_mut)?;
+                Ok(ResolvedType::Unit)
+            }
             Stmt::Expr(expr) => self.check_expr(expr),
             Stmt::Return(expr) => {
                 let ret_type = if let Some(expr) = expr {
@@ -3040,6 +3049,54 @@ impl TypeChecker {
                 // The parsing error has already been reported.
                 Ok(ResolvedType::Unknown)
             }
+        }
+    }
+
+    /// Check a destructuring pattern against a type and bind variables
+    fn check_destructure_pattern(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        ty: &ResolvedType,
+        is_mut: bool,
+    ) -> TypeResult<()> {
+        match &pattern.node {
+            Pattern::Ident(name) => {
+                self.define_var_with_linearity(
+                    name,
+                    ty.clone(),
+                    is_mut,
+                    Linearity::Unrestricted,
+                    Some(pattern.span),
+                );
+                Ok(())
+            }
+            Pattern::Tuple(patterns) => {
+                if let ResolvedType::Tuple(types) = ty {
+                    if patterns.len() != types.len() {
+                        return Err(TypeError::Mismatch {
+                            expected: format!("tuple of {} elements", patterns.len()),
+                            found: format!("tuple of {} elements", types.len()),
+                            span: Some(pattern.span),
+                        });
+                    }
+                    for (pat, elem_ty) in patterns.iter().zip(types.iter()) {
+                        self.check_destructure_pattern(pat, elem_ty, is_mut)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(TypeError::Mismatch {
+                        expected: "tuple".to_string(),
+                        found: format!("{}", ty),
+                        span: Some(pattern.span),
+                    })
+                }
+            }
+            Pattern::Wildcard => Ok(()),
+            _ => Err(TypeError::Mismatch {
+                expected: "identifier or tuple pattern".to_string(),
+                found: "unsupported pattern in destructuring".to_string(),
+                span: Some(pattern.span),
+            }),
         }
     }
 

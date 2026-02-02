@@ -4,7 +4,7 @@
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
 use crate::types::LocalVar;
-use vais_ast::{Spanned, Stmt, Expr};
+use vais_ast::{Pattern, Spanned, Stmt, Expr};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -169,6 +169,14 @@ impl CodeGenerator {
 
                 Ok(("void".to_string(), ir))
             }
+            Stmt::LetDestructure {
+                pattern,
+                value,
+                is_mut,
+                ..
+            } => {
+                self.generate_let_destructure(pattern, value, *is_mut, counter)
+            }
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
                 if let Some(expr) = expr {
@@ -266,6 +274,77 @@ impl CodeGenerator {
                     message
                 )))
             }
+        }
+    }
+
+    /// Generate LLVM IR for tuple destructuring: `(a, b) := expr`
+    pub(crate) fn generate_let_destructure(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        value: &Spanned<Expr>,
+        _is_mut: bool,
+        counter: &mut usize,
+    ) -> CodegenResult<(String, String)> {
+        let (val, mut ir) = self.generate_expr(value, counter)?;
+        let tuple_ty = self.infer_expr_type(value);
+        let llvm_tuple_ty = self.type_to_llvm(&tuple_ty);
+
+        self.bind_pattern_from_tuple(pattern, &val, &llvm_tuple_ty, &tuple_ty, counter, &mut ir)?;
+
+        Ok(("void".to_string(), ir))
+    }
+
+    /// Recursively bind pattern variables from a tuple value using extractvalue
+    fn bind_pattern_from_tuple(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        val: &str,
+        llvm_ty: &str,
+        resolved_ty: &ResolvedType,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> CodegenResult<()> {
+        match &pattern.node {
+            Pattern::Tuple(patterns) => {
+                let elem_types = if let ResolvedType::Tuple(types) = resolved_ty {
+                    types
+                } else {
+                    return Err(CodegenError::Unsupported(
+                        "destructuring non-tuple type".to_string(),
+                    ));
+                };
+
+                for (i, pat) in patterns.iter().enumerate() {
+                    let elem_resolved = &elem_types[i];
+                    let elem_llvm_ty = self.type_to_llvm(elem_resolved);
+                    let extracted = self.next_temp(counter);
+                    ir.push_str(&format!(
+                        "  {} = extractvalue {} {}, {}\n",
+                        extracted, llvm_ty, val, i
+                    ));
+                    self.bind_pattern_from_tuple(
+                        pat,
+                        &extracted,
+                        &elem_llvm_ty,
+                        elem_resolved,
+                        counter,
+                        ir,
+                    )?;
+                }
+                Ok(())
+            }
+            Pattern::Ident(name) => {
+                // Register as SSA local (immutable binding)
+                self.locals.insert(
+                    name.clone(),
+                    LocalVar::ssa(resolved_ty.clone(), val.to_string()),
+                );
+                Ok(())
+            }
+            Pattern::Wildcard => Ok(()),
+            _ => Err(CodegenError::Unsupported(
+                "unsupported pattern in destructuring".to_string(),
+            )),
         }
     }
 

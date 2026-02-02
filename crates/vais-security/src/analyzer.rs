@@ -153,6 +153,9 @@ impl SecurityAnalyzer {
                 self.analyze_expr(&expr.node, expr.span);
             },
             Stmt::Error { .. } => {},
+            Stmt::LetDestructure { value, .. } => {
+                self.analyze_expr(&value.node, value.span);
+            },
         }
     }
 

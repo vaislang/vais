@@ -574,6 +574,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
             Stmt::Error { message, .. } => {
                 Err(JitError::Unsupported(format!("Parse error in statement: {}", message)))
             }
+            Stmt::LetDestructure { .. } => {
+                Err(JitError::Unsupported("tuple destructuring not yet supported in JIT mode".to_string()))
+            }
         }
     }
 

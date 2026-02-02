@@ -305,6 +305,9 @@ impl Interpreter {
                 Stmt::Error { message, .. } => {
                     return Err(JitError::Runtime(message.clone()));
                 }
+                Stmt::LetDestructure { .. } => {
+                    return Err(JitError::Runtime("tuple destructuring not yet supported in interpreter".to_string()));
+                }
             }
 
             // For the last statement, capture its value if it's an expression

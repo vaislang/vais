@@ -144,6 +144,10 @@ impl Parser {
                 } else {
                     false
                 }
+            } else if matches!(tok.token, Token::LParen) {
+                // Check for tuple destructuring: (a, b) := expr
+                // Lookahead past matching parens to find :=
+                self.is_tuple_destructure()
             } else {
                 false
             }
@@ -152,9 +156,49 @@ impl Parser {
         }
     }
 
-    /// Parse let statement: `x := expr` or `x: T = expr`
+    /// Check if current position starts a tuple destructuring pattern
+    /// Looks for `(...)` followed by `:=`
+    fn is_tuple_destructure(&self) -> bool {
+        let mut depth = 0;
+        let mut i = self.pos;
+        while i < self.tokens.len() {
+            match &self.tokens[i].token {
+                Token::LParen => depth += 1,
+                Token::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        // Check if next token is :=
+                        return self.tokens.get(i + 1)
+                            .map(|t| matches!(t.token, Token::ColonEq))
+                            .unwrap_or(false);
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        false
+    }
+
+    /// Parse let statement: `x := expr` or `x: T = expr` or `(a, b) := expr`
     /// Also supports ownership modifiers: `x := linear expr` or `x: affine T = expr`
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
+        // Check for tuple destructuring: (a, b) := expr
+        if self.check(&Token::LParen) {
+            let pattern = self.parse_pattern()?;
+            self.expect(&Token::ColonEq)?;
+            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
+            if is_mut {
+                self.advance();
+            }
+            let value = self.parse_expr()?;
+            return Ok(Stmt::LetDestructure {
+                pattern,
+                value: Box::new(value),
+                is_mut,
+            });
+        }
+
         let name = self.parse_ident()?;
 
         let (ty, is_mut, ownership) = if self.check(&Token::ColonEq) {

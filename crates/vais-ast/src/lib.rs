@@ -775,6 +775,12 @@ pub enum Stmt {
         is_mut: bool,
         ownership: Ownership, // Linear type ownership mode
     },
+    /// Tuple destructuring: `(a, b) := expr`
+    LetDestructure {
+        pattern: Spanned<Pattern>,
+        value: Box<Spanned<Expr>>,
+        is_mut: bool,
+    },
     /// Expression statement
     Expr(Box<Spanned<Expr>>),
     /// Return: `R expr` or implicit last expression

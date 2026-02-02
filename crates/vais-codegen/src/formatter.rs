@@ -895,6 +895,16 @@ impl Formatter {
                 self.output.push_str(&self.format_expr(&value.node));
                 self.output.push('\n');
             }
+            Stmt::LetDestructure { pattern, value, is_mut } => {
+                self.output.push_str(&indent);
+                if *is_mut {
+                    self.output.push_str("mut ");
+                }
+                self.output.push_str(&self.format_pattern(&pattern.node));
+                self.output.push_str(" := ");
+                self.output.push_str(&self.format_expr(&value.node));
+                self.output.push('\n');
+            }
             Stmt::Expr(expr) => {
                 // Handle if/loop/match/block specially for proper indentation
                 match &expr.node {
@@ -1396,6 +1406,16 @@ impl Formatter {
                 } else {
                     s.push_str(" := ");
                 }
+                s.push_str(&self.format_expr(&value.node));
+                s
+            }
+            Stmt::LetDestructure { pattern, value, is_mut } => {
+                let mut s = String::new();
+                if *is_mut {
+                    s.push_str("mut ");
+                }
+                s.push_str(&self.format_pattern(&pattern.node));
+                s.push_str(" := ");
                 s.push_str(&self.format_expr(&value.node));
                 s
             }

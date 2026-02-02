@@ -458,7 +458,7 @@ impl EffectInferrer {
         functions: &HashMap<String, &FunctionSig>,
     ) -> EffectSet {
         match stmt {
-            Stmt::Let { value, .. } => {
+            Stmt::Let { value, .. } | Stmt::LetDestructure { value, .. } => {
                 self.infer_expr_effects(&value.node, functions)
             }
 

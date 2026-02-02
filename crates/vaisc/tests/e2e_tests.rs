@@ -3316,3 +3316,50 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ==================== Tuple Destructuring ====================
+
+#[test]
+fn e2e_tuple_destructure_simple() {
+    let source = r#"
+F main() -> i64 {
+    (a, b) := (10, 20)
+    R a + b
+}
+"#;
+    assert_exit_code(source, 30);
+}
+
+#[test]
+fn e2e_tuple_destructure_from_function() {
+    let source = r#"
+F pair() -> (i64, i64) = (3, 7)
+F main() -> i64 {
+    (x, y) := pair()
+    R x + y
+}
+"#;
+    assert_exit_code(source, 10);
+}
+
+#[test]
+fn e2e_tuple_destructure_three_elements() {
+    let source = r#"
+F main() -> i64 {
+    (a, b, c) := (10, 20, 12)
+    R a + b + c
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn e2e_tuple_destructure_with_arithmetic() {
+    let source = r#"
+F main() -> i64 {
+    (a, b) := (100, 58)
+    R a - b
+}
+"#;
+    assert_exit_code(source, 42);
+}

@@ -503,6 +503,13 @@ impl<'a> AstExpander<'a> {
             }
             Stmt::Continue => Stmt::Continue,
             Stmt::Defer(expr) => Stmt::Defer(Box::new(self.expand_expr(*expr)?)),
+            Stmt::LetDestructure { pattern, value, is_mut } => {
+                Stmt::LetDestructure {
+                    pattern,
+                    value: Box::new(self.expand_expr(*value)?),
+                    is_mut,
+                }
+            }
             Stmt::Error { message, skipped_tokens } => Stmt::Error { message, skipped_tokens },
         };
         Ok(Spanned::new(expanded, span))

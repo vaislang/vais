@@ -673,6 +673,11 @@ impl OwnershipChecker {
 
                 Ok(())
             }
+            Stmt::LetDestructure { value, .. } => {
+                self.check_expr_ownership(value)?;
+                self.check_move_from_expr(value)?;
+                Ok(())
+            }
             Stmt::Expr(expr) => self.check_expr_ownership(expr),
             Stmt::Return(Some(expr)) => {
                 self.check_expr_ownership(expr)?;
