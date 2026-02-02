@@ -1,0 +1,20 @@
+# Test ~ as mut abbreviation
+# x := ~ 0 is equivalent to x := mut 0
+
+F main() -> i64 {
+    # Mutable variable using ~ abbreviation
+    counter := ~ 0;
+    counter += 1;
+    counter += 2;
+    counter += 7;
+
+    # Bitwise NOT still works with parentheses
+    bits := (~0);
+
+    # Mutable with traditional mut keyword (still works)
+    old_style := mut 100;
+    old_style += 50;
+
+    # Return counter value (should be 10)
+    counter
+}

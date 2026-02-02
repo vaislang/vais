@@ -172,8 +172,8 @@ impl Parser {
             } else {
                 Ownership::Regular
             };
-            // Check for mut: `x := mut expr`
-            let is_mut = self.check(&Token::Mut);
+            // Check for mut: `x := mut expr` or `x := ~ expr`
+            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
             if is_mut {
                 self.advance();
             }
@@ -193,8 +193,8 @@ impl Parser {
             } else {
                 Ownership::Regular
             };
-            // Check for mut: `x: mut T = expr`
-            let is_mut = self.check(&Token::Mut);
+            // Check for mut: `x: mut T = expr` or `x: ~ T = expr`
+            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
             if is_mut {
                 self.advance();
             }

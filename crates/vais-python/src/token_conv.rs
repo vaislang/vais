@@ -89,6 +89,7 @@ pub fn token_to_string(token: &Token) -> String {
         Token::EqEq => "EqEq",
         Token::Neq => "Neq",
         Token::Amp => "Amp",
+        Token::PipeArrow => "PipeArrow",
         Token::Pipe => "Pipe",
         Token::Bang => "Bang",
         Token::Tilde => "Tilde",

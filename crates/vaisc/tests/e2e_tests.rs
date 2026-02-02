@@ -3005,3 +3005,121 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ===== Tilde Mut Abbreviation Tests =====
+
+#[test]
+fn test_tilde_mut_basic() {
+    let source = r#"
+F main() -> i64 {
+    x := ~ 0;
+    x += 10;
+    x
+}
+"#;
+    assert_exit_code(source, 10);
+}
+
+#[test]
+fn test_tilde_mut_with_compound_assign() {
+    let source = r#"
+F main() -> i64 {
+    counter := ~ 1;
+    counter *= 3;
+    counter += 2;
+    counter
+}
+"#;
+    assert_exit_code(source, 5);
+}
+
+#[test]
+fn test_tilde_mut_backward_compat() {
+    let source = r#"
+F main() -> i64 {
+    a := mut 5;
+    a += 5;
+    b := ~ 10;
+    b += 10;
+    I a == 10 && b == 20 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_tilde_bitwise_not_in_parens() {
+    let source = r#"
+F main() -> i64 {
+    x := (~0);
+    I x == -1 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+// ===== Pipe Operator Tests =====
+
+#[test]
+fn test_pipe_simple() {
+    let source = r#"
+F double(x: i64) -> i64 = x * 2
+F main() -> i64 {
+    5 |> double
+}
+"#;
+    assert_exit_code(source, 10);
+}
+
+#[test]
+fn test_pipe_chained() {
+    let source = r#"
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+F main() -> i64 {
+    3 |> double |> add_one
+}
+"#;
+    assert_exit_code(source, 7);
+}
+
+#[test]
+fn test_pipe_triple_chain() {
+    let source = r#"
+F inc(x: i64) -> i64 = x + 1
+F double(x: i64) -> i64 = x * 2
+F square(x: i64) -> i64 = x * x
+F main() -> i64 {
+    2 |> inc |> double |> square
+}
+"#;
+    assert_exit_code(source, 36);
+}
+
+#[test]
+fn test_pipe_in_binding() {
+    let source = r#"
+F negate(x: i64) -> i64 = -x
+F main() -> i64 {
+    result := 42 |> negate;
+    I result == -42 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_pipe_with_tilde_mut() {
+    let source = r#"
+F double(x: i64) -> i64 = x * 2
+F main() -> i64 {
+    x := ~ (5 |> double);
+    x += 1;
+    x
+}
+"#;
+    assert_exit_code(source, 11);
+}

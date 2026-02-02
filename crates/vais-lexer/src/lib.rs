@@ -271,6 +271,8 @@ pub enum Token {
 
     #[token("&")]
     Amp,
+    #[token("|>", priority = 4)]
+    PipeArrow,
     #[token("|")]
     Pipe,
     #[token("!")]
@@ -424,6 +426,7 @@ impl fmt::Display for Token {
             Token::EqEq => write!(f, "=="),
             Token::Neq => write!(f, "!="),
             Token::Amp => write!(f, "&"),
+            Token::PipeArrow => write!(f, "|>"),
             Token::Pipe => write!(f, "|"),
             Token::Bang => write!(f, "!"),
             Token::Tilde => write!(f, "~"),
@@ -866,6 +869,26 @@ mod tests {
         assert_eq!(tokens[3].token, Token::Tilde);
         assert_eq!(tokens[4].token, Token::Shl);
         assert_eq!(tokens[5].token, Token::Shr);
+    }
+
+    #[test]
+    fn test_pipe_arrow_operator() {
+        let source = "x |> f |> g";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[0].token, Token::Ident("x".to_string()));
+        assert_eq!(tokens[1].token, Token::PipeArrow);
+        assert_eq!(tokens[2].token, Token::Ident("f".to_string()));
+        assert_eq!(tokens[3].token, Token::PipeArrow);
+        assert_eq!(tokens[4].token, Token::Ident("g".to_string()));
+    }
+
+    #[test]
+    fn test_pipe_arrow_vs_pipe() {
+        // |> should be PipeArrow, | should be Pipe
+        let source = "a |> b | c";
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens[1].token, Token::PipeArrow);
+        assert_eq!(tokens[3].token, Token::Pipe);
     }
 
     #[test]

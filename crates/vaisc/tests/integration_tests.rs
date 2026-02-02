@@ -393,7 +393,7 @@ fn test_unary_operators() {
     let source = r#"
 F unary(x: i64) -> i64 {
     neg := -x;
-    bitnot := ~x;
+    bitnot := (~x);
     neg + bitnot
 }
 "#;

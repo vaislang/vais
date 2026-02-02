@@ -1701,15 +1701,15 @@ impl Parser {
                 Ownership::Regular
             };
 
-            let is_mut = self.check(&Token::Mut);
+            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
             if is_mut {
                 self.advance();
             }
 
-            // Handle &self and &mut self
+            // Handle &self and &mut self (or &~ self)
             if self.check(&Token::Amp) {
                 self.advance();
-                let is_self_mut = self.check(&Token::Mut);
+                let is_self_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
                 if is_self_mut {
                     self.advance();
                 }
@@ -1887,7 +1887,7 @@ impl Parser {
             } else {
                 None
             };
-            let is_mut = self.check(&Token::Mut);
+            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
             if is_mut {
                 self.advance();
             }
@@ -2409,6 +2409,7 @@ impl Parser {
             Token::SlashEq => "'/='".to_string(),
             Token::Percent => "'%'".to_string(),
             Token::Amp => "'&'".to_string(),
+            Token::PipeArrow => "'|>'".to_string(),
             Token::Pipe => "'|'".to_string(),
             Token::Bang => "'!'".to_string(),
             Token::Tilde => "'~'".to_string(),

@@ -1,0 +1,22 @@
+# Test pipe operator |>
+# x |> f |> g transforms to g(f(x))
+
+F double(x: i64) -> i64 = x * 2
+
+F add_ten(x: i64) -> i64 = x + 10
+
+F negate(x: i64) -> i64 = -x
+
+F main() -> i64 {
+    # Simple pipe: 5 |> double = double(5) = 10
+    a := 5 |> double;
+
+    # Chained pipe: 5 |> double |> add_ten = add_ten(double(5)) = 20
+    b := 5 |> double |> add_ten;
+
+    # Triple chain: 3 |> double |> add_ten |> negate = -16
+    c := 3 |> double |> add_ten |> negate;
+
+    # a + b + c = 10 + 20 + (-16) = 14
+    a + b + c
+}

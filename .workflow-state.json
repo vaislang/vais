@@ -5,8 +5,8 @@
     { "id": 1, "name": "Phase 29-30 로드맵 설계 & ROADMAP.md 작성", "status": "completed", "model": "Opus" },
     { "id": 2, "name": "문자열 보간 구현 (렉서+파서+코드젠)", "status": "completed", "model": "Opus" },
     { "id": 3, "name": "함수 파라미터 타입 추론 확장", "status": "completed", "model": "Opus" },
-    { "id": 4, "name": "mut → ~ 축약 키워드", "status": "pending", "model": "Haiku" },
-    { "id": 5, "name": "파이프 연산자 |> 구현", "status": "pending", "model": "Sonnet" },
+    { "id": 4, "name": "mut → ~ 축약 키워드", "status": "completed", "model": "Haiku" },
+    { "id": 5, "name": "파이프 연산자 |> 구현", "status": "completed", "model": "Sonnet" },
     { "id": 6, "name": "TCO 구현", "status": "pending", "model": "Opus" },
     { "id": 7, "name": "인라이닝 임계값 상향 & PGO 연동", "status": "pending", "model": "Sonnet" },
     { "id": 8, "name": "MIR 기반 최적화 파이프라인 활성화", "status": "pending", "model": "Opus" },
@@ -14,5 +14,5 @@
     { "id": 10, "name": "벤치마크 스위트 확장 & 성능 검증", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "함수 파라미터 타입 추론 확장"
+  "lastCompleted": "파이프 연산자 |> 구현"
 }

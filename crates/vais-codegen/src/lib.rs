@@ -5727,7 +5727,7 @@ mod tests {
         let source = r#"
             F unary_ops(x:i64,b:bool)->(i64,i64,bool){
                 neg:=-x;
-                bit_not:=~x;
+                bit_not:=(~x);
                 log_not:=!b;
                 (neg,bit_not,log_not)
             }

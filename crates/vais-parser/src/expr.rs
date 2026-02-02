@@ -60,7 +60,7 @@ impl Parser {
 
     /// Parse assignment expression
     pub(crate) fn parse_assignment(&mut self) -> ParseResult<Spanned<Expr>> {
-        let expr = self.parse_ternary()?;
+        let expr = self.parse_pipe()?;
 
         if self.check(&Token::Eq) {
             self.advance();
@@ -103,6 +103,28 @@ impl Parser {
         }
 
         Ok(expr)
+    }
+
+    /// Parse pipe operator: `x |> f |> g` → `g(f(x))`
+    /// Left-associative, between assignment and ternary in precedence.
+    pub(crate) fn parse_pipe(&mut self) -> ParseResult<Spanned<Expr>> {
+        let mut left = self.parse_ternary()?;
+
+        while self.check(&Token::PipeArrow) {
+            self.advance();
+            let right = self.parse_ternary()?;
+            let span = left.span.merge(right.span);
+            // Transform: left |> right into right(left)
+            left = Spanned::new(
+                Expr::Call {
+                    func: Box::new(right),
+                    args: vec![left],
+                },
+                span,
+            );
+        }
+
+        Ok(left)
     }
 
     /// Parse ternary: `cond ? then : else`
