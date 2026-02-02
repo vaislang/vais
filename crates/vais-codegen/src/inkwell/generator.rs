@@ -14,7 +14,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, FloatPredicate};
 
-use vais_ast::{self as ast, BinOp, Expr, IfElse, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, Type, UnaryOp};
+use vais_ast::{self as ast, BinOp, Expr, IfElse, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, StringInterpPart, Type, UnaryOp};
 use vais_types::ResolvedType;
 
 use crate::{CodegenError, CodegenResult, TargetTriple};
@@ -412,6 +412,70 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 self.generate_ternary(&cond.node, &then.node, &else_.node)
             }
 
+            // Assert: evaluate condition, abort if false
+            Expr::Assert { condition, message } => {
+                self.generate_assert(&condition.node, message.as_deref())
+            }
+
+            // Comptime: evaluate at compile time (for now, just evaluate normally)
+            Expr::Comptime { body } => {
+                self.generate_expr(&body.node)
+            }
+
+            // Lazy: evaluate expression lazily (for now, just evaluate eagerly)
+            Expr::Lazy(inner) => {
+                self.generate_expr(&inner.node)
+            }
+
+            // Await: for now, just evaluate the inner expression
+            Expr::Await(inner) => {
+                self.generate_expr(&inner.node)
+            }
+
+            // Static method call: Type::method(args)
+            Expr::StaticMethodCall { type_name, method, args } => {
+                // Look up function as TypeName_method or just method
+                let fn_name = format!("{}_{}", type_name.node, method.node);
+                if self.functions.contains_key(&fn_name) || self.module.get_function(&fn_name).is_some() {
+                    let callee = Expr::Ident(fn_name);
+                    self.generate_call(&callee, args)
+                } else {
+                    // Try just the method name
+                    let callee = Expr::Ident(method.node.clone());
+                    self.generate_call(&callee, args)
+                }
+            }
+
+            // String interpolation
+            Expr::StringInterp(parts) => {
+                self.generate_string_interp(parts)
+            }
+
+            // Spread: just evaluate the inner expression
+            Expr::Spread(inner) => {
+                self.generate_expr(&inner.node)
+            }
+
+            // Force: evaluate a lazy value
+            Expr::Force(inner) => {
+                self.generate_expr(&inner.node)
+            }
+
+            // Spawn: for now just evaluate inner
+            Expr::Spawn(inner) => {
+                self.generate_expr(&inner.node)
+            }
+
+            // SelfCall (@): recursive call to current function
+            Expr::SelfCall => {
+                // Return a reference to the current function (for indirect calls)
+                if let Some(func) = self.current_function {
+                    Ok(func.as_global_value().as_pointer_value().into())
+                } else {
+                    Err(CodegenError::Unsupported("SelfCall outside of function".to_string()))
+                }
+            }
+
             _ => Err(CodegenError::Unsupported(format!(
                 "Expression kind not yet implemented: {:?}",
                 expr
@@ -612,8 +676,43 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Get function name
         let fn_name = match callee {
             Expr::Ident(name) => name.clone(),
+            Expr::SelfCall => {
+                // @ recursive call: call current function
+                if let Some(func) = self.current_function {
+                    let fn_name = func.get_name().to_str().unwrap_or("").to_string();
+                    fn_name
+                } else {
+                    return Err(CodegenError::Unsupported("SelfCall outside function".to_string()));
+                }
+            }
             _ => return Err(CodegenError::Unsupported("Indirect calls not yet supported".to_string())),
         };
+
+        // Handle built-in pseudo-functions that need special codegen
+        match fn_name.as_str() {
+            "println" => return self.generate_println_call(args),
+            "print" => return self.generate_print_call(args),
+            "format" => return self.generate_format_call(args),
+            "store_i64" => return self.generate_store_i64(args),
+            "load_i64" => return self.generate_load_i64(args),
+            "store_byte" => return self.generate_store_byte(args),
+            "load_byte" => return self.generate_load_byte(args),
+            "store_f64" => return self.generate_store_f64(args),
+            "load_f64" => return self.generate_load_f64(args),
+            "__strlen" => {
+                // __strlen is an alias for strlen
+                let strlen_fn = self.module.get_function("strlen")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("strlen".to_string()))?;
+                let arg_values: Vec<BasicMetadataValueEnum> = args.iter()
+                    .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
+                    .collect::<CodegenResult<Vec<_>>>()?;
+                let call = self.builder.build_call(strlen_fn, &arg_values, "strlen_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(call.try_as_basic_value().left()
+                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false).into()));
+            }
+            _ => {}
+        }
 
         // Get function value
         let fn_value = self
@@ -712,6 +811,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // For now, just return unit - full defer requires more infrastructure
                 let _ = expr;
                 Ok(self.context.struct_type(&[], false).const_zero().into())
+            }
+            Stmt::LetDestructure { pattern, value, is_mut: _ } => {
+                self.generate_let_destructure(&pattern.node, &value.node)
             }
             _ => Err(CodegenError::Unsupported(format!("Statement: {:?}", stmt))),
         }
@@ -2351,6 +2453,346 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .get(&(enum_name.to_string(), variant_name.to_string()))
             .copied()
             .unwrap_or_else(|| self.get_enum_variant_tag(variant_name))
+    }
+
+    // ========== Assert ==========
+
+    fn generate_assert(
+        &mut self,
+        condition: &Expr,
+        _message: Option<&Spanned<Expr>>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let fn_value = self.current_function.ok_or_else(|| {
+            CodegenError::LlvmError("No current function for assert".to_string())
+        })?;
+
+        let cond_val = self.generate_expr(condition)?;
+        let cond_bool = if cond_val.is_int_value() {
+            let int_val = cond_val.into_int_value();
+            if int_val.get_type().get_bit_width() > 1 {
+                self.builder.build_int_compare(
+                    IntPredicate::NE,
+                    int_val,
+                    int_val.get_type().const_int(0, false),
+                    "assert_cond"
+                ).map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            } else {
+                int_val
+            }
+        } else {
+            self.context.bool_type().const_int(1, false)
+        };
+
+        let pass_block = self.context.append_basic_block(fn_value, "assert_pass");
+        let fail_block = self.context.append_basic_block(fn_value, "assert_fail");
+
+        self.builder.build_conditional_branch(cond_bool, pass_block, fail_block)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Fail: call abort
+        self.builder.position_at_end(fail_block);
+        if let Some(abort_fn) = self.module.get_function("abort") {
+            self.builder.build_call(abort_fn, &[], "")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
+        self.builder.build_unreachable()
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Pass: continue
+        self.builder.position_at_end(pass_block);
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    // ========== String Interpolation ==========
+
+    fn generate_string_interp(
+        &mut self,
+        parts: &[StringInterpPart],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Build a printf format string and collect args
+        let mut format_str = String::new();
+        let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
+
+        for part in parts {
+            match part {
+                StringInterpPart::Lit(s) => {
+                    // Escape % for printf
+                    format_str.push_str(&s.replace('%', "%%"));
+                }
+                StringInterpPart::Expr(expr) => {
+                    let val = self.generate_expr(&expr.node)?;
+                    if val.is_int_value() {
+                        format_str.push_str("%lld");
+                        args.push(val.into());
+                    } else if val.is_float_value() {
+                        format_str.push_str("%f");
+                        args.push(val.into());
+                    } else if val.is_pointer_value() {
+                        format_str.push_str("%s");
+                        args.push(val.into());
+                    } else {
+                        format_str.push_str("%lld");
+                        args.push(val.into());
+                    }
+                }
+            }
+        }
+
+        // Generate printf call
+        let fmt_val = self.generate_string_literal(&format_str)?;
+        let mut all_args: Vec<BasicMetadataValueEnum> = vec![fmt_val.into()];
+        all_args.extend(args);
+
+        if let Some(printf_fn) = self.module.get_function("printf") {
+            let call = self.builder.build_call(printf_fn, &all_args, "printf_call")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(call.try_as_basic_value()
+                .left()
+                .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
+        } else {
+            Ok(self.context.struct_type(&[], false).const_zero().into())
+        }
+    }
+
+    // ========== Let Destructure ==========
+
+    fn generate_let_destructure(
+        &mut self,
+        pattern: &Pattern,
+        value: &Expr,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let val = self.generate_expr(value)?;
+
+        match pattern {
+            Pattern::Tuple(pats) => {
+                // Value should be a struct (tuple), extract elements
+                if val.is_struct_value() {
+                    let struct_val = val.into_struct_value();
+                    for (i, pat) in pats.iter().enumerate() {
+                        if let Pattern::Ident(name) = &pat.node {
+                            let elem = self.builder.build_extract_value(struct_val, i as u32, name)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            let elem_type = elem.get_type();
+                            let alloca = self.builder.build_alloca(elem_type, name)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.builder.build_store(alloca, elem)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.locals.insert(name.clone(), (alloca, elem_type));
+                        }
+                    }
+                } else {
+                    // Fallback: if it's an i64 tuple packed value, handle differently
+                    // For now, just bind the whole value to the first name
+                    if let Some(pat) = pats.first() {
+                        if let Pattern::Ident(name) = &pat.node {
+                            let val_type = val.get_type();
+                            let alloca = self.builder.build_alloca(val_type, name)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.builder.build_store(alloca, val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            self.locals.insert(name.clone(), (alloca, val_type));
+                        }
+                    }
+                }
+            }
+            Pattern::Ident(name) => {
+                let val_type = val.get_type();
+                let alloca = self.builder.build_alloca(val_type, name)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder.build_store(alloca, val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(name.clone(), (alloca, val_type));
+            }
+            _ => {}
+        }
+
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+    // ========== Built-in pseudo-functions ==========
+
+    fn generate_println_call(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // println("fmt", args...) => printf("fmt\n", args...)
+        let printf_fn = self.module.get_function("printf")
+            .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
+
+        if args.is_empty() {
+            // Just print newline
+            let newline = self.generate_string_literal("\n")?;
+            self.builder.build_call(printf_fn, &[newline.into()], "println_call")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        } else {
+            // First arg is format string - append \n
+            let mut arg_values: Vec<BasicMetadataValueEnum> = Vec::new();
+
+            // Handle format string: if it's a string literal, append \n
+            let first_val = self.generate_expr(&args[0].node)?;
+            if first_val.is_pointer_value() {
+                // Append \n to format string - generate new string with \n
+                // For simplicity, just call printf with format then printf with \n
+                arg_values.push(first_val.into());
+                for arg in &args[1..] {
+                    let val = self.generate_expr(&arg.node)?;
+                    arg_values.push(val.into());
+                }
+                self.builder.build_call(printf_fn, &arg_values, "println_fmt")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let newline = self.generate_string_literal("\n")?;
+                self.builder.build_call(printf_fn, &[newline.into()], "println_nl")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            } else {
+                arg_values.push(first_val.into());
+                self.builder.build_call(printf_fn, &arg_values, "println_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            }
+        }
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_print_call(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // print("fmt", args...) => printf("fmt", args...)
+        let printf_fn = self.module.get_function("printf")
+            .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
+
+        let arg_values: Vec<BasicMetadataValueEnum> = args.iter()
+            .map(|arg| self.generate_expr(&arg.node).map(|v| v.into()))
+            .collect::<CodegenResult<Vec<_>>>()?;
+
+        self.builder.build_call(printf_fn, &arg_values, "print_call")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_format_call(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // format("fmt", args...) => snprintf to heap buffer, return ptr
+        // Simplified: just return the format string for now
+        if let Some(first) = args.first() {
+            self.generate_expr(&first.node)
+        } else {
+            self.generate_string_literal("")
+        }
+    }
+
+    fn generate_store_i64(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // store_i64(ptr: i64, val: i64) -> void
+        // Stores a 64-bit integer at the given pointer
+        if args.len() < 2 {
+            return Err(CodegenError::Unsupported("store_i64 requires 2 args".to_string()));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+        let val = self.generate_expr(&args[1].node)?;
+
+        let ptr = self.builder.build_int_to_ptr(
+            ptr_val.into_int_value(),
+            self.context.i64_type().ptr_type(AddressSpace::default()),
+            "store_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        self.builder.build_store(ptr, val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_load_i64(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // load_i64(ptr: i64) -> i64
+        if args.is_empty() {
+            return Err(CodegenError::Unsupported("load_i64 requires 1 arg".to_string()));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+
+        let ptr = self.builder.build_int_to_ptr(
+            ptr_val.into_int_value(),
+            self.context.i64_type().ptr_type(AddressSpace::default()),
+            "load_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        self.builder.build_load(self.context.i64_type(), ptr, "loaded_i64")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    fn generate_store_byte(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // store_byte(ptr: i64, val: i64) -> void
+        if args.len() < 2 {
+            return Err(CodegenError::Unsupported("store_byte requires 2 args".to_string()));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+        let val = self.generate_expr(&args[1].node)?;
+
+        let ptr = self.builder.build_int_to_ptr(
+            ptr_val.into_int_value(),
+            self.context.i8_type().ptr_type(AddressSpace::default()),
+            "store_byte_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        let byte_val = self.builder.build_int_truncate(
+            val.into_int_value(),
+            self.context.i8_type(),
+            "trunc_byte"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        self.builder.build_store(ptr, byte_val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_load_byte(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // load_byte(ptr: i64) -> i64
+        if args.is_empty() {
+            return Err(CodegenError::Unsupported("load_byte requires 1 arg".to_string()));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+
+        let ptr = self.builder.build_int_to_ptr(
+            ptr_val.into_int_value(),
+            self.context.i8_type().ptr_type(AddressSpace::default()),
+            "load_byte_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        let byte = self.builder.build_load(self.context.i8_type(), ptr, "loaded_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Zero-extend to i64
+        let extended = self.builder.build_int_z_extend(
+            byte.into_int_value(),
+            self.context.i64_type(),
+            "zext_byte"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(extended.into())
+    }
+
+    fn generate_store_f64(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // store_f64(ptr: i64, val: f64) -> void
+        if args.len() < 2 {
+            return Err(CodegenError::Unsupported("store_f64 requires 2 args".to_string()));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+        let val = self.generate_expr(&args[1].node)?;
+
+        let ptr = self.builder.build_int_to_ptr(
+            ptr_val.into_int_value(),
+            self.context.f64_type().ptr_type(AddressSpace::default()),
+            "store_f64_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        self.builder.build_store(ptr, val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(self.context.struct_type(&[], false).const_zero().into())
+    }
+
+    fn generate_load_f64(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // load_f64(ptr: i64) -> f64
+        if args.is_empty() {
+            return Err(CodegenError::Unsupported("load_f64 requires 1 arg".to_string()));
+        }
+        let ptr_val = self.generate_expr(&args[0].node)?;
+
+        let ptr = self.builder.build_int_to_ptr(
+            ptr_val.into_int_value(),
+            self.context.f64_type().ptr_type(AddressSpace::default()),
+            "load_f64_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        self.builder.build_load(self.context.f64_type(), ptr, "loaded_f64")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 }
 

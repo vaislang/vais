@@ -120,6 +120,11 @@ struct Cli {
     /// Disable ownership/borrow checking entirely
     #[arg(long, global = true)]
     no_ownership_check: bool,
+
+    /// Use inkwell (LLVM API) backend instead of text-based IR generation
+    /// Requires compilation with --features inkwell
+    #[arg(long, global = true)]
+    inkwell: bool,
 }
 
 #[derive(Subcommand)]
@@ -200,6 +205,10 @@ enum Commands {
         /// Enable parallel compilation with N threads (0 = auto-detect)
         #[arg(short = 'j', long, value_name = "THREADS")]
         parallel: Option<usize>,
+
+        /// Use inkwell (LLVM API) backend instead of text-based IR generation
+        #[arg(long)]
+        inkwell: bool,
     },
 
     /// Run a Vais source file
@@ -501,7 +510,7 @@ fn main() {
     }
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, gpu_compile, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, gpu_compile, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel, inkwell: build_inkwell }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(&input, output, gpu_target_str, gpu_host, gpu_compile, cli.verbose)
@@ -541,7 +550,8 @@ fn main() {
                 vais_codegen::parallel::ParallelConfig::new(threads)
             });
 
-            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config)
+            let use_inkwell = build_inkwell || cli.inkwell;
+            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config, use_inkwell)
             }
         }
         Some(Commands::Run { input, args }) => {
@@ -594,6 +604,7 @@ fn main() {
                     vais_codegen::optimize::PgoMode::None,
                     false,
                     None, // parallel_config
+                    cli.inkwell,
                 )
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
@@ -1079,13 +1090,14 @@ fn cmd_build_with_timing(
     pgo_mode: vais_codegen::optimize::PgoMode,
     suggest_fixes: bool,
     parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
+    use_inkwell: bool,
 ) -> Result<(), String> {
     use std::time::Instant;
 
     let start = Instant::now();
     let result = cmd_build(
         input, output, emit_ir, opt_level, debug, verbose, plugins,
-        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config
+        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config, use_inkwell
     );
     let elapsed = start.elapsed();
 
@@ -1097,6 +1109,73 @@ fn cmd_build_with_timing(
     }
 
     result
+}
+
+/// Text-based IR code generation (default backend).
+#[allow(clippy::too_many_arguments)]
+fn generate_with_text_backend(
+    module_name: &str,
+    target: &TargetTriple,
+    gc: bool,
+    gc_threshold: Option<usize>,
+    debug: bool,
+    input: &PathBuf,
+    main_source: &str,
+    checker: &TypeChecker,
+    final_ast: &vais_ast::Module,
+    verbose: bool,
+) -> Result<String, String> {
+    let mut codegen = CodeGenerator::new_with_target(module_name, target.clone());
+
+    // Enable GC if requested
+    if gc {
+        codegen.enable_gc();
+        if let Some(threshold) = gc_threshold {
+            codegen.set_gc_threshold(threshold);
+        }
+        if verbose {
+            println!("  {} (threshold: {} bytes)",
+                "GC enabled".cyan(),
+                gc_threshold.unwrap_or(1048576));
+        }
+    }
+
+    // Enable debug info if requested
+    if debug {
+        let source_file = input.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown.vais");
+        let source_dir = input.parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or(".");
+        codegen.enable_debug(source_file, source_dir, main_source);
+
+        if verbose {
+            println!("  {}", "Debug info enabled".cyan());
+        }
+    }
+
+    // Pass resolved function signatures to codegen (for inferred parameter types)
+    codegen.set_resolved_functions(checker.get_all_functions().clone());
+
+    if verbose {
+        println!("  {} text (IR generation)", "Backend:".cyan());
+    }
+
+    let codegen_start = std::time::Instant::now();
+    let instantiations = checker.get_generic_instantiations();
+    let raw_ir = if instantiations.is_empty() {
+        codegen.generate_module(final_ast)
+    } else {
+        codegen.generate_module_with_instantiations(final_ast, instantiations)
+    }.map_err(|e| format!("Codegen error: {}", e))?;
+    let codegen_time = codegen_start.elapsed();
+
+    if verbose {
+        println!("  {} Codegen time: {:.3}s", "⏱".cyan(), codegen_time.as_secs_f64());
+    }
+
+    Ok(raw_ir)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1117,6 +1196,7 @@ fn cmd_build(
     pgo_mode: vais_codegen::optimize::PgoMode,
     suggest_fixes: bool,
     parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
+    use_inkwell: bool,
 ) -> Result<(), String> {
     use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
 
@@ -1294,55 +1374,55 @@ fn cmd_build(
         .and_then(|s| s.to_str())
         .unwrap_or("main");
 
-    let mut codegen = CodeGenerator::new_with_target(module_name, target.clone());
-
     if verbose && !matches!(target, TargetTriple::Native) {
         println!("  {} {}", "Target:".cyan(), target.triple_str());
     }
 
-    // Enable GC if requested
-    if gc {
-        codegen.enable_gc();
-        if let Some(threshold) = gc_threshold {
-            codegen.set_gc_threshold(threshold);
+    // Inkwell backend path (opt-in via --inkwell flag)
+    #[cfg(feature = "inkwell")]
+    let raw_ir = if use_inkwell {
+        // Warn about unsupported features in inkwell backend
+        if gc {
+            eprintln!("{}: --gc is not yet supported with the inkwell backend, ignoring", "warning".yellow().bold());
         }
-        if verbose {
-            println!("  {} (threshold: {} bytes)",
-                "GC enabled".cyan(),
-                gc_threshold.unwrap_or(1048576));
+        if debug {
+            eprintln!("{}: -g/--debug is not yet supported with the inkwell backend, ignoring", "warning".yellow().bold());
         }
-    }
-
-    // Enable debug info if requested
-    if debug {
-        let source_file = input.file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown.vais");
-        let source_dir = input.parent()
-            .and_then(|p| p.to_str())
-            .unwrap_or(".");
-        codegen.enable_debug(source_file, source_dir, &main_source);
 
         if verbose {
-            println!("  {}", "Debug info enabled".cyan());
+            println!("  {} inkwell (LLVM API)", "Backend:".cyan());
         }
-    }
 
-    // Pass resolved function signatures to codegen (for inferred parameter types)
-    codegen.set_resolved_functions(checker.get_all_functions().clone());
+        let codegen_start = std::time::Instant::now();
+        let context = ::inkwell::context::Context::create();
+        let mut gen = vais_codegen::InkwellCodeGenerator::new_with_target(&context, module_name, target.clone());
+        gen.generate_module(&final_ast)
+            .map_err(|e| format!("Inkwell codegen error: {}", e))?;
+        let ir = gen.get_ir_string();
+        let codegen_time = codegen_start.elapsed();
 
-    let codegen_start = std::time::Instant::now();
-    let instantiations = checker.get_generic_instantiations();
-    let raw_ir = if instantiations.is_empty() {
-        codegen.generate_module(&final_ast)
+        if verbose {
+            println!("  {} Codegen time: {:.3}s", "⏱".cyan(), codegen_time.as_secs_f64());
+        }
+
+        ir
     } else {
-        codegen.generate_module_with_instantiations(&final_ast, instantiations)
-    }.map_err(|e| format!("Codegen error: {}", e))?;
-    let codegen_time = codegen_start.elapsed();
+        generate_with_text_backend(
+            module_name, &target, gc, gc_threshold, debug, input, &main_source,
+            &checker, &final_ast, verbose,
+        )?
+    };
 
-    if verbose {
-        println!("  {} Codegen time: {:.3}s", "⏱".cyan(), codegen_time.as_secs_f64());
-    }
+    #[cfg(not(feature = "inkwell"))]
+    let raw_ir = {
+        if use_inkwell {
+            return Err("Inkwell backend not available. Recompile with: cargo build --features inkwell".to_string());
+        }
+        generate_with_text_backend(
+            module_name, &target, gc, gc_threshold, debug, input, &main_source,
+            &checker, &final_ast, verbose,
+        )?
+    };
 
     // Apply optimization passes before emitting IR
     // When debug is enabled, disable optimizations to preserve debuggability
@@ -2326,6 +2406,7 @@ fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegi
         vais_codegen::optimize::PgoMode::None,
         false,
         None, // parallel_config
+        false, // use_inkwell
     )?;
 
     // Run the binary
@@ -2565,6 +2646,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 vais_codegen::optimize::PgoMode::None,
                 false,
                 None, // parallel_config
+                false, // use_inkwell
             )?;
 
             if hot {
@@ -3591,6 +3673,7 @@ fn cmd_pgo(
             vais_codegen::optimize::PgoMode::Generate(profile_dir.to_string()),
             false, // suggest_fixes
             None, // parallel_config
+            false, // use_inkwell
         )?;
 
         println!("{} Instrumented binary: {}", "  ✓".green(), instrumented_bin.display());
@@ -3669,6 +3752,7 @@ fn cmd_pgo(
         vais_codegen::optimize::PgoMode::Use(profdata_path),
         false, // suggest_fixes
         None, // parallel_config
+        false, // use_inkwell
     )?;
 
     println!("{} PGO-optimized binary: {}", "  ✓".green(), output_path.display());
@@ -3747,6 +3831,7 @@ fn cmd_watch(
         vais_codegen::optimize::PgoMode::None,
         false,
         None, // parallel_config
+        false, // use_inkwell
     )?;
 
     // Execute initial run if requested
@@ -3832,6 +3917,7 @@ fn cmd_watch(
                         vais_codegen::optimize::PgoMode::None,
                         false,
                         None, // parallel_config
+                        false, // use_inkwell
                     ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());

@@ -17,7 +17,7 @@ path = "src/main.rs"
 [features]
 default = []
 jit = ["vais-jit"]
-inkwell = ["vais-codegen/inkwell-codegen"]
+inkwell = ["vais-codegen/inkwell-codegen", "dep:inkwell"]
 
 [dependencies]
 vais-lexer = { path = "../vais-lexer" }
@@ -32,6 +32,7 @@ vais-gpu = { path = "../vais-gpu" }
 vais-macro = { path = "../vais-macro" }
 vais-query = { path = "../vais-query" }
 
+inkwell = { workspace = true, optional = true }
 clap = { version = "4.4", features = ["derive"] }
 miette = { workspace = true }
 thiserror = { workspace = true }
