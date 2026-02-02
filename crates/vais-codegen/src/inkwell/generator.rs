@@ -94,6 +94,9 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Enum variant tags: maps (enum_name, variant_name) -> tag
     enum_variants: HashMap<(String, String), i32>,
+
+    /// Variable name -> struct type name tracking (for method call resolution)
+    var_struct_types: HashMap<String, String>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -132,6 +135,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_counter: 0,
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
+            var_struct_types: HashMap::new(),
         };
 
         // Declare built-in functions
@@ -142,7 +146,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     /// Generates code for an entire Vais module.
     pub fn generate_module(&mut self, vais_module: &VaisModule) -> CodegenResult<()> {
-        // First pass: collect all function signatures and struct definitions
+        // First pass: collect all function signatures, struct definitions, and enum definitions
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Function(func) => {
@@ -158,10 +162,46 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        // Second pass: generate function bodies
+        // Second pass: declare methods from Impl blocks and struct inline methods
         for item in &vais_module.items {
-            if let ast::Item::Function(func) = &item.node {
-                self.generate_function(func)?;
+            match &item.node {
+                ast::Item::Impl(impl_block) => {
+                    if let Some(type_name) = Self::get_impl_type_name(&impl_block.target_type.node) {
+                        for method in &impl_block.methods {
+                            self.declare_method(&type_name, &method.node)?;
+                        }
+                    }
+                }
+                ast::Item::Struct(s) => {
+                    let type_name = s.name.node.clone();
+                    for method in &s.methods {
+                        self.declare_method(&type_name, &method.node)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Third pass: generate function bodies and method bodies
+        for item in &vais_module.items {
+            match &item.node {
+                ast::Item::Function(func) => {
+                    self.generate_function(func)?;
+                }
+                ast::Item::Impl(impl_block) => {
+                    if let Some(type_name) = Self::get_impl_type_name(&impl_block.target_type.node) {
+                        for method in &impl_block.methods {
+                            self.generate_method(&type_name, &method.node)?;
+                        }
+                    }
+                }
+                ast::Item::Struct(s) => {
+                    let type_name = s.name.node.clone();
+                    for method in &s.methods {
+                        self.generate_method(&type_name, &method.node)?;
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -268,6 +308,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.current_function = Some(fn_value);
         self.locals.clear();
+        self.var_struct_types.clear();
 
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
@@ -283,6 +324,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder.build_store(alloca, param_value)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.locals.insert(param.name.node.clone(), (alloca, param_type));
+
+            // Track struct type for parameters
+            if let Some(struct_name) = self.extract_struct_type_name(&param.ty.node) {
+                self.var_struct_types.insert(param.name.node.clone(), struct_name);
+            }
         }
 
         // Generate function body
@@ -533,6 +579,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     fn generate_var(&mut self, name: &str) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Handle None as a built-in value: { i8 tag=0, i64 data=0 }
+        if name == "None" {
+            let enum_type = self.context.struct_type(&[
+                self.context.i8_type().into(),
+                self.context.i64_type().into(),
+            ], false);
+            let mut val = enum_type.get_undef();
+            val = self.builder.build_insert_value(val, self.context.i8_type().const_int(0, false), 0, "none_tag")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+            val = self.builder.build_insert_value(val, self.context.i64_type().const_int(0, false), 1, "none_data")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+            return Ok(val.into());
+        }
+
         let result = self.locals.get(name);
 
         if let Some((ptr, var_type)) = result {
@@ -543,6 +603,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(value)
         } else {
+            // Check if this is an enum variant name (e.g., Red, Green, Blue)
+            for ((_, v_name), tag) in &self.enum_variants {
+                if v_name == name {
+                    let enum_type = self.context.struct_type(&[
+                        self.context.i8_type().into(),
+                        self.context.i64_type().into(),
+                    ], false);
+                    let mut val = enum_type.get_undef();
+                    val = self.builder.build_insert_value(val, self.context.i8_type().const_int(*tag as u64, false), 0, "variant_tag")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                    val = self.builder.build_insert_value(val, self.context.i64_type().const_int(0, false), 1, "variant_data")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                    return Ok(val.into());
+                }
+            }
+
             // Collect all available symbols for suggestions
             let mut candidates: Vec<&str> = Vec::new();
 
@@ -699,6 +775,63 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             "load_byte" => return self.generate_load_byte(args),
             "store_f64" => return self.generate_store_f64(args),
             "load_f64" => return self.generate_load_f64(args),
+            // Option constructors: Some(val) -> { i8 tag=1, i64 data=val }
+            "Some" => {
+                let enum_type = self.context.struct_type(&[
+                    self.context.i8_type().into(),
+                    self.context.i64_type().into(),
+                ], false);
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    if v.is_int_value() { v.into_int_value() } else { self.context.i64_type().const_int(0, false) }
+                };
+                let mut val = enum_type.get_undef();
+                val = self.builder.build_insert_value(val, self.context.i8_type().const_int(1, false), 0, "some_tag")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                val = self.builder.build_insert_value(val, data_val, 1, "some_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                return Ok(val.into());
+            }
+            // Result constructors: Ok(val) -> { i8 tag=0, i64 data=val }
+            "Ok" => {
+                let enum_type = self.context.struct_type(&[
+                    self.context.i8_type().into(),
+                    self.context.i64_type().into(),
+                ], false);
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    if v.is_int_value() { v.into_int_value() } else { self.context.i64_type().const_int(0, false) }
+                };
+                let mut val = enum_type.get_undef();
+                val = self.builder.build_insert_value(val, self.context.i8_type().const_int(0, false), 0, "ok_tag")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                val = self.builder.build_insert_value(val, data_val, 1, "ok_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                return Ok(val.into());
+            }
+            // Err(val) -> { i8 tag=1, i64 data=val }
+            "Err" => {
+                let enum_type = self.context.struct_type(&[
+                    self.context.i8_type().into(),
+                    self.context.i64_type().into(),
+                ], false);
+                let data_val = if args.is_empty() {
+                    self.context.i64_type().const_int(0, false)
+                } else {
+                    let v = self.generate_expr(&args[0].node)?;
+                    if v.is_int_value() { v.into_int_value() } else { self.context.i64_type().const_int(0, false) }
+                };
+                let mut val = enum_type.get_undef();
+                val = self.builder.build_insert_value(val, self.context.i8_type().const_int(1, false), 0, "err_tag")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                val = self.builder.build_insert_value(val, data_val, 1, "err_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_struct_value();
+                return Ok(val.into());
+            }
             "__strlen" => {
                 // __strlen is an alias for strlen
                 let strlen_fn = self.module.get_function("strlen")
@@ -780,16 +913,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     fn generate_stmt(&mut self, stmt: &Stmt) -> CodegenResult<BasicValueEnum<'ctx>> {
         match stmt {
             Stmt::Let { name, ty, value, .. } => {
+                // Track struct type from the value expression before generating
+                let struct_type_name = self.infer_value_struct_type(&value.node);
+
                 let val = self.generate_expr(&value.node)?;
-                let resolved = ty.as_ref()
-                    .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(ResolvedType::I64);
-                let var_type = self.type_mapper.map_type(&resolved);
+                let var_type = if let Some(t) = ty.as_ref() {
+                    let resolved = self.ast_type_to_resolved(&t.node);
+                    self.type_mapper.map_type(&resolved)
+                } else if val.is_struct_value() {
+                    // Use actual struct type for struct values
+                    val.get_type()
+                } else {
+                    // Default to i64 for non-struct values (backward compatible)
+                    self.type_mapper.map_type(&ResolvedType::I64)
+                };
                 let alloca = self.builder.build_alloca(var_type, &name.node)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.builder.build_store(alloca, val)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.locals.insert(name.node.clone(), (alloca, var_type));
+
+                // Record struct type for variable (from StructLit, function return type, or type annotation)
+                if let Some(sn) = struct_type_name {
+                    self.var_struct_types.insert(name.node.clone(), sn);
+                } else if let Some(t) = ty.as_ref() {
+                    if let Some(sn) = self.extract_struct_type_name(&t.node) {
+                        self.var_struct_types.insert(name.node.clone(), sn);
+                    }
+                } else if val.is_struct_value() {
+                    // Fallback: match the generated value's struct type against known structs
+                    let struct_type = val.into_struct_value().get_type();
+                    for (sn, st) in &self.generated_structs {
+                        if *st == struct_type {
+                            self.var_struct_types.insert(name.node.clone(), sn.clone());
+                            break;
+                        }
+                    }
+                }
+
                 Ok(self.context.struct_type(&[], false).const_zero().into())
             }
             Stmt::Expr(expr) => self.generate_expr(&expr.node),
@@ -1288,17 +1449,31 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         method: &str,
         args: &[Spanned<Expr>],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // For now, transform method call to function call with receiver as first arg
-        // e.g., obj.method(a, b) -> Type_method(obj, a, b)
+        // Transform method call to function call with receiver as first arg
+        // e.g., obj.method(a, b) -> TypeName_method(obj, a, b)
 
         let receiver_val = self.generate_expr(receiver)?;
 
-        // Get method function name (would need type info for proper resolution)
-        let fn_name = method.to_string();
+        // Try to resolve the struct type name from the receiver
+        let struct_name = self.infer_struct_name(receiver).ok();
 
-        // Get function value
-        let fn_value = self.module.get_function(&fn_name)
-            .ok_or_else(|| CodegenError::UndefinedFunction(fn_name.clone()))?;
+        // Try qualified name: TypeName_method
+        let qualified_name = struct_name.as_ref().map(|sn| format!("{}_{}", sn, method));
+
+        let fn_value = qualified_name
+            .as_ref()
+            .and_then(|qn| self.functions.get(qn).copied().or_else(|| self.module.get_function(qn)))
+            // Fallback: try bare method name
+            .or_else(|| self.functions.get(method).copied().or_else(|| self.module.get_function(method)));
+
+        let fn_value = if let Some(f) = fn_value {
+            f
+        } else {
+            let tried = qualified_name.as_deref().unwrap_or(method);
+            return Err(CodegenError::UndefinedFunction(format!(
+                "{} (method call on {:?})", tried, receiver
+            )));
+        };
 
         // Generate arguments (receiver first)
         let mut arg_values: Vec<BasicMetadataValueEnum> = vec![receiver_val.into()];
@@ -1856,8 +2031,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_type = *self.generated_structs.get(name)
             .ok_or_else(|| CodegenError::UndefinedVar(format!("Struct not found: {}", name)))?;
 
-        // Create struct value
-        let struct_val = struct_type.const_named_struct(&field_values);
+        // Create struct value using insert_value for runtime values
+        let mut struct_val = struct_type.get_undef();
+        for (i, val) in field_values.iter().enumerate() {
+            struct_val = self.builder.build_insert_value(struct_val, *val, i as u32, &format!("field_{}", i))
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_struct_value();
+        }
         Ok(struct_val.into())
     }
 
@@ -1879,18 +2059,49 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
 
-    /// Infers the struct name from an expression (for field access).
+    /// Infers the struct name from an expression (for field access and method calls).
     fn infer_struct_name(&self, expr: &Expr) -> CodegenResult<String> {
         match expr {
             Expr::Ident(name) => {
-                // Look up variable type - would need type info stored with locals
-                // For now, return an error if we can't determine the type
+                // Look up in var_struct_types
+                if let Some(struct_name) = self.var_struct_types.get(name) {
+                    return Ok(struct_name.clone());
+                }
                 Err(CodegenError::Unsupported(format!(
                     "Cannot infer struct type for variable: {}. Consider adding type annotations.",
                     name
                 )))
             }
             Expr::StructLit { name, .. } => Ok(name.node.clone()),
+            Expr::Field { expr: inner, field } => {
+                // Recursively infer the inner expression's struct type,
+                // then look up the field's type (if it's also a struct)
+                let parent_struct = self.infer_struct_name(&inner.node)?;
+                // Check if the field type is itself a known struct
+                if let Some(fields) = self.struct_fields.get(&parent_struct) {
+                    let field_idx = fields.iter().position(|f| f == &field.node);
+                    if let Some(_idx) = field_idx {
+                        // We'd need field type info to resolve nested struct types
+                        // For now, just return an error for nested field access
+                    }
+                }
+                Err(CodegenError::Unsupported(format!(
+                    "Cannot infer struct type for nested field access: {}.{}",
+                    parent_struct, field.node
+                )))
+            }
+            Expr::Call { func, .. } => {
+                // Try to infer return type as struct from function name
+                if let Expr::Ident(fn_name) = &func.node {
+                    // Check if the function name matches a struct constructor pattern
+                    if self.generated_structs.contains_key(fn_name.as_str()) {
+                        return Ok(fn_name.clone());
+                    }
+                }
+                Err(CodegenError::Unsupported(format!(
+                    "Cannot infer struct type for call expression"
+                )))
+            }
             _ => Err(CodegenError::Unsupported(format!(
                 "Cannot infer struct type for expression: {:?}",
                 expr
@@ -2608,6 +2819,218 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         Ok(self.context.struct_type(&[], false).const_zero().into())
     }
+    // ========== Impl/Method Support ==========
+
+    /// Extracts a struct type name from an AST Type node (if it refers to a struct).
+    fn extract_struct_type_name(&self, ty: &Type) -> Option<String> {
+        match ty {
+            Type::Named { name, .. } => {
+                if self.generated_structs.contains_key(name) {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            }
+            Type::Ref(inner) | Type::RefMut(inner) => self.extract_struct_type_name(&inner.node),
+            _ => None,
+        }
+    }
+
+    /// Infers the struct type from a value expression (for Let bindings).
+    fn infer_value_struct_type(&self, expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::StructLit { name, .. } => Some(name.node.clone()),
+            Expr::Call { func, .. } => {
+                // Look up function return type by checking if function name
+                // corresponds to a known function with a struct return type
+                if let Expr::Ident(fn_name) = &func.node {
+                    // Check if the function's return type is a known struct
+                    // by looking up the function declaration
+                    let fn_value = self.functions.get(fn_name).copied()
+                        .or_else(|| self.module.get_function(fn_name));
+                    if let Some(fn_value) = fn_value {
+                        let ret_type = fn_value.get_type().get_return_type();
+                        if let Some(ret) = ret_type {
+                            if ret.is_struct_type() {
+                                // Find which struct name matches this type
+                                let struct_type = ret.into_struct_type();
+                                for (name, st) in &self.generated_structs {
+                                    if *st == struct_type {
+                                        return Some(name.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            Expr::MethodCall { receiver, method, .. } => {
+                // Try to infer from method return type
+                let struct_name = self.infer_struct_name(&receiver.node).ok()?;
+                let qualified = format!("{}_{}", struct_name, method.node);
+                let fn_value = self.functions.get(&qualified).copied()
+                    .or_else(|| self.module.get_function(&qualified));
+                if let Some(fn_value) = fn_value {
+                    let ret_type = fn_value.get_type().get_return_type();
+                    if let Some(ret) = ret_type {
+                        if ret.is_struct_type() {
+                            let struct_type = ret.into_struct_type();
+                            for (name, st) in &self.generated_structs {
+                                if *st == struct_type {
+                                    return Some(name.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            Expr::Block(stmts) => {
+                // Return type of block is the last statement's value
+                if let Some(last) = stmts.last() {
+                    if let Stmt::Expr(e) = &last.node {
+                        return self.infer_value_struct_type(&e.node);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Declares a method as `TypeName_methodName` function.
+    fn declare_method(
+        &mut self,
+        type_name: &str,
+        func: &ast::Function,
+    ) -> CodegenResult<FunctionValue<'ctx>> {
+        let method_name = format!("{}_{}", type_name, func.name.node);
+
+        // Build parameter types: map self -> struct type pointer or value
+        let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
+        for p in &func.params {
+            if p.name.node == "self" {
+                // self parameter: use the struct type
+                if let Some(struct_type) = self.generated_structs.get(type_name) {
+                    param_types.push((*struct_type).into());
+                } else {
+                    let resolved = self.ast_type_to_resolved(&p.ty.node);
+                    param_types.push(self.type_mapper.map_type(&resolved).into());
+                }
+            } else {
+                let resolved = self.ast_type_to_resolved(&p.ty.node);
+                param_types.push(self.type_mapper.map_type(&resolved).into());
+            }
+        }
+
+        let ret_resolved = func.ret_type.as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        let fn_type = if ret_resolved == ResolvedType::Unit {
+            self.context.void_type().fn_type(&param_types, false)
+        } else {
+            let ret_type = self.type_mapper.map_type(&ret_resolved);
+            ret_type.fn_type(&param_types, false)
+        };
+
+        let fn_value = self.module.add_function(&method_name, fn_type, None);
+        self.functions.insert(method_name, fn_value);
+
+        Ok(fn_value)
+    }
+
+    /// Generates the body of a method declared via `declare_method`.
+    fn generate_method(
+        &mut self,
+        type_name: &str,
+        func: &ast::Function,
+    ) -> CodegenResult<()> {
+        let method_name = format!("{}_{}", type_name, func.name.node);
+        let fn_value = *self
+            .functions
+            .get(&method_name)
+            .ok_or_else(|| CodegenError::UndefinedFunction(method_name.clone()))?;
+
+        self.current_function = Some(fn_value);
+        self.locals.clear();
+        self.var_struct_types.clear();
+
+        let entry = self.context.append_basic_block(fn_value, "entry");
+        self.builder.position_at_end(entry);
+
+        // Allocate parameters
+        for (i, param) in func.params.iter().enumerate() {
+            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_type = if param.name.node == "self" {
+                if let Some(struct_type) = self.generated_structs.get(type_name) {
+                    BasicTypeEnum::StructType(*struct_type)
+                } else {
+                    let resolved = self.ast_type_to_resolved(&param.ty.node);
+                    self.type_mapper.map_type(&resolved)
+                }
+            } else {
+                let resolved = self.ast_type_to_resolved(&param.ty.node);
+                self.type_mapper.map_type(&resolved)
+            };
+
+            let alloca = self.builder.build_alloca(param_type, &param.name.node)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.build_store(alloca, param_value)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.locals.insert(param.name.node.clone(), (alloca, param_type));
+
+            // Track self as struct type
+            if param.name.node == "self" {
+                self.var_struct_types.insert("self".to_string(), type_name.to_string());
+            } else if let Some(sn) = self.extract_struct_type_name(&param.ty.node) {
+                self.var_struct_types.insert(param.name.node.clone(), sn);
+            }
+        }
+
+        // Generate body
+        let ret_resolved = func.ret_type.as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        match &func.body {
+            ast::FunctionBody::Expr(body_expr) => {
+                let body_value = self.generate_expr(&body_expr.node)?;
+                if ret_resolved == ResolvedType::Unit {
+                    self.builder.build_return(None)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                } else {
+                    self.builder.build_return(Some(&body_value))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                }
+            }
+            ast::FunctionBody::Block(stmts) => {
+                let body_value = self.generate_block(stmts)?;
+                if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                    if ret_resolved == ResolvedType::Unit {
+                        self.builder.build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        self.builder.build_return(Some(&body_value))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+            }
+        }
+
+        self.current_function = None;
+        Ok(())
+    }
+
+    /// Extracts the type name from an Impl target_type.
+    fn get_impl_type_name(ty: &Type) -> Option<String> {
+        match ty {
+            Type::Named { name, .. } => Some(name.clone()),
+            _ => None,
+        }
+    }
+
     // ========== Built-in pseudo-functions ==========
 
     fn generate_println_call(&mut self, args: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
