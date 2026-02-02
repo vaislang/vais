@@ -1490,6 +1490,7 @@ impl Parser {
             Token::Defer => "D".to_string(),
             Token::Extern => "N".to_string(),
             Token::Union => "O".to_string(),
+            Token::Await => "Y".to_string(),
             // Multi-character keywords that can appear in import paths or identifiers
             Token::Io => "io".to_string(),
             Token::Mut => "mut".to_string(),
