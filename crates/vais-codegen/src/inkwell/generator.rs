@@ -14,7 +14,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate, FloatPredicate};
 
-use vais_ast::{self as ast, BinaryOp, Expr, IfElse, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, Type, UnaryOp};
+use vais_ast::{self as ast, BinOp, Expr, IfElse, Literal, MatchArm, Module as VaisModule, Pattern, Spanned, Stmt, Type, UnaryOp};
 use vais_types::ResolvedType;
 
 use crate::{CodegenError, CodegenResult, TargetTriple};
@@ -144,7 +144,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub fn generate_module(&mut self, vais_module: &VaisModule) -> CodegenResult<()> {
         // First pass: collect all function signatures and struct definitions
         for item in &vais_module.items {
-            match item {
+            match &item.node {
                 ast::Item::Function(func) => {
                     self.declare_function(func)?;
                 }
@@ -160,7 +160,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Second pass: generate function bodies
         for item in &vais_module.items {
-            if let ast::Item::Function(func) = item {
+            if let ast::Item::Function(func) = &item.node {
                 self.generate_function(func)?;
             }
         }
@@ -191,18 +191,25 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let param_types: Vec<BasicMetadataTypeEnum> = func
             .params
             .iter()
-            .map(|p| self.type_mapper.map_type(&p.ty).into())
+            .map(|p| {
+                let resolved = self.ast_type_to_resolved(&p.ty.node);
+                self.type_mapper.map_type(&resolved).into()
+            })
             .collect();
 
-        let fn_type = if func.return_type == ResolvedType::Unit {
+        let ret_resolved = func.ret_type.as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+
+        let fn_type = if ret_resolved == ResolvedType::Unit {
             self.context.void_type().fn_type(&param_types, false)
         } else {
-            let ret_type = self.type_mapper.map_type(&func.return_type);
+            let ret_type = self.type_mapper.map_type(&ret_resolved);
             ret_type.fn_type(&param_types, false)
         };
 
-        let fn_value = self.module.add_function(&func.name, fn_type, None);
-        self.functions.insert(func.name.clone(), fn_value);
+        let fn_value = self.module.add_function(&func.name.node, fn_type, None);
+        self.functions.insert(func.name.node.clone(), fn_value);
 
         Ok(fn_value)
     }
@@ -211,16 +218,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let field_types: Vec<BasicTypeEnum> = s
             .fields
             .iter()
-            .map(|f| self.type_mapper.map_type(&f.ty))
+            .map(|f| {
+                let resolved = self.ast_type_to_resolved(&f.ty.node);
+                self.type_mapper.map_type(&resolved)
+            })
             .collect();
 
         // Store field names for later field access lookups
-        let field_names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
-        self.struct_fields.insert(s.name.clone(), field_names);
+        let field_names: Vec<String> = s.fields.iter().map(|f| f.name.node.clone()).collect();
+        let name = s.name.node.clone();
+        self.struct_fields.insert(name.clone(), field_names);
 
         let struct_type = self.context.struct_type(&field_types, false);
-        self.type_mapper.register_struct(&s.name, struct_type);
-        self.generated_structs.insert(s.name.clone(), struct_type);
+        self.type_mapper.register_struct(&name, struct_type);
+        self.generated_structs.insert(name, struct_type);
 
         Ok(struct_type)
     }
@@ -241,7 +252,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             );
         }
 
-        self.type_mapper.register_struct(&e.name, enum_type);
+        self.type_mapper.register_struct(&e.name.node, enum_type);
         self.generated_structs.insert(enum_name, enum_type);
 
         Ok(enum_type)
@@ -252,8 +263,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     fn generate_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
         let fn_value = *self
             .functions
-            .get(&func.name)
-            .ok_or_else(|| CodegenError::UndefinedFunction(func.name.clone()))?;
+            .get(&func.name.node)
+            .ok_or_else(|| CodegenError::UndefinedFunction(func.name.node.clone()))?;
 
         self.current_function = Some(fn_value);
         self.locals.clear();
@@ -265,24 +276,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Allocate space for parameters
         for (i, param) in func.params.iter().enumerate() {
             let param_value = fn_value.get_nth_param(i as u32).unwrap();
-            let param_type = self.type_mapper.map_type(&param.ty);
-            let alloca = self.builder.build_alloca(param_type, &param.name)
+            let resolved = self.ast_type_to_resolved(&param.ty.node);
+            let param_type = self.type_mapper.map_type(&resolved);
+            let alloca = self.builder.build_alloca(param_type, &param.name.node)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.build_store(alloca, param_value)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.locals.insert(param.name.clone(), (alloca, param_type));
+            self.locals.insert(param.name.node.clone(), (alloca, param_type));
         }
 
         // Generate function body
-        let body_value = self.generate_expr(&func.body)?;
+        let ret_resolved = func.ret_type.as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
 
-        // Add return if needed
-        if func.return_type == ResolvedType::Unit {
-            self.builder.build_return(None)
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        } else {
-            self.builder.build_return(Some(&body_value))
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        match &func.body {
+            ast::FunctionBody::Expr(body_expr) => {
+                let body_value = self.generate_expr(&body_expr.node)?;
+                if ret_resolved == ResolvedType::Unit {
+                    self.builder.build_return(None)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                } else {
+                    self.builder.build_return(Some(&body_value))
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                }
+            }
+            ast::FunctionBody::Block(stmts) => {
+                let body_value = self.generate_block(stmts)?;
+                // Only add return if the block doesn't already have a terminator
+                if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                    if ret_resolved == ResolvedType::Unit {
+                        self.builder.build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        self.builder.build_return(Some(&body_value))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+            }
         }
 
         self.current_function = None;
@@ -399,15 +430,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Literal::Bool(b) => {
                 Ok(self.context.bool_type().const_int(*b as u64, false).into())
             }
-            Literal::Char(c) => {
-                Ok(self.context.i32_type().const_int(*c as u64, false).into())
-            }
             Literal::String(s) => self.generate_string_literal(s),
-            Literal::Unit => {
-                // Return empty struct for unit
-                let unit_type = self.context.struct_type(&[], false);
-                Ok(unit_type.const_zero().into())
-            }
         }
     }
 
@@ -416,7 +439,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         if let Some(global) = self.string_constants.get(s) {
             let ptr = self.builder.build_pointer_cast(
                 global.as_pointer_value(),
-                self.context.ptr_type(AddressSpace::default()),
+                self.context.i8_type().ptr_type(AddressSpace::default()),
                 "str_ptr",
             ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             return Ok(ptr.into());
@@ -439,7 +462,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         let ptr = self.builder.build_pointer_cast(
             global.as_pointer_value(),
-            self.context.ptr_type(AddressSpace::default()),
+            self.context.i8_type().ptr_type(AddressSpace::default()),
             "str_ptr",
         ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         Ok(ptr.into())
@@ -479,7 +502,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     fn generate_binary(
         &mut self,
-        op: BinaryOp,
+        op: BinOp,
         lhs: &Expr,
         rhs: &Expr,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
@@ -498,29 +521,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     fn generate_int_binary(
         &mut self,
-        op: BinaryOp,
+        op: BinOp,
         lhs: IntValue<'ctx>,
         rhs: IntValue<'ctx>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let result = match op {
-            BinaryOp::Add => self.builder.build_int_add(lhs, rhs, "add"),
-            BinaryOp::Sub => self.builder.build_int_sub(lhs, rhs, "sub"),
-            BinaryOp::Mul => self.builder.build_int_mul(lhs, rhs, "mul"),
-            BinaryOp::Div => self.builder.build_int_signed_div(lhs, rhs, "div"),
-            BinaryOp::Mod => self.builder.build_int_signed_rem(lhs, rhs, "rem"),
-            BinaryOp::Eq => self.builder.build_int_compare(IntPredicate::EQ, lhs, rhs, "eq"),
-            BinaryOp::Ne => self.builder.build_int_compare(IntPredicate::NE, lhs, rhs, "ne"),
-            BinaryOp::Lt => self.builder.build_int_compare(IntPredicate::SLT, lhs, rhs, "lt"),
-            BinaryOp::Le => self.builder.build_int_compare(IntPredicate::SLE, lhs, rhs, "le"),
-            BinaryOp::Gt => self.builder.build_int_compare(IntPredicate::SGT, lhs, rhs, "gt"),
-            BinaryOp::Ge => self.builder.build_int_compare(IntPredicate::SGE, lhs, rhs, "ge"),
-            BinaryOp::And => self.builder.build_and(lhs, rhs, "and"),
-            BinaryOp::Or => self.builder.build_or(lhs, rhs, "or"),
-            BinaryOp::BitAnd => self.builder.build_and(lhs, rhs, "bitand"),
-            BinaryOp::BitOr => self.builder.build_or(lhs, rhs, "bitor"),
-            BinaryOp::BitXor => self.builder.build_xor(lhs, rhs, "bitxor"),
-            BinaryOp::Shl => self.builder.build_left_shift(lhs, rhs, "shl"),
-            BinaryOp::Shr => self.builder.build_right_shift(lhs, rhs, true, "shr"),
+            BinOp::Add => self.builder.build_int_add(lhs, rhs, "add"),
+            BinOp::Sub => self.builder.build_int_sub(lhs, rhs, "sub"),
+            BinOp::Mul => self.builder.build_int_mul(lhs, rhs, "mul"),
+            BinOp::Div => self.builder.build_int_signed_div(lhs, rhs, "div"),
+            BinOp::Mod => self.builder.build_int_signed_rem(lhs, rhs, "rem"),
+            BinOp::Eq => self.builder.build_int_compare(IntPredicate::EQ, lhs, rhs, "eq"),
+            BinOp::Neq=> self.builder.build_int_compare(IntPredicate::NE, lhs, rhs, "ne"),
+            BinOp::Lt => self.builder.build_int_compare(IntPredicate::SLT, lhs, rhs, "lt"),
+            BinOp::Lte=> self.builder.build_int_compare(IntPredicate::SLE, lhs, rhs, "le"),
+            BinOp::Gt => self.builder.build_int_compare(IntPredicate::SGT, lhs, rhs, "gt"),
+            BinOp::Gte=> self.builder.build_int_compare(IntPredicate::SGE, lhs, rhs, "ge"),
+            BinOp::And => self.builder.build_and(lhs, rhs, "and"),
+            BinOp::Or => self.builder.build_or(lhs, rhs, "or"),
+            BinOp::BitAnd => self.builder.build_and(lhs, rhs, "bitand"),
+            BinOp::BitOr => self.builder.build_or(lhs, rhs, "bitor"),
+            BinOp::BitXor => self.builder.build_xor(lhs, rhs, "bitxor"),
+            BinOp::Shl => self.builder.build_left_shift(lhs, rhs, "shl"),
+            BinOp::Shr => self.builder.build_right_shift(lhs, rhs, true, "shr"),
             _ => return Err(CodegenError::Unsupported(format!("Binary op: {:?}", op))),
         };
         result.map(|v| v.into()).map_err(|e| CodegenError::LlvmError(e.to_string()))
@@ -528,22 +551,22 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     fn generate_float_binary(
         &mut self,
-        op: BinaryOp,
+        op: BinOp,
         lhs: inkwell::values::FloatValue<'ctx>,
         rhs: inkwell::values::FloatValue<'ctx>,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
         let result = match op {
-            BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "fadd").map(|v| v.into()),
-            BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "fsub").map(|v| v.into()),
-            BinaryOp::Mul => self.builder.build_float_mul(lhs, rhs, "fmul").map(|v| v.into()),
-            BinaryOp::Div => self.builder.build_float_div(lhs, rhs, "fdiv").map(|v| v.into()),
-            BinaryOp::Mod => self.builder.build_float_rem(lhs, rhs, "frem").map(|v| v.into()),
-            BinaryOp::Eq => self.builder.build_float_compare(FloatPredicate::OEQ, lhs, rhs, "feq").map(|v| v.into()),
-            BinaryOp::Ne => self.builder.build_float_compare(FloatPredicate::ONE, lhs, rhs, "fne").map(|v| v.into()),
-            BinaryOp::Lt => self.builder.build_float_compare(FloatPredicate::OLT, lhs, rhs, "flt").map(|v| v.into()),
-            BinaryOp::Le => self.builder.build_float_compare(FloatPredicate::OLE, lhs, rhs, "fle").map(|v| v.into()),
-            BinaryOp::Gt => self.builder.build_float_compare(FloatPredicate::OGT, lhs, rhs, "fgt").map(|v| v.into()),
-            BinaryOp::Ge => self.builder.build_float_compare(FloatPredicate::OGE, lhs, rhs, "fge").map(|v| v.into()),
+            BinOp::Add => self.builder.build_float_add(lhs, rhs, "fadd").map(|v| v.into()),
+            BinOp::Sub => self.builder.build_float_sub(lhs, rhs, "fsub").map(|v| v.into()),
+            BinOp::Mul => self.builder.build_float_mul(lhs, rhs, "fmul").map(|v| v.into()),
+            BinOp::Div => self.builder.build_float_div(lhs, rhs, "fdiv").map(|v| v.into()),
+            BinOp::Mod => self.builder.build_float_rem(lhs, rhs, "frem").map(|v| v.into()),
+            BinOp::Eq => self.builder.build_float_compare(FloatPredicate::OEQ, lhs, rhs, "feq").map(|v| v.into()),
+            BinOp::Neq=> self.builder.build_float_compare(FloatPredicate::ONE, lhs, rhs, "fne").map(|v| v.into()),
+            BinOp::Lt => self.builder.build_float_compare(FloatPredicate::OLT, lhs, rhs, "flt").map(|v| v.into()),
+            BinOp::Lte=> self.builder.build_float_compare(FloatPredicate::OLE, lhs, rhs, "fle").map(|v| v.into()),
+            BinOp::Gt => self.builder.build_float_compare(FloatPredicate::OGT, lhs, rhs, "fgt").map(|v| v.into()),
+            BinOp::Gte=> self.builder.build_float_compare(FloatPredicate::OGE, lhs, rhs, "fge").map(|v| v.into()),
             _ => return Err(CodegenError::Unsupported(format!("Float binary op: {:?}", op))),
         };
         result.map_err(|e| CodegenError::LlvmError(e.to_string()))
@@ -578,18 +601,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map(|v| v.into())
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))
             }
-            UnaryOp::Deref => {
-                // Load from pointer
-                let ptr = val.into_pointer_value();
-                self.builder
-                    .build_load(self.context.i64_type(), ptr, "deref")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
-            }
-            UnaryOp::Ref => {
-                // Get address - operand must be an lvalue
-                // For now, return the value as-is (simplified)
-                Ok(val)
-            }
         }
     }
 
@@ -608,29 +619,31 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let fn_value = self
             .functions
             .get(&fn_name)
+            .copied()
             .or_else(|| self.module.get_function(&fn_name));
 
         let fn_value = if let Some(func) = fn_value {
             func
         } else {
             // Collect all available function names for suggestions
-            let mut candidates: Vec<&str> = Vec::new();
+            let mut candidate_strings: Vec<String> = Vec::new();
 
             // Add registered functions
             for func_name in self.functions.keys() {
-                candidates.push(func_name.as_str());
+                candidate_strings.push(func_name.clone());
             }
 
             // Add module functions
             let mut current_func = self.module.get_first_function();
             while let Some(func) = current_func {
-                if let Some(name) = func.get_name().to_str().ok() {
-                    candidates.push(name);
+                if let Ok(name) = func.get_name().to_str() {
+                    candidate_strings.push(name.to_string());
                 }
                 current_func = func.get_next_function();
             }
 
             // Get suggestions
+            let candidates: Vec<&str> = candidate_strings.iter().map(|s| s.as_str()).collect();
             let suggestions = crate::suggest_similar(&fn_name, &candidates, 3);
             let suggestion_text = crate::format_did_you_mean(&suggestions);
 
@@ -646,17 +659,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Build call
         let call = self
             .builder
-            .build_call(*fn_value, &arg_values, "call")
+            .build_call(fn_value, &arg_values, "call")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
         // Return call result or unit
-        call.try_as_basic_value()
+        Ok(call.try_as_basic_value()
             .left()
-            .ok_or_else(|| {
-                // Void function - return unit
-                Ok(self.context.struct_type(&[], false).const_zero().into())
-            })
-            .unwrap_or_else(|v| v)
+            .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
     }
 
     fn generate_block(&mut self, stmts: &[Spanned<Stmt>]) -> CodegenResult<BasicValueEnum<'ctx>> {
@@ -673,7 +682,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match stmt {
             Stmt::Let { name, ty, value, .. } => {
                 let val = self.generate_expr(&value.node)?;
-                let var_type = self.type_mapper.map_type(ty);
+                let resolved = ty.as_ref()
+                    .map(|t| self.ast_type_to_resolved(&t.node))
+                    .unwrap_or(ResolvedType::I64);
+                let var_type = self.type_mapper.map_type(&resolved);
                 let alloca = self.builder.build_alloca(var_type, &name.node)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.builder.build_store(alloca, val)
@@ -1051,8 +1063,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     fn generate_break(&mut self, value: Option<&Expr>) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let loop_ctx = self.loop_stack.last()
-            .ok_or_else(|| CodegenError::Unsupported("break outside of loop".to_string()))?;
+        let break_block = self.loop_stack.last()
+            .ok_or_else(|| CodegenError::Unsupported("break outside of loop".to_string()))?
+            .break_block;
 
         // Generate value if present (for loop with value)
         if let Some(val_expr) = value {
@@ -1060,7 +1073,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // In a full implementation, this would be used for loop-with-value
         }
 
-        let break_block = loop_ctx.break_block;
         self.builder.build_unconditional_branch(break_block)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
@@ -1083,7 +1095,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     fn generate_array(&mut self, elements: &[Spanned<Expr>]) -> CodegenResult<BasicValueEnum<'ctx>> {
         if elements.is_empty() {
             // Empty array - return null pointer
-            return Ok(self.context.ptr_type(AddressSpace::default()).const_null().into());
+            return Ok(self.context.i8_type().ptr_type(AddressSpace::default()).const_null().into());
         }
 
         // Generate all elements
@@ -1197,10 +1209,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_call(fn_value, &arg_values, "method_call")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-        call.try_as_basic_value()
+        Ok(call.try_as_basic_value()
             .left()
-            .ok_or_else(|| Ok(self.context.struct_type(&[], false).const_zero().into()))
-            .unwrap_or_else(|v| v)
+            .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()))
     }
 
     // ========== Lambda/Closure ==========
@@ -1236,8 +1247,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Then add original lambda parameters
         for p in params {
-            let ty = self.ast_type_to_resolved(&p.ty.node);
-            param_types.push(self.type_mapper.map_type(&ty).into());
+            let resolved = self.ast_type_to_resolved(&p.ty.node);
+            param_types.push(self.type_mapper.map_type(&resolved).into());
         }
 
         // Create function type (always returns i64 for now)
@@ -1334,10 +1345,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 "i16" => ResolvedType::I16,
                 "i32" => ResolvedType::I32,
                 "i64" => ResolvedType::I64,
+                "i128" => ResolvedType::I128,
                 "u8" => ResolvedType::U8,
                 "u16" => ResolvedType::U16,
                 "u32" => ResolvedType::U32,
                 "u64" => ResolvedType::U64,
+                "u128" => ResolvedType::U128,
                 "f32" => ResolvedType::F32,
                 "f64" => ResolvedType::F64,
                 "bool" => ResolvedType::Bool,
@@ -1346,22 +1359,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
                         ResolvedType::Generic(name.clone())
-                    } else if !generics.is_empty() {
-                        // Named type with generics
+                    } else {
                         let generic_types: Vec<ResolvedType> = generics
                             .iter()
                             .map(|g| self.ast_type_to_resolved(&g.node))
                             .collect();
-                        ResolvedType::Struct(name.clone(), generic_types)
-                    } else {
-                        // Simple named type
-                        ResolvedType::Struct(name.clone(), vec![])
+                        ResolvedType::Named { name: name.clone(), generics: generic_types }
                     }
                 }
             },
-            Type::Unit => ResolvedType::Unit,
-            Type::Pointer(inner) => ResolvedType::Ptr(Box::new(self.ast_type_to_resolved(&inner.node))),
-            Type::Array(inner) => ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)), 0),
+            Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Array(inner) => ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node))),
             Type::Tuple(elems) => {
                 let elem_types: Vec<ResolvedType> = elems
                     .iter()
@@ -1369,23 +1377,31 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .collect();
                 ResolvedType::Tuple(elem_types)
             }
-            Type::Fn { params, ret } => {
+            Type::FnPtr { params, ret, is_vararg } => {
                 let param_types: Vec<ResolvedType> = params
                     .iter()
                     .map(|p| self.ast_type_to_resolved(&p.node))
                     .collect();
                 let ret_type = self.ast_type_to_resolved(&ret.node);
-                ResolvedType::Function(param_types, Box::new(ret_type))
+                ResolvedType::FnPtr {
+                    params: param_types,
+                    ret: Box::new(ret_type),
+                    is_vararg: *is_vararg,
+                    effects: None,
+                }
             }
-            Type::Optional(inner) => ResolvedType::Option(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Optional(inner) => ResolvedType::Optional(Box::new(self.ast_type_to_resolved(&inner.node))),
             Type::Result(inner) => ResolvedType::Result(
                 Box::new(self.ast_type_to_resolved(&inner.node)),
-                Box::new(ResolvedType::Str) // Default error type
             ),
-            Type::Ref(inner) => ResolvedType::Ptr(Box::new(self.ast_type_to_resolved(&inner.node))),
-            Type::RefMut(inner) => ResolvedType::Ptr(Box::new(self.ast_type_to_resolved(&inner.node))),
-            Type::Infer => ResolvedType::I64, // Default to i64 for unresolved types
-            _ => ResolvedType::I64, // Fallback
+            Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::Map(key, value) => ResolvedType::Map(
+                Box::new(self.ast_type_to_resolved(&key.node)),
+                Box::new(self.ast_type_to_resolved(&value.node)),
+            ),
+            Type::Unit => ResolvedType::Unit,
+            _ => ResolvedType::I64, // Fallback for Infer, ConstArray, etc.
         }
     }
 
@@ -1602,7 +1618,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     fn generate_assign_op(
         &mut self,
-        op: BinaryOp,
+        op: BinOp,
         target: &Expr,
         value: &Expr,
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
@@ -1729,14 +1745,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         name: &str,
         fields: &[(Spanned<String>, Spanned<Expr>)],
     ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let struct_type = self.generated_structs.get(name)
-            .ok_or_else(|| CodegenError::UndefinedVar(format!("Struct not found: {}", name)))?;
-
-        // Generate field values
+        // Generate field values first (before borrowing generated_structs)
         let mut field_values: Vec<BasicValueEnum> = Vec::new();
         for (_, expr) in fields {
             field_values.push(self.generate_expr(&expr.node)?);
         }
+
+        let struct_type = *self.generated_structs.get(name)
+            .ok_or_else(|| CodegenError::UndefinedVar(format!("Struct not found: {}", name)))?;
 
         // Create struct value
         let struct_val = struct_type.const_named_struct(&field_values);
@@ -2078,7 +2094,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         let strcmp_fn = self.module.get_function("strcmp")
                             .unwrap_or_else(|| {
                                 let i32_type = self.context.i32_type();
-                                let ptr_type = self.context.ptr_type(AddressSpace::default());
+                                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
                                 let fn_type = i32_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
                                 self.module.add_function("strcmp", fn_type, None)
                             });
@@ -2390,6 +2406,12 @@ mod tests {
     fn test_generate_string_literal() {
         let context = Context::create();
         let mut gen = InkwellCodeGenerator::new(&context, "test");
+
+        // Need a function context for builder position
+        let fn_type = context.void_type().fn_type(&[], false);
+        let func = gen.module.add_function("__test_str", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        gen.builder.position_at_end(entry);
 
         let result = gen.generate_string_literal("hello").unwrap();
         assert!(result.is_pointer_value());

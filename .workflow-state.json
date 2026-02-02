@@ -1,11 +1,15 @@
 {
   "phase": 5,
-  "request": "Phase 29 잔여 작업 완료",
+  "request": "Phase 30 성능 최적화 - Stage 1부터 순차 진행",
   "tasks": [
-    { "id": 1, "name": "skip_to_closing 근본 수정 (파서 에러 복구 버그)", "status": "completed", "model": "Opus" },
-    { "id": 2, "name": "맵 리터럴 {k:v} 구현", "status": "completed", "model": "Sonnet" },
-    { "id": 3, "name": "디스트럭처링 (a,b) := expr 구현", "status": "pending", "model": "Opus" }
+    { "id": 1, "name": "Phase 30 Stage 1: inkwell 백엔드 AST 동기화 (78개 에러 수정)", "status": "completed", "model": "Opus" },
+    { "id": 2, "name": "Phase 30 Stage 1: inkwell 백엔드 CLI 통합 & 기본 전환", "status": "pending", "model": "Opus" },
+    { "id": 3, "name": "Phase 30 Stage 2: TCO 꼬리 호출 최적화", "status": "pending", "model": "Opus" },
+    { "id": 4, "name": "Phase 30 Stage 3: 인라이닝 & PGO", "status": "pending", "model": "Sonnet" },
+    { "id": 5, "name": "Phase 30 Stage 4: MIR 최적화 파이프라인", "status": "pending", "model": "Opus" },
+    { "id": 6, "name": "Phase 30 Stage 5: 경계 검사 제거 & SIMD 강화", "status": "pending", "model": "Opus" },
+    { "id": 7, "name": "Phase 30 Stage 6: 벤치마크 스위트", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": null,
-  "lastCompleted": "맵 리터럴 {k:v} 구현"
+  "lastCompleted": "Phase 30 Stage 1: inkwell 백엔드 AST 동기화"
 }

@@ -38,14 +38,15 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::I16 => self.context.i16_type().into(),
             ResolvedType::I32 => self.context.i32_type().into(),
             ResolvedType::I64 => self.context.i64_type().into(),
+            ResolvedType::I128 => self.context.i128_type().into(),
             ResolvedType::U8 => self.context.i8_type().into(),
             ResolvedType::U16 => self.context.i16_type().into(),
             ResolvedType::U32 => self.context.i32_type().into(),
             ResolvedType::U64 => self.context.i64_type().into(),
+            ResolvedType::U128 => self.context.i128_type().into(),
             ResolvedType::F32 => self.context.f32_type().into(),
             ResolvedType::F64 => self.context.f64_type().into(),
             ResolvedType::Bool => self.context.bool_type().into(),
-            ResolvedType::Char => self.context.i32_type().into(), // Unicode code point
             ResolvedType::Str => self
                 .context
                 .i8_type()
@@ -55,59 +56,58 @@ impl<'ctx> TypeMapper<'ctx> {
                 // Unit type represented as empty struct
                 self.context.struct_type(&[], false).into()
             }
-            ResolvedType::Array(elem_ty, size) => {
-                let elem_llvm = self.map_type(elem_ty);
-                elem_llvm.array_type(*size as u32).into()
+            ResolvedType::Array(elem_ty) => {
+                // Dynamic array is a pointer
+                let _elem_llvm = self.map_type(elem_ty);
+                self.context.i8_type().ptr_type(AddressSpace::default()).into()
             }
-            ResolvedType::Ptr(inner) => {
-                let _inner_llvm = self.map_type(inner);
+            ResolvedType::ConstArray { element, size } => {
+                let elem_llvm = self.map_type(element);
+                let sz = match size {
+                    vais_types::ResolvedConst::Value(n) => *n as u32,
+                    _ => 1,
+                };
+                elem_llvm.array_type(sz).into()
+            }
+            ResolvedType::Pointer(inner) | ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                 // In LLVM 17+, pointers are opaque
+                let _inner_llvm = self.map_type(inner);
                 self.context
+                    .i8_type()
                     .ptr_type(AddressSpace::default())
                     .into()
             }
-            ResolvedType::Struct(name, _) => {
-                if let Some(st) = self.struct_types.get(name) {
+            ResolvedType::Named { name, .. } => {
+                if let Some(st) = self.struct_types.get(name.as_str()) {
                     (*st).into()
                 } else {
                     // Return opaque struct placeholder
                     self.context.opaque_struct_type(name).into()
                 }
             }
-            ResolvedType::Enum(name, _) => {
-                // Enums are represented as tagged unions
-                // For now, use i64 for tag + pointer for data
-                if let Some(st) = self.struct_types.get(name) {
-                    (*st).into()
-                } else {
-                    self.context.opaque_struct_type(name).into()
-                }
-            }
-            ResolvedType::Function(params, ret) => {
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                 // Function type as pointer
-                let param_types: Vec<BasicMetadataTypeEnum> = params
+                let _param_types: Vec<BasicMetadataTypeEnum> = params
                     .iter()
                     .map(|p| self.map_type(p).into())
                     .collect();
-                let ret_type = self.map_type(ret);
-                let fn_type = ret_type.fn_type(&param_types, false);
-                fn_type.ptr_type(AddressSpace::default()).into()
+                let _ret_type = self.map_type(ret);
+                self.context.i8_type().ptr_type(AddressSpace::default()).into()
             }
             ResolvedType::Generic(name) => {
                 // Generic types should be substituted before codegen
-                // ICE: fall back to i64 pointer and log error
                 eprintln!("ICE: unsubstituted generic type '{}' reached codegen", name);
-                self.context.ptr_type(AddressSpace::default()).into()
+                self.context.i8_type().ptr_type(AddressSpace::default()).into()
             }
-            ResolvedType::Infer => {
+            ResolvedType::Var(_) | ResolvedType::Unknown => {
                 // Should be resolved before codegen
-                // ICE: fall back to i64 and log error
-                eprintln!("ICE: unresolved infer type reached codegen");
+                eprintln!("ICE: unresolved type variable reached codegen");
                 self.context.i64_type().into()
             }
             ResolvedType::Never => {
                 // Never type - use void pointer as placeholder
                 self.context
+                    .i8_type()
                     .ptr_type(AddressSpace::default())
                     .into()
             }
@@ -116,16 +116,7 @@ impl<'ctx> TypeMapper<'ctx> {
                     elems.iter().map(|e| self.map_type(e)).collect();
                 self.context.struct_type(&elem_types, false).into()
             }
-            ResolvedType::Slice(elem_ty) => {
-                // Slice is a fat pointer: { *T, len }
-                let _elem_llvm = self.map_type(elem_ty);
-                let ptr_type = self.context.ptr_type(AddressSpace::default());
-                let len_type = self.context.i64_type();
-                self.context
-                    .struct_type(&[ptr_type.into(), len_type.into()], false)
-                    .into()
-            }
-            ResolvedType::Option(inner) => {
+            ResolvedType::Optional(inner) => {
                 // Option<T> is { tag: i8, value: T }
                 let inner_llvm = self.map_type(inner);
                 let tag_type = self.context.i8_type();
@@ -133,16 +124,58 @@ impl<'ctx> TypeMapper<'ctx> {
                     .struct_type(&[tag_type.into(), inner_llvm], false)
                     .into()
             }
-            ResolvedType::Result(ok, err) => {
-                // Result<T, E> is { tag: i8, value: max(T, E) }
+            ResolvedType::Result(ok) => {
+                // Result<T> is { tag: i8, value: T }
                 let ok_llvm = self.map_type(ok);
-                let err_llvm = self.map_type(err);
                 let tag_type = self.context.i8_type();
-                // Use pointer to hold either value
-                let value_type = self.context.ptr_type(AddressSpace::default());
                 self.context
-                    .struct_type(&[tag_type.into(), value_type.into()], false)
+                    .struct_type(&[tag_type.into(), ok_llvm], false)
                     .into()
+            }
+            ResolvedType::Map(key, value) => {
+                // Map is a pointer to runtime structure
+                let _key_llvm = self.map_type(key);
+                let _val_llvm = self.map_type(value);
+                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+            }
+            ResolvedType::Range(_) => {
+                // Range is { start: i64, end: i64 }
+                let i64_type = self.context.i64_type();
+                self.context
+                    .struct_type(&[i64_type.into(), i64_type.into()], false)
+                    .into()
+            }
+            ResolvedType::Future(inner) => {
+                let _inner_llvm = self.map_type(inner);
+                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+            }
+            ResolvedType::DynTrait { .. } => {
+                // Fat pointer: { data_ptr, vtable_ptr }
+                let ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+                self.context
+                    .struct_type(&[ptr_type.into(), ptr_type.into()], false)
+                    .into()
+            }
+            ResolvedType::Vector { element, lanes } => {
+                let elem_llvm = self.map_type(element);
+                match elem_llvm {
+                    BasicTypeEnum::IntType(t) => t.vec_type(*lanes).into(),
+                    BasicTypeEnum::FloatType(t) => t.vec_type(*lanes).into(),
+                    _ => self.context.i64_type().vec_type(*lanes).into(),
+                }
+            }
+            ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => {
+                let _inner_llvm = self.map_type(inner);
+                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+            }
+            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) | ResolvedType::Lazy(inner) => {
+                // Transparent wrappers at runtime
+                self.map_type(inner)
+            }
+            // Fallback for remaining types
+            ResolvedType::ConstGeneric(_) | ResolvedType::Lifetime(_)
+            | ResolvedType::Associated { .. } | ResolvedType::Dependent { .. } => {
+                self.context.i64_type().into()
             }
         }
     }
@@ -152,15 +185,22 @@ impl<'ctx> TypeMapper<'ctx> {
         match ty {
             ResolvedType::I8 | ResolvedType::U8 | ResolvedType::Bool => 1,
             ResolvedType::I16 | ResolvedType::U16 => 2,
-            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::Char | ResolvedType::F32 => 4,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
             ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-            ResolvedType::Str | ResolvedType::Ptr(_) => 8, // 64-bit pointer
+            ResolvedType::I128 | ResolvedType::U128 => 16,
+            ResolvedType::Str | ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
             ResolvedType::Unit => 0,
-            ResolvedType::Array(elem, size) => self.size_of(elem) * (*size as u64),
+            ResolvedType::ConstArray { element, size } => {
+                let sz = match size {
+                    vais_types::ResolvedConst::Value(n) => *n as u64,
+                    _ => 1,
+                };
+                self.size_of(element) * sz
+            }
+            ResolvedType::Array(_) => 8, // pointer
             ResolvedType::Tuple(elems) => elems.iter().map(|e| self.size_of(e)).sum(),
-            ResolvedType::Slice(_) => 16, // ptr + len
-            ResolvedType::Option(inner) => 1 + self.size_of(inner),
-            ResolvedType::Result(ok, err) => 1 + self.size_of(ok).max(self.size_of(err)),
+            ResolvedType::Optional(inner) => 1 + self.size_of(inner),
+            ResolvedType::Result(ok) => 1 + self.size_of(ok),
             _ => 8, // Default for structs, enums, functions
         }
     }
