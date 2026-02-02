@@ -1,10 +1,11 @@
 # Map literal syntax test
 # {key: value, ...} creates a map (parallel arrays)
 
-F main() {
+F main() -> i64 {
     # Simple integer map
     m := {1: 10, 2: 20, 3: 30}
 
     # Print to verify compilation
     println("map literal compiled successfully")
+    0
 }
