@@ -38,7 +38,7 @@ fn configure_type_checker(checker: &mut TypeChecker) {
     }
 }
 use vais_codegen::{CodeGenerator, TargetTriple};
-use vais_codegen::optimize::{optimize_ir, OptLevel};
+use vais_codegen::optimize::{optimize_ir_with_pgo, OptLevel};
 use vais_lexer::tokenize;
 use vais_parser::parse;
 use vais_types::{TypeChecker};
@@ -1448,7 +1448,7 @@ fn cmd_build(
         }
         vais_codegen::parallel::parallel_optimize_ir(&raw_ir, opt)
     } else {
-        optimize_ir(&raw_ir, opt)
+        optimize_ir_with_pgo(&raw_ir, opt, &pgo_mode)
     };
 
     // Run plugin optimizations

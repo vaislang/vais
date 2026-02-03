@@ -27,6 +27,11 @@ name = "compiler_benchmarks"
 path = "compiler_benchmarks.rs"
 harness = false
 
+[[bench]]
+name = "inlining_bench"
+path = "inlining_bench.rs"
+harness = false
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }

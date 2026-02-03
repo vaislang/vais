@@ -321,11 +321,28 @@ impl OptLevel {
 
 /// Apply optimization passes to LLVM IR
 pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
+    optimize_ir_with_pgo(ir, level, &PgoMode::None)
+}
+
+/// Apply optimization passes to LLVM IR with optional PGO support
+///
+/// When PGO is in Generate mode, instrumentation hints are added.
+/// When PGO is in Use mode, profile data guides inlining and optimization decisions.
+pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &PgoMode) -> String {
     if level == OptLevel::O0 {
+        // Even at O0, apply PGO instrumentation if requested
+        if let PgoMode::Generate(_) = pgo {
+            return instrument_ir_for_pgo(ir);
+        }
         return ir.to_string();
     }
 
     let mut result = ir.to_string();
+
+    // PGO Generate: add instrumentation
+    if let PgoMode::Generate(_) = pgo {
+        result = instrument_ir_for_pgo(&result);
+    }
 
     // O1+: Basic optimizations (before inlining to simplify function bodies)
     if level >= OptLevel::O1 {
@@ -333,9 +350,6 @@ pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
         result = dead_store_elimination(&result);
         result = branch_optimization(&result);
         result = conditional_branch_simplification(&result);
-        // Note: basic_block_merging is disabled for now due to phi node complexity
-        // The right fix is to not generate empty blocks in the first place (codegen level)
-        // result = basic_block_merging(&result);
     }
 
     // O1+: Tail call optimization - mark tail calls with 'tail' or 'musttail'
@@ -351,6 +365,11 @@ pub fn optimize_ir(ir: &str, level: OptLevel) -> String {
     // O3: Inlining after basic optimizations
     if level >= OptLevel::O3 {
         result = aggressive_inline(&result);
+    }
+
+    // PGO Use: apply profile-guided hints (hot/cold function annotations)
+    if let PgoMode::Use(profile_path) = pgo {
+        result = apply_pgo_hints(&result, profile_path);
     }
 
     // O2+: CSE and DCE after inlining to clean up
@@ -1459,12 +1478,36 @@ struct InlinableFunction {
     return_type: String,
     body: Vec<String>,
     has_side_effects: bool,
+    has_external_calls: bool,
+}
+
+/// Count how many times each function is called in the IR
+fn count_call_sites(ir: &str) -> HashMap<String, usize> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for line in ir.lines() {
+        let trimmed = line.trim();
+        if trimmed.contains("call ") {
+            // Extract function name from call: call TYPE @func_name(
+            if let Some(at_pos) = trimmed.find("@") {
+                let after_at = &trimmed[at_pos..];
+                if let Some(paren_pos) = after_at.find('(') {
+                    let func_name = &after_at[..paren_pos];
+                    *counts.entry(func_name.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    counts
 }
 
 /// Aggressive inlining for small functions
+///
+/// Prioritizes functions by call frequency (hot functions first) and supports
+/// larger function bodies (up to 50 instructions). Functions called more
+/// frequently are inlined first for maximum benefit.
 pub(crate) fn aggressive_inline(ir: &str) -> String {
     // Parse all small functions that are candidates for inlining
-    let inline_candidates = find_inline_candidates(ir);
+    let mut inline_candidates = find_inline_candidates(ir);
 
     #[cfg(debug_assertions)]
     {
@@ -1479,6 +1522,24 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
         return ir.to_string();
     }
 
+    // Count call sites and sort candidates by frequency (most called first)
+    let call_counts = count_call_sites(ir);
+    inline_candidates.sort_by(|a, b| {
+        let count_a = call_counts.get(&a.name).copied().unwrap_or(0);
+        let count_b = call_counts.get(&b.name).copied().unwrap_or(0);
+        // Primary: higher call count first; Secondary: smaller body first
+        count_b.cmp(&count_a).then(a.body.len().cmp(&b.body.len()))
+    });
+
+    #[cfg(debug_assertions)]
+    {
+        for func in &inline_candidates {
+            let count = call_counts.get(&func.name).copied().unwrap_or(0);
+            eprintln!("DEBUG: Inline priority: {} (calls={}, body={})",
+                     func.name, count, func.body.len());
+        }
+    }
+
     // Inline function calls
     let mut result = ir.to_string();
     let mut inline_counter = 0;
@@ -1491,10 +1552,16 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
 }
 
 /// Find functions that are good candidates for inlining
+///
+/// Uses a tiered threshold:
+/// - Functions ≤ 10 instructions: always inline (even with internal side effects like stores)
+/// - Functions ≤ 50 instructions: inline if no external call side effects
+/// - Functions > 50 instructions: never inline at text level (rely on LLVM's inliner)
 fn find_inline_candidates(ir: &str) -> Vec<InlinableFunction> {
     let mut candidates = Vec::new();
     let lines: Vec<&str> = ir.lines().collect();
-    let small_threshold = 10; // instructions
+    let large_threshold = 50; // max instructions for inlining
+    let small_threshold = 10; // always-inline threshold (even with store side effects)
 
     let mut i = 0;
     while i < lines.len() {
@@ -1503,14 +1570,31 @@ fn find_inline_candidates(ir: &str) -> Vec<InlinableFunction> {
         // Look for function definitions
         if line.starts_with("define ") && line.contains("@") {
             if let Some(func) = parse_function(&lines, i) {
-                // Check if function is small enough and doesn't have disqualifying features
                 let body_size = func.body.len();
                 let is_main = func.name == "@main";
                 let is_internal = func.name.starts_with("@__") || func.name.starts_with("@_");
                 let is_recursive = func.body.iter().any(|l| l.contains(&format!("call {} {}", func.return_type, func.name)));
 
-                // Don't inline: main, internal helpers, recursive functions, or functions with side effects
-                if body_size <= small_threshold && !is_main && !is_internal && !is_recursive && !func.has_side_effects {
+                // Never inline: main, internal helpers, recursive functions
+                if is_main || is_internal || is_recursive {
+                    i += 1;
+                    continue;
+                }
+
+                // Tiered inlining:
+                // - Small functions (≤10 instructions): inline even with store side effects
+                // - Medium functions (≤50): inline only if no side effects
+                let eligible = if body_size <= small_threshold {
+                    // Small functions: allow store side effects but not external calls
+                    !func.has_external_calls
+                } else if body_size <= large_threshold {
+                    // Medium functions: must be pure (no side effects at all)
+                    !func.has_side_effects
+                } else {
+                    false
+                };
+
+                if eligible {
                     candidates.push(func);
                 }
             }
@@ -1554,6 +1638,7 @@ fn parse_function(lines: &[&str], start_idx: usize) -> Option<InlinableFunction>
     // So the { is on the same line as define, and } is on its own line
     let mut body = Vec::new();
     let mut has_side_effects = false;
+    let mut has_external_calls = false;
 
     for line in lines.iter().skip(start_idx + 1) {
         let trimmed = line.trim();
@@ -1569,17 +1654,14 @@ fn parse_function(lines: &[&str], start_idx: usize) -> Option<InlinableFunction>
         }
 
         // Check for side effects
-        // Store operations have side effects
+        // Store operations have side effects (but are internal/local)
         if trimmed.starts_with("store ") {
             has_side_effects = true;
         }
-        // Calls to external functions have side effects
-        // But we'll allow calls to functions we're analyzing (they'll be checked separately)
+        // Calls to functions have side effects
         if trimmed.contains("call ") {
-            // Check if it's a call to an external function (starts with @)
-            // For now, mark all calls as having side effects to be safe
-            // In a more sophisticated implementation, we could track which functions are pure
             has_side_effects = true;
+            has_external_calls = true;
         }
 
         body.push(trimmed.to_string());
@@ -1591,6 +1673,7 @@ fn parse_function(lines: &[&str], start_idx: usize) -> Option<InlinableFunction>
         return_type,
         body,
         has_side_effects,
+        has_external_calls,
     })
 }
 

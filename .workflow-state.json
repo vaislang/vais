@@ -1,17 +1,16 @@
 {
-  "phase": 5,
-  "request": "Phase 30 성능 최적화 - Stage 1 inkwell 기능 패리티",
+  "phase": 4,
+  "request": "Phase 30 성능 최적화 - Stage 3~6 자동 진행",
   "tasks": [
     { "id": 1, "name": "Phase 30 Stage 1: inkwell 백엔드 AST 동기화 (78개 에러 수정)", "status": "completed", "model": "Opus" },
     { "id": 2, "name": "Phase 30 Stage 1: extern 빌트인 함수 등록 + 표현식 지원 확대", "status": "completed", "model": "Opus" },
     { "id": 3, "name": "Phase 30 Stage 1: inkwell 남은 기능 패리티 (클로저/impl/generics)", "status": "completed", "model": "Opus" },
     { "id": 4, "name": "Phase 30 Stage 1: inkwell 85%→98% (PHI노드/슬라이스/SIMD 수정)", "status": "completed", "model": "Opus" },
     { "id": 5, "name": "Phase 30 Stage 2: TCO 꼬리 호출 최적화", "status": "completed", "model": "Opus" },
-    { "id": 6, "name": "Phase 30 Stage 3: 인라이닝 & PGO", "status": "pending", "model": "Sonnet" },
+    { "id": 6, "name": "Phase 30 Stage 3: 인라이닝 & PGO", "status": "in_progress", "model": "Sonnet" },
     { "id": 7, "name": "Phase 30 Stage 4: MIR 최적화 파이프라인", "status": "pending", "model": "Opus" },
     { "id": 8, "name": "Phase 30 Stage 5: 경계 검사 제거 & SIMD 강화", "status": "pending", "model": "Opus" },
     { "id": 9, "name": "Phase 30 Stage 6: 벤치마크 스위트", "status": "pending", "model": "Sonnet" }
   ],
-  "currentTask": null,
-  "lastCompleted": "Phase 30 Stage 2: TCO 꼬리 호출 최적화"
+  "currentTask": 6
 }
