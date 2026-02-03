@@ -886,6 +886,179 @@ fn generate_loop_metadata(loop_id: u32, candidate: &VectorizationCandidate, targ
     md
 }
 
+/// Reduction operation kind detected in a loop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReductionKind {
+    /// Sum reduction: acc += val
+    Add,
+    /// Product reduction: acc *= val
+    Mul,
+    /// Min reduction: acc = min(acc, val)
+    Min,
+    /// Max reduction: acc = max(acc, val)
+    Max,
+    /// Bitwise OR reduction
+    Or,
+    /// Bitwise AND reduction
+    And,
+    /// Bitwise XOR reduction
+    Xor,
+}
+
+impl ReductionKind {
+    /// Get the LLVM metadata string for this reduction kind.
+    pub fn llvm_metadata(&self) -> &'static str {
+        match self {
+            ReductionKind::Add => "llvm.loop.vectorize.followup_reduction_add",
+            ReductionKind::Mul => "llvm.loop.vectorize.followup_reduction_mul",
+            ReductionKind::Min => "llvm.loop.vectorize.followup_reduction_min",
+            ReductionKind::Max => "llvm.loop.vectorize.followup_reduction_max",
+            ReductionKind::Or => "llvm.loop.vectorize.followup_reduction_or",
+            ReductionKind::And => "llvm.loop.vectorize.followup_reduction_and",
+            ReductionKind::Xor => "llvm.loop.vectorize.followup_reduction_xor",
+        }
+    }
+
+    /// Get the identity element for this reduction.
+    pub fn identity_i64(&self) -> i64 {
+        match self {
+            ReductionKind::Add | ReductionKind::Or | ReductionKind::Xor => 0,
+            ReductionKind::Mul => 1,
+            ReductionKind::Min => i64::MAX,
+            ReductionKind::Max => i64::MIN,
+            ReductionKind::And => -1, // all ones
+        }
+    }
+}
+
+/// Detect reduction patterns in a loop body.
+///
+/// Looks for PHI nodes that accumulate values through add/mul/min/max operations.
+/// Pattern: `%acc = phi [identity, %entry], [%acc.next, %loop]`
+///          `%acc.next = add %acc, %val` (or mul, etc.)
+pub fn detect_reductions(ir: &str, loop_header: &str) -> Vec<(String, ReductionKind)> {
+    let mut reductions = Vec::new();
+    let lines: Vec<&str> = ir.lines().collect();
+    let mut in_loop = false;
+    let mut phi_accumulators: Vec<(String, String)> = Vec::new(); // (acc_var, next_var)
+
+    // Pass 1: Find PHI nodes that look like accumulators
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed == format!("{}:", loop_header) {
+            in_loop = true;
+            continue;
+        }
+        if !in_loop {
+            continue;
+        }
+        // End of loop block (next label or function end)
+        if (trimmed.ends_with(':') && trimmed != format!("{}:", loop_header)) && !phi_accumulators.is_empty() {
+            break;
+        }
+        // Match: %acc = phi i64 [ 0, %entry ], [ %acc.next, %loop ]
+        if trimmed.contains("= phi") {
+            if let Some((acc_var, next_var)) = parse_accumulator_phi(trimmed) {
+                phi_accumulators.push((acc_var, next_var));
+            }
+        }
+    }
+
+    // Pass 2: Find the update operations for each accumulator
+    in_loop = false;
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed == format!("{}:", loop_header) {
+            in_loop = true;
+            continue;
+        }
+        if !in_loop {
+            continue;
+        }
+
+        for (acc_var, next_var) in &phi_accumulators {
+            // Match: %acc.next = add i64 %acc, %val
+            if trimmed.starts_with(&format!("{} =", next_var)) || trimmed.starts_with(&format!("{} =", next_var.trim())) {
+                if let Some(kind) = detect_reduction_op(trimmed, acc_var) {
+                    reductions.push((acc_var.clone(), kind));
+                }
+            }
+        }
+    }
+
+    reductions
+}
+
+/// Parse a PHI node that looks like an accumulator.
+/// Returns (accumulator_var, next_value_var).
+fn parse_accumulator_phi(line: &str) -> Option<(String, String)> {
+    // Pattern: %acc = phi i64 [ 0, %entry ], [ %acc.next, %body ]
+    if !line.contains("= phi") {
+        return None;
+    }
+
+    let acc_var = line.split('=').next()?.trim().to_string();
+    if !acc_var.starts_with('%') {
+        return None;
+    }
+
+    // Find the second bracket group [%next_var, %label]
+    let mut bracket_count = 0;
+    let mut second_bracket_start = None;
+    for (i, ch) in line.char_indices() {
+        if ch == '[' {
+            bracket_count += 1;
+            if bracket_count == 2 {
+                second_bracket_start = Some(i + 1);
+                break;
+            }
+        }
+    }
+
+    let start = second_bracket_start?;
+    let rest = &line[start..];
+    let end = rest.find(']')?;
+    let inner = &rest[..end];
+
+    // inner = "%acc.next, %body"
+    let parts: Vec<&str> = inner.split(',').collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let next_var = parts[0].trim().to_string();
+    if next_var.starts_with('%') {
+        Some((acc_var, next_var))
+    } else {
+        None
+    }
+}
+
+/// Detect the reduction operation kind from an assignment.
+fn detect_reduction_op(line: &str, acc_var: &str) -> Option<ReductionKind> {
+    if !line.contains(acc_var) {
+        return None;
+    }
+
+    // Check for common patterns
+    if line.contains(" add ") || line.contains(" fadd ") {
+        Some(ReductionKind::Add)
+    } else if line.contains(" mul ") || line.contains(" fmul ") {
+        Some(ReductionKind::Mul)
+    } else if line.contains(" or ") {
+        Some(ReductionKind::Or)
+    } else if line.contains(" and ") {
+        Some(ReductionKind::And)
+    } else if line.contains(" xor ") {
+        Some(ReductionKind::Xor)
+    } else if line.contains("@llvm.smin") || line.contains("@llvm.umin") || line.contains("@llvm.minnum") {
+        Some(ReductionKind::Min)
+    } else if line.contains("@llvm.smax") || line.contains("@llvm.umax") || line.contains("@llvm.maxnum") {
+        Some(ReductionKind::Max)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -959,5 +1132,41 @@ exit:
         let access = parse_memory_access(store, true).unwrap();
         assert_eq!(access.base, "%ptr");
         assert!(access.is_write);
+    }
+
+    #[test]
+    fn test_detect_sum_reduction() {
+        let ir = r#"
+define i64 @sum(i64* %arr, i64 %n) {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+  %acc = phi i64 [ 0, %entry ], [ %acc.next, %loop ]
+  %ptr = getelementptr i64, i64* %arr, i64 %i
+  %val = load i64, i64* %ptr
+  %acc.next = add i64 %acc, %val
+  %i.next = add i64 %i, 1
+  %cond = icmp slt i64 %i.next, %n
+  br i1 %cond, label %loop, label %exit
+
+exit:
+  ret i64 %acc
+}
+"#;
+        let reductions = detect_reductions(ir, "loop");
+        // Both %i (induction) and %acc are detected as Add reductions
+        assert!(reductions.len() >= 1);
+        let acc_reduction = reductions.iter().find(|(var, _)| var == "%acc");
+        assert!(acc_reduction.is_some(), "Should detect %acc as a reduction");
+        assert_eq!(acc_reduction.unwrap().1, ReductionKind::Add);
+    }
+
+    #[test]
+    fn test_reduction_identity() {
+        assert_eq!(ReductionKind::Add.identity_i64(), 0);
+        assert_eq!(ReductionKind::Mul.identity_i64(), 1);
+        assert_eq!(ReductionKind::Min.identity_i64(), i64::MAX);
     }
 }

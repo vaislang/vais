@@ -9,8 +9,8 @@
     { "id": 5, "name": "Phase 30 Stage 2: TCO 꼬리 호출 최적화", "status": "completed", "model": "Opus" },
     { "id": 6, "name": "Phase 30 Stage 3: 인라이닝 & PGO", "status": "completed", "model": "Sonnet" },
     { "id": 7, "name": "Phase 30 Stage 4: MIR 최적화 파이프라인", "status": "completed", "model": "Opus" },
-    { "id": 8, "name": "Phase 30 Stage 5: 경계 검사 제거 & SIMD 강화", "status": "in_progress", "model": "Opus" },
-    { "id": 9, "name": "Phase 30 Stage 6: 벤치마크 스위트", "status": "pending", "model": "Sonnet" }
+    { "id": 8, "name": "Phase 30 Stage 5: 경계 검사 제거 & SIMD 강화", "status": "completed", "model": "Opus" },
+    { "id": 9, "name": "Phase 30 Stage 6: 벤치마크 스위트", "status": "in_progress", "model": "Sonnet" }
   ],
-  "currentTask": 8
+  "currentTask": 9
 }

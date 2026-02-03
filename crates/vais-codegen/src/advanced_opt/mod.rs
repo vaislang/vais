@@ -5,9 +5,11 @@
 //! - **Interprocedural Alias Analysis**: Cross-function pointer alias tracking
 //! - **Auto-vectorization**: Automatic loop vectorization with LLVM hints
 //! - **Cache-friendly Data Layout**: Structure layout optimization for cache efficiency
+//! - **Bounds Check Elimination**: Range analysis to remove redundant bounds checks
 
 pub mod alias_analysis;
 pub mod auto_vectorize;
+pub mod bounds_check_elim;
 pub mod data_layout;
 
 pub use alias_analysis::{
@@ -16,11 +18,17 @@ pub use alias_analysis::{
 };
 pub use auto_vectorize::{
     AutoVectorizer, VectorizationCandidate, LoopDependence, VectorWidth,
-    analyze_vectorization, generate_vectorization_hints,
+    ReductionKind, analyze_vectorization, generate_vectorization_hints,
+    detect_reductions,
+};
+pub use bounds_check_elim::{
+    ValueRange, RangeAnalysis, BoundsCheck,
+    analyze_bounds_checks, eliminate_bounds_checks,
 };
 pub use data_layout::{
     DataLayoutOptimizer, StructLayout, FieldInfo, LayoutSuggestion,
     optimize_struct_layout, suggest_aos_to_soa,
+    suggest_field_reorder, padding_savings,
 };
 
 use crate::optimize::OptLevel;
@@ -34,6 +42,8 @@ pub struct AdvancedOptConfig {
     pub auto_vectorize: bool,
     /// Enable data layout optimization
     pub data_layout_opt: bool,
+    /// Enable bounds check elimination via range analysis
+    pub bounds_check_elim: bool,
     /// Target vector width (default: 256 for AVX2)
     pub vector_width: VectorWidth,
     /// Cache line size in bytes (default: 64)
@@ -48,6 +58,7 @@ impl Default for AdvancedOptConfig {
             alias_analysis: true,
             auto_vectorize: true,
             data_layout_opt: true,
+            bounds_check_elim: true,
             vector_width: VectorWidth::AVX2,
             cache_line_size: 64,
             aggressive: false,
@@ -63,18 +74,21 @@ impl AdvancedOptConfig {
                 alias_analysis: false,
                 auto_vectorize: false,
                 data_layout_opt: false,
+                bounds_check_elim: false,
                 ..Default::default()
             },
             OptLevel::O1 => Self {
                 alias_analysis: true,
                 auto_vectorize: false,
                 data_layout_opt: false,
+                bounds_check_elim: false,
                 ..Default::default()
             },
             OptLevel::O2 => Self {
                 alias_analysis: true,
                 auto_vectorize: true,
                 data_layout_opt: true,
+                bounds_check_elim: true,
                 aggressive: false,
                 ..Default::default()
             },
@@ -82,6 +96,7 @@ impl AdvancedOptConfig {
                 alias_analysis: true,
                 auto_vectorize: true,
                 data_layout_opt: true,
+                bounds_check_elim: true,
                 aggressive: true,
                 ..Default::default()
             },
@@ -100,12 +115,17 @@ pub fn apply_advanced_optimizations(ir: &str, config: &AdvancedOptConfig) -> Str
         None
     };
 
-    // Phase 2: Auto-vectorization hints
+    // Phase 2: Bounds check elimination via range analysis (before vectorization)
+    if config.bounds_check_elim {
+        result = eliminate_bounds_checks(&result);
+    }
+
+    // Phase 3: Auto-vectorization hints
     if config.auto_vectorize {
         result = generate_vectorization_hints(&result, config.vector_width, alias_info.as_ref());
     }
 
-    // Phase 3: Data layout optimization annotations
+    // Phase 4: Data layout optimization annotations
     if config.data_layout_opt {
         result = apply_data_layout_hints(&result, config.cache_line_size);
     }

@@ -428,6 +428,60 @@ pub fn suggest_aos_to_soa(
     }
 }
 
+/// Suggest optimal field ordering for a struct to minimize padding.
+///
+/// Sorts fields by alignment (descending), so larger fields come first,
+/// naturally reducing internal padding.
+pub fn suggest_field_reorder(fields: &[(String, String)]) -> Vec<(String, String)> {
+    let mut fields_with_align: Vec<(String, String, usize)> = fields.iter()
+        .map(|(name, ty)| {
+            let (_, align) = type_size_align(ty);
+            (name.clone(), ty.clone(), align)
+        })
+        .collect();
+
+    // Sort by alignment descending (stable sort to preserve order among same-alignment fields)
+    fields_with_align.sort_by(|a, b| b.2.cmp(&a.2));
+
+    fields_with_align.into_iter()
+        .map(|(name, ty, _)| (name, ty))
+        .collect()
+}
+
+/// Calculate the padding savings from reordering struct fields.
+pub fn padding_savings(fields: &[(String, String)]) -> (usize, usize) {
+    // Original layout
+    let original_padding = calculate_padding(fields);
+
+    // Optimized layout
+    let optimized = suggest_field_reorder(fields);
+    let optimized_padding = calculate_padding(&optimized);
+
+    (original_padding, optimized_padding)
+}
+
+/// Calculate total padding for a given field order.
+fn calculate_padding(fields: &[(String, String)]) -> usize {
+    let mut offset = 0usize;
+    let mut total_data = 0usize;
+
+    for (_, ty) in fields {
+        let (size, align) = type_size_align(ty);
+        offset = align_to(offset, align);
+        offset += size;
+        total_data += size;
+    }
+
+    // Final alignment to largest field
+    let max_align = fields.iter()
+        .map(|(_, ty)| type_size_align(ty).1)
+        .max()
+        .unwrap_or(1);
+    offset = align_to(offset, max_align);
+
+    offset - total_data
+}
+
 // Helper functions
 
 fn align_to(offset: usize, alignment: usize) -> usize {
@@ -665,5 +719,30 @@ entry:
             matches!(s, LayoutSuggestion::ReorderFields { struct_name, .. } if struct_name == "Mixed")
         });
         assert!(has_reorder);
+    }
+
+    #[test]
+    fn test_suggest_field_reorder() {
+        let fields = vec![
+            ("a".to_string(), "i8".to_string()),
+            ("b".to_string(), "i64".to_string()),
+            ("c".to_string(), "i32".to_string()),
+            ("d".to_string(), "i8".to_string()),
+        ];
+        let reordered = suggest_field_reorder(&fields);
+        // i64 should come first, then i32, then i8s
+        assert_eq!(reordered[0].1, "i64");
+        assert_eq!(reordered[1].1, "i32");
+    }
+
+    #[test]
+    fn test_padding_savings() {
+        let fields = vec![
+            ("a".to_string(), "i8".to_string()),
+            ("b".to_string(), "i64".to_string()),
+            ("c".to_string(), "i8".to_string()),
+        ];
+        let (original, optimized) = padding_savings(&fields);
+        assert!(original > optimized, "Reordering should reduce padding: {} > {}", original, optimized);
     }
 }
