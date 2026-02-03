@@ -53,6 +53,16 @@
             {
               "name": "constant.character.escape.vais",
               "match": "\\\\(x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]+\\}|[0nrt\\\\'\"])"
+            },
+            {
+              "name": "meta.interpolation.vais",
+              "begin": "(?<!\\{)\\{(?!\\{)",
+              "end": "\\}",
+              "beginCaptures": { "0": { "name": "punctuation.definition.interpolation.begin.vais" } },
+              "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.vais" } },
+              "patterns": [
+                { "include": "source.vais" }
+              ]
             }
           ]
         },
@@ -97,7 +107,7 @@
       "patterns": [
         {
           "name": "keyword.control.async.vais",
-          "match": "\\b(A|async|await)\\b"
+          "match": "\\b(A|Y|async|await)\\b"
         }
       ]
     },
@@ -160,6 +170,14 @@
           "match": "@"
         },
         {
+          "name": "keyword.operator.pipe.vais",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.spread.vais",
+          "match": "\\.\\."
+        },
+        {
           "name": "keyword.operator.comparison.vais",
           "match": "(==|!=|<|>|<=|>=)"
         },
@@ -197,7 +215,7 @@
         },
         {
           "name": "support.function.builtin.vais",
-          "match": "\\b(puts|putchar|print_i64|malloc|free|strlen)\\b"
+          "match": "\\b(puts|putchar|println|print|format|print_i64|print_f64|malloc|free|strlen)\\b"
         }
       ]
     },

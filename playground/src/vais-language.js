@@ -9,7 +9,7 @@ export function registerVaisLanguage(monaco) {
     tokenPostfix: '.vais',
 
     keywords: [
-      'F', 'S', 'E', 'I', 'L', 'M', 'T', 'U', 'R', 'C', 'O',
+      'F', 'S', 'E', 'I', 'L', 'M', 'T', 'U', 'R', 'C', 'O', 'A', 'Y',
       'break', 'continue', 'return', 'true', 'false',
       'async', 'await', 'pub', 'mut', 'const', 'static',
       'impl', 'trait', 'where', 'self', 'Self', 'super',
@@ -29,7 +29,7 @@ export function registerVaisLanguage(monaco) {
       '+', '-', '*', '/', '&', '|', '^', '%',
       '<<', '>>', '>>>', '+=', '-=', '*=', '/=', '&=',
       '|=', '^=', '%=', '<<=', '>>=', '>>>=', '=>',
-      '@', ':='
+      '@', ':=', '|>'
     ],
 
     symbols: /[=><!~?:&|+\-*\/\^%@]+/,
@@ -187,6 +187,8 @@ export function registerVaisLanguage(monaco) {
         { label: 'str', kind: monaco.languages.CompletionItemKind.TypeParameter, insertText: 'str' },
 
         // Built-in functions
+        { label: 'println', kind: monaco.languages.CompletionItemKind.Function, insertText: 'println("${1:text}")', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+        { label: 'print', kind: monaco.languages.CompletionItemKind.Function, insertText: 'print("${1:text}")', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'puts', kind: monaco.languages.CompletionItemKind.Function, insertText: 'puts("${1:text}")', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'putchar', kind: monaco.languages.CompletionItemKind.Function, insertText: 'putchar(${1:char})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
         { label: 'printf', kind: monaco.languages.CompletionItemKind.Function, insertText: 'printf("${1:format}", ${2:args})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },

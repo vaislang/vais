@@ -29,6 +29,18 @@ Vais 프로그래밍 언어를 학습하고 숙달하기 위한 2주 커리큘�
 | `S` | Struct (구조체) | `S Point { x: i64, y: i64 }` |
 | `E` | Enum (열거형) | `E Result { Ok, Err }` |
 | `T` | Trait (특성) | `T Comparable { ... }` |
+| `Y` | Await (비동기 대기) | `result.Y` |
+| `~` | Mut 축약 (가변) | `~ x := 0` |
+
+**토큰 절감 문법 (v1.0)**
+
+| 문법 | 설명 | 예시 |
+|------|------|------|
+| `{expr}` | 문자열 보간 | `println("x={x}")` |
+| `\|>` | 파이프 연산자 | `x \|> f \|> g` |
+| `~` | mut 축약 | `~ count := 0` |
+| `Y` | await 축약 | `data.Y` |
+| `(a, b) :=` | 디스트럭처링 | `(x, y) := get_pair()` |
 
 **변수 바인딩**
 
@@ -40,6 +52,10 @@ name := "Vais"
 # 가변 변수 바인딩
 counter := mut 0
 counter = counter + 1
+
+# ~ 축약 (mut의 단축 표기)
+~ total := 0
+total = total + 1
 ```
 
 **기본 타입**
@@ -67,8 +83,9 @@ is_error: bool = false
 **Hello World**
 
 ```vais
-F main() {
-    print("Hello, Vais!")
+F main() -> i64 {
+    println("Hello, Vais!")
+    0
 }
 ```
 
@@ -321,10 +338,10 @@ F count_to(n: i64) -> i64 {
     0
 }
 
-# 루프 내에서의 누적
+# 루프 내에서의 누적 (~ 축약 사용)
 F sum_n(n: i64) -> i64 {
-    total := mut 0
-    counter := mut 1
+    ~ total := 0
+    ~ counter := 1
     L {
         I counter > n {
             B
@@ -368,6 +385,38 @@ F sum_array(arr: *i64, len: i64, idx: i64) -> i64 {
 }
 
 F main() -> i64 = fib(10)  # 55
+```
+
+#### 파이프 연산자 (Pipe Operator)
+
+```vais
+# |> 연산자로 함수를 연쇄 호출
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+
+# 왼쪽 값을 오른쪽 함수의 첫 인자로 전달
+F main() -> i64 {
+    # 5 |> double |> add_one = add_one(double(5)) = 11
+    result := 5 |> double |> add_one
+    result
+}
+```
+
+#### 문자열 보간 (String Interpolation)
+
+```vais
+F main() -> i64 {
+    name := "Vais"
+    x := 42
+
+    # {expr} 으로 변수/표현식 삽입
+    println("Hello, {name}!")
+    println("x = {x}, x*2 = {x * 2}")
+
+    # {{ }} 으로 중괄호 이스케이프
+    println("Literal: {{braces}}")
+    0
+}
 ```
 
 #### 클로저 (Closures)
@@ -955,10 +1004,10 @@ F async fetch_data(url: str) -> str {
     "response data"
 }
 
-# await를 사용한 비동기 대기
+# await를 사용한 비동기 대기 (Y 축약 사용 가능)
 F async process_data() -> i64 {
-    data := await fetch_data("https://api.example.com")
-    puts(data)
+    data := fetch_data("https://api.example.com").Y
+    println("Data: {data}")
     0
 }
 

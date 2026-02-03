@@ -293,6 +293,106 @@ F main() -> i64 {
 }`
   },
 
+  'string-interpolation': {
+    name: 'String Interpolation',
+    description: 'Embed expressions in strings with {expr}',
+    code: `# String interpolation example
+F main() -> i64 {
+    name := "Vais"
+    version := 1
+
+    # Variable interpolation
+    println("Hello, {name}!")
+
+    # Expression interpolation
+    println("1 + 2 = {1 + 2}")
+
+    # Escaped braces
+    println("Use {{braces}} for literal braces")
+
+    0
+}`
+  },
+
+  'pipe-operator': {
+    name: 'Pipe Operator',
+    description: 'Chain functions with |>',
+    code: `# Pipe operator |> example
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+F square(x: i64) -> i64 = x * x
+
+F main() -> i64 {
+    # 5 |> double |> add_one = add_one(double(5)) = 11
+    result := 5 |> double |> add_one
+
+    # Chain multiple transformations
+    result2 := 3 |> square |> double |> add_one
+
+    0
+}`
+  },
+
+  'tilde-mut': {
+    name: 'Tilde Mut (~)',
+    description: 'Shorthand ~ for mut keyword',
+    code: `# ~ is shorthand for mut
+F main() -> i64 {
+    # Traditional mutable
+    counter := mut 0
+
+    # ~ shorthand (equivalent)
+    ~ total := 0
+
+    L i: 0..10 {
+        counter = counter + 1
+        total = total + i
+    }
+
+    0
+}`
+  },
+
+  'destructuring': {
+    name: 'Destructuring',
+    description: 'Tuple destructuring with :=',
+    code: `# Tuple destructuring example
+F get_pair() -> (i64, i64) = (10, 20)
+
+F swap(a: i64, b: i64) -> (i64, i64) = (b, a)
+
+F main() -> i64 {
+    # Destructure tuple
+    (x, y) := get_pair()
+
+    # Destructure swap result
+    (a, b) := swap(1, 2)
+
+    0
+}`
+  },
+
+  'type-infer-params': {
+    name: 'Parameter Type Inference',
+    description: 'Omit parameter types when inferable',
+    code: `# Parameter types can be omitted
+F add(a, b) = a + b
+F multiply(a, b) = a * b
+
+# Mixed: some explicit, some inferred
+F greet(name: str) -> i64 {
+    println("Hello, {name}!")
+    0
+}
+
+F main() -> i64 {
+    result := add(10, 20)
+    product := multiply(3, 4)
+    greet("Vais")
+    0
+}`
+  },
+
   'minimal': {
     name: 'Minimal Program',
     description: 'Simplest valid program',

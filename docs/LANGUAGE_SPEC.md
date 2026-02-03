@@ -1,6 +1,6 @@
 # Vais Language Specification
 
-Version: 0.0.1
+Version: 1.0.0
 
 ## Table of Contents
 
@@ -84,6 +84,14 @@ Examples: `x`, `my_var`, `Counter`, `_private`
 "Line with \"quotes\""
 ```
 
+**String Interpolation:**
+```vais
+name := "Vais"
+println("Hello, {name}!")           # Variable interpolation
+println("Result: {2 + 3}")         # Expression interpolation
+println("Escaped: {{not interp}}") # Escaped braces
+```
+
 **Boolean Literals:**
 ```vais
 true
@@ -118,14 +126,21 @@ Note: Constants are defined with the `C` keyword followed by identifier, type, a
 
 ### Multi-letter Keywords
 
-- `mut` - Mutable variable/reference
+- `mut` - Mutable variable/reference (also available as `~` shorthand)
 - `self` - Instance reference
 - `Self` - Type reference in impl
 - `true`, `false` - Boolean literals
 - `spawn` - Spawn async task
-- `await` - Await async result
+- `await` - Await async result (also available as `Y` shorthand)
 - `weak` - Weak reference
 - `clone` - Clone operation
+
+### Shorthand Keywords (Phase 29)
+
+| Shorthand | Replaces | Example |
+|-----------|----------|---------|
+| `~` | `mut` | `x := ~ 0` (mutable variable) |
+| `Y` | `await` | `result.Y` (postfix await) |
 
 ---
 
@@ -225,8 +240,10 @@ Pair<A, B>  # Multiple type parameters
 | `::` | Path separator | `std::math::PI` |
 | `->` | Function return type | `F add()->i64` |
 | `=>` | Match arm separator | `0 => "zero"` |
-| `..` | Range (exclusive) | `0..10` |
+| `..` | Range (exclusive) / Spread | `0..10`, `[..arr]` |
 | `..=` | Range (inclusive) | `0..=10` |
+| `\|>` | Pipe operator | `x \|> f \|> g` (equivalent to `g(f(x))`) |
+| `~` | Mutable shorthand | `x := ~ 0` (same as `x := mut 0`) |
 
 ---
 
@@ -309,6 +326,41 @@ Equivalent to:
 F fib(n:i64)->i64 = n<2 ? n : fib(n-1) + fib(n-2)
 ```
 
+### Pipe Operator
+
+The `|>` operator passes the left-hand value as the first argument to the right-hand function:
+
+```vais
+# x |> f is equivalent to f(x)
+result := 5 |> double |> add_one
+
+# Chaining multiple transformations
+F double(x: i64) -> i64 = x * 2
+F add_one(x: i64) -> i64 = x + 1
+
+F main() -> i64 = 5 |> double |> add_one  # 11
+```
+
+### String Interpolation
+
+Embed expressions inside string literals with `{expr}`:
+
+```vais
+name := "World"
+println("Hello, {name}!")          # Variable
+println("Sum: {2 + 3}")           # Expression
+println("Escaped: {{braces}}")    # Literal braces with {{ }}
+```
+
+### Tuple Destructuring
+
+Unpack tuple values into multiple variables:
+
+```vais
+(a, b) := get_pair()
+(x, y, z) := (1, 2, 3)
+```
+
 ### Block Expressions
 
 Blocks are expressions that return the value of their last expression:
@@ -328,14 +380,17 @@ Blocks are expressions that return the value of their last expression:
 ### Variable Declaration
 
 ```vais
-# Type-inferred
+# Type-inferred (immutable)
 x := 10
 
 # Explicit type
 y: i64 = 20
 
-# Mutable (future)
+# Mutable
 mut z := 30
+
+# Mutable with ~ shorthand
+~ w := 30    # equivalent to: mut w := 30
 ```
 
 ### If-Else Expression
@@ -447,6 +502,25 @@ F factorial(n:i64)->i64 {
 
 ```vais
 F example(x: i64, y: f64, name: str) -> i64 { ... }
+```
+
+### Parameter Type Inference
+
+Parameter types can be omitted when they can be inferred from call sites:
+
+```vais
+# Types inferred from usage
+F add(a, b) = a + b
+
+# Mixed: some explicit, some inferred
+F scale(x, factor: f64) -> f64 = x * factor
+
+# The compiler infers types from how the function is called
+F main() -> i64 {
+    add(1, 2)       # a: i64, b: i64 inferred
+    scale(3.0, 2.0)  # x: f64 inferred
+    0
+}
 ```
 
 ### Return Types
@@ -794,8 +868,11 @@ F main() -> i64 {
     # Call async function and await result
     result := compute(21).await
 
+    # Using Y shorthand (equivalent to .await)
+    result2 := compute(21).Y
+
     # Chain async calls
-    data := fetch_data("example.com").await
+    data := fetch_data("example.com").Y
 
     0
 }
@@ -883,6 +960,8 @@ The following functions are provided by the compiler:
 
 ```vais
 puts(s: str) -> i64          # Print string with newline
+println(s: str) -> i64       # Print with interpolation support: println("x={x}")
+print(s: str) -> i64         # Print without newline
 putchar(c: i64) -> i64       # Print character
 puts_ptr(ptr: i64) -> i64    # Print C string from pointer
 ```
@@ -935,6 +1014,10 @@ C VERSION: str = "0.0.1"
 5. **Leverage generics** to reduce code duplication
 6. **Import only needed modules** to keep token count low
 7. **Use match exhaustiveness** to catch all cases
+8. **Use `~` instead of `mut`** for maximum token efficiency
+9. **Use `|>` pipe operator** for readable function chaining
+10. **Use string interpolation** `println("x={x}")` instead of manual concatenation
+11. **Omit parameter types** when they can be inferred from call sites
 
 ---
 
@@ -1025,6 +1108,9 @@ Expr         ::= Literal
                | MatchExpr
                | BlockExpr
                | '@' '(' Args ')'
+               | Expr '|>' Expr
+               | StringInterp
+               | '..' Expr
 
 Stmt         ::= 'R' Expr?
                | 'B'
