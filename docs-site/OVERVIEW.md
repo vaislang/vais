@@ -303,8 +303,8 @@ cd docs-site
 ### 문서 작성자 (기여자)
 
 1. **개발 환경 설정**
+   See [INSTALLATION.md](INSTALLATION.md) for mdBook installation, then:
    ```bash
-   cargo install mdbook
    cd docs-site
    ./serve.sh
    ```

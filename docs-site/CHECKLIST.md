@@ -156,12 +156,9 @@
 
 ## 테스트 (로컬) □
 
-실제 빌드를 위해서는 mdBook이 필요합니다:
+실제 빌드를 위해서는 mdBook이 필요합니다. See [INSTALLATION.md](INSTALLATION.md) for mdBook installation, then:
 
 ```bash
-# mdBook 설치
-cargo install mdbook
-
 # 빌드 테스트
 cd docs-site
 ./build.sh

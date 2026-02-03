@@ -6,8 +6,7 @@
 
 ### 필요 사항
 
-- Rust 및 Cargo (mdBook 설치용)
-- mdBook (`cargo install mdbook`)
+mdBook 설치 방법은 [INSTALLATION.md](INSTALLATION.md) 참고
 
 ### 로컬에서 문서 빌드
 
@@ -112,9 +111,7 @@ mdBook의 내장 검색 기능이 자동으로 활성화됩니다. 추가 설정
 
 ### mdBook이 설치되지 않음
 
-```bash
-cargo install mdbook
-```
+자세한 설치 방법은 [INSTALLATION.md](INSTALLATION.md) 참고
 
 ### 빌드 오류
 

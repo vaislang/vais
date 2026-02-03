@@ -771,12 +771,12 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
 
     match nvcc_check {
         Err(_) => {
-            return Err(format!(
+            return Err(
                 "nvcc not found. Please install the CUDA Toolkit:\n\
                  - Linux: https://developer.nvidia.com/cuda-downloads\n\
                  - macOS: CUDA is no longer supported on macOS (use Metal instead)\n\
-                 - Set CUDA_PATH or add nvcc to PATH"
-            ));
+                 - Set CUDA_PATH or add nvcc to PATH".to_string()
+            );
         }
         Ok(output) if !output.status.success() => {
             return Err("nvcc found but failed to run. Check CUDA Toolkit installation.".to_string());
@@ -1128,7 +1128,7 @@ fn generate_with_text_backend(
     gc: bool,
     gc_threshold: Option<usize>,
     debug: bool,
-    input: &PathBuf,
+    input: &Path,
     main_source: &str,
     checker: &TypeChecker,
     final_ast: &vais_ast::Module,

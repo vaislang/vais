@@ -1065,6 +1065,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
     }
 
+    #[allow(dead_code)]
     fn generate_literal(&mut self, lit: &Literal) -> CodegenResult<BasicValueEnum<'ctx>> {
         match lit {
             Literal::Int(n) => {
@@ -2731,6 +2732,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Map a type to LLVM, handling generics through substitution
+    #[allow(dead_code)]
     fn map_type_with_generics(&self, ty: &ResolvedType) -> BasicTypeEnum<'ctx> {
         // First substitute any generic parameters
         let substituted = self.substitute_type(ty);

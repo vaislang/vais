@@ -12,10 +12,7 @@ git clone https://github.com/vaislang/vais.git
 cd vais/docs-site
 ```
 
-2. mdBook 설치:
-```bash
-cargo install mdbook
-```
+2. mdBook 설치는 [INSTALLATION.md](INSTALLATION.md) 참고
 
 3. 개발 서버 시작:
 ```bash

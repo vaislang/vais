@@ -232,9 +232,7 @@ cd docs-site
    ```
 
 2. **mdBook 업데이트**
-   ```bash
-   cargo install mdbook --force
-   ```
+   See [INSTALLATION.md](INSTALLATION.md) for mdBook installation and update instructions.
 
 3. **문서 동기화**
    - 원본 문서 업데이트 시 자동 반영

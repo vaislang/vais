@@ -145,13 +145,7 @@ mdbook build
 
 ### mdBook 설치
 
-```bash
-# Cargo로 설치
-cargo install mdbook
-
-# 업데이트
-cargo install mdbook --force
-```
+설치 방법은 [INSTALLATION.md](INSTALLATION.md) 참고
 
 ## 유용한 명령어
 
