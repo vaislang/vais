@@ -3927,3 +3927,686 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ===== Phase 31 Stage 5: StringMap & OwnedString Tests =====
+
+#[test]
+fn e2e_stringmap_insert_and_get() {
+    // Test StringMap with str keys: insert, get, update, remove
+    let source = r#"
+# Hash a string key using DJB2 (operates on i64 pointer)
+F hash_str(p: i64) -> i64 {
+    hash_str_rec(p, 5381, 0)
+}
+F hash_str_rec(p: i64, h: i64, i: i64) -> i64 {
+    b := load_byte(p + i)
+    I b == 0 { I h < 0 { 0 - h } E { h } }
+    E { hash_str_rec(p, h * 33 + b, i + 1) }
+}
+
+# Compare two i64 string pointers byte-by-byte
+F ptr_str_eq(a: i64, b: i64) -> i64 {
+    I a == b { R 1 }
+    I a == 0 || b == 0 { R 0 }
+    ptr_str_eq_rec(a, b, 0)
+}
+F ptr_str_eq_rec(a: i64, b: i64, i: i64) -> i64 {
+    ca := load_byte(a + i)
+    cb := load_byte(b + i)
+    I ca != cb { 0 }
+    E I ca == 0 { 1 }
+    E { ptr_str_eq_rec(a, b, i + 1) }
+}
+
+# Duplicate a string from i64 pointer
+F ptr_str_dup(p: i64) -> i64 {
+    I p == 0 { R 0 }
+    len := str_len_raw(p, 0)
+    buf := malloc(len + 1)
+    memcpy(buf, p, len + 1)
+    buf
+}
+F str_len_raw(p: i64, i: i64) -> i64 {
+    I load_byte(p + i) == 0 { i } E { str_len_raw(p, i + 1) }
+}
+
+F init_buckets(buckets: i64, i: i64, cap: i64) -> i64 {
+    I i >= cap { 0 }
+    E { store_i64(buckets + i * 8, 0); init_buckets(buckets, i + 1, cap) }
+}
+
+S StringMap { buckets: i64, size: i64, cap: i64 }
+
+X StringMap {
+    F with_capacity(capacity: i64) -> StringMap {
+        cap := I capacity < 8 { 8 } E { capacity }
+        buckets := malloc(cap * 8)
+        init_buckets(buckets, 0, cap)
+        StringMap { buckets: buckets, size: 0, cap: cap }
+    }
+    F len(&self) -> i64 = self.size
+
+    # Public API uses str, converts to i64 via str_to_ptr
+    F set(&self, key: str, value: i64) -> i64 {
+        kp := str_to_ptr(key)
+        @.set_raw(kp, value)
+    }
+    F get(&self, key: str) -> i64 {
+        kp := str_to_ptr(key)
+        @.get_raw(kp)
+    }
+    F contains(&self, key: str) -> i64 {
+        kp := str_to_ptr(key)
+        @.contains_raw(kp)
+    }
+    F remove(&self, key: str) -> i64 {
+        kp := str_to_ptr(key)
+        @.remove_raw(kp)
+    }
+
+    # Internal i64 pointer API
+    F hash_key(&self, kp: i64) -> i64 { h := hash_str(kp); h % self.cap }
+
+    F set_raw(&self, kp: i64, value: i64) -> i64 {
+        idx := @.hash_key(kp)
+        ep := load_i64(self.buckets + idx * 8)
+        result := @.update_chain(ep, kp, value)
+        I result >= 0 { result }
+        E {
+            kc := ptr_str_dup(kp)
+            ne := malloc(24)
+            store_i64(ne, kc)
+            store_i64(ne + 8, value)
+            store_i64(ne + 16, ep)
+            store_i64(self.buckets + idx * 8, ne)
+            self.size = self.size + 1
+            0
+        }
+    }
+    F get_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp)
+        ep := load_i64(self.buckets + idx * 8)
+        @.get_chain(ep, kp)
+    }
+    F get_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 }
+        E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { load_i64(ep + 8) }
+            E { @.get_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F contains_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp)
+        ep := load_i64(self.buckets + idx * 8)
+        @.contains_chain(ep, kp)
+    }
+    F contains_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 }
+        E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { 1 }
+            E { @.contains_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F update_chain(&self, ep: i64, kp: i64, value: i64) -> i64 {
+        I ep == 0 { 0 - 1 }
+        E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 {
+                old := load_i64(ep + 8)
+                store_i64(ep + 8, value)
+                old
+            } E { @.update_chain(load_i64(ep + 16), kp, value) }
+        }
+    }
+    F remove_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp)
+        ep := load_i64(self.buckets + idx * 8)
+        @.remove_chain(idx, 0, ep, kp)
+    }
+    F remove_chain(&self, bi: i64, prev: i64, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 }
+        E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 {
+                val := load_i64(ep + 8)
+                nxt := load_i64(ep + 16)
+                _ := I prev == 0 { store_i64(self.buckets + bi * 8, nxt); 0 }
+                     E { store_i64(prev + 16, nxt); 0 }
+                free(ek)
+                free(ep)
+                self.size = self.size - 1
+                val
+            } E { @.remove_chain(bi, ep, load_i64(ep + 16), kp) }
+        }
+    }
+}
+
+F main() -> i64 {
+    m := StringMap.with_capacity(16)
+    m.set("hello", 100)
+    m.set("world", 200)
+    m.set("vais", 300)
+    I m.len() != 3 { R 1 }
+    I m.get("hello") != 100 { R 2 }
+    I m.get("world") != 200 { R 3 }
+    I m.get("vais") != 300 { R 4 }
+    I m.contains("hello") != 1 { R 5 }
+    I m.contains("missing") != 0 { R 6 }
+    m.set("hello", 999)
+    I m.get("hello") != 999 { R 7 }
+    I m.len() != 3 { R 8 }
+    removed := m.remove("world")
+    I removed != 200 { R 9 }
+    I m.len() != 2 { R 10 }
+    I m.contains("world") != 0 { R 11 }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_stringmap_collision_handling() {
+    // Test collision handling with very small bucket count
+    let source = r#"
+F hash_str(p: i64) -> i64 { hash_str_rec(p, 5381, 0) }
+F hash_str_rec(p: i64, h: i64, i: i64) -> i64 {
+    b := load_byte(p + i)
+    I b == 0 { I h < 0 { 0 - h } E { h } }
+    E { hash_str_rec(p, h * 33 + b, i + 1) }
+}
+F ptr_str_eq(a: i64, b: i64) -> i64 {
+    I a == b { R 1 }
+    I a == 0 || b == 0 { R 0 }
+    ptr_str_eq_rec(a, b, 0)
+}
+F ptr_str_eq_rec(a: i64, b: i64, i: i64) -> i64 {
+    ca := load_byte(a + i)
+    cb := load_byte(b + i)
+    I ca != cb { 0 } E I ca == 0 { 1 } E { ptr_str_eq_rec(a, b, i + 1) }
+}
+F ptr_str_dup(p: i64) -> i64 {
+    I p == 0 { R 0 }
+    len := str_len_raw(p, 0)
+    buf := malloc(len + 1)
+    memcpy(buf, p, len + 1)
+    buf
+}
+F str_len_raw(p: i64, i: i64) -> i64 {
+    I load_byte(p + i) == 0 { i } E { str_len_raw(p, i + 1) }
+}
+F init_buckets(buckets: i64, i: i64, cap: i64) -> i64 {
+    I i >= cap { 0 } E { store_i64(buckets + i * 8, 0); init_buckets(buckets, i + 1, cap) }
+}
+
+S StringMap { buckets: i64, size: i64, cap: i64 }
+X StringMap {
+    F with_capacity(capacity: i64) -> StringMap {
+        cap := I capacity < 8 { 8 } E { capacity }
+        buckets := malloc(cap * 8)
+        init_buckets(buckets, 0, cap)
+        StringMap { buckets: buckets, size: 0, cap: cap }
+    }
+    F len(&self) -> i64 = self.size
+    F set(&self, key: str, value: i64) -> i64 { kp := str_to_ptr(key); @.set_raw(kp, value) }
+    F get(&self, key: str) -> i64 { kp := str_to_ptr(key); @.get_raw(kp) }
+    F contains(&self, key: str) -> i64 { kp := str_to_ptr(key); @.contains_raw(kp) }
+    F hash_key(&self, kp: i64) -> i64 { h := hash_str(kp); h % self.cap }
+    F set_raw(&self, kp: i64, value: i64) -> i64 {
+        idx := @.hash_key(kp)
+        ep := load_i64(self.buckets + idx * 8)
+        result := @.update_chain(ep, kp, value)
+        I result >= 0 { result }
+        E {
+            kc := ptr_str_dup(kp)
+            ne := malloc(24)
+            store_i64(ne, kc); store_i64(ne + 8, value); store_i64(ne + 16, ep)
+            store_i64(self.buckets + idx * 8, ne)
+            self.size = self.size + 1; 0
+        }
+    }
+    F get_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp)
+        @.get_chain(load_i64(self.buckets + idx * 8), kp)
+    }
+    F get_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { load_i64(ep + 8) }
+            E { @.get_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F contains_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp)
+        @.contains_chain(load_i64(self.buckets + idx * 8), kp)
+    }
+    F contains_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { 1 }
+            E { @.contains_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F update_chain(&self, ep: i64, kp: i64, value: i64) -> i64 {
+        I ep == 0 { 0 - 1 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { old := load_i64(ep + 8); store_i64(ep + 8, value); old }
+            E { @.update_chain(load_i64(ep + 16), kp, value) }
+        }
+    }
+}
+
+F main() -> i64 {
+    # Small capacity forces collisions
+    m := StringMap.with_capacity(2)
+    m.set("alpha", 1)
+    m.set("beta", 2)
+    m.set("gamma", 3)
+    m.set("delta", 4)
+    m.set("epsilon", 5)
+    I m.len() != 5 { R 1 }
+    I m.get("alpha") != 1 { R 2 }
+    I m.get("beta") != 2 { R 3 }
+    I m.get("gamma") != 3 { R 4 }
+    I m.get("delta") != 4 { R 5 }
+    I m.get("epsilon") != 5 { R 6 }
+    I m.contains("alpha") != 1 { R 7 }
+    I m.contains("nonexistent") != 0 { R 8 }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_owned_string_basic() {
+    // Test OwnedString: from_str, push_char, push_str, eq_str, clone, clear
+    let source = r#"
+S OwnedString { data: i64, len: i64, cap: i64 }
+
+X OwnedString {
+    F with_capacity(capacity: i64) -> OwnedString {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        store_byte(data, 0)
+        OwnedString { data: data, len: 0, cap: cap }
+    }
+    F from_cstr(s: str) -> OwnedString {
+        p := str_to_ptr(s)
+        len := strlen(s)
+        cap := len + 16
+        data := malloc(cap)
+        memcpy(data, p, len + 1)
+        OwnedString { data: data, len: len, cap: cap }
+    }
+    F len(&self) -> i64 = self.len
+    F push_char(&self, c: i64) -> i64 {
+        I self.len >= self.cap - 1 { @.grow() } E { 0 }
+        store_byte(self.data + self.len, c)
+        self.len = self.len + 1
+        store_byte(self.data + self.len, 0)
+        self.len
+    }
+    F push_cstr(&self, s: str) -> i64 {
+        p := str_to_ptr(s)
+        slen := strlen(s)
+        I slen == 0 { R self.len }
+        I self.len + slen + 1 > self.cap { @.grow() } E { 0 }
+        memcpy(self.data + self.len, p, slen + 1)
+        self.len = self.len + slen
+        self.len
+    }
+    F grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 16 { 16 } E { self.cap * 2 }
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len + 1)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+    F eq_cstr(&self, s: str) -> i64 {
+        p := str_to_ptr(s)
+        slen := strlen(s)
+        I self.len != slen { R 0 }
+        memcmp_rec(self.data, p, 0, self.len)
+    }
+    F copy(&self) -> OwnedString {
+        new_data := malloc(self.cap)
+        memcpy(new_data, self.data, self.len + 1)
+        OwnedString { data: new_data, len: self.len, cap: self.cap }
+    }
+    F clear(&self) -> i64 {
+        self.len = 0
+        store_byte(self.data, 0)
+        0
+    }
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        0
+    }
+}
+
+F memcmp_rec(a: i64, b: i64, idx: i64, len: i64) -> i64 {
+    I idx >= len { 1 }
+    E {
+        I load_byte(a + idx) != load_byte(b + idx) { 0 }
+        E { memcmp_rec(a, b, idx + 1, len) }
+    }
+}
+
+F main() -> i64 {
+    s := OwnedString.from_cstr("hello")
+    I s.len() != 5 { R 1 }
+    I s.eq_cstr("hello") != 1 { R 2 }
+    I s.eq_cstr("world") != 0 { R 3 }
+    s.push_char(33)
+    I s.len() != 6 { R 4 }
+    I s.eq_cstr("hello!") != 1 { R 5 }
+    s.push_cstr(" world")
+    I s.len() != 12 { R 6 }
+    I s.eq_cstr("hello! world") != 1 { R 7 }
+    s2 := s.copy()
+    I s2.eq_cstr("hello! world") != 1 { R 8 }
+    s.clear()
+    I s.len() != 0 { R 9 }
+    I s2.eq_cstr("hello! world") != 1 { R 10 }
+    e := OwnedString.with_capacity(32)
+    I e.len() != 0 { R 11 }
+    e.push_cstr("test")
+    I e.eq_cstr("test") != 1 { R 12 }
+    s.drop()
+    s2.drop()
+    e.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_stringmap_with_dynamic_keys() {
+    // Test StringMap + OwnedString: build dynamic keys, insert, look up with literals
+    let source = r#"
+F hash_str(p: i64) -> i64 { hash_str_rec(p, 5381, 0) }
+F hash_str_rec(p: i64, h: i64, i: i64) -> i64 {
+    b := load_byte(p + i)
+    I b == 0 { I h < 0 { 0 - h } E { h } } E { hash_str_rec(p, h * 33 + b, i + 1) }
+}
+F ptr_str_eq(a: i64, b: i64) -> i64 {
+    I a == b { R 1 }
+    I a == 0 || b == 0 { R 0 }
+    ptr_str_eq_rec(a, b, 0)
+}
+F ptr_str_eq_rec(a: i64, b: i64, i: i64) -> i64 {
+    ca := load_byte(a + i)
+    cb := load_byte(b + i)
+    I ca != cb { 0 }
+    E I ca == 0 { 1 }
+    E { ptr_str_eq_rec(a, b, i + 1) }
+}
+F ptr_str_dup(p: i64) -> i64 {
+    I p == 0 { R 0 }
+    len := str_len_raw(p, 0)
+    buf := malloc(len + 1)
+    memcpy(buf, p, len + 1)
+    buf
+}
+F str_len_raw(p: i64, i: i64) -> i64 {
+    I load_byte(p + i) == 0 { i } E { str_len_raw(p, i + 1) }
+}
+F init_buckets(buckets: i64, i: i64, cap: i64) -> i64 {
+    I i >= cap { 0 }
+    E {
+        store_i64(buckets + i * 8, 0)
+        init_buckets(buckets, i + 1, cap)
+    }
+}
+
+S StringMap { buckets: i64, size: i64, cap: i64 }
+X StringMap {
+    F with_capacity(capacity: i64) -> StringMap {
+        cap := I capacity < 8 { 8 } E { capacity }
+        buckets := malloc(cap * 8)
+        init_buckets(buckets, 0, cap)
+        StringMap { buckets: buckets, size: 0, cap: cap }
+    }
+    F len(&self) -> i64 = self.size
+    F set(&self, key: str, value: i64) -> i64 {
+        kp := str_to_ptr(key)
+        @.set_raw(kp, value)
+    }
+    F get(&self, key: str) -> i64 {
+        kp := str_to_ptr(key)
+        @.get_raw(kp)
+    }
+    F set_ptr(&self, kp: i64, value: i64) -> i64 {
+        @.set_raw(kp, value)
+    }
+    F get_ptr(&self, kp: i64) -> i64 {
+        @.get_raw(kp)
+    }
+    F hash_key(&self, kp: i64) -> i64 {
+        h := hash_str(kp)
+        h % self.cap
+    }
+    F set_raw(&self, kp: i64, value: i64) -> i64 {
+        idx := @.hash_key(kp)
+        ep := load_i64(self.buckets + idx * 8)
+        result := @.update_chain(ep, kp, value)
+        I result >= 0 { result }
+        E {
+            kc := ptr_str_dup(kp)
+            ne := malloc(24)
+            store_i64(ne, kc)
+            store_i64(ne + 8, value)
+            store_i64(ne + 16, ep)
+            store_i64(self.buckets + idx * 8, ne)
+            self.size = self.size + 1
+            0
+        }
+    }
+    F get_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp)
+        @.get_chain(load_i64(self.buckets + idx * 8), kp)
+    }
+    F get_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 }
+        E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { load_i64(ep + 8) }
+            E { @.get_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F update_chain(&self, ep: i64, kp: i64, value: i64) -> i64 {
+        I ep == 0 { 0 - 1 }
+        E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 {
+                old := load_i64(ep + 8)
+                store_i64(ep + 8, value)
+                old
+            } E { @.update_chain(load_i64(ep + 16), kp, value) }
+        }
+    }
+}
+
+S OwnedString { data: i64, len: i64, cap: i64 }
+X OwnedString {
+    F with_capacity(capacity: i64) -> OwnedString {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        store_byte(data, 0)
+        OwnedString { data: data, len: 0, cap: cap }
+    }
+    F as_ptr(&self) -> i64 = self.data
+    F push_cstr(&self, s: str) -> i64 {
+        p := str_to_ptr(s)
+        slen := strlen(s)
+        I slen == 0 { R self.len }
+        I self.len + slen + 1 > self.cap { @.grow() } E { 0 }
+        memcpy(self.data + self.len, p, slen + 1)
+        self.len = self.len + slen
+        self.len
+    }
+    F grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 16 { 16 } E { self.cap * 2 }
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len + 1)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        0
+    }
+}
+
+F main() -> i64 {
+    m := StringMap.with_capacity(16)
+    key1 := OwnedString.with_capacity(64)
+    key1.push_cstr("table_")
+    key1.push_cstr("users")
+    key2 := OwnedString.with_capacity(64)
+    key2.push_cstr("table_")
+    key2.push_cstr("orders")
+    m.set_ptr(key1.as_ptr(), 42)
+    m.set_ptr(key2.as_ptr(), 99)
+    I m.len() != 2 { R 1 }
+    I m.get("table_users") != 42 { R 2 }
+    I m.get("table_orders") != 99 { R 3 }
+    I m.get_ptr(key1.as_ptr()) != 42 { R 4 }
+    I m.get_ptr(key2.as_ptr()) != 99 { R 5 }
+    key1.drop()
+    key2.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_stringmap_delete_and_reinsert() {
+    // Test delete + reinsert of same key
+    let source = r#"
+F hash_str(p: i64) -> i64 { hash_str_rec(p, 5381, 0) }
+F hash_str_rec(p: i64, h: i64, i: i64) -> i64 {
+    b := load_byte(p + i)
+    I b == 0 { I h < 0 { 0 - h } E { h } } E { hash_str_rec(p, h * 33 + b, i + 1) }
+}
+F ptr_str_eq(a: i64, b: i64) -> i64 {
+    I a == b { R 1 }; I a == 0 || b == 0 { R 0 }; ptr_str_eq_rec(a, b, 0)
+}
+F ptr_str_eq_rec(a: i64, b: i64, i: i64) -> i64 {
+    ca := load_byte(a + i); cb := load_byte(b + i)
+    I ca != cb { 0 } E I ca == 0 { 1 } E { ptr_str_eq_rec(a, b, i + 1) }
+}
+F ptr_str_dup(p: i64) -> i64 {
+    I p == 0 { R 0 }; len := str_len_raw(p, 0)
+    buf := malloc(len + 1); memcpy(buf, p, len + 1); buf
+}
+F str_len_raw(p: i64, i: i64) -> i64 {
+    I load_byte(p + i) == 0 { i } E { str_len_raw(p, i + 1) }
+}
+F init_buckets(buckets: i64, i: i64, cap: i64) -> i64 {
+    I i >= cap { 0 } E { store_i64(buckets + i * 8, 0); init_buckets(buckets, i + 1, cap) }
+}
+
+S StringMap { buckets: i64, size: i64, cap: i64 }
+X StringMap {
+    F with_capacity(capacity: i64) -> StringMap {
+        cap := I capacity < 8 { 8 } E { capacity }
+        buckets := malloc(cap * 8); init_buckets(buckets, 0, cap)
+        StringMap { buckets: buckets, size: 0, cap: cap }
+    }
+    F len(&self) -> i64 = self.size
+    F set(&self, key: str, value: i64) -> i64 { kp := str_to_ptr(key); @.set_raw(kp, value) }
+    F get(&self, key: str) -> i64 { kp := str_to_ptr(key); @.get_raw(kp) }
+    F contains(&self, key: str) -> i64 { kp := str_to_ptr(key); @.contains_raw(kp) }
+    F remove(&self, key: str) -> i64 { kp := str_to_ptr(key); @.remove_raw(kp) }
+    F hash_key(&self, kp: i64) -> i64 { h := hash_str(kp); h % self.cap }
+    F set_raw(&self, kp: i64, value: i64) -> i64 {
+        idx := @.hash_key(kp); ep := load_i64(self.buckets + idx * 8)
+        result := @.update_chain(ep, kp, value)
+        I result >= 0 { result } E {
+            kc := ptr_str_dup(kp); ne := malloc(24)
+            store_i64(ne, kc); store_i64(ne + 8, value); store_i64(ne + 16, ep)
+            store_i64(self.buckets + idx * 8, ne); self.size = self.size + 1; 0
+        }
+    }
+    F get_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp); @.get_chain(load_i64(self.buckets + idx * 8), kp)
+    }
+    F get_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { load_i64(ep + 8) }
+            E { @.get_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F contains_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp); @.contains_chain(load_i64(self.buckets + idx * 8), kp)
+    }
+    F contains_chain(&self, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { 1 } E { @.contains_chain(load_i64(ep + 16), kp) }
+        }
+    }
+    F update_chain(&self, ep: i64, kp: i64, value: i64) -> i64 {
+        I ep == 0 { 0 - 1 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 { old := load_i64(ep + 8); store_i64(ep + 8, value); old }
+            E { @.update_chain(load_i64(ep + 16), kp, value) }
+        }
+    }
+    F remove_raw(&self, kp: i64) -> i64 {
+        idx := @.hash_key(kp); ep := load_i64(self.buckets + idx * 8)
+        @.remove_chain(idx, 0, ep, kp)
+    }
+    F remove_chain(&self, bi: i64, prev: i64, ep: i64, kp: i64) -> i64 {
+        I ep == 0 { 0 } E {
+            ek := load_i64(ep)
+            I ptr_str_eq(ek, kp) == 1 {
+                val := load_i64(ep + 8); nxt := load_i64(ep + 16)
+                _ := I prev == 0 { store_i64(self.buckets + bi * 8, nxt); 0 }
+                     E { store_i64(prev + 16, nxt); 0 }
+                free(ek); free(ep); self.size = self.size - 1; val
+            } E { @.remove_chain(bi, ep, load_i64(ep + 16), kp) }
+        }
+    }
+}
+
+F main() -> i64 {
+    m := StringMap.with_capacity(8)
+    m.set("name", 1)
+    m.set("age", 2)
+    m.set("city", 3)
+    removed := m.remove("age")
+    I removed != 2 { R 1 }
+    I m.len() != 2 { R 2 }
+    I m.contains("age") != 0 { R 3 }
+    m.set("age", 99)
+    I m.len() != 3 { R 4 }
+    I m.get("age") != 99 { R 5 }
+    I m.get("name") != 1 { R 6 }
+    I m.get("city") != 3 { R 7 }
+    m.remove("name")
+    m.remove("age")
+    m.remove("city")
+    I m.len() != 0 { R 8 }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}

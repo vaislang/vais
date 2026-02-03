@@ -1,0 +1,179 @@
+# OwnedString - heap-allocated string with length tracking and automatic lifecycle
+# Unlike raw i8* pointers, OwnedString tracks its length and capacity,
+# owns its buffer, and can be safely converted to/from str (i8*).
+# Useful for building string keys, paths, and dynamic text in DB engines.
+
+U std/option
+
+S OwnedString {
+    data: i64,      # Pointer to heap-allocated char buffer (i8*)
+    len: i64,       # Current length (excluding null terminator)
+    cap: i64        # Allocated capacity
+}
+
+X OwnedString {
+    # Create an empty OwnedString with given capacity
+    F with_capacity(capacity: i64) -> OwnedString {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        store_byte(data, 0)
+        OwnedString { data: data, len: 0, cap: cap }
+    }
+
+    # Create OwnedString from a null-terminated string (copies the data)
+    F from_str(s: i64) -> OwnedString {
+        I s == 0 {
+            OwnedString.with_capacity(16)
+        } E {
+            len := strlen(s)
+            cap := len + 16
+            data := malloc(cap)
+            memcpy(data, s, len + 1)
+            OwnedString { data: data, len: len, cap: cap }
+        }
+    }
+
+    # Get length
+    F len(&self) -> i64 = self.len
+
+    # Get capacity
+    F capacity(&self) -> i64 = self.cap
+
+    # Check if empty
+    F is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } E { 0 }
+    }
+
+    # Get raw pointer (for passing to FFI or str-based APIs)
+    F as_ptr(&self) -> i64 = self.data
+
+    # Get character at index (ASCII value)
+    F char_at(&self, index: i64) -> i64 {
+        I index < 0 || index >= self.len { 0 }
+        E { load_byte(self.data + index) }
+    }
+
+    # Push a single character
+    F push_char(&self, c: i64) -> i64 {
+        I self.len >= self.cap - 1 {
+            @.grow()
+        }
+        store_byte(self.data + self.len, c)
+        self.len = self.len + 1
+        store_byte(self.data + self.len, 0)
+        self.len
+    }
+
+    # Append a null-terminated string
+    F push_str(&self, s: i64) -> i64 {
+        I s == 0 { R self.len }
+        slen := strlen(s)
+        I slen == 0 { R self.len }
+
+        # Ensure enough capacity
+        needed := self.len + slen + 1
+        @.ensure_capacity(needed)
+
+        memcpy(self.data + self.len, s, slen + 1)
+        self.len = self.len + slen
+        self.len
+    }
+
+    # Ensure at least `needed` bytes of capacity
+    F ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { R self.cap }
+        new_cap := self.cap
+        L {
+            I new_cap >= needed { B 0 }
+            new_cap = new_cap * 2
+        }
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len + 1)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    # Grow capacity (double it)
+    F grow(&self) -> i64 {
+        new_cap := self.cap * 2
+        I new_cap < 16 { new_cap = 16 }
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len + 1)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    # Compare with another OwnedString by content
+    F eq(&self, other: OwnedString) -> i64 {
+        I self.len != other.len { R 0 }
+        owned_str_memcmp(self.data, other.data, self.len)
+    }
+
+    # Compare with a null-terminated string
+    F eq_str(&self, s: i64) -> i64 {
+        I s == 0 { R I self.len == 0 { 1 } E { 0 } }
+        slen := strlen(s)
+        I self.len != slen { R 0 }
+        owned_str_memcmp(self.data, s, self.len)
+    }
+
+    # Clone (deep copy)
+    F clone(&self) -> OwnedString {
+        new_data := malloc(self.cap)
+        memcpy(new_data, self.data, self.len + 1)
+        OwnedString { data: new_data, len: self.len, cap: self.cap }
+    }
+
+    # Clear contents (keep allocated memory)
+    F clear(&self) -> i64 {
+        self.len = 0
+        store_byte(self.data, 0)
+        0
+    }
+
+    # Print the string
+    F print(&self) -> i64 {
+        puts_ptr(self.data)
+    }
+
+    # Free all memory
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        0
+    }
+}
+
+# Helper: byte-by-byte comparison (returns 1 if equal, 0 if not)
+F owned_str_memcmp(a: i64, b: i64, len: i64) -> i64 {
+    owned_str_memcmp_loop(a, b, 0, len)
+}
+
+F owned_str_memcmp_loop(a: i64, b: i64, idx: i64, len: i64) -> i64 {
+    I idx >= len { 1 }
+    E {
+        I load_byte(a + idx) != load_byte(b + idx) { 0 }
+        E { owned_str_memcmp_loop(a, b, idx + 1, len) }
+    }
+}
+
+# Convenience: concatenate two OwnedStrings into a new one
+F owned_str_concat(a: OwnedString, b: OwnedString) -> OwnedString {
+    new_len := a.len + b.len
+    new_cap := new_len + 16
+    data := malloc(new_cap)
+    memcpy(data, a.data, a.len)
+    memcpy(data + a.len, b.data, b.len + 1)
+    OwnedString { data: data, len: new_len, cap: new_cap }
+}
+
+# Convenience: create OwnedString from literal
+F owned_str(s: i64) -> OwnedString {
+    OwnedString.from_str(s)
+}
