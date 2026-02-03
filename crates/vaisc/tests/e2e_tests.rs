@@ -3655,3 +3655,275 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ==================== Phase 31 Stage 4: Allocator Pointer-Based State Mutation ====================
+
+#[test]
+fn test_bump_allocator_state_mutation() {
+    // Verify BumpAllocator.alloc() actually advances offset via pointer-based self
+    let source = r#"
+S BumpAllocator {
+    buffer: i64,
+    capacity: i64,
+    offset: i64,
+    allocated: i64
+}
+
+X BumpAllocator {
+    F new(capacity: i64) -> BumpAllocator {
+        buffer := malloc(capacity)
+        BumpAllocator { buffer: buffer, capacity: capacity, offset: 0, allocated: 0 }
+    }
+
+    F alloc(&self, size: i64, align: i64) -> i64 {
+        mask := align - 1
+        aligned_offset := (self.offset + mask) & (~mask)
+        new_offset := aligned_offset + size
+        I new_offset > self.capacity { R 0 }
+        ptr := self.buffer + aligned_offset
+        self.offset = new_offset
+        self.allocated = self.allocated + size
+        ptr
+    }
+
+    F remaining(&self) -> i64 = self.capacity - self.offset
+    F total_allocated(&self) -> i64 = self.allocated
+
+    F reset(&self) -> i64 {
+        self.offset = 0
+        self.allocated = 0
+        0
+    }
+
+    F drop(&self) -> i64 {
+        free(self.buffer)
+        0
+    }
+}
+
+F main() -> i64 {
+    alloc := BumpAllocator.new(1024)
+    ptr1 := alloc.alloc(64, 8)
+    I ptr1 == 0 { R 1 }
+    ptr2 := alloc.alloc(128, 8)
+    I ptr2 == 0 { R 2 }
+    I ptr2 <= ptr1 { R 3 }
+    I ptr2 < ptr1 + 64 { R 4 }
+    I alloc.total_allocated() != 192 { R 5 }
+    I alloc.remaining() != 832 { R 6 }
+    alloc.reset()
+    I alloc.remaining() != 1024 { R 7 }
+    ptr3 := alloc.alloc(64, 8)
+    I ptr3 != ptr1 { R 8 }
+    alloc.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_pool_allocator_state_mutation() {
+    // Verify pool allocator with free list correctly updates state via pointer-based self
+    let source = r#"
+S Pool {
+    buf: i64,
+    head: i64,
+    count: i64
+}
+
+X Pool {
+    F new(n: i64) -> Pool {
+        buf := malloc(n * 8)
+        # Initialize 3-element free list manually for testing
+        store_i64(buf, buf + 8)
+        store_i64(buf + 8, buf + 16)
+        store_i64(buf + 16, buf + 24)
+        store_i64(buf + 24, buf + 32)
+        store_i64(buf + 32, buf + 40)
+        store_i64(buf + 40, buf + 48)
+        store_i64(buf + 48, buf + 56)
+        store_i64(buf + 56, buf + 64)
+        store_i64(buf + 64, buf + 72)
+        store_i64(buf + 72, 0)
+        Pool { buf: buf, head: buf, count: n }
+    }
+
+    F alloc(&self) -> i64 {
+        I self.head == 0 { R 0 }
+        block := self.head
+        self.head = load_i64(block)
+        self.count = self.count - 1
+        block
+    }
+
+    F dealloc(&self, ptr: i64) -> i64 {
+        store_i64(ptr, self.head)
+        self.head = ptr
+        self.count = self.count + 1
+        0
+    }
+
+    F available(&self) -> i64 = self.count
+    F drop(&self) -> i64 { free(self.buf); 0 }
+}
+
+F main() -> i64 {
+    p := Pool.new(10)
+    I p.available() != 10 { R 1 }
+    a := p.alloc()
+    I a == 0 { R 2 }
+    b := p.alloc()
+    I b == 0 { R 3 }
+    I a == b { R 4 }
+    I p.available() != 8 { R 5 }
+    p.dealloc(a)
+    I p.available() != 9 { R 6 }
+    c := p.alloc()
+    I c != a { R 7 }
+    p.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_freelist_allocator_state_mutation() {
+    // Verify free list allocator with block splitting correctly updates state
+    let source = r#"
+S FLAlloc {
+    buf: i64,
+    cap: i64,
+    head: i64,
+    used: i64
+}
+
+X FLAlloc {
+    F new(cap: i64) -> FLAlloc {
+        buf := malloc(cap)
+        store_i64(buf, cap)
+        store_i64(buf + 8, 0)
+        FLAlloc { buf: buf, cap: cap, head: buf, used: 0 }
+    }
+
+    F alloc(&self, size: i64) -> i64 {
+        needed := size + 16
+        needed := I needed < 32 { 32 } E { needed }
+        curr := self.head
+        I curr == 0 { R 0 }
+        bsz := load_i64(curr)
+        nxt := load_i64(curr + 8)
+        I bsz >= needed {
+            I bsz >= needed + 32 {
+                new_block := curr + needed
+                store_i64(new_block, bsz - needed)
+                store_i64(new_block + 8, nxt)
+                store_i64(curr, needed)
+                self.head = new_block
+            } E {
+                self.head = nxt
+            }
+            self.used = self.used + load_i64(curr)
+            R curr + 16
+        }
+        0
+    }
+
+    F dealloc(&self, ptr: i64) -> i64 {
+        I ptr == 0 { R 0 }
+        block := ptr - 16
+        bsz := load_i64(block)
+        store_i64(block + 8, self.head)
+        self.head = block
+        self.used = self.used - bsz
+        0
+    }
+
+    F total_used(&self) -> i64 = self.used
+    F drop(&self) -> i64 { free(self.buf); 0 }
+}
+
+F main() -> i64 {
+    a := FLAlloc.new(4096)
+    p1 := a.alloc(64)
+    I p1 == 0 { R 1 }
+    p2 := a.alloc(128)
+    I p2 == 0 { R 2 }
+    I p2 <= p1 { R 3 }
+    I a.total_used() == 0 { R 4 }
+    a.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_stack_allocator_state_mutation() {
+    // Verify StackAllocator alloc/pop correctly track offset
+    let source = r#"
+S StackAllocator {
+    buffer: i64, capacity: i64, offset: i64, prev_offset: i64
+}
+
+X StackAllocator {
+    F new(capacity: i64) -> StackAllocator {
+        buffer := malloc(capacity)
+        StackAllocator {
+            buffer: buffer,
+            capacity: I buffer != 0 { capacity } E { 0 },
+            offset: 0, prev_offset: 0
+        }
+    }
+
+    F alloc(&self, size: i64, align: i64) -> i64 {
+        header_size := 8
+        mask := align - 1
+        aligned_offset := (self.offset + header_size + mask) & (~mask)
+        new_offset := aligned_offset + size
+        I new_offset > self.capacity { R 0 }
+        store_i64(self.buffer + aligned_offset - header_size, self.offset)
+        self.prev_offset = self.offset
+        self.offset = new_offset
+        self.buffer + aligned_offset
+    }
+
+    F pop(&self) -> i64 {
+        I self.offset == 0 { R 0 }
+        self.offset = self.prev_offset
+        0
+    }
+
+    F remaining(&self) -> i64 = self.capacity - self.offset
+
+    F reset(&self) -> i64 {
+        self.offset = 0
+        self.prev_offset = 0
+        0
+    }
+
+    F drop(&self) -> i64 { free(self.buffer); 0 }
+}
+
+F main() -> i64 {
+    stack := StackAllocator.new(1024)
+    I stack.remaining() != 1024 { R 1 }
+    ptr1 := stack.alloc(64, 8)
+    I ptr1 == 0 { R 2 }
+    rem1 := stack.remaining()
+    I rem1 >= 1024 { R 3 }
+    ptr2 := stack.alloc(128, 8)
+    I ptr2 == 0 { R 4 }
+    rem2 := stack.remaining()
+    I rem2 >= rem1 { R 5 }
+    stack.pop()
+    I stack.remaining() != rem1 { R 6 }
+    stack.reset()
+    I stack.remaining() != 1024 { R 7 }
+    stack.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
