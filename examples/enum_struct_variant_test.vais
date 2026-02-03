@@ -29,8 +29,8 @@ F main() -> i64 {
     putchar(10)
 
     puts("Test 1: Enum with struct variants defined")
-    puts("Color enum has: Red, Green, Blue, Custom{r,g,b}")
-    puts("Message enum has: Quit, Move{x,y}, Write(i64), ChangeColor{r,g,b}")
+    puts("Color enum has: Red, Green, Blue, Custom{{r,g,b}}")
+    puts("Message enum has: Quit, Move{{x,y}}, Write(i64), ChangeColor{{r,g,b}}")
     putchar(10)
 
     puts("Test 2: Type checking successful")
