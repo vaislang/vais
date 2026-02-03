@@ -1,0 +1,129 @@
+# ByteBuffer - Growable byte buffer for binary serialization/deserialization
+# This example demonstrates write and read operations on a ByteBuffer
+
+S ByteBuffer {
+    data: i64,
+    len: i64,
+    cap: i64,
+    pos: i64
+}
+
+X ByteBuffer {
+    F with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
+    }
+
+    F ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { R self.cap }
+        new_cap := self.cap
+        L {
+            I new_cap >= needed { B 0 }
+            new_cap = new_cap * 2
+        }
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    F write_u8(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 1)
+        store_byte(self.data + self.len, value & 255)
+        self.len = self.len + 1
+        1
+    }
+
+    F read_u8(&self) -> i64 {
+        I self.pos >= self.len { R 0 - 1 }
+        val := load_byte(self.data + self.pos)
+        self.pos = self.pos + 1
+        val
+    }
+
+    F write_i32_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 4)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        self.len = self.len + 4
+        4
+    }
+
+    F read_i32_le(&self) -> i64 {
+        I self.pos + 4 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        self.pos = self.pos + 4
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+    }
+
+    F write_i64_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 8)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        store_byte(self.data + self.len + 4, (value >> 32) & 255)
+        store_byte(self.data + self.len + 5, (value >> 40) & 255)
+        store_byte(self.data + self.len + 6, (value >> 48) & 255)
+        store_byte(self.data + self.len + 7, (value >> 56) & 255)
+        self.len = self.len + 8
+        8
+    }
+
+    F read_i64_le(&self) -> i64 {
+        I self.pos + 8 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        b4 := load_byte(self.data + self.pos + 4)
+        b5 := load_byte(self.data + self.pos + 5)
+        b6 := load_byte(self.data + self.pos + 6)
+        b7 := load_byte(self.data + self.pos + 7)
+        self.pos = self.pos + 8
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    }
+
+    F rewind(&self) -> i64 {
+        self.pos = 0
+        0
+    }
+
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        self.pos = 0
+        0
+    }
+}
+
+F main() -> i64 {
+    buf := ByteBuffer.with_capacity(64)
+    buf.write_u8(42)
+    buf.write_i32_le(12345)
+    buf.write_i64_le(9876543210)
+
+    buf.rewind()
+
+    val_u8 := buf.read_u8()
+    I val_u8 != 42 { R 1 }
+
+    val_i32 := buf.read_i32_le()
+    I val_i32 != 12345 { R 2 }
+
+    val_i64 := buf.read_i64_le()
+    I val_i64 != 9876543210 { R 3 }
+
+    buf.drop()
+    0
+}

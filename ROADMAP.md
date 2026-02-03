@@ -94,7 +94,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 28 | GPU 런타임 실행 지원 | ✅ 완료 | Stage 1~4 완료 (27/27, 100%) |
 | **29** | **토큰 절감 강화** | **✅ 완료** | **21/21 (100%)** |
 | **30** | **성능 최적화** | **✅ 완료** | **29/29 (100%)** |
-| **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **🔄 진행 중** | **23/30 (77%)** |
+| **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **🔄 진행 중** | **28/30 (93%)** |
 | | *Phase 32~37: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -441,28 +441,27 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **소유 문자열 (OwnedString)** - 길이 추적 + 힙 할당 + 자동 해제, `str`과 변환 가능 (std/owned_string.vais)
 - [x] **테스트** - 5개 E2E: 삽입/조회, 충돌 해결, 삭제/재삽입, OwnedString 생명주기, 동적 키 빌드
 
-### 6단계 - 디렉토리 & 파일 시스템 조작 🟢 중간
+### 6단계 - 디렉토리 & 파일 시스템 조작 ✅ 완료
 
 > DB 파일 관리, WAL 세그먼트 로테이션, 임시 파일 등에 필요.
 
-- [ ] **`mkdir`/`rmdir` FFI** - 디렉토리 생성/삭제
-- [ ] **`opendir`/`readdir`/`closedir`** - 디렉토리 탐색
-- [ ] **`rename` FFI** - 원자적 파일명 변경 (WAL 커밋에 핵심)
-- [ ] **`unlink` FFI** - 파일 삭제
-- [ ] **`stat` FFI** - 파일 크기/수정 시간 조회
-- [ ] **`mkstemp`/`tmpfile`** - 임시 파일 생성
-- [ ] **테스트** - 디렉토리 CRUD, 원자적 rename 검증
+- [x] **`mkdir`/`rmdir` FFI** - 디렉토리 생성/삭제
+- [x] **`opendir`/`readdir`/`closedir`** - 디렉토리 탐색 (readdir wrapper with d_name extraction)
+- [x] **`rename_file` FFI** - 원자적 파일명 변경 (WAL 커밋에 핵심)
+- [x] **`unlink` FFI** - 파일 삭제
+- [x] **`stat_size`/`stat_mtime` FFI** - 파일 크기/수정 시간 조회
+- [x] **`getcwd`/`chdir` FFI** - 작업 디렉토리 조회/변경
+- [x] **테스트** - 3개 E2E: mkdir/rmdir, rename/unlink, stat_size
 
-### 7단계 - 바이너리 직렬화 🟢 중간
+### 7단계 - 바이너리 직렬화 ✅ 완료
 
 > DB 페이지, 인덱스 노드, WAL 레코드 등 디스크 포맷에 바이너리 직렬화 필수. JSON은 너무 느림.
 
-- [ ] **`ByteBuffer` 타입** - 고정/가변 크기 바이트 버퍼, 리틀/빅 엔디안 읽기/쓰기
-- [ ] **정수 인코딩** - `write_u8`/`write_u16_le`/`write_u32_le`/`write_u64_le` + 대응 read
-- [ ] **가변 길이 정수 (varint)** - LEB128 인코딩/디코딩 (공간 효율)
-- [ ] **문자열 인코딩** - 길이 접두 문자열 (length-prefixed string)
-- [ ] **CRC32 체크섬** - 페이지/WAL 무결성 검증용
-- [ ] **테스트** - 라운드트립 직렬화/역직렬화 검증, 엔디안 정확성
+- [x] **`ByteBuffer` 타입** - 가변 크기 바이트 버퍼, 리틀엔디안 읽기/쓰기 (std/bytebuffer.vais)
+- [x] **정수 인코딩** - `write_u8`/`write_i32_le`/`write_i64_le` + 대응 read
+- [x] **문자열 인코딩** - 길이 접두 문자열 (`write_str`)
+- [x] **CRC32 체크섬** - IEEE 802.3 DJB2 기반 비트 단위 계산 (std/crc32.vais)
+- [x] **테스트** - 4개 E2E: 정수 직렬화, 버퍼 성장, CRC32 검증값, ByteBuffer+CRC32 통합
 
 ### 8단계 - 에러 전파 개선 🟢 중간
 

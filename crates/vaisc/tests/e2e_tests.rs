@@ -4610,3 +4610,420 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ========== Phase 31 Stage 6: Filesystem FFI Tests ==========
+
+#[test]
+fn e2e_mkdir_rmdir() {
+    let source = r#"
+F main() -> i64 {
+    rmdir("/tmp/vais_e2e_mkdir_1234")
+    r1 := mkdir("/tmp/vais_e2e_mkdir_1234", 493)
+    I r1 != 0 { R 1 }
+    d := opendir("/tmp/vais_e2e_mkdir_1234")
+    I d == 0 { R 2 }
+    closedir(d)
+    r2 := rmdir("/tmp/vais_e2e_mkdir_1234")
+    I r2 != 0 { R 3 }
+    d2 := opendir("/tmp/vais_e2e_mkdir_1234")
+    I d2 != 0 { closedir(d2); R 4 }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_file_rename_unlink() {
+    let source = r#"
+F main() -> i64 {
+    unlink("/tmp/vais_e2e_rename_old")
+    unlink("/tmp/vais_e2e_rename_new")
+    fp := fopen("/tmp/vais_e2e_rename_old", "w")
+    I fp == 0 { R 1 }
+    fputs("hello", fp)
+    fclose(fp)
+    r := rename_file("/tmp/vais_e2e_rename_old", "/tmp/vais_e2e_rename_new")
+    I r != 0 { R 2 }
+    fp2 := fopen("/tmp/vais_e2e_rename_new", "r")
+    I fp2 == 0 { R 3 }
+    fclose(fp2)
+    fp3 := fopen("/tmp/vais_e2e_rename_old", "r")
+    I fp3 != 0 { fclose(fp3); R 4 }
+    unlink("/tmp/vais_e2e_rename_new")
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_stat_file_size() {
+    let source = r#"
+F main() -> i64 {
+    unlink("/tmp/vais_e2e_stat_size")
+    fp := fopen("/tmp/vais_e2e_stat_size", "w")
+    I fp == 0 { R 1 }
+    fputs("Hello, World!", fp)
+    fclose(fp)
+    size := stat_size("/tmp/vais_e2e_stat_size")
+    unlink("/tmp/vais_e2e_stat_size")
+    I size == 13 { 0 } E { R 2 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+// ========== Phase 31 Stage 7: ByteBuffer + CRC32 Tests ==========
+
+#[test]
+fn e2e_bytebuffer_write_read_integers() {
+    let source = r#"
+F grow_cap(cap: i64, needed: i64) -> i64 {
+    I cap >= needed { cap } E { grow_cap(cap * 2, needed) }
+}
+
+S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
+
+X ByteBuffer {
+    F with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
+    }
+    F ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { R self.cap }
+        new_cap := grow_cap(self.cap, needed)
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+    F write_u8(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 1)
+        store_byte(self.data + self.len, value & 255)
+        self.len = self.len + 1
+        1
+    }
+    F read_u8(&self) -> i64 {
+        I self.pos >= self.len { R 0 - 1 }
+        val := load_byte(self.data + self.pos)
+        self.pos = self.pos + 1
+        val
+    }
+    F write_i32_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 4)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        self.len = self.len + 4
+        4
+    }
+    F read_i32_le(&self) -> i64 {
+        I self.pos + 4 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        self.pos = self.pos + 4
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+    }
+    F write_i64_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 8)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        store_byte(self.data + self.len + 4, (value >> 32) & 255)
+        store_byte(self.data + self.len + 5, (value >> 40) & 255)
+        store_byte(self.data + self.len + 6, (value >> 48) & 255)
+        store_byte(self.data + self.len + 7, (value >> 56) & 255)
+        self.len = self.len + 8
+        8
+    }
+    F read_i64_le(&self) -> i64 {
+        I self.pos + 8 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        b4 := load_byte(self.data + self.pos + 4)
+        b5 := load_byte(self.data + self.pos + 5)
+        b6 := load_byte(self.data + self.pos + 6)
+        b7 := load_byte(self.data + self.pos + 7)
+        self.pos = self.pos + 8
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    }
+    F rewind(&self) -> i64 {
+        self.pos = 0
+        0
+    }
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        self.pos = 0
+        0
+    }
+}
+
+F main() -> i64 {
+    buf := ByteBuffer.with_capacity(64)
+    buf.write_u8(42)
+    buf.write_i32_le(12345)
+    buf.write_i64_le(9876543210)
+    buf.rewind()
+    I buf.read_u8() != 42 { R 1 }
+    I buf.read_i32_le() != 12345 { R 2 }
+    I buf.read_i64_le() != 9876543210 { R 3 }
+    buf.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_bytebuffer_grow() {
+    let source = r#"
+F grow_cap(cap: i64, needed: i64) -> i64 {
+    I cap >= needed { cap } E { grow_cap(cap * 2, needed) }
+}
+
+S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
+
+X ByteBuffer {
+    F with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
+    }
+    F ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { R self.cap }
+        new_cap := grow_cap(self.cap, needed)
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+    F write_u8(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 1)
+        store_byte(self.data + self.len, value & 255)
+        self.len = self.len + 1
+        1
+    }
+    F write_n(&self, n: i64) -> i64 {
+        @.write_n_rec(0, n)
+    }
+    F write_n_rec(&self, i: i64, n: i64) -> i64 {
+        I i >= n { 0 }
+        E {
+            @.write_u8(i & 255)
+            @.write_n_rec(i + 1, n)
+        }
+    }
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        0
+    }
+}
+
+F verify_buf(data: i64, i: i64, n: i64) -> i64 {
+    I i >= n { 0 }
+    E {
+        val := load_byte(data + i)
+        expected := i & 255
+        I val != expected { R i + 1 }
+        verify_buf(data, i + 1, n)
+    }
+}
+
+F main() -> i64 {
+    buf := ByteBuffer.with_capacity(16)
+    buf.write_n(100)
+    I buf.len != 100 { R 1 }
+    I buf.cap < 100 { R 2 }
+    result := verify_buf(buf.data, 0, 100)
+    I result != 0 { R result + 100 }
+    buf.drop()
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_crc32_known_values() {
+    let source = r#"
+F crc32_update_byte(crc: i64, byte_val: i64) -> i64 {
+    v := crc ^ byte_val
+    masked := v & 4294967295
+    crc32_update_bit(masked, 0)
+}
+
+F crc32_update_bit(crc: i64, bit: i64) -> i64 {
+    I bit >= 8 { crc & 4294967295 }
+    E {
+        low_bit := crc & 1
+        shifted := crc >> 1
+        masked_shift := shifted & 2147483647
+        next := I low_bit == 1 {
+            masked_shift ^ 3988292384
+        } E {
+            masked_shift
+        }
+        n := next & 4294967295
+        crc32_update_bit(n, bit + 1)
+    }
+}
+
+F crc32_loop(data: i64, crc: i64, idx: i64, len: i64) -> i64 {
+    I idx >= len { crc }
+    E {
+        byte_val := load_byte(data + idx)
+        new_crc := crc32_update_byte(crc, byte_val)
+        crc32_loop(data, new_crc, idx + 1, len)
+    }
+}
+
+F crc32(data: i64, len: i64) -> i64 {
+    result := crc32_loop(data, 4294967295, 0, len)
+    xored := result ^ 4294967295
+    xored & 4294967295
+}
+
+F crc32_str(s: str) -> i64 {
+    p := str_to_ptr(s)
+    len := strlen(s)
+    crc32(p, len)
+}
+
+F main() -> i64 {
+    r1 := crc32_str("")
+    I r1 != 0 { R 1 }
+    r2 := crc32_str("123456789")
+    I r2 != 3421780262 { R 2 }
+    r3 := crc32_str("a")
+    I r3 != 3904355907 { R 3 }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_bytebuffer_with_crc32() {
+    let source = r#"
+F grow_cap(cap: i64, needed: i64) -> i64 {
+    I cap >= needed { cap } E { grow_cap(cap * 2, needed) }
+}
+
+S ByteBuffer { data: i64, len: i64, cap: i64, pos: i64 }
+
+X ByteBuffer {
+    F with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
+    }
+    F ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { R self.cap }
+        new_cap := grow_cap(self.cap, needed)
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+    F write_u8(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 1)
+        store_byte(self.data + self.len, value & 255)
+        self.len = self.len + 1
+        1
+    }
+    F write_i32_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 4)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        self.len = self.len + 4
+        4
+    }
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        0
+    }
+}
+
+F crc32_update_byte(crc: i64, byte_val: i64) -> i64 {
+    v := crc ^ byte_val
+    masked := v & 4294967295
+    crc32_update_bit(masked, 0)
+}
+
+F crc32_update_bit(crc: i64, bit: i64) -> i64 {
+    I bit >= 8 { crc & 4294967295 }
+    E {
+        low_bit := crc & 1
+        shifted := crc >> 1
+        masked_shift := shifted & 2147483647
+        next := I low_bit == 1 {
+            masked_shift ^ 3988292384
+        } E {
+            masked_shift
+        }
+        n := next & 4294967295
+        crc32_update_bit(n, bit + 1)
+    }
+}
+
+F crc32_loop(data: i64, crc: i64, idx: i64, len: i64) -> i64 {
+    I idx >= len { crc }
+    E {
+        byte_val := load_byte(data + idx)
+        new_crc := crc32_update_byte(crc, byte_val)
+        crc32_loop(data, new_crc, idx + 1, len)
+    }
+}
+
+F crc32(data: i64, len: i64) -> i64 {
+    result := crc32_loop(data, 4294967295, 0, len)
+    xored := result ^ 4294967295
+    xored & 4294967295
+}
+
+F main() -> i64 {
+    buf := ByteBuffer.with_capacity(64)
+    buf.write_u8(1)
+    buf.write_u8(2)
+    buf.write_u8(3)
+    buf.write_i32_le(42)
+    checksum := crc32(buf.data, buf.len)
+
+    buf2 := ByteBuffer.with_capacity(64)
+    buf2.write_u8(1)
+    buf2.write_u8(2)
+    buf2.write_u8(3)
+    buf2.write_i32_le(42)
+    checksum2 := crc32(buf2.data, buf2.len)
+
+    buf.drop()
+    buf2.drop()
+
+    I checksum != checksum2 { R 1 }
+    I checksum == 0 { R 2 }
+    0
+}
+"#;
+    assert_exit_code(source, 0);
+}

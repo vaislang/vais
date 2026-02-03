@@ -1,0 +1,54 @@
+# CRC32 - IEEE 802.3 polynomial checksum for data integrity verification
+# Tests known CRC32 values
+
+F crc32_update_byte(crc: i64, byte_val: i64) -> i64 {
+    crc32_update_bit((crc ^ byte_val) & 4294967295, 0)
+}
+
+F crc32_update_bit(crc: i64, bit: i64) -> i64 {
+    I bit >= 8 {
+        R crc & 4294967295
+    }
+    next := I (crc & 1) == 1 {
+        ((crc >> 1) & 2147483647) ^ 3988292384
+    } E {
+        (crc >> 1) & 2147483647
+    }
+    crc32_update_bit(next & 4294967295, bit + 1)
+}
+
+F crc32_loop(data: i64, crc: i64, idx: i64, len: i64) -> i64 {
+    I idx >= len { crc }
+    E {
+        byte_val := load_byte(data + idx)
+        new_crc := crc32_update_byte(crc, byte_val)
+        crc32_loop(data, new_crc, idx + 1, len)
+    }
+}
+
+F crc32(data: i64, len: i64) -> i64 {
+    result := crc32_loop(data, 4294967295, 0, len)
+    result ^ 4294967295
+}
+
+F crc32_str(s: str) -> i64 {
+    p := str_to_ptr(s)
+    len := strlen(s)
+    crc32(p, len)
+}
+
+F main() -> i64 {
+    # CRC32("") = 0
+    crc_empty := crc32_str("")
+    I crc_empty != 0 { R 1 }
+
+    # CRC32("a") = 3904355907 (0xE8B7BE43)
+    crc_a := crc32_str("a")
+    I crc_a != 3904355907 { R 2 }
+
+    # CRC32("123456789") = 3421780262 (0xCBF43926)
+    crc_digits := crc32_str("123456789")
+    I crc_digits != 3421780262 { R 3 }
+
+    0
+}

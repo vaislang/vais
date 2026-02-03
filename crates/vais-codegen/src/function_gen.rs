@@ -463,6 +463,70 @@ impl CodeGenerator {
         ir.push_str("  ret i64 %val\n");
         ir.push_str("}\n");
 
+        // __readdir_wrapper: readdir wrapper that returns pointer to d_name
+        ir.push_str("\n; Filesystem helper: readdir wrapper\n");
+        ir.push_str("%struct.dirent = type opaque\n");
+        ir.push_str("declare %struct.dirent* @readdir(i8*)\n");
+        ir.push_str("define i64 @__readdir_wrapper(i64 %dirp) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %0 = inttoptr i64 %dirp to i8*\n");
+        ir.push_str("  %1 = call %struct.dirent* @readdir(i8* %0)\n");
+        ir.push_str("  %2 = icmp eq %struct.dirent* %1, null\n");
+        ir.push_str("  br i1 %2, label %ret_null, label %ret_name\n");
+        ir.push_str("ret_null:\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("ret_name:\n");
+        ir.push_str("  %3 = bitcast %struct.dirent* %1 to i8*\n");
+        // On macOS (Darwin), d_name is at offset 21
+        // On Linux, d_name is at offset 19
+        // For now, use offset 21 for macOS
+        ir.push_str("  %4 = getelementptr inbounds i8, i8* %3, i64 21\n");
+        ir.push_str("  %5 = ptrtoint i8* %4 to i64\n");
+        ir.push_str("  ret i64 %5\n");
+        ir.push_str("}\n");
+
+        // __stat_size: get file size using stat
+        ir.push_str("\n; Filesystem helper: stat file size\n");
+        ir.push_str("%struct.stat = type opaque\n");
+        ir.push_str("declare i32 @stat(i8*, %struct.stat*)\n");
+        ir.push_str("define i64 @__stat_size(i8* %path) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %statbuf = alloca [144 x i8], align 8\n");
+        ir.push_str("  %0 = bitcast [144 x i8]* %statbuf to %struct.stat*\n");
+        ir.push_str("  %1 = call i32 @stat(i8* %path, %struct.stat* %0)\n");
+        ir.push_str("  %2 = icmp ne i32 %1, 0\n");
+        ir.push_str("  br i1 %2, label %error, label %success\n");
+        ir.push_str("error:\n");
+        ir.push_str("  ret i64 -1\n");
+        ir.push_str("success:\n");
+        // st_size is at offset 96 on macOS (after dev:4, mode:2, nlink:2, ino:8, uid:4, gid:4, rdev:4, atim:16, mtim:16, ctim:16, birthtim:16, size:8)
+        // Actually on macOS x86_64, st_size is at offset 96
+        ir.push_str("  %3 = getelementptr inbounds [144 x i8], [144 x i8]* %statbuf, i64 0, i64 96\n");
+        ir.push_str("  %4 = bitcast i8* %3 to i64*\n");
+        ir.push_str("  %5 = load i64, i64* %4\n");
+        ir.push_str("  ret i64 %5\n");
+        ir.push_str("}\n");
+
+        // __stat_mtime: get file modification time using stat
+        ir.push_str("\n; Filesystem helper: stat modification time\n");
+        ir.push_str("define i64 @__stat_mtime(i8* %path) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %statbuf = alloca [144 x i8], align 8\n");
+        ir.push_str("  %0 = bitcast [144 x i8]* %statbuf to %struct.stat*\n");
+        ir.push_str("  %1 = call i32 @stat(i8* %path, %struct.stat* %0)\n");
+        ir.push_str("  %2 = icmp ne i32 %1, 0\n");
+        ir.push_str("  br i1 %2, label %error, label %success\n");
+        ir.push_str("error:\n");
+        ir.push_str("  ret i64 -1\n");
+        ir.push_str("success:\n");
+        // st_mtimespec is at offset 48 on macOS (after dev:4, mode:2, nlink:2, ino:8, uid:4, gid:4, rdev:4, atim:16, mtim starts here)
+        // The tv_sec field is the first 8 bytes of the timespec
+        ir.push_str("  %3 = getelementptr inbounds [144 x i8], [144 x i8]* %statbuf, i64 0, i64 48\n");
+        ir.push_str("  %4 = bitcast i8* %3 to i64*\n");
+        ir.push_str("  %5 = load i64, i64* %4\n");
+        ir.push_str("  ret i64 %5\n");
+        ir.push_str("}\n");
+
         ir
     }
 

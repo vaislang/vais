@@ -1,0 +1,165 @@
+# ByteBuffer - Growable byte buffer for binary serialization/deserialization
+# Essential for database page management, WAL records, and network protocols
+
+S ByteBuffer {
+    data: i64,      # Pointer to heap-allocated buffer
+    len: i64,       # Current write position / bytes written
+    cap: i64,       # Allocated capacity
+    pos: i64        # Current read position
+}
+
+X ByteBuffer {
+    # Create with given capacity
+    F with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } E { capacity }
+        data := malloc(cap)
+        ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
+    }
+
+    # Getters
+    F len(&self) -> i64 = self.len
+    F capacity(&self) -> i64 = self.cap
+    F position(&self) -> i64 = self.pos
+    F data_ptr(&self) -> i64 = self.data
+    F remaining(&self) -> i64 { self.len - self.pos }
+
+    # Seek to position
+    F seek(&self, pos: i64) -> i64 {
+        self.pos = pos
+        pos
+    }
+
+    # Reset for re-reading
+    F rewind(&self) -> i64 {
+        self.pos = 0
+        0
+    }
+
+    # Ensure capacity
+    F ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { R self.cap }
+        new_cap := self.cap
+        L {
+            I new_cap >= needed { B 0 }
+            new_cap = new_cap * 2
+        }
+        new_data := malloc(new_cap)
+        memcpy(new_data, self.data, self.len)
+        free(self.data)
+        self.data = new_data
+        self.cap = new_cap
+        new_cap
+    }
+
+    # Write a single byte
+    F write_u8(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 1)
+        store_byte(self.data + self.len, value & 255)
+        self.len = self.len + 1
+        1
+    }
+
+    # Read a single byte
+    F read_u8(&self) -> i64 {
+        I self.pos >= self.len { R 0 - 1 }
+        val := load_byte(self.data + self.pos)
+        self.pos = self.pos + 1
+        val
+    }
+
+    # Write i32 in little-endian (4 bytes)
+    F write_i32_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 4)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        self.len = self.len + 4
+        4
+    }
+
+    # Read i32 little-endian
+    F read_i32_le(&self) -> i64 {
+        I self.pos + 4 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        self.pos = self.pos + 4
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+    }
+
+    # Write i64 in little-endian (8 bytes)
+    F write_i64_le(&self, value: i64) -> i64 {
+        @.ensure_capacity(self.len + 8)
+        store_byte(self.data + self.len, value & 255)
+        store_byte(self.data + self.len + 1, (value >> 8) & 255)
+        store_byte(self.data + self.len + 2, (value >> 16) & 255)
+        store_byte(self.data + self.len + 3, (value >> 24) & 255)
+        store_byte(self.data + self.len + 4, (value >> 32) & 255)
+        store_byte(self.data + self.len + 5, (value >> 40) & 255)
+        store_byte(self.data + self.len + 6, (value >> 48) & 255)
+        store_byte(self.data + self.len + 7, (value >> 56) & 255)
+        self.len = self.len + 8
+        8
+    }
+
+    # Read i64 little-endian
+    F read_i64_le(&self) -> i64 {
+        I self.pos + 8 > self.len { R 0 - 1 }
+        b0 := load_byte(self.data + self.pos)
+        b1 := load_byte(self.data + self.pos + 1)
+        b2 := load_byte(self.data + self.pos + 2)
+        b3 := load_byte(self.data + self.pos + 3)
+        b4 := load_byte(self.data + self.pos + 4)
+        b5 := load_byte(self.data + self.pos + 5)
+        b6 := load_byte(self.data + self.pos + 6)
+        b7 := load_byte(self.data + self.pos + 7)
+        self.pos = self.pos + 8
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+    }
+
+    # Write raw bytes from pointer
+    F write_bytes(&self, src: i64, count: i64) -> i64 {
+        @.ensure_capacity(self.len + count)
+        memcpy(self.data + self.len, src, count)
+        self.len = self.len + count
+        count
+    }
+
+    # Read raw bytes into destination pointer
+    F read_bytes(&self, dst: i64, count: i64) -> i64 {
+        I self.pos + count > self.len { R 0 - 1 }
+        memcpy(dst, self.data + self.pos, count)
+        self.pos = self.pos + count
+        count
+    }
+
+    # Write a null-terminated string (length-prefixed: i32 len + bytes)
+    F write_str(&self, s: str) -> i64 {
+        p := str_to_ptr(s)
+        slen := strlen(s)
+        @.write_i32_le(slen)
+        @.ensure_capacity(self.len + slen)
+        memcpy(self.data + self.len, p, slen)
+        self.len = self.len + slen
+        slen + 4
+    }
+
+    # Clear buffer
+    F clear(&self) -> i64 {
+        self.len = 0
+        self.pos = 0
+        0
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        I self.data != 0 { free(self.data) }
+        self.data = 0
+        self.len = 0
+        self.cap = 0
+        self.pos = 0
+        0
+    }
+}

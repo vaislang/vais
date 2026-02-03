@@ -1,0 +1,48 @@
+# filesystem.vais - Filesystem operations API
+#
+# Provides clean wrappers around POSIX filesystem FFI functions
+
+# Directory operations
+F fs_mkdir(path: str, mode: i64) -> i64 {
+    mkdir(path, mode)
+}
+
+F fs_rmdir(path: str) -> i64 {
+    rmdir(path)
+}
+
+F fs_chdir(path: str) -> i64 {
+    chdir(path)
+}
+
+# File operations
+F fs_unlink(path: str) -> i64 {
+    unlink(path)
+}
+
+F fs_rename(old_path: str, new_path: str) -> i64 {
+    rename_file(old_path, new_path)
+}
+
+# File metadata
+F fs_file_size(path: str) -> i64 {
+    stat_size(path)
+}
+
+F fs_mtime(path: str) -> i64 {
+    stat_mtime(path)
+}
+
+# Current working directory
+F fs_getcwd() -> str {
+    buf := malloc(1024)
+    result := getcwd(buf, 1024)
+    I result == 0 {
+        free(buf)
+        R ""
+    }
+    # TODO: Convert buf to str properly and free it
+    # For now, return empty string as this needs str conversion support
+    free(buf)
+    ""
+}

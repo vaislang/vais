@@ -1,0 +1,45 @@
+# CRC32 (IEEE 802.3 polynomial: 0xEDB88320 in reflected form)
+# Computes CRC32 over a byte buffer for data integrity verification
+
+# Update CRC32 with a single byte
+F crc32_update_byte(crc: i64, byte_val: i64) -> i64 {
+    crc32_update_bit((crc ^ byte_val) & 4294967295, 0)
+}
+
+# Process 8 bits of a byte (bitwise algorithm, no lookup table)
+F crc32_update_bit(crc: i64, bit: i64) -> i64 {
+    I bit >= 8 {
+        R crc & 4294967295
+    }
+    next := I (crc & 1) == 1 {
+        ((crc >> 1) & 2147483647) ^ 3988292384
+    } E {
+        (crc >> 1) & 2147483647
+    }
+    crc32_update_bit(next & 4294967295, bit + 1)
+}
+
+# Main loop to process all bytes in buffer
+F crc32_loop(data: i64, crc: i64, idx: i64, len: i64) -> i64 {
+    I idx >= len { crc }
+    E {
+        byte_val := load_byte(data + idx)
+        new_crc := crc32_update_byte(crc, byte_val)
+        crc32_loop(data, new_crc, idx + 1, len)
+    }
+}
+
+# Compute CRC32 over a buffer
+# data: pointer to buffer
+# len: number of bytes
+F crc32(data: i64, len: i64) -> i64 {
+    result := crc32_loop(data, 4294967295, 0, len)   # 0xFFFFFFFF initial value
+    result ^ 4294967295                               # Final XOR
+}
+
+# CRC32 of a string literal
+F crc32_str(s: str) -> i64 {
+    p := str_to_ptr(s)
+    len := strlen(s)
+    crc32(p, len)
+}

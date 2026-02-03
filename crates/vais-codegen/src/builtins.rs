@@ -492,6 +492,81 @@ impl CodeGenerator {
             ],
             ResolvedType::I64
         );
+
+        // mkdir: (path, mode) -> int (0 on success, -1 on error)
+        register_extern!(self, "mkdir",
+            vec![
+                ("path".to_string(), ResolvedType::Str),
+                ("mode".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // rmdir: (path) -> int (0 on success, -1 on error)
+        register_extern!(self, "rmdir",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // opendir: (path) -> DIR* (as i64, 0 on error)
+        register_extern!(self, "opendir",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // readdir: (dirp) -> dirent* (pointer to name, 0 at end)
+        register_helper!(self, "readdir" => "__readdir_wrapper",
+            vec![("dirp".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // closedir: (dirp) -> int (0 on success)
+        register_extern!(self, "closedir",
+            vec![("dirp".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // rename_file: (old, new) -> int (0 on success) - maps to C rename()
+        register_extern!(self, "rename_file" => "rename",
+            vec![
+                ("old".to_string(), ResolvedType::Str),
+                ("new_path".to_string(), ResolvedType::Str),
+            ],
+            ResolvedType::I64
+        );
+
+        // unlink: (path) -> int (0 on success)
+        register_extern!(self, "unlink",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // stat_size: (path) -> i64 (file size in bytes)
+        register_helper!(self, "stat_size" => "__stat_size",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // stat_mtime: (path) -> i64 (modification time as unix timestamp)
+        register_helper!(self, "stat_mtime" => "__stat_mtime",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
+
+        // getcwd: (buf, size) -> char* (pointer to buf on success, 0 on error)
+        register_extern!(self, "getcwd",
+            vec![
+                ("buf".to_string(), ResolvedType::I64),
+                ("size".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // chdir: (path) -> int (0 on success)
+        register_extern!(self, "chdir",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
     }
 
     fn register_string_functions(&mut self) {

@@ -1384,6 +1384,213 @@ impl TypeChecker {
             },
         );
 
+        // mkdir: (path, mode) -> i64 (0 on success, -1 on error)
+        self.functions.insert(
+            "mkdir".to_string(),
+            FunctionSig {
+                name: "mkdir".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("path".to_string(), ResolvedType::Str, false),
+                    ("mode".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // rmdir: (path) -> i64 (0 on success, -1 on error)
+        self.functions.insert(
+            "rmdir".to_string(),
+            FunctionSig {
+                name: "rmdir".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // opendir: (path) -> i64 (DIR* as i64, 0 on error)
+        self.functions.insert(
+            "opendir".to_string(),
+            FunctionSig {
+                name: "opendir".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // readdir: (dirp) -> i64 (pointer to dirent name, 0 at end)
+        self.functions.insert(
+            "readdir".to_string(),
+            FunctionSig {
+                name: "readdir".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("dirp".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // closedir: (dirp) -> i64 (0 on success)
+        self.functions.insert(
+            "closedir".to_string(),
+            FunctionSig {
+                name: "closedir".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("dirp".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // rename_file: (old, new_path) -> i64 (0 on success)
+        self.functions.insert(
+            "rename_file".to_string(),
+            FunctionSig {
+                name: "rename_file".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("old".to_string(), ResolvedType::Str, false),
+                    ("new_path".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // unlink: (path) -> i64 (0 on success)
+        self.functions.insert(
+            "unlink".to_string(),
+            FunctionSig {
+                name: "unlink".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // stat_size: (path) -> i64 (file size in bytes)
+        self.functions.insert(
+            "stat_size".to_string(),
+            FunctionSig {
+                name: "stat_size".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // stat_mtime: (path) -> i64 (modification time as unix timestamp)
+        self.functions.insert(
+            "stat_mtime".to_string(),
+            FunctionSig {
+                name: "stat_mtime".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // getcwd: (buf, size) -> i64 (pointer to buf on success, 0 on error)
+        self.functions.insert(
+            "getcwd".to_string(),
+            FunctionSig {
+                name: "getcwd".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("buf".to_string(), ResolvedType::I64, false),
+                    ("size".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // chdir: (path) -> i64 (0 on success)
+        self.functions.insert(
+            "chdir".to_string(),
+            FunctionSig {
+                name: "chdir".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // Register SIMD intrinsic functions
         self.register_simd_builtins();
     }
