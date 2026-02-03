@@ -10,3 +10,4 @@ vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
 
 [dev-dependencies]
+vais-parser = { path = "../vais-parser" }

@@ -12,11 +12,15 @@
 //! - Borrow checking and move analysis
 //! - Dead code elimination
 //! - Constant propagation
+//! - Common subexpression elimination
 //! - Inlining decisions
 //! - Drop elaboration
 
 mod types;
 mod builder;
+pub mod optimize;
+pub mod emit_llvm;
+pub mod lower;
 
 pub use types::*;
 pub use builder::MirBuilder;

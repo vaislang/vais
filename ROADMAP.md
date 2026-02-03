@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 27 | GPU 코드젠 & Async 런타임 완성 | ✅ 완료 | 100% |
 | 28 | GPU 런타임 실행 지원 | 🔄 진행 중 | Stage 1~3 완료, Stage 4 잔여 (23/27, 85%) |
 | **29** | **토큰 절감 강화** | **✅ 완료** | **21/21 (100%)** |
-| **30** | **성능 최적화** | **🔄 진행 중** | **15/29 (52%)** |
+| **30** | **성능 최적화** | **🔄 진행 중** | **19/29 (66%)** |
 | **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **⏳ 예정** | **0/30 (0%)** |
 | | *Phase 32~37: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
@@ -339,14 +339,14 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **PGO 파이프라인 연동** - optimize_ir_with_pgo() 도입, PGO Generate/Use 모드를 최적화 파이프라인에 통합, 메인 빌드에서 자동 적용
 - [x] **벤치마크** - inlining_bench.rs 추가 (소형/중형/핫 함수 인라이닝, O0~O3 레벨 비교)
 
-### 4단계 - MIR 기반 최적화 파이프라인
+### 4단계 - MIR 기반 최적화 파이프라인 ✅
 
 > 텍스트 문자열 매칭 → 구조적 CFG 기반 최적화
 
-- [ ] **AST → MIR 변환 활성화** - vais-mir 크레이트를 메인 파이프라인에 연결
-- [ ] **MIR 레벨 DCE** - Dead Code Elimination을 MIR에서 수행
-- [ ] **MIR 레벨 CSE** - Common Subexpression Elimination
-- [ ] **MIR → LLVM IR 변환** - MIR에서 직접 LLVM IR 생성 (텍스트 최적화 단계 대체)
+- [x] **AST → MIR 변환 활성화** - `lower.rs`: AST → MIR 변환 구현 (함수, if/else, let, match, call, @재귀 등)
+- [x] **MIR 레벨 DCE** - `optimize.rs`: Dead Code Elimination (미사용 로컬 제거)
+- [x] **MIR 레벨 CSE** - `optimize.rs`: Common Subexpression Elimination + 상수 전파 + 도달불가 블록 제거
+- [x] **MIR → LLVM IR 변환** - `emit_llvm.rs`: MIR에서 직접 LLVM IR 텍스트 생성
 
 ### 5단계 - 경계 검사 제거 & 고급 최적화
 
