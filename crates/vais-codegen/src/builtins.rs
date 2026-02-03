@@ -420,6 +420,48 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
+        // mmap: (addr, len, prot, flags, fd, offset) -> void* (as i64)
+        register_extern!(self, "mmap",
+            vec![
+                ("addr".to_string(), ResolvedType::I64),
+                ("len".to_string(), ResolvedType::I64),
+                ("prot".to_string(), ResolvedType::I64),
+                ("flags".to_string(), ResolvedType::I64),
+                ("fd".to_string(), ResolvedType::I64),
+                ("offset".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // munmap: (addr, len) -> int
+        register_extern!(self, "munmap",
+            vec![
+                ("addr".to_string(), ResolvedType::I64),
+                ("len".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // msync: (addr, len, flags) -> int
+        register_extern!(self, "msync",
+            vec![
+                ("addr".to_string(), ResolvedType::I64),
+                ("len".to_string(), ResolvedType::I64),
+                ("flags".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // madvise: (addr, len, advice) -> int
+        register_extern!(self, "madvise",
+            vec![
+                ("addr".to_string(), ResolvedType::I64),
+                ("len".to_string(), ResolvedType::I64),
+                ("advice".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
         // POSIX open: (path, flags, mode) -> fd
         register_extern!(self, "posix_open" => "open",
             vec![

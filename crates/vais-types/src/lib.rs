@@ -1215,6 +1215,96 @@ impl TypeChecker {
             },
         );
 
+        // mmap: (addr, len, prot, flags, fd, offset) -> ptr
+        self.functions.insert(
+            "mmap".to_string(),
+            FunctionSig {
+                name: "mmap".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("addr".to_string(), ResolvedType::I64, false),
+                    ("len".to_string(), ResolvedType::I64, false),
+                    ("prot".to_string(), ResolvedType::I64, false),
+                    ("flags".to_string(), ResolvedType::I64, false),
+                    ("fd".to_string(), ResolvedType::I64, false),
+                    ("offset".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // munmap: (addr, len) -> int
+        self.functions.insert(
+            "munmap".to_string(),
+            FunctionSig {
+                name: "munmap".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("addr".to_string(), ResolvedType::I64, false),
+                    ("len".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // msync: (addr, len, flags) -> int
+        self.functions.insert(
+            "msync".to_string(),
+            FunctionSig {
+                name: "msync".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("addr".to_string(), ResolvedType::I64, false),
+                    ("len".to_string(), ResolvedType::I64, false),
+                    ("flags".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // madvise: (addr, len, advice) -> int
+        self.functions.insert(
+            "madvise".to_string(),
+            FunctionSig {
+                name: "madvise".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("addr".to_string(), ResolvedType::I64, false),
+                    ("len".to_string(), ResolvedType::I64, false),
+                    ("advice".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // posix_open: (path, flags, mode) -> fd
         self.functions.insert(
             "posix_open".to_string(),

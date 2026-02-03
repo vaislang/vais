@@ -405,11 +405,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 > DB 엔진의 효율적인 디스크 I/O를 위해 mmap 필수. 버퍼 풀 없이 모든 읽기가 stdio를 거침.
 
-- [ ] **`mmap`/`munmap` FFI 추가** - POSIX mmap 바인딩, `PROT_READ`/`PROT_WRITE`/`MAP_SHARED`/`MAP_PRIVATE` 플래그
-- [ ] **`MappedFile` 구조체** - 파일을 메모리에 매핑하는 고수준 API, 자동 munmap (drop)
-- [ ] **`madvise` 힌트** - `MADV_SEQUENTIAL`/`MADV_RANDOM`/`MADV_WILLNEED` 지원
-- [ ] **`msync` 지원** - 매핑된 메모리의 변경사항을 디스크에 동기화
-- [ ] **테스트** - 대용량 파일 매핑, 읽기/쓰기 검증, munmap 후 재매핑
+- [x] **`mmap`/`munmap` FFI 추가** - POSIX mmap 바인딩, `PROT_READ`/`PROT_WRITE`/`MAP_SHARED`/`MAP_PRIVATE` 플래그
+- [x] **`MappedFile` 구조체** - 파일을 메모리에 매핑하는 고수준 API (map/map_read/map_readwrite/unmap/read_byte/write_byte)
+- [x] **`madvise` 힌트** - `MADV_SEQUENTIAL`/`MADV_RANDOM`/`MADV_WILLNEED` 지원
+- [x] **`msync` 지원** - 매핑된 메모리의 변경사항을 디스크에 동기화 (sync/sync_async)
+- [x] **테스트** - mmap 읽기, 쓰기+msync, invalid fd, madvise E2E 테스트 4개
 
 ### 3단계 - 파일 잠금 (동시 접근 필수) 🟡 높음
 

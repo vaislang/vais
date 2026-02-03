@@ -3454,3 +3454,121 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+#[test]
+fn e2e_mmap_read_file() {
+    // Test: write a file, mmap it for reading, verify content via load_byte
+    let source = r#"
+F main() -> i64 {
+    # Write test file
+    fp := fopen("/tmp/vais_mmap_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("MMAP", fp)
+    fclose(fp)
+
+    # Open with POSIX open for fd
+    fd := posix_open("/tmp/vais_mmap_test.txt", 0, 0)
+    I fd < 0 { R 2 }
+
+    # mmap: PROT_READ=1, MAP_PRIVATE=2
+    addr := mmap(0, 4, 1, 2, fd, 0)
+    I addr == 0 - 1 { posix_close(fd); R 3 }
+
+    # Read first byte: 'M' = 77
+    ch := load_byte(addr)
+    munmap(addr, 4)
+    posix_close(fd)
+    remove("/tmp/vais_mmap_test.txt")
+    I ch == 77 { R 0 } E { R 4 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_mmap_write_and_msync() {
+    // Test: mmap a file for read-write, modify, msync, read back
+    let source = r#"
+F main() -> i64 {
+    # Create file with initial content
+    fp := fopen("/tmp/vais_mmap_rw_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("AAAA", fp)
+    fclose(fp)
+
+    # Open for read-write: O_RDWR = 2
+    fd := posix_open("/tmp/vais_mmap_rw_test.txt", 2, 0)
+    I fd < 0 { R 2 }
+
+    # mmap: PROT_READ|PROT_WRITE=3, MAP_SHARED=1
+    addr := mmap(0, 4, 3, 1, fd, 0)
+    I addr == 0 - 1 { posix_close(fd); R 3 }
+
+    # Write 'Z' (90) at offset 0
+    store_byte(addr, 90)
+
+    # msync: MS_SYNC=16 (macOS)
+    result := msync(addr, 4, 16)
+    munmap(addr, 4)
+    posix_close(fd)
+    I result != 0 {
+        remove("/tmp/vais_mmap_rw_test.txt")
+        R 4
+    }
+
+    # Read back and verify
+    fp2 := fopen("/tmp/vais_mmap_rw_test.txt", "r")
+    I fp2 == 0 { R 5 }
+    buf := malloc(8)
+    fgets(buf, 8, fp2)
+    fclose(fp2)
+    ch := load_byte(buf)
+    free(buf)
+    remove("/tmp/vais_mmap_rw_test.txt")
+    I ch == 90 { R 0 } E { R 6 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_mmap_invalid_fd() {
+    // Test: mmap with invalid fd returns MAP_FAILED (-1)
+    let source = r#"
+F main() -> i64 {
+    # mmap with invalid fd (-1) should fail
+    # PROT_READ=1, MAP_PRIVATE=2
+    addr := mmap(0, 4096, 1, 2, 0 - 1, 0)
+    I addr == 0 - 1 { R 0 } E { R 1 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_mmap_madvise() {
+    // Test: mmap a file and call madvise with MADV_SEQUENTIAL
+    let source = r#"
+F main() -> i64 {
+    fp := fopen("/tmp/vais_madvise_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("advise test data here!!", fp)
+    fclose(fp)
+
+    fd := posix_open("/tmp/vais_madvise_test.txt", 0, 0)
+    I fd < 0 { R 2 }
+
+    # PROT_READ=1, MAP_PRIVATE=2
+    addr := mmap(0, 23, 1, 2, fd, 0)
+    I addr == 0 - 1 { posix_close(fd); R 3 }
+
+    # MADV_SEQUENTIAL=2
+    result := madvise(addr, 23, 2)
+    munmap(addr, 23)
+    posix_close(fd)
+    remove("/tmp/vais_madvise_test.txt")
+    I result == 0 { R 0 } E { R 4 }
+}
+"#;
+    assert_exit_code(source, 0);
+}

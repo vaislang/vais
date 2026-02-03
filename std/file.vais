@@ -460,6 +460,124 @@ F file_sync(path: i64) -> i64 {
 # O_RDONLY constant for POSIX open
 C O_RDONLY: i64 = 0
 
+# Memory mapping constants
+C PROT_NONE: i64 = 0
+C PROT_READ: i64 = 1
+C PROT_WRITE: i64 = 2
+C PROT_EXEC: i64 = 4
+
+C MAP_SHARED: i64 = 1
+C MAP_PRIVATE: i64 = 2
+
+C MAP_FAILED: i64 = 0 - 1
+
+# madvise advice constants
+C MADV_NORMAL: i64 = 0
+C MADV_RANDOM: i64 = 1
+C MADV_SEQUENTIAL: i64 = 2
+C MADV_WILLNEED: i64 = 3
+C MADV_DONTNEED: i64 = 4
+
+# msync flags (macOS values)
+C MS_ASYNC: i64 = 1
+C MS_SYNC: i64 = 16
+C MS_INVALIDATE: i64 = 2
+
+# Memory-mapped file handle
+S MappedFile {
+    addr: i64,
+    len: i64
+}
+
+X MappedFile {
+    # Map a file descriptor into memory with given protection and flags
+    # Returns MappedFile with addr=0 on failure
+    F map(fd: i64, len: i64, prot: i64, flags: i64, offset: i64) -> MappedFile {
+        addr := mmap(0, len, prot, flags, fd, offset)
+        I addr == MAP_FAILED {
+            MappedFile { addr: 0, len: 0 }
+        } E {
+            MappedFile { addr: addr, len: len }
+        }
+    }
+
+    # Map a file for reading (convenience)
+    F map_read(fd: i64, len: i64) -> MappedFile {
+        MappedFile.map(fd, len, PROT_READ, MAP_PRIVATE, 0)
+    }
+
+    # Map a file for read-write (shared, changes written back)
+    F map_readwrite(fd: i64, len: i64) -> MappedFile {
+        MappedFile.map(fd, len, PROT_READ + PROT_WRITE, MAP_SHARED, 0)
+    }
+
+    # Check if mapping is valid
+    F is_valid(&self) -> i64 {
+        I self.addr != 0 { 1 } E { 0 }
+    }
+
+    # Unmap the memory region. Returns 1 on success, 0 on error.
+    F unmap(&self) -> i64 {
+        I self.addr == 0 {
+            0
+        } E {
+            result := munmap(self.addr, self.len)
+            I result == 0 { 1 } E { 0 }
+        }
+    }
+
+    # Sync mapped memory to disk. Returns 1 on success, 0 on error.
+    F sync(&self) -> i64 {
+        I self.addr == 0 {
+            0
+        } E {
+            result := msync(self.addr, self.len, MS_SYNC)
+            I result == 0 { 1 } E { 0 }
+        }
+    }
+
+    # Async sync mapped memory to disk. Returns 1 on success, 0 on error.
+    F sync_async(&self) -> i64 {
+        I self.addr == 0 {
+            0
+        } E {
+            result := msync(self.addr, self.len, MS_ASYNC)
+            I result == 0 { 1 } E { 0 }
+        }
+    }
+
+    # Advise kernel on expected access pattern. Returns 1 on success, 0 on error.
+    F advise(&self, advice: i64) -> i64 {
+        I self.addr == 0 {
+            0
+        } E {
+            result := madvise(self.addr, self.len, advice)
+            I result == 0 { 1 } E { 0 }
+        }
+    }
+
+    # Read a byte at given offset within the mapping
+    F read_byte(&self, offset: i64) -> i64 {
+        I self.addr == 0 { 0 - 1 }
+        E I offset < 0 { 0 - 1 }
+        E I offset >= self.len { 0 - 1 }
+        E {
+            load_byte(self.addr + offset)
+        }
+    }
+
+    # Write a byte at given offset within the mapping
+    F write_byte(&self, offset: i64, val: i64) -> i64 {
+        I self.addr == 0 { 0 }
+        E I offset < 0 { 0 }
+        E I offset >= self.len { 0 }
+        E {
+            store_byte(self.addr + offset, val)
+            1
+        }
+    }
+}
+
 # Sync directory metadata to disk (ensures rename/unlink durability)
 # Opens dir as fd, fsyncs, closes. Returns 1 on success, 0 on error.
 F dir_sync(path: i64) -> i64 {
