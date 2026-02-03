@@ -5027,3 +5027,137 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ========== Phase 31 Stage 8: ? Operator + Error Propagation Tests ==========
+
+#[test]
+fn e2e_try_operator_result_ok() {
+    // Test ? operator on Ok result - should extract value
+    // compute(20): safe_divide(20,2)=Ok(10), ? extracts 10, Ok(10+10)=Ok(20)
+    // main matches Ok(v) => v (20), then 20 - 20 = 0
+    let source = r#"
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+F safe_divide(a: i64, b: i64) -> Result {
+    I b == 0 { Err(1) } E { Ok(a / b) }
+}
+
+F compute(x: i64) -> Result {
+    v := safe_divide(x, 2)?
+    R Ok(v + 10)
+}
+
+F main() -> i64 {
+    r := compute(20)
+    v := M r {
+        Ok(val) => val,
+        Err(_) => 99
+    }
+    v - 20
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_try_operator_result_err_propagation() {
+    // Test ? operator on Err result - should propagate error
+    // compute() calls failing_op() which returns Err(42), ? propagates it
+    // main matches Err(e) => e, so exit code = 42
+    let source = r#"
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+F failing_op() -> Result {
+    Err(42)
+}
+
+F compute() -> Result {
+    v := failing_op()?
+    R Ok(v + 100)
+}
+
+F main() -> i64 {
+    r := compute()
+    v := M r {
+        Ok(_) => 1,
+        Err(e) => e
+    }
+    v - 42
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_try_operator_chaining() {
+    // Test chaining ? operators via nested function calls
+    // pipeline calls step1_then_step2 which uses ? then calls step2
+    // pipeline(10): step1(10)=Ok(20) -> ? -> 20 -> step2(20)=Ok(25)
+    // main matches Ok(v) => v, exit code = 25
+    let source = r#"
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+F step1(x: i64) -> Result {
+    I x < 0 { Err(1) } E { Ok(x * 2) }
+}
+
+F step2(x: i64) -> Result {
+    I x > 100 { Err(2) } E { Ok(x + 5) }
+}
+
+F apply_step2(a: i64) -> Result {
+    step2(a)
+}
+
+F pipeline(x: i64) -> Result {
+    a := step1(x)?
+    R apply_step2(a)
+}
+
+F main() -> i64 {
+    r := pipeline(10)
+    v := M r { Ok(val) => val, Err(_) => 99 }
+    v - 25
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_result_methods() {
+    // Test Result enum with match-based helper functions
+    let source = r#"
+E Result {
+    Ok(i64),
+    Err(i64)
+}
+
+F is_ok(r: Result) -> i64 {
+    M r { Ok(_) => 1, Err(_) => 0 }
+}
+
+F unwrap_or(r: Result, default: i64) -> i64 {
+    M r { Ok(v) => v, Err(_) => default }
+}
+
+F main() -> i64 {
+    ok := Ok(42)
+    err := Err(99)
+    ok_check := is_ok(ok)
+    err_check := is_ok(err)
+    ok_val := unwrap_or(ok, 0)
+    err_val := unwrap_or(err, 0)
+    ok_check - 1 + err_check + ok_val - 42 + err_val
+}
+"#;
+    assert_exit_code(source, 0);
+}

@@ -4399,44 +4399,38 @@ impl CodeGenerator {
             }
 
             // Try expression: expr? - propagate Err early, continue with Ok value
-            // Result layout: {i64 tag, i64 value} where tag=0 is Ok, tag=1 is Err
+            // User-defined enum layout: %EnumName = type { i32 tag, { i64 } payload }
             Expr::Try(inner) => {
+                // Determine the LLVM type name from the inner expression's type
+                let inner_type = self.infer_expr_type(inner);
+                let llvm_type = self.type_to_llvm(&inner_type);
+
                 let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
                 let mut ir = inner_ir;
 
-                // Extract tag from result
-                let _tag_tmp = self.next_temp(counter);
-                let result_ptr = self.next_temp(counter);
-                let tag_ptr = self.next_temp(counter);
+                ir.push_str("  ; Try expression (?)\n");
+
+                // Extract tag (field 0, i32)
                 let tag = self.next_temp(counter);
+                ir.push_str(&format!("  {} = extractvalue {} {}, 0\n", tag, llvm_type, inner_val));
 
-                // Assume result is a struct {i64, i64} passed as i64 ptr or packed value
-                // For simplicity, treat it as a 2-element struct: {tag, value}
-                // where tag 0 = Ok, tag 1 = Err
-                ir.push_str("  ; Try expression\n");
-                ir.push_str(&format!("  {} = inttoptr i64 {} to {{i64, i64}}*\n", result_ptr, inner_val));
-                ir.push_str(&format!("  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n", tag_ptr, result_ptr));
-                ir.push_str(&format!("  {} = load i64, i64* {}\n", tag, tag_ptr));
-
-                // Check if Err (tag == 1)
+                // Check if Err (tag != 0, i.e., not Ok)
                 let is_err = self.next_temp(counter);
                 let err_label = self.next_label("try_err");
                 let ok_label = self.next_label("try_ok");
                 let merge_label = self.next_label("try_merge");
 
-                ir.push_str(&format!("  {} = icmp eq i64 {}, 1\n", is_err, tag));
+                ir.push_str(&format!("  {} = icmp ne i32 {}, 0\n", is_err, tag));
                 ir.push_str(&format!("  br i1 {}, label %{}, label %{}\n\n", is_err, err_label, ok_label));
 
-                // Err branch: return early with the same error
+                // Err branch: return the whole enum value as-is (early return)
                 ir.push_str(&format!("{}:\n", err_label));
-                ir.push_str(&format!("  ret i64 {}  ; early return on Err\n\n", inner_val));
+                ir.push_str(&format!("  ret {} {}  ; early return on Err\n\n", llvm_type, inner_val));
 
-                // Ok branch: extract value and continue
+                // Ok branch: extract payload value (field 1, then field 0 of the payload struct)
                 ir.push_str(&format!("{}:\n", ok_label));
-                let value_ptr = self.next_temp(counter);
                 let value = self.next_temp(counter);
-                ir.push_str(&format!("  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n", value_ptr, result_ptr));
-                ir.push_str(&format!("  {} = load i64, i64* {}\n", value, value_ptr));
+                ir.push_str(&format!("  {} = extractvalue {} {}, 1, 0\n", value, llvm_type, inner_val));
                 ir.push_str(&format!("  br label %{}\n\n", merge_label));
 
                 // Merge block
@@ -4446,41 +4440,39 @@ impl CodeGenerator {
             }
 
             // Unwrap expression: expr! - panic on Err/None, continue with value
+            // User-defined enum layout: %EnumName = type { i32 tag, { i64 } payload }
             Expr::Unwrap(inner) => {
+                // Determine the LLVM type name from the inner expression's type
+                let inner_type = self.infer_expr_type(inner);
+                let llvm_type = self.type_to_llvm(&inner_type);
+
                 let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
                 let mut ir = inner_ir;
 
-                // Extract tag from result/option
-                let result_ptr = self.next_temp(counter);
-                let tag_ptr = self.next_temp(counter);
-                let tag = self.next_temp(counter);
-
                 ir.push_str("  ; Unwrap expression\n");
-                ir.push_str(&format!("  {} = inttoptr i64 {} to {{i64, i64}}*\n", result_ptr, inner_val));
-                ir.push_str(&format!("  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 0\n", tag_ptr, result_ptr));
-                ir.push_str(&format!("  {} = load i64, i64* {}\n", tag, tag_ptr));
+
+                // Extract tag (field 0, i32)
+                let tag = self.next_temp(counter);
+                ir.push_str(&format!("  {} = extractvalue {} {}, 0\n", tag, llvm_type, inner_val));
 
                 // Check if Err/None (tag != 0)
                 let is_err = self.next_temp(counter);
                 let err_label = self.next_label("unwrap_err");
                 let ok_label = self.next_label("unwrap_ok");
 
-                ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", is_err, tag));
+                ir.push_str(&format!("  {} = icmp ne i32 {}, 0\n", is_err, tag));
                 ir.push_str(&format!("  br i1 {}, label %{}, label %{}\n\n", is_err, err_label, ok_label));
 
                 // Err branch: panic/abort
                 ir.push_str(&format!("{}:\n", err_label));
-                // Call puts to print error message then call abort
-                ir.push_str("  call i32 @puts(i8* getelementptr ([22 x i8], [22 x i8]* @.unwrap_panic_msg, i64 0, i64 0))\n");
+                ir.push_str("  call i32 @puts(ptr getelementptr ([22 x i8], ptr @.unwrap_panic_msg, i64 0, i64 0))\n");
                 ir.push_str("  call void @abort()\n");
                 ir.push_str("  unreachable\n\n");
 
-                // Ok branch: extract value
+                // Ok branch: extract value (field 1, field 0 of payload struct)
                 ir.push_str(&format!("{}:\n", ok_label));
-                let value_ptr = self.next_temp(counter);
                 let value = self.next_temp(counter);
-                ir.push_str(&format!("  {} = getelementptr {{i64, i64}}, {{i64, i64}}* {}, i32 0, i32 1\n", value_ptr, result_ptr));
-                ir.push_str(&format!("  {} = load i64, i64* {}\n", value, value_ptr));
+                ir.push_str(&format!("  {} = extractvalue {} {}, 1, 0\n", value, llvm_type, inner_val));
 
                 // Track that we need the panic message and abort declaration
                 self.needs_unwrap_panic = true;

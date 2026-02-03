@@ -4456,9 +4456,43 @@ impl TypeChecker {
                 // Try operator (?) works on both Result<T> and Option<T>
                 // - Result<T>: returns T on Ok, propagates Err
                 // - Option<T>: returns T on Some, propagates None
-                match inner_type {
-                    ResolvedType::Result(ok_type) => Ok(*ok_type),
-                    ResolvedType::Optional(some_type) => Ok(*some_type),
+                match &inner_type {
+                    ResolvedType::Result(ok_type) => Ok(*ok_type.clone()),
+                    ResolvedType::Optional(some_type) => Ok(*some_type.clone()),
+                    // Also support user-defined enums named "Result" with Ok variant
+                    ResolvedType::Named { name, .. } if name == "Result" => {
+                        if let Some(enum_def) = self.enums.get("Result") {
+                            if let Some(variant_fields) = enum_def.variants.get("Ok") {
+                                match variant_fields {
+                                    VariantFieldTypes::Tuple(types) if !types.is_empty() => {
+                                        Ok(types[0].clone())
+                                    }
+                                    _ => Ok(ResolvedType::I64),
+                                }
+                            } else {
+                                Ok(ResolvedType::I64)
+                            }
+                        } else {
+                            Ok(ResolvedType::I64)
+                        }
+                    }
+                    // Also support user-defined enums named "Option" with Some variant
+                    ResolvedType::Named { name, .. } if name == "Option" => {
+                        if let Some(enum_def) = self.enums.get("Option") {
+                            if let Some(variant_fields) = enum_def.variants.get("Some") {
+                                match variant_fields {
+                                    VariantFieldTypes::Tuple(types) if !types.is_empty() => {
+                                        Ok(types[0].clone())
+                                    }
+                                    _ => Ok(ResolvedType::I64),
+                                }
+                            } else {
+                                Ok(ResolvedType::I64)
+                            }
+                        } else {
+                            Ok(ResolvedType::I64)
+                        }
+                    }
                     _ => Err(TypeError::Mismatch {
                         expected: "Result or Option type".to_string(),
                         found: inner_type.to_string(),
@@ -4469,8 +4503,23 @@ impl TypeChecker {
 
             Expr::Unwrap(inner) => {
                 let inner_type = self.check_expr(inner)?;
-                match inner_type {
-                    ResolvedType::Optional(inner) | ResolvedType::Result(inner) => Ok(*inner),
+                match &inner_type {
+                    ResolvedType::Optional(inner) | ResolvedType::Result(inner) => Ok(*inner.clone()),
+                    // Support user-defined Result/Option enums
+                    ResolvedType::Named { name, .. } if name == "Result" => {
+                        if let Some(enum_def) = self.enums.get("Result") {
+                            if let Some(VariantFieldTypes::Tuple(types)) = enum_def.variants.get("Ok") {
+                                if !types.is_empty() { Ok(types[0].clone()) } else { Ok(ResolvedType::I64) }
+                            } else { Ok(ResolvedType::I64) }
+                        } else { Ok(ResolvedType::I64) }
+                    }
+                    ResolvedType::Named { name, .. } if name == "Option" => {
+                        if let Some(enum_def) = self.enums.get("Option") {
+                            if let Some(VariantFieldTypes::Tuple(types)) = enum_def.variants.get("Some") {
+                                if !types.is_empty() { Ok(types[0].clone()) } else { Ok(ResolvedType::I64) }
+                            } else { Ok(ResolvedType::I64) }
+                        } else { Ok(ResolvedType::I64) }
+                    }
                     _ => Err(TypeError::Mismatch {
                         expected: "Optional or Result".to_string(),
                         found: inner_type.to_string(),

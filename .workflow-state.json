@@ -9,8 +9,9 @@
     { "id": 5, "name": "문자열 해시/비교 + StringMap + OwnedString + 테스트", "status": "completed", "model": "Opus" },
     { "id": 6, "name": "디렉토리/파일 시스템 조작 FFI + 테스트", "status": "completed", "model": "Sonnet" },
     { "id": 7, "name": "ByteBuffer + 바이너리 직렬화 + CRC32 + 테스트", "status": "completed", "model": "Sonnet" },
-    { "id": 8, "name": "? 연산자 코드젠 완성 + 에러 전파 개선 + 테스트", "status": "pending", "model": "Opus" }
+    { "id": 8, "name": "? 연산자 코드젠 완성 + 에러 전파 개선 + 테스트", "status": "completed", "model": "Opus" }
   ],
-  "currentTask": 8,
-  "lastCompleted": "ByteBuffer + 바이너리 직렬화 + CRC32 + 테스트"
+  "currentTask": null,
+  "lastCompleted": "? 연산자 코드젠 완성 + 에러 전파 개선 + 테스트",
+  "phaseComplete": true
 }
