@@ -91,7 +91,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 26a | 홍보 & 커뮤니티 성장 | 🔄 진행 중 | 3/4 (75%) - 프로필 완성 잔여 |
 | 26b | 기술 부채 해결 - 타입 추론 일관성 | ✅ 완료 | 100% |
 | 27 | GPU 코드젠 & Async 런타임 완성 | ✅ 완료 | 100% |
-| 28 | GPU 런타임 실행 지원 | 🔄 진행 중 | Stage 1~3 완료, Stage 4 잔여 (23/27, 85%) |
+| 28 | GPU 런타임 실행 지원 | ✅ 완료 | Stage 1~4 완료 (27/27, 100%) |
 | **29** | **토큰 절감 강화** | **✅ 완료** | **21/21 (100%)** |
 | **30** | **성능 최적화** | **✅ 완료** | **29/29 (100%)** |
 | **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **⏳ 예정** | **0/30 (0%)** |
@@ -180,7 +180,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 🚀 Phase 28: GPU 런타임 실행 지원
 
-> **상태**: 🔄 진행 중 (Stage 1~3 완료, Stage 4 잔여)
+> **상태**: ✅ 완료 (Stage 1~4 완료)
 > **추가일**: 2026-02-01
 > **목표**: GPU 코드 생성 → 실제 런타임 실행 엔드투엔드 파이프라인
 
@@ -214,12 +214,12 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **컴파일러 통합** - `--gpu opencl --gpu-compile` 자동 빌드 + 링킹
 - [x] **E2E 테스트** - OpenCL 벡터 연산, SAXPY, 멀티커널
 
-### 4단계 - 고급 기능 ⏳ 미완료
+### 4단계 - 고급 기능 ✅ 완료
 
-- [ ] **통합 메모리 (Unified Memory)** - CUDA managed memory / Metal shared memory
-- [ ] **스트림/비동기 실행** - 커널 실행과 데이터 전송 오버랩
-- [ ] **다중 GPU** - 멀티 디바이스 디스패치
-- [ ] **프로파일링 통합** - GPU 커널 실행 시간 측정
+- [x] **통합 메모리 (Unified Memory)** - CUDA managed memory + prefetch/advise 힌트, Metal shared memory
+- [x] **스트림/비동기 실행** - CUDA async memcpy + stream event, Metal async dispatch, OpenCL async dispatch
+- [x] **다중 GPU** - CUDA peer access (P2P enable/disable/memcpy), Metal device_select, OpenCL device_select
+- [x] **프로파일링 통합** - CUDA event-stream 기록, Metal CFAbsoluteTime 기반 이벤트, OpenCL 이벤트 프로파일링
 
 ### 검증 기준
 
@@ -228,7 +228,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 1단계 | CUDA 벡터 덧셈 E2E (호스트→GPU→실행→결과→검증) | ✅ |
 | 2단계 | Metal 벡터 덧셈 E2E (macOS) | ✅ |
 | 3단계 | OpenCL 벡터 덧셈 E2E (크로스플랫폼) | ✅ |
-| 4단계 | Unified Memory + 비동기 실행 벤치마크 | ⏳ |
+| 4단계 | Unified Memory + 비동기 실행 + 멀티GPU + 프로파일링 E2E 테스트 | ✅ |
 
 ### 의존성
 

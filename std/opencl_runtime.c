@@ -486,3 +486,173 @@ long opencl_device_local_mem(void) {
     clGetDeviceInfo(g_device, CL_DEVICE_LOCAL_MEM_SIZE, sizeof(mem), &mem, NULL);
     return (long)mem;
 }
+
+// ============================================
+// Event / Profiling
+// ============================================
+
+// Create a profiling event (wraps cl_event).
+// Note: Actual event is produced by dispatch; this creates a placeholder.
+void* opencl_event_create(void) {
+    cl_event* event = (cl_event*)calloc(1, sizeof(cl_event));
+    return (void*)event;
+}
+
+// Destroy a profiling event.
+long opencl_event_destroy(void* event_handle) {
+    if (!event_handle) return 0;
+    cl_event* event = (cl_event*)event_handle;
+    if (*event) {
+        clReleaseEvent(*event);
+    }
+    free(event);
+    return 0;
+}
+
+// Wait for an event to complete.
+long opencl_event_wait(void* event_handle) {
+    if (!event_handle) return -1;
+    cl_event* event = (cl_event*)event_handle;
+    if (!*event) return -1;
+    cl_int err = clWaitForEvents(1, event);
+    return ocl_check_error(err, "opencl_event_wait");
+}
+
+// Get elapsed time between two events in milliseconds.
+// Both events must have completed (call opencl_event_wait first).
+double opencl_event_elapsed(void* start_handle, void* end_handle) {
+    if (!start_handle || !end_handle) return -1.0;
+    cl_event* start = (cl_event*)start_handle;
+    cl_event* end = (cl_event*)end_handle;
+    if (!*start || !*end) return -1.0;
+
+    cl_ulong start_ns = 0, end_ns = 0;
+    cl_int err;
+    err = clGetEventProfilingInfo(*start, CL_PROFILING_COMMAND_END,
+                                  sizeof(cl_ulong), &start_ns, NULL);
+    if (err != CL_SUCCESS) return -1.0;
+
+    err = clGetEventProfilingInfo(*end, CL_PROFILING_COMMAND_END,
+                                  sizeof(cl_ulong), &end_ns, NULL);
+    if (err != CL_SUCCESS) return -1.0;
+
+    return (double)(end_ns - start_ns) / 1e6;  // nanoseconds to milliseconds
+}
+
+// ============================================
+// Async dispatch
+// ============================================
+
+// Dispatch a kernel asynchronously (non-blocking) and return an event.
+// The event is written to *out_event (caller must call opencl_event_destroy later).
+long opencl_dispatch_async(
+    void* kernel_handle,
+    long global_x, long global_y, long global_z,
+    long local_x, long local_y, long local_z,
+    void** out_event
+) {
+    if (!kernel_handle || !g_queue) return -1;
+
+    cl_uint work_dim = 1;
+    if (global_z > 1) work_dim = 3;
+    else if (global_y > 1) work_dim = 2;
+
+    size_t global_work_size[3] = {
+        (size_t)global_x,
+        (size_t)(global_y > 0 ? global_y : 1),
+        (size_t)(global_z > 0 ? global_z : 1)
+    };
+
+    size_t local_work_size[3] = {
+        (size_t)local_x,
+        (size_t)(local_y > 0 ? local_y : 1),
+        (size_t)(local_z > 0 ? local_z : 1)
+    };
+
+    size_t* local_ptr = (local_x > 0) ? local_work_size : NULL;
+
+    cl_event event;
+    cl_int err = clEnqueueNDRangeKernel(
+        g_queue, (cl_kernel)kernel_handle,
+        work_dim, NULL, global_work_size, local_ptr,
+        0, NULL, &event
+    );
+    if (ocl_check_error(err, "opencl_dispatch_async") != 0) {
+        return -1;
+    }
+
+    if (out_event) {
+        cl_event* event_ptr = (cl_event*)calloc(1, sizeof(cl_event));
+        if (event_ptr) {
+            *event_ptr = event;
+            *out_event = (void*)event_ptr;
+        }
+    }
+
+    return 0;
+}
+
+// ============================================
+// Multi-device selection
+// ============================================
+
+// Select a specific device by index on the current platform.
+// Reinitializes context and command queue for the new device.
+long opencl_device_select(long device_index) {
+    if (!g_platform) {
+        fprintf(stderr, "[vais-gpu] OpenCL error: Platform not initialized. Call opencl_init() first.\n");
+        return -1;
+    }
+
+    cl_uint num_devices = 0;
+    cl_int err = clGetDeviceIDs(g_platform, CL_DEVICE_TYPE_ALL, 0, NULL, &num_devices);
+    if (err != CL_SUCCESS || num_devices == 0) {
+        fprintf(stderr, "[vais-gpu] OpenCL error: No devices on platform\n");
+        g_last_error = err;
+        return -1;
+    }
+
+    if ((cl_uint)device_index >= num_devices) {
+        fprintf(stderr, "[vais-gpu] OpenCL error: Device index %ld out of range (count=%u)\n",
+                device_index, num_devices);
+        return -1;
+    }
+
+    cl_device_id* devices = (cl_device_id*)malloc(sizeof(cl_device_id) * num_devices);
+    if (!devices) return -1;
+
+    err = clGetDeviceIDs(g_platform, CL_DEVICE_TYPE_ALL, num_devices, devices, NULL);
+    if (err != CL_SUCCESS) {
+        free(devices);
+        g_last_error = err;
+        return -1;
+    }
+
+    cl_device_id new_device = devices[(cl_uint)device_index];
+    free(devices);
+
+    // Release old resources
+    if (g_queue)   { clReleaseCommandQueue(g_queue); g_queue = NULL; }
+    if (g_context) { clReleaseContext(g_context); g_context = NULL; }
+    if (g_program) { clReleaseProgram(g_program); g_program = NULL; }
+
+    g_device = new_device;
+
+    g_context = clCreateContext(NULL, 1, &g_device, NULL, NULL, &err);
+    if (ocl_check_error(err, "opencl_device_select:clCreateContext") != 0) {
+        return -1;
+    }
+
+#ifdef CL_VERSION_2_0
+    g_queue = clCreateCommandQueueWithProperties(g_context, g_device, NULL, &err);
+#else
+    g_queue = clCreateCommandQueue(g_context, g_device, 0, &err);
+#endif
+    if (ocl_check_error(err, "opencl_device_select:clCreateCommandQueue") != 0) {
+        clReleaseContext(g_context);
+        g_context = NULL;
+        return -1;
+    }
+
+    return 0;
+}

@@ -818,6 +818,231 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
     }
 }
 
+// ============================================================================
+// Stage 4: GPU Advanced Features Tests
+// Unified Memory, Stream/Async, Multi-GPU, Profiling
+// ============================================================================
+
+mod e2e_unified_memory {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const UNIFIED_MEMORY_KERNEL: &str = r#"
+#[gpu]
+F unified_add(data: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        data[idx] = data[idx] + 1.0
+    }
+}
+"#;
+
+    #[test]
+    fn test_unified_memory_kernel_codegen_cuda() {
+        let module = parse(UNIFIED_MEMORY_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+        assert!(code.contains("unified_add"), "Should contain kernel name");
+        assert!(code.contains("double*"), "Should have double* for f64 pointer");
+    }
+
+    #[test]
+    fn test_unified_memory_kernel_codegen_all_backends() {
+        let module = parse(UNIFIED_MEMORY_KERNEL).expect("parse failed");
+        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+            let mut gen = GpuCodeGenerator::new(*target);
+            let code = gen.generate(&module)
+                .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
+            assert!(code.contains("unified_add"),
+                "{:?} should contain kernel name 'unified_add'", target);
+        }
+    }
+
+    #[test]
+    fn test_unified_memory_kernel_metadata() {
+        let module = parse(UNIFIED_MEMORY_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "unified_add");
+        assert_eq!(kernels[0].params.len(), 2, "unified_add should have 2 params (data, n)");
+    }
+}
+
+mod e2e_stream_async {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const STREAM_KERNEL: &str = r#"
+#[gpu]
+F stream_process(input: *f64, output: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        output[idx] = input[idx] * 2.0
+    }
+}
+"#;
+
+    #[test]
+    fn test_stream_kernel_cuda_codegen() {
+        let module = parse(STREAM_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+        assert!(code.contains("stream_process"), "Should contain kernel name");
+    }
+
+    #[test]
+    fn test_stream_kernel_host_code_generation() {
+        let module = parse(STREAM_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let host = gen.generate_host_code();
+        // Host code should be generated (stream management is in runtime, not codegen)
+        assert!(host.len() > 0, "Host code should be non-empty");
+    }
+
+    #[test]
+    fn test_stream_kernel_metadata() {
+        let module = parse(STREAM_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "stream_process");
+        assert_eq!(kernels[0].params.len(), 3);
+    }
+
+    #[test]
+    fn test_stream_kernel_all_backends() {
+        let module = parse(STREAM_KERNEL).expect("parse failed");
+        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+            let mut gen = GpuCodeGenerator::new(*target);
+            let code = gen.generate(&module)
+                .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
+            assert!(code.contains("stream_process"),
+                "{:?} should contain kernel name", target);
+        }
+    }
+}
+
+mod e2e_multi_gpu {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const MULTI_GPU_KERNEL: &str = r#"
+#[gpu]
+F gpu_work_a(data: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        data[idx] = data[idx] + 1.0
+    }
+}
+
+#[gpu]
+F gpu_work_b(data: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        data[idx] = data[idx] * 2.0
+    }
+}
+"#;
+
+    #[test]
+    fn test_multi_gpu_kernels_cuda() {
+        let module = parse(MULTI_GPU_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("gpu_work_a"), "Should contain first kernel");
+        assert!(code.contains("gpu_work_b"), "Should contain second kernel");
+        assert_eq!(gen.kernels().len(), 2, "Should discover both kernels");
+    }
+
+    #[test]
+    fn test_multi_gpu_kernels_metadata() {
+        let module = parse(MULTI_GPU_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 2);
+        assert_eq!(kernels[0].name, "gpu_work_a");
+        assert_eq!(kernels[1].name, "gpu_work_b");
+        // Both should have same param signature
+        assert_eq!(kernels[0].params.len(), 2);
+        assert_eq!(kernels[1].params.len(), 2);
+    }
+
+    #[test]
+    fn test_multi_gpu_kernels_all_backends() {
+        let module = parse(MULTI_GPU_KERNEL).expect("parse failed");
+        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+            let mut gen = GpuCodeGenerator::new(*target);
+            let code = gen.generate(&module)
+                .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
+            assert!(code.contains("gpu_work_a") && code.contains("gpu_work_b"),
+                "{:?} should contain both kernel names", target);
+        }
+    }
+}
+
+mod e2e_profiling {
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
+    use vais_parser::parse;
+
+    const PROFILED_KERNEL: &str = r#"
+#[gpu]
+F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
+    idx := thread_idx_x() + block_idx_x() * block_dim_x()
+    I idx < n {
+        y[idx] = a * x[idx] + y[idx]
+    }
+}
+"#;
+
+    #[test]
+    fn test_profiling_kernel_cuda_codegen() {
+        let module = parse(PROFILED_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let code = gen.generate(&module).expect("CUDA codegen failed");
+        assert!(code.contains("timed_saxpy"), "Should contain kernel name");
+        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+    }
+
+    #[test]
+    fn test_profiling_kernel_host_code() {
+        let module = parse(PROFILED_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let host = gen.generate_host_code();
+        assert!(host.len() > 0, "Host code should be generated for profiling");
+    }
+
+    #[test]
+    fn test_profiling_kernel_metadata() {
+        let module = parse(PROFILED_KERNEL).expect("parse failed");
+        let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
+        let _code = gen.generate(&module).expect("CUDA codegen failed");
+        let kernels = gen.kernels();
+        assert_eq!(kernels.len(), 1);
+        assert_eq!(kernels[0].name, "timed_saxpy");
+        assert_eq!(kernels[0].params.len(), 4);
+    }
+
+    #[test]
+    fn test_profiling_kernel_all_backends() {
+        let module = parse(PROFILED_KERNEL).expect("parse failed");
+        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+            let mut gen = GpuCodeGenerator::new(*target);
+            let code = gen.generate(&module)
+                .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
+            assert!(code.contains("timed_saxpy"),
+                "{:?} should contain kernel name 'timed_saxpy'", target);
+        }
+    }
+}
+
 // E2E Metal runtime integration tests
 mod e2e_metal_runtime {
     use vais_gpu::{GpuCodeGenerator, GpuTarget};

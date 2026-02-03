@@ -91,6 +91,31 @@ long   gpu_event_synchronize(void* event);
 double gpu_event_elapsed(void* start, void* end);
 
 // ============================================
+// Async memory transfer
+// ============================================
+long  gpu_memcpy_h2d_async(void* dst, const void* src, long size, void* stream);
+long  gpu_memcpy_d2h_async(void* dst, const void* src, long size, void* stream);
+
+// ============================================
+// Unified memory hints
+// ============================================
+long  gpu_mem_prefetch(void* ptr, long size, long device_id);
+long  gpu_mem_advise(void* ptr, long size, long advice, long device_id);
+
+// ============================================
+// Event-stream operations
+// ============================================
+long  gpu_event_record_stream(void* event, void* stream);
+
+// ============================================
+// Multi-GPU peer access
+// ============================================
+long  gpu_peer_access_enable(long peer_device);
+long  gpu_peer_access_disable(long peer_device);
+long  gpu_peer_can_access(long device, long peer);
+long  gpu_memcpy_peer(void* dst, long dst_device, const void* src, long src_device, long size);
+
+// ============================================
 // Error handling
 // ============================================
 long        gpu_last_error(void);

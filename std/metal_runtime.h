@@ -55,6 +55,31 @@ long        metal_max_threadgroup_memory(void);
 long        metal_max_threads_per_threadgroup(void);
 
 // ============================================
+// Event / Profiling
+// ============================================
+void* metal_event_create(void);
+long  metal_event_destroy(void* event_handle);
+long  metal_event_record(void* event_handle);
+long  metal_event_wait(void* event_handle);
+double metal_event_elapsed(void* start_handle, void* end_handle);
+
+// ============================================
+// Async dispatch
+// ============================================
+long  metal_dispatch_async(
+    void* pipeline_handle,
+    void** buffers,
+    long buffer_count,
+    long grid_x, long grid_y, long grid_z,
+    long block_x, long block_y, long block_z
+);
+
+// ============================================
+// Multi-GPU device selection
+// ============================================
+long  metal_device_select(long device_index);
+
+// ============================================
 // Cleanup
 // ============================================
 long  metal_cleanup(void);

@@ -349,6 +349,141 @@ long metal_max_threads_per_threadgroup(void) {
 }
 
 // ============================================
+// Event / Profiling
+// ============================================
+
+// Metal event wrapper struct for timing.
+typedef struct {
+    CFAbsoluteTime timestamp;
+} metal_event_t;
+
+// Create a profiling event. Returns handle or NULL on failure.
+void* metal_event_create(void) {
+    metal_event_t* event = (metal_event_t*)malloc(sizeof(metal_event_t));
+    if (!event) return NULL;
+    event->timestamp = 0.0;
+    return (void*)event;
+}
+
+// Destroy a profiling event.
+long metal_event_destroy(void* event_handle) {
+    if (!event_handle) return 0;
+    free(event_handle);
+    return 0;
+}
+
+// Record current time into event.
+long metal_event_record(void* event_handle) {
+    if (!event_handle) return -1;
+    metal_event_t* event = (metal_event_t*)event_handle;
+    event->timestamp = CFAbsoluteTimeGetCurrent();
+    return 0;
+}
+
+// Wait (no-op for CPU-side timestamps, included for API parity).
+long metal_event_wait(void* event_handle) {
+    if (!event_handle) return -1;
+    return 0;
+}
+
+// Get elapsed time between two events in milliseconds.
+double metal_event_elapsed(void* start_handle, void* end_handle) {
+    if (!start_handle || !end_handle) return -1.0;
+    metal_event_t* start = (metal_event_t*)start_handle;
+    metal_event_t* end = (metal_event_t*)end_handle;
+    return (end->timestamp - start->timestamp) * 1000.0;
+}
+
+// ============================================
+// Async dispatch
+// ============================================
+
+// Dispatch a compute kernel asynchronously (does not wait for completion).
+long metal_dispatch_async(
+    void* pipeline_handle,
+    void** buffers,
+    long buffer_count,
+    long grid_x, long grid_y, long grid_z,
+    long block_x, long block_y, long block_z
+) {
+    @autoreleasepool {
+        if (!pipeline_handle || !g_command_queue) {
+            fprintf(stderr, "[vais-gpu] Metal error: Pipeline or command queue not initialized\n");
+            return -1;
+        }
+
+        id<MTLComputePipelineState> pipeline =
+            (__bridge id<MTLComputePipelineState>)pipeline_handle;
+
+        id<MTLCommandBuffer> commandBuffer = [g_command_queue commandBuffer];
+        if (!commandBuffer) {
+            fprintf(stderr, "[vais-gpu] Metal error: Failed to create command buffer\n");
+            return -1;
+        }
+
+        id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+        if (!encoder) {
+            fprintf(stderr, "[vais-gpu] Metal error: Failed to create compute encoder\n");
+            return -1;
+        }
+
+        [encoder setComputePipelineState:pipeline];
+
+        for (long i = 0; i < buffer_count; i++) {
+            if (buffers[i]) {
+                id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)buffers[i];
+                [encoder setBuffer:buffer offset:0 atIndex:(NSUInteger)i];
+            }
+        }
+
+        MTLSize gridSize = MTLSizeMake((NSUInteger)grid_x, (NSUInteger)grid_y, (NSUInteger)grid_z);
+        MTLSize threadgroupSize = MTLSizeMake((NSUInteger)block_x, (NSUInteger)block_y, (NSUInteger)block_z);
+
+        [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+        [encoder endEncoding];
+
+        // Commit but do NOT wait — async dispatch
+        [commandBuffer commit];
+
+        return 0;
+    }
+}
+
+// ============================================
+// Multi-GPU device selection
+// ============================================
+
+// Select a Metal device by index (supports eGPU).
+// Returns 0 on success, -1 on failure.
+long metal_device_select(long device_index) {
+#if TARGET_OS_OSX
+    @autoreleasepool {
+        NSArray<id<MTLDevice>>* devices = MTLCopyAllDevices();
+        if ((NSUInteger)device_index >= devices.count) {
+            fprintf(stderr, "[vais-gpu] Metal error: Device index %ld out of range (count=%lu)\n",
+                    device_index, (unsigned long)devices.count);
+            return -1;
+        }
+        g_device = devices[(NSUInteger)device_index];
+        // Recreate command queue for new device
+        g_command_queue = [g_device newCommandQueue];
+        if (!g_command_queue) {
+            fprintf(stderr, "[vais-gpu] Metal error: Failed to create command queue for device %ld\n",
+                    device_index);
+            return -1;
+        }
+        // Library must be reloaded for new device
+        g_library = nil;
+        return 0;
+    }
+#else
+    (void)device_index;
+    fprintf(stderr, "[vais-gpu] Metal error: Multi-GPU not supported on this platform\n");
+    return -1;
+#endif
+}
+
+// ============================================
 // Cleanup
 // ============================================
 

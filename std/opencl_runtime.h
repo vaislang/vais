@@ -58,6 +58,29 @@ long        opencl_device_global_mem(void);
 long        opencl_device_local_mem(void);
 
 // ============================================
+// Event / Profiling
+// ============================================
+void*  opencl_event_create(void);
+long   opencl_event_destroy(void* event_handle);
+long   opencl_event_wait(void* event_handle);
+double opencl_event_elapsed(void* start_handle, void* end_handle);
+
+// ============================================
+// Async dispatch
+// ============================================
+long  opencl_dispatch_async(
+    void* kernel_handle,
+    long global_x, long global_y, long global_z,
+    long local_x, long local_y, long local_z,
+    void** out_event
+);
+
+// ============================================
+// Multi-device selection
+// ============================================
+long  opencl_device_select(long device_index);
+
+// ============================================
 // Error handling
 // ============================================
 long        opencl_last_error(void);

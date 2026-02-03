@@ -547,6 +547,51 @@ F gpu_event_synchronize(event: *i64) -> i64 { 0 }
 @[extern "C"]
 F gpu_event_elapsed(start: *i64, end: *i64) -> f64 { 0.0 }
 
+# --- Async Memory Transfer ---
+
+# Asynchronous host-to-device copy on a stream
+@[extern "C"]
+F gpu_memcpy_h2d_async(dst: *i64, src: *i64, size: i64, stream: *i64) -> i64 { 0 }
+
+# Asynchronous device-to-host copy on a stream
+@[extern "C"]
+F gpu_memcpy_d2h_async(dst: *i64, src: *i64, size: i64, stream: *i64) -> i64 { 0 }
+
+# --- Unified Memory Hints ---
+
+# Prefetch unified memory to a specific device
+@[extern "C"]
+F gpu_mem_prefetch(ptr: *i64, size: i64, device_id: i64) -> i64 { 0 }
+
+# Advise runtime about memory access patterns
+# advice: 1=ReadMostly, 2=PreferredLocation, 3=AccessedBy
+@[extern "C"]
+F gpu_mem_advise(ptr: *i64, size: i64, advice: i64, device_id: i64) -> i64 { 0 }
+
+# --- Event-Stream Operations ---
+
+# Record an event on a specific stream
+@[extern "C"]
+F gpu_event_record_stream(event: *i64, stream: *i64) -> i64 { 0 }
+
+# --- Multi-GPU Peer Access ---
+
+# Enable peer-to-peer access to another device
+@[extern "C"]
+F gpu_peer_access_enable(peer_device: i64) -> i64 { 0 }
+
+# Disable peer-to-peer access to another device
+@[extern "C"]
+F gpu_peer_access_disable(peer_device: i64) -> i64 { 0 }
+
+# Check if peer access is possible (returns 1 if yes, 0 if no)
+@[extern "C"]
+F gpu_peer_can_access(device: i64, peer: i64) -> i64 { 0 }
+
+# Copy memory between devices (peer-to-peer)
+@[extern "C"]
+F gpu_memcpy_peer(dst: *i64, dst_device: i64, src: *i64, src_device: i64, size: i64) -> i64 { 0 }
+
 # --- Error Handling ---
 
 # Get the last CUDA error code (0 = success)

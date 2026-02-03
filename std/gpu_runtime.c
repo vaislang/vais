@@ -329,6 +329,93 @@ void* gpu_alloc_managed(long size) {
 }
 
 // ============================================
+// Async memory transfer
+// ============================================
+
+// Asynchronous host-to-device memory copy on a stream.
+long gpu_memcpy_h2d_async(void* dst, const void* src, long size, void* stream) {
+    cudaError_t err = cudaMemcpyAsync(dst, src, (size_t)size,
+                                       cudaMemcpyHostToDevice, (cudaStream_t)stream);
+    return gpu_check_error(err, "gpu_memcpy_h2d_async");
+}
+
+// Asynchronous device-to-host memory copy on a stream.
+long gpu_memcpy_d2h_async(void* dst, const void* src, long size, void* stream) {
+    cudaError_t err = cudaMemcpyAsync(dst, src, (size_t)size,
+                                       cudaMemcpyDeviceToHost, (cudaStream_t)stream);
+    return gpu_check_error(err, "gpu_memcpy_d2h_async");
+}
+
+// ============================================
+// Unified memory hints
+// ============================================
+
+// Prefetch unified memory to a specific device.
+long gpu_mem_prefetch(void* ptr, long size, long device_id) {
+    cudaError_t err = cudaMemPrefetchAsync(ptr, (size_t)size, (int)device_id, 0);
+    return gpu_check_error(err, "gpu_mem_prefetch");
+}
+
+// Advise the runtime about memory access patterns.
+// advice values: 1=ReadMostly, 2=PreferredLocation, 3=AccessedBy
+long gpu_mem_advise(void* ptr, long size, long advice, long device_id) {
+    cudaMemoryAdvise cuda_advice;
+    switch ((int)advice) {
+        case 1: cuda_advice = cudaMemAdviseSetReadMostly; break;
+        case 2: cuda_advice = cudaMemAdviseSetPreferredLocation; break;
+        case 3: cuda_advice = cudaMemAdviseSetAccessedBy; break;
+        default:
+            fprintf(stderr, "[vais-gpu] CUDA error in gpu_mem_advise: unknown advice %ld\n", advice);
+            return -1;
+    }
+    cudaError_t err = cudaMemAdvise(ptr, (size_t)size, cuda_advice, (int)device_id);
+    return gpu_check_error(err, "gpu_mem_advise");
+}
+
+// ============================================
+// Event-stream operations
+// ============================================
+
+// Record an event on a specific stream.
+long gpu_event_record_stream(void* event, void* stream) {
+    cudaError_t err = cudaEventRecord((cudaEvent_t)event, (cudaStream_t)stream);
+    return gpu_check_error(err, "gpu_event_record_stream");
+}
+
+// ============================================
+// Multi-GPU peer access
+// ============================================
+
+// Enable peer access from the current device to peer_device.
+long gpu_peer_access_enable(long peer_device) {
+    cudaError_t err = cudaDeviceEnablePeerAccess((int)peer_device, 0);
+    return gpu_check_error(err, "gpu_peer_access_enable");
+}
+
+// Disable peer access from the current device to peer_device.
+long gpu_peer_access_disable(long peer_device) {
+    cudaError_t err = cudaDeviceDisablePeerAccess((int)peer_device);
+    return gpu_check_error(err, "gpu_peer_access_disable");
+}
+
+// Check if device can access peer's memory directly.
+// Returns 1 if peer access is possible, 0 if not, -1 on error.
+long gpu_peer_can_access(long device, long peer) {
+    int can_access = 0;
+    cudaError_t err = cudaDeviceCanAccessPeer(&can_access, (int)device, (int)peer);
+    if (gpu_check_error(err, "gpu_peer_can_access") != 0) {
+        return -1;
+    }
+    return (long)can_access;
+}
+
+// Copy memory between devices (peer-to-peer).
+long gpu_memcpy_peer(void* dst, long dst_device, const void* src, long src_device, long size) {
+    cudaError_t err = cudaMemcpyPeer(dst, (int)dst_device, src, (int)src_device, (size_t)size);
+    return gpu_check_error(err, "gpu_memcpy_peer");
+}
+
+// ============================================
 // Error query
 // ============================================
 
