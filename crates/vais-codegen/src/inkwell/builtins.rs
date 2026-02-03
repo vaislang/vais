@@ -158,6 +158,26 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     // ===== SIMD functions =====
     module.add_function("simd_mul_vec4f32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
     module.add_function("simd_add_vec4f32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_sub_vec4f32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_div_vec4f32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_reduce_add_vec4f32", f64_type.fn_type(&[i8_ptr.into()], false), None);
+    module.add_function("simd_reduce_mul_vec4f32", f64_type.fn_type(&[i8_ptr.into()], false), None);
+    module.add_function("simd_dot_vec4f32", f64_type.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_create_vec4f32", i8_ptr.fn_type(&[f64_type.into(), f64_type.into(), f64_type.into(), f64_type.into()], false), None);
+    module.add_function("simd_get_vec4f32", f64_type.fn_type(&[i8_ptr.into(), i32_type.into()], false), None);
+    // Integer SIMD
+    module.add_function("simd_add_vec4i32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_mul_vec4i32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_sub_vec4i32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_reduce_add_vec4i32", i64_type.fn_type(&[i8_ptr.into()], false), None);
+    module.add_function("simd_reduce_mul_vec4i32", i64_type.fn_type(&[i8_ptr.into()], false), None);
+    // Vec4i32 constructors
+    module.add_function("vec4i32", i8_ptr.fn_type(&[i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into()], false), None);
+    module.add_function("vec4f32", i8_ptr.fn_type(&[f64_type.into(), f64_type.into(), f64_type.into(), f64_type.into()], false), None);
+    // Vec2i64
+    module.add_function("simd_add_vec2i64", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_reduce_add_vec2i64", i64_type.fn_type(&[i8_ptr.into()], false), None);
+    module.add_function("vec2i64", i8_ptr.fn_type(&[i64_type.into(), i64_type.into()], false), None);
 
     // ===== String helper functions =====
     // snprintf(buf, size, fmt, ...) -> i32
