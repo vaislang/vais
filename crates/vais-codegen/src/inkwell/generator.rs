@@ -112,6 +112,9 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Function name -> return struct type name (for struct type inference)
     function_return_structs: HashMap<String, String>,
+
+    /// Defer stack: expressions to execute in LIFO order before function return
+    defer_stack: Vec<Expr>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -156,6 +159,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             _last_lambda_info: None,
             constants: HashMap::new(),
             function_return_structs: HashMap::new(),
+            defer_stack: Vec::new(),
         };
 
         // Declare built-in functions
@@ -486,6 +490,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.defer_stack.clear();
 
         // For generic functions, set up default substitutions (T -> i64, etc.)
         let old_substitutions = self.generic_substitutions.clone();
@@ -518,6 +523,57 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Generate contract checks (#[requires] attributes)
+        for (idx, attr) in func.attributes.iter().enumerate() {
+            if attr.name == "requires" {
+                if let Some(expr) = &attr.expr {
+                    let cond_val = self.generate_expr(&expr.node)?;
+                    // Convert condition to i1 (bool)
+                    let cond_i1 = if cond_val.is_int_value() {
+                        self.builder.build_int_compare(
+                            IntPredicate::NE,
+                            cond_val.into_int_value(),
+                            cond_val.get_type().into_int_type().const_zero(),
+                            "contract_cond"
+                        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        // Non-int condition: treat as truthy
+                        self.context.bool_type().const_int(1, false)
+                    };
+
+                    let ok_block = self.context.append_basic_block(fn_value, &format!("contract_ok_{}", idx));
+                    let fail_block = self.context.append_basic_block(fn_value, &format!("contract_fail_{}", idx));
+
+                    self.builder.build_conditional_branch(cond_i1, ok_block, fail_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Fail block: write message to stderr and exit
+                    self.builder.position_at_end(fail_block);
+                    let msg = format!("requires condition #{}", idx);
+                    let msg_val = self.generate_string_literal(&msg)?;
+                    // Write to stderr (fd=2) using write()
+                    let write_fn = self.module.get_function("write")
+                        .unwrap_or_else(|| self.module.add_function("write", self.context.i64_type().fn_type(&[self.context.i32_type().into(), self.context.i8_type().ptr_type(AddressSpace::default()).into(), self.context.i64_type().into()], false), None));
+                    let msg_len = self.context.i64_type().const_int(msg.len() as u64, false);
+                    self.builder.build_call(write_fn, &[self.context.i32_type().const_int(2, false).into(), msg_val.into(), msg_len.into()], "contract_write")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    // Write newline
+                    let newline = self.generate_string_literal("\n")?;
+                    self.builder.build_call(write_fn, &[self.context.i32_type().const_int(2, false).into(), newline.into(), self.context.i64_type().const_int(1, false).into()], "contract_nl")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    let exit_fn = self.module.get_function("exit")
+                        .unwrap_or_else(|| self.module.add_function("exit", self.context.void_type().fn_type(&[self.context.i32_type().into()], false), None));
+                    self.builder.build_call(exit_fn, &[self.context.i32_type().const_int(1, false).into()], "")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.builder.build_unreachable()
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Continue in OK block
+                    self.builder.position_at_end(ok_block);
+                }
+            }
+        }
+
         // Generate function body
         let ret_resolved = func.ret_type.as_ref()
             .map(|t| self.ast_type_to_resolved(&t.node))
@@ -527,6 +583,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
+                self.emit_defer_cleanup()?;
                 if ret_substituted == ResolvedType::Unit {
                     self.builder.build_return(None)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -539,6 +596,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let body_value = self.generate_block(stmts)?;
                 // Only add return if the block doesn't already have a terminator
                 if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                    self.emit_defer_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder.build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -638,9 +696,26 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
             // Reference/Dereference
             Expr::Ref(inner) => {
-                // Get address of inner expression
-                let val = self.generate_expr(&inner.node)?;
-                Ok(val) // Simplified - needs proper lvalue handling
+                // Get address of inner expression (lvalue)
+                match &inner.node {
+                    Expr::Ident(name) => {
+                        if let Some((ptr, _)) = self.locals.get(name) {
+                            Ok((*ptr).into())
+                        } else {
+                            let val = self.generate_expr(&inner.node)?;
+                            Ok(val)
+                        }
+                    }
+                    _ => {
+                        // For non-lvalue expressions, create a temporary alloca
+                        let val = self.generate_expr(&inner.node)?;
+                        let alloca = self.builder.build_alloca(val.get_type(), "ref_tmp")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder.build_store(alloca, val)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        Ok(alloca.into())
+                    }
+                }
             }
             Expr::Deref(inner) => {
                 let ptr = self.generate_expr(&inner.node)?;
@@ -1056,6 +1131,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         };
 
         // Handle built-in pseudo-functions that need special codegen
+        // Handle puts with string interpolation: printf the interp, then puts("") for newline
+        if fn_name == "puts" && args.len() == 1 {
+            if matches!(&args[0].node, Expr::StringInterp(_)) {
+                let _interp_val = self.generate_expr(&args[0].node)?;
+                // String interp already printed via printf; now add newline
+                let printf_fn = self.module.get_function("printf")
+                    .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
+                let newline = self.generate_string_literal("\n")?;
+                self.builder.build_call(printf_fn, &[newline.into()], "puts_nl")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(self.context.struct_type(&[], false).const_zero().into());
+            }
+        }
         match fn_name.as_str() {
             "println" => return self.generate_println_call(args),
             "print" => return self.generate_print_call(args),
@@ -1369,11 +1457,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Stmt::Expr(expr) => self.generate_expr(&expr.node),
             Stmt::Return(Some(expr)) => {
                 let val = self.generate_expr(&expr.node)?;
+                self.emit_defer_cleanup()?;
                 self.builder.build_return(Some(&val))
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 Ok(self.context.struct_type(&[], false).const_zero().into())
             }
             Stmt::Return(None) => {
+                self.emit_defer_cleanup()?;
                 self.builder.build_return(None)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 Ok(self.context.struct_type(&[], false).const_zero().into())
@@ -1381,9 +1471,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Stmt::Break(value) => self.generate_break(value.as_ref().map(|v| &v.node)),
             Stmt::Continue => self.generate_continue(),
             Stmt::Defer(expr) => {
-                // Add deferred expression to stack (will be executed on function exit)
-                // For now, just return unit - full defer requires more infrastructure
-                let _ = expr;
+                // Add deferred expression to stack (will be executed in LIFO order before return)
+                self.defer_stack.push(expr.node.clone());
                 Ok(self.context.struct_type(&[], false).const_zero().into())
             }
             Stmt::LetDestructure { pattern, value, is_mut: _ } => {
@@ -1764,6 +1853,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(self.context.struct_type(&[], false).const_zero().into())
     }
 
+    /// Emit deferred expressions in LIFO order (before function return).
+    fn emit_defer_cleanup(&mut self) -> CodegenResult<()> {
+        let deferred: Vec<Expr> = self.defer_stack.iter().rev().cloned().collect();
+        for expr in deferred {
+            self.generate_expr(&expr)?;
+        }
+        Ok(())
+    }
+
     fn generate_break(&mut self, value: Option<&Expr>) -> CodegenResult<BasicValueEnum<'ctx>> {
         let break_block = self.loop_stack.last()
             .ok_or_else(|| CodegenError::Unsupported("break outside of loop".to_string()))?
@@ -2007,8 +2105,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Transform method call to function call with receiver as first arg
         // e.g., obj.method(a, b) -> TypeName_method(obj, a, b)
 
-        let receiver_val = self.generate_expr(receiver)?;
-
         // Try to resolve the struct type name from the receiver
         let mut struct_name = self.infer_struct_name(receiver).ok();
 
@@ -2023,6 +2119,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
             }
         }
+
+        // Get receiver pointer for pass-by-reference self parameter
+        let receiver_ptr: Option<PointerValue<'ctx>> = match receiver {
+            Expr::Ident(name) => {
+                self.locals.get(name).map(|(ptr, _)| *ptr)
+            }
+            Expr::SelfCall => {
+                // @ in method context: self is already a pointer
+                self.locals.get("self").map(|(ptr, _)| *ptr)
+            }
+            _ => None,
+        };
+
+        // Also generate the receiver value as fallback (for non-method calls or unknown receivers)
+        let receiver_val = self.generate_expr(receiver)?;
 
         // Try qualified name: TypeName_method
         let qualified_name = struct_name.as_ref().map(|sn| format!("{}_{}", sn, method));
@@ -2058,8 +2169,23 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         };
 
-        // Generate arguments (receiver first)
-        let mut arg_values: Vec<BasicMetadataValueEnum> = vec![receiver_val.into()];
+        // Generate arguments (receiver first, pass as pointer for methods)
+        let mut arg_values: Vec<BasicMetadataValueEnum> = if let Some(ptr) = receiver_ptr {
+            // Pass receiver as pointer (self by reference)
+            vec![ptr.into()]
+        } else {
+            // Fallback: for struct literal receivers or complex expressions,
+            // create a temporary alloca and pass its pointer
+            if struct_name.is_some() {
+                let alloca = self.builder.build_alloca(receiver_val.get_type(), "tmp_self")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder.build_store(alloca, receiver_val)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                vec![alloca.into()]
+            } else {
+                vec![receiver_val.into()]
+            }
+        };
         for arg in args {
             arg_values.push(self.generate_expr(&arg.node)?.into());
         }
@@ -3156,9 +3282,27 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Wildcard always matches
                 Ok(self.context.bool_type().const_int(1, false))
             }
-            Pattern::Ident(_) => {
-                // Identifier pattern always matches (binding)
-                Ok(self.context.bool_type().const_int(1, false))
+            Pattern::Ident(name) => {
+                // Check if this identifier is a known enum variant (simple variant without data)
+                let is_enum_variant = self.enum_variants.iter().any(|((_, v), _)| v == name);
+                if is_enum_variant && match_val.is_struct_value() {
+                    // Compare the tag value
+                    let struct_val = match_val.into_struct_value();
+                    let tag_val = self.builder.build_extract_value(struct_val, 0, "enum_tag")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into_int_value();
+                    let expected_tag = self.get_enum_variant_tag(name);
+                    let result = self.builder.build_int_compare(
+                        IntPredicate::EQ,
+                        tag_val,
+                        self.context.i8_type().const_int(expected_tag as u64, false),
+                        "variant_check"
+                    ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    Ok(result)
+                } else {
+                    // Regular binding - always matches
+                    Ok(self.context.bool_type().const_int(1, false))
+                }
             }
             Pattern::Literal(lit) => {
                 match lit {
@@ -3725,18 +3869,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .or_insert(ResolvedType::I64);
         }
 
-        // Build parameter types: map self -> struct type pointer or value
+        // Build parameter types: map self -> pointer type (pass by reference)
         let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
         for p in &func.params {
             if p.name.node == "self" {
-                // self parameter: use the struct type
-                if let Some(struct_type) = self.generated_structs.get(type_name) {
-                    param_types.push((*struct_type).into());
-                } else {
-                    let resolved = self.ast_type_to_resolved(&p.ty.node);
-                    let substituted = self.substitute_type(&resolved);
-                    param_types.push(self.type_mapper.map_type(&substituted).into());
-                }
+                // self parameter: pass as pointer for mutation visibility
+                param_types.push(self.context.i8_type().ptr_type(AddressSpace::default()).into());
             } else {
                 let resolved = self.ast_type_to_resolved(&p.ty.node);
                 let substituted = self.substitute_type(&resolved);
@@ -3787,6 +3925,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.current_function = Some(fn_value);
         self.locals.clear();
         self.var_struct_types.clear();
+        self.defer_stack.clear();
 
         // Set up generic substitutions from parent struct and method generics
         let old_substitutions = self.generic_substitutions.clone();
@@ -3809,31 +3948,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Allocate parameters
         for (i, param) in func.params.iter().enumerate() {
             let param_value = fn_value.get_nth_param(i as u32).unwrap();
-            let param_type = if param.name.node == "self" {
-                if let Some(struct_type) = self.generated_structs.get(type_name) {
-                    BasicTypeEnum::StructType(*struct_type)
-                } else {
-                    let resolved = self.ast_type_to_resolved(&param.ty.node);
-                    let substituted = self.substitute_type(&resolved);
-                    self.type_mapper.map_type(&substituted)
-                }
+
+            if param.name.node == "self" {
+                // self is passed as a pointer to the caller's alloca
+                // Use it directly as the local pointer (no separate alloca needed)
+                let self_ptr = param_value.into_pointer_value();
+                let struct_type = self.generated_structs.get(type_name)
+                    .copied()
+                    .unwrap_or_else(|| self.context.struct_type(&[], false));
+                self.locals.insert("self".to_string(), (self_ptr, BasicTypeEnum::StructType(struct_type)));
+                self.var_struct_types.insert("self".to_string(), type_name.to_string());
             } else {
                 let resolved = self.ast_type_to_resolved(&param.ty.node);
                 let substituted = self.substitute_type(&resolved);
-                self.type_mapper.map_type(&substituted)
-            };
+                let param_type = self.type_mapper.map_type(&substituted);
 
-            let alloca = self.builder.build_alloca(param_type, &param.name.node)
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.builder.build_store(alloca, param_value)
-                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            self.locals.insert(param.name.node.clone(), (alloca, param_type));
+                let alloca = self.builder.build_alloca(param_type, &param.name.node)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.builder.build_store(alloca, param_value)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                self.locals.insert(param.name.node.clone(), (alloca, param_type));
 
-            // Track self as struct type
-            if param.name.node == "self" {
-                self.var_struct_types.insert("self".to_string(), type_name.to_string());
-            } else if let Some(sn) = self.extract_struct_type_name(&param.ty.node) {
-                self.var_struct_types.insert(param.name.node.clone(), sn);
+                if let Some(sn) = self.extract_struct_type_name(&param.ty.node) {
+                    self.var_struct_types.insert(param.name.node.clone(), sn);
+                }
             }
         }
 
@@ -3846,6 +3984,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
+                self.emit_defer_cleanup()?;
                 if ret_substituted == ResolvedType::Unit {
                     self.builder.build_return(None)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -3857,6 +3996,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             ast::FunctionBody::Block(stmts) => {
                 let body_value = self.generate_block(stmts)?;
                 if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                    self.emit_defer_cleanup()?;
                     if ret_substituted == ResolvedType::Unit {
                         self.builder.build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;

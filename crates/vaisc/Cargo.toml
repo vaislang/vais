@@ -15,7 +15,7 @@ name = "vaisc"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["inkwell"]
 jit = ["vais-jit"]
 inkwell = ["vais-codegen/inkwell-codegen", "dep:inkwell"]
 

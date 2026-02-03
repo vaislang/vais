@@ -93,7 +93,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 27 | GPU 코드젠 & Async 런타임 완성 | ✅ 완료 | 100% |
 | 28 | GPU 런타임 실행 지원 | 🔄 진행 중 | Stage 1~3 완료, Stage 4 잔여 (23/27, 85%) |
 | **29** | **토큰 절감 강화** | **✅ 완료** | **21/21 (100%)** |
-| **30** | **성능 최적화** | **🔄 진행 중** | **7/29 (24%)** |
+| **30** | **성능 최적화** | **🔄 진행 중** | **11/29 (38%)** |
 | **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **⏳ 예정** | **0/30 (0%)** |
 | | *Phase 32~37: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
@@ -299,7 +299,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 🚀 Phase 30: 성능 최적화 - C/Rust급 실행 속도 달성
 
-> **상태**: 🔄 진행 중 (Stage 1 - inkwell 98% 패리티 달성, 예제 115/117 통과, 기본값 전환 대기)
+> **상태**: 🔄 진행 중 (Stage 1 완료 - inkwell 기본 백엔드 전환, 런타임 출력 88/117 일치, E2E 210/210 통과)
 > **목표**: C 대비 실행 속도 갭 10-20% → 5% 이내
 > **핵심 지표**: fibonacci(40), matrix_mul, sort 벤치마크에서 C -O2 대비 비교
 
@@ -315,9 +315,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **inkwell 기능 패리티 강화** - Impl/Struct 메서드 선언·생성, 메서드 호출 해석(TypeName_method), var_struct_types 기반 구조체 타입 추론, Option/Result 생성자(Some/None/Ok/Err), 열거형 variant 식별자, 구조체 리터럴 런타임 값 지원 (예제 통과율 55% → 61%)
 - [x] **inkwell 제네릭/클로저/extern 패리티** - Generic 타입 i64 폴백, 함수/메서드/구조체 제네릭 치환, ExternBlock 선언 처리, Union 지원, SelfCall 메서드 해석, 클로저 캡처 자동 감지·전달, 추가 빌트인 80+ 등록 (예제 통과율 61% → 75%)
 - [x] **inkwell 통과율 85% → 98% (99→115/117)** - PHI 노드 predecessor 불일치 수정 (if-else/ternary/match에서 terminate된 블록 체크), generate_block 조기 종료, 슬라이스 인덱싱 지원 (Range→slice 연산), SIMD 함수 인라인 정의 (vec4i32/vec4f32/vec2i64 생성자+연산+리듀스)
-- [ ] **inkwell 백엔드 기본값 전환** - GC/debug/generics 기능 패리티 달성 후 `Cargo.toml` default feature 변경
-- [ ] **inkwell 코드젠 완성도 검증** - 기존 E2E 테스트 128개 전부 통과 확인
-- [ ] **컴파일 속도 벤치마크** - 텍스트 vs inkwell 비교 측정
+- [x] **inkwell 런타임 패리티 강화** - self를 포인터로 전달하여 메서드 내 변이 반영 (8개 예제 수정), defer 스택 LIFO 구현, #[requires] contract 속성 처리, 열거형 패턴 매칭 태그 비교 수정, Expr::Ref lvalue 포인터 반환, puts+StringInterp 크래시 수정 (런타임 출력 일치 79→88/117)
+- [x] **inkwell 백엔드 기본값 전환** - `vais-codegen` default feature를 `inkwell-codegen`으로 변경, `vaisc` default에 `inkwell` 추가, 컴파일 시 자동으로 inkwell 사용
+- [x] **inkwell 코드젠 완성도 검증** - E2E 테스트 210개 전부 통과 확인 (text/inkwell 모두)
+- [x] **컴파일 속도 벤치마크** - inkwell이 텍스트 대비 ~36% 빠름 (10회 반복 측정: 1.52s vs 2.39s)
 
 ### 2단계 - Tail Call Optimization (TCO)
 

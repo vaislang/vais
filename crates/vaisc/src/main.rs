@@ -510,7 +510,7 @@ fn main() {
     }
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, gpu_compile, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel, inkwell: build_inkwell }) => {
+        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, gpu_compile, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel, inkwell: _build_inkwell }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(&input, output, gpu_target_str, gpu_host, gpu_compile, cli.verbose)
@@ -550,6 +550,10 @@ fn main() {
                 vais_codegen::parallel::ParallelConfig::new(threads)
             });
 
+            // Default to inkwell when feature is available
+            #[cfg(feature = "inkwell")]
+            let use_inkwell = true;
+            #[cfg(not(feature = "inkwell"))]
             let use_inkwell = build_inkwell || cli.inkwell;
             cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config, use_inkwell)
             }
@@ -604,7 +608,12 @@ fn main() {
                     vais_codegen::optimize::PgoMode::None,
                     false,
                     None, // parallel_config
-                    cli.inkwell,
+                    {
+                        #[cfg(feature = "inkwell")]
+                        { true }
+                        #[cfg(not(feature = "inkwell"))]
+                        { cli.inkwell }
+                    },
                 )
             } else {
                 println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
