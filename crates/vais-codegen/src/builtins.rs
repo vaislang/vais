@@ -483,6 +483,15 @@ impl CodeGenerator {
             vec![("path".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
+
+        // flock: (fd, operation) -> int (advisory file locking)
+        register_extern!(self, "flock",
+            vec![
+                ("fd".to_string(), ResolvedType::I64),
+                ("operation".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
     }
 
     fn register_string_functions(&mut self) {

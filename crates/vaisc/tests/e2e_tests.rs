@@ -3572,3 +3572,86 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+#[test]
+fn e2e_flock_exclusive_lock() {
+    // Test: open a file, acquire exclusive lock, unlock, close
+    let source = r#"
+F main() -> i64 {
+    # Create test file
+    fp := fopen("/tmp/vais_flock_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("lock test", fp)
+    fclose(fp)
+
+    # Open with POSIX open for fd (O_RDWR=2)
+    fd := posix_open("/tmp/vais_flock_test.txt", 2, 0)
+    I fd < 0 { R 2 }
+
+    # LOCK_EX=2 (exclusive lock)
+    result := flock(fd, 2)
+    I result != 0 { posix_close(fd); R 3 }
+
+    # LOCK_UN=8 (unlock)
+    result2 := flock(fd, 8)
+    posix_close(fd)
+    remove("/tmp/vais_flock_test.txt")
+    I result2 == 0 { R 0 } E { R 4 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_flock_shared_lock() {
+    // Test: acquire shared lock on a file
+    let source = r#"
+F main() -> i64 {
+    fp := fopen("/tmp/vais_flock_sh_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("shared lock test", fp)
+    fclose(fp)
+
+    fd := posix_open("/tmp/vais_flock_sh_test.txt", 0, 0)
+    I fd < 0 { R 2 }
+
+    # LOCK_SH=1
+    result := flock(fd, 1)
+    I result != 0 { posix_close(fd); R 3 }
+
+    # LOCK_UN=8
+    flock(fd, 8)
+    posix_close(fd)
+    remove("/tmp/vais_flock_sh_test.txt")
+    R 0
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_flock_try_nonblocking() {
+    // Test: try non-blocking exclusive lock (LOCK_EX | LOCK_NB)
+    let source = r#"
+F main() -> i64 {
+    fp := fopen("/tmp/vais_flock_nb_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("nb lock test", fp)
+    fclose(fp)
+
+    fd := posix_open("/tmp/vais_flock_nb_test.txt", 2, 0)
+    I fd < 0 { R 2 }
+
+    # LOCK_EX=2 + LOCK_NB=4 = 6
+    result := flock(fd, 6)
+    I result != 0 { posix_close(fd); R 3 }
+
+    # Unlock and close
+    flock(fd, 8)
+    posix_close(fd)
+    remove("/tmp/vais_flock_nb_test.txt")
+    R 0
+}
+"#;
+    assert_exit_code(source, 0);
+}

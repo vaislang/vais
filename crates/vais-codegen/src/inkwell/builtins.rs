@@ -84,6 +84,8 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     module.add_function("close", i32_type.fn_type(&[i32_type.into()], false), None);
     // remove(path) -> i32
     module.add_function("remove", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // flock(fd, operation) -> i32 (advisory file locking)
+    module.add_function("flock", i32_type.fn_type(&[i32_type.into(), i32_type.into()], false), None);
 
     // ===== Stdlib functions =====
     // atoi(s) -> i32

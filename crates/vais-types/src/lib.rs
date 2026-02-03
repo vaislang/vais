@@ -1363,6 +1363,27 @@ impl TypeChecker {
             },
         );
 
+        // flock: (fd, operation) -> i64 (advisory file locking)
+        self.functions.insert(
+            "flock".to_string(),
+            FunctionSig {
+                name: "flock".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("fd".to_string(), ResolvedType::I64, false),
+                    ("operation".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // Register SIMD intrinsic functions
         self.register_simd_builtins();
     }

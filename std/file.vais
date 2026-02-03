@@ -578,6 +578,129 @@ X MappedFile {
     }
 }
 
+# flock operation constants
+C LOCK_SH: i64 = 1   # Shared lock (read)
+C LOCK_EX: i64 = 2   # Exclusive lock (write)
+C LOCK_NB: i64 = 4   # Non-blocking (OR with SH/EX)
+C LOCK_UN: i64 = 8   # Unlock
+
+# Advisory file lock wrapper
+S FileLock {
+    fd: i64,
+    locked: i64    # 0=unlocked, 1=shared, 2=exclusive
+}
+
+X FileLock {
+    # Create a FileLock from a file descriptor
+    F from_fd(fd: i64) -> FileLock {
+        FileLock { fd: fd, locked: 0 }
+    }
+
+    # Create a FileLock by opening a path (O_RDWR=2)
+    F open(path: i64) -> FileLock {
+        I path == 0 {
+            FileLock { fd: 0 - 1, locked: 0 }
+        } E {
+            fd := posix_open(path, 2, 0)
+            FileLock { fd: fd, locked: 0 }
+        }
+    }
+
+    # Check if the lock handle is valid
+    F is_valid(&self) -> i64 {
+        I self.fd >= 0 { 1 } E { 0 }
+    }
+
+    # Acquire a shared (read) lock, blocking
+    # Returns 1 on success, 0 on error
+    F lock_shared(&self) -> i64 {
+        I self.fd < 0 { 0 }
+        E {
+            result := flock(self.fd, LOCK_SH)
+            I result == 0 {
+                self.locked = 1
+                1
+            } E { 0 }
+        }
+    }
+
+    # Acquire an exclusive (write) lock, blocking
+    # Returns 1 on success, 0 on error
+    F lock_exclusive(&self) -> i64 {
+        I self.fd < 0 { 0 }
+        E {
+            result := flock(self.fd, LOCK_EX)
+            I result == 0 {
+                self.locked = 2
+                1
+            } E { 0 }
+        }
+    }
+
+    # Try to acquire a shared lock, non-blocking
+    # Returns 1 on success, 0 if would block or error
+    F try_lock_shared(&self) -> i64 {
+        I self.fd < 0 { 0 }
+        E {
+            result := flock(self.fd, LOCK_SH + LOCK_NB)
+            I result == 0 {
+                self.locked = 1
+                1
+            } E { 0 }
+        }
+    }
+
+    # Try to acquire an exclusive lock, non-blocking
+    # Returns 1 on success, 0 if would block or error
+    F try_lock_exclusive(&self) -> i64 {
+        I self.fd < 0 { 0 }
+        E {
+            result := flock(self.fd, LOCK_EX + LOCK_NB)
+            I result == 0 {
+                self.locked = 2
+                1
+            } E { 0 }
+        }
+    }
+
+    # Release the lock
+    # Returns 1 on success, 0 on error
+    F unlock(&self) -> i64 {
+        I self.fd < 0 { 0 }
+        E I self.locked == 0 { 1 }
+        E {
+            result := flock(self.fd, LOCK_UN)
+            I result == 0 {
+                self.locked = 0
+                1
+            } E { 0 }
+        }
+    }
+
+    # Check if currently locked
+    F is_locked(&self) -> i64 {
+        I self.locked != 0 { 1 } E { 0 }
+    }
+
+    # Close the file descriptor and release lock
+    F close(&self) -> i64 {
+        I self.fd >= 0 {
+            I self.locked != 0 {
+                flock(self.fd, LOCK_UN)
+                self.locked = 0
+            }
+            posix_close(self.fd)
+            self.fd = 0 - 1
+        }
+        0
+    }
+
+    # Alias for close (RAII pattern)
+    F drop(&self) -> i64 {
+        @.close()
+    }
+}
+
 # Sync directory metadata to disk (ensures rename/unlink durability)
 # Opens dir as fd, fsyncs, closes. Returns 1 on success, 0 on error.
 F dir_sync(path: i64) -> i64 {
