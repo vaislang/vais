@@ -32,6 +32,11 @@ name = "inlining_bench"
 path = "inlining_bench.rs"
 harness = false
 
+[[bench]]
+name = "performance_bench"
+path = "performance_bench.rs"
+harness = false
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }
