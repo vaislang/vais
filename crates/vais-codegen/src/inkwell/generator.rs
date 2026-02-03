@@ -608,7 +608,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(self.context.i64_type().const_int(0, false).into())
             }
             Expr::Tuple(elements) => self.generate_tuple(elements),
-            Expr::Index { expr: arr, index } => self.generate_index(&arr.node, &index.node),
+            Expr::Index { expr: arr, index } => {
+                // Check if this is a slice operation (index is a Range expression)
+                if let Expr::Range { start, end, inclusive } = &index.node {
+                    return self.generate_slice(&arr.node, start.as_deref(), end.as_deref(), *inclusive);
+                }
+                self.generate_index(&arr.node, &index.node)
+            }
 
             // Method call
             Expr::MethodCall { receiver, method, args } => {
@@ -1289,6 +1295,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut last_value: BasicValueEnum = self.context.struct_type(&[], false).const_zero().into();
 
         for stmt in stmts {
+            // Stop generating after a terminator (return/break/continue)
+            if let Some(block) = self.builder.get_insert_block() {
+                if block.get_terminator().is_some() {
+                    break;
+                }
+            }
             last_value = self.generate_stmt(&stmt.node)?;
         }
 
@@ -1321,8 +1333,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 } else if val.is_float_value() {
                     // Keep float type
                     val.get_type()
-                } else if val.is_pointer_value() && matches!(&value.node, Expr::Array(_)) {
-                    // Keep pointer type for array allocations
+                } else if val.is_pointer_value() && matches!(&value.node, Expr::Array(_) | Expr::Index { .. }) {
+                    // Keep pointer type for array allocations and slice results
                     val.get_type()
                 } else {
                     // Default to i64 for non-struct values (backward compatible)
@@ -1422,9 +1434,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Then block
         self.builder.position_at_end(then_block);
         let then_val = self.generate_block(then_stmts)?;
-        self.builder.build_unconditional_branch(merge_block)
-            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         let then_end_block = self.builder.get_insert_block().unwrap();
+        let then_terminated = then_end_block.get_terminator().is_some();
+        if !then_terminated {
+            self.builder.build_unconditional_branch(merge_block)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
 
         // Else block
         self.builder.position_at_end(else_block);
@@ -1433,21 +1448,44 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         } else {
             self.context.struct_type(&[], false).const_zero().into()
         };
-        self.builder.build_unconditional_branch(merge_block)
-            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         let else_end_block = self.builder.get_insert_block().unwrap();
+        let else_terminated = else_end_block.get_terminator().is_some();
+        if !else_terminated {
+            self.builder.build_unconditional_branch(merge_block)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
 
         // Merge block with phi
         self.builder.position_at_end(merge_block);
 
-        // Build phi node if both branches return values
-        if then_val.get_type() == else_val.get_type() {
+        // If both branches are terminated (return/break), merge is unreachable
+        if then_terminated && else_terminated {
+            self.builder.build_unreachable()
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(self.context.struct_type(&[], false).const_zero().into());
+        }
+
+        // Build phi node - only include non-terminated branches
+        let mut incoming: Vec<(&dyn BasicValue<'ctx>, inkwell::basic_block::BasicBlock<'ctx>)> = Vec::new();
+        if !then_terminated {
+            incoming.push((&then_val, then_end_block));
+        }
+        if !else_terminated {
+            incoming.push((&else_val, else_end_block));
+        }
+
+        if incoming.len() == 1 {
+            // Only one branch reaches merge - no phi needed
+            Ok(incoming[0].0.as_basic_value_enum())
+        } else if !incoming.is_empty() && then_val.get_type() == else_val.get_type() {
             let phi = self.builder.build_phi(then_val.get_type(), "if_result")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            phi.add_incoming(&[(&then_val, then_end_block), (&else_val, else_end_block)]);
+            for (val, block) in &incoming {
+                phi.add_incoming(&[(*val, *block)]);
+            }
             Ok(phi.as_basic_value())
         } else {
-            Ok(then_val)
+            Ok(self.context.struct_type(&[], false).const_zero().into())
         }
     }
 
@@ -1840,6 +1878,122 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Load element
         self.builder.build_load(self.context.i64_type(), elem_ptr, "elem")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    fn generate_slice(
+        &mut self,
+        arr: &Expr,
+        start: Option<&Spanned<Expr>>,
+        end: Option<&Spanned<Expr>>,
+        inclusive: bool,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let fn_value = self.current_function.ok_or_else(|| {
+            CodegenError::LlvmError("No current function for slice".to_string())
+        })?;
+
+        let arr_val = self.generate_expr(arr)?;
+        let arr_ptr = arr_val.into_pointer_value();
+
+        // Get start index (default 0)
+        let start_val = if let Some(start_expr) = start {
+            self.generate_expr(&start_expr.node)?.into_int_value()
+        } else {
+            self.context.i64_type().const_int(0, false)
+        };
+
+        // Get end index
+        let end_val = if let Some(end_expr) = end {
+            let val = self.generate_expr(&end_expr.node)?.into_int_value();
+            if inclusive {
+                self.builder.build_int_add(val, self.context.i64_type().const_int(1, false), "incl_end")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            } else {
+                val
+            }
+        } else {
+            return Err(CodegenError::Unsupported(
+                "Slice without end index requires array length".to_string(),
+            ));
+        };
+
+        // Calculate slice length: end - start
+        let length = self.builder.build_int_sub(end_val, start_val, "slice_len")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Allocate new array: malloc(length * 8)
+        let byte_size = self.builder.build_int_mul(
+            length,
+            self.context.i64_type().const_int(8, false),
+            "byte_size"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let fn_type = self.context.i8_type().ptr_type(AddressSpace::default())
+                .fn_type(&[self.context.i64_type().into()], false);
+            self.module.add_function("malloc", fn_type, None)
+        });
+
+        let raw_ptr = self.builder.build_call(malloc_fn, &[byte_size.into()], "slice_raw")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .unwrap();
+        let slice_ptr = self.builder.build_pointer_cast(
+            raw_ptr.into_pointer_value(),
+            self.context.i64_type().ptr_type(AddressSpace::default()),
+            "slice_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Copy elements using a loop
+        let loop_var = self.builder.build_alloca(self.context.i64_type(), "slice_i")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_store(loop_var, self.context.i64_type().const_int(0, false))
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        let loop_cond = self.context.append_basic_block(fn_value, "slice_cond");
+        let loop_body = self.context.append_basic_block(fn_value, "slice_body");
+        let loop_end = self.context.append_basic_block(fn_value, "slice_end");
+
+        self.builder.build_unconditional_branch(loop_cond)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Loop condition: i < length
+        self.builder.position_at_end(loop_cond);
+        let i = self.builder.build_load(self.context.i64_type(), loop_var, "i")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?.into_int_value();
+        let cmp = self.builder.build_int_compare(IntPredicate::SLT, i, length, "slice_cmp")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_conditional_branch(cmp, loop_body, loop_end)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Loop body: slice_ptr[i] = arr_ptr[start + i]
+        self.builder.position_at_end(loop_body);
+        let src_idx = self.builder.build_int_add(start_val, i, "src_idx")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let src_ptr = unsafe {
+            self.builder.build_gep(self.context.i64_type(), arr_ptr, &[src_idx], "src_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let elem = self.builder.build_load(self.context.i64_type(), src_ptr, "elem")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let dst_ptr = unsafe {
+            self.builder.build_gep(self.context.i64_type(), slice_ptr, &[i], "dst_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        self.builder.build_store(dst_ptr, elem)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // i++
+        let next_i = self.builder.build_int_add(i, self.context.i64_type().const_int(1, false), "next_i")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_store(loop_var, next_i)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.build_unconditional_branch(loop_cond)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // After loop
+        self.builder.position_at_end(loop_end);
+        Ok(slice_ptr.into())
     }
 
     // ========== Method Call ==========
@@ -2526,22 +2680,48 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         self.builder.position_at_end(then_block);
         let then_val = self.generate_expr(then_expr)?;
-        self.builder.build_unconditional_branch(merge_block)
-            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         let then_end = self.builder.get_insert_block().unwrap();
+        let then_terminated = then_end.get_terminator().is_some();
+        if !then_terminated {
+            self.builder.build_unconditional_branch(merge_block)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
 
         self.builder.position_at_end(else_block);
         let else_val = self.generate_expr(else_expr)?;
-        self.builder.build_unconditional_branch(merge_block)
-            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         let else_end = self.builder.get_insert_block().unwrap();
+        let else_terminated = else_end.get_terminator().is_some();
+        if !else_terminated {
+            self.builder.build_unconditional_branch(merge_block)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        }
 
         self.builder.position_at_end(merge_block);
-        let phi = self.builder.build_phi(then_val.get_type(), "ternary_result")
-            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-        phi.add_incoming(&[(&then_val, then_end), (&else_val, else_end)]);
 
-        Ok(phi.as_basic_value())
+        if then_terminated && else_terminated {
+            self.builder.build_unreachable()
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(self.context.struct_type(&[], false).const_zero().into());
+        }
+
+        let mut incoming: Vec<(&dyn BasicValue<'ctx>, inkwell::basic_block::BasicBlock<'ctx>)> = Vec::new();
+        if !then_terminated {
+            incoming.push((&then_val, then_end));
+        }
+        if !else_terminated {
+            incoming.push((&else_val, else_end));
+        }
+
+        if incoming.len() == 1 {
+            Ok(incoming[0].0.as_basic_value_enum())
+        } else {
+            let phi = self.builder.build_phi(then_val.get_type(), "ternary_result")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            for (val, block) in &incoming {
+                phi.add_incoming(&[(*val, *block)]);
+            }
+            Ok(phi.as_basic_value())
+        }
     }
 
     fn generate_struct_literal(
@@ -2816,9 +2996,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Guard passed - execute body
                     self.builder.position_at_end(guard_pass);
                     let body_val = self.generate_expr(&arm.body.node)?;
-                    self.builder.build_unconditional_branch(merge_block)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    arm_results.push((body_val, self.builder.get_insert_block().unwrap()));
+                    let body_end = self.builder.get_insert_block().unwrap();
+                    if body_end.get_terminator().is_none() {
+                        self.builder.build_unconditional_branch(merge_block)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        arm_results.push((body_val, body_end));
+                    }
 
                     // Guard failed - go to default
                     self.builder.position_at_end(guard_fail);
@@ -2826,9 +3009,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 } else {
                     let body_val = self.generate_expr(&arm.body.node)?;
-                    self.builder.build_unconditional_branch(merge_block)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                    arm_results.push((body_val, arm_block));
+                    let body_end = self.builder.get_insert_block().unwrap();
+                    if body_end.get_terminator().is_none() {
+                        self.builder.build_unconditional_branch(merge_block)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        arm_results.push((body_val, body_end));
+                    }
                 }
             }
 
@@ -2836,9 +3022,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder.position_at_end(default_block);
             if let Some(arm) = default_arm {
                 let body_val = self.generate_expr(&arm.body.node)?;
-                self.builder.build_unconditional_branch(merge_block)
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                arm_results.push((body_val, default_block));
+                let default_end = self.builder.get_insert_block().unwrap();
+                if default_end.get_terminator().is_none() {
+                    self.builder.build_unconditional_branch(merge_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    arm_results.push((body_val, default_end));
+                }
             } else {
                 // No default arm - return default value (0)
                 let default_val = self.context.i64_type().const_int(0, false);
@@ -2917,9 +3106,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 let body_val = self.generate_expr(&arm.body.node)?;
                 let body_end_block = self.builder.get_insert_block().unwrap();
-                self.builder.build_unconditional_branch(merge_block)
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                arm_results.push((body_val, body_end_block));
+                if body_end_block.get_terminator().is_none() {
+                    self.builder.build_unconditional_branch(merge_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    arm_results.push((body_val, body_end_block));
+                }
 
                 current_block = next_block;
             }
@@ -2932,8 +3123,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.builder.position_at_end(merge_block);
 
         if arm_results.is_empty() {
-            // No arms - return default value
-            Ok(self.context.i64_type().const_int(0, false).into())
+            // All arms terminated (return/break) - merge is unreachable
+            self.builder.build_unreachable()
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            Ok(self.context.struct_type(&[], false).const_zero().into())
+        } else if arm_results.len() == 1 {
+            // Only one arm reaches merge - no phi needed
+            Ok(arm_results[0].0)
         } else {
             // Build phi node
             let first_type = arm_results[0].0.get_type();
