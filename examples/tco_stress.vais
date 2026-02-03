@@ -1,0 +1,14 @@
+# TCO stress test - would definitely stack overflow without TCO
+F countdown(n:i64)->i64 = n < 1 ? 0 : @(n-1)
+
+# Sum with accumulator - tail recursive
+F sum_acc(n:i64, acc:i64)->i64 = n < 1 ? acc : @(n-1, acc+n)
+
+F main()->i64 {
+    # 10 million iterations - impossible without TCO
+    x := countdown(10000000)
+    # Sum 1..1000 = 500500
+    y := sum_acc(1000, 0)
+    puts("TCO stress test passed!")
+    y
+}

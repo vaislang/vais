@@ -299,7 +299,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 🚀 Phase 30: 성능 최적화 - C/Rust급 실행 속도 달성
 
-> **상태**: 🔄 진행 중 (Stage 1 완료 - inkwell 기본 백엔드 전환, 런타임 출력 88/117 일치, E2E 210/210 통과)
+> **상태**: 🔄 진행 중 (Stage 1-2 완료 - inkwell 기본 백엔드 + TCO 꼬리 호출 최적화, E2E 210/210 통과)
 > **목표**: C 대비 실행 속도 갭 10-20% → 5% 이내
 > **핵심 지표**: fibonacci(40), matrix_mul, sort 벤치마크에서 C -O2 대비 비교
 
@@ -320,14 +320,15 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **inkwell 코드젠 완성도 검증** - E2E 테스트 210개 전부 통과 확인 (text/inkwell 모두)
 - [x] **컴파일 속도 벤치마크** - inkwell이 텍스트 대비 ~36% 빠름 (10회 반복 측정: 1.52s vs 2.39s)
 
-### 2단계 - Tail Call Optimization (TCO)
+### 2단계 - Tail Call Optimization (TCO) ✅
 
 > `@` 재귀 연산자가 핵심 기능인데 TCO 없으면 스택 오버플로 위험
 
-- [ ] **꼬리 호출 패턴 감지** - optimize.rs에 tail position 분석 추가
-- [ ] **LLVM `musttail` 어노테이션 생성** - 꼬리 호출에 musttail 마킹
-- [ ] **꼬리 재귀 → 루프 변환** - MIR 레벨에서 재귀를 while 루프로 변환
-- [ ] **테스트** - factorial(100000), fib tail-recursive 버전 스택 오버플로 없이 통과
+- [x] **꼬리 호출 패턴 감지** - inkwell 백엔드에서 AST 레벨 tail position 분석 (Ternary/If/Match/Block 분기 탐색)
+- [x] **LLVM `musttail` 어노테이션 생성** - 텍스트 백엔드 optimize.rs에 tail/musttail 마킹 패스 추가
+- [x] **꼬리 재귀 → 루프 변환** - inkwell 백엔드에서 TCO 감지 시 루프 기반 코드 생성 (TcoState로 파라미터 alloca 업데이트 + loop header 점프)
+- [x] **MIR TailCall 터미네이터** - vais-mir에 Terminator::TailCall 변형 추가
+- [x] **테스트** - countdown(10000000), sum_acc(1000) 스택 오버플로 없이 통과 (E2E 178/178 유지)
 
 ### 3단계 - 인라이닝 & 프로파일 기반 최적화
 

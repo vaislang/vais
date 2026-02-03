@@ -1,0 +1,21 @@
+# Tail Call Optimization test
+# countdown is tail-recursive: @(n-1) is in tail position
+F countdown(n:i64)->i64 = n < 1 ? 0 : @(n-1)
+
+# sum_tail uses accumulator pattern for tail recursion
+F sum_tail(n:i64, acc:i64)->i64 = n < 1 ? acc : @(n-1, acc+n)
+
+# Non-tail-recursive (n * @(n-1) is NOT tail position)
+F factorial(n:i64)->i64 = n < 2 ? 1 : n * @(n-1)
+
+F main()->i64 {
+    # countdown(10) should be 0
+    x := countdown(10)
+    # sum_tail(10, 0) = 55
+    y := sum_tail(10, 0)
+    # factorial(5) = 120
+    z := factorial(5)
+    # Test with large value - would stack overflow without TCO
+    w := countdown(100000)
+    x + y + z + w
+}

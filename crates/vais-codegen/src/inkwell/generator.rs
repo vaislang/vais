@@ -115,6 +115,18 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Defer stack: expressions to execute in LIFO order before function return
     defer_stack: Vec<Expr>,
+
+    /// TCO state: when generating a tail-recursive function as a loop,
+    /// this holds the parameter allocas and the loop header block for jumping back.
+    tco_state: Option<TcoState<'ctx>>,
+}
+
+/// Tail Call Optimization state for loop-based tail recursion elimination.
+struct TcoState<'ctx> {
+    /// Parameter allocas (name -> alloca pointer) for updating params before looping back
+    param_allocas: Vec<(String, PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
+    /// The loop header block to branch back to
+    loop_header: inkwell::basic_block::BasicBlock<'ctx>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -160,6 +172,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             constants: HashMap::new(),
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
+            tco_state: None,
         };
 
         // Declare built-in functions
@@ -481,7 +494,181 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     // ========== Code Generation Phase ==========
 
+    /// Check if an expression contains a SelfCall (@) in tail position.
+    /// Tail position means the result of the SelfCall is directly returned
+    /// without any further computation.
+    fn has_tail_self_call(expr: &Expr) -> bool {
+        match expr {
+            // Direct self-call: @(args) - this IS a tail call
+            Expr::Call { func, .. } if matches!(&func.node, Expr::SelfCall) => true,
+            // Ternary: cond ? then : else - check both branches
+            Expr::Ternary { then, else_, .. } => {
+                Self::has_tail_self_call(&then.node) || Self::has_tail_self_call(&else_.node)
+            }
+            // If expression: check then and else branches
+            Expr::If { then, else_, .. } => {
+                // Check last statement of then block
+                let then_tail = then.last().map_or(false, |s| {
+                    if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
+                });
+                let else_tail = else_.as_ref().map_or(false, |ie| Self::if_else_has_tail(ie));
+                then_tail || else_tail
+            }
+            // Match expression: check arms
+            Expr::Match { arms, .. } => {
+                arms.iter().any(|arm| Self::has_tail_self_call(&arm.body.node))
+            }
+            // Block: check last expression
+            Expr::Block(stmts) => {
+                stmts.last().map_or(false, |s| {
+                    if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
+                })
+            }
+            _ => false,
+        }
+    }
+
+    fn if_else_has_tail(ie: &IfElse) -> bool {
+        match ie {
+            IfElse::Else(stmts) => {
+                stmts.last().map_or(false, |s| {
+                    if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
+                })
+            }
+            IfElse::ElseIf(_, then, else_) => {
+                let then_tail = then.last().map_or(false, |s| {
+                    if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
+                });
+                let else_tail = else_.as_ref().map_or(false, |ie| Self::if_else_has_tail(ie));
+                then_tail || else_tail
+            }
+        }
+    }
+
+    /// Generate a tail-recursive function body as a loop.
+    /// Instead of recursive calls, we update the parameters and branch back to the loop header.
+    fn generate_tco_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
+        let fn_value = *self
+            .functions
+            .get(&func.name.node)
+            .ok_or_else(|| CodegenError::UndefinedFunction(func.name.node.clone()))?;
+
+        self.current_function = Some(fn_value);
+        self.locals.clear();
+        self.var_struct_types.clear();
+        self.defer_stack.clear();
+
+        let old_substitutions = self.generic_substitutions.clone();
+        if !func.generics.is_empty() {
+            for gp in &func.generics {
+                self.generic_substitutions
+                    .entry(gp.name.node.clone())
+                    .or_insert(ResolvedType::I64);
+            }
+        }
+
+        // Create entry block
+        let entry = self.context.append_basic_block(fn_value, "entry");
+        self.builder.position_at_end(entry);
+
+        // Allocate space for parameters (these will be updated on each loop iteration)
+        let mut param_allocas = Vec::new();
+        for (i, param) in func.params.iter().enumerate() {
+            let param_value = fn_value.get_nth_param(i as u32).unwrap();
+            let param_type = param_value.get_type();
+            let alloca = self.builder.build_alloca(param_type, &param.name.node)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder.build_store(alloca, param_value)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.locals.insert(param.name.node.clone(), (alloca, param_type));
+            param_allocas.push((param.name.node.clone(), alloca, param_type));
+
+            if let Some(struct_name) = self.extract_struct_type_name(&param.ty.node) {
+                self.var_struct_types.insert(param.name.node.clone(), struct_name);
+            }
+        }
+
+        // Create loop header block (jump target for tail calls)
+        let loop_header = self.context.append_basic_block(fn_value, "tco_loop");
+        self.builder.build_unconditional_branch(loop_header)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder.position_at_end(loop_header);
+
+        // Set TCO state so generate_call knows to emit loop-back instead of recursive call
+        self.tco_state = Some(TcoState {
+            param_allocas: param_allocas.clone(),
+            loop_header,
+        });
+
+        // Generate function body
+        let ret_resolved = func.ret_type.as_ref()
+            .map(|t| self.ast_type_to_resolved(&t.node))
+            .unwrap_or(ResolvedType::Unit);
+        let ret_substituted = self.substitute_type(&ret_resolved);
+
+        match &func.body {
+            ast::FunctionBody::Expr(body_expr) => {
+                let body_value = self.generate_expr(&body_expr.node)?;
+                // Only return if we haven't already (tail call branches back)
+                if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                    self.emit_defer_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder.build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        self.builder.build_return(Some(&body_value))
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    }
+                }
+            }
+            ast::FunctionBody::Block(stmts) => {
+                let body_value = self.generate_block(stmts)?;
+                if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                    self.emit_defer_cleanup()?;
+                    if ret_substituted == ResolvedType::Unit {
+                        self.builder.build_return(None)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    } else {
+                        let expected_ret_type = fn_value.get_type().get_return_type();
+                        let body_type_matches = expected_ret_type.map_or(false, |ert| ert == body_value.get_type());
+                        if body_type_matches {
+                            self.builder.build_return(Some(&body_value))
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        } else if let Some(ert) = expected_ret_type {
+                            let default_val = self.get_default_value(ert);
+                            self.builder.build_return(Some(&default_val))
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        } else {
+                            self.builder.build_return(None)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Clear TCO state
+        self.tco_state = None;
+        self.generic_substitutions = old_substitutions;
+        self.current_function = None;
+        Ok(())
+    }
+
     fn generate_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
+        // Check if this function has tail-recursive self-calls
+        let is_tail_recursive = match &func.body {
+            ast::FunctionBody::Expr(body_expr) => Self::has_tail_self_call(&body_expr.node),
+            ast::FunctionBody::Block(stmts) => {
+                stmts.last().map_or(false, |s| {
+                    if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
+                })
+            }
+        };
+
+        if is_tail_recursive {
+            return self.generate_tco_function(func);
+        }
+
         let fn_value = *self
             .functions
             .get(&func.name.node)
@@ -1119,7 +1306,46 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let fn_name = match callee {
             Expr::Ident(name) => name.clone(),
             Expr::SelfCall => {
-                // @ recursive call: call current function
+                // @ recursive call: check if we're in TCO mode
+                if let Some(tco) = &self.tco_state {
+                    // TCO: update parameters and branch back to loop header
+                    let param_allocas = tco.param_allocas.clone();
+                    let loop_header = tco.loop_header;
+
+                    // Evaluate all arguments first (before updating any params)
+                    let arg_values: Vec<BasicValueEnum<'ctx>> = args
+                        .iter()
+                        .map(|arg| self.generate_expr(&arg.node))
+                        .collect::<CodegenResult<Vec<_>>>()?;
+
+                    // Update parameter allocas with new values
+                    for (i, (_, alloca, param_type)) in param_allocas.iter().enumerate() {
+                        if i < arg_values.len() {
+                            let mut new_val = arg_values[i];
+                            // Cast if needed
+                            if new_val.get_type() != *param_type {
+                                if new_val.is_int_value() && param_type.is_int_type() {
+                                    new_val = self.builder.build_int_cast(
+                                        new_val.into_int_value(),
+                                        param_type.into_int_type(),
+                                        "tco_cast"
+                                    ).map_err(|e| CodegenError::LlvmError(e.to_string()))?.into();
+                                }
+                            }
+                            self.builder.build_store(*alloca, new_val)
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        }
+                    }
+
+                    // Branch back to loop header
+                    self.builder.build_unconditional_branch(loop_header)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                    // Return a dummy value (this code path is dead after the branch)
+                    return Ok(self.context.i64_type().const_int(0, false).into());
+                }
+
+                // Non-TCO: regular recursive call
                 if let Some(func) = self.current_function {
                     let fn_name = func.get_name().to_str().unwrap_or("").to_string();
                     fn_name

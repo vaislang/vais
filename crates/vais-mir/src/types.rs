@@ -281,6 +281,11 @@ pub enum Terminator {
         destination: Place,
         target: BasicBlockId,
     },
+    /// Tail call: a call in tail position that can be optimized to a jump.
+    TailCall {
+        func: String,
+        args: Vec<Operand>,
+    },
     /// Unreachable code.
     Unreachable,
     /// Assert a condition, panic if false.
@@ -322,6 +327,16 @@ impl fmt::Display for Terminator {
                     write!(f, "{}", arg)?;
                 }
                 write!(f, ") -> {}", target)
+            }
+            Terminator::TailCall { func, args } => {
+                write!(f, "tailcall {}(", func)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
             }
             Terminator::Unreachable => write!(f, "unreachable"),
             Terminator::Assert {
