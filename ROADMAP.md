@@ -299,7 +299,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 🚀 Phase 30: 성능 최적화 - C/Rust급 실행 속도 달성
 
-> **상태**: 🔄 진행 중 (Stage 1 - 제네릭/클로저/extern 패리티 완료, 예제 73% 통과 (86/117), 기본값 전환 대기)
+> **상태**: 🔄 진행 중 (Stage 1 - 제네릭/클로저/extern 패리티 완료, 예제 75% 통과 (88/117), 기본값 전환 대기)
 > **목표**: C 대비 실행 속도 갭 10-20% → 5% 이내
 > **핵심 지표**: fibonacci(40), matrix_mul, sort 벤치마크에서 C -O2 대비 비교
 
@@ -313,7 +313,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **inkwell 빌트인 함수 대폭 확장** - putchar/fopen/GC/thread/sync/stdlib 등 80+ extern 등록, println/print/format/store_i64/load_i64/store_byte/load_byte 인라인 구현
 - [x] **inkwell 표현식 지원 확대** - Assert/Comptime/Lazy/Await/Force/Spawn/SelfCall/StaticMethodCall/StringInterp/Spread/LetDestructure 지원 추가 (예제 통과율 22% → 55%)
 - [x] **inkwell 기능 패리티 강화** - Impl/Struct 메서드 선언·생성, 메서드 호출 해석(TypeName_method), var_struct_types 기반 구조체 타입 추론, Option/Result 생성자(Some/None/Ok/Err), 열거형 variant 식별자, 구조체 리터럴 런타임 값 지원 (예제 통과율 55% → 61%)
-- [x] **inkwell 제네릭/클로저/extern 패리티** - Generic 타입 i64 폴백, 함수/메서드/구조체 제네릭 치환, ExternBlock 선언 처리, Union 지원, SelfCall 메서드 해석, 클로저 캡처 자동 감지·전달, 추가 빌트인 80+ 등록 (예제 통과율 61% → 73%)
+- [x] **inkwell 제네릭/클로저/extern 패리티** - Generic 타입 i64 폴백, 함수/메서드/구조체 제네릭 치환, ExternBlock 선언 처리, Union 지원, SelfCall 메서드 해석, 클로저 캡처 자동 감지·전달, 추가 빌트인 80+ 등록 (예제 통과율 61% → 75%)
 - [ ] **inkwell 백엔드 기본값 전환** - GC/debug/generics 기능 패리티 달성 후 `Cargo.toml` default feature 변경
 - [ ] **inkwell 코드젠 완성도 검증** - 기존 E2E 테스트 128개 전부 통과 확인
 - [ ] **컴파일 속도 벤치마크** - 텍스트 vs inkwell 비교 측정

@@ -1,5 +1,5 @@
 {
-  "phase": 5,
+  "phase": 6,
   "request": "Phase 30 성능 최적화 - Stage 1 inkwell 기능 패리티",
   "tasks": [
     { "id": 1, "name": "Phase 30 Stage 1: inkwell 백엔드 AST 동기화 (78개 에러 수정)", "status": "completed", "model": "Opus" },
@@ -13,5 +13,5 @@
     { "id": 9, "name": "Phase 30 Stage 6: 벤치마크 스위트", "status": "pending", "model": "Sonnet" }
   ],
   "currentTask": 4,
-  "lastCompleted": "Phase 30 Stage 1: 제네릭/클로저/extern 패리티 (61%→73%, 86/117)"
+  "lastCompleted": "Phase 30 Stage 1: 제네릭/클로저/extern 패리티 (61%→75%, 88/117)"
 }
