@@ -72,6 +72,18 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     module.add_function("fflush", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // feof(stream) -> i32
     module.add_function("feof", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // fileno(stream) -> i32 (get fd from FILE*)
+    module.add_function("fileno", i32_type.fn_type(&[i8_ptr.into()], false), None);
+    // fsync(fd) -> i32
+    module.add_function("fsync", i32_type.fn_type(&[i32_type.into()], false), None);
+    // fdatasync(fd) -> i32 (data-only sync)
+    module.add_function("fdatasync", i32_type.fn_type(&[i32_type.into()], false), None);
+    // open(path, flags, mode) -> fd
+    module.add_function("open", i32_type.fn_type(&[i8_ptr.into(), i32_type.into(), i32_type.into()], false), None);
+    // close(fd) -> i32
+    module.add_function("close", i32_type.fn_type(&[i32_type.into()], false), None);
+    // remove(path) -> i32
+    module.add_function("remove", i32_type.fn_type(&[i8_ptr.into()], false), None);
 
     // ===== Stdlib functions =====
     // atoi(s) -> i32

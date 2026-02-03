@@ -207,6 +207,40 @@ X File {
         }
     }
 
+    # Sync file data and metadata to disk (fsync)
+    # Returns 1 on success, 0 on error
+    F sync(&self) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            fflush(self.handle)
+            fd := fileno(self.handle)
+            I fd < 0 {
+                0
+            } E {
+                result := fsync(fd)
+                I result == 0 { 1 } E { 0 }
+            }
+        }
+    }
+
+    # Sync file data only to disk (fdatasync, no metadata flush)
+    # Returns 1 on success, 0 on error
+    F datasync(&self) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            fflush(self.handle)
+            fd := fileno(self.handle)
+            I fd < 0 {
+                0
+            } E {
+                result := fdatasync(fd)
+                I result == 0 { 1 } E { 0 }
+            }
+        }
+    }
+
     # Seek to position (origin: 0=start, 1=current, 2=end)
     # Returns 0 on success, -1 on error
     F seek(&self, offset: i64, origin: i64) -> i64 {
@@ -402,6 +436,43 @@ F file_exists(path: i64) -> i64 {
         } E {
             f.close()
             1
+        }
+    }
+}
+
+# Sync file data+metadata to disk by path
+# Opens, fsyncs, and closes. Returns 1 on success, 0 on error.
+F file_sync(path: i64) -> i64 {
+    I path == 0 {
+        0
+    } E {
+        f := File.open_read(path)
+        I f.handle == 0 {
+            0
+        } E {
+            result := f.sync()
+            f.close()
+            result
+        }
+    }
+}
+
+# O_RDONLY constant for POSIX open
+C O_RDONLY: i64 = 0
+
+# Sync directory metadata to disk (ensures rename/unlink durability)
+# Opens dir as fd, fsyncs, closes. Returns 1 on success, 0 on error.
+F dir_sync(path: i64) -> i64 {
+    I path == 0 {
+        0
+    } E {
+        fd := posix_open(path, O_RDONLY, 0)
+        I fd < 0 {
+            0
+        } E {
+            result := fsync(fd)
+            posix_close(fd)
+            I result == 0 { 1 } E { 0 }
         }
     }
 }

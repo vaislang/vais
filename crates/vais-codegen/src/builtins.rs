@@ -400,6 +400,47 @@ impl CodeGenerator {
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
+
+        // fileno: (FILE*) -> int (get file descriptor from FILE*)
+        register_extern!(self, "fileno",
+            vec![("stream".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // fsync: (fd) -> int (flush to disk)
+        register_extern!(self, "fsync",
+            vec![("fd".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // fdatasync: (fd) -> int (flush data only, no metadata)
+        // On macOS, mapped to fcntl F_FULLFSYNC or fsync fallback
+        register_extern!(self, "fdatasync",
+            vec![("fd".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // POSIX open: (path, flags, mode) -> fd
+        register_extern!(self, "posix_open" => "open",
+            vec![
+                ("path".to_string(), ResolvedType::Str),
+                ("flags".to_string(), ResolvedType::I64),
+                ("mode".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // POSIX close: (fd) -> int
+        register_extern!(self, "posix_close" => "close",
+            vec![("fd".to_string(), ResolvedType::I64)],
+            ResolvedType::I64
+        );
+
+        // remove: (path) -> int (delete file)
+        register_extern!(self, "remove",
+            vec![("path".to_string(), ResolvedType::Str)],
+            ResolvedType::I64
+        );
     }
 
     fn register_string_functions(&mut self) {

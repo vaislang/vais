@@ -1161,6 +1161,118 @@ impl TypeChecker {
             },
         );
 
+        // fileno: (stream) -> i64
+        self.functions.insert(
+            "fileno".to_string(),
+            FunctionSig {
+                name: "fileno".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("stream".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // fsync: (fd) -> i64
+        self.functions.insert(
+            "fsync".to_string(),
+            FunctionSig {
+                name: "fsync".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("fd".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // fdatasync: (fd) -> i64
+        self.functions.insert(
+            "fdatasync".to_string(),
+            FunctionSig {
+                name: "fdatasync".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("fd".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // posix_open: (path, flags, mode) -> fd
+        self.functions.insert(
+            "posix_open".to_string(),
+            FunctionSig {
+                name: "posix_open".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("path".to_string(), ResolvedType::Str, false),
+                    ("flags".to_string(), ResolvedType::I64, false),
+                    ("mode".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // posix_close: (fd) -> i64
+        self.functions.insert(
+            "posix_close".to_string(),
+            FunctionSig {
+                name: "posix_close".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("fd".to_string(), ResolvedType::I64, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
+        // remove: (path) -> i64
+        self.functions.insert(
+            "remove".to_string(),
+            FunctionSig {
+                name: "remove".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![("path".to_string(), ResolvedType::Str, false)],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // Register SIMD intrinsic functions
         self.register_simd_builtins();
     }

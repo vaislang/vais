@@ -3363,3 +3363,94 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 42);
 }
+
+// ==================== Phase 31: File System Durability ====================
+
+#[test]
+fn e2e_fsync_write_and_sync() {
+    // Test: write file, fsync via fileno, read back and verify
+    let source = r#"
+F main() -> i64 {
+    # Write a file
+    fp := fopen("/tmp/vais_fsync_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("hello fsync", fp)
+    fflush(fp)
+    fd := fileno(fp)
+    I fd < 0 {
+        fclose(fp)
+        R 2
+    }
+    result := fsync(fd)
+    fclose(fp)
+    I result != 0 { R 3 }
+
+    # Read back
+    fp2 := fopen("/tmp/vais_fsync_test.txt", "r")
+    I fp2 == 0 { R 4 }
+    buf := malloc(64)
+    fgets(buf, 64, fp2)
+    fclose(fp2)
+
+    # Verify content starts with 'h' (104)
+    ch := load_byte(buf)
+    free(buf)
+    remove("/tmp/vais_fsync_test.txt")
+    I ch == 104 { R 0 } E { R 5 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_fileno_valid_stream() {
+    // Test: fileno returns valid fd for an open file
+    let source = r#"
+F main() -> i64 {
+    fp := fopen("/tmp/vais_fileno_test.txt", "w")
+    I fp == 0 { R 1 }
+    fd := fileno(fp)
+    fclose(fp)
+    remove("/tmp/vais_fileno_test.txt")
+    I fd >= 0 { R 0 } E { R 2 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_file_sync_method() {
+    // Test File.sync() method via the std/file.vais pattern
+    // (simplified: directly test fsync + fflush combo)
+    let source = r#"
+F main() -> i64 {
+    fp := fopen("/tmp/vais_sync_method_test.txt", "w")
+    I fp == 0 { R 1 }
+    fputs("sync test data", fp)
+    # Simulate File.sync(): fflush then fsync(fileno(fp))
+    fflush(fp)
+    fd := fileno(fp)
+    result := fsync(fd)
+    fclose(fp)
+    remove("/tmp/vais_sync_method_test.txt")
+    I result == 0 { R 0 } E { R 2 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_dir_sync_tmp() {
+    // Test: open directory fd, fsync it, close it
+    let source = r#"
+F main() -> i64 {
+    # O_RDONLY = 0
+    fd := posix_open("/tmp", 0, 0)
+    I fd < 0 { R 1 }
+    result := fsync(fd)
+    posix_close(fd)
+    I result == 0 { R 0 } E { R 2 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
