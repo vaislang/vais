@@ -133,10 +133,59 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     // ===== Abort for panic =====
     module.add_function("abort", void_type.fn_type(&[], false), None);
 
-    // ===== Internal helper functions =====
-    // These get generated as inline LLVM IR, not declared as extern
-    // but the text backend generates them inline. For inkwell, we declare them
-    // so they can be resolved; actual implementation is done via helper generation.
+    // ===== Additional Thread/Sync functions =====
+    module.add_function("__mutex_try_lock", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__thread_sleep_ms", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__rwlock_create", i64_type.fn_type(&[], false), None);
+    module.add_function("__rwlock_read_lock", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__rwlock_read_unlock", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__rwlock_write_lock", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__rwlock_write_unlock", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__rwlock_destroy", void_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__cond_create", i64_type.fn_type(&[], false), None);
+    module.add_function("__cond_wait", i64_type.fn_type(&[i64_type.into(), i64_type.into()], false), None);
+    module.add_function("__cond_signal", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__cond_broadcast", i64_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__cond_destroy", void_type.fn_type(&[i64_type.into()], false), None);
+    module.add_function("__atomic_load", i64_type.fn_type(&[i8_ptr.into()], false), None);
+    module.add_function("__atomic_store", void_type.fn_type(&[i8_ptr.into(), i64_type.into()], false), None);
+    module.add_function("__atomic_add", i64_type.fn_type(&[i8_ptr.into(), i64_type.into()], false), None);
+    module.add_function("__atomic_cas", i64_type.fn_type(&[i8_ptr.into(), i64_type.into(), i64_type.into()], false), None);
+
+    // ===== GC gen functions =====
+    module.add_function("vais_gen_gc_init", void_type.fn_type(&[], false), None);
+
+    // ===== SIMD functions =====
+    module.add_function("simd_mul_vec4f32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("simd_add_vec4f32", i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+
+    // ===== String helper functions =====
+    // snprintf(buf, size, fmt, ...) -> i32
+    module.add_function("snprintf", i32_type.fn_type(&[i8_ptr.into(), i64_type.into(), i8_ptr.into()], true), None);
+    // strtol(str, endptr, base) -> i64
+    module.add_function("strtol", i64_type.fn_type(&[i8_ptr.into(), i8_ptr.into(), i32_type.into()], false), None);
+    // strtod(str, endptr) -> f64
+    module.add_function("strtod", f64_type.fn_type(&[i8_ptr.into(), i8_ptr.into()], false), None);
+
+    // ===== Time functions =====
+    module.add_function("time", i64_type.fn_type(&[i8_ptr.into()], false), None);
+    module.add_function("clock", i64_type.fn_type(&[], false), None);
+
+    // ===== Network functions =====
+    module.add_function("socket", i32_type.fn_type(&[i32_type.into(), i32_type.into(), i32_type.into()], false), None);
+    module.add_function("bind", i32_type.fn_type(&[i32_type.into(), i8_ptr.into(), i32_type.into()], false), None);
+    module.add_function("listen", i32_type.fn_type(&[i32_type.into(), i32_type.into()], false), None);
+    module.add_function("accept", i32_type.fn_type(&[i32_type.into(), i8_ptr.into(), i8_ptr.into()], false), None);
+    module.add_function("connect", i32_type.fn_type(&[i32_type.into(), i8_ptr.into(), i32_type.into()], false), None);
+    module.add_function("send", i64_type.fn_type(&[i32_type.into(), i8_ptr.into(), i64_type.into(), i32_type.into()], false), None);
+    module.add_function("recv", i64_type.fn_type(&[i32_type.into(), i8_ptr.into(), i64_type.into(), i32_type.into()], false), None);
+    module.add_function("read", i64_type.fn_type(&[i32_type.into(), i8_ptr.into(), i64_type.into()], false), None);
+    module.add_function("write", i64_type.fn_type(&[i32_type.into(), i8_ptr.into(), i64_type.into()], false), None);
+
+    // ===== Regex functions =====
+    module.add_function("regcomp", i32_type.fn_type(&[i8_ptr.into(), i8_ptr.into(), i32_type.into()], false), None);
+    module.add_function("regexec", i32_type.fn_type(&[i8_ptr.into(), i8_ptr.into(), i64_type.into(), i8_ptr.into(), i32_type.into()], false), None);
+    module.add_function("regfree", void_type.fn_type(&[i8_ptr.into()], false), None);
 }
 
 fn declare_math_functions<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {

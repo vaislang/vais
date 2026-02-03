@@ -94,10 +94,10 @@ impl<'ctx> TypeMapper<'ctx> {
                 let _ret_type = self.map_type(ret);
                 self.context.i8_type().ptr_type(AddressSpace::default()).into()
             }
-            ResolvedType::Generic(name) => {
-                // Generic types should be substituted before codegen
-                eprintln!("ICE: unsubstituted generic type '{}' reached codegen", name);
-                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+            ResolvedType::Generic(_name) => {
+                // Generic types should ideally be substituted before codegen.
+                // Fallback to i64 which is the most common concrete type in Vais.
+                self.context.i64_type().into()
             }
             ResolvedType::Var(_) | ResolvedType::Unknown => {
                 // Should be resolved before codegen

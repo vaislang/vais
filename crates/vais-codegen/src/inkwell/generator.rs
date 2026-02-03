@@ -97,6 +97,15 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Variable name -> struct type name tracking (for method call resolution)
     var_struct_types: HashMap<String, String>,
+
+    /// Struct name -> generic parameter names (for method generic substitution)
+    struct_generic_params: HashMap<String, Vec<String>>,
+
+    /// Lambda binding info: variable name -> (lambda function name, captured values)
+    lambda_bindings: HashMap<String, (String, Vec<(String, BasicValueEnum<'ctx>)>)>,
+
+    /// Temporary storage for the last generated lambda (used by Stmt::Let to track bindings)
+    _last_lambda_info: Option<(String, Vec<(String, BasicValueEnum<'ctx>)>)>,
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
@@ -136,6 +145,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             lambda_functions: Vec::new(),
             enum_variants: HashMap::new(),
             var_struct_types: HashMap::new(),
+            struct_generic_params: HashMap::new(),
+            lambda_bindings: HashMap::new(),
+            _last_lambda_info: None,
         };
 
         // Declare built-in functions
@@ -146,7 +158,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     /// Generates code for an entire Vais module.
     pub fn generate_module(&mut self, vais_module: &VaisModule) -> CodegenResult<()> {
-        // First pass: collect all function signatures, struct definitions, and enum definitions
+        // First pass: collect all function signatures, struct definitions, enum definitions, and extern blocks
         for item in &vais_module.items {
             match &item.node {
                 ast::Item::Function(func) => {
@@ -157,6 +169,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 ast::Item::Enum(e) => {
                     self.define_enum(e)?;
+                }
+                ast::Item::ExternBlock(extern_block) => {
+                    self.declare_extern_block(extern_block)?;
+                }
+                ast::Item::Union(u) => {
+                    self.define_union(u)?;
                 }
                 _ => {}
             }
@@ -228,25 +246,40 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     // ========== Declaration Phase ==========
 
     fn declare_function(&mut self, func: &ast::Function) -> CodegenResult<FunctionValue<'ctx>> {
+        // For generic functions, set up default substitutions (T -> i64, etc.)
+        let old_substitutions = self.generic_substitutions.clone();
+        if !func.generics.is_empty() {
+            for gp in &func.generics {
+                self.generic_substitutions
+                    .entry(gp.name.node.clone())
+                    .or_insert(ResolvedType::I64);
+            }
+        }
+
         let param_types: Vec<BasicMetadataTypeEnum> = func
             .params
             .iter()
             .map(|p| {
                 let resolved = self.ast_type_to_resolved(&p.ty.node);
-                self.type_mapper.map_type(&resolved).into()
+                let substituted = self.substitute_type(&resolved);
+                self.type_mapper.map_type(&substituted).into()
             })
             .collect();
 
         let ret_resolved = func.ret_type.as_ref()
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(ResolvedType::Unit);
+        let ret_substituted = self.substitute_type(&ret_resolved);
 
-        let fn_type = if ret_resolved == ResolvedType::Unit {
+        let fn_type = if ret_substituted == ResolvedType::Unit {
             self.context.void_type().fn_type(&param_types, false)
         } else {
-            let ret_type = self.type_mapper.map_type(&ret_resolved);
+            let ret_type = self.type_mapper.map_type(&ret_substituted);
             ret_type.fn_type(&param_types, false)
         };
+
+        // Restore substitutions
+        self.generic_substitutions = old_substitutions;
 
         let fn_value = self.module.add_function(&func.name.node, fn_type, None);
         self.functions.insert(func.name.node.clone(), fn_value);
@@ -255,14 +288,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     fn define_struct(&mut self, s: &ast::Struct) -> CodegenResult<StructType<'ctx>> {
+        // For generic structs, set up substitutions (default generic params to i64)
+        let old_substitutions = self.generic_substitutions.clone();
+        if !s.generics.is_empty() {
+            let gp_names: Vec<String> = s.generics.iter().map(|gp| gp.name.node.clone()).collect();
+            self.struct_generic_params.insert(s.name.node.clone(), gp_names);
+            for gp in &s.generics {
+                self.generic_substitutions
+                    .entry(gp.name.node.clone())
+                    .or_insert(ResolvedType::I64);
+            }
+        }
+
         let field_types: Vec<BasicTypeEnum> = s
             .fields
             .iter()
             .map(|f| {
                 let resolved = self.ast_type_to_resolved(&f.ty.node);
-                self.type_mapper.map_type(&resolved)
+                let substituted = self.substitute_type(&resolved);
+                self.type_mapper.map_type(&substituted)
             })
             .collect();
+
+        // Restore substitutions
+        self.generic_substitutions = old_substitutions;
 
         // Store field names for later field access lookups
         let field_names: Vec<String> = s.fields.iter().map(|f| f.name.node.clone()).collect();
@@ -298,6 +347,60 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         Ok(enum_type)
     }
 
+    fn declare_extern_block(&mut self, extern_block: &ast::ExternBlock) -> CodegenResult<()> {
+        for func in &extern_block.functions {
+            let fn_name = func.name.node.clone();
+
+            // Skip if already declared (e.g., by builtins)
+            if self.functions.contains_key(&fn_name) || self.module.get_function(&fn_name).is_some() {
+                continue;
+            }
+
+            let param_types: Vec<BasicMetadataTypeEnum> = func
+                .params
+                .iter()
+                .map(|p| {
+                    let resolved = self.ast_type_to_resolved(&p.ty.node);
+                    let substituted = self.substitute_type(&resolved);
+                    self.type_mapper.map_type(&substituted).into()
+                })
+                .collect();
+
+            let ret_resolved = func.ret_type.as_ref()
+                .map(|t| self.ast_type_to_resolved(&t.node))
+                .unwrap_or(ResolvedType::Unit);
+            let ret_substituted = self.substitute_type(&ret_resolved);
+
+            let fn_type = if ret_substituted == ResolvedType::Unit {
+                self.context.void_type().fn_type(&param_types, func.is_vararg)
+            } else {
+                let ret_type = self.type_mapper.map_type(&ret_substituted);
+                ret_type.fn_type(&param_types, func.is_vararg)
+            };
+
+            let fn_value = self.module.add_function(&fn_name, fn_type, None);
+            self.functions.insert(fn_name, fn_value);
+        }
+        Ok(())
+    }
+
+    fn define_union(&mut self, u: &ast::Union) -> CodegenResult<StructType<'ctx>> {
+        // Union: all fields share memory - size = max field size
+        // Represent as a struct with a single i64 field (simplification)
+        let union_type = self.context.struct_type(
+            &[self.context.i64_type().into()],
+            false,
+        );
+
+        let field_names: Vec<String> = u.fields.iter().map(|f| f.name.node.clone()).collect();
+        let name = u.name.node.clone();
+        self.struct_fields.insert(name.clone(), field_names);
+        self.type_mapper.register_struct(&name, union_type);
+        self.generated_structs.insert(name, union_type);
+
+        Ok(union_type)
+    }
+
     // ========== Code Generation Phase ==========
 
     fn generate_function(&mut self, func: &ast::Function) -> CodegenResult<()> {
@@ -310,6 +413,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.locals.clear();
         self.var_struct_types.clear();
 
+        // For generic functions, set up default substitutions (T -> i64, etc.)
+        let old_substitutions = self.generic_substitutions.clone();
+        if !func.generics.is_empty() {
+            for gp in &func.generics {
+                self.generic_substitutions
+                    .entry(gp.name.node.clone())
+                    .or_insert(ResolvedType::I64);
+            }
+        }
+
         // Create entry block
         let entry = self.context.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(entry);
@@ -318,7 +431,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         for (i, param) in func.params.iter().enumerate() {
             let param_value = fn_value.get_nth_param(i as u32).unwrap();
             let resolved = self.ast_type_to_resolved(&param.ty.node);
-            let param_type = self.type_mapper.map_type(&resolved);
+            let substituted = self.substitute_type(&resolved);
+            let param_type = self.type_mapper.map_type(&substituted);
             let alloca = self.builder.build_alloca(param_type, &param.name.node)
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             self.builder.build_store(alloca, param_value)
@@ -335,11 +449,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let ret_resolved = func.ret_type.as_ref()
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(ResolvedType::Unit);
+        let ret_substituted = self.substitute_type(&ret_resolved);
 
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                if ret_resolved == ResolvedType::Unit {
+                if ret_substituted == ResolvedType::Unit {
                     self.builder.build_return(None)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 } else {
@@ -351,7 +466,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 let body_value = self.generate_block(stmts)?;
                 // Only add return if the block doesn't already have a terminator
                 if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
-                    if ret_resolved == ResolvedType::Unit {
+                    if ret_substituted == ResolvedType::Unit {
                         self.builder.build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
@@ -362,6 +477,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Restore generic substitutions
+        self.generic_substitutions = old_substitutions;
         self.current_function = None;
         Ok(())
     }
@@ -847,6 +964,27 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             _ => {}
         }
 
+        // Check if this is a lambda binding (closure call)
+        if let Some((lambda_fn_name, captured_vals)) = self.lambda_bindings.get(&fn_name).cloned() {
+            if let Some(lambda_fn) = self.functions.get(&lambda_fn_name).copied()
+                .or_else(|| self.module.get_function(&lambda_fn_name)) {
+                // Build args: captured values first, then actual args
+                let mut arg_values: Vec<BasicMetadataValueEnum> = captured_vals
+                    .iter()
+                    .map(|(_, val)| (*val).into())
+                    .collect();
+                for arg in args {
+                    arg_values.push(self.generate_expr(&arg.node)?.into());
+                }
+                let call = self.builder
+                    .build_call(lambda_fn, &arg_values, "lambda_call")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(call.try_as_basic_value()
+                    .left()
+                    .unwrap_or_else(|| self.context.struct_type(&[], false).const_zero().into()));
+            }
+        }
+
         // Get function value
         let fn_value = self
             .functions
@@ -915,8 +1053,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Stmt::Let { name, ty, value, .. } => {
                 // Track struct type from the value expression before generating
                 let struct_type_name = self.infer_value_struct_type(&value.node);
+                let is_lambda = matches!(&value.node, Expr::Lambda { .. });
 
+                // Clear last lambda info before generating
+                self._last_lambda_info = None;
                 let val = self.generate_expr(&value.node)?;
+
+                // If this was a lambda binding, record the lambda info
+                if is_lambda {
+                    if let Some((lambda_fn_name, captures)) = self._last_lambda_info.take() {
+                        self.lambda_bindings.insert(name.node.clone(), (lambda_fn_name, captures));
+                    }
+                }
                 let var_type = if let Some(t) = ty.as_ref() {
                     let resolved = self.ast_type_to_resolved(&t.node);
                     self.type_mapper.map_type(&resolved)
@@ -1455,7 +1603,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let receiver_val = self.generate_expr(receiver)?;
 
         // Try to resolve the struct type name from the receiver
-        let struct_name = self.infer_struct_name(receiver).ok();
+        let mut struct_name = self.infer_struct_name(receiver).ok();
+
+        // For SelfCall (@), infer struct type from current function name (TypeName_method pattern)
+        if struct_name.is_none() {
+            if matches!(receiver, Expr::SelfCall) {
+                if let Some(func) = self.current_function {
+                    let fn_name = func.get_name().to_str().unwrap_or("").to_string();
+                    if let Some(idx) = fn_name.find('_') {
+                        struct_name = Some(fn_name[..idx].to_string());
+                    }
+                }
+            }
+        }
 
         // Try qualified name: TypeName_method
         let qualified_name = struct_name.as_ref().map(|sn| format!("{}_{}", sn, method));
@@ -1504,8 +1664,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.lambda_counter += 1;
 
         // Find captured variables from current scope
+        // If captures list is empty (type checker didn't fill it), auto-detect from body
+        let effective_captures: Vec<String> = if captures.is_empty() {
+            let param_names: std::collections::HashSet<String> = params.iter().map(|p| p.name.node.clone()).collect();
+            let used_idents = Self::collect_idents(body);
+            used_idents.into_iter()
+                .filter(|name| !param_names.contains(name) && self.locals.contains_key(name))
+                .collect()
+        } else {
+            captures.to_vec()
+        };
+
         let mut captured_vars: Vec<(String, BasicValueEnum<'ctx>, BasicTypeEnum<'ctx>)> = Vec::new();
-        for cap_name in captures {
+        for cap_name in &effective_captures {
             if let Some((ptr, var_type)) = self.locals.get(cap_name) {
                 // Load the captured value
                 let val = self.builder.build_load(*var_type, *ptr, &format!("cap_{}", cap_name))
@@ -1585,32 +1756,102 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.builder.position_at_end(block);
         }
 
-        // Return function pointer as i64
-        // If there are captures, we need to create a closure struct
-        if captured_vars.is_empty() {
-            // No captures - just return function pointer as i64
-            let fn_ptr = lambda_fn.as_global_value().as_pointer_value();
-            let fn_int = self.builder.build_ptr_to_int(
-                fn_ptr,
-                self.context.i64_type(),
-                "lambda_ptr"
-            ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            Ok(fn_int.into())
-        } else {
-            // With captures - create closure struct { fn_ptr, captures... }
-            // For simplicity, return function pointer as i64
-            // Full closure support would require creating a struct and trampoline
-            let fn_ptr = lambda_fn.as_global_value().as_pointer_value();
-            let fn_int = self.builder.build_ptr_to_int(
-                fn_ptr,
-                self.context.i64_type(),
-                "lambda_ptr"
-            ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // Register lambda as a callable function
+        self.functions.insert(lambda_name.clone(), lambda_fn);
 
-            // Store captured values for later use (in a real implementation,
-            // these would be packed into a closure struct)
-            // For now, we just return the function pointer
-            Ok(fn_int.into())
+        // Store captured values for later use at call sites
+        let captured_for_binding: Vec<(String, BasicValueEnum<'ctx>)> = captured_vars
+            .iter()
+            .map(|(name, val, _)| (name.clone(), *val))
+            .collect();
+
+        // Store the last lambda info so Stmt::Let can track it
+        self._last_lambda_info = Some((lambda_name.clone(), captured_for_binding));
+
+        // Return function pointer as i64
+        let fn_ptr = lambda_fn.as_global_value().as_pointer_value();
+        let fn_int = self.builder.build_ptr_to_int(
+            fn_ptr,
+            self.context.i64_type(),
+            "lambda_ptr"
+        ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(fn_int.into())
+    }
+
+    /// Collect all Ident names used in an expression (for auto-capture detection)
+    fn collect_idents(expr: &Expr) -> Vec<String> {
+        let mut idents = Vec::new();
+        Self::collect_idents_inner(expr, &mut idents);
+        idents.sort();
+        idents.dedup();
+        idents
+    }
+
+    fn collect_idents_inner(expr: &Expr, idents: &mut Vec<String>) {
+        match expr {
+            Expr::Ident(name) => idents.push(name.clone()),
+            Expr::Binary { left, right, .. } => {
+                Self::collect_idents_inner(&left.node, idents);
+                Self::collect_idents_inner(&right.node, idents);
+            }
+            Expr::Unary { expr, .. } => Self::collect_idents_inner(&expr.node, idents),
+            Expr::Call { func, args } => {
+                Self::collect_idents_inner(&func.node, idents);
+                for arg in args {
+                    Self::collect_idents_inner(&arg.node, idents);
+                }
+            }
+            Expr::Block(stmts) => {
+                for stmt in stmts {
+                    if let Stmt::Expr(e) = &stmt.node {
+                        Self::collect_idents_inner(&e.node, idents);
+                    }
+                }
+            }
+            Expr::If { cond, then, else_ } => {
+                Self::collect_idents_inner(&cond.node, idents);
+                for stmt in then {
+                    if let Stmt::Expr(e) = &stmt.node {
+                        Self::collect_idents_inner(&e.node, idents);
+                    }
+                }
+                if let Some(else_branch) = else_ {
+                    match else_branch {
+                        IfElse::ElseIf(cond_expr, then_stmts, _else_opt) => {
+                            Self::collect_idents_inner(&cond_expr.node, idents);
+                            for stmt in then_stmts {
+                                if let Stmt::Expr(e) = &stmt.node {
+                                    Self::collect_idents_inner(&e.node, idents);
+                                }
+                            }
+                        }
+                        IfElse::Else(stmts) => {
+                            for stmt in stmts {
+                                if let Stmt::Expr(e) = &stmt.node {
+                                    Self::collect_idents_inner(&e.node, idents);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                Self::collect_idents_inner(&receiver.node, idents);
+                for arg in args {
+                    Self::collect_idents_inner(&arg.node, idents);
+                }
+            }
+            Expr::Field { expr, .. } => Self::collect_idents_inner(&expr.node, idents),
+            Expr::Index { expr, index } => {
+                Self::collect_idents_inner(&expr.node, idents);
+                Self::collect_idents_inner(&index.node, idents);
+            }
+            Expr::Tuple(elems) | Expr::Array(elems) => {
+                for e in elems {
+                    Self::collect_idents_inner(&e.node, idents);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -2907,6 +3148,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<FunctionValue<'ctx>> {
         let method_name = format!("{}_{}", type_name, func.name.node);
 
+        // Set up generic substitutions from parent struct and method generics
+        let old_substitutions = self.generic_substitutions.clone();
+        if let Some(gp_names) = self.struct_generic_params.get(type_name).cloned() {
+            for gp_name in &gp_names {
+                self.generic_substitutions
+                    .entry(gp_name.clone())
+                    .or_insert(ResolvedType::I64);
+            }
+        }
+        for gp in &func.generics {
+            self.generic_substitutions
+                .entry(gp.name.node.clone())
+                .or_insert(ResolvedType::I64);
+        }
+
         // Build parameter types: map self -> struct type pointer or value
         let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
         for p in &func.params {
@@ -2916,24 +3172,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     param_types.push((*struct_type).into());
                 } else {
                     let resolved = self.ast_type_to_resolved(&p.ty.node);
-                    param_types.push(self.type_mapper.map_type(&resolved).into());
+                    let substituted = self.substitute_type(&resolved);
+                    param_types.push(self.type_mapper.map_type(&substituted).into());
                 }
             } else {
                 let resolved = self.ast_type_to_resolved(&p.ty.node);
-                param_types.push(self.type_mapper.map_type(&resolved).into());
+                let substituted = self.substitute_type(&resolved);
+                param_types.push(self.type_mapper.map_type(&substituted).into());
             }
         }
 
         let ret_resolved = func.ret_type.as_ref()
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(ResolvedType::Unit);
+        let ret_substituted = self.substitute_type(&ret_resolved);
 
-        let fn_type = if ret_resolved == ResolvedType::Unit {
+        let fn_type = if ret_substituted == ResolvedType::Unit {
             self.context.void_type().fn_type(&param_types, false)
         } else {
-            let ret_type = self.type_mapper.map_type(&ret_resolved);
+            let ret_type = self.type_mapper.map_type(&ret_substituted);
             ret_type.fn_type(&param_types, false)
         };
+
+        // Restore substitutions
+        self.generic_substitutions = old_substitutions;
 
         let fn_value = self.module.add_function(&method_name, fn_type, None);
         self.functions.insert(method_name, fn_value);
@@ -2957,6 +3219,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.locals.clear();
         self.var_struct_types.clear();
 
+        // Set up generic substitutions from parent struct and method generics
+        let old_substitutions = self.generic_substitutions.clone();
+        if let Some(gp_names) = self.struct_generic_params.get(type_name).cloned() {
+            for gp_name in &gp_names {
+                self.generic_substitutions
+                    .entry(gp_name.clone())
+                    .or_insert(ResolvedType::I64);
+            }
+        }
+        for gp in &func.generics {
+            self.generic_substitutions
+                .entry(gp.name.node.clone())
+                .or_insert(ResolvedType::I64);
+        }
+
         let entry = self.context.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(entry);
 
@@ -2968,11 +3245,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     BasicTypeEnum::StructType(*struct_type)
                 } else {
                     let resolved = self.ast_type_to_resolved(&param.ty.node);
-                    self.type_mapper.map_type(&resolved)
+                    let substituted = self.substitute_type(&resolved);
+                    self.type_mapper.map_type(&substituted)
                 }
             } else {
                 let resolved = self.ast_type_to_resolved(&param.ty.node);
-                self.type_mapper.map_type(&resolved)
+                let substituted = self.substitute_type(&resolved);
+                self.type_mapper.map_type(&substituted)
             };
 
             let alloca = self.builder.build_alloca(param_type, &param.name.node)
@@ -2993,11 +3272,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let ret_resolved = func.ret_type.as_ref()
             .map(|t| self.ast_type_to_resolved(&t.node))
             .unwrap_or(ResolvedType::Unit);
+        let ret_substituted = self.substitute_type(&ret_resolved);
 
         match &func.body {
             ast::FunctionBody::Expr(body_expr) => {
                 let body_value = self.generate_expr(&body_expr.node)?;
-                if ret_resolved == ResolvedType::Unit {
+                if ret_substituted == ResolvedType::Unit {
                     self.builder.build_return(None)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 } else {
@@ -3008,7 +3288,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             ast::FunctionBody::Block(stmts) => {
                 let body_value = self.generate_block(stmts)?;
                 if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
-                    if ret_resolved == ResolvedType::Unit {
+                    if ret_substituted == ResolvedType::Unit {
                         self.builder.build_return(None)
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
@@ -3019,6 +3299,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Restore generic substitutions
+        self.generic_substitutions = old_substitutions;
         self.current_function = None;
         Ok(())
     }
