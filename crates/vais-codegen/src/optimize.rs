@@ -549,7 +549,7 @@ pub(crate) fn tail_call_optimization(ir: &str) -> String {
                     // Check if next line is "ret TYPE %dest"
                     if next_trimmed.starts_with("ret ") && next_trimmed.contains(dest) {
                         // Check if this is a self-recursive call (calls the current function)
-                        let is_self_call = current_fn_name.as_ref().map_or(false, |fn_name| {
+                        let is_self_call = current_fn_name.as_ref().is_some_and(|fn_name| {
                             trimmed.contains(&format!("@{}(", fn_name))
                         });
 

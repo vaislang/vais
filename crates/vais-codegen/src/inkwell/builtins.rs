@@ -2,7 +2,6 @@
 
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::values::BasicValue;
 use inkwell::AddressSpace;
 
 /// Declares all built-in functions in the module.

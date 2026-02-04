@@ -3994,7 +3994,7 @@ impl CodeGenerator {
 
             // Spread: ..expr (handled within array generation; standalone generates inner)
             Expr::Spread(inner) => {
-                return self.generate_expr(inner, counter);
+                self.generate_expr(inner, counter)
             }
 
             // Reference: &expr

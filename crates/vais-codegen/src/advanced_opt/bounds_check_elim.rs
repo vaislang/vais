@@ -39,7 +39,7 @@ impl ValueRange {
     /// True if this range is entirely within [0, length).
     pub fn is_safe_for_length(&self, length: &str) -> bool {
         // Lower bound must be >= 0
-        let lo_ok = self.lo.map_or(false, |lo| lo >= 0);
+        let lo_ok = self.lo.is_some_and(|lo| lo >= 0);
         if !lo_ok {
             return false;
         }
@@ -186,8 +186,8 @@ fn parse_induction_phi(line: &str) -> Option<String> {
 fn find_loop_bound(lines: &[&str], phi_line: usize, var: &str) -> Option<String> {
     // Search within a window around the phi node for icmp slt/ult
     let search_end = std::cmp::min(phi_line + 20, lines.len());
-    for i in phi_line..search_end {
-        let trimmed = lines[i].trim();
+    for line in lines.iter().take(search_end).skip(phi_line) {
+        let trimmed = line.trim();
         // Pattern: %cmp = icmp slt i64 %var, %bound
         //          %cmp = icmp ult i64 %var, %bound
         if (trimmed.contains("icmp slt") || trimmed.contains("icmp ult"))
@@ -272,8 +272,8 @@ fn parse_comparison(line: &str) -> Option<(String, String, String)> {
 /// Find a conditional branch that uses a comparison result.
 fn find_branch_on_cmp(lines: &[&str], cmp_line: usize, cmp_var: &str) -> Option<usize> {
     let search_end = std::cmp::min(cmp_line + 5, lines.len());
-    for i in (cmp_line + 1)..search_end {
-        let trimmed = lines[i].trim();
+    for (i, line) in lines.iter().enumerate().take(search_end).skip(cmp_line + 1) {
+        let trimmed = line.trim();
         if trimmed.starts_with("br i1") && trimmed.contains(cmp_var) {
             return Some(i);
         }
@@ -294,8 +294,8 @@ fn has_array_access_in_true_branch(lines: &[&str], br_line: usize, idx_var: &str
 
     // Find the true label block and check for GEP using idx_var
     let mut in_true_block = false;
-    for i in (br_line + 1)..lines.len() {
-        let trimmed = lines[i].trim();
+    for line in lines.iter().skip(br_line + 1) {
+        let trimmed = line.trim();
 
         // Check if we've entered the true block
         if trimmed.starts_with(&format!("{}:", true_label.trim_start_matches('%'))) {

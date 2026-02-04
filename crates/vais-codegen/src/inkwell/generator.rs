@@ -31,6 +31,7 @@ struct LoopContext<'ctx> {
 
 /// Closure information for captured variables
 #[derive(Clone)]
+#[allow(dead_code)]
 struct ClosureInfo<'ctx> {
     /// The generated LLVM function
     func: FunctionValue<'ctx>,
@@ -56,6 +57,7 @@ pub struct InkwellCodeGenerator<'ctx> {
     type_mapper: TypeMapper<'ctx>,
 
     /// Target architecture
+    #[allow(dead_code)]
     target: TargetTriple,
 
     /// Registered functions by name
@@ -146,7 +148,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             module.set_triple(&inkwell::targets::TargetTriple::create(target.triple_str()));
         }
 
-        let mut gen = Self {
+        let gen = Self {
             context,
             module,
             builder,
@@ -508,10 +510,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             // If expression: check then and else branches
             Expr::If { then, else_, .. } => {
                 // Check last statement of then block
-                let then_tail = then.last().map_or(false, |s| {
+                let then_tail = then.last().is_some_and(|s| {
                     if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
                 });
-                let else_tail = else_.as_ref().map_or(false, |ie| Self::if_else_has_tail(ie));
+                let else_tail = else_.as_ref().is_some_and(Self::if_else_has_tail);
                 then_tail || else_tail
             }
             // Match expression: check arms
@@ -520,7 +522,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             // Block: check last expression
             Expr::Block(stmts) => {
-                stmts.last().map_or(false, |s| {
+                stmts.last().is_some_and(|s| {
                     if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
                 })
             }
@@ -531,15 +533,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     fn if_else_has_tail(ie: &IfElse) -> bool {
         match ie {
             IfElse::Else(stmts) => {
-                stmts.last().map_or(false, |s| {
+                stmts.last().is_some_and(|s| {
                     if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
                 })
             }
             IfElse::ElseIf(_, then, else_) => {
-                let then_tail = then.last().map_or(false, |s| {
+                let then_tail = then.last().is_some_and(|s| {
                     if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
                 });
-                let else_tail = else_.as_ref().map_or(false, |ie| Self::if_else_has_tail(ie));
+                let else_tail = else_.as_ref().is_some_and(|ie| Self::if_else_has_tail(ie));
                 then_tail || else_tail
             }
         }
@@ -630,7 +632,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
                         let expected_ret_type = fn_value.get_type().get_return_type();
-                        let body_type_matches = expected_ret_type.map_or(false, |ert| ert == body_value.get_type());
+                        let body_type_matches = expected_ret_type.is_some_and(|ert| ert == body_value.get_type());
                         if body_type_matches {
                             self.builder.build_return(Some(&body_value))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -659,7 +661,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let is_tail_recursive = match &func.body {
             ast::FunctionBody::Expr(body_expr) => Self::has_tail_self_call(&body_expr.node),
             ast::FunctionBody::Block(stmts) => {
-                stmts.last().map_or(false, |s| {
+                stmts.last().is_some_and(|s| {
                     if let Stmt::Expr(e) = &s.node { Self::has_tail_self_call(&e.node) } else { false }
                 })
             }
@@ -790,7 +792,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     } else {
                         // Check if body value type matches expected return type
                         let expected_ret_type = fn_value.get_type().get_return_type();
-                        let body_type_matches = expected_ret_type.map_or(false, |ert| ert == body_value.get_type());
+                        let body_type_matches = expected_ret_type.is_some_and(|ert| ert == body_value.get_type());
                         if body_type_matches {
                             self.builder.build_return(Some(&body_value))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -1141,7 +1143,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(value)
         } else if let Some(val) = self.constants.get(name) {
             // Check constants
-            return Ok(*val);
+            Ok(*val)
         } else {
             // Check if this is an enum variant name (e.g., Red, Green, Blue)
             for ((_, v_name), tag) in &self.enum_variants {
@@ -1238,7 +1240,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             BinOp::BitXor => self.builder.build_xor(lhs, rhs, "bitxor"),
             BinOp::Shl => self.builder.build_left_shift(lhs, rhs, "shl"),
             BinOp::Shr => self.builder.build_right_shift(lhs, rhs, true, "shr"),
-            _ => return Err(CodegenError::Unsupported(format!("Binary op: {:?}", op))),
+            // _ => return Err(CodegenError::Unsupported(format!("Binary op: {:?}", op))),
         };
         result.map(|v| v.into()).map_err(|e| CodegenError::LlvmError(e.to_string()))
     }
@@ -1324,14 +1326,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         if i < arg_values.len() {
                             let mut new_val = arg_values[i];
                             // Cast if needed
-                            if new_val.get_type() != *param_type {
-                                if new_val.is_int_value() && param_type.is_int_type() {
-                                    new_val = self.builder.build_int_cast(
-                                        new_val.into_int_value(),
-                                        param_type.into_int_type(),
-                                        "tco_cast"
-                                    ).map_err(|e| CodegenError::LlvmError(e.to_string()))?.into();
-                                }
+                            if new_val.get_type() != *param_type
+                                && new_val.is_int_value() && param_type.is_int_type() {
+                                new_val = self.builder.build_int_cast(
+                                    new_val.into_int_value(),
+                                    param_type.into_int_type(),
+                                    "tco_cast"
+                                ).map_err(|e| CodegenError::LlvmError(e.to_string()))?.into();
                             }
                             self.builder.build_store(*alloca, new_val)
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
@@ -1359,17 +1360,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Handle built-in pseudo-functions that need special codegen
         // Handle puts with string interpolation: printf the interp, then puts("") for newline
-        if fn_name == "puts" && args.len() == 1 {
-            if matches!(&args[0].node, Expr::StringInterp(_)) {
-                let _interp_val = self.generate_expr(&args[0].node)?;
-                // String interp already printed via printf; now add newline
-                let printf_fn = self.module.get_function("printf")
-                    .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
-                let newline = self.generate_string_literal("\n")?;
-                self.builder.build_call(printf_fn, &[newline.into()], "puts_nl")
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                return Ok(self.context.struct_type(&[], false).const_zero().into());
-            }
+        if fn_name == "puts" && args.len() == 1
+            && matches!(&args[0].node, Expr::StringInterp(_)) {
+            let _interp_val = self.generate_expr(&args[0].node)?;
+            // String interp already printed via printf; now add newline
+            let printf_fn = self.module.get_function("printf")
+                .ok_or_else(|| CodegenError::UndefinedFunction("printf".to_string()))?;
+            let newline = self.generate_string_literal("\n")?;
+            self.builder.build_call(printf_fn, &[newline.into()], "puts_nl")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            return Ok(self.context.struct_type(&[], false).const_zero().into());
         }
         match fn_name.as_str() {
             "println" => return self.generate_println_call(args),
@@ -1827,17 +1827,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         })?;
 
         // Check if this is a range-based for loop
-        let is_range_loop = iter.as_ref().map_or(false, |it| {
+        let is_range_loop = iter.as_ref().is_some_and(|it| {
             matches!(&it.node, Expr::Range { .. })
         });
 
-        if is_range_loop && pattern.is_some() {
-            // Range-based for loop: L pattern : start..end { body }
-            self.generate_range_for_loop(fn_value, pattern.unwrap(), iter.unwrap(), body)
-        } else {
-            // Condition-based or infinite loop
-            self.generate_condition_loop(fn_value, pattern, iter, body)
+        if is_range_loop {
+            if let (Some(pat), Some(it)) = (pattern, iter) {
+                // Range-based for loop: L pattern : start..end { body }
+                return self.generate_range_for_loop(fn_value, pat, it, body);
+            }
         }
+        // Condition-based or infinite loop
+        self.generate_condition_loop(fn_value, pattern, iter, body)
     }
 
     fn generate_range_for_loop(
@@ -2336,13 +2337,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let mut struct_name = self.infer_struct_name(receiver).ok();
 
         // For SelfCall (@), infer struct type from current function name (TypeName_method pattern)
-        if struct_name.is_none() {
-            if matches!(receiver, Expr::SelfCall) {
-                if let Some(func) = self.current_function {
-                    let fn_name = func.get_name().to_str().unwrap_or("").to_string();
-                    if let Some(idx) = fn_name.find('_') {
-                        struct_name = Some(fn_name[..idx].to_string());
-                    }
+        if struct_name.is_none()
+            && matches!(receiver, Expr::SelfCall) {
+            if let Some(func) = self.current_function {
+                let fn_name = func.get_name().to_str().unwrap_or("").to_string();
+                if let Some(idx) = fn_name.find('_') {
+                    struct_name = Some(fn_name[..idx].to_string());
                 }
             }
         }
@@ -2651,7 +2651,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 "str" => ResolvedType::Str,
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
-                    if name.len() == 1 && name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
                         ResolvedType::Generic(name.clone())
                     } else {
                         let generic_types: Vec<ResolvedType> = generics
@@ -2853,7 +2853,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         match target {
             Expr::Ident(name) => {
-                if let Some((ptr, var_type)) = self.locals.get(name).cloned() {
+                if let Some((ptr, _var_type)) = self.locals.get(name).cloned() {
                     self.builder.build_store(ptr, val)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     Ok(val)
@@ -2946,14 +2946,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         };
 
         // Store back
-        match target {
-            Expr::Ident(name) => {
-                if let Some((ptr, _)) = self.locals.get(name).cloned() {
-                    self.builder.build_store(ptr, result)
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-                }
+        if let Expr::Ident(name) = target {
+            if let Some((ptr, _)) = self.locals.get(name).cloned() {
+                self.builder.build_store(ptr, result)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             }
-            _ => {}
         }
 
         Ok(result)
@@ -3220,9 +3217,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         return Ok(fn_name.clone());
                     }
                 }
-                Err(CodegenError::Unsupported(format!(
-                    "Cannot infer struct type for call expression"
-                )))
+                Err(CodegenError::Unsupported(
+                    "Cannot infer struct type for call expression".to_string()
+                ))
             }
             _ => Err(CodegenError::Unsupported(format!(
                 "Cannot infer struct type for expression: {:?}",
@@ -3998,7 +3995,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     Some(name.clone())
                 } else if !matches!(name.as_str(), "i8" | "i16" | "i32" | "i64" | "i128"
                     | "u8" | "u16" | "u32" | "u64" | "u128" | "f32" | "f64"
-                    | "bool" | "str" | "ptr") && name.chars().next().map_or(false, |c| c.is_uppercase())
+                    | "bool" | "str" | "ptr") && name.chars().next().is_some_and(|c| c.is_uppercase())
                 {
                     // Capitalized name that's not a primitive - likely a struct
                     Some(name.clone())
@@ -4230,7 +4227,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                     } else {
                         let expected_ret_type = fn_value.get_type().get_return_type();
-                        let body_type_matches = expected_ret_type.map_or(false, |ert| ert == body_value.get_type());
+                        let body_type_matches = expected_ret_type.is_some_and(|ert| ert == body_value.get_type());
                         if body_type_matches {
                             self.builder.build_return(Some(&body_value))
                                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;

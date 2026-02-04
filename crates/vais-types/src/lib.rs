@@ -3448,7 +3448,7 @@ impl TypeChecker {
                 is_mut,
             } => {
                 let value_type = self.check_expr(value)?;
-                self.check_destructure_pattern(&pattern, &value_type, *is_mut)?;
+                self.check_destructure_pattern(pattern, &value_type, *is_mut)?;
                 Ok(ResolvedType::Unit)
             }
             Stmt::Expr(expr) => self.check_expr(expr),
