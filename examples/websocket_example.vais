@@ -1,0 +1,286 @@
+# WebSocket Echo Server Example
+# Demonstrates a simple WebSocket server that echoes messages back to clients.
+#
+# Build:
+#   vaisc --emit-ir examples/websocket_example.vais
+#   clang -o ws_echo examples/websocket_example.ll std/http_runtime.c std/websocket_runtime.c
+#
+# Run:
+#   ./ws_echo
+#
+# Test with websocat, wscat, or browser JavaScript:
+#   websocat ws://127.0.0.1:9001
+#   wscat -c ws://127.0.0.1:9001
+#
+# Browser test:
+#   let ws = new WebSocket("ws://127.0.0.1:9001");
+#   ws.onmessage = (e) => console.log("Received:", e.data);
+#   ws.onopen = () => ws.send("Hello from browser!");
+
+# External function declarations
+X F __tcp_listen(port: i64) -> i64
+X F __tcp_accept(listener_fd: i64) -> i64
+X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+X F __tcp_close(fd: i64) -> i64
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __load_i64(ptr: i64) -> i64
+X F __find_header_end(buffer: i64, len: i64) -> i64
+X F __ws_accept_key(client_key: i64) -> i64
+X F __ws_encode_frame(opcode: i64, payload: i64, payload_len: i64, masked: i64, mask_key: i64, out_frame: i64) -> i64
+X F __ws_decode_frame(data: i64, data_len: i64, out_frame: i64) -> i64
+X F __ws_parse_upgrade_request(buffer: i64, len: i64) -> i64
+X F __ws_build_upgrade_response(accept_key: i64, out_buffer: i64) -> i64
+X F __ws_log(msg: str) -> i64
+X F __ws_log_int(label: str, value: i64) -> i64
+
+# WebSocket opcodes
+C WS_TEXT: i64 = 1
+C WS_BINARY: i64 = 2
+C WS_CLOSE: i64 = 8
+C WS_PING: i64 = 9
+C WS_PONG: i64 = 10
+
+# Send a WebSocket text frame (server-side, unmasked)
+F ws_send_text(fd: i64, msg: str) -> i64 {
+    msg_len := __strlen(msg)
+    buf := __malloc(msg_len + 14)
+    I buf == 0 {
+        R -1
+    }
+    frame_len := __ws_encode_frame(WS_TEXT, msg as i64, msg_len, 0, 0, buf)
+    I frame_len <= 0 {
+        __free(buf)
+        R -1
+    }
+    sent := __tcp_send(fd, buf, frame_len)
+    __free(buf)
+    sent
+}
+
+# Send a WebSocket pong frame
+F ws_send_pong(fd: i64) -> i64 {
+    buf := __malloc(16)
+    I buf == 0 {
+        R -1
+    }
+    frame_len := __ws_encode_frame(WS_PONG, 0, 0, 0, 0, buf)
+    sent := __tcp_send(fd, buf, frame_len)
+    __free(buf)
+    sent
+}
+
+# Send a WebSocket close frame with status code 1000 (normal closure)
+F ws_send_close(fd: i64) -> i64 {
+    # Build 2-byte close payload: status code 1000 in big-endian
+    payload := __malloc(2)
+    store_byte(payload, 3)      # 1000 / 256 = 3
+    store_byte(payload + 1, 232) # 1000 & 255 = 232
+    buf := __malloc(16)
+    I buf == 0 {
+        __free(payload)
+        R -1
+    }
+    frame_len := __ws_encode_frame(WS_CLOSE, payload, 2, 0, 0, buf)
+    sent := __tcp_send(fd, buf, frame_len)
+    __free(buf)
+    __free(payload)
+    sent
+}
+
+# Perform WebSocket handshake on an accepted TCP connection
+# Returns 1 on success, 0 on failure
+F do_handshake(fd: i64) -> i64 {
+    buf := __malloc(8192)
+    I buf == 0 {
+        R 0
+    }
+
+    # Read the HTTP upgrade request
+    total := 0
+    L true {
+        n := __tcp_recv(fd, buf + total, 4096)
+        I n <= 0 {
+            __free(buf)
+            R 0
+        }
+        total = total + n
+        I __find_header_end(buf, total) >= 0 {
+            B
+        }
+        I total >= 8192 {
+            __free(buf)
+            R 0
+        }
+    }
+
+    # Extract Sec-WebSocket-Key
+    ws_key := __ws_parse_upgrade_request(buf, total)
+    __free(buf)
+
+    I ws_key == 0 {
+        R 0
+    }
+
+    # Compute accept key (SHA-1 + Base64 of key + GUID)
+    accept_key := __ws_accept_key(ws_key)
+    __free(ws_key)
+
+    I accept_key == 0 {
+        R 0
+    }
+
+    # Build and send upgrade response
+    resp_buf := __malloc(512)
+    I resp_buf == 0 {
+        __free(accept_key)
+        R 0
+    }
+
+    resp_len := __ws_build_upgrade_response(accept_key, resp_buf)
+    __free(accept_key)
+
+    I resp_len <= 0 {
+        __free(resp_buf)
+        R 0
+    }
+
+    sent := __tcp_send(fd, resp_buf, resp_len)
+    __free(resp_buf)
+
+    I sent > 0 { 1 } E { 0 }
+}
+
+# Handle a single WebSocket client connection (echo loop)
+F handle_client(fd: i64) -> i64 {
+    __ws_log("Handling client connection")
+
+    recv_buf := __malloc(65550)
+    frame_out := __malloc(40)  # 5 i64 fields
+
+    I recv_buf == 0 | frame_out == 0 {
+        I recv_buf != 0 { __free(recv_buf) }
+        I frame_out != 0 { __free(frame_out) }
+        R -1
+    }
+
+    is_open := 1
+    L is_open == 1 {
+        # Read data from client
+        total := 0
+        L total < 2 {
+            n := __tcp_recv(fd, recv_buf + total, 4096)
+            I n <= 0 {
+                is_open = 0
+                B
+            }
+            total = total + n
+        }
+
+        I is_open == 0 {
+            B
+        }
+
+        # Try to decode, reading more if incomplete
+        consumed := __ws_decode_frame(recv_buf, total, frame_out)
+        L consumed == 0 & total < 65550 {
+            n := __tcp_recv(fd, recv_buf + total, 4096)
+            I n <= 0 {
+                is_open = 0
+                B
+            }
+            total = total + n
+            consumed = __ws_decode_frame(recv_buf, total, frame_out)
+        }
+
+        I consumed <= 0 | is_open == 0 {
+            is_open = 0
+            B
+        }
+
+        # Extract decoded frame fields
+        opcode := __load_i64(frame_out)
+        payload := __load_i64(frame_out + 8)
+        payload_len := __load_i64(frame_out + 16)
+
+        __ws_log_int("Received opcode", opcode)
+        __ws_log_int("Payload length", payload_len)
+
+        I opcode == WS_TEXT {
+            # Echo text message back
+            __ws_log("Echoing text frame")
+            ws_send_text(fd, payload as str)
+        } E I opcode == WS_BINARY {
+            # Echo binary data back
+            __ws_log("Echoing binary frame")
+            echo_buf := __malloc(payload_len + 14)
+            I echo_buf != 0 {
+                frame_len := __ws_encode_frame(WS_BINARY, payload, payload_len, 0, 0, echo_buf)
+                __tcp_send(fd, echo_buf, frame_len)
+                __free(echo_buf)
+            }
+        } E I opcode == WS_PING {
+            # Respond with pong
+            __ws_log("Received ping, sending pong")
+            ws_send_pong(fd)
+        } E I opcode == WS_CLOSE {
+            # Send close frame back and exit loop
+            __ws_log("Received close frame")
+            ws_send_close(fd)
+            is_open = 0
+        }
+
+        # Free decoded payload
+        I payload != 0 {
+            __free(payload)
+        }
+    }
+
+    __free(recv_buf)
+    __free(frame_out)
+    __ws_log("Client disconnected")
+    0
+}
+
+F main() -> i64 {
+    port := 9001
+
+    puts("=== Vais WebSocket Echo Server ===")
+    __ws_log_int("Listening on port", port)
+
+    listener := __tcp_listen(port)
+    I listener < 0 {
+        puts("Failed to start server")
+        R 1
+    }
+
+    puts("Waiting for WebSocket connections...")
+    puts("Test with: websocat ws://127.0.0.1:9001")
+
+    # Accept connections in a loop
+    L true {
+        client := __tcp_accept(listener)
+        I client < 0 {
+            C
+        }
+
+        __ws_log("New TCP connection")
+
+        # Perform WebSocket handshake
+        ok := do_handshake(client)
+        I ok == 1 {
+            __ws_log("WebSocket handshake successful")
+            handle_client(client)
+        } E {
+            __ws_log("WebSocket handshake failed")
+        }
+
+        __tcp_close(client)
+    }
+
+    __tcp_close(listener)
+    0
+}

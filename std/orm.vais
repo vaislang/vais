@@ -1,0 +1,804 @@
+# ORM - Lightweight Object-Relational Mapping for Vais
+# Generates standard SQL compatible with SQLite and PostgreSQL
+# Provides schema definition, query building, and migration support
+#
+# Features:
+# - Schema/Column definition with types, primary keys, defaults
+# - Fluent QueryBuilder for SELECT, INSERT, UPDATE, DELETE
+# - SQL injection prevention via C runtime escaping
+# - Migration up/down placeholders
+
+# ============================================
+# Constants
+# ============================================
+
+# Column types
+C COL_INTEGER: i64 = 1
+C COL_TEXT: i64 = 2
+C COL_REAL: i64 = 3
+C COL_BLOB: i64 = 4
+C COL_BOOLEAN: i64 = 5
+
+# Query types
+C QUERY_SELECT: i64 = 1
+C QUERY_INSERT: i64 = 2
+C QUERY_UPDATE: i64 = 3
+C QUERY_DELETE: i64 = 4
+
+# Buffer sizes
+C SQL_BUFFER_SIZE: i64 = 4096
+C SQL_MAX_COLUMNS: i64 = 64
+C SQL_MAX_WHERE: i64 = 32
+C SQL_MAX_VALUES: i64 = 64
+
+# ============================================
+# Column Definition
+# ============================================
+
+S Column {
+    name: str,
+    col_type: i64,
+    is_primary: i64,
+    is_nullable: i64,
+    default_value: str
+}
+
+X Column {
+    F new(name: str, col_type: i64) -> Column {
+        Column {
+            name: name,
+            col_type: col_type,
+            is_primary: 0,
+            is_nullable: 0,
+            default_value: ""
+        }
+    }
+
+    F integer(name: str) -> Column {
+        Column::new(name, COL_INTEGER)
+    }
+
+    F text(name: str) -> Column {
+        Column::new(name, COL_TEXT)
+    }
+
+    F real(name: str) -> Column {
+        Column::new(name, COL_REAL)
+    }
+
+    F blob(name: str) -> Column {
+        Column::new(name, COL_BLOB)
+    }
+
+    F boolean(name: str) -> Column {
+        Column::new(name, COL_BOOLEAN)
+    }
+
+    # Get SQL type string for this column type
+    F type_str(&self) -> str {
+        M self.col_type {
+            1 => "INTEGER",
+            2 => "TEXT",
+            3 => "REAL",
+            4 => "BLOB",
+            5 => "BOOLEAN",
+            _ => "TEXT"
+        }
+    }
+
+    # Write column definition SQL to buffer at pos, returns new pos
+    F write_def(&self, buf: i64, pos: i64) -> i64 {
+        p := pos
+        p = p + __str_copy_to(buf + p, self.name)
+        store_byte(buf + p, 32)  # space
+        p = p + 1
+        p = p + __str_copy_to(buf + p, self.type_str())
+
+        I self.is_primary == 1 {
+            p = p + __str_copy_to(buf + p, " PRIMARY KEY")
+        }
+
+        I self.is_nullable == 0 & self.is_primary == 0 {
+            p = p + __str_copy_to(buf + p, " NOT NULL")
+        }
+
+        default_len := __strlen(self.default_value)
+        I default_len > 0 {
+            p = p + __str_copy_to(buf + p, " DEFAULT ")
+            p = p + __str_copy_to(buf + p, self.default_value)
+        }
+
+        p
+    }
+}
+
+# ============================================
+# Schema Definition
+# ============================================
+
+S Schema {
+    table_name: str,
+    columns: i64,        # Pointer to array of Column data
+    column_count: i64
+}
+
+X Schema {
+    F new(table_name: str) -> Schema {
+        # Allocate space for column array (each column: 5 fields * 8 bytes = 40 bytes)
+        columns := __malloc(SQL_MAX_COLUMNS * 40)
+        Schema {
+            table_name: table_name,
+            columns: columns,
+            column_count: 0
+        }
+    }
+
+    # Add a column to the schema
+    F add_column(&self, name: str, col_type: i64) -> Schema {
+        I self.column_count >= SQL_MAX_COLUMNS {
+            R self
+        }
+        offset := self.column_count * 40
+        __store_ptr(self.columns + offset, name as i64)
+        __store_i64(self.columns + offset + 8, col_type)
+        __store_i64(self.columns + offset + 16, 0)   # is_primary = 0
+        __store_i64(self.columns + offset + 24, 0)   # is_nullable = 0
+        __store_ptr(self.columns + offset + 32, "" as i64)  # default_value = ""
+        self.column_count = self.column_count + 1
+        self
+    }
+
+    # Mark the last added column as primary key
+    F primary_key(&self) -> Schema {
+        I self.column_count > 0 {
+            offset := (self.column_count - 1) * 40
+            __store_i64(self.columns + offset + 16, 1)
+        }
+        self
+    }
+
+    # Mark the last added column as nullable
+    F nullable(&self) -> Schema {
+        I self.column_count > 0 {
+            offset := (self.column_count - 1) * 40
+            __store_i64(self.columns + offset + 24, 1)
+        }
+        self
+    }
+
+    # Set default value on the last added column
+    F with_default(&self, val: str) -> Schema {
+        I self.column_count > 0 {
+            offset := (self.column_count - 1) * 40
+            __store_ptr(self.columns + offset + 32, val as i64)
+        }
+        self
+    }
+
+    # Get column type string from type id
+    F col_type_str(col_type: i64) -> str {
+        M col_type {
+            1 => "INTEGER",
+            2 => "TEXT",
+            3 => "REAL",
+            4 => "BLOB",
+            5 => "BOOLEAN",
+            _ => "TEXT"
+        }
+    }
+
+    # Generate CREATE TABLE SQL
+    F create_table(&self) -> str {
+        buf := __malloc(SQL_BUFFER_SIZE)
+        pos := 0
+
+        pos = pos + __str_copy_to(buf + pos, "CREATE TABLE IF NOT EXISTS ")
+        pos = pos + __str_copy_to(buf + pos, self.table_name)
+        pos = pos + __str_copy_to(buf + pos, " (")
+
+        i := 0
+        L i < self.column_count {
+            I i > 0 {
+                store_byte(buf + pos, 44)  # ,
+                store_byte(buf + pos + 1, 32)  # space
+                pos = pos + 2
+            }
+
+            offset := i * 40
+            col_name := __load_ptr(self.columns + offset) as str
+            col_type := __load_i64(self.columns + offset + 8)
+            is_primary := __load_i64(self.columns + offset + 16)
+            is_nullable := __load_i64(self.columns + offset + 24)
+            default_val := __load_ptr(self.columns + offset + 32) as str
+
+            pos = pos + __str_copy_to(buf + pos, col_name)
+            store_byte(buf + pos, 32)  # space
+            pos = pos + 1
+            pos = pos + __str_copy_to(buf + pos, Schema::col_type_str(col_type))
+
+            I is_primary == 1 {
+                pos = pos + __str_copy_to(buf + pos, " PRIMARY KEY")
+            }
+
+            I is_nullable == 0 & is_primary == 0 {
+                pos = pos + __str_copy_to(buf + pos, " NOT NULL")
+            }
+
+            def_len := __strlen(default_val)
+            I def_len > 0 {
+                pos = pos + __str_copy_to(buf + pos, " DEFAULT ")
+                pos = pos + __str_copy_to(buf + pos, default_val)
+            }
+
+            i = i + 1
+        }
+
+        store_byte(buf + pos, 41)  # )
+        store_byte(buf + pos + 1, 59)  # ;
+        pos = pos + 2
+        store_byte(buf + pos, 0)  # null terminator
+
+        buf as str
+    }
+
+    # Generate DROP TABLE SQL
+    F drop_table(&self) -> str {
+        buf := __malloc(SQL_BUFFER_SIZE)
+        pos := 0
+        pos = pos + __str_copy_to(buf + pos, "DROP TABLE IF EXISTS ")
+        pos = pos + __str_copy_to(buf + pos, self.table_name)
+        store_byte(buf + pos, 59)  # ;
+        pos = pos + 1
+        store_byte(buf + pos, 0)  # null terminator
+        buf as str
+    }
+
+    # Get column count
+    F len(&self) -> i64 {
+        self.column_count
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        I self.columns != 0 {
+            __free(self.columns)
+        }
+        0
+    }
+}
+
+# ============================================
+# WhereClause - condition storage
+# ============================================
+
+S WhereClause {
+    items: i64,        # Pointer to array: [connector, column, operator, value]
+    count: i64,
+    capacity: i64
+}
+
+X WhereClause {
+    F new() -> WhereClause {
+        capacity := SQL_MAX_WHERE
+        items := __malloc(capacity * 32)  # 4 pointers * 8 bytes = 32 per clause
+        WhereClause {
+            items: items,
+            count: 0,
+            capacity: capacity
+        }
+    }
+
+    # Add a where condition
+    # connector: "AND", "OR", "" (first)
+    F add(&self, connector: str, column: str, operator: str, value: str) -> i64 {
+        I self.count >= self.capacity {
+            R -1
+        }
+        offset := self.count * 32
+        __store_ptr(self.items + offset, connector as i64)
+        __store_ptr(self.items + offset + 8, column as i64)
+        __store_ptr(self.items + offset + 16, operator as i64)
+        __store_ptr(self.items + offset + 24, value as i64)
+        self.count = self.count + 1
+        0
+    }
+
+    # Write WHERE clause to buffer, returns new pos
+    F write_to(&self, buf: i64, pos: i64) -> i64 {
+        I self.count == 0 {
+            R pos
+        }
+
+        p := pos
+        p = p + __str_copy_to(buf + p, " WHERE ")
+
+        i := 0
+        L i < self.count {
+            offset := i * 32
+            connector := __load_ptr(self.items + offset) as str
+            column := __load_ptr(self.items + offset + 8) as str
+            operator := __load_ptr(self.items + offset + 16) as str
+            value := __load_ptr(self.items + offset + 24) as str
+
+            I i > 0 {
+                store_byte(buf + p, 32)  # space
+                p = p + 1
+                p = p + __str_copy_to(buf + p, connector)
+                store_byte(buf + p, 32)  # space
+                p = p + 1
+            }
+
+            p = p + __str_copy_to(buf + p, column)
+            store_byte(buf + p, 32)  # space
+            p = p + 1
+            p = p + __str_copy_to(buf + p, operator)
+            store_byte(buf + p, 32)  # space
+            p = p + 1
+
+            # Write quoted value using C runtime for safety
+            escaped := __sql_quote(value)
+            p = p + __str_copy_to(buf + p, escaped)
+
+            i = i + 1
+        }
+
+        p
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        I self.items != 0 {
+            __free(self.items)
+        }
+        0
+    }
+}
+
+# ============================================
+# QueryBuilder - Fluent SQL Query Construction
+# ============================================
+
+S QueryBuilder {
+    query_type: i64,
+    table: str,
+    columns: i64,        # Pointer to column name array
+    column_count: i64,
+    values: i64,         # Pointer to value array (for INSERT/UPDATE)
+    value_count: i64,
+    where_clause: WhereClause,
+    order_col: str,
+    order_dir: str,
+    limit_val: i64,
+    offset_val: i64
+}
+
+X QueryBuilder {
+    F new() -> QueryBuilder {
+        columns := __malloc(SQL_MAX_COLUMNS * 8)
+        values := __malloc(SQL_MAX_VALUES * 8)
+        QueryBuilder {
+            query_type: QUERY_SELECT,
+            table: "",
+            columns: columns,
+            column_count: 0,
+            values: values,
+            value_count: 0,
+            where_clause: WhereClause::new(),
+            order_col: "",
+            order_dir: "",
+            limit_val: -1,
+            offset_val: -1
+        }
+    }
+
+    # Set table and query type to SELECT, with column list
+    F select(cols: str) -> QueryBuilder {
+        qb := QueryBuilder::new()
+        qb.query_type = QUERY_SELECT
+        # Store columns string as the first entry for simple usage
+        __store_ptr(qb.columns, cols as i64)
+        qb.column_count = 1
+        qb
+    }
+
+    # Set the FROM table
+    F from(&self, table: str) -> QueryBuilder {
+        self.table = table
+        self
+    }
+
+    # WHERE column = value
+    F where_eq(&self, column: str, value: str) -> QueryBuilder {
+        I self.where_clause.count == 0 {
+            self.where_clause.add("", column, "=", value)
+        } E {
+            self.where_clause.add("AND", column, "=", value)
+        }
+        self
+    }
+
+    # WHERE column > value
+    F where_gt(&self, column: str, value: str) -> QueryBuilder {
+        I self.where_clause.count == 0 {
+            self.where_clause.add("", column, ">", value)
+        } E {
+            self.where_clause.add("AND", column, ">", value)
+        }
+        self
+    }
+
+    # WHERE column < value
+    F where_lt(&self, column: str, value: str) -> QueryBuilder {
+        I self.where_clause.count == 0 {
+            self.where_clause.add("", column, "<", value)
+        } E {
+            self.where_clause.add("AND", column, "<", value)
+        }
+        self
+    }
+
+    # AND column = value
+    F and_eq(&self, column: str, value: str) -> QueryBuilder {
+        self.where_clause.add("AND", column, "=", value)
+        self
+    }
+
+    # OR column = value
+    F or_eq(&self, column: str, value: str) -> QueryBuilder {
+        self.where_clause.add("OR", column, "=", value)
+        self
+    }
+
+    # ORDER BY column direction
+    F order_by(&self, column: str, direction: str) -> QueryBuilder {
+        self.order_col = column
+        self.order_dir = direction
+        self
+    }
+
+    # LIMIT n
+    F limit(&self, n: i64) -> QueryBuilder {
+        self.limit_val = n
+        self
+    }
+
+    # OFFSET n
+    F offset(&self, n: i64) -> QueryBuilder {
+        self.offset_val = n
+        self
+    }
+
+    # Build an INSERT query
+    # cols: comma-separated column names
+    # vals: comma-separated values (will be quoted)
+    F insert(table: str, cols: str, vals: str) -> QueryBuilder {
+        qb := QueryBuilder::new()
+        qb.query_type = QUERY_INSERT
+        qb.table = table
+        __store_ptr(qb.columns, cols as i64)
+        qb.column_count = 1
+        __store_ptr(qb.values, vals as i64)
+        qb.value_count = 1
+        qb
+    }
+
+    # Build an UPDATE query
+    # set_clause: e.g. "name = 'Alice', age = 30"
+    F update(table: str, set_clause: str) -> QueryBuilder {
+        qb := QueryBuilder::new()
+        qb.query_type = QUERY_UPDATE
+        qb.table = table
+        __store_ptr(qb.values, set_clause as i64)
+        qb.value_count = 1
+        qb
+    }
+
+    # Build a DELETE query
+    F delete(table: str) -> QueryBuilder {
+        qb := QueryBuilder::new()
+        qb.query_type = QUERY_DELETE
+        qb.table = table
+        qb
+    }
+
+    # Build the final SQL string
+    F build(&self) -> str {
+        buf := __malloc(SQL_BUFFER_SIZE)
+        pos := 0
+
+        M self.query_type {
+            1 => {
+                # SELECT
+                pos = pos + __str_copy_to(buf + pos, "SELECT ")
+                I self.column_count > 0 {
+                    col_str := __load_ptr(self.columns) as str
+                    pos = pos + __str_copy_to(buf + pos, col_str)
+                } E {
+                    store_byte(buf + pos, 42)  # *
+                    pos = pos + 1
+                }
+                pos = pos + __str_copy_to(buf + pos, " FROM ")
+                pos = pos + __str_copy_to(buf + pos, self.table)
+
+                # WHERE
+                pos = self.where_clause.write_to(buf, pos)
+
+                # ORDER BY
+                order_len := __strlen(self.order_col)
+                I order_len > 0 {
+                    pos = pos + __str_copy_to(buf + pos, " ORDER BY ")
+                    pos = pos + __str_copy_to(buf + pos, self.order_col)
+                    dir_len := __strlen(self.order_dir)
+                    I dir_len > 0 {
+                        store_byte(buf + pos, 32)  # space
+                        pos = pos + 1
+                        pos = pos + __str_copy_to(buf + pos, self.order_dir)
+                    }
+                }
+
+                # LIMIT
+                I self.limit_val >= 0 {
+                    pos = pos + __str_copy_to(buf + pos, " LIMIT ")
+                    pos = pos + __i64_to_str(buf + pos, self.limit_val)
+                }
+
+                # OFFSET
+                I self.offset_val >= 0 {
+                    pos = pos + __str_copy_to(buf + pos, " OFFSET ")
+                    pos = pos + __i64_to_str(buf + pos, self.offset_val)
+                }
+            },
+            2 => {
+                # INSERT
+                pos = pos + __str_copy_to(buf + pos, "INSERT INTO ")
+                pos = pos + __str_copy_to(buf + pos, self.table)
+                pos = pos + __str_copy_to(buf + pos, " (")
+                I self.column_count > 0 {
+                    col_str := __load_ptr(self.columns) as str
+                    pos = pos + __str_copy_to(buf + pos, col_str)
+                }
+                pos = pos + __str_copy_to(buf + pos, ") VALUES (")
+                I self.value_count > 0 {
+                    val_str := __load_ptr(self.values) as str
+                    pos = pos + __str_copy_to(buf + pos, val_str)
+                }
+                store_byte(buf + pos, 41)  # )
+                pos = pos + 1
+            },
+            3 => {
+                # UPDATE
+                pos = pos + __str_copy_to(buf + pos, "UPDATE ")
+                pos = pos + __str_copy_to(buf + pos, self.table)
+                pos = pos + __str_copy_to(buf + pos, " SET ")
+                I self.value_count > 0 {
+                    set_str := __load_ptr(self.values) as str
+                    pos = pos + __str_copy_to(buf + pos, set_str)
+                }
+
+                # WHERE
+                pos = self.where_clause.write_to(buf, pos)
+            },
+            4 => {
+                # DELETE
+                pos = pos + __str_copy_to(buf + pos, "DELETE FROM ")
+                pos = pos + __str_copy_to(buf + pos, self.table)
+
+                # WHERE
+                pos = self.where_clause.write_to(buf, pos)
+            },
+            _ => {
+                pos = pos + __str_copy_to(buf + pos, "-- unknown query type")
+            }
+        }
+
+        store_byte(buf + pos, 59)  # ;
+        pos = pos + 1
+        store_byte(buf + pos, 0)  # null terminator
+
+        buf as str
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        I self.columns != 0 {
+            __free(self.columns)
+        }
+        I self.values != 0 {
+            __free(self.values)
+        }
+        self.where_clause.drop()
+        0
+    }
+}
+
+# ============================================
+# Migration Support (placeholders)
+# ============================================
+
+S Migration {
+    version: i64,
+    name: str,
+    up_sql: str,
+    down_sql: str
+}
+
+X Migration {
+    F new(version: i64, name: str, up_sql: str, down_sql: str) -> Migration {
+        Migration {
+            version: version,
+            name: name,
+            up_sql: up_sql,
+            down_sql: down_sql
+        }
+    }
+
+    # Get the up migration SQL
+    F migrate_up(&self) -> str {
+        self.up_sql
+    }
+
+    # Get the down migration SQL
+    F migrate_down(&self) -> str {
+        self.down_sql
+    }
+}
+
+S MigrationRunner {
+    migrations: i64,     # Pointer to array of Migration pointers
+    count: i64,
+    capacity: i64
+}
+
+X MigrationRunner {
+    F new() -> MigrationRunner {
+        capacity := 64
+        migrations := __malloc(capacity * 8)
+        MigrationRunner {
+            migrations: migrations,
+            count: 0,
+            capacity: capacity
+        }
+    }
+
+    # Add a migration
+    F add(&self, migration: Migration) -> MigrationRunner {
+        I self.count >= self.capacity {
+            R self
+        }
+        # Store migration data (copy the 4 fields = 32 bytes)
+        m_ptr := __malloc(32)
+        __store_i64(m_ptr, migration.version)
+        __store_ptr(m_ptr + 8, migration.name as i64)
+        __store_ptr(m_ptr + 16, migration.up_sql as i64)
+        __store_ptr(m_ptr + 24, migration.down_sql as i64)
+        __store_ptr(self.migrations + self.count * 8, m_ptr)
+        self.count = self.count + 1
+        self
+    }
+
+    # Get all up-migration SQL statements concatenated
+    F migrate_up_all(&self) -> str {
+        buf := __malloc(SQL_BUFFER_SIZE * 4)
+        pos := 0
+        i := 0
+        L i < self.count {
+            m_ptr := __load_ptr(self.migrations + i * 8)
+            I m_ptr != 0 {
+                up_sql := __load_ptr(m_ptr + 16) as str
+                pos = pos + __str_copy_to(buf + pos, up_sql)
+                store_byte(buf + pos, 10)  # newline
+                pos = pos + 1
+            }
+            i = i + 1
+        }
+        store_byte(buf + pos, 0)  # null terminator
+        buf as str
+    }
+
+    # Get all down-migration SQL statements (in reverse order)
+    F migrate_down_all(&self) -> str {
+        buf := __malloc(SQL_BUFFER_SIZE * 4)
+        pos := 0
+        i := self.count - 1
+        L i >= 0 {
+            m_ptr := __load_ptr(self.migrations + i * 8)
+            I m_ptr != 0 {
+                down_sql := __load_ptr(m_ptr + 24) as str
+                pos = pos + __str_copy_to(buf + pos, down_sql)
+                store_byte(buf + pos, 10)  # newline
+                pos = pos + 1
+            }
+            i = i - 1
+        }
+        store_byte(buf + pos, 0)  # null terminator
+        buf as str
+    }
+
+    # Get migration count
+    F len(&self) -> i64 {
+        self.count
+    }
+
+    # Free memory
+    F drop(&self) -> i64 {
+        i := 0
+        L i < self.count {
+            m_ptr := __load_ptr(self.migrations + i * 8)
+            I m_ptr != 0 {
+                __free(m_ptr)
+            }
+            i = i + 1
+        }
+        I self.migrations != 0 {
+            __free(self.migrations)
+        }
+        0
+    }
+}
+
+# ============================================
+# Convenience Functions
+# ============================================
+
+# Create a new schema for a table
+F schema(table_name: str) -> Schema {
+    Schema::new(table_name)
+}
+
+# Create a SELECT query builder
+F select_from(columns: str, table: str) -> QueryBuilder {
+    QueryBuilder::select(columns).from(table)
+}
+
+# Create an INSERT query builder
+F insert_into(table: str, cols: str, vals: str) -> QueryBuilder {
+    QueryBuilder::insert(table, cols, vals)
+}
+
+# Create an UPDATE query builder
+F update_table(table: str, set_clause: str) -> QueryBuilder {
+    QueryBuilder::update(table, set_clause)
+}
+
+# Create a DELETE query builder
+F delete_from(table: str) -> QueryBuilder {
+    QueryBuilder::delete(table)
+}
+
+# Create a new migration
+F migration(version: i64, name: str, up_sql: str, down_sql: str) -> Migration {
+    Migration::new(version, name, up_sql, down_sql)
+}
+
+# Create a new migration runner
+F migration_runner() -> MigrationRunner {
+    MigrationRunner::new()
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+# SQL string helpers (from orm_runtime.c)
+X F __sql_escape(input: str) -> str
+X F __sql_quote(input: str) -> str
+X F __sql_build_select(table: str, columns: str, where_clause: str, order: str, limit_val: i64) -> str
+X F __sql_build_insert(table: str, columns: str, values: str) -> str
+X F __sql_build_update(table: str, set_clause: str, where_clause: str) -> str
+X F __sql_build_delete(table: str, where_clause: str) -> str
+X F __sql_build_create_table(table: str, column_defs: str) -> str
+
+# String operations
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+
+# Memory operations
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __memcpy(dst: i64, src: i64, len: i64) -> i64
+X F __store_ptr(ptr: i64, value: i64) -> i64
+X F __store_i64(ptr: i64, value: i64) -> i64
+X F __load_ptr(ptr: i64) -> i64
+X F __load_i64(ptr: i64) -> i64

@@ -1,0 +1,264 @@
+# PostgreSQL example - demonstrates basic database operations
+#
+# Prerequisites:
+#   - PostgreSQL server running on localhost:5432
+#   - A database named "testdb" accessible by user "postgres"
+#   - libpq installed (brew install libpq on macOS, apt install libpq-dev on Linux)
+#
+# Build:
+#   vaisc examples/postgres_example.vais
+#   clang examples/postgres_example.ll std/postgres_runtime.c -lpq -o postgres_example
+#
+# Run:
+#   ./postgres_example
+
+# Extern declarations for the PostgreSQL runtime
+X F __pg_connect(conninfo: str) -> i64
+X F __pg_finish(handle: i64) -> i64
+X F __pg_exec(handle: i64, sql: str) -> i64
+X F __pg_exec_params(handle: i64, sql: str, nparams: i64, param_values: i64) -> i64
+X F __pg_prepare(handle: i64, name: str, sql: str, nparams: i64) -> i64
+X F __pg_exec_prepared(handle: i64, name: str, nparams: i64, param_values: i64) -> i64
+X F __pg_ntuples(result: i64) -> i64
+X F __pg_nfields(result: i64) -> i64
+X F __pg_getvalue(result: i64, row: i64, col: i64) -> str
+X F __pg_getisnull(result: i64, row: i64, col: i64) -> i64
+X F __pg_clear(result: i64) -> i64
+X F __pg_status(handle: i64) -> i64
+X F __pg_error_message(handle: i64) -> str
+X F __pg_result_status(result: i64) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+
+F main() -> i64 {
+    puts("=== Vais PostgreSQL Example ===")
+    puts("")
+
+    # ----------------------------------------
+    # Step 1: Connect to the database
+    # ----------------------------------------
+    puts("Step 1: Connecting to PostgreSQL...")
+    handle := __pg_connect("host=localhost port=5432 dbname=testdb user=postgres")
+
+    I handle == 0 {
+        puts("ERROR: Failed to create connection (null handle)")
+        R 1
+    }
+
+    status := __pg_status(handle)
+    I status != 0 {
+        puts("ERROR: Connection failed:")
+        msg := __pg_error_message(handle)
+        puts(msg)
+        __pg_finish(handle)
+        R 1
+    }
+    puts("  Connected successfully!")
+    puts("")
+
+    # ----------------------------------------
+    # Step 2: Create a test table
+    # ----------------------------------------
+    puts("Step 2: Creating test table...")
+    res := __pg_exec(handle, "DROP TABLE IF EXISTS vais_test")
+    __pg_clear(res)
+
+    res = __pg_exec(handle, "CREATE TABLE vais_test (id SERIAL PRIMARY KEY, name TEXT NOT NULL, age INTEGER, active BOOLEAN DEFAULT true)")
+    res_status := __pg_result_status(res)
+    __pg_clear(res)
+
+    I res_status == 1 {
+        puts("  Table created successfully!")
+    } E {
+        puts("  ERROR: Failed to create table")
+        msg := __pg_error_message(handle)
+        puts(msg)
+    }
+    puts("")
+
+    # ----------------------------------------
+    # Step 3: Insert data using simple exec
+    # ----------------------------------------
+    puts("Step 3: Inserting data...")
+    res = __pg_exec(handle, "INSERT INTO vais_test (name, age, active) VALUES ('Alice', 30, true)")
+    __pg_clear(res)
+    puts("  Inserted Alice")
+
+    res = __pg_exec(handle, "INSERT INTO vais_test (name, age, active) VALUES ('Bob', 25, true)")
+    __pg_clear(res)
+    puts("  Inserted Bob")
+
+    res = __pg_exec(handle, "INSERT INTO vais_test (name, age, active) VALUES ('Charlie', 35, false)")
+    __pg_clear(res)
+    puts("  Inserted Charlie")
+    puts("")
+
+    # ----------------------------------------
+    # Step 4: Query data
+    # ----------------------------------------
+    puts("Step 4: Querying all rows...")
+    res = __pg_exec(handle, "SELECT id, name, age, active FROM vais_test ORDER BY id")
+    res_status = __pg_result_status(res)
+
+    I res_status == 2 {
+        nrows := __pg_ntuples(res)
+        ncols := __pg_nfields(res)
+        puts("  Rows returned:")
+
+        i := 0
+        L i < nrows {
+            id_val := __pg_getvalue(res, i, 0)
+            name_val := __pg_getvalue(res, i, 1)
+            age_val := __pg_getvalue(res, i, 2)
+            active_val := __pg_getvalue(res, i, 3)
+
+            puts("    ---")
+            puts(id_val)
+            puts(name_val)
+            puts(age_val)
+            puts(active_val)
+
+            i = i + 1
+        }
+    } E {
+        puts("  ERROR: Query failed")
+        msg := __pg_error_message(handle)
+        puts(msg)
+    }
+    __pg_clear(res)
+    puts("")
+
+    # ----------------------------------------
+    # Step 5: Parameterized query
+    # ----------------------------------------
+    puts("Step 5: Parameterized query...")
+    # Build parameter array: an array of char* pointers
+    params := __malloc(8)  # 1 pointer = 8 bytes
+    store_i64(params, "25" as i64)
+
+    res = __pg_exec_params(handle, "SELECT name, age FROM vais_test WHERE age > $1", 1, params)
+    res_status = __pg_result_status(res)
+
+    I res_status == 2 {
+        nrows := __pg_ntuples(res)
+        puts("  People older than 25:")
+
+        i := 0
+        L i < nrows {
+            name_val := __pg_getvalue(res, i, 0)
+            age_val := __pg_getvalue(res, i, 1)
+            puts(name_val)
+            puts(age_val)
+            i = i + 1
+        }
+    } E {
+        puts("  ERROR: Parameterized query failed")
+    }
+    __pg_clear(res)
+    __free(params)
+    puts("")
+
+    # ----------------------------------------
+    # Step 6: Prepared statement
+    # ----------------------------------------
+    puts("Step 6: Prepared statement...")
+    res = __pg_prepare(handle, "find_by_name", "SELECT id, name, age FROM vais_test WHERE name = $1", 1)
+    __pg_clear(res)
+
+    params = __malloc(8)
+    store_i64(params, "Bob" as i64)
+
+    res = __pg_exec_prepared(handle, "find_by_name", 1, params)
+    res_status = __pg_result_status(res)
+
+    I res_status == 2 {
+        nrows := __pg_ntuples(res)
+        I nrows > 0 {
+            puts("  Found Bob:")
+            puts(__pg_getvalue(res, 0, 0))
+            puts(__pg_getvalue(res, 0, 1))
+            puts(__pg_getvalue(res, 0, 2))
+        } E {
+            puts("  Bob not found")
+        }
+    } E {
+        puts("  ERROR: Prepared statement failed")
+    }
+    __pg_clear(res)
+    __free(params)
+    puts("")
+
+    # ----------------------------------------
+    # Step 7: Transaction
+    # ----------------------------------------
+    puts("Step 7: Transaction...")
+    res = __pg_exec(handle, "BEGIN")
+    __pg_clear(res)
+    puts("  BEGIN")
+
+    res = __pg_exec(handle, "INSERT INTO vais_test (name, age) VALUES ('Dave', 28)")
+    __pg_clear(res)
+    puts("  Inserted Dave")
+
+    res = __pg_exec(handle, "UPDATE vais_test SET age = 31 WHERE name = 'Alice'")
+    __pg_clear(res)
+    puts("  Updated Alice age to 31")
+
+    res = __pg_exec(handle, "COMMIT")
+    __pg_clear(res)
+    puts("  COMMIT")
+    puts("")
+
+    # ----------------------------------------
+    # Step 8: Verify final state
+    # ----------------------------------------
+    puts("Step 8: Final state...")
+    res = __pg_exec(handle, "SELECT name, age FROM vais_test ORDER BY name")
+    res_status = __pg_result_status(res)
+
+    I res_status == 2 {
+        nrows := __pg_ntuples(res)
+        i := 0
+        L i < nrows {
+            puts(__pg_getvalue(res, i, 0))
+            puts(__pg_getvalue(res, i, 1))
+            i = i + 1
+        }
+    }
+    __pg_clear(res)
+    puts("")
+
+    # ----------------------------------------
+    # Step 9: NULL value check
+    # ----------------------------------------
+    puts("Step 9: NULL value handling...")
+    res = __pg_exec(handle, "INSERT INTO vais_test (name, age) VALUES ('Eve', NULL)")
+    __pg_clear(res)
+
+    res = __pg_exec(handle, "SELECT name, age FROM vais_test WHERE name = 'Eve'")
+    I __pg_result_status(res) == 2 {
+        is_null := __pg_getisnull(res, 0, 1)
+        I is_null == 1 {
+            puts("  Eve's age is NULL (correct)")
+        } E {
+            puts("  Eve's age is not NULL (unexpected)")
+        }
+    }
+    __pg_clear(res)
+    puts("")
+
+    # ----------------------------------------
+    # Step 10: Cleanup
+    # ----------------------------------------
+    puts("Step 10: Cleanup...")
+    res = __pg_exec(handle, "DROP TABLE vais_test")
+    __pg_clear(res)
+    puts("  Dropped test table")
+
+    __pg_finish(handle)
+    puts("  Disconnected")
+    puts("")
+    puts("=== Done ===")
+
+    0
+}

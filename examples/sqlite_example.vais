@@ -1,0 +1,215 @@
+# SQLite Example - Basic CRUD Operations
+# Demonstrates opening a database, creating tables, inserting,
+# querying, updating, and deleting rows using the Vais SQLite bindings.
+#
+# Build:
+#   vaisc --emit-ir examples/sqlite_example.vais
+#   clang -o sqlite_example examples/sqlite_example.ll std/sqlite_runtime.c -lsqlite3
+#
+# Run:
+#   ./sqlite_example
+
+# External function declarations
+X F __sqlite_open(path: str) -> i64
+X F __sqlite_close(handle: i64) -> i64
+X F __sqlite_exec(handle: i64, sql: str, callback: i64) -> i64
+X F __sqlite_prepare(handle: i64, sql: str) -> i64
+X F __sqlite_bind_int(stmt: i64, index: i64, value: i64) -> i64
+X F __sqlite_bind_text(stmt: i64, index: i64, text: str) -> i64
+X F __sqlite_step(stmt: i64) -> i64
+X F __sqlite_column_int(stmt: i64, index: i64) -> i64
+X F __sqlite_column_text(stmt: i64, index: i64) -> str
+X F __sqlite_column_count(stmt: i64) -> i64
+X F __sqlite_finalize(stmt: i64) -> i64
+X F __sqlite_errmsg(handle: i64) -> str
+X F __sqlite_last_insert_rowid(handle: i64) -> i64
+X F __sqlite_changes(handle: i64) -> i64
+
+# SQLite step result codes
+C SQLITE_OK: i64 = 0
+C SQLITE_ROW: i64 = 100
+C SQLITE_DONE: i64 = 101
+
+# Helper: print an integer value with a label
+F print_int(label: str, value: i64) -> i64 {
+    puts(label)
+    printf("%lld\n", value)
+    0
+}
+
+F main() -> i64 {
+    puts("=== Vais SQLite Example ===")
+    puts("")
+
+    # 1. Open database (in-memory for this example)
+    puts("Opening in-memory database...")
+    db := __sqlite_open(":memory:")
+    I db == 0 {
+        puts("ERROR: Failed to open database")
+        R 1
+    }
+    puts("Database opened successfully.")
+    puts("")
+
+    # 2. Create table
+    puts("Creating users table...")
+    rc := __sqlite_exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL, age INTEGER)", 0)
+    I rc != SQLITE_OK {
+        puts("ERROR: Failed to create table")
+        puts(__sqlite_errmsg(db))
+        __sqlite_close(db)
+        R 1
+    }
+    puts("Table created.")
+    puts("")
+
+    # 3. Insert rows using prepared statements
+    puts("Inserting users...")
+
+    # Insert Alice
+    stmt := __sqlite_prepare(db, "INSERT INTO users (name, email, age) VALUES (?1, ?2, ?3)")
+    I stmt == 0 {
+        puts("ERROR: Failed to prepare insert statement")
+        puts(__sqlite_errmsg(db))
+        __sqlite_close(db)
+        R 1
+    }
+    __sqlite_bind_text(stmt, 1, "Alice")
+    __sqlite_bind_text(stmt, 2, "alice@example.com")
+    __sqlite_bind_int(stmt, 3, 30)
+    rc = __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+    alice_id := __sqlite_last_insert_rowid(db)
+    puts("Inserted Alice with id:")
+    printf("  %lld\n", alice_id)
+
+    # Insert Bob
+    stmt = __sqlite_prepare(db, "INSERT INTO users (name, email, age) VALUES (?1, ?2, ?3)")
+    __sqlite_bind_text(stmt, 1, "Bob")
+    __sqlite_bind_text(stmt, 2, "bob@example.com")
+    __sqlite_bind_int(stmt, 3, 25)
+    __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+    bob_id := __sqlite_last_insert_rowid(db)
+    puts("Inserted Bob with id:")
+    printf("  %lld\n", bob_id)
+
+    # Insert Charlie
+    stmt = __sqlite_prepare(db, "INSERT INTO users (name, email, age) VALUES (?1, ?2, ?3)")
+    __sqlite_bind_text(stmt, 1, "Charlie")
+    __sqlite_bind_text(stmt, 2, "charlie@example.com")
+    __sqlite_bind_int(stmt, 3, 35)
+    __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+    charlie_id := __sqlite_last_insert_rowid(db)
+    puts("Inserted Charlie with id:")
+    printf("  %lld\n", charlie_id)
+    puts("")
+
+    # 4. Query all users
+    puts("=== All Users ===")
+    stmt = __sqlite_prepare(db, "SELECT id, name, email, age FROM users ORDER BY id")
+    I stmt == 0 {
+        puts("ERROR: Failed to prepare select statement")
+        puts(__sqlite_errmsg(db))
+        __sqlite_close(db)
+        R 1
+    }
+
+    L __sqlite_step(stmt) == SQLITE_ROW {
+        id := __sqlite_column_int(stmt, 0)
+        name := __sqlite_column_text(stmt, 1)
+        email := __sqlite_column_text(stmt, 2)
+        age := __sqlite_column_int(stmt, 3)
+        printf("  [%lld] %s (%s) age=%lld\n", id, name, email, age)
+    }
+    __sqlite_finalize(stmt)
+    puts("")
+
+    # 5. Update a row
+    puts("Updating Bob's age to 26...")
+    stmt = __sqlite_prepare(db, "UPDATE users SET age = ?1 WHERE name = ?2")
+    __sqlite_bind_int(stmt, 1, 26)
+    __sqlite_bind_text(stmt, 2, "Bob")
+    __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+    changed := __sqlite_changes(db)
+    puts("Rows changed:")
+    printf("  %lld\n", changed)
+    puts("")
+
+    # 6. Query with WHERE clause
+    puts("=== Users older than 28 ===")
+    stmt = __sqlite_prepare(db, "SELECT name, age FROM users WHERE age > ?1")
+    __sqlite_bind_int(stmt, 1, 28)
+    L __sqlite_step(stmt) == SQLITE_ROW {
+        name := __sqlite_column_text(stmt, 0)
+        age := __sqlite_column_int(stmt, 1)
+        printf("  %s (age %lld)\n", name, age)
+    }
+    __sqlite_finalize(stmt)
+    puts("")
+
+    # 7. Transaction example
+    puts("=== Transaction Example ===")
+    __sqlite_exec(db, "BEGIN TRANSACTION", 0)
+
+    stmt = __sqlite_prepare(db, "INSERT INTO users (name, email, age) VALUES (?1, ?2, ?3)")
+    __sqlite_bind_text(stmt, 1, "Diana")
+    __sqlite_bind_text(stmt, 2, "diana@example.com")
+    __sqlite_bind_int(stmt, 3, 28)
+    __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+
+    stmt = __sqlite_prepare(db, "INSERT INTO users (name, email, age) VALUES (?1, ?2, ?3)")
+    __sqlite_bind_text(stmt, 1, "Eve")
+    __sqlite_bind_text(stmt, 2, "eve@example.com")
+    __sqlite_bind_int(stmt, 3, 22)
+    __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+
+    __sqlite_exec(db, "COMMIT", 0)
+    puts("Transaction committed with 2 new users.")
+    puts("")
+
+    # 8. Delete a row
+    puts("Deleting Charlie...")
+    stmt = __sqlite_prepare(db, "DELETE FROM users WHERE name = ?1")
+    __sqlite_bind_text(stmt, 1, "Charlie")
+    __sqlite_step(stmt)
+    __sqlite_finalize(stmt)
+    changed = __sqlite_changes(db)
+    puts("Rows deleted:")
+    printf("  %lld\n", changed)
+    puts("")
+
+    # 9. Final query - show all remaining users
+    puts("=== Final User List ===")
+    stmt = __sqlite_prepare(db, "SELECT id, name, email, age FROM users ORDER BY id")
+    L __sqlite_step(stmt) == SQLITE_ROW {
+        id := __sqlite_column_int(stmt, 0)
+        name := __sqlite_column_text(stmt, 1)
+        email := __sqlite_column_text(stmt, 2)
+        age := __sqlite_column_int(stmt, 3)
+        printf("  [%lld] %s (%s) age=%lld\n", id, name, email, age)
+    }
+    __sqlite_finalize(stmt)
+    puts("")
+
+    # 10. Count total users
+    puts("=== User Count ===")
+    stmt = __sqlite_prepare(db, "SELECT COUNT(*) FROM users")
+    I __sqlite_step(stmt) == SQLITE_ROW {
+        count := __sqlite_column_int(stmt, 0)
+        printf("  Total users: %lld\n", count)
+    }
+    __sqlite_finalize(stmt)
+    puts("")
+
+    # 11. Close database
+    puts("Closing database...")
+    __sqlite_close(db)
+    puts("Done!")
+
+    0
+}

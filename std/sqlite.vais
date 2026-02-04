@@ -1,0 +1,545 @@
+# SQLite - SQLite3 database bindings for Vais
+# Provides a safe, ergonomic interface to SQLite3 via C runtime bindings.
+#
+# Usage:
+#   Build with: vaisc --emit-ir your_app.vais
+#               clang -o your_app your_app.ll std/sqlite_runtime.c -lsqlite3
+#
+# Requires: SQLite3 development headers and library (-lsqlite3)
+
+# ============================================
+# Constants
+# ============================================
+
+# SQLite result codes
+C SQLITE_OK: i64 = 0
+C SQLITE_ERROR: i64 = 1
+C SQLITE_INTERNAL: i64 = 2
+C SQLITE_PERM: i64 = 3
+C SQLITE_ABORT: i64 = 4
+C SQLITE_BUSY: i64 = 5
+C SQLITE_LOCKED: i64 = 6
+C SQLITE_NOMEM: i64 = 7
+C SQLITE_READONLY: i64 = 8
+C SQLITE_INTERRUPT: i64 = 9
+C SQLITE_IOERR: i64 = 10
+C SQLITE_CORRUPT: i64 = 11
+C SQLITE_NOTFOUND: i64 = 12
+C SQLITE_FULL: i64 = 13
+C SQLITE_CANTOPEN: i64 = 14
+C SQLITE_PROTOCOL: i64 = 15
+C SQLITE_CONSTRAINT: i64 = 19
+C SQLITE_MISMATCH: i64 = 20
+C SQLITE_MISUSE: i64 = 21
+
+# Step result codes
+C SQLITE_ROW: i64 = 100
+C SQLITE_DONE: i64 = 101
+
+# Column type codes
+C SQLITE_INTEGER: i64 = 1
+C SQLITE_FLOAT: i64 = 2
+C SQLITE_TEXT: i64 = 3
+C SQLITE_BLOB: i64 = 4
+C SQLITE_NULL: i64 = 5
+
+# ============================================
+# External Functions (C runtime bindings)
+# ============================================
+
+X F __sqlite_open(path: str) -> i64
+X F __sqlite_close(handle: i64) -> i64
+X F __sqlite_exec(handle: i64, sql: str, callback: i64) -> i64
+X F __sqlite_prepare(handle: i64, sql: str) -> i64
+X F __sqlite_bind_int(stmt: i64, index: i64, value: i64) -> i64
+X F __sqlite_bind_text(stmt: i64, index: i64, text: str) -> i64
+X F __sqlite_bind_double(stmt: i64, index: i64, value: i64) -> i64
+X F __sqlite_bind_null(stmt: i64, index: i64) -> i64
+X F __sqlite_step(stmt: i64) -> i64
+X F __sqlite_column_int(stmt: i64, index: i64) -> i64
+X F __sqlite_column_text(stmt: i64, index: i64) -> str
+X F __sqlite_column_double(stmt: i64, index: i64) -> i64
+X F __sqlite_column_type(stmt: i64, index: i64) -> i64
+X F __sqlite_column_count(stmt: i64) -> i64
+X F __sqlite_column_name(stmt: i64, index: i64) -> str
+X F __sqlite_finalize(stmt: i64) -> i64
+X F __sqlite_reset(stmt: i64) -> i64
+X F __sqlite_errmsg(handle: i64) -> str
+X F __sqlite_last_insert_rowid(handle: i64) -> i64
+X F __sqlite_changes(handle: i64) -> i64
+
+# Memory and string helpers (from runtime)
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+X F __memcpy(dst: i64, src: i64, len: i64) -> i64
+X F __store_byte(ptr: i64, value: i64) -> i64
+X F __store_ptr(ptr: i64, value: i64) -> i64
+X F __store_i64(ptr: i64, value: i64) -> i64
+X F __load_ptr(ptr: i64) -> i64
+X F __load_i64(ptr: i64) -> i64
+
+# ============================================
+# Database
+# ============================================
+
+S Database {
+    handle: i64,
+    path: str,
+    is_open: i64
+}
+
+X Database {
+    # Open a database file. Creates the file if it does not exist.
+    # Returns a Database with is_open=1 on success, is_open=0 on failure.
+    F open(path: str) -> Database {
+        handle := __sqlite_open(path)
+        I handle != 0 {
+            Database {
+                handle: handle,
+                path: path,
+                is_open: 1
+            }
+        } E {
+            Database {
+                handle: 0,
+                path: path,
+                is_open: 0
+            }
+        }
+    }
+
+    # Open an in-memory database
+    F memory() -> Database {
+        Database::open(":memory:")
+    }
+
+    # Check if the database is open
+    F is_valid(&self) -> i64 {
+        I self.is_open == 1 & self.handle != 0 { 1 } E { 0 }
+    }
+
+    # Close the database connection
+    F close(&self) -> i64 {
+        I self.is_open == 1 & self.handle != 0 {
+            rc := __sqlite_close(self.handle)
+            self.handle = 0
+            self.is_open = 0
+            rc
+        } E {
+            SQLITE_OK
+        }
+    }
+
+    # Execute a simple SQL statement (no results)
+    # Returns SQLITE_OK on success, error code on failure.
+    F exec(&self, sql: str) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_exec(self.handle, sql, 0)
+    }
+
+    # Prepare a SQL statement for execution
+    # Returns a Statement with handle=0 on failure.
+    F prepare(&self, sql: str) -> Statement {
+        I self.is_valid() == 0 {
+            R Statement {
+                handle: 0,
+                db_handle: 0,
+                column_count: 0
+            }
+        }
+        stmt_handle := __sqlite_prepare(self.handle, sql)
+        I stmt_handle != 0 {
+            col_count := __sqlite_column_count(stmt_handle)
+            Statement {
+                handle: stmt_handle,
+                db_handle: self.handle,
+                column_count: col_count
+            }
+        } E {
+            Statement {
+                handle: 0,
+                db_handle: self.handle,
+                column_count: 0
+            }
+        }
+    }
+
+    # Get the last error message
+    F error_message(&self) -> str {
+        I self.handle != 0 {
+            __sqlite_errmsg(self.handle)
+        } E {
+            "Database not open"
+        }
+    }
+
+    # Get the rowid of the last inserted row
+    F last_insert_id(&self) -> i64 {
+        I self.is_valid() == 0 {
+            R -1
+        }
+        __sqlite_last_insert_rowid(self.handle)
+    }
+
+    # Get the number of rows changed by the last statement
+    F changes(&self) -> i64 {
+        I self.is_valid() == 0 {
+            R 0
+        }
+        __sqlite_changes(self.handle)
+    }
+
+    # Begin a transaction
+    F begin(&self) -> i64 {
+        self.exec("BEGIN TRANSACTION")
+    }
+
+    # Commit a transaction
+    F commit(&self) -> i64 {
+        self.exec("COMMIT")
+    }
+
+    # Rollback a transaction
+    F rollback(&self) -> i64 {
+        self.exec("ROLLBACK")
+    }
+
+    # Begin an immediate transaction (acquires write lock immediately)
+    F begin_immediate(&self) -> i64 {
+        self.exec("BEGIN IMMEDIATE")
+    }
+
+    # Create a table if it does not already exist
+    # sql should be the full CREATE TABLE statement
+    F create_table(&self, sql: str) -> i64 {
+        self.exec(sql)
+    }
+
+    # Drop a table if it exists
+    # table_name is just the name, the DROP TABLE IF EXISTS is added automatically
+    F drop_table(&self, table_name: str) -> i64 {
+        buf := __malloc(256)
+        pos := 0
+        pos = pos + __str_copy_to(buf + pos, "DROP TABLE IF EXISTS ")
+        pos = pos + __str_copy_to(buf + pos, table_name)
+        store_byte(buf + pos, 0)
+        rc := self.exec(buf as str)
+        __free(buf)
+        rc
+    }
+
+    # Enable WAL (Write-Ahead Logging) mode for better concurrency
+    F enable_wal(&self) -> i64 {
+        self.exec("PRAGMA journal_mode=WAL")
+    }
+
+    # Enable foreign key enforcement
+    F enable_foreign_keys(&self) -> i64 {
+        self.exec("PRAGMA foreign_keys=ON")
+    }
+
+    # RAII cleanup
+    F drop(&self) -> i64 {
+        self.close()
+    }
+}
+
+# ============================================
+# Statement (Prepared Statement)
+# ============================================
+
+S Statement {
+    handle: i64,
+    db_handle: i64,
+    column_count: i64
+}
+
+X Statement {
+    # Check if statement is valid
+    F is_valid(&self) -> i64 {
+        I self.handle != 0 { 1 } E { 0 }
+    }
+
+    # Bind an integer value to a parameter (1-indexed)
+    F bind_int(&self, index: i64, value: i64) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_bind_int(self.handle, index, value)
+    }
+
+    # Bind a text value to a parameter (1-indexed)
+    F bind_text(&self, index: i64, value: str) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_bind_text(self.handle, index, value)
+    }
+
+    # Bind a double (f64) value to a parameter (1-indexed)
+    # The value is passed as i64 bits (use as_f64_bits)
+    F bind_double(&self, index: i64, value: i64) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_bind_double(self.handle, index, value)
+    }
+
+    # Bind a NULL value to a parameter (1-indexed)
+    F bind_null(&self, index: i64) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_bind_null(self.handle, index)
+    }
+
+    # Execute one step of the statement
+    # Returns SQLITE_ROW (100) if there is a row available
+    # Returns SQLITE_DONE (101) when execution is complete
+    # Returns an error code on failure
+    F step(&self) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_step(self.handle)
+    }
+
+    # Get an integer column value (0-indexed)
+    F column_int(&self, index: i64) -> i64 {
+        I self.is_valid() == 0 {
+            R 0
+        }
+        __sqlite_column_int(self.handle, index)
+    }
+
+    # Get a text column value (0-indexed)
+    F column_text(&self, index: i64) -> str {
+        I self.is_valid() == 0 {
+            R ""
+        }
+        __sqlite_column_text(self.handle, index)
+    }
+
+    # Get a double column value as i64 bits (0-indexed)
+    F column_double(&self, index: i64) -> i64 {
+        I self.is_valid() == 0 {
+            R 0
+        }
+        __sqlite_column_double(self.handle, index)
+    }
+
+    # Get the type of a column value (0-indexed)
+    # Returns one of: SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
+    F column_type(&self, index: i64) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_NULL
+        }
+        __sqlite_column_type(self.handle, index)
+    }
+
+    # Get the name of a column (0-indexed)
+    F column_name(&self, index: i64) -> str {
+        I self.is_valid() == 0 {
+            R ""
+        }
+        __sqlite_column_name(self.handle, index)
+    }
+
+    # Get the number of columns in the result set
+    F columns(&self) -> i64 {
+        self.column_count
+    }
+
+    # Reset the statement for re-execution (clears bindings are NOT cleared)
+    F reset(&self) -> i64 {
+        I self.is_valid() == 0 {
+            R SQLITE_MISUSE
+        }
+        __sqlite_reset(self.handle)
+    }
+
+    # Finalize (destroy) the prepared statement
+    F finalize(&self) -> i64 {
+        I self.handle != 0 {
+            rc := __sqlite_finalize(self.handle)
+            self.handle = 0
+            rc
+        } E {
+            SQLITE_OK
+        }
+    }
+
+    # Execute the statement to completion (no results expected)
+    # Useful for INSERT, UPDATE, DELETE
+    F execute(&self) -> i64 {
+        rc := self.step()
+        I rc == SQLITE_DONE {
+            SQLITE_OK
+        } E I rc == SQLITE_ROW {
+            # Consume remaining rows
+            L rc == SQLITE_ROW {
+                rc = self.step()
+            }
+            I rc == SQLITE_DONE { SQLITE_OK } E { rc }
+        } E {
+            rc
+        }
+    }
+
+    # RAII cleanup
+    F drop(&self) -> i64 {
+        self.finalize()
+    }
+}
+
+# ============================================
+# Row - Convenience wrapper for result rows
+# ============================================
+
+S Row {
+    stmt_handle: i64,
+    column_count: i64
+}
+
+X Row {
+    # Create a Row from a statement (used during iteration)
+    F from_stmt(stmt: &Statement) -> Row {
+        Row {
+            stmt_handle: stmt.handle,
+            column_count: stmt.column_count
+        }
+    }
+
+    # Get an integer column value (0-indexed)
+    F get_int(&self, index: i64) -> i64 {
+        I self.stmt_handle == 0 {
+            R 0
+        }
+        __sqlite_column_int(self.stmt_handle, index)
+    }
+
+    # Get a text column value (0-indexed)
+    F get_text(&self, index: i64) -> str {
+        I self.stmt_handle == 0 {
+            R ""
+        }
+        __sqlite_column_text(self.stmt_handle, index)
+    }
+
+    # Get a double column value as i64 bits (0-indexed)
+    F get_double(&self, index: i64) -> i64 {
+        I self.stmt_handle == 0 {
+            R 0
+        }
+        __sqlite_column_double(self.stmt_handle, index)
+    }
+
+    # Get the type of a column value (0-indexed)
+    F get_type(&self, index: i64) -> i64 {
+        I self.stmt_handle == 0 {
+            R SQLITE_NULL
+        }
+        __sqlite_column_type(self.stmt_handle, index)
+    }
+
+    # Get the name of a column (0-indexed)
+    F get_name(&self, index: i64) -> str {
+        I self.stmt_handle == 0 {
+            R ""
+        }
+        __sqlite_column_name(self.stmt_handle, index)
+    }
+
+    # Check if a column is NULL (0-indexed)
+    F is_null(&self, index: i64) -> i64 {
+        I self.get_type(index) == SQLITE_NULL { 1 } E { 0 }
+    }
+
+    # Get column count
+    F columns(&self) -> i64 {
+        self.column_count
+    }
+}
+
+# ============================================
+# Query Iterator Pattern
+# ============================================
+
+# Execute a query and iterate over results using step()
+# Example usage:
+#   stmt := db.prepare("SELECT id, name FROM users")
+#   L stmt.step() == SQLITE_ROW {
+#       row := Row::from_stmt(&stmt)
+#       id := row.get_int(0)
+#       name := row.get_text(1)
+#       # ... process row ...
+#   }
+#   stmt.finalize()
+
+# ============================================
+# Convenience Functions
+# ============================================
+
+# Open a database file
+F open(path: str) -> Database {
+    Database::open(path)
+}
+
+# Open an in-memory database
+F memory() -> Database {
+    Database::memory()
+}
+
+# Execute a simple SQL statement on a database
+F exec(db: &Database, sql: str) -> i64 {
+    db.exec(sql)
+}
+
+# Convert a SQLite result code to a human-readable string
+F result_code_str(code: i64) -> str {
+    M code {
+        0 => "SQLITE_OK",
+        1 => "SQLITE_ERROR",
+        2 => "SQLITE_INTERNAL",
+        3 => "SQLITE_PERM",
+        4 => "SQLITE_ABORT",
+        5 => "SQLITE_BUSY",
+        6 => "SQLITE_LOCKED",
+        7 => "SQLITE_NOMEM",
+        8 => "SQLITE_READONLY",
+        9 => "SQLITE_INTERRUPT",
+        10 => "SQLITE_IOERR",
+        11 => "SQLITE_CORRUPT",
+        12 => "SQLITE_NOTFOUND",
+        13 => "SQLITE_FULL",
+        14 => "SQLITE_CANTOPEN",
+        15 => "SQLITE_PROTOCOL",
+        19 => "SQLITE_CONSTRAINT",
+        20 => "SQLITE_MISMATCH",
+        21 => "SQLITE_MISUSE",
+        100 => "SQLITE_ROW",
+        101 => "SQLITE_DONE",
+        _ => "SQLITE_UNKNOWN"
+    }
+}
+
+# Check if a result code indicates success
+F is_ok(code: i64) -> i64 {
+    I code == SQLITE_OK { 1 } E { 0 }
+}
+
+# Check if a step result indicates a row is available
+F has_row(code: i64) -> i64 {
+    I code == SQLITE_ROW { 1 } E { 0 }
+}
+
+# Check if a step result indicates completion
+F is_done(code: i64) -> i64 {
+    I code == SQLITE_DONE { 1 } E { 0 }
+}

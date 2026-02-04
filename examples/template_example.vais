@@ -1,0 +1,120 @@
+# Template engine example - demonstrates template rendering with variables,
+# conditionals, loops, filters, and HTML escaping.
+
+U std/template
+
+X F puts(s: str) -> i64
+X F putchar(c: i64) -> i64
+X F free(ptr: i64) -> i64
+
+# Helper: print a string from a pointer (for rendered results)
+F print_result(label: str, result: str) -> i64 {
+    puts(label)
+    puts(result)
+    putchar(10)
+    0
+}
+
+F main() -> i64 {
+    puts("=== Vais Template Engine Example ===\n")
+
+    # ------------------------------------------
+    # 1. Simple variable interpolation
+    # ------------------------------------------
+    puts("1. Variable interpolation:")
+    ctx := template_ctx_new()
+    ctx.set_str("name", "World")
+    ctx.set_str("language", "Vais")
+
+    tmpl := template_parse("Hello, {{ name }}! Welcome to {{ language }}.")
+    result := tmpl.render(&ctx)
+    print_result("   ", result)
+    free(result as i64)
+    tmpl.free()
+
+    # ------------------------------------------
+    # 2. Integer variables
+    # ------------------------------------------
+    puts("\n2. Integer variables:")
+    ctx.set_int("version", 1)
+    ctx.set_int("year", 2025)
+
+    tmpl2 := template_parse("{{ language }} v{{ version }} - Released {{ year }}")
+    result2 := tmpl2.render(&ctx)
+    print_result("   ", result2)
+    free(result2 as i64)
+    tmpl2.free()
+
+    # ------------------------------------------
+    # 3. Conditional blocks
+    # ------------------------------------------
+    puts("\n3. Conditional blocks:")
+    ctx.set_str("show_greeting", "true")
+    ctx.set_str("is_admin", "0")
+
+    tmpl3 := template_parse("{% if show_greeting %}Greetings, {{ name }}!{% endif %}{% if is_admin %} [ADMIN]{% endif %}")
+    result3 := tmpl3.render(&ctx)
+    print_result("   ", result3)
+    free(result3 as i64)
+    tmpl3.free()
+
+    # ------------------------------------------
+    # 4. Loop blocks
+    # ------------------------------------------
+    puts("\n4. Loop blocks:")
+    ctx.set_str("colors", "red,green,blue")
+
+    tmpl4 := template_parse("Colors: {% for color in colors %}[{{ color }}] {% endfor %}")
+    result4 := tmpl4.render(&ctx)
+    print_result("   ", result4)
+    free(result4 as i64)
+    tmpl4.free()
+
+    # ------------------------------------------
+    # 5. Filters
+    # ------------------------------------------
+    puts("\n5. Filters:")
+    ctx.set_str("title", "hello world")
+
+    tmpl5 := template_parse("Upper: {{ title | upper }}")
+    result5 := tmpl5.render(&ctx)
+    print_result("   ", result5)
+    free(result5 as i64)
+    tmpl5.free()
+
+    # ------------------------------------------
+    # 6. HTML escaping
+    # ------------------------------------------
+    puts("\n6. HTML escaping:")
+    escaped := html_escape("<script>alert('xss')</script>")
+    print_result("   ", escaped)
+    free(escaped as i64)
+
+    # ------------------------------------------
+    # 7. Quick render (one-shot)
+    # ------------------------------------------
+    puts("\n7. Quick render:")
+    result7 := template_render_var("Hi {{ user }}!", "user", "Alice")
+    print_result("   ", result7)
+    free(result7 as i64)
+
+    # ------------------------------------------
+    # 8. Conditional with else (if var is falsy)
+    # ------------------------------------------
+    puts("\n8. Conditional with else:")
+    ctx.set_str("logged_in", "true")
+
+    tmpl8 := template_parse("{% if logged_in %}Welcome back, {{ name }}!{% else %}Please log in.{% endif %}")
+    result8 := tmpl8.render(&ctx)
+    print_result("   ", result8)
+    free(result8 as i64)
+    tmpl8.free()
+
+    # ------------------------------------------
+    # Cleanup
+    # ------------------------------------------
+    ctx.free()
+
+    puts("\n=== All template tests completed ===")
+    0
+}

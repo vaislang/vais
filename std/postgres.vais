@@ -1,0 +1,619 @@
+# PostgreSQL - Client library for PostgreSQL databases
+# Built on top of libpq via C runtime bindings (std/postgres_runtime.c)
+#
+# Usage:
+#   Compile with: -lpq (link against libpq)
+#   Example: vaisc myapp.vais && clang myapp.ll std/postgres_runtime.c -lpq -o myapp
+#
+# Supports:
+#   - Connection management (connect/disconnect)
+#   - Simple queries and parameterized queries
+#   - Prepared statements
+#   - Transactions (begin/commit/rollback)
+#   - Row/column value access (int, text, float, bool)
+#   - Connection status and error reporting
+#   - Connection string building
+
+# ============================================
+# Constants
+# ============================================
+
+# Connection status codes (from libpq PGconnStatusType)
+C PG_CONNECTION_OK: i64 = 0
+C PG_CONNECTION_BAD: i64 = 1
+
+# Result status codes (from libpq ExecStatusType)
+C PG_RESULT_EMPTY_QUERY: i64 = 0
+C PG_RESULT_COMMAND_OK: i64 = 1
+C PG_RESULT_TUPLES_OK: i64 = 2
+C PG_RESULT_BAD_RESPONSE: i64 = 5
+C PG_RESULT_FATAL_ERROR: i64 = 7
+
+# Default port
+C PG_DEFAULT_PORT: i64 = 5432
+
+# Buffer sizes
+C PG_CONNINFO_MAX: i64 = 1024
+C PG_MAX_PARAMS: i64 = 64
+
+# ============================================
+# Extern C functions (postgres_runtime.c)
+# ============================================
+
+X F __pg_connect(conninfo: str) -> i64
+X F __pg_finish(handle: i64) -> i64
+X F __pg_exec(handle: i64, sql: str) -> i64
+X F __pg_exec_params(handle: i64, sql: str, nparams: i64, param_values: i64) -> i64
+X F __pg_prepare(handle: i64, name: str, sql: str, nparams: i64) -> i64
+X F __pg_exec_prepared(handle: i64, name: str, nparams: i64, param_values: i64) -> i64
+X F __pg_ntuples(result: i64) -> i64
+X F __pg_nfields(result: i64) -> i64
+X F __pg_getvalue(result: i64, row: i64, col: i64) -> str
+X F __pg_getisnull(result: i64, row: i64, col: i64) -> i64
+X F __pg_clear(result: i64) -> i64
+X F __pg_status(handle: i64) -> i64
+X F __pg_error_message(handle: i64) -> str
+X F __pg_result_status(result: i64) -> i64
+
+# String/memory helpers
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+
+# ============================================
+# PgResult - Query result handle
+# ============================================
+
+S PgResult {
+    handle: i64,       # PGresult* from libpq
+    row_count: i64,    # Number of rows
+    col_count: i64     # Number of columns
+}
+
+X PgResult {
+    # Wrap a raw libpq PGresult pointer
+    F from_handle(h: i64) -> PgResult {
+        I h == 0 {
+            PgResult { handle: 0, row_count: 0, col_count: 0 }
+        } E {
+            PgResult {
+                handle: h,
+                row_count: __pg_ntuples(h),
+                col_count: __pg_nfields(h)
+            }
+        }
+    }
+
+    # Check if the result is valid (not null)
+    F is_valid(&self) -> i64 {
+        I self.handle != 0 { 1 } E { 0 }
+    }
+
+    # Check if the query was successful (COMMAND_OK or TUPLES_OK)
+    F is_ok(&self) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            status := __pg_result_status(self.handle)
+            I status == PG_RESULT_COMMAND_OK | status == PG_RESULT_TUPLES_OK {
+                1
+            } E {
+                0
+            }
+        }
+    }
+
+    # Get the result status code
+    F status(&self) -> i64 {
+        I self.handle == 0 {
+            PG_RESULT_FATAL_ERROR
+        } E {
+            __pg_result_status(self.handle)
+        }
+    }
+
+    # Get number of rows
+    F rows(&self) -> i64 {
+        self.row_count
+    }
+
+    # Get number of columns
+    F cols(&self) -> i64 {
+        self.col_count
+    }
+
+    # Get a value as text (raw string)
+    F get_text(&self, row: i64, col: i64) -> str {
+        I self.handle == 0 {
+            ""
+        } E I row < 0 | row >= self.row_count {
+            ""
+        } E I col < 0 | col >= self.col_count {
+            ""
+        } E {
+            __pg_getvalue(self.handle, row, col)
+        }
+    }
+
+    # Get a value as integer
+    F get_int(&self, row: i64, col: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E I row < 0 | row >= self.row_count {
+            0
+        } E I col < 0 | col >= self.col_count {
+            0
+        } E {
+            I __pg_getisnull(self.handle, row, col) == 1 {
+                0
+            } E {
+                val := __pg_getvalue(self.handle, row, col)
+                val as i64
+            }
+        }
+    }
+
+    # Get a value as float (returned as i64 bit pattern)
+    F get_float(&self, row: i64, col: i64) -> f64 {
+        I self.handle == 0 {
+            0.0
+        } E I row < 0 | row >= self.row_count {
+            0.0
+        } E I col < 0 | col >= self.col_count {
+            0.0
+        } E {
+            I __pg_getisnull(self.handle, row, col) == 1 {
+                0.0
+            } E {
+                val := __pg_getvalue(self.handle, row, col)
+                val as f64
+            }
+        }
+    }
+
+    # Get a value as boolean (returns 1 for "t"/"true"/"1", 0 otherwise)
+    F get_bool(&self, row: i64, col: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E I row < 0 | row >= self.row_count {
+            0
+        } E I col < 0 | col >= self.col_count {
+            0
+        } E {
+            I __pg_getisnull(self.handle, row, col) == 1 {
+                0
+            } E {
+                val := __pg_getvalue(self.handle, row, col)
+                I __str_eq(val, "t") == 1 {
+                    1
+                } E I __str_eq(val, "true") == 1 {
+                    1
+                } E I __str_eq(val, "1") == 1 {
+                    1
+                } E {
+                    0
+                }
+            }
+        }
+    }
+
+    # Check if a value is NULL
+    F is_null(&self, row: i64, col: i64) -> i64 {
+        I self.handle == 0 {
+            1
+        } E I row < 0 | row >= self.row_count {
+            1
+        } E I col < 0 | col >= self.col_count {
+            1
+        } E {
+            __pg_getisnull(self.handle, row, col)
+        }
+    }
+
+    # Free the result resources
+    F clear(&self) -> i64 {
+        I self.handle != 0 {
+            __pg_clear(self.handle)
+            self.handle = 0
+            self.row_count = 0
+            self.col_count = 0
+        }
+        0
+    }
+
+    # Alias for clear (RAII pattern)
+    F drop(&self) -> i64 {
+        @.clear()
+    }
+}
+
+# ============================================
+# PgConnection - Database connection handle
+# ============================================
+
+S PgConnection {
+    handle: i64,        # PGconn* from libpq
+    host: str,
+    port: i64,
+    dbname: str,
+    user: str,
+    is_connected: i64   # 1 if connected, 0 otherwise
+}
+
+X PgConnection {
+    # Connect using a full connection string
+    # e.g., "host=localhost port=5432 dbname=mydb user=myuser password=secret"
+    F connect(conninfo: str) -> PgConnection {
+        h := __pg_connect(conninfo)
+        I h == 0 {
+            PgConnection {
+                handle: 0,
+                host: "",
+                port: 0,
+                dbname: "",
+                user: "",
+                is_connected: 0
+            }
+        } E {
+            status := __pg_status(h)
+            I status == PG_CONNECTION_OK {
+                PgConnection {
+                    handle: h,
+                    host: "",
+                    port: 0,
+                    dbname: "",
+                    user: "",
+                    is_connected: 1
+                }
+            } E {
+                # Connection failed, but we still have a handle for error messages
+                PgConnection {
+                    handle: h,
+                    host: "",
+                    port: 0,
+                    dbname: "",
+                    user: "",
+                    is_connected: 0
+                }
+            }
+        }
+    }
+
+    # Connect using individual parameters
+    F connect_params(host: str, port: i64, dbname: str, user: str, password: str) -> PgConnection {
+        conninfo := build_conninfo(host, port, dbname, user, password)
+        conn := PgConnection::connect(conninfo)
+        conn.host = host
+        conn.port = port
+        conn.dbname = dbname
+        conn.user = user
+        conn
+    }
+
+    # Check if connection is active and OK
+    F is_connected(&self) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            status := __pg_status(self.handle)
+            I status == PG_CONNECTION_OK {
+                1
+            } E {
+                0
+            }
+        }
+    }
+
+    # Get connection status code
+    F status(&self) -> i64 {
+        I self.handle == 0 {
+            PG_CONNECTION_BAD
+        } E {
+            __pg_status(self.handle)
+        }
+    }
+
+    # Get error message from the connection
+    F error_message(&self) -> str {
+        I self.handle == 0 {
+            "No connection"
+        } E {
+            __pg_error_message(self.handle)
+        }
+    }
+
+    # Execute a simple SQL command (no results expected)
+    # Returns 1 on success, 0 on failure
+    F exec(&self, sql: str) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            res := __pg_exec(self.handle, sql)
+            I res == 0 {
+                0
+            } E {
+                status := __pg_result_status(res)
+                __pg_clear(res)
+                I status == PG_RESULT_COMMAND_OK {
+                    1
+                } E {
+                    0
+                }
+            }
+        }
+    }
+
+    # Execute a SQL query and return results
+    F query(&self, sql: str) -> PgResult {
+        I self.handle == 0 {
+            PgResult::from_handle(0)
+        } E {
+            res := __pg_exec(self.handle, sql)
+            PgResult::from_handle(res)
+        }
+    }
+
+    # Execute a parameterized query (no results expected)
+    # params is a pointer to an array of str pointers (char**)
+    # Returns 1 on success, 0 on failure
+    F exec_params(&self, sql: str, nparams: i64, params: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            res := __pg_exec_params(self.handle, sql, nparams, params)
+            I res == 0 {
+                0
+            } E {
+                status := __pg_result_status(res)
+                __pg_clear(res)
+                I status == PG_RESULT_COMMAND_OK {
+                    1
+                } E {
+                    0
+                }
+            }
+        }
+    }
+
+    # Execute a parameterized query and return results
+    F query_params(&self, sql: str, nparams: i64, params: i64) -> PgResult {
+        I self.handle == 0 {
+            PgResult::from_handle(0)
+        } E {
+            res := __pg_exec_params(self.handle, sql, nparams, params)
+            PgResult::from_handle(res)
+        }
+    }
+
+    # Prepare a named statement
+    # Returns 1 on success, 0 on failure
+    F prepare(&self, name: str, sql: str, nparams: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            res := __pg_prepare(self.handle, name, sql, nparams)
+            I res == 0 {
+                0
+            } E {
+                status := __pg_result_status(res)
+                __pg_clear(res)
+                I status == PG_RESULT_COMMAND_OK {
+                    1
+                } E {
+                    0
+                }
+            }
+        }
+    }
+
+    # Execute a prepared statement (no results expected)
+    # Returns 1 on success, 0 on failure
+    F exec_prepared(&self, name: str, nparams: i64, params: i64) -> i64 {
+        I self.handle == 0 {
+            0
+        } E {
+            res := __pg_exec_prepared(self.handle, name, nparams, params)
+            I res == 0 {
+                0
+            } E {
+                status := __pg_result_status(res)
+                __pg_clear(res)
+                I status == PG_RESULT_COMMAND_OK {
+                    1
+                } E {
+                    0
+                }
+            }
+        }
+    }
+
+    # Execute a prepared statement and return results
+    F query_prepared(&self, name: str, nparams: i64, params: i64) -> PgResult {
+        I self.handle == 0 {
+            PgResult::from_handle(0)
+        } E {
+            res := __pg_exec_prepared(self.handle, name, nparams, params)
+            PgResult::from_handle(res)
+        }
+    }
+
+    # Begin a transaction
+    F begin(&self) -> i64 {
+        @.exec("BEGIN")
+    }
+
+    # Commit a transaction
+    F commit(&self) -> i64 {
+        @.exec("COMMIT")
+    }
+
+    # Rollback a transaction
+    F rollback(&self) -> i64 {
+        @.exec("ROLLBACK")
+    }
+
+    # Disconnect from the database
+    F disconnect(&self) -> i64 {
+        I self.handle != 0 {
+            __pg_finish(self.handle)
+            self.handle = 0
+            self.is_connected = 0
+        }
+        0
+    }
+
+    # Alias for disconnect (RAII pattern)
+    F drop(&self) -> i64 {
+        @.disconnect()
+    }
+}
+
+# ============================================
+# Parameter Builder Helper
+# ============================================
+# Helps build parameter arrays for parameterized queries.
+# Parameters are stored as an array of string pointers (char**).
+
+S PgParams {
+    values: i64,      # Pointer to array of str pointers
+    count: i64,
+    capacity: i64
+}
+
+X PgParams {
+    # Create a new parameter builder
+    F new() -> PgParams {
+        capacity := 16
+        values := __malloc(capacity * 8)  # 8 bytes per pointer
+        PgParams {
+            values: values,
+            count: 0,
+            capacity: capacity
+        }
+    }
+
+    # Add a string parameter
+    F add_text(&self, value: str) -> PgParams {
+        I self.count >= self.capacity {
+            new_capacity := self.capacity * 2
+            new_values := __malloc(new_capacity * 8)
+            # Copy existing pointers
+            i := 0
+            L i < self.count {
+                src := self.values + i * 8
+                dst := new_values + i * 8
+                store_i64(dst, load_i64(src))
+                i = i + 1
+            }
+            __free(self.values)
+            self.values = new_values
+            self.capacity = new_capacity
+        }
+        store_i64(self.values + self.count * 8, value as i64)
+        self.count = self.count + 1
+        self
+    }
+
+    # Add an integer parameter (converted to string)
+    F add_int(&self, value: i64) -> PgParams {
+        buf := __malloc(32)
+        __i64_to_str(buf, value)
+        store_byte(buf + 20, 0)  # ensure null terminated within buffer
+        # Actually use __i64_to_str properly: it writes digits, we need null term
+        len := __i64_to_str(buf, value)
+        store_byte(buf + len, 0)
+        @.add_text(buf as str)
+    }
+
+    # Get the raw pointer to pass to query functions
+    F ptr(&self) -> i64 {
+        self.values
+    }
+
+    # Get the number of parameters
+    F len(&self) -> i64 {
+        self.count
+    }
+
+    # Free the parameter builder
+    F clear(&self) -> i64 {
+        I self.values != 0 {
+            __free(self.values)
+            self.values = 0
+            self.count = 0
+            self.capacity = 0
+        }
+        0
+    }
+
+    # Alias for clear
+    F drop(&self) -> i64 {
+        @.clear()
+    }
+}
+
+# ============================================
+# Connection String Builder
+# ============================================
+
+# Build a libpq connection info string from individual parameters
+# Returns a connection string like "host=localhost port=5432 dbname=mydb user=myuser password=secret"
+F build_conninfo(host: str, port: i64, dbname: str, user: str, password: str) -> str {
+    buf := __malloc(PG_CONNINFO_MAX)
+    pos := 0
+
+    # host=
+    pos = pos + __str_copy_to(buf + pos, "host=")
+    pos = pos + __str_copy_to(buf + pos, host)
+    store_byte(buf + pos, 32)  # space
+    pos = pos + 1
+
+    # port=
+    pos = pos + __str_copy_to(buf + pos, "port=")
+    pos = pos + __i64_to_str(buf + pos, port)
+    store_byte(buf + pos, 32)  # space
+    pos = pos + 1
+
+    # dbname=
+    pos = pos + __str_copy_to(buf + pos, "dbname=")
+    pos = pos + __str_copy_to(buf + pos, dbname)
+    store_byte(buf + pos, 32)  # space
+    pos = pos + 1
+
+    # user=
+    pos = pos + __str_copy_to(buf + pos, "user=")
+    pos = pos + __str_copy_to(buf + pos, user)
+    store_byte(buf + pos, 32)  # space
+    pos = pos + 1
+
+    # password=
+    pos = pos + __str_copy_to(buf + pos, "password=")
+    pos = pos + __str_copy_to(buf + pos, password)
+
+    # Null terminate
+    store_byte(buf + pos, 0)
+
+    buf as str
+}
+
+# ============================================
+# Convenience Functions
+# ============================================
+
+# Quick connect with individual parameters
+F pg_connect(host: str, port: i64, dbname: str, user: str, password: str) -> PgConnection {
+    PgConnection::connect_params(host, port, dbname, user, password)
+}
+
+# Quick connect with connection string
+F pg_connect_str(conninfo: str) -> PgConnection {
+    PgConnection::connect(conninfo)
+}
+
+# Quick connect to localhost with defaults
+F pg_connect_local(dbname: str, user: str) -> PgConnection {
+    PgConnection::connect_params("localhost", PG_DEFAULT_PORT, dbname, user, "")
+}

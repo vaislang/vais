@@ -1,0 +1,318 @@
+# Template - Template engine for Vais
+# Supports variable interpolation {{ var }}, conditionals {% if %}, loops {% for %},
+# HTML escaping, filter placeholders, and include/partial placeholders.
+#
+# Template syntax:
+#   {{ variable }}           - Variable interpolation
+#   {{ variable | upper }}   - Variable with filter (placeholder)
+#   {% if condition %}...{% endif %}  - Conditional block
+#   {% for item in list %}...{% endfor %}  - Loop block
+#   {% include "partial" %} - Include partial (placeholder)
+#
+# Usage:
+#   ctx := template_ctx_new()
+#   template_ctx_set_str(ctx, "name", "World")
+#   tmpl := template_parse("Hello, {{ name }}!")
+#   result := template_render(tmpl, ctx)
+#   # result is a pointer to rendered string
+#   template_free(tmpl)
+#   template_ctx_free(ctx)
+
+# ============================================
+# Constants
+# ============================================
+
+# Node types for compiled template
+C NODE_TEXT: i64 = 0       # Raw text node
+C NODE_VAR: i64 = 1        # Variable interpolation {{ var }}
+C NODE_IF: i64 = 2         # Conditional block {% if cond %}
+C NODE_FOR: i64 = 3        # Loop block {% for item in list %}
+C NODE_INCLUDE: i64 = 4    # Include partial {% include "name" %}
+C NODE_FILTER: i64 = 5     # Variable with filter {{ var | filter }}
+
+# Filter types
+C FILTER_NONE: i64 = 0
+C FILTER_UPPER: i64 = 1
+C FILTER_LOWER: i64 = 2
+C FILTER_ESCAPE: i64 = 3
+C FILTER_TRIM: i64 = 4
+C FILTER_LENGTH: i64 = 5
+
+# Context value types
+C VAL_STR: i64 = 0
+C VAL_INT: i64 = 1
+C VAL_LIST: i64 = 2    # Array of string pointers
+
+# Buffer sizes
+C TPL_MAX_NODES: i64 = 256
+C TPL_MAX_VARS: i64 = 64
+C TPL_BUFFER_SIZE: i64 = 65536     # 64KB render buffer
+C TPL_KEY_SIZE: i64 = 128
+C TPL_VAL_SIZE: i64 = 4096
+
+# ============================================
+# Template Context (key-value store)
+# ============================================
+
+S TemplateCtx {
+    handle: i64    # Opaque pointer to C runtime context
+}
+
+X TemplateCtx {
+    # Create a new template context
+    F new() -> TemplateCtx {
+        h := __template_ctx_new()
+        TemplateCtx { handle: h }
+    }
+
+    # Set a string variable in the context
+    F set_str(&self, key: str, value: str) -> TemplateCtx {
+        __template_ctx_set(self.handle, key, value)
+        self
+    }
+
+    # Set an integer variable in the context (converts to string)
+    F set_int(&self, key: str, value: i64) -> TemplateCtx {
+        # Convert integer to string via buffer
+        buf := __malloc(32)
+        len := __i64_to_str(buf, value)
+        __store_byte(buf + len, 0)  # null terminate
+        __template_ctx_set(self.handle, key, buf as str)
+        self
+    }
+
+    # Get a variable value from the context
+    F get(&self, key: str) -> str {
+        result := __template_ctx_get(self.handle, key)
+        I result as i64 == 0 {
+            ""
+        } E {
+            result
+        }
+    }
+
+    # Check if a variable exists and is truthy
+    # Returns 1 if key exists and is non-empty and not "0", else 0
+    F is_truthy(&self, key: str) -> i64 {
+        val := __template_ctx_get(self.handle, key)
+        I val as i64 == 0 {
+            0
+        } E {
+            len := __strlen(val)
+            I len == 0 {
+                0
+            } E I len == 1 {
+                ch := __load_byte_at(val as i64, 0)
+                I ch == 48 {  # '0'
+                    0
+                } E {
+                    1
+                }
+            } E {
+                # Check for "false"
+                I __str_eq(val, "false") == 1 {
+                    0
+                } E {
+                    1
+                }
+            }
+        }
+    }
+
+    # Free the context
+    F free(&self) -> i64 {
+        I self.handle != 0 {
+            __template_ctx_free(self.handle)
+            self.handle = 0
+        }
+        0
+    }
+
+    # Alias for free (RAII pattern)
+    F drop(&self) -> i64 {
+        self.free()
+    }
+}
+
+# ============================================
+# Template struct
+# ============================================
+
+S Template {
+    source: str,
+    handle: i64    # Opaque pointer to C runtime parsed template
+}
+
+X Template {
+    # Parse a template string into a compiled template
+    F parse(source: str) -> Template {
+        len := __strlen(source)
+        h := __template_parse(source, len)
+        Template {
+            source: source,
+            handle: h
+        }
+    }
+
+    # Render the template with the given context
+    # Returns a pointer to the rendered string (caller should free)
+    F render(&self, ctx: &TemplateCtx) -> str {
+        I self.handle == 0 {
+            ""
+        } E {
+            result := __template_render(self.handle, ctx.handle)
+            I result as i64 == 0 {
+                ""
+            } E {
+                result
+            }
+        }
+    }
+
+    # Free the template
+    F free(&self) -> i64 {
+        I self.handle != 0 {
+            __template_free(self.handle)
+            self.handle = 0
+        }
+        0
+    }
+
+    # Alias for free (RAII pattern)
+    F drop(&self) -> i64 {
+        self.free()
+    }
+}
+
+# ============================================
+# HTML Escaping
+# ============================================
+
+# Escape HTML entities in a string
+# Replaces: & -> &amp; < -> &lt; > -> &gt; " -> &quot; ' -> &#39;
+# Returns a new allocated string (caller should free)
+F html_escape(input: str) -> str {
+    result := __html_escape(input)
+    I result as i64 == 0 {
+        ""
+    } E {
+        result
+    }
+}
+
+# ============================================
+# Convenience Functions
+# ============================================
+
+# Create a new template context
+F template_ctx_new() -> TemplateCtx {
+    TemplateCtx::new()
+}
+
+# Parse a template string
+F template_parse(source: str) -> Template {
+    Template::parse(source)
+}
+
+# Render a template with a context (one-shot convenience)
+F template_render(tmpl: &Template, ctx: &TemplateCtx) -> str {
+    tmpl.render(ctx)
+}
+
+# Quick render: parse + render in one step
+# Useful for simple one-off templates
+F template_quick_render(source: str, ctx: &TemplateCtx) -> str {
+    tmpl := Template::parse(source)
+    result := tmpl.render(ctx)
+    tmpl.free()
+    result
+}
+
+# Render a template string with a single variable
+F template_render_var(source: str, key: str, value: str) -> str {
+    ctx := TemplateCtx::new()
+    ctx.set_str(key, value)
+    tmpl := Template::parse(source)
+    result := tmpl.render(&ctx)
+    tmpl.free()
+    ctx.free()
+    result
+}
+
+# ============================================
+# Filter Application (placeholder API)
+# ============================================
+
+# Apply a named filter to a string value
+# Currently supports: upper, lower, escape, trim, length
+F apply_filter(value: str, filter_name: str) -> str {
+    I __str_eq(filter_name, "upper") == 1 {
+        __str_to_upper(value)
+    } E I __str_eq(filter_name, "lower") == 1 {
+        __str_to_lower(value)
+    } E I __str_eq(filter_name, "escape") == 1 {
+        html_escape(value)
+    } E I __str_eq(filter_name, "trim") == 1 {
+        __str_trim(value)
+    } E I __str_eq(filter_name, "length") == 1 {
+        # Return the string length as a string
+        len := __strlen(value)
+        buf := __malloc(32)
+        n := __i64_to_str(buf, len)
+        __store_byte(buf + n, 0)
+        buf as str
+    } E {
+        # Unknown filter, return value unchanged
+        value
+    }
+}
+
+# ============================================
+# Include/Partial Support (placeholder API)
+# ============================================
+
+# Register a partial template by name
+# In a full implementation, this would store partials in a registry
+# For now, this is a no-op placeholder
+F template_register_partial(name: str, source: str) -> i64 {
+    # Placeholder: would store in a global partial registry
+    __template_register_partial(name, source)
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+# Template parsing and rendering
+X F __template_parse(source: str, len: i64) -> i64
+X F __template_render(tmpl_handle: i64, ctx_handle: i64) -> str
+X F __template_free(tmpl_handle: i64) -> i64
+
+# Context management
+X F __template_ctx_new() -> i64
+X F __template_ctx_set(ctx: i64, key: str, value: str) -> i64
+X F __template_ctx_get(ctx: i64, key: str) -> str
+X F __template_ctx_free(ctx: i64) -> i64
+
+# HTML escaping
+X F __html_escape(input: str) -> str
+
+# String utilities
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+X F __load_byte_at(ptr: i64, offset: i64) -> i64
+
+# String filters
+X F __str_to_upper(s: str) -> str
+X F __str_to_lower(s: str) -> str
+X F __str_trim(s: str) -> str
+
+# Memory operations
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __store_byte(ptr: i64, value: i64) -> i64
+
+# Partial registration
+X F __template_register_partial(name: str, source: str) -> i64
