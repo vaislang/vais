@@ -1,0 +1,6 @@
+[package]
+name = "vais-datapipe"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "CSV data processing pipeline built with Vais"
+license = "MIT"

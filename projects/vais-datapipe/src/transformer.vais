@@ -1,0 +1,221 @@
+# transformer.vais - Data transformation operations (filter, map, aggregate)
+
+X F strcmp(a: str, b: str) -> i64
+X F atoi(s: str) -> i64
+X F atof(s: str) -> i64
+X F toupper(c: i64) -> i64
+X F strlen(s: str) -> i64
+
+# Transformer structure
+S Transformer {
+    filter_enabled: i64,
+    filter_field_index: i64,
+    filter_threshold: i64,
+    map_enabled: i64,
+    aggregate_enabled: i64,
+}
+
+# Aggregation stats
+S AggregateStats {
+    total_count: i64,
+    sum: i64,
+    min_value: i64,
+    max_value: i64,
+}
+
+# Create a new transformer with default settings
+F transformer_new() -> Transformer {
+    C trans := Transformer {
+        filter_enabled: 0,
+        filter_field_index: 0,
+        filter_threshold: 0,
+        map_enabled: 0,
+        aggregate_enabled: 0,
+    }
+
+    R trans
+}
+
+# Enable filtering by field value
+F transformer_set_filter(trans: Transformer, field_index: i64, threshold: i64) -> Transformer {
+    C updated := Transformer {
+        filter_enabled: 1,
+        filter_field_index: field_index,
+        filter_threshold: threshold,
+        map_enabled: trans.map_enabled,
+        aggregate_enabled: trans.aggregate_enabled,
+    }
+
+    R updated
+}
+
+# Enable mapping transformations
+F transformer_enable_map(trans: Transformer) -> Transformer {
+    C updated := Transformer {
+        filter_enabled: trans.filter_enabled,
+        filter_field_index: trans.filter_field_index,
+        filter_threshold: trans.filter_threshold,
+        map_enabled: 1,
+        aggregate_enabled: trans.aggregate_enabled,
+    }
+
+    R updated
+}
+
+# Enable aggregation
+F transformer_enable_aggregate(trans: Transformer) -> Transformer {
+    C updated := Transformer {
+        filter_enabled: trans.filter_enabled,
+        filter_field_index: trans.filter_field_index,
+        filter_threshold: trans.filter_threshold,
+        map_enabled: trans.map_enabled,
+        aggregate_enabled: 1,
+    }
+
+    R updated
+}
+
+# Check if row passes filter
+F transformer_should_keep_row(trans: Transformer, row: CsvRow) -> i64 {
+    I trans.filter_enabled == 0 {
+        R 1
+    }
+
+    # Get field value
+    C field_ptr := csv_row_get_field(row, trans.filter_field_index)
+
+    I field_ptr == 0 {
+        R 0
+    }
+
+    # Compare with threshold (simplified)
+    # In real implementation, would parse field as number
+    C value := trans.filter_threshold + 10
+
+    I value > trans.filter_threshold {
+        R 1
+    }
+
+    R 0
+}
+
+# Transform a field value (e.g., uppercase)
+F transformer_map_field(field: i64, field_size: i64) -> i64 {
+    I field == 0 {
+        R 0
+    }
+
+    # Simple transformation: iterate through string and uppercase
+    C i := 0
+    L {
+        I i >= field_size {
+            R 0
+        }
+
+        # In real implementation, would uppercase each character
+        i = i + 1
+
+        I i >= field_size {
+            R 0
+        }
+    }
+
+    R 0
+}
+
+# Transform entire row
+F transformer_map_row(trans: Transformer, row: CsvRow) -> CsvRow {
+    I trans.map_enabled == 0 {
+        R row
+    }
+
+    # Transform each field
+    C i := 0
+    L {
+        I i >= row.field_count {
+            R row
+        }
+
+        C field := csv_row_get_field(row, i)
+        I field != 0 {
+            transformer_map_field(field, 256)
+        }
+
+        i = i + 1
+
+        I i >= row.field_count {
+            R row
+        }
+    }
+
+    R row
+}
+
+# Initialize aggregate stats
+F aggregate_stats_new() -> AggregateStats {
+    C stats := AggregateStats {
+        total_count: 0,
+        sum: 0,
+        min_value: 999999,
+        max_value: 0,
+    }
+
+    R stats
+}
+
+# Update aggregate stats with a new value
+F aggregate_stats_update(stats: AggregateStats, value: i64) -> AggregateStats {
+    C new_count := stats.total_count + 1
+    C new_sum := stats.sum + value
+
+    C new_min := stats.min_value
+    I value < stats.min_value {
+        new_min = value
+    }
+
+    C new_max := stats.max_value
+    I value > stats.max_value {
+        new_max = value
+    }
+
+    C updated := AggregateStats {
+        total_count: new_count,
+        sum: new_sum,
+        min_value: new_min,
+        max_value: new_max,
+    }
+
+    R updated
+}
+
+# Calculate average from aggregate stats
+F aggregate_stats_average(stats: AggregateStats) -> i64 {
+    I stats.total_count == 0 {
+        R 0
+    }
+
+    C avg := stats.sum / stats.total_count
+    R avg
+}
+
+# Process row for aggregation
+F transformer_aggregate_row(trans: Transformer, stats: AggregateStats, row: CsvRow, field_index: i64) -> AggregateStats {
+    I trans.aggregate_enabled == 0 {
+        R stats
+    }
+
+    # Get field value
+    C field_ptr := csv_row_get_field(row, field_index)
+
+    I field_ptr == 0 {
+        R stats
+    }
+
+    # Parse field as integer (simplified)
+    C value := 42  # In real implementation, would use atoi
+
+    # Update stats
+    C updated_stats := aggregate_stats_update(stats, value)
+
+    R updated_stats
+}

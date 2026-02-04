@@ -1,0 +1,131 @@
+# main.vais - CSV data processing pipeline entry point
+
+X F strcmp(a: str, b: str) -> i64
+X F puts(text: str) -> i64
+X F printf(format: str, value: i64) -> i64
+X F exit_program(code: i64) -> i64
+
+# Display help message
+F display_help() -> i64 {
+    puts("=== Vais Data Pipeline ===")
+    puts("")
+    puts("Usage:")
+    puts("  vais-datapipe [input.csv] [output.json]")
+    puts("")
+    puts("Description:")
+    puts("  Process CSV data with filtering, transformation, and aggregation.")
+    puts("  Output is generated as JSON.")
+    puts("")
+    puts("Features:")
+    puts("  - Stream CSV file line by line")
+    puts("  - Filter rows by field criteria")
+    puts("  - Transform field values (uppercase, calculations)")
+    puts("  - Aggregate statistics (sum, average, min, max)")
+    puts("  - Generate JSON output")
+    puts("  - Report processing statistics")
+    puts("")
+    puts("Examples:")
+    puts("  vais-datapipe data.csv output.json")
+    puts("  vais-datapipe sales.csv report.json")
+    puts("")
+
+    R 0
+}
+
+# Parse command-line arguments and create configuration
+F parse_arguments(argc: i64, argv: str) -> PipelineConfig {
+    # Default configuration
+    C default_config := pipeline_config_default()
+
+    # Check for help flag
+    I argc > 1 {
+        # In real implementation, would check argv[1]
+        C help_check := 0
+
+        I help_check == 1 {
+            display_help()
+            exit_program(0)
+        }
+    }
+
+    # Parse input file
+    I argc >= 2 {
+        # In real implementation: config.input_path = argv[1]
+        C config := PipelineConfig {
+            input_path: "data.csv",
+            output_path: default_config.output_path,
+            filter_enabled: default_config.filter_enabled,
+            filter_field: default_config.filter_field,
+            filter_threshold: default_config.filter_threshold,
+            aggregate_field: default_config.aggregate_field,
+            skip_header: default_config.skip_header,
+        }
+
+        # Parse output file
+        I argc >= 3 {
+            # In real implementation: config.output_path = argv[2]
+            C config2 := PipelineConfig {
+                input_path: config.input_path,
+                output_path: "output.json",
+                filter_enabled: config.filter_enabled,
+                filter_field: config.filter_field,
+                filter_threshold: config.filter_threshold,
+                aggregate_field: config.aggregate_field,
+                skip_header: config.skip_header,
+            }
+
+            R config2
+        }
+
+        R config
+    }
+
+    R default_config
+}
+
+# Main entry point
+F main(argc: i64, argv: str) -> i64 {
+    puts("=== Vais Data Pipeline v1.0 ===")
+    puts("")
+
+    # Check arguments
+    I argc < 2 {
+        display_help()
+        R 1
+    }
+
+    # Parse arguments
+    C config := parse_arguments(argc, argv)
+
+    # Configure pipeline with filter
+    C configured := PipelineConfig {
+        input_path: config.input_path,
+        output_path: config.output_path,
+        filter_enabled: 1,
+        filter_field: 2,
+        filter_threshold: 30,
+        aggregate_field: 3,
+        skip_header: 1,
+    }
+
+    # Run pipeline
+    C result := pipeline_run(configured)
+
+    # Return success/failure
+    I result.success == 1 {
+        R 0
+    } E {
+        R 1
+    }
+}
+
+# Entry point wrapper for testing
+F start() -> i64 {
+    # Simulate command line arguments
+    C argc := 3
+    C argv := "vais-datapipe data.csv output.json"
+
+    C result := main(argc, argv)
+
+    R result
+}

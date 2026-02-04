@@ -1,0 +1,227 @@
+# pipeline.vais - Data pipeline orchestration (chain reader -> transformer -> writer)
+
+X F time_get_ms() -> i64
+X F printf(format: str, value: i64) -> i64
+X F puts(text: str) -> i64
+
+# Pipeline structure
+S Pipeline {
+    reader: CsvReader,
+    transformer: Transformer,
+    writer: JsonWriter,
+    stats: AggregateStats,
+}
+
+# Pipeline configuration
+S PipelineConfig {
+    input_path: str,
+    output_path: str,
+    filter_enabled: i64,
+    filter_field: i64,
+    filter_threshold: i64,
+    aggregate_field: i64,
+    skip_header: i64,
+}
+
+# Pipeline result
+S PipelineResult {
+    processed_count: i64,
+    filtered_count: i64,
+    elapsed_ms: i64,
+    success: i64,
+}
+
+# Create default pipeline configuration
+F pipeline_config_default() -> PipelineConfig {
+    C config := PipelineConfig {
+        input_path: "input.csv",
+        output_path: "output.json",
+        filter_enabled: 0,
+        filter_field: 0,
+        filter_threshold: 0,
+        aggregate_field: 0,
+        skip_header: 1,
+    }
+
+    R config
+}
+
+# Create pipeline from configuration
+F pipeline_new(config: PipelineConfig) -> Pipeline {
+    C reader := csv_reader_new(config.input_path)
+    C transformer := transformer_new()
+
+    # Configure transformer if filter enabled
+    C configured_trans := transformer
+    I config.filter_enabled == 1 {
+        configured_trans = transformer_set_filter(transformer, config.filter_field, config.filter_threshold)
+    }
+
+    # Enable aggregation
+    configured_trans = transformer_enable_aggregate(configured_trans)
+
+    C writer := json_writer_new(config.output_path)
+    C stats := aggregate_stats_new()
+
+    C pipeline := Pipeline {
+        reader: reader,
+        transformer: configured_trans,
+        writer: writer,
+        stats: stats,
+    }
+
+    R pipeline
+}
+
+# Free pipeline resources
+F pipeline_free(pipeline: Pipeline) -> i64 {
+    csv_reader_free(pipeline.reader)
+    json_writer_free(pipeline.writer)
+
+    R 0
+}
+
+# Execute the pipeline
+F pipeline_execute(pipeline: Pipeline, config: PipelineConfig) -> PipelineResult {
+    C start_time := time_get_ms()
+
+    # Skip header if configured
+    I config.skip_header == 1 {
+        csv_reader_skip_header(pipeline.reader)
+    }
+
+    # Start JSON array
+    json_writer_begin_array(pipeline.writer)
+
+    # Process rows
+    C processed := 0
+    C filtered := 0
+    C current_writer := pipeline.writer
+    C current_stats := pipeline.stats
+
+    # Main processing loop
+    C max_rows := 100  # Limit for this example
+    C i := 0
+    L {
+        I i >= max_rows {
+            R PipelineResult {
+                processed_count: processed,
+                filtered_count: filtered,
+                elapsed_ms: time_get_ms() - start_time,
+                success: 1,
+            }
+        }
+
+        # Read next line
+        C line_result := csv_reader_read_line(pipeline.reader)
+
+        I line_result == 0 {
+            R PipelineResult {
+                processed_count: processed,
+                filtered_count: filtered,
+                elapsed_ms: time_get_ms() - start_time,
+                success: 1,
+            }
+        }
+
+        # Parse into row
+        C row := csv_row_new(i + 1)
+
+        # Check filter
+        C should_keep := transformer_should_keep_row(pipeline.transformer, row)
+
+        I should_keep == 1 {
+            # Transform row
+            C transformed_row := transformer_map_row(pipeline.transformer, row)
+
+            # Write to JSON
+            current_writer = json_writer_write_row(current_writer, transformed_row)
+
+            # Update aggregates
+            current_stats = transformer_aggregate_row(
+                pipeline.transformer,
+                current_stats,
+                transformed_row,
+                config.aggregate_field
+            )
+
+            processed = processed + 1
+        } E {
+            filtered = filtered + 1
+        }
+
+        # Clean up row
+        csv_row_free(row)
+
+        i = i + 1
+    }
+
+    # End JSON array
+    json_writer_end_array(current_writer)
+
+    C elapsed := time_get_ms() - start_time
+
+    C result := PipelineResult {
+        processed_count: processed,
+        filtered_count: filtered,
+        elapsed_ms: elapsed,
+        success: 1,
+    }
+
+    R result
+}
+
+# Print pipeline result
+F pipeline_print_result(result: PipelineResult) -> i64 {
+    puts("\n=== Pipeline Execution Result ===")
+
+    I result.success == 1 {
+        puts("Status: SUCCESS")
+    } E {
+        puts("Status: FAILED")
+        R 1
+    }
+
+    puts("Processed rows: ")
+    printf("%d", result.processed_count)
+    puts("")
+
+    puts("Filtered rows: ")
+    printf("%d", result.filtered_count)
+    puts("")
+
+    puts("Elapsed time (ms): ")
+    printf("%d", result.elapsed_ms)
+    puts("")
+
+    puts("=== Done ===")
+
+    R 0
+}
+
+# Run pipeline with configuration
+F pipeline_run(config: PipelineConfig) -> PipelineResult {
+    puts("=== Starting Data Pipeline ===")
+
+    puts("Input: ")
+    puts(config.input_path)
+    puts("")
+
+    puts("Output: ")
+    puts(config.output_path)
+    puts("")
+
+    # Create pipeline
+    C pipeline := pipeline_new(config)
+
+    # Execute
+    C result := pipeline_execute(pipeline, config)
+
+    # Clean up
+    pipeline_free(pipeline)
+
+    # Print result
+    pipeline_print_result(result)
+
+    R result
+}
