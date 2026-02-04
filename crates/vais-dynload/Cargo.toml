@@ -17,7 +17,7 @@ vais-hotreload = { path = "../vais-hotreload" }
 vais-ast = { path = "../vais-ast" }
 
 # WASM runtime
-wasmtime = "17.0"
+wasmtime = "41.0"
 
 # Async runtime for WASM
 tokio = { workspace = true, features = ["rt", "sync", "time"] }

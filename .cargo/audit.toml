@@ -1,0 +1,15 @@
+# Cargo audit configuration
+# See: https://rustsec.org/
+
+[advisories]
+# sqlx 0.7.4 RUSTSEC-2024-0363: Binary Protocol Misinterpretation
+# Fix requires sqlx >= 0.8.1 which is not yet released (only 0.9.0-alpha exists)
+# This project uses SQLite only (not MySQL), so the vulnerability does not apply.
+#
+# rsa 0.9.10 RUSTSEC-2023-0071: Marvin Attack timing sidechannel
+# Transitive dependency via sqlx-mysql. Not used (SQLite only).
+# No fixed version available.
+ignore = [
+    "RUSTSEC-2024-0363",
+    "RUSTSEC-2023-0071",
+]
