@@ -876,4 +876,129 @@ Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로�
 
 ---
 
+## Phase 35: 프로덕션 완성 & 커뮤니티 런칭
+
+> 브랜치: `develop` → 완료 후 `main`에 merge
+
+### 목표
+
+Phase 34에서 8.5/10 수준을 달성한 Vais를 **9/10 이상**으로 끌어올려, 오픈소스 공개 및 커뮤니티 런칭이 가능한 수준으로 완성한다.
+
+### 현황 (Phase 34 완료 시점)
+
+| 항목 | 수치 | 비고 |
+|------|------|------|
+| 테스트 | 2,050+ | E2E 272개, 통합 273개 |
+| 표준 라이브러리 | 65개 .vais + 19개 C 런타임 | 95% 완성 |
+| 실전 프로젝트 | 3개 | CLI, HTTP, 데이터 파이프라인 |
+| 공개 패키지 | 10개 소스 | 아직 실제 퍼블리시 안 됨 |
+| API 문서 | 5개 모듈 | 전체 65개 중 5개만 생성 |
+| 온보딩 가이드 | 5개 문서 | 완비 |
+
+### Stage 1: 셀프호스팅 부분 검증
+
+**목표**: Vais 컴파일러의 일부 모듈을 Vais로 재작성하여 셀프호스팅 능력 검증
+
+- [ ] Vais lexer의 핵심 토큰화 로직을 Vais로 재작성 (`selfhost/lexer.vais`)
+- [ ] 단일 문자 키워드 + 식별자 + 숫자 리터럴 토큰화
+- [ ] Rust 구현과 동일한 출력 검증 테스트 5개
+- [ ] 셀프호스팅 호환성 보고서 작성
+- **파일**: `selfhost/lexer.vais` + `selfhost/tests/`
+- **의존성**: 없음
+
+### Stage 2: 패키지 publish/install 라운드트립
+
+**목표**: 레지스트리에 실제 패키지를 퍼블리시하고 설치하는 전체 흐름 검증
+
+- [ ] 레지스트리 서버 로컬 실행 + 10개 패키지 퍼블리시
+- [ ] `vaisc pkg install <name>` 으로 패키지 다운로드 검증
+- [ ] 의존성 해결 (Semver 호환성) E2E 테스트
+- [ ] 패키지 yank/unyank 워크플로 검증
+- [ ] `vaisc pkg list` / `vaisc pkg search` 동작 확인
+- **파일**: `crates/vaisc/tests/registry_e2e_tests.rs`
+- **의존성**: Stage 1 완료 권장
+
+### Stage 3: CI/CD 파이프라인 완성
+
+**목표**: GitHub Actions로 전체 빌드/테스트/배포 자동화
+
+- [ ] `.github/workflows/ci.yml` - PR 검증 (check, clippy, test, bench)
+- [ ] `.github/workflows/release.yml` - 릴리스 바이너리 빌드 (Linux/macOS/Windows)
+- [ ] `.github/workflows/docs.yml` - docs-site 자동 배포 (GitHub Pages)
+- [ ] 레지스트리 서버 Docker 이미지 자동 빌드
+- [ ] 배지 (badge) 추가: CI 상태, 테스트 커버리지, 버전
+- **파일**: `.github/workflows/` + `README.md`
+- **의존성**: 없음
+
+### Stage 4: 컴파일러 에러 메시지 개선
+
+**목표**: 실전 프로젝트에서 발견된 에러 메시지 품질 향상
+
+- [ ] 타입 불일치 에러에 "did you mean?" 제안 강화
+- [ ] 미사용 변수 경고에 `_` 접두사 제안
+- [ ] 구조체 필드 접근 에러 시 유사 필드명 제안
+- [ ] extern 함수 시그니처 불일치 시 명확한 안내
+- [ ] 에러 메시지 품질 E2E 테스트 10개 추가
+- **파일**: `crates/vais-types/src/` + `crates/vaisc/tests/`
+- **의존성**: 없음
+
+### Stage 5: API 문서 전체 생성
+
+**목표**: 표준 라이브러리 전체 65개 모듈의 API 레퍼런스 완성
+
+- [ ] 나머지 60개 모듈의 API 문서 자동 생성
+- [ ] 모듈 간 상호 참조 링크
+- [ ] 검색 가능한 인덱스 페이지
+- [ ] docs-site SUMMARY.md 전체 업데이트
+- **파일**: `docs-site/src/api/` (60개 파일 추가)
+- **의존성**: Stage 3 완료 권장 (자동 배포)
+
+### Stage 6: 커뮤니티 인프라 구축
+
+**목표**: 오픈소스 프로젝트로서의 기본 인프라 완비
+
+- [ ] CONTRIBUTING.md - 기여 가이드 (이슈, PR, 코드 리뷰 절차)
+- [ ] CODE_OF_CONDUCT.md - 행동 강령
+- [ ] GitHub Issue/PR 템플릿 (버그 보고, 기능 요청, RFC)
+- [ ] CHANGELOG.md 자동 생성 설정 (conventional commits 기반)
+- [ ] README.md 대폭 개선 (배지, 기능 표, 빠른 시작, 스크린샷)
+- **파일**: 루트 디렉토리 + `.github/`
+- **의존성**: Stage 3 완료 권장
+
+### Stage 7: v1.0 릴리스 준비
+
+**목표**: 공식 v1.0.0 릴리스 체크리스트 완수
+
+- [ ] Semver 안정화: public API 목록 확정
+- [ ] 브레이킹 체인지 검토 및 마이그레이션 가이드
+- [ ] 성능 회귀 테스트 베이스라인 확정 (벤치마크 고정)
+- [ ] 라이선스 검토 (모든 의존성 SBOM 확인)
+- [ ] v1.0.0 릴리스 노트 초안 작성
+- [ ] `develop` → `main` 머지 전략 결정
+- **파일**: `RELEASE_NOTES.md` + `MIGRATION.md`
+- **의존성**: Stage 1~6 모두 완료 필수
+
+### 검증 기준
+
+| 단계 | 검증 항목 |
+|------|----------|
+| Stage 1 | selfhost lexer가 10개 토큰 샘플을 Rust 구현과 동일하게 토큰화 |
+| Stage 2 | 로컬 레지스트리에서 publish → install 라운드트립 성공 |
+| Stage 3 | PR 생성 → CI 자동 실행 → 테스트 통과 → 배지 녹색 |
+| Stage 4 | 에러 메시지 E2E 10개 통과 + "did you mean?" 동작 |
+| Stage 5 | docs-site에서 65개 모듈 전체 API 검색 가능 |
+| Stage 6 | CONTRIBUTING.md 따라서 첫 PR 생성 가능 |
+| Stage 7 | v1.0.0 릴리스 노트 + 마이그레이션 가이드 완성 |
+
+### 완료 후 기대 효과
+- 셀프호스팅 검증으로 언어 성숙도 입증
+- 패키지 에코시스템 실제 동작 확인
+- CI/CD 자동화로 지속적 품질 보장
+- 에러 메시지 개선으로 개발자 경험 향상
+- 커뮤니티 인프라로 외부 기여자 유입 가능
+- **프로덕션 적용 수준: 8.5/10 → 9+/10**
+- **v1.0.0 공식 릴리스 준비 완료**
+
+---
+
 **메인테이너**: Steve
