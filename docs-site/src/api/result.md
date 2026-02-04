@@ -24,6 +24,7 @@ E Result {
 | `is_ok` | `F is_ok(&self) -> i64` | Returns `1` if Ok |
 | `is_err` | `F is_err(&self) -> i64` | Returns `1` if Err |
 | `unwrap_or` | `F unwrap_or(&self, default: i64) -> i64` | Returns Ok value or default |
+| `map` | `F map(&self, f: i64) -> Result` | Map the Ok value |
 | `err_or` | `F err_or(&self, default: i64) -> i64` | Returns Err value or default |
 
 ## Helper Functions

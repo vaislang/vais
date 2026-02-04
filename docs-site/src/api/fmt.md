@@ -8,6 +8,15 @@
 U std/fmt
 ```
 
+## Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `FMT_BUF_SIZE` | 256 | Default format buffer size |
+| `ALIGN_LEFT` | 0 | Left alignment |
+| `ALIGN_CENTER` | 1 | Center alignment |
+| `ALIGN_RIGHT` | 2 | Right alignment |
+
 ## Number Conversion Functions
 
 | Function | Signature | Description |
@@ -19,6 +28,10 @@ U std/fmt
 | `format_int` | `F format_int(value: i64) -> i64` | Alias for itoa |
 | `format_hex` | `F format_hex(value: i64) -> i64` | Alias for itoa_hex |
 | `format_bin` | `F format_bin(value: i64) -> i64` | Alias for itoa_bin |
+| `format_oct` | `F format_oct(value: i64) -> i64` | Alias for itoa_oct |
+| `strlen` | `F strlen(s: i64) -> i64` | Get string length |
+| `strcpy` | `F strcpy(dst: i64, src: i64) -> i64` | Copy string to buffer |
+| `fmt_builder` | `F fmt_builder() -> FormatBuilder` | Create new format builder |
 
 ## FormatBuilder
 
@@ -35,9 +48,20 @@ Incremental string builder for formatted output.
 | `write_newline` | `F write_newline(&self) -> i64` | Write newline |
 | `write_repeat` | `F write_repeat(&self, ch: i64, count: i64) -> i64` | Write char N times |
 | `write_padded_int` | `F write_padded_int(&self, value: i64, width: i64, align: i64, pad: i64) -> i64` | Padded integer |
+| `len` | `F len(&self) -> i64` | Get current length |
 | `finish` | `F finish(&self) -> i64` | Finalize, return string pointer |
 | `reset` | `F reset(&self) -> i64` | Reset for reuse |
 | `cleanup` | `F cleanup(&self) -> i64` | Free buffer |
+
+## DebugStruct
+
+Helper for structured debug output.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `F new(name: i64) -> DebugStruct` | Create with struct name |
+| `field` | `F field(&self, name: i64, value: i64) -> i64` | Add a field |
+| `finish` | `F finish(&self) -> i64` | Finalize output |
 
 ## Usage
 

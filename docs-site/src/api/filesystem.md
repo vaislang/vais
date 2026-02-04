@@ -17,6 +17,7 @@ U std/filesystem
 | `fs_mkdir` | `F fs_mkdir(path: str, mode: i64) -> i64` | Create directory |
 | `fs_rmdir` | `F fs_rmdir(path: str) -> i64` | Remove directory |
 | `fs_chdir` | `F fs_chdir(path: str) -> i64` | Change directory |
+| `fs_getcwd` | `F fs_getcwd() -> str` | Get current working directory |
 
 ### File Operations
 
@@ -29,9 +30,8 @@ U std/filesystem
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `fs_file_size` | `F fs_file_size(path: str) -> i64` | Get file size |
-| `fs_file_exists` | `F fs_file_exists(path: str) -> i64` | Check if file exists |
-| `fs_is_dir` | `F fs_is_dir(path: str) -> i64` | Check if path is directory |
+| `fs_file_size` | `F fs_file_size(path: str) -> i64` | Get file size in bytes |
+| `fs_mtime` | `F fs_mtime(path: str) -> i64` | Get modification time (Unix timestamp) |
 
 ## Usage
 
@@ -39,9 +39,18 @@ U std/filesystem
 U std/filesystem
 
 F main() -> i64 {
+    # Directory operations
     fs_mkdir("output", 755)
+    cwd := fs_getcwd()
+
+    # File operations
     size := fs_file_size("data.txt")
+    mtime := fs_mtime("data.txt")
     fs_rename("old.txt", "new.txt")
+
+    # Cleanup
+    fs_unlink("temp.txt")
+    fs_rmdir("output")
     0
 }
 ```

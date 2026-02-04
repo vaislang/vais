@@ -23,6 +23,7 @@ The Compress module provides RFC-compliant compression with:
 | `COMPRESS_ERR_MEMORY` | -3 | Memory allocation failed |
 | `COMPRESS_ERR_DATA` | -4 | Invalid or corrupted data |
 | `COMPRESS_ERR_STREAM` | -5 | Stream error |
+| `COMPRESS_ERR_VERSION` | -6 | Version error |
 | `COMPRESS_ERR_BUFFER` | -7 | Buffer error |
 
 ### Compression Modes

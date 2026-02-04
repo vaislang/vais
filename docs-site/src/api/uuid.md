@@ -29,6 +29,7 @@ S Uuid { high: i64, low: i64 }
 |----------|-----------|-------------|
 | `uuid_v4` | `F uuid_v4() -> Uuid` | Generate random UUID v4 |
 | `uuid_v4_string` | `F uuid_v4_string() -> String` | Generate as string |
+| `uuid_sequential` | `F uuid_sequential() -> Uuid` | Generate sequential UUID |
 | `uuid_parse` | `F uuid_parse(s: String) -> Uuid` | Parse from string |
 | `uuid_parse_cstr` | `F uuid_parse_cstr(cstr: i64) -> Uuid` | Parse from C string |
 

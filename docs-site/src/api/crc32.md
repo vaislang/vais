@@ -13,6 +13,7 @@ U std/crc32
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `crc32` | `F crc32(data: i64, len: i64) -> i64` | Compute CRC32 of buffer |
+| `crc32_str` | `F crc32_str(s: str) -> i64` | Compute CRC32 of string |
 | `crc32_update_byte` | `F crc32_update_byte(crc: i64, byte_val: i64) -> i64` | Update CRC with one byte |
 | `crc32_loop` | `F crc32_loop(data: i64, crc: i64, idx: i64, len: i64) -> i64` | Process byte range |
 

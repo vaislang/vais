@@ -24,7 +24,10 @@ U std/random
 | `random_bytes` | `F random_bytes(buffer: i64, count: i64) -> i64` | Fill buffer with random bytes |
 | `random_alnum` | `F random_alnum() -> i64` | Random alphanumeric char |
 | `random_hex` | `F random_hex() -> i64` | Random hex char |
+| `random_c` | `F random_c() -> i64` | Random using C rand() |
 | `random_xorshift` | `F random_xorshift() -> i64` | Fast xorshift random |
+| `random_xorshift_seed` | `F random_xorshift_seed(seed: i64) -> i64` | Seed xorshift RNG |
+| `random_f64_simple` | `F random_f64_simple() -> f64` | Simple random f64 in [0.0, 1.0) |
 
 ## Usage
 

@@ -24,13 +24,13 @@ S HashMap<K, V> {
 |--------|-----------|-------------|
 | `with_capacity` | `F with_capacity(capacity: i64) -> HashMap<K, V>` | Create with given bucket count |
 | `len` | `F len(&self) -> i64` | Get number of entries |
+| `capacity` | `F capacity(&self) -> i64` | Get capacity |
 | `is_empty` | `F is_empty(&self) -> i64` | Check if empty |
 | `get` | `F get(&self, key: K) -> V` | Get value (0 if not found) |
 | `get_opt` | `F get_opt(&self, key: K) -> Option<V>` | Get value as Option |
 | `contains` | `F contains(&self, key: K) -> i64` | Check if key exists |
 | `set` | `F set(&self, key: K, value: V) -> V` | Insert/update, returns old value |
 | `remove` | `F remove(&self, key: K) -> V` | Remove key, returns value |
-| `remove_opt` | `F remove_opt(&self, key: K) -> Option<V>` | Remove with Option return |
 | `clear` | `F clear(&self) -> i64` | Remove all entries |
 | `drop` | `F drop(&self) -> i64` | Free all memory |
 

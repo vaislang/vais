@@ -27,8 +27,22 @@ S Arena {
 | `new` | `F new() -> Arena` | Create with 64KB chunks |
 | `with_chunk_size` | `F with_chunk_size(size: i64) -> Arena` | Custom chunk size |
 | `alloc` | `F alloc(&self, size: i64) -> i64` | Allocate bytes |
+| `alloc_zeroed` | `F alloc_zeroed(&self, size: i64) -> i64` | Allocate zero-initialized bytes |
+| `alloc_array` | `F alloc_array(&self, count: i64, item_size: i64) -> i64` | Allocate array |
+| `grow` | `F grow(&self) -> i64` | Grow arena by adding new chunk |
+| `total_allocated` | `F total_allocated(&self) -> i64` | Get total allocated bytes |
+| `total_capacity` | `F total_capacity(&self) -> i64` | Get total capacity |
 | `reset` | `F reset(&self) -> i64` | Reset (reuse memory) |
 | `drop` | `F drop(&self) -> i64` | Free all chunks |
+
+## Free Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `arena_new` | `F arena_new() -> Arena` | Create arena (convenience) |
+| `arena_alloc` | `F arena_alloc(arena: Arena, size: i64) -> i64` | Allocate (convenience) |
+| `arena_reset` | `F arena_reset(arena: Arena) -> i64` | Reset (convenience) |
+| `arena_drop` | `F arena_drop(arena: Arena) -> i64` | Drop (convenience) |
 
 ## Usage
 

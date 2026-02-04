@@ -20,6 +20,8 @@ S StringMap { buckets: i64, size: i64, cap: i64 }
 |--------|-----------|-------------|
 | `with_capacity` | `F with_capacity(capacity: i64) -> StringMap` | Create with capacity |
 | `len` | `F len(&self) -> i64` | Number of entries |
+| `capacity` | `F capacity(&self) -> i64` | Get capacity |
+| `is_empty` | `F is_empty(&self) -> i64` | Check if empty |
 | `get` | `F get(&self, key: i64) -> i64` | Get value by string key |
 | `get_opt` | `F get_opt(&self, key: i64) -> Option<i64>` | Get as Option |
 | `contains` | `F contains(&self, key: i64) -> i64` | Check if key exists |

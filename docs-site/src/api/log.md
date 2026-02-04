@@ -48,6 +48,9 @@ The Log module provides production-grade logging with:
 | `LOG_ERR_INIT` | -1 | Initialization failed |
 | `LOG_ERR_FILE` | -2 | File error |
 | `LOG_ERR_INVALID_LEVEL` | -3 | Invalid log level |
+| `LOG_ERR_INVALID_OUTPUT` | -4 | Invalid output target |
+| `LOG_ERR_INVALID_FORMAT` | -5 | Invalid output format |
+| `LOG_ERR_SPAN` | -6 | Span error (invalid ID or operation) |
 | `LOG_ERR_WRITE` | -7 | Write error |
 
 ## Initialization Functions
@@ -234,6 +237,40 @@ Get the trace ID for a span.
 - `span_id`: Span ID
 
 **Returns:** Trace ID string or empty string if span not found
+
+## Convenience Functions
+
+### trace_field / debug_field / info_field / warn_field / error_field
+
+```vais
+F trace_field(msg: str, key: str, value: str) -> i64
+F debug_field(msg: str, key: str, value: str) -> i64
+F info_field(msg: str, key: str, value: str) -> i64
+F warn_field(msg: str, key: str, value: str) -> i64
+F error_field(msg: str, key: str, value: str) -> i64
+```
+
+Log a message with a single field at the respective level.
+
+**Parameters:**
+- `msg`: Message to log
+- `key`: Field name
+- `value`: Field value
+
+---
+
+### log_error_text
+
+```vais
+F log_error_text(code: i64) -> str
+```
+
+Get human-readable error description for an error code.
+
+**Parameters:**
+- `code`: Error code
+
+**Returns:** Error description string
 
 ## Usage Examples
 
