@@ -121,6 +121,9 @@ pub struct TypeChecker {
 
     // Ownership checking mode: None = disabled, Some(true) = strict (errors), Some(false) = warn only
     ownership_check_mode: Option<bool>,
+
+    // Number of items imported from other modules (skip ownership checking for these)
+    imported_item_count: usize,
 }
 
 impl TypeChecker {
@@ -149,6 +152,7 @@ impl TypeChecker {
             substitute_cache: RefCell::new(HashMap::new()),
             lifetime_inferencer: lifetime::LifetimeInferencer::new(),
             ownership_check_mode: Some(false), // warn-only by default
+            imported_item_count: 0,
         };
         checker.register_builtins();
         checker
@@ -162,6 +166,11 @@ impl TypeChecker {
     /// Disable ownership checking entirely
     pub fn disable_ownership_check(&mut self) {
         self.ownership_check_mode = None;
+    }
+
+    /// Set the number of imported items to skip during ownership checking
+    pub fn set_imported_item_count(&mut self, count: usize) {
+        self.imported_item_count = count;
     }
 
     /// Get warnings collected during type checking
@@ -2419,11 +2428,19 @@ impl TypeChecker {
             }
         }
 
-        // Third pass: ownership and borrow checking
+        // Third pass: ownership and borrow checking (skip imported items)
         if let Some(strict) = self.ownership_check_mode {
             let mut ownership_checker = ownership::OwnershipChecker::new_collecting();
+            // Only check ownership for items from the current file, not imported modules
+            let local_module = if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                Module {
+                    items: module.items[self.imported_item_count..].to_vec(),
+                }
+            } else {
+                module.clone()
+            };
             // Run ownership check in collecting mode (never fails, collects all errors)
-            let _ = ownership_checker.check_module(module);
+            let _ = ownership_checker.check_module(&local_module);
             let ownership_errors = ownership_checker.take_errors();
 
             if !ownership_errors.is_empty() {

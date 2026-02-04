@@ -1419,6 +1419,20 @@ fn cmd_build(
     let typecheck_start = std::time::Instant::now();
     let mut checker = TypeChecker::new();
     configure_type_checker(&mut checker);
+
+    // Calculate imported item count so ownership checker can skip imported items
+    let input_canonical = input.canonicalize()
+        .unwrap_or_else(|_| input.to_path_buf());
+    if let Ok(original_ast) = query_db.parse(&input_canonical) {
+        let original_non_use_count = original_ast.items.iter()
+            .filter(|item| !matches!(item.node, Item::Use(_)))
+            .count();
+        let imported_count = final_ast.items.len().saturating_sub(original_non_use_count);
+        if imported_count > 0 {
+            checker.set_imported_item_count(imported_count);
+        }
+    }
+
     if let Err(e) = checker.check_module(&final_ast) {
         // If suggest_fixes is enabled, print suggested fixes
         if suggest_fixes {

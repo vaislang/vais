@@ -53,6 +53,93 @@
     "E011": {
       "title": "Unreachable pattern",
       "message": "unreachable pattern at arm {arm}"
+    },
+    "E012": {
+      "title": "Effect mismatch",
+      "message": "function declared as {declared} but has effect {actual}",
+      "help": "remove the '{declared}' annotation or fix the function body"
+    },
+    "E013": {
+      "title": "Purity violation",
+      "message": "pure function cannot call impure function: {callee} has effects {effects}"
+    },
+    "E014": {
+      "title": "Linear type violation",
+      "message": "variable '{var_name}' must be used exactly once, but was used {actual_uses} times"
+    },
+    "E015": {
+      "title": "Affine type violation",
+      "message": "variable '{var_name}' can be used at most once, but was used {actual_uses} times"
+    },
+    "E016": {
+      "title": "Move after use",
+      "message": "variable '{var_name}' was already moved"
+    },
+    "E017": {
+      "title": "Dependent type predicate not boolean",
+      "message": "dependent type predicate must be a boolean expression, found {found}"
+    },
+    "E018": {
+      "title": "Refinement violation",
+      "message": "dependent type refinement violation: predicate '{predicate}' may not hold"
+    },
+    "E019": {
+      "title": "Lifetime elision failed",
+      "message": "cannot determine output lifetime for function '{function_name}' with {input_count} input lifetimes",
+      "help": "use explicit lifetime annotations"
+    },
+    "E020": {
+      "title": "Lifetime outlives static",
+      "message": "lifetime '{lifetime_name}' does not live long enough: cannot outlive 'static"
+    },
+    "E021": {
+      "title": "Lifetime too short",
+      "message": "reference lifetime {reference_lifetime} outlives referent lifetime {referent_lifetime}"
+    },
+    "E022": {
+      "title": "Use after move",
+      "message": "use of moved value: variable '{var_name}' was moved",
+      "help": "consider cloning the value before moving, or restructure the code to avoid reuse"
+    },
+    "E023": {
+      "title": "Use after partial move",
+      "message": "use of partially moved value: variable '{var_name}' has moved fields"
+    },
+    "E024": {
+      "title": "Assign while borrowed",
+      "message": "cannot assign to '{var_name}' while it is borrowed",
+      "help": "ensure the borrow is no longer active before assigning"
+    },
+    "E025": {
+      "title": "Borrow after move",
+      "message": "cannot borrow '{var_name}' after it was moved"
+    },
+    "E026": {
+      "title": "Borrow conflict",
+      "message": "cannot borrow '{var_name}': conflicting borrows",
+      "help": "ensure only one mutable borrow OR any number of immutable borrows exist at a time"
+    },
+    "E027": {
+      "title": "Mutable borrow of immutable",
+      "message": "cannot mutably borrow immutable variable '{var_name}'",
+      "help": "declare the variable as mutable"
+    },
+    "E028": {
+      "title": "Dangling reference",
+      "message": "dangling reference: '{ref_var}' references '{source_var}' which does not live long enough"
+    },
+    "E029": {
+      "title": "Return local reference",
+      "message": "cannot return reference to local variable '{var_name}'",
+      "help": "return an owned value instead"
+    },
+    "E030": {
+      "title": "No such field",
+      "message": "no field '{field}' on type '{type_name}'"
+    },
+    "E031": {
+      "title": "Extern signature mismatch",
+      "message": "extern function '{name}' has unexpected return type: expected '{expected}', found '{found}'"
     }
   },
 

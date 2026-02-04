@@ -53,6 +53,93 @@
     "E011": {
       "title": "无法到达的模式",
       "message": "arm {arm} 处的模式无法到达"
+    },
+    "E012": {
+      "title": "效果不匹配",
+      "message": "函数声明为 {declared} 但实际效果为 {actual}",
+      "help": "请移除 '{declared}' 注解或修复函数体"
+    },
+    "E013": {
+      "title": "纯度违规",
+      "message": "纯函数不能调用非纯函数：{callee} 具有效果 {effects}"
+    },
+    "E014": {
+      "title": "线性类型违规",
+      "message": "变量 '{var_name}' 必须恰好使用一次，但被使用了 {actual_uses} 次"
+    },
+    "E015": {
+      "title": "仿射类型违规",
+      "message": "变量 '{var_name}' 最多只能使用一次，但被使用了 {actual_uses} 次"
+    },
+    "E016": {
+      "title": "使用后移动",
+      "message": "变量 '{var_name}' 已经被移动"
+    },
+    "E017": {
+      "title": "依赖类型谓词非布尔值",
+      "message": "依赖类型谓词必须是布尔表达式，但找到了 {found}"
+    },
+    "E018": {
+      "title": "精化违规",
+      "message": "依赖类型精化违规：谓词 '{predicate}' 可能不成立"
+    },
+    "E019": {
+      "title": "生命周期省略失败",
+      "message": "无法从函数 '{function_name}' 的 {input_count} 个输入生命周期确定输出生命周期",
+      "help": "请使用显式生命周期注解"
+    },
+    "E020": {
+      "title": "生命周期超出 static",
+      "message": "生命周期 '{lifetime_name}' 存活不够长：无法超出 'static"
+    },
+    "E021": {
+      "title": "生命周期不足",
+      "message": "引用生命周期 {reference_lifetime} 超出了被引用对象的生命周期 {referent_lifetime}"
+    },
+    "E022": {
+      "title": "移动后使用",
+      "message": "使用已移动的值：变量 '{var_name}' 已被移动",
+      "help": "请在移动前克隆值，或重构代码以避免重复使用"
+    },
+    "E023": {
+      "title": "部分移动后使用",
+      "message": "使用部分移动的值：变量 '{var_name}' 的部分字段已被移动"
+    },
+    "E024": {
+      "title": "借用时赋值",
+      "message": "'{var_name}' 在被借用时无法赋值",
+      "help": "请确保赋值前借用不再处于活动状态"
+    },
+    "E025": {
+      "title": "移动后借用",
+      "message": "'{var_name}' 被移动后无法借用"
+    },
+    "E026": {
+      "title": "借用冲突",
+      "message": "无法借用 '{var_name}'：存在冲突的借用",
+      "help": "请确保同一时间只有一个可变借用或任意数量的不可变借用"
+    },
+    "E027": {
+      "title": "不可变变量的可变借用",
+      "message": "无法可变借用不可变变量 '{var_name}'",
+      "help": "请将变量声明为可变的"
+    },
+    "E028": {
+      "title": "悬垂引用",
+      "message": "悬垂引用：'{ref_var}' 引用的 '{source_var}' 存活不够长"
+    },
+    "E029": {
+      "title": "返回局部变量引用",
+      "message": "无法返回局部变量 '{var_name}' 的引用",
+      "help": "请返回拥有所有权的值"
+    },
+    "E030": {
+      "title": "不存在的字段",
+      "message": "类型 '{type_name}' 上没有字段 '{field}'"
+    },
+    "E031": {
+      "title": "extern 签名不匹配",
+      "message": "extern 函数 '{name}' 的返回类型不符：期望 '{expected}'，找到 '{found}'"
     }
   },
 
