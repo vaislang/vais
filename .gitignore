@@ -48,6 +48,13 @@ string_test
 # LLVM IR files (generated during compilation)
 *.ll
 
+# Build artifacts in selfhost/
+selfhost/*.o
+selfhost/runtime.c
+
+# Build artifacts in std/
+std/*.o
+
 # macOS debug symbols
 *.dSYM/
 

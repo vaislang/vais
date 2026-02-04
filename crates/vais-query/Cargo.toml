@@ -12,7 +12,7 @@ vais-ast = { path = "../vais-ast" }
 vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
 
-sha2 = "0.10"
+sha2 = { workspace = true }
 parking_lot = "0.12"
 
 [dev-dependencies]

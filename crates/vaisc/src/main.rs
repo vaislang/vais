@@ -2248,10 +2248,13 @@ fn compile_to_native(
         }
     }
 
+    // Track if we need to link pthread (used by thread and sync runtimes)
+    let mut needs_pthread = false;
+
     // Link thread runtime if available (for std/thread.vais support)
     if let Some(thread_rt_path) = find_thread_runtime() {
         args.push(thread_rt_path.to_str().unwrap_or("thread_runtime.c").to_string());
-        args.push("-lpthread".to_string());
+        needs_pthread = true;
         if verbose {
             println!("{} Linking thread runtime from: {}", "info:".blue().bold(), thread_rt_path.display());
         }
@@ -2260,10 +2263,15 @@ fn compile_to_native(
     // Link sync runtime if available (for std/sync.vais support)
     if let Some(sync_rt_path) = find_sync_runtime() {
         args.push(sync_rt_path.to_str().unwrap_or("sync_runtime.c").to_string());
-        args.push("-lpthread".to_string());
+        needs_pthread = true;
         if verbose {
             println!("{} Linking sync runtime from: {}", "info:".blue().bold(), sync_rt_path.display());
         }
+    }
+
+    // Add -lpthread once if needed by any runtime
+    if needs_pthread {
+        args.push("-lpthread".to_string());
     }
 
     if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled()) {

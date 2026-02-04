@@ -8,7 +8,7 @@ description = "Language Server Protocol implementation for Vais"
 [dependencies]
 # LSP
 tower-lsp = "0.20"
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
 
 # Vais compiler
 vais-lexer = { path = "../vais-lexer" }
@@ -18,8 +18,8 @@ vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
 
 # Utilities
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 dashmap = "5"
 ropey = "1"
 
