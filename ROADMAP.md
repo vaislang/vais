@@ -98,6 +98,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **32** | **표준 라이브러리 확장 - 웹/DB/템플릿** | **✅ 완료** | **7/7 (100%)** |
 | **33** | **대형 프로젝트 도입 준비 - 프로덕션 블로커 해소** | **✅ 완료** | **7/7 (100%)** |
 | **36** | **대형 프로젝트 도입 준비 (Production Readiness)** | **🔄 진행 중** | **6/8 (75%)** |
+| **37** | **프로덕션 갭 해소 (Reality Check)** | **📋 계획** | **0/7 (0%)** |
 | | *Phase 34~: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -1147,6 +1148,137 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 | M1: 기본 동작 | 1, 2 | 4.0/5.0 | std import 동작, 에러 메시지 정상 |
 | M2: 실용 수준 | 3, 4, 5 | 4.5/5.0 | 멀티 모듈 프로젝트 가능, 소유권 강제 |
 | M3: 프로덕션 준비 | 6, 7, 8 | 4.8/5.0 | CI 자동화, 성능 검증, 안정성 확인 |
+
+---
+
+## Phase 37: 프로덕션 갭 해소 - Reality Check
+
+> **기준일**: 2026-02-05
+> **배경**: Phase 33~36은 ROADMAP 상 "완료"로 표시되었으나, 실제 검증 결과 다수 항목이 미동작하거나 미배포 상태.
+> 이 Phase는 기존 Phase들의 **실질적 미완성 항목**을 식별하고 해소하여 실제 프로덕션 도입을 가능하게 한다.
+
+### 현실 점검 (As-Is)
+
+| 영역 | ROADMAP 상태 | 실제 상태 | 갭 |
+|------|-------------|----------|-----|
+| CI 파이프라인 | Phase 35 Stage 3 ✅ | **main CI 전부 failure** (security audit, ASan, bench) | 🚨 심각 |
+| 패키지 레지스트리 | Phase 33 Stage 3 ✅, Phase 35 Stage 2 ✅ | **서버 미배포, 실제 퍼블리시 미검증** (Phase 34 Stage 5에 미체크 항목 존재) | 🚨 심각 |
+| 빌드 시스템 | 없음 | **수동 `clang file.ll runtime.c` 필요**, 통합 빌드 시스템 없음 | 🚨 심각 |
+| 셀프호스팅 | Phase 35 Stage 1 ✅ (55%) | **45~55% 수준**, Phase 36 Stage 4에 미체크 항목 존재 | ⚠️ 중간 |
+| 대규모 벤치마크 | Phase 36 Stage 7 미완 | **5만줄+ 프로젝트 미검증** | ⚠️ 중간 |
+| Async 실전 검증 | Phase 36 Stage 8 미완 | **1만 동시 연결, 장시간 테스트 미완** | ⚠️ 중간 |
+| 의존성 보안 | Phase 35 ✅ | **rsa, sqlx, wasmtime 등 5개 취약점** (RUSTSEC) | ⚠️ 중간 |
+
+### Stage 1: CI 파이프라인 복구 (Critical - 최우선)
+
+**목표**: main 브랜치 CI를 green 상태로 복구
+
+- [ ] Security Audit 실패 해결: `rsa 0.9.10` (RUSTSEC-2023-0071), `sqlx 0.7.4` (RUSTSEC-2024-0363), `wasmtime 17.0.3` 취약점
+  - sqlx 0.7.4 → 0.8.x 업그레이드 (breaking changes 대응)
+  - wasmtime 17.0.3 → 최신 버전 업그레이드
+  - rsa: sqlx-mysql 의존성이므로 sqlx 업그레이드로 해결 여부 확인
+- [ ] ASan (Memory Safety) 테스트 실패 원인 분석 및 수정
+- [ ] Benchmark Dashboard 실패 원인 분석 및 수정
+- [ ] 모든 CI workflow가 main에서 green 확인
+- **의존성**: 없음
+- **검증**: `gh run list` 전체 success
+
+### Stage 2: 통합 빌드 시스템 구축 (Critical)
+
+**목표**: `vaisc build project.vais -o binary` 한 줄로 C 런타임 포함 빌드 완료
+
+- [ ] `vaisc build` 명령에 C 런타임 자동 링킹 (`std/*.c` 자동 감지/컴파일)
+- [ ] `use std::http_server` → 자동으로 `http_server_runtime.c` 링킹
+- [ ] `vais.toml`에서 외부 C 라이브러리 의존성 선언 (`[dependencies.native]`)
+- [ ] 멀티파일 프로젝트 빌드 (`vaisc build src/` → 전체 빌드)
+- [ ] 증분 컴파일 지원 (변경된 파일만 재컴파일)
+- **의존성**: Stage 1 완료 권장
+- **검증**: `examples/http_server_example.vais`를 `vaisc build` 한 줄로 빌드 및 실행
+
+### Stage 3: 의존성 보안 해소 (High)
+
+**목표**: 알려진 취약점 0개
+
+- [ ] `cargo audit` 통과 (0 vulnerabilities)
+- [ ] outdated 의존성 업데이트 (inkwell, cranelift, sqlx, wasmtime 등)
+- [ ] `Cargo.lock` 갱신 후 전체 테스트 통과 확인
+- **의존성**: Stage 1과 병렬 가능
+- **검증**: `cargo audit` 성공 + `cargo test` 통과
+
+### Stage 4: 패키지 레지스트리 실배포 (High)
+
+**목표**: 공개 레지스트리에서 `vaisc pkg install` 동작
+
+- [ ] 레지스트리 서버 배포 (fly.io / Railway / 자체 서버)
+- [ ] 도메인 설정 (예: registry.vais.dev)
+- [ ] 10개 기본 패키지 (Phase 34 Stage 5) 실제 퍼블리시
+- [ ] `vaisc pkg install vais-std-cli` → 다운로드 → 프로젝트에서 사용 가능 확인
+- [ ] 레지스트리 API 문서 공개
+- **의존성**: Stage 1, 3 완료 권장
+- **검증**: 외부 네트워크에서 `vaisc pkg search` → `vaisc pkg install` → `use` 라운드트립 성공
+
+### Stage 5: 셀프호스팅 75% 달성 (Medium)
+
+**목표**: Vais 컴파일러의 lexer + token 모듈을 Vais로 완전히 대체 가능
+
+- [ ] `self`, `Self`, `as`, `const` 키워드 추가 (Phase 36 Stage 4 잔여)
+- [ ] 문자열 이스케이프 디코딩 구현 (Phase 36 Stage 4 잔여)
+- [ ] selfhost lexer와 Rust lexer의 100% 동일 출력 검증 (전체 examples/ 대상)
+- [ ] selfhost parser 기초 구현 시작
+- **의존성**: Stage 1 완료
+- **검증**: selfhost lexer가 전체 examples/ 131개 파일을 Rust lexer와 동일하게 토큰화
+
+### Stage 6: 대규모 벤치마크 + Async 검증 (Medium)
+
+**목표**: Phase 36 Stage 7, 8 완수
+
+- [ ] 5만줄+ 멀티파일 프로젝트 생성 및 컴파일 성능 측정
+- [ ] 증분 컴파일 시간, 메모리 사용량 프로파일링
+- [ ] 1만 동시 TCP 연결 벤치마크
+- [ ] 24시간 장시간 실행 메모리 누수 테스트
+- [ ] Rust/Go 동급 프로젝트 대비 비교 벤치마크
+- **의존성**: Stage 2 완료 (통합 빌드 시스템 필요)
+- **검증**: 5만줄 전체 빌드 10초 이내, 1만 동시 연결 p99 < 10ms
+
+### Stage 7: 프로덕션 도입 가이드 (Low)
+
+**목표**: "Vais로 프로덕션 서비스 구축하기" 실전 가이드
+
+- [ ] 프로덕션 체크리스트 (보안, 모니터링, 배포, 롤백)
+- [ ] Docker 기반 배포 가이드 (Dockerfile 템플릿)
+- [ ] CI/CD 파이프라인 템플릿 (GitHub Actions)
+- [ ] 실전 프로젝트 구축 튜토리얼 (REST API → 배포까지)
+- **의존성**: Stage 2, 4 완료
+- **검증**: 가이드 따라서 30분 내 REST API 서버 배포 가능
+
+### 우선순위 및 의존성
+
+```
+Stage 1 (CI 복구) ──────────┬──→ Stage 4 (레지스트리 배포)
+                            │
+Stage 3 (보안) ─────────────┤
+                            │
+Stage 2 (빌드 시스템) ──────┼──→ Stage 6 (벤치마크)
+                            │
+Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가이드)
+```
+
+### 마일스톤
+
+| 마일스톤 | 포함 Stage | 기대 효과 |
+|----------|-----------|----------|
+| M1: CI Green | 1, 3 | main 브랜치 신뢰 회복, PR 워크플로 정상화 |
+| M2: 원커맨드 빌드 | 2 | `vaisc build` 한 줄로 C 런타임 포함 빌드 |
+| M3: 에코시스템 | 4, 5 | 패키지 설치/공유 가능, 셀프호스팅 75% |
+| M4: 프로덕션 레디 | 6, 7 | 성능 검증 완료, 도입 가이드 공개 |
+
+### 완료 후 기대 효과
+- CI green으로 코드 품질 신뢰 확보
+- `vaisc build` 한 줄 빌드로 진입장벽 해소
+- 패키지 에코시스템으로 코드 재사용 가능
+- 벤치마크 데이터로 성능 객관적 입증
+- **프로덕션 적용 수준: 3.55/5.0 → 4.5+/5.0**
+- **대형 프로젝트 도입 실질적 가능**
 
 ---
 
