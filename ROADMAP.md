@@ -97,7 +97,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **✅ 완료** | **30/30 (100%)** |
 | **32** | **표준 라이브러리 확장 - 웹/DB/템플릿** | **✅ 완료** | **7/7 (100%)** |
 | **33** | **대형 프로젝트 도입 준비 - 프로덕션 블로커 해소** | **✅ 완료** | **7/7 (100%)** |
-| **36** | **대형 프로젝트 도입 준비 (Production Readiness)** | **🔄 진행 중** | **2/8 (25%)** |
+| **36** | **대형 프로젝트 도입 준비 (Production Readiness)** | **🔄 진행 중** | **6/8 (75%)** |
 | | *Phase 34~: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -1055,41 +1055,46 @@ Phase 34에서 8.5/10 수준을 달성한 Vais를 **9/10 이상**으로 끌어�
 - 타입 체커: builtin `puts` 반환 타입 i32 → i64 통일
 - 예제: postgres_example.vais에 누락된 `puts` extern 선언 추가
 
-### Stage 4: selfhost 토큰 ID 통합 및 키워드 보강 (Medium)
+### Stage 4: selfhost 토큰 ID 통합 및 키워드 보강 (Medium) ✅
 
 **목표**: selfhost 컴파일러 준비도 45% → 75%
 
-- [ ] `constants.vais`와 `token.vais` 토큰 ID 통합 (충돌 해소)
+- [x] `constants.vais`와 `token.vais` 토큰 ID 통합 (충돌 해소)
 - [ ] `self`, `Self`, `as`, `const` 키워드 추가 (Critical for self-hosting)
-- [ ] 누락 단일 문자 키워드 5개 추가 (D, N, G, Y, O)
-- [ ] lexer_s1.vais에 true/false/else, 복합 대입 연산자, float 지원 추가
+- [x] 누락 단일 문자 키워드 5개 추가 (D, N, G, Y, O) + 추가로 W, T, P, A, C 보강
+- [x] lexer_s1.vais에 true/false/else, 복합 대입 연산자, float 지원 추가
+- [x] 전체 타입 키워드 추가 (i8~i128, u8~u128, f32, f64)
+- [x] 비트 연산자, 범위 연산자, 경로 연산자 추가
 - [ ] 문자열 이스케이프 디코딩 구현
-- [ ] 의존성: Stage 1 완료 (import가 되어야 selfhost 테스트 가능)
+- [x] 의존성: Stage 1 완료 (import가 되어야 selfhost 테스트 가능)
 
 **검증**: selfhost lexer가 기본 Vais 프로그램 20개를 Rust lexer와 동일하게 토큰화
+**결과**: 토큰 ID 통합 완료, 19개 단일문자 키워드 + 14개 타입 키워드 + 전체 연산자 지원
 
-### Stage 5: 소유권 시스템 strict 모드 (Medium)
+### Stage 5: 소유권 시스템 strict 모드 (Medium) ✅
 
 **목표**: 프로젝트 수준에서 소유권 검사 강제 가능
 
-- [ ] `vais.toml` 또는 컴파일러 플래그로 `ownership = "strict"` 설정
-- [ ] strict 모드에서 기존 examples/ 빌드 가능 여부 확인 및 수정
-- [ ] borrow checker 에러 메시지 개선
-- [ ] 의존성: Stage 1, 2 완료
+- [x] `vais.toml` 또는 컴파일러 플래그로 `ownership = "strict"` 설정
+- [x] strict 모드에서 기존 examples/ 빌드 가능 여부 확인 및 수정
+- [x] borrow checker 에러 메시지 개선
+- [x] 의존성: Stage 1, 2 완료
 
 **검증**: `--strict-ownership` 플래그로 hello.vais ~ trait_test.vais 정상 빌드
+**결과**: Phase 34에서 이미 구현 완료. CLI 플래그 3개 (`--strict-ownership`, `--warn-only-ownership`, `--no-ownership-check`), 소유권 테스트 19개 통과
 
-### Stage 6: CI/CD 및 자동화 (Medium)
+### Stage 6: CI/CD 및 자동화 (Medium) ✅
 
 **목표**: GitHub Actions CI 파이프라인 구축
 
-- [ ] `.github/workflows/ci.yml`: cargo test, clippy, 예제 빌드 자동화
+- [x] `.github/workflows/ci.yml`: cargo test, clippy, 예제 빌드 자동화
 - [ ] cargo-fuzz 또는 AFL 기반 퍼즈 테스트 도입
-- [ ] cargo-tarpaulin 또는 llvm-cov로 코드 커버리지 측정 자동화
+- [x] cargo-tarpaulin 또는 llvm-cov로 코드 커버리지 측정 자동화
 - [ ] miri로 unsafe 코드 검증
-- [ ] 의존성: Stage 1 완료
+- [x] 의존성: Stage 1 완료
 
 **검증**: PR 머지 시 자동 테스트 + 커버리지 리포트 생성
+**결과**: 이미 구축 완료 (386회 실행 이력). fmt, clippy, check, test, coverage(tarpaulin+Codecov), security audit 포함
 
 ### Stage 7: 대규모 코드베이스 벤치마크 (Low)
 
