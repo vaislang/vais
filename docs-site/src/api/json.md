@@ -301,58 +301,119 @@ Create a JSON string value.
 ### Parsing JSON
 
 ```vais
-# Parse a JSON object
-json_str := '{"name":"Alice","age":25,"active":true}'
-root := json_parse(str_to_ptr(json_str))
+U std/json
 
-# Extract values
-name := json_get_string(json_object_get(root, "name"))
-age := json_get_int(json_object_get(root, "age"))
-active := json_get_bool(json_object_get(root, "active"))
+F main() -> i64 {
+    # Parse a JSON object
+    json_str := '{"name":"Alice","age":25,"active":true}'
+    root := json_parse(str_to_ptr(json_str))
 
-# Clean up
-json_free(root)
+    # Extract values
+    name := json_get_string(json_object_get(root, "name"))
+    age := json_get_int(json_object_get(root, "age"))
+    active := json_get_bool(json_object_get(root, "active"))
+
+    # Clean up
+    json_free(root)
+    0
+}
 ```
 
 ### Building JSON
 
 ```vais
-# Create object
-obj := json_object_create()
-json_object_put(obj, "name", json_string_new(str_to_ptr("Bob")))
-json_object_put(obj, "score", json_int(95))
+U std/json
 
-# Create array
-arr := json_array_create()
-json_array_add(arr, json_int(1))
-json_array_add(arr, json_int(2))
-json_array_add(arr, json_int(3))
+F main() -> i64 {
+    # Create object
+    obj := json_object_create()
+    json_object_put(obj, "name", json_string_new(str_to_ptr("Bob")))
+    json_object_put(obj, "score", json_int(95))
 
-json_object_put(obj, "numbers", arr)
+    # Create array
+    arr := json_array_create()
+    json_array_add(arr, json_int(1))
+    json_array_add(arr, json_int(2))
+    json_array_add(arr, json_int(3))
 
-# Serialize to string
-json_string := json_to_string(obj)
-# Result: {"name":"Bob","score":95,"numbers":[1,2,3]}
+    json_object_put(obj, "numbers", arr)
 
-# Clean up
-json_free(obj)
-free(json_string)
+    # Serialize to string
+    json_string := json_to_string(obj)
+    # Result: {"name":"Bob","score":95,"numbers":[1,2,3]}
+
+    puts_ptr(json_string)
+
+    # Clean up
+    json_free(obj)
+    free(json_string)
+    0
+}
 ```
 
 ### Working with Arrays
 
 ```vais
-json_str := '[10,20,30,40,50]'
-arr := json_parse(str_to_ptr(json_str))
+U std/json
 
-len := json_array_len(arr)
-i := 0
-L i < len {
-    elem := json_array_get(arr, i)
-    value := json_get_int(elem)
-    # Process value
-    i = i + 1
+F main() -> i64 {
+    json_str := '[10,20,30,40,50]'
+    arr := json_parse(str_to_ptr(json_str))
+
+    len := json_array_len(arr)
+    i := 0
+    L i < len {
+        elem := json_array_get(arr, i)
+        value := json_get_int(elem)
+        # Process value
+        i = i + 1
+    }
+
+    json_free(arr)
+    0
 }
+```
 
-json_free(arr)
+### Nested Structures
+
+```vais
+U std/json
+
+F main() -> i64 {
+    # Parse nested JSON
+    json_str := '{"user":{"id":123,"roles":["admin","user"]}}'
+    root := json_parse(str_to_ptr(json_str))
+
+    # Navigate nested structure
+    user_obj := json_object_get(root, "user")
+    user_id := json_get_int(json_object_get(user_obj, "id"))
+
+    roles_arr := json_object_get(user_obj, "roles")
+    first_role := json_get_string(json_array_get(roles_arr, 0))
+
+    json_free(root)
+    0
+}
+```
+
+### Type Checking
+
+```vais
+U std/json
+
+F main() -> i64 {
+    value := json_parse(str_to_ptr("42"))
+    t := json_type(value)
+
+    I t == 2 {
+        # Integer type
+        n := json_get_int(value)
+    } E I t == 4 {
+        # String type
+        s := json_get_string(value)
+    }
+
+    json_free(value)
+    0
+}
 ```

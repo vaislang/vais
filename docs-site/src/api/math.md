@@ -75,16 +75,158 @@ U std/math
 | `rad_to_deg` | `F rad_to_deg(radians: f64) -> f64` | Radians to degrees |
 | `approx_eq` | `F approx_eq(a: f64, b: f64, epsilon: f64) -> i64` | Approximate equality check |
 
-## Usage
+## Usage Examples
+
+### Basic Calculations
 
 ```vais
 U std/math
 
 F main() -> i64 {
+    # Absolute value
+    x := abs(-42.5)  # 42.5
+    y := abs_i64(-10)  # 10
+
+    # Min/max
+    smaller := min(3.5, 7.2)  # 3.5
+    larger := max_i64(10, 20)  # 20
+
+    # Clamping
+    val := clamp(15.0, 0.0, 10.0)  # 10.0
+
+    0
+}
+```
+
+### Trigonometry
+
+```vais
+U std/math
+
+F main() -> i64 {
+    # Convert degrees to radians
     angle := deg_to_rad(45.0)
+
+    # Compute sine and cosine
     s := sin(angle)
     c := cos(angle)
+
+    # Pythagorean identity: sin²(x) + cos²(x) = 1
     hyp := sqrt(s * s + c * c)  # ~1.0
+
+    # Inverse trigonometric functions
+    radians := asin(0.707)
+    degrees := rad_to_deg(radians)
+
+    0
+}
+```
+
+### Power and Logarithms
+
+```vais
+U std/math
+
+F main() -> i64 {
+    # Exponentiation
+    squared := pow(5.0, 2.0)  # 25.0
+    cubed := pow(2.0, 3.0)    # 8.0
+
+    # Square root
+    root := sqrt(16.0)  # 4.0
+
+    # Natural logarithm
+    ln := log(EULER)  # ~1.0
+
+    # Exponential
+    result := exp(1.0)  # ~2.718 (EULER)
+
+    # Other logarithms
+    log_10 := log10(100.0)  # 2.0
+    log_2 := log2(8.0)      # 3.0
+
+    0
+}
+```
+
+### Rounding Operations
+
+```vais
+U std/math
+
+F main() -> i64 {
+    x := 3.7
+    y := 3.2
+
+    a := floor(x)  # 3.0
+    b := ceil(x)   # 4.0
+    c := round(x)  # 4.0
+
+    d := floor(y)  # 3.0
+    e := ceil(y)   # 4.0
+    f := round(y)  # 3.0
+
+    0
+}
+```
+
+### Floating-Point Comparison
+
+```vais
+U std/math
+
+F main() -> i64 {
+    a := 0.1 + 0.2
+    b := 0.3
+
+    # Direct comparison may fail due to floating-point precision
+    # I a == b { ... }
+
+    # Use approximate equality instead
+    epsilon := 0.0001
+    I approx_eq(a, b, epsilon) == 1 {
+        # Values are approximately equal
+    }
+
+    0
+}
+```
+
+### Practical Example: Distance Calculation
+
+```vais
+U std/math
+
+# Calculate Euclidean distance between two points
+F distance(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+    dx := x2 - x1
+    dy := y2 - y1
+    sqrt(dx * dx + dy * dy)
+}
+
+F main() -> i64 {
+    dist := distance(0.0, 0.0, 3.0, 4.0)  # 5.0
+    0
+}
+```
+
+### Practical Example: Circle Calculations
+
+```vais
+U std/math
+
+F circle_area(radius: f64) -> f64 {
+    PI * radius * radius
+}
+
+F circle_circumference(radius: f64) -> f64 {
+    TAU * radius  # or 2.0 * PI * radius
+}
+
+F main() -> i64 {
+    r := 5.0
+    area := circle_area(r)
+    circ := circle_circumference(r)
     0
 }
 ```
