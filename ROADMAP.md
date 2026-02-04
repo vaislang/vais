@@ -724,4 +724,155 @@ Vais를 프로덕션 환경의 대형 프로젝트에 도입할 수 있도록, �
 
 ---
 
+## Phase 34: 실전 검증 & 에코시스템 구축
+
+> 브랜치: `develop` → 완료 후 `main`에 merge
+
+### 목표
+
+Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로젝트에서 검증**하고, **에코시스템 기반**을 구축하여 대형 프로젝트 적용 수준(8.5+/10)으로 끌어올린다.
+
+### 현황 (Phase 33 완료 시점)
+
+| 항목 | 수치 | 비고 |
+|------|------|------|
+| 테스트 | 2,007개 | E2E 241개, 통합 256개 |
+| 표준 라이브러리 | 65개 .vais + 19개 C 런타임 | 95% 완성 |
+| 실전 사용 사례 | 0개 | **핵심 갭** |
+| 공개 패키지 | 0개 | 레지스트리 인프라만 존재 |
+| API 문서 사이트 | 없음 | 자동 생성 도구만 존재 |
+
+### Stage 1: 안정성 강화 - Borrow Checker & 크래시 복구
+
+**목표**: 메모리 안전성 보장 수준 향상 + 컴파일러 견고성
+
+- [ ] Borrow Checker strict 모드를 신규 프로젝트 기본값으로 설정
+- [ ] `vaisc init` 시 `borrow_check = "strict"` 기본 생성
+- [ ] 컴파일러 패닉 → graceful error 전환 (ICE 핸들링)
+- [ ] 컴파일러 크래시 시 진단 보고서 자동 생성 (`vaisc --report-crash`)
+- [ ] Borrow Checker strict 모드 E2E 테스트 10개 추가
+- **파일**: `crates/vaisc/src/main.rs` + `crates/vais-types/src/lib.rs`
+- **의존성**: 없음
+
+### Stage 2: Windows E2E 테스트 강화
+
+**목표**: Windows 플랫폼 안정성 검증
+
+- [ ] Windows 전용 E2E 테스트 15개 추가 (파일 경로, 프로세스, 네트워크)
+- [ ] IOCP 비동기 I/O 통합 테스트
+- [ ] Windows CI 매트릭스에 async/TLS/compression 테스트 포함
+- [ ] 크로스플랫폼 경로 처리 테스트 (\ vs /)
+- **파일**: `crates/vaisc/tests/windows_e2e_tests.rs` + CI 설정
+- **의존성**: Stage 1 완료 권장
+
+### Stage 3: API 문서 사이트 구축
+
+**목표**: 표준 라이브러리 API 레퍼런스 자동 생성
+
+- [ ] `vaisc doc` 명령으로 HTML API 문서 생성
+- [ ] 표준 라이브러리 65개 모듈의 API 문서 자동 추출
+- [ ] 함수 시그니처, 구조체 필드, 상수값 자동 문서화
+- [ ] 사용 예제 코드 블록 포함
+- [ ] docs-site에 API Reference 섹션 추가
+- **파일**: `crates/vaisc/src/doc_gen.rs` + `docs-site/src/api/`
+- **의존성**: 없음
+
+### Stage 4: 온보딩 가이드 & 베스트 프랙티스
+
+**목표**: 신규 사용자가 30분 내에 첫 프로젝트를 구축할 수 있는 가이드
+
+- [ ] Getting Started 가이드 (설치 → Hello World → 첫 프로젝트)
+- [ ] 에러 처리 패턴 가이드 (Result/Option, 에러 전파, 로깅 통합)
+- [ ] 성능 튜닝 가이드 (컴파일 최적화 플래그, 프로파일링, 벤치마크)
+- [ ] 코딩 스타일 가이드 (네이밍, 모듈 구조, 테스트 작성법)
+- [ ] FAQ 문서 (Rust/Go/Zig 대비 차별점, 마이그레이션 팁)
+- **파일**: `docs-site/src/guide/`
+- **의존성**: 없음
+
+### Stage 5: 레지스트리 기본 패키지 퍼블리시
+
+**목표**: 패키지 에코시스템 시드 (최소 10개 공개 패키지)
+
+- [ ] `vais-std-math` - 수학 확장 (행렬, 벡터, 통계)
+- [ ] `vais-std-cli` - CLI 인자 파서 (argparse 스타일)
+- [ ] `vais-std-env` - 환경 변수, OS 정보 유틸리티
+- [ ] `vais-std-color` - 터미널 컬러 출력
+- [ ] `vais-std-csv` - CSV 파서/생성기
+- [ ] `vais-std-toml` - TOML 파서
+- [ ] `vais-std-dotenv` - .env 파일 로더
+- [ ] `vais-std-retry` - 재시도 로직 (exponential backoff)
+- [ ] `vais-std-validate` - 입력 검증 (이메일, URL, 범위)
+- [ ] `vais-std-cache` - 인메모리 LRU 캐시
+- [ ] 각 패키지에 README + 예제 + 테스트 포함
+- [ ] 레지스트리 서버에 실제 퍼블리시 검증
+- **파일**: `packages/` 디렉토리 (신규)
+- **의존성**: Stage 1 완료 권장
+
+### Stage 6: 실전 프로젝트 1 - CLI 도구
+
+**목표**: Vais로 실용적 CLI 도구 구축하여 언어 실전 검증
+
+- [ ] `vais-todo` - 터미널 TODO 관리 도구
+  - 추가/삭제/완료/목록 출력
+  - JSON 파일 영속화
+  - 컬러 출력 + 필터링
+- [ ] CLI 인자 파싱 (Stage 5의 vais-std-cli 활용)
+- [ ] 파일 I/O + JSON 직렬화/역직렬화 실사용 검증
+- [ ] 에러 처리 패턴 실전 적용
+- **파일**: `projects/vais-todo/`
+- **의존성**: Stage 5 완료 필수
+
+### Stage 7: 실전 프로젝트 2 - HTTP API 서버
+
+**목표**: Vais로 REST API 서버 구축하여 웹 스택 검증
+
+- [ ] 간단한 북마크 관리 API 서버
+  - CRUD 엔드포인트 (GET/POST/PUT/DELETE)
+  - SQLite 영속화 (std/sqlite.vais 활용)
+  - JSON 요청/응답 처리
+- [ ] TLS/HTTPS 설정 (std/tls.vais 활용)
+- [ ] 구조화 로깅 (std/log.vais 활용)
+- [ ] gzip 응답 압축 (std/compress.vais 활용)
+- **파일**: `projects/vais-bookmarks/`
+- **의존성**: Stage 5, Stage 6 완료 권장
+
+### Stage 8: 실전 프로젝트 3 - 데이터 처리 파이프라인 + 매크로 벤치마크
+
+**목표**: 데이터 처리 성능 검증 + 실제 앱 벤치마크
+
+- [ ] CSV 파일 읽기 → 변환 → JSON 출력 파이프라인
+  - 대용량 파일 스트리밍 처리 (10MB+)
+  - 비동기 I/O 활용 (std/async.vais)
+  - 멀티스레드 병렬 처리 (std/thread.vais)
+- [ ] 매크로 벤치마크: 실제 앱 3개의 실행 성능 측정
+  - CLI 도구: 1000 항목 처리 속도
+  - API 서버: 요청 처리량 (req/sec)
+  - 데이터 파이프라인: 10MB CSV 처리 시간
+- [ ] C/Rust 동등 구현과 성능 비교 보고서
+- **파일**: `projects/vais-datapipe/` + `benches/macro_bench.rs`
+- **의존성**: Stage 6, Stage 7 완료 필수
+
+### 검증 기준
+
+| 단계 | 검증 항목 |
+|------|----------|
+| Stage 1 | strict 모드 E2E 10개 통과 + 크래시 복구 동작 확인 |
+| Stage 2 | Windows CI에서 async/TLS 테스트 통과 |
+| Stage 3 | `vaisc doc` 실행 → 65개 모듈 HTML 문서 생성 |
+| Stage 4 | Getting Started 가이드 따라하면 30분 내 첫 프로젝트 완성 |
+| Stage 5 | 10개 패키지 레지스트리에 publish + install 라운드트립 |
+| Stage 6 | `vais-todo` 바이너리로 TODO CRUD 동작 |
+| Stage 7 | `vais-bookmarks` 서버에 curl로 CRUD + HTTPS 동작 |
+| Stage 8 | 벤치마크 보고서: C 대비 20% 이내 성능 달성 |
+
+### 완료 후 기대 효과
+- 실전 프로젝트 3개로 언어 안정성 검증 완료
+- 패키지 에코시스템 시드 (10개 기본 패키지)
+- API 문서 + 온보딩 가이드로 신규 사용자 진입 장벽 해소
+- Windows 안정성 확보로 크로스플랫폼 지원 완성
+- 매크로 벤치마크로 성능 수준 객관적 입증
+- **프로덕션 적용 수준: 7.5/10 → 8.5+/10**
+
+---
+
 **메인테이너**: Steve
