@@ -9,12 +9,19 @@
   <meta property="og:description" content="Token-efficient syntax, LLVM backend, type inference. Write less tokens, get native performance.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="/logo-icon.png">
+  <meta property="og:url" content="https://vais.dev/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Vais - AI-Optimized Systems Programming Language">
+  <meta name="twitter:description" content="Token-efficient syntax, LLVM backend, type inference. Write less tokens, get native performance.">
+  <meta name="twitter:image" content="/logo-icon.png">
+  <link rel="canonical" href="https://vais.dev/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
   <link rel="apple-touch-icon" href="/logo-icon.png">
   <link rel="stylesheet" href="/src/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 </head>
 <body>
   <!-- Navigation -->
@@ -29,7 +36,8 @@
         <a href="#compare">Compare</a>
         <a href="#playground">Playground</a>
         <a href="/docs/" class="nav-link-docs">Docs</a>
-        <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener">
+        <a href="/blog/" class="nav-link-blog">Blog</a>
+        <a href="https://github.com/vaislang/vais" class="nav-link-github" target="_blank" rel="noopener" aria-label="GitHub repository">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
         </a>
       </div>
@@ -66,9 +74,13 @@
             <span class="code-dot red"></span>
             <span class="code-dot yellow"></span>
             <span class="code-dot green"></span>
-            <span class="code-filename">fibonacci.vais</span>
+            <div class="code-tabs">
+              <button class="code-tab active" data-tab="0">fibonacci.vais</button>
+              <button class="code-tab" data-tab="1">structs.vais</button>
+              <button class="code-tab" data-tab="2">match.vais</button>
+            </div>
           </div>
-          <pre class="code-body"><code><span class="kw">F</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
+          <pre class="code-body" aria-label="Vais code example"><code class="code-panel active" data-panel="0"><span class="kw">F</span> <span class="fn">fib</span>(<span class="param">n</span>: <span class="type">i64</span>) -> <span class="type">i64</span> {
   <span class="kw">I</span> n &lt;= <span class="num">1</span> { n }
   <span class="kw">E</span> { <span class="self">@</span>(n - <span class="num">1</span>) + <span class="self">@</span>(n - <span class="num">2</span>) }
 }
@@ -76,6 +88,25 @@
 <span class="kw">F</span> <span class="fn">main</span>() {
   result <span class="op">:=</span> <span class="fn">fib</span>(<span class="num">10</span>)
   <span class="fn">println</span>(<span class="str">"fib(10) = {}"</span>, result)
+}</code><code class="code-panel" data-panel="1"><span class="kw">S</span> <span class="type">Vec2</span> { x: <span class="type">f64</span>, y: <span class="type">f64</span> }
+
+<span class="kw">F</span> <span class="fn">len</span>(v: <span class="type">Vec2</span>) -> <span class="type">f64</span> {
+  <span class="fn">sqrt</span>(v.x * v.x + v.y * v.y)
+}
+
+<span class="kw">F</span> <span class="fn">main</span>() {
+  p <span class="op">:=</span> <span class="type">Vec2</span> { x: <span class="num">3.0</span>, y: <span class="num">4.0</span> }
+  <span class="fn">println</span>(<span class="str">"len = {}"</span>, <span class="fn">len</span>(p))
+}</code><code class="code-panel" data-panel="2"><span class="kw">E</span> <span class="type">Shape</span> {
+  Circle(<span class="type">f64</span>),
+  Rect(<span class="type">f64</span>, <span class="type">f64</span>),
+}
+
+<span class="kw">F</span> <span class="fn">area</span>(s: <span class="type">Shape</span>) -> <span class="type">f64</span> {
+  <span class="kw">M</span> s {
+    Circle(r) => <span class="num">3.14159</span> * r * r,
+    Rect(w, h) => w * h,
+  }
 }</code></pre>
         </div>
       </div>
@@ -217,11 +248,14 @@
       <p class="section-subtitle">
         Write and run Vais code directly in your browser. No installation required.
       </p>
-      <div class="playground-embed">
-        <div class="playground-placeholder">
+      <div class="playground-embed" id="playground-container">
+        <div class="playground-placeholder" id="playground-placeholder">
           <div class="playground-placeholder-icon">▶</div>
           <p>Launch Interactive Playground</p>
-          <a href="/playground" class="btn btn-primary" target="_blank">Open Playground</a>
+          <div class="playground-actions">
+            <button class="btn btn-primary" id="playground-load-btn">Load Playground Here</button>
+            <a href="/playground" class="btn btn-secondary" target="_blank">Open in New Tab</a>
+          </div>
         </div>
       </div>
     </div>

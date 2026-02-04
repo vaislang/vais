@@ -23,15 +23,53 @@ const navLinks = document.querySelector('.nav-links');
 if (toggle && navLinks) {
   toggle.addEventListener('click', () => {
     navLinks.classList.toggle('open');
+    toggle.classList.toggle('active');
   });
 
   // Close on link click
   navLinks.querySelectorAll('a').forEach((link) => {
     link.addEventListener('click', () => {
       navLinks.classList.remove('open');
+      toggle.classList.remove('active');
     });
   });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!toggle.contains(e.target) && !navLinks.contains(e.target)) {
+      navLinks.classList.remove('open');
+      toggle.classList.remove('active');
+    }
+  });
 }
+
+// Inline playground loader
+const playgroundBtn = document.getElementById('playground-load-btn');
+if (playgroundBtn) {
+  playgroundBtn.addEventListener('click', () => {
+    const container = document.getElementById('playground-container');
+    const placeholder = document.getElementById('playground-placeholder');
+    if (container && placeholder) {
+      const iframe = document.createElement('iframe');
+      iframe.src = '/playground/';
+      iframe.title = 'Vais Playground';
+      iframe.loading = 'lazy';
+      placeholder.remove();
+      container.appendChild(iframe);
+    }
+  });
+}
+
+// Code tabs
+document.querySelectorAll('.code-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const idx = tab.dataset.tab;
+    document.querySelectorAll('.code-tab').forEach((t) => t.classList.remove('active'));
+    document.querySelectorAll('.code-panel').forEach((p) => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.code-panel[data-panel="${idx}"]`)?.classList.add('active');
+  });
+});
 
 // Smooth scroll for anchor links
 document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
