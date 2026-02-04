@@ -3,7 +3,6 @@ title = "Vais Programming Language"
 description = "공식 Vais 프로그래밍 언어 문서"
 authors = ["Vais Contributors"]
 language = "ko"
-multilingual = false
 src = "src"
 
 [build]
@@ -15,8 +14,8 @@ create-missing = false
 [output.html]
 default-theme = "dark"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/sswoo/vais"
-edit-url-template = "https://github.com/sswoo/vais/edit/main/{path}"
+git-repository-url = "https://github.com/vaislang/vais"
+edit-url-template = "https://github.com/vaislang/vais/edit/main/{path}"
 site-url = "/docs/"
 
 [output.html.search]

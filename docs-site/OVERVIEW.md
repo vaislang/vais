@@ -192,7 +192,7 @@ multilingual = false
 [output.html]
 default-theme = "dark"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/sswoo/vais"
+git-repository-url = "https://github.com/vaislang/vais"
 site-url = "/vais/"
 
 [output.html.search]

@@ -48,6 +48,9 @@ string_test
 # LLVM IR files (generated during compilation)
 *.ll
 
+# mdBook build output
+docs-site/book/
+
 # Build artifacts in selfhost/
 selfhost/*.o
 selfhost/runtime.c

@@ -152,7 +152,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 항목 | 상태 | 비고 |
 |------|------|------|
 | 빌드 안정성 | ✅ | cargo build/clippy 클린 |
-| 테스트 통과율 | ✅ | 1,850+ 테스트 전체 통과, 165 E2E |
+| 테스트 통과율 | ✅ | 2,007 테스트 전체 통과, 210+ E2E |
 | 예제 컴파일율 | ✅ | 110/111 (100%) + 1개 의도적 실패 |
 | 보안 감사 | ✅ | 14개 이슈 전수 수정 완료 (Phase 15) |
 | 라이선스 | ✅ | 396개 의존성 감사, MIT/Apache-2.0 호환 |
@@ -495,6 +495,37 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 Phase 31 완료 후 **VaisDB 본체 구현**은 별도 repo (`vaisdb`)에서 진행:
 - 📦 repo: `vaisdb/` (별도 프로젝트)
 - VaisDB ROADMAP은 해당 repo에서 관리
+
+---
+
+## 🔍 프로젝트 전체 검토 (2026-02-04)
+
+### 완료된 개선 작업
+
+| 항목 | 내용 | 상태 |
+|------|------|------|
+| docs-site | `{{#include}}` 누락 파일 12개 생성 | ✅ 완료 |
+| website | blog 멀티페이지 빌드, HTML 이스케이핑, 버전 통일 | ✅ 완료 |
+| playground | Monaco worker 설정 (`vite-plugin-monaco-editor`), npm install | ✅ 완료 |
+| Cargo workspace | 15개 crate `workspace.dependencies` 통일 (serde, tokio, rayon 등) | ✅ 완료 |
+| 링커 경고 | `-lpthread` 중복 링킹 수정 (`needs_pthread` 플래그) | ✅ 완료 |
+| .gitignore | selfhost/std 빌드 산출물 패턴 추가 | ✅ 완료 |
+
+### 추가 해결 (2026-02-04)
+
+| 항목 | 내용 | 상태 |
+|------|------|------|
+| website hero | `V x = 42` → `:=` 구문으로 수정 | ✅ 완료 |
+| GitHub URL | docs-site `sswoo/vais` → `vaislang/vais` 통일 | ✅ 완료 |
+| docs-site 빌드 | mdbook 빌드 성공 확인 (`multilingual` 필드 제거) | ✅ 완료 |
+| .gitignore | docs-site/book/ 빌드 출력물 추가 | ✅ 완료 |
+
+### 코드 품질 현황
+
+- Clippy 경고: 0개
+- 테스트: 2,007개 전체 통과
+- Dead code / Unused imports: 0개
+- 대형 파일 (6,000줄+): 이미 충분히 모듈화되어 있어 추가 분할 불필요
 
 ---
 
