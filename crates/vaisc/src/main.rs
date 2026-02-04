@@ -23,11 +23,43 @@ use std::sync::OnceLock;
 use vais_ast::{Item, Module, Spanned};
 
 /// Global ownership checking configuration
-/// None = warn-only (default), Some(true) = strict errors, Some(false) = disabled
+/// None = disabled, Some(true) = strict errors (default), Some(false) = warn-only
 static OWNERSHIP_MODE: OnceLock<Option<bool>> = OnceLock::new();
 
 fn get_ownership_mode() -> Option<bool> {
-    OWNERSHIP_MODE.get().copied().unwrap_or(Some(false))
+    OWNERSHIP_MODE.get().copied().unwrap_or(Some(true))
+}
+
+/// Generate a crash report with system info, backtrace, and panic details
+fn generate_crash_report(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let mut report = String::new();
+    report.push_str("=== Vais Compiler Crash Report ===\n\n");
+
+    // Timestamp
+    report.push_str(&format!("Timestamp: {:?}\n", std::time::SystemTime::now()));
+
+    // Version info
+    report.push_str(&format!("Compiler: vaisc {}\n", env!("CARGO_PKG_VERSION")));
+    report.push_str(&format!("OS: {} {}\n", std::env::consts::OS, std::env::consts::ARCH));
+
+    // Panic info
+    report.push_str(&format!("\nPanic: {}\n", info));
+    if let Some(location) = info.location() {
+        report.push_str(&format!("Location: {}:{}:{}\n", location.file(), location.line(), location.column()));
+    }
+
+    // Backtrace
+    report.push_str("\nBacktrace:\n");
+    report.push_str(&format!("{}", std::backtrace::Backtrace::force_capture()));
+
+    // Command line args
+    report.push_str("\nCommand line args:\n");
+    for arg in std::env::args() {
+        report.push_str(&format!("  {}\n", arg));
+    }
+
+    report.push_str("\n=== End of Crash Report ===\n");
+    report
 }
 
 fn configure_type_checker(checker: &mut TypeChecker) {
@@ -113,13 +145,21 @@ struct Cli {
     #[arg(long, global = true)]
     allow_plugins: bool,
 
-    /// Enable strict ownership/borrow checking (errors instead of warnings)
+    /// Enable strict ownership/borrow checking (now the default, kept for compatibility)
     #[arg(long, global = true)]
     strict_ownership: bool,
 
     /// Disable ownership/borrow checking entirely
     #[arg(long, global = true)]
     no_ownership_check: bool,
+
+    /// Generate a crash report file when the compiler panics
+    #[arg(long, global = true)]
+    report_crash: bool,
+
+    /// Use warn-only borrow checking (legacy default, not recommended for new projects)
+    #[arg(long, global = true)]
+    warn_only_ownership: bool,
 
     /// Use inkwell (LLVM API) backend instead of text-based IR generation
     /// Requires compilation with --features inkwell
@@ -475,13 +515,39 @@ enum CacheAction {
 fn main() {
     let cli = Cli::parse();
 
+    // Install panic handler for crash reporting
+    let report_crash = cli.report_crash;
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // Always print the panic info
+        default_hook(info);
+
+        // Generate crash report if requested or always for ICEs
+        if report_crash {
+            let report = generate_crash_report(info);
+            let report_path = format!("vaisc-crash-{}.txt", std::process::id());
+            if let Ok(()) = std::fs::write(&report_path, &report) {
+                eprintln!("\n{}: internal compiler error (ICE)", "error".red().bold());
+                eprintln!("  Crash report saved to: {}", report_path);
+                eprintln!("  Please report this bug at: https://github.com/vaislang/vais/issues");
+            }
+        } else {
+            eprintln!("\n{}: internal compiler error (ICE)", "error".red().bold());
+            eprintln!("  Use --report-crash to generate a detailed crash report");
+            eprintln!("  Please report this bug at: https://github.com/vaislang/vais/issues");
+        }
+    }));
+
     // Configure ownership checking mode
+    // Default: strict (errors) for new projects
+    // Use --warn-only-ownership for legacy warn-only behavior
+    // Use --no-ownership-check to disable entirely
     let ownership_mode = if cli.no_ownership_check {
         None // disabled
-    } else if cli.strict_ownership {
-        Some(true) // strict (errors)
+    } else if cli.warn_only_ownership {
+        Some(false) // warn-only (legacy)
     } else {
-        Some(false) // warn-only (default)
+        Some(true) // strict (default since Phase 34)
     };
     let _ = OWNERSHIP_MODE.set(ownership_mode);
 

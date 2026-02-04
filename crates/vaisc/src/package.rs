@@ -65,6 +65,13 @@ pub struct BuildConfig {
     pub debug: Option<bool>,
     #[serde(default)]
     pub target: Option<String>,
+    /// Borrow check mode: "strict" (default), "warn", or "off"
+    #[serde(default = "default_borrow_check")]
+    pub borrow_check: Option<String>,
+}
+
+fn default_borrow_check() -> Option<String> {
+    Some("strict".to_string())
 }
 
 /// Package manager errors
