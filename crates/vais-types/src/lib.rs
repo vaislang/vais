@@ -2611,6 +2611,9 @@ impl TypeChecker {
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
 
+        // Validate common extern function signatures and warn on mismatches
+        self.validate_extern_signature(&name, &ret);
+
         self.functions.insert(
             name.clone(),
             FunctionSig {
@@ -2629,6 +2632,21 @@ impl TypeChecker {
         );
 
         Ok(())
+    }
+
+    /// Validate extern function signatures for common patterns.
+    /// Emits warnings for known extern functions with unexpected return types.
+    fn validate_extern_signature(&mut self, name: &str, ret: &ResolvedType) {
+        // Common allocation/pointer-returning functions should return i64 (pointer)
+        let pointer_returning_fns = ["malloc", "calloc", "realloc", "mmap", "fopen", "dlopen"];
+        if pointer_returning_fns.contains(&name)
+            && !matches!(ret, ResolvedType::I64 | ResolvedType::Pointer(_) | ResolvedType::Unknown)
+        {
+            self.warnings.push(format!(
+                "extern function `{}` should return `i64` (pointer), found `{}`",
+                name, ret
+            ));
+        }
     }
 
     /// Register a struct
@@ -3223,6 +3241,10 @@ impl TypeChecker {
 
         // Lifetime inference: check reference lifetimes in the function signature
         self.check_function_lifetimes(f)?;
+
+        // Check for unused local variables (excluding function parameters) and emit warnings
+        let param_names: Vec<String> = f.params.iter().map(|p| p.name.node.clone()).collect();
+        self.check_unused_variables(&param_names);
 
         self.current_fn_ret = None;
         self.current_fn_name = None;
@@ -4139,11 +4161,11 @@ impl TypeChecker {
                 }
 
                 // Get field names for did-you-mean suggestion
-                let suggestion = if let Some(name) = type_name {
-                    if let Some(struct_def) = self.structs.get(&name) {
+                let suggestion = if let Some(ref name) = type_name {
+                    if let Some(struct_def) = self.structs.get(name) {
                         types::find_similar_name(&field.node,
                             struct_def.fields.keys().map(|s| s.as_str()))
-                    } else if let Some(union_def) = self.unions.get(&name) {
+                    } else if let Some(union_def) = self.unions.get(name) {
                         types::find_similar_name(&field.node,
                             union_def.fields.keys().map(|s| s.as_str()))
                     } else {
@@ -4153,10 +4175,12 @@ impl TypeChecker {
                     None
                 };
 
-                Err(TypeError::UndefinedVar {
-                    name: field.node.clone(),
-                    span: None,
+                let display_type_name = type_name.unwrap_or_else(|| inner_type.to_string());
+                Err(TypeError::NoSuchField {
+                    field: field.node.clone(),
+                    type_name: display_type_name,
                     suggestion,
+                    span: None,
                 })
             }
 
@@ -5095,6 +5119,30 @@ impl TypeChecker {
 
     fn pop_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    /// Check for unused variables in the current scope and emit warnings.
+    /// Variables prefixed with `_` are considered intentionally unused.
+    /// Function parameters are excluded from this check (they are often
+    /// intentionally unused, especially in trait implementations and stubs).
+    fn check_unused_variables(&mut self, excluded_names: &[String]) {
+        if let Some(scope) = self.scopes.last() {
+            for (name, var_info) in scope.iter() {
+                // Skip special names, underscore-prefixed names, and function parameters
+                if name == "self" || name == "return" || name.starts_with('_') {
+                    continue;
+                }
+                if excluded_names.contains(name) {
+                    continue;
+                }
+                if var_info.use_count == 0 {
+                    self.warnings.push(format!(
+                        "unused variable `{}`. If intentional, prefix with underscore: `_{}`",
+                        name, name
+                    ));
+                }
+            }
+        }
     }
 
     fn define_var(&mut self, name: &str, ty: ResolvedType, is_mut: bool) {

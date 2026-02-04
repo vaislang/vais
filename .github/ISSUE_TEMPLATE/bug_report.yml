@@ -1,0 +1,117 @@
+name: Bug Report
+description: Report a bug in the Vais compiler or standard library
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug. Please fill out the information below to help us investigate.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the bug...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Create a file `test.vais` with the following content:
+           ```
+           F main() -> i32 {
+             ...
+           }
+           ```
+        2. Run `vaisc test.vais`
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: Describe the expected behavior...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened. Include error messages and output if applicable.
+      placeholder: Describe the actual behavior...
+    validations:
+      required: true
+
+  - type: input
+    id: vais-version
+    attributes:
+      label: Vais Version
+      description: Output of `vaisc --version`
+      placeholder: "vais 1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux (Ubuntu/Debian)
+        - Linux (Fedora/RHEL)
+        - Linux (Arch)
+        - Linux (Other)
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: llvm-version
+    attributes:
+      label: LLVM Version
+      description: Output of `llvm-config --version`
+      placeholder: "17.0.6"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the compiler is affected?
+      options:
+        - Lexer
+        - Parser
+        - Type Checker
+        - Code Generation (LLVM)
+        - Standard Library
+        - LSP / Editor Integration
+        - JIT Compiler
+        - Plugin System
+        - CLI / REPL
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (logs, screenshots, related issues).
+      placeholder: Add any other context here...
+    validations:
+      required: false

@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Discussions
-    url: https://github.com/vais-ral/vais/discussions
+    url: https://github.com/vaislang/vais/discussions
     about: "Have a question? Start a discussion! Use Q&A for questions, Ideas for feature requests, General for discussions, and Show and Tell for showcasing projects."
   - name: Documentation
     url: https://vais.dev/docs
     about: "Check out our comprehensive documentation to learn more about Vais."
   - name: Examples
-    url: https://github.com/vais-ral/vais/tree/main/examples
+    url: https://github.com/vaislang/vais/tree/main/examples
     about: "Browse examples to see how to use Vais in your projects."

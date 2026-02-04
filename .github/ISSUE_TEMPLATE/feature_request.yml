@@ -1,0 +1,86 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for Vais
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! Please fill out the information below.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: A clear description of the problem this feature would solve. What are you trying to do that is difficult or impossible today?
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you would like. Include syntax examples if proposing a language feature.
+      placeholder: |
+        I would like a feature that...
+
+        Example syntax:
+        ```
+        F example() -> i32 {
+          ...
+        }
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you have considered.
+      placeholder: "I also considered..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the project does this relate to?
+      options:
+        - Language Syntax
+        - Type System
+        - Standard Library
+        - Compiler Performance
+        - Code Generation
+        - Tooling (LSP, Debugger)
+        - Package Registry
+        - Documentation
+        - Editor Extensions
+        - Other
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Nice to have
+        - Important
+        - Critical for my use case
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context, mockups, or references for the feature request.
+      placeholder: Add any other context here...
+    validations:
+      required: false

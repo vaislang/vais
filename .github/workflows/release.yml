@@ -13,20 +13,25 @@ jobs:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            archive_name: vais-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
+            binary_name: vaisc
+            archive_ext: tar.gz
           - target: x86_64-apple-darwin
             os: macos-latest
-            archive_name: vais-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
+            binary_name: vaisc
+            archive_ext: tar.gz
           - target: aarch64-apple-darwin
             os: macos-latest
-            archive_name: vais-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
+            binary_name: vaisc
+            archive_ext: tar.gz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            archive_name: vais-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
+            binary_name: vaisc.exe
+            archive_ext: zip
 
     steps:
       - name: Checkout repository
@@ -37,21 +42,39 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install LLVM dependencies (Linux)
+      - name: Install LLVM 17 (Ubuntu)
         if: runner.os == 'Linux'
         run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
           sudo apt-get update
-          sudo apt-get install -y clang llvm-dev
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
-      - name: Install LLVM dependencies (macOS)
+      - name: Install LLVM 17 (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm
+          brew install llvm@17
+          echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
 
-      - name: Install LLVM dependencies (Windows)
+      - name: Install LLVM 17 (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install llvm
+          choco install llvm --version=17.0.6 -y
+          echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-release-
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} -p vaisc
@@ -59,25 +82,32 @@ jobs:
       - name: Package release (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p release/vais
-          cp target/${{ matrix.target }}/release/vaisc release/vais/
-          cp -r std release/vais/
-          cd release
-          tar -czf ../vais-${{ github.ref_name }}-${{ matrix.target }}.tar.gz vais
+          ARCHIVE_NAME="vais-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir -p staging/vais
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} staging/vais/
+          cp -r std staging/vais/ 2>/dev/null || true
+          cp LICENSE README.md staging/vais/ 2>/dev/null || true
+          cd staging
+          tar -czf "../${ARCHIVE_NAME}.tar.gz" vais
+          echo "ARCHIVE_PATH=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
 
       - name: Package release (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path release\vais
-          Copy-Item target\${{ matrix.target }}\release\vaisc.exe release\vais\
-          Copy-Item -Recurse std release\vais\
-          Compress-Archive -Path release\vais\* -DestinationPath vais-${{ github.ref_name }}-${{ matrix.target }}.zip
+          $archiveName = "vais-${{ github.ref_name }}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path staging\vais
+          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.binary_name }}" staging\vais\
+          if (Test-Path "std") { Copy-Item -Recurse std staging\vais\ }
+          if (Test-Path "LICENSE") { Copy-Item LICENSE staging\vais\ }
+          if (Test-Path "README.md") { Copy-Item README.md staging\vais\ }
+          Compress-Archive -Path staging\vais\* -DestinationPath "${archiveName}.zip"
+          echo "ARCHIVE_PATH=${archiveName}.zip" >> $env:GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vais-${{ github.ref_name }}-${{ matrix.target }}
+          name: vais-${{ matrix.target }}
           path: vais-${{ github.ref_name }}-${{ matrix.target }}.*
 
   release:
@@ -96,7 +126,7 @@ jobs:
         with:
           path: artifacts
 
-      - name: Move artifacts to release directory
+      - name: Collect release assets
         run: |
           mkdir -p release
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} release/ \;
@@ -114,5 +144,24 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          body: |
+            ## Vais Compiler ${{ github.ref_name }}
+
+            ### Installation
+
+            Download the appropriate archive for your platform, extract it, and add the `vaisc` binary to your PATH.
+
+            | Platform | Archive |
+            |----------|---------|
+            | Linux x86_64 | `vais-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz` |
+            | macOS x86_64 | `vais-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz` |
+            | macOS ARM64 | `vais-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz` |
+            | Windows x86_64 | `vais-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip` |
+
+            ### Verify checksums
+
+            ```bash
+            sha256sum -c sha256sums.txt
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

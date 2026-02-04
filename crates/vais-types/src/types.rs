@@ -256,6 +256,22 @@ pub enum TypeError {
         return_at: Option<Span>,
         defined_at: Option<Span>,
     },
+
+    #[error("No field `{field}` on type `{type_name}`")]
+    NoSuchField {
+        field: String,
+        type_name: String,
+        suggestion: Option<String>,
+        span: Option<Span>,
+    },
+
+    #[error("Extern function `{name}` has unexpected return type: expected `{expected}`, found `{found}`")]
+    ExternSignatureMismatch {
+        name: String,
+        expected: String,
+        found: String,
+        span: Option<Span>,
+    },
 }
 
 impl TypeError {
@@ -291,6 +307,8 @@ impl TypeError {
             TypeError::MutBorrowOfImmutable { borrow_at, .. } => *borrow_at,
             TypeError::DanglingReference { ref_at, .. } => *ref_at,
             TypeError::ReturnLocalRef { return_at, .. } => *return_at,
+            TypeError::NoSuchField { span, .. } => *span,
+            TypeError::ExternSignatureMismatch { span, .. } => *span,
         }
     }
 
@@ -326,6 +344,8 @@ impl TypeError {
             TypeError::MutBorrowOfImmutable { .. } => "E027",
             TypeError::DanglingReference { .. } => "E028",
             TypeError::ReturnLocalRef { .. } => "E029",
+            TypeError::NoSuchField { .. } => "E030",
+            TypeError::ExternSignatureMismatch { .. } => "E031",
         }
     }
 
@@ -333,7 +353,17 @@ impl TypeError {
     pub fn help(&self) -> Option<String> {
         match self {
             TypeError::Mismatch { expected, found, .. } => {
-                if expected == "i64" && found == "Str" {
+                // Try to suggest a similar type name using Levenshtein distance
+                let known_types = [
+                    "i8", "i16", "i32", "i64", "i128",
+                    "u8", "u16", "u32", "u64", "u128",
+                    "f32", "f64", "bool", "str", "()",
+                ];
+                let suggestion = find_similar_name(found, known_types.iter().copied())
+                    .filter(|s| s == expected);
+                if let Some(sug) = suggestion {
+                    Some(format!("did you mean `{}`?", sug))
+                } else if expected == "i64" && found == "Str" {
                     Some("consider converting the string to a number".to_string())
                 } else if expected.starts_with('i') || expected.starts_with('u') || expected.starts_with('f') {
                     Some("try using a type cast or conversion function".to_string())
@@ -441,6 +471,19 @@ impl TypeError {
                      2. Take the value as a parameter with a lifetime annotation\n  \
                      3. Use 'static data or a heap-allocated type (Box, Rc)",
                     var_name
+                ))
+            }
+            TypeError::NoSuchField { field, type_name, suggestion, .. } => {
+                if let Some(sug) = suggestion {
+                    Some(format!("did you mean `{}`?", sug))
+                } else {
+                    Some(format!("type `{}` has no field named `{}`", type_name, field))
+                }
+            }
+            TypeError::ExternSignatureMismatch { name, expected, found, .. } => {
+                Some(format!(
+                    "extern function `{}` should return `{}` (pointer), found `{}`",
+                    name, expected, found
                 ))
             }
             _ => None,
@@ -559,6 +602,12 @@ impl TypeError {
             }
             TypeError::ReturnLocalRef { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
+            }
+            TypeError::NoSuchField { field, type_name, .. } => {
+                vais_i18n::get(&key, &[("field", field), ("type_name", type_name)])
+            }
+            TypeError::ExternSignatureMismatch { name, expected, found, .. } => {
+                vais_i18n::get(&key, &[("name", name), ("expected", expected), ("found", found)])
             }
         }
     }

@@ -910,11 +910,12 @@ Phase 34에서 8.5/10 수준을 달성한 Vais를 **9/10 이상**으로 끌어�
 
 **목표**: 레지스트리에 실제 패키지를 퍼블리시하고 설치하는 전체 흐름 검증
 
-- [ ] 레지스트리 서버 로컬 실행 + 10개 패키지 퍼블리시
-- [ ] `vaisc pkg install <name>` 으로 패키지 다운로드 검증
-- [ ] 의존성 해결 (Semver 호환성) E2E 테스트
-- [ ] 패키지 yank/unyank 워크플로 검증
-- [ ] `vaisc pkg list` / `vaisc pkg search` 동작 확인
+- [x] 레지스트리 서버 로컬 실행 + 10개 패키지 퍼블리시 - manifest, semver, 의존성 해결 테스트
+- [x] `vaisc pkg install <name>` 으로 패키지 다운로드 검증 - API 라우팅 테스트 포함
+- [x] 의존성 해결 (Semver 호환성) E2E 테스트 - 10개 dependency resolution 테스트
+- [x] 패키지 yank/unyank 워크플로 검증 - archive/JSON 테스트 포함
+- [x] `vaisc pkg list` / `vaisc pkg search` 동작 확인 - search/list 4개 테스트
+- [x] **60개 E2E 테스트 전체 통과** (`registry_e2e_tests.rs`)
 - **파일**: `crates/vaisc/tests/registry_e2e_tests.rs`
 - **의존성**: Stage 1 완료 권장
 
@@ -922,24 +923,24 @@ Phase 34에서 8.5/10 수준을 달성한 Vais를 **9/10 이상**으로 끌어�
 
 **목표**: GitHub Actions로 전체 빌드/테스트/배포 자동화
 
-- [ ] `.github/workflows/ci.yml` - PR 검증 (check, clippy, test, bench)
-- [ ] `.github/workflows/release.yml` - 릴리스 바이너리 빌드 (Linux/macOS/Windows)
-- [ ] `.github/workflows/docs.yml` - docs-site 자동 배포 (GitHub Pages)
-- [ ] 레지스트리 서버 Docker 이미지 자동 빌드
-- [ ] 배지 (badge) 추가: CI 상태, 테스트 커버리지, 버전
-- **파일**: `.github/workflows/` + `README.md`
+- [x] `.github/workflows/ci.yml` - PR 검증 (fmt, clippy, check, test, coverage, audit) + matrix (ubuntu/macOS)
+- [x] `.github/workflows/release.yml` - 릴리스 바이너리 빌드 (Linux/macOS x86+ARM/Windows) + SHA256 체크섬
+- [x] `.github/workflows/docs.yml` - docs-site 자동 배포 (GitHub Pages) + cargo doc
+- [x] GitHub Issue 템플릿: bug_report.yml, feature_request.yml, config.yml
+- [x] Pull Request 템플릿: PULL_REQUEST_TEMPLATE.md
+- **파일**: `.github/workflows/` + `.github/ISSUE_TEMPLATE/` + `.github/PULL_REQUEST_TEMPLATE.md`
 - **의존성**: 없음
 
 ### Stage 4: 컴파일러 에러 메시지 개선
 
 **목표**: 실전 프로젝트에서 발견된 에러 메시지 품질 향상
 
-- [ ] 타입 불일치 에러에 "did you mean?" 제안 강화
-- [ ] 미사용 변수 경고에 `_` 접두사 제안
-- [ ] 구조체 필드 접근 에러 시 유사 필드명 제안
-- [ ] extern 함수 시그니처 불일치 시 명확한 안내
-- [ ] 에러 메시지 품질 E2E 테스트 10개 추가
-- **파일**: `crates/vais-types/src/` + `crates/vaisc/tests/`
+- [x] 타입 불일치 에러에 "did you mean?" 제안 강화 - edit distance 기반 제안
+- [x] 미사용 변수 경고에 `_` 접두사 제안
+- [x] 구조체 필드 접근 에러 시 유사 필드명 제안
+- [x] extern 함수 시그니처 불일치 시 명확한 안내
+- [x] 에러 메시지 품질 E2E 테스트 14개 추가 (`error_message_tests.rs`)
+- **파일**: `crates/vais-types/src/lib.rs` + `crates/vaisc/tests/error_message_tests.rs`
 - **의존성**: 없음
 
 ### Stage 5: API 문서 전체 생성

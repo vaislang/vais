@@ -5,14 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'docs/**'
       - 'docs-site/**'
-      - 'README.md'
-      - 'CONTRIBUTING.md'
-      - 'ROADMAP.md'
-      - '*.md'
-      - 'playground/*.md'
-      - 'crates/*/**.md'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -22,36 +15,39 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
   build:
+    name: Build Documentation
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Rust
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
 
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache mdbook
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/mdbook
-          key: ${{ runner.os }}-mdbook-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-docs-
 
       - name: Install mdBook
         run: |
@@ -60,9 +56,23 @@ jobs:
             cargo binstall -y mdbook
           fi
 
-      - name: Build documentation
+      - name: Build mdBook documentation
         working-directory: docs-site
         run: mdbook build
+
+      - name: Build API documentation
+        run: |
+          cargo doc \
+            --workspace \
+            --exclude vais-python \
+            --exclude vais-node \
+            --no-deps
+
+      - name: Combine documentation
+        run: |
+          # Copy API docs into mdBook output
+          mkdir -p docs-site/book/api
+          cp -r target/doc/* docs-site/book/api/ 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -70,6 +80,7 @@ jobs:
           path: ./docs-site/book
 
   deploy:
+    name: Deploy to GitHub Pages
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
