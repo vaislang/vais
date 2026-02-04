@@ -4,16 +4,9 @@
 
 Vais (Vibe AI Language for Systems) is an AI-optimized systems programming language with single-character keywords, LLVM backend, and full type inference. The compiler is written in Rust.
 
-## GitHub & Deployment
+## GitHub & Links
 
-- **GitHub Organization**: `vaislang` — https://github.com/vaislang
-- **Repository**: `vaislang/vais` — https://github.com/vaislang/vais
-- **Docker Hub**: `vaislang/vais`
-- **Homebrew Tap**: `vaislang/tap`
-- **Docs (GitHub Pages)**: https://vaislang.github.io/vais/
-- **Website domain**: https://vais.dev/ (planned)
-
-> **Important**: 모든 외부 링크(website, blog, docs 등)에서 GitHub URL은 반드시 `vaislang/vais`를 사용할 것. 개인 계정(`sswoo/vais` 등)으로 변경하지 말 것.
+> GitHub org은 `vaislang`이며, 모든 외부 링크는 `vaislang/vais`를 사용할 것. 상세 URL은 README.md의 Links 섹션 참조.
 
 ## Build & Test
 

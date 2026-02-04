@@ -186,7 +186,7 @@ cd docs-site
 ./serve.sh
 ```
 
-Visit the [online documentation](https://sswoo.github.io/vais/) or browse the individual files:
+Visit the [online documentation](https://vaislang.github.io/vais/) or browse the individual files:
 
 - [LANGUAGE_SPEC.md](docs/LANGUAGE_SPEC.md) - Complete language specification
 - [STDLIB.md](docs/STDLIB.md) - Standard library reference
@@ -246,6 +246,17 @@ cd vais && cargo build --release
 ```bash
 docker run ghcr.io/vaislang/vais:latest --help
 ```
+
+## Links
+
+| Resource | URL |
+|----------|-----|
+| **Repository** | https://github.com/vaislang/vais |
+| **Documentation** | https://vaislang.github.io/vais/ |
+| **Playground** | https://vais.dev/playground/ |
+| **Website** | https://vais.dev/ |
+| **Docker Hub** | `vaislang/vais` |
+| **Homebrew Tap** | `vaislang/tap` |
 
 ## Community
 
