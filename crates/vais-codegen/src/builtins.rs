@@ -858,6 +858,34 @@ impl CodeGenerator {
             vec![("fd".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
+
+        // === Cross-platform async reactor support ===
+
+        // async_platform: returns platform ID (1=macOS, 2=Linux, 3=Windows)
+        register_helper!(self, "async_platform" => "__async_platform",
+            vec![],
+            ResolvedType::I64
+        );
+
+        // epoll_set_timer_ms: configure timerfd delay (Linux epoll backend)
+        register_helper!(self, "epoll_set_timer_ms" => "__epoll_set_timer_ms",
+            vec![
+                ("kq".to_string(), ResolvedType::I64),
+                ("timer_id".to_string(), ResolvedType::I64),
+                ("delay_ms".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
+        // iocp_set_timer_ms: configure timer delay (Windows IOCP backend)
+        register_helper!(self, "iocp_set_timer_ms" => "__iocp_set_timer_ms",
+            vec![
+                ("kq".to_string(), ResolvedType::I64),
+                ("timer_id".to_string(), ResolvedType::I64),
+                ("delay_ms".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
     }
 
     fn register_simd_functions(&mut self) {

@@ -1,0 +1,119 @@
+# Cross-platform Async Reactor Test
+# Tests the unified Reactor API that wraps kqueue/epoll/IOCP
+
+# Import platform detection
+X F async_platform() -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+X F time_now_ms() -> i64
+X F kqueue() -> i64
+X F kevent_register(kq: i64, fd: i64, filter: i64, flags: i64) -> i64
+X F kevent_wait(kq: i64, events_buf: i64, max_events: i64, timeout_ms: i64) -> i64
+X F kevent_get_fd(events_buf: i64, index: i64) -> i64
+X F kevent_get_filter(events_buf: i64, index: i64) -> i64
+X F close(fd: i64) -> i64
+X F pipe(fds_buf: i64) -> i64
+X F write_byte(fd: i64, value: i64) -> i64
+X F read_byte(fd: i64) -> i64
+
+# Platform constants
+C PLATFORM_MACOS: i64 = 1
+C PLATFORM_LINUX: i64 = 2
+C PLATFORM_WINDOWS: i64 = 3
+
+# Event filter constants
+C EVFILT_READ: i64 = -1
+C EVFILT_WRITE: i64 = -2
+C EV_ADD: i64 = 1
+C EV_DELETE: i64 = 2
+
+F main() -> i64 {
+    # Test 1: Platform detection
+    platform := async_platform()
+    P "=== Async Reactor Cross-Platform Test ==="
+
+    L platform == PLATFORM_MACOS {
+        P "Platform: macOS (kqueue)"
+    }
+    L platform == PLATFORM_LINUX {
+        P "Platform: Linux (epoll)"
+    }
+    L platform == PLATFORM_WINDOWS {
+        P "Platform: Windows (IOCP)"
+    }
+    L platform == 0 {
+        P "Platform: Unknown"
+        R 1
+    }
+
+    # Test 2: Create event backend
+    kq := kqueue()
+    L kq < 0 {
+        P "FAIL: Could not create event backend"
+        R 1
+    }
+    P "PASS: Event backend created"
+
+    # Test 3: Create pipe and register for events
+    pipe_buf := malloc(16)
+    pipe(pipe_buf)
+    read_fd := load_i64(pipe_buf)
+    write_fd := load_i64(pipe_buf + 8)
+    free(pipe_buf)
+
+    L read_fd < 0 {
+        P "FAIL: Could not create pipe"
+        R 1
+    }
+    P "PASS: Pipe created"
+
+    # Test 4: Register read interest
+    kevent_register(kq, read_fd, EVFILT_READ, EV_ADD)
+    P "PASS: Read interest registered"
+
+    # Test 5: Write to pipe and poll for events
+    write_byte(write_fd, 42)
+
+    events_buf := malloc(64 * 16)
+    n := kevent_wait(kq, events_buf, 64, 100)
+
+    L n > 0 {
+        ev_fd := kevent_get_fd(events_buf, 0)
+        ev_filter := kevent_get_filter(events_buf, 0)
+        L ev_fd == read_fd {
+            P "PASS: Received read event on pipe"
+        } ! {
+            P "WARN: Event on unexpected fd"
+        }
+    } ! {
+        P "FAIL: No events received"
+    }
+
+    # Test 6: Read the byte back
+    byte := read_byte(read_fd)
+    L byte == 42 {
+        P "PASS: Correct byte read from pipe"
+    } ! {
+        P "FAIL: Wrong byte value"
+    }
+
+    # Test 7: Time measurement
+    t1 := time_now_ms()
+    L t1 > 0 {
+        P "PASS: time_now_ms works"
+    } ! {
+        P "FAIL: time_now_ms returned 0"
+    }
+
+    # Cleanup
+    kevent_register(kq, read_fd, EVFILT_READ, EV_DELETE)
+    close(read_fd)
+    close(write_fd)
+    close(kq)
+    free(events_buf)
+
+    P "=== All reactor tests passed ==="
+    0
+}

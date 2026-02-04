@@ -614,13 +614,15 @@ Vais를 프로덕션 환경의 대형 프로젝트에 도입할 수 있도록, �
 - **의존성**: FFI (libssl, libcrypto)
 
 ### Stage 2: Async 런타임 크로스플랫폼
-- [ ] Linux epoll 백엔드 (`std/async_epoll.c`)
-- [ ] Windows IOCP 백엔드 (`std/async_iocp.c`)
-- [ ] 통합 이벤트 루프 추상화 (`std/async_reactor.vais`)
-- [ ] 타이머/타임아웃 지원
-- [ ] Async TCP accept/read/write
-- [ ] 플랫폼 자동 감지 (`#ifdef` 기반 빌드)
-- **파일**: `std/async_reactor.vais` + `std/async_epoll.c` + `std/async_iocp.c`
+- [x] Linux epoll 백엔드 (`std/async_epoll.c`)
+- [x] Windows IOCP 백엔드 (`std/async_iocp.c`)
+- [x] macOS kqueue 헬퍼 (`std/async_kqueue.c`)
+- [x] 통합 이벤트 루프 추상화 (`std/async_reactor.vais`)
+- [x] 타이머/타임아웃 지원 (timerfd/CreateTimerQueueTimer/kqueue)
+- [x] Async TCP accept/read/write (Reactor.register_read/write)
+- [x] 플랫폼 자동 감지 (`async_platform()` + 조건부 컴파일)
+- [x] 코드젠 builtin 등록 (`async_platform`, `epoll_set_timer_ms`, `iocp_set_timer_ms`)
+- **파일**: `std/async_reactor.vais` + `std/async_epoll.c` + `std/async_iocp.c` + `std/async_kqueue.c`
 - **의존성**: 기존 `std/async.vais` 확장
 
 ### Stage 3: 패키지 레지스트리 배포 준비

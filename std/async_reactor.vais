@@ -1,0 +1,444 @@
+# Async Reactor - Platform-independent event loop abstraction
+# Wraps kqueue (macOS), epoll (Linux), and IOCP (Windows) backends
+# into a unified API for the async runtime.
+#
+# Usage:
+#   reactor := Reactor::new()
+#   reactor.register_read(fd, task_ptr)
+#   reactor.register_timer(timer_id, delay_ms, task_ptr)
+#   n := reactor.poll(timeout_ms)
+#   fd := reactor.event_fd(0)
+
+# Platform constants
+C PLATFORM_UNKNOWN: i64 = 0
+C PLATFORM_MACOS: i64 = 1      # kqueue
+C PLATFORM_LINUX: i64 = 2      # epoll
+C PLATFORM_WINDOWS: i64 = 3    # IOCP
+
+# Event filter constants (kqueue-compatible, used across all platforms)
+C REACTOR_READ: i64 = -1
+C REACTOR_WRITE: i64 = -2
+C REACTOR_TIMER: i64 = -7
+
+# Event action constants
+C REACTOR_ADD: i64 = 1
+C REACTOR_DELETE: i64 = 2
+C REACTOR_ONESHOT: i64 = 16
+
+# Maximum events per poll
+C REACTOR_MAX_EVENTS: i64 = 64
+
+# ============================================
+# Platform detection
+# ============================================
+
+# Extern: returns platform ID (1=macOS, 2=Linux, 3=Windows)
+# Provided by async_epoll.c, async_iocp.c, or kqueue runtime
+X F async_platform() -> i64
+
+# Extern: platform syscall functions (same interface on all platforms)
+# These are implemented by the platform-specific C backend
+X F kqueue() -> i64
+X F kevent_register(kq: i64, fd: i64, filter: i64, flags: i64) -> i64
+X F kevent_wait(kq: i64, events_buf: i64, max_events: i64, timeout_ms: i64) -> i64
+X F kevent_get_fd(events_buf: i64, index: i64) -> i64
+X F kevent_get_filter(events_buf: i64, index: i64) -> i64
+X F close(fd: i64) -> i64
+X F pipe(fds_buf: i64) -> i64
+X F write_byte(fd: i64, value: i64) -> i64
+X F read_byte(fd: i64) -> i64
+X F time_now_ms() -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F store_i64(ptr: i64, value: i64) -> i64
+X F load_i64(ptr: i64) -> i64
+
+# Extern: platform-specific timer setup (epoll/IOCP only)
+X F epoll_set_timer_ms(kq: i64, timer_id: i64, delay_ms: i64) -> i64
+X F iocp_set_timer_ms(kq: i64, timer_id: i64, delay_ms: i64) -> i64
+
+# ============================================
+# ReactorEvent - a single I/O event
+# ============================================
+
+S ReactorEvent {
+    fd: i64,        # File descriptor or timer ID
+    filter: i64     # REACTOR_READ, REACTOR_WRITE, or REACTOR_TIMER
+}
+
+X ReactorEvent {
+    F new(fd: i64, filter: i64) -> ReactorEvent {
+        ReactorEvent { fd: fd, filter: filter }
+    }
+
+    F is_read(&self) -> i64 {
+        self.filter == REACTOR_READ
+    }
+
+    F is_write(&self) -> i64 {
+        self.filter == REACTOR_WRITE
+    }
+
+    F is_timer(&self) -> i64 {
+        self.filter == REACTOR_TIMER
+    }
+}
+
+# ============================================
+# EventSource - tracks what a task is waiting on
+# ============================================
+
+S ReactorSource {
+    source_type: i64,   # REACTOR_READ, REACTOR_WRITE, REACTOR_TIMER
+    fd: i64,            # File descriptor or timer ID
+    task_ptr: i64,      # Pointer to the waiting TaskNode
+    deadline_ms: i64,   # Deadline for timers (absolute time in ms)
+    next: i64           # Linked list pointer
+}
+
+# ============================================
+# Reactor - platform-independent event loop
+# ============================================
+
+S Reactor {
+    backend_fd: i64,        # kqueue/epoll/IOCP handle
+    platform: i64,          # PLATFORM_MACOS, PLATFORM_LINUX, PLATFORM_WINDOWS
+    waker_read_fd: i64,     # Wake-up pipe read end
+    waker_write_fd: i64,    # Wake-up pipe write end
+    sources_head: i64,      # Event source linked list head
+    sources_tail: i64,      # Event source linked list tail
+    source_count: i64,      # Number of registered sources
+    events_buf: i64,        # Buffer for poll results
+    running: i64            # 1 if reactor is active
+}
+
+X Reactor {
+    # Create a new reactor with automatic platform detection
+    F new() -> Reactor {
+        platform := async_platform()
+
+        # Create backend (kqueue/epoll/IOCP - all use __kqueue interface)
+        backend_fd := kqueue()
+
+        # Create wake-up pipe
+        pipe_buf := malloc(16)
+        pipe(pipe_buf)
+        read_fd := load_i64(pipe_buf)
+        write_fd := load_i64(pipe_buf + 8)
+        free(pipe_buf)
+
+        # Register waker pipe for read events
+        kevent_register(backend_fd, read_fd, REACTOR_READ, REACTOR_ADD)
+
+        # Allocate events buffer
+        events_buf := malloc(REACTOR_MAX_EVENTS * 16)
+
+        Reactor {
+            backend_fd: backend_fd,
+            platform: platform,
+            waker_read_fd: read_fd,
+            waker_write_fd: write_fd,
+            sources_head: 0,
+            sources_tail: 0,
+            source_count: 0,
+            events_buf: events_buf,
+            running: 0
+        }
+    }
+
+    # Get the current platform
+    F get_platform(&self) -> i64 {
+        self.platform
+    }
+
+    # Get platform name as string pointer (for debugging)
+    F platform_name(&self) -> i64 {
+        # Returns a static string identifier
+        self.platform
+    }
+
+    # Register interest in reading from a file descriptor
+    F register_read(&self, fd: i64, task_ptr: i64) -> i64 {
+        kevent_register(self.backend_fd, fd, REACTOR_READ, REACTOR_ADD)
+        self.add_source(REACTOR_READ, fd, task_ptr, 0)
+    }
+
+    # Register interest in writing to a file descriptor
+    F register_write(&self, fd: i64, task_ptr: i64) -> i64 {
+        kevent_register(self.backend_fd, fd, REACTOR_WRITE, REACTOR_ADD)
+        self.add_source(REACTOR_WRITE, fd, task_ptr, 0)
+    }
+
+    # Register a timer with delay in milliseconds
+    F register_timer(&self, timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
+        deadline := time_now_ms() + delay_ms
+        kevent_register(self.backend_fd, timer_id, REACTOR_TIMER, REACTOR_ADD)
+
+        # Platform-specific timer configuration
+        L self.platform == PLATFORM_LINUX {
+            epoll_set_timer_ms(self.backend_fd, timer_id, delay_ms)
+        }
+        L self.platform == PLATFORM_WINDOWS {
+            iocp_set_timer_ms(self.backend_fd, timer_id, delay_ms)
+        }
+        # macOS kqueue handles timer delay natively via NOTE flags
+
+        self.add_source(REACTOR_TIMER, timer_id, task_ptr, deadline)
+    }
+
+    # Deregister an event source
+    F deregister(&self, fd: i64, filter: i64) -> i64 {
+        kevent_register(self.backend_fd, fd, filter, REACTOR_DELETE)
+        self.remove_source(fd)
+    }
+
+    # Add an event source to the tracking list
+    F add_source(&self, source_type: i64, fd: i64, task_ptr: i64, deadline_ms: i64) -> i64 {
+        src_ptr := malloc(40)
+        store_i64(src_ptr, source_type)
+        store_i64(src_ptr + 8, fd)
+        store_i64(src_ptr + 16, task_ptr)
+        store_i64(src_ptr + 24, deadline_ms)
+        store_i64(src_ptr + 32, 0)
+
+        L self.sources_tail == 0 {
+            self.sources_head = src_ptr
+            self.sources_tail = src_ptr
+        } ! {
+            store_i64(self.sources_tail + 32, src_ptr)
+            self.sources_tail = src_ptr
+        }
+
+        self.source_count = self.source_count + 1
+        src_ptr
+    }
+
+    # Remove an event source by fd
+    F remove_source(&self, fd: i64) -> i64 {
+        prev := 0
+        current := self.sources_head
+
+        L current != 0 {
+            src_fd := load_i64(current + 8)
+            next := load_i64(current + 32)
+
+            L src_fd == fd {
+                L prev == 0 {
+                    self.sources_head = next
+                } ! {
+                    store_i64(prev + 32, next)
+                }
+
+                L next == 0 {
+                    self.sources_tail = prev
+                }
+
+                free(current)
+                self.source_count = self.source_count - 1
+                R 1
+            }
+
+            prev = current
+            current = next
+        }
+        0
+    }
+
+    # Find the task waiting on a given fd
+    F find_task_for_fd(&self, fd: i64) -> i64 {
+        current := self.sources_head
+        L current != 0 {
+            src_fd := load_i64(current + 8)
+            L src_fd == fd {
+                R load_i64(current + 16)
+            }
+            current = load_i64(current + 32)
+        }
+        0
+    }
+
+    # Wake up the reactor from another context
+    F wake(&self) -> i64 {
+        write_byte(self.waker_write_fd, 1)
+    }
+
+    # Drain the waker pipe
+    F drain_waker(&self) -> i64 {
+        read_byte(self.waker_read_fd)
+    }
+
+    # Poll for I/O events with timeout
+    # Returns number of ready events
+    F poll(&self, timeout_ms: i64) -> i64 {
+        kevent_wait(self.backend_fd, self.events_buf, REACTOR_MAX_EVENTS, timeout_ms)
+    }
+
+    # Get fd from event at index
+    F event_fd(&self, index: i64) -> i64 {
+        kevent_get_fd(self.events_buf, index)
+    }
+
+    # Get filter from event at index
+    F event_filter(&self, index: i64) -> i64 {
+        kevent_get_filter(self.events_buf, index)
+    }
+
+    # Check if an event is from the waker pipe
+    F is_waker_event(&self, index: i64) -> i64 {
+        self.event_fd(index) == self.waker_read_fd
+    }
+
+    # Process all events from last poll, waking corresponding tasks
+    # Returns number of tasks woken
+    F process_events(&self, n_events: i64) -> i64 {
+        woken := 0
+        i := 0
+        L i < n_events {
+            ev_fd := self.event_fd(i)
+
+            L ev_fd == self.waker_read_fd {
+                self.drain_waker()
+            } ! {
+                task_ptr := self.find_task_for_fd(ev_fd)
+                L task_ptr != 0 {
+                    # Mark task as ready (status offset = 24 in TaskNode)
+                    store_i64(task_ptr + 24, 2)  # TASK_READY = 2
+                    woken = woken + 1
+                }
+            }
+
+            i = i + 1
+        }
+        woken
+    }
+
+    # Cleanup all resources
+    F cleanup(&self) -> i64 {
+        # Free all event sources
+        current := self.sources_head
+        L current != 0 {
+            next := load_i64(current + 32)
+            free(current)
+            current = next
+        }
+
+        # Close backend fd
+        close(self.backend_fd)
+        # Close waker pipe
+        close(self.waker_read_fd)
+        close(self.waker_write_fd)
+        # Free events buffer
+        free(self.events_buf)
+
+        0
+    }
+}
+
+# ============================================
+# Global Reactor instance
+# ============================================
+
+V __GLOBAL_REACTOR_INSTANCE: i64 = 0
+
+# Initialize global reactor
+F reactor_instance_init() -> i64 {
+    L __GLOBAL_REACTOR_INSTANCE == 0 {
+        # Allocate Reactor on heap (9 fields * 8 bytes = 72 bytes)
+        r_ptr := malloc(72)
+
+        platform := async_platform()
+        backend_fd := kqueue()
+
+        pipe_buf := malloc(16)
+        pipe(pipe_buf)
+        read_fd := load_i64(pipe_buf)
+        write_fd := load_i64(pipe_buf + 8)
+        free(pipe_buf)
+
+        kevent_register(backend_fd, read_fd, REACTOR_READ, REACTOR_ADD)
+        events_buf := malloc(REACTOR_MAX_EVENTS * 16)
+
+        store_i64(r_ptr, backend_fd)         # backend_fd
+        store_i64(r_ptr + 8, platform)       # platform
+        store_i64(r_ptr + 16, read_fd)       # waker_read_fd
+        store_i64(r_ptr + 24, write_fd)      # waker_write_fd
+        store_i64(r_ptr + 32, 0)             # sources_head
+        store_i64(r_ptr + 40, 0)             # sources_tail
+        store_i64(r_ptr + 48, 0)             # source_count
+        store_i64(r_ptr + 56, events_buf)    # events_buf
+        store_i64(r_ptr + 64, 0)             # running
+
+        __GLOBAL_REACTOR_INSTANCE = r_ptr
+    }
+    __GLOBAL_REACTOR_INSTANCE
+}
+
+# Get global reactor instance
+F get_reactor_instance() -> i64 {
+    L __GLOBAL_REACTOR_INSTANCE == 0 {
+        reactor_instance_init()
+    }
+    __GLOBAL_REACTOR_INSTANCE
+}
+
+# ============================================
+# Convenience functions using global reactor
+# ============================================
+
+# Register a read interest on global reactor
+F reactor_register_read(fd: i64, task_ptr: i64) -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.register_read(fd, task_ptr)
+}
+
+# Register a write interest on global reactor
+F reactor_register_write(fd: i64, task_ptr: i64) -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.register_write(fd, task_ptr)
+}
+
+# Register a timer on global reactor
+F reactor_register_timer(timer_id: i64, delay_ms: i64, task_ptr: i64) -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.register_timer(timer_id, delay_ms, task_ptr)
+}
+
+# Poll for events on global reactor
+F reactor_poll(timeout_ms: i64) -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.poll(timeout_ms)
+}
+
+# Process events on global reactor
+F reactor_process_events(n_events: i64) -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.process_events(n_events)
+}
+
+# Wake up global reactor
+F reactor_wake() -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.wake()
+}
+
+# Cleanup global reactor
+F reactor_cleanup() -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.cleanup()
+    __GLOBAL_REACTOR_INSTANCE = 0
+    0
+}
+
+# Get current platform ID
+F reactor_get_platform() -> i64 {
+    r := get_reactor_instance()
+    r_ptr := r as *Reactor
+    r_ptr.get_platform()
+}
