@@ -9,6 +9,14 @@
 - [튜토리얼](./getting-started/tutorial.md)
 - [빠른 시작](./getting-started/quick-start.md)
 
+# 가이드
+
+- [Getting Started](./guide/getting-started.md)
+- [에러 처리 패턴](./guide/error-handling.md)
+- [성능 튜닝](./guide/performance.md)
+- [코딩 스타일](./guide/style-guide.md)
+- [FAQ](./guide/faq.md)
+
 # 언어 레퍼런스
 
 - [언어 사양](./language/language-spec.md)
@@ -60,6 +68,16 @@
 # 보안
 
 - [임포트 경로 보안](./security/import-path-security.md)
+
+---
+
+# API Reference
+
+- [Vec](./api/vec.md)
+- [JSON](./api/json.md)
+- [HTTP](./api/http.md)
+- [Log](./api/log.md)
+- [Compress](./api/compress.md)
 
 ---
 

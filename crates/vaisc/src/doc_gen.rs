@@ -6,7 +6,7 @@ use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use vais_ast::{Item, Module, Function, Struct, Enum, Trait};
+use vais_ast::{Item, Module, Function, Struct, Enum, Trait, ConstDef, ExternFunction};
 use vais_parser::parse;
 
 /// Documentation item extracted from source
@@ -29,6 +29,8 @@ enum DocKind {
     Struct,
     Enum,
     Trait,
+    Constant,
+    ExternFunction,
     #[allow(dead_code)]
     Module,
 }
@@ -165,6 +167,16 @@ fn extract_documentation(file: &Path, ast: &Module, source: &str) -> ModuleDoc {
             Item::Trait(t) => {
                 items.push(extract_trait_doc(t, docs));
             }
+            Item::Const(c) => {
+                items.push(extract_const_doc(c, docs));
+            }
+            Item::ExternBlock(eb) => {
+                // Extract each extern function from the block
+                for f in &eb.functions {
+                    // For extern functions, we'll extract docs from above the entire block
+                    items.push(extract_extern_function_doc(f, docs.clone()));
+                }
+            }
             _ => {}
         }
     }
@@ -177,6 +189,7 @@ fn extract_documentation(file: &Path, ast: &Module, source: &str) -> ModuleDoc {
 }
 
 /// Extract doc comments by looking backwards from a given position
+/// Supports both /// (Rust-style) and # (Vais-style) comments
 fn extract_doc_comments(lines: &[&str], start_pos: usize) -> Vec<String> {
     let mut docs = Vec::new();
     let mut byte_count = 0;
@@ -188,8 +201,15 @@ fn extract_doc_comments(lines: &[&str], start_pos: usize) -> Vec<String> {
             // We've reached the item, look backwards for doc comments
             for j in (0..i).rev() {
                 let prev_line = lines[j].trim();
+                // Support both /// and # for comments
                 if let Some(stripped) = prev_line.strip_prefix("///") {
                     docs.insert(0, stripped.trim().to_string());
+                } else if let Some(stripped) = prev_line.strip_prefix('#') {
+                    let comment = stripped.trim();
+                    // Skip separator lines like "============"
+                    if !comment.is_empty() && !comment.chars().all(|c| c == '=' || c == '-') {
+                        docs.insert(0, comment.to_string());
+                    }
                 } else if !prev_line.is_empty() {
                     // Non-doc-comment line, stop
                     break;
@@ -423,6 +443,71 @@ fn extract_enum_doc(e: &Enum, docs: Vec<String>) -> DocItem {
     }
 }
 
+/// Extract constant documentation
+fn extract_const_doc(c: &ConstDef, docs: Vec<String>) -> DocItem {
+    let mut signature = String::new();
+    if c.is_pub {
+        signature.push_str("P ");
+    }
+    signature.push_str(&format!("C {}: {} = {:?}", c.name.node, c.ty.node, c.value.node));
+
+    DocItem {
+        name: c.name.node.clone(),
+        kind: DocKind::Constant,
+        signature,
+        docs,
+        params: vec![],
+        returns: None,
+        examples: vec![],
+        _generics: vec![],
+        visibility: if c.is_pub { Visibility::Public } else { Visibility::Private },
+    }
+}
+
+/// Extract external function documentation
+fn extract_extern_function_doc(f: &ExternFunction, docs: Vec<String>) -> DocItem {
+    let params: Vec<ParamDoc> = f
+        .params
+        .iter()
+        .map(|p| ParamDoc {
+            name: p.name.node.clone(),
+            ty: format!("{}", p.ty.node),
+            is_mut: false, // Extern functions typically don't have mut params
+        })
+        .collect();
+
+    let returns = f.ret_type.as_ref().map(|t| format!("{}", t.node));
+
+    let mut signature = String::new();
+    signature.push_str("X F ");
+    signature.push_str(&f.name.node);
+
+    signature.push('(');
+    for (i, p) in params.iter().enumerate() {
+        if i > 0 {
+            signature.push_str(", ");
+        }
+        signature.push_str(&format!("{}: {}", p.name, p.ty));
+    }
+    signature.push(')');
+
+    if let Some(ret) = &returns {
+        signature.push_str(&format!(" -> {}", ret));
+    }
+
+    DocItem {
+        name: f.name.node.clone(),
+        kind: DocKind::ExternFunction,
+        signature,
+        docs,
+        params,
+        returns,
+        examples: vec![],
+        _generics: vec![],
+        visibility: Visibility::Public,
+    }
+}
+
 /// Extract trait documentation
 fn extract_trait_doc(t: &Trait, docs: Vec<String>) -> DocItem {
     let generics: Vec<GenericDoc> = t
@@ -506,6 +591,11 @@ fn generate_markdown_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), Strin
         content.push_str(&format!("Source: `{}`\n\n", doc.path.display()));
 
         // Group by kind
+        let constants: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::Constant))
+            .collect();
         let structs: Vec<_> = doc
             .items
             .iter()
@@ -526,6 +616,28 @@ fn generate_markdown_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), Strin
             .iter()
             .filter(|i| matches!(i.kind, DocKind::Function))
             .collect();
+        let extern_functions: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::ExternFunction))
+            .collect();
+
+        // Constants
+        if !constants.is_empty() {
+            content.push_str("## Constants\n\n");
+            for item in constants {
+                content.push_str(&format!("### {}\n\n", item.name));
+                content.push_str(&format!("```vais\n{}\n```\n\n", item.signature));
+
+                if !item.docs.is_empty() {
+                    for doc_line in &item.docs {
+                        content.push_str(doc_line);
+                        content.push('\n');
+                    }
+                    content.push('\n');
+                }
+            }
+        }
 
         // Structs
         if !structs.is_empty() {
@@ -625,6 +737,39 @@ fn generate_markdown_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), Strin
                         content.push_str(example);
                         content.push_str("```\n\n");
                     }
+                }
+            }
+        }
+
+        // External Functions
+        if !extern_functions.is_empty() {
+            content.push_str("## External Functions\n\n");
+            for item in extern_functions {
+                content.push_str(&format!("### {}\n\n", item.name));
+                content.push_str(&format!("```vais\n{}\n```\n\n", item.signature));
+
+                if !item.docs.is_empty() {
+                    for doc_line in &item.docs {
+                        content.push_str(doc_line);
+                        content.push('\n');
+                    }
+                    content.push('\n');
+                }
+
+                if !item.params.is_empty() {
+                    content.push_str("**Parameters:**\n\n");
+                    for param in &item.params {
+                        let mutability = if param.is_mut { " (mutable)" } else { "" };
+                        content.push_str(&format!(
+                            "- `{}`: {}{}\n",
+                            param.name, param.ty, mutability
+                        ));
+                    }
+                    content.push('\n');
+                }
+
+                if let Some(ret) = &item.returns {
+                    content.push_str(&format!("**Returns:** `{}`\n\n", ret));
                 }
             }
         }
@@ -802,10 +947,20 @@ a:hover {
         content.push_str("<h2><a href=\"index.html\">← Back</a></h2>\n");
 
         // Build sections
+        let constants: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Constant)).collect();
         let structs: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Struct)).collect();
         let enums: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Enum)).collect();
         let traits: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Trait)).collect();
         let functions: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Function)).collect();
+        let extern_functions: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::ExternFunction)).collect();
+
+        if !constants.is_empty() {
+            content.push_str("<h2>Constants</h2>\n<ul>\n");
+            for item in &constants {
+                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+            }
+            content.push_str("</ul>\n");
+        }
 
         if !structs.is_empty() {
             content.push_str("<h2>Structs</h2>\n<ul>\n");
@@ -839,6 +994,14 @@ a:hover {
             content.push_str("</ul>\n");
         }
 
+        if !extern_functions.is_empty() {
+            content.push_str("<h2>External Functions</h2>\n<ul>\n");
+            for item in &extern_functions {
+                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+            }
+            content.push_str("</ul>\n");
+        }
+
         content.push_str("</div>\n");
 
         // Content area
@@ -853,6 +1016,8 @@ a:hover {
                 DocKind::Struct => "struct",
                 DocKind::Enum => "enum",
                 DocKind::Trait => "trait",
+                DocKind::Constant => "constant",
+                DocKind::ExternFunction => "extern",
                 DocKind::Module => "module",
             };
 

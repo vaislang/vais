@@ -758,10 +758,10 @@ Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로�
 
 **목표**: Windows 플랫폼 안정성 검증
 
-- [ ] Windows 전용 E2E 테스트 15개 추가 (파일 경로, 프로세스, 네트워크)
-- [ ] IOCP 비동기 I/O 통합 테스트
-- [ ] Windows CI 매트릭스에 async/TLS/compression 테스트 포함
-- [ ] 크로스플랫폼 경로 처리 테스트 (\ vs /)
+- [x] Windows 전용 E2E 테스트 15개 추가 (파일 경로, 프로세스, 네트워크)
+- [x] IOCP 비동기 I/O 통합 테스트
+- [x] Windows CI 매트릭스에 async/TLS/compression 테스트 포함
+- [x] 크로스플랫폼 경로 처리 테스트 (\ vs /)
 - **파일**: `crates/vaisc/tests/windows_e2e_tests.rs` + CI 설정
 - **의존성**: Stage 1 완료 권장
 
@@ -769,11 +769,11 @@ Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로�
 
 **목표**: 표준 라이브러리 API 레퍼런스 자동 생성
 
-- [ ] `vaisc doc` 명령으로 HTML API 문서 생성
-- [ ] 표준 라이브러리 65개 모듈의 API 문서 자동 추출
-- [ ] 함수 시그니처, 구조체 필드, 상수값 자동 문서화
-- [ ] 사용 예제 코드 블록 포함
-- [ ] docs-site에 API Reference 섹션 추가
+- [x] `vaisc doc` 명령으로 HTML API 문서 생성
+- [x] 표준 라이브러리 65개 모듈의 API 문서 자동 추출
+- [x] 함수 시그니처, 구조체 필드, 상수값 자동 문서화
+- [x] 사용 예제 코드 블록 포함
+- [x] docs-site에 API Reference 섹션 추가
 - **파일**: `crates/vaisc/src/doc_gen.rs` + `docs-site/src/api/`
 - **의존성**: 없음
 
@@ -781,11 +781,11 @@ Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로�
 
 **목표**: 신규 사용자가 30분 내에 첫 프로젝트를 구축할 수 있는 가이드
 
-- [ ] Getting Started 가이드 (설치 → Hello World → 첫 프로젝트)
-- [ ] 에러 처리 패턴 가이드 (Result/Option, 에러 전파, 로깅 통합)
-- [ ] 성능 튜닝 가이드 (컴파일 최적화 플래그, 프로파일링, 벤치마크)
-- [ ] 코딩 스타일 가이드 (네이밍, 모듈 구조, 테스트 작성법)
-- [ ] FAQ 문서 (Rust/Go/Zig 대비 차별점, 마이그레이션 팁)
+- [x] Getting Started 가이드 (설치 → Hello World → 첫 프로젝트)
+- [x] 에러 처리 패턴 가이드 (Result/Option, 에러 전파, 로깅 통합)
+- [x] 성능 튜닝 가이드 (컴파일 최적화 플래그, 프로파일링, 벤치마크)
+- [x] 코딩 스타일 가이드 (네이밍, 모듈 구조, 테스트 작성법)
+- [x] FAQ 문서 (Rust/Go/Zig 대비 차별점, 마이그레이션 팁)
 - **파일**: `docs-site/src/guide/`
 - **의존성**: 없음
 
