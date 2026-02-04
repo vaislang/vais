@@ -37,6 +37,11 @@ name = "performance_bench"
 path = "performance_bench.rs"
 harness = false
 
+[[bench]]
+name = "phase33_bench"
+path = "phase33_bench.rs"
+harness = false
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }

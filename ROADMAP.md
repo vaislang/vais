@@ -662,12 +662,12 @@ Vais를 프로덕션 환경의 대형 프로젝트에 도입할 수 있도록, �
 - **의존성**: FFI (zlib)
 
 ### Stage 7: 통합 E2E 검증 + 벤치마크
-- [ ] HTTPS 서버 + TLS 클라이언트 통합 테스트
-- [ ] Async I/O 크로스플랫폼 테스트 (macOS/Linux)
-- [ ] 패키지 publish/install 라운드트립 테스트
-- [ ] 구조화 로깅 출력 검증
-- [ ] 성능 벤치마크 (HTTP throughput, DB ops/sec, TLS handshake latency)
-- [ ] 프로덕션 체크리스트 문서 작성
+- [x] HTTPS 서버 + TLS 클라이언트 통합 테스트
+- [x] Async I/O 크로스플랫폼 테스트 (macOS/Linux)
+- [x] 패키지 publish/install 라운드트립 테스트
+- [x] 구조화 로깅 출력 검증
+- [x] 성능 벤치마크 (HTTP throughput, DB ops/sec, TLS handshake latency)
+- [x] 프로덕션 체크리스트 문서 작성
 - **파일**: `crates/vaisc/tests/` + `benches/` + `docs-site/`
 - **의존성**: Stage 1~6 완료 필수
 
