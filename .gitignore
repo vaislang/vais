@@ -93,6 +93,23 @@ examples/option_test3
 examples/proptest_example
 examples/test_import
 examples/vec_test_minimal
+examples/adoption_prototype
+examples/bytebuffer
+examples/crc32
+examples/destructuring
+examples/gpu_vector_add
+examples/map_literal
+examples/pipe_operator
+examples/tco_stress
+examples/tco_tail_call
+examples/tilde_mut
+examples/type_infer_params
+examples/type_infer_params_advanced
+examples/void_phi_assert
+examples/projects/benchmark/benchmark
+examples/projects/benchmark/benchmark_c
+examples/projects/num-convert/file_stats
+examples/projects/num-convert/num_convert
 
 # Test binaries in root
 test_*

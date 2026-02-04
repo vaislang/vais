@@ -1,0 +1,13 @@
+# Tuple destructuring example
+
+F pair() -> (i64, i64) = (3, 7)
+
+F main() -> i64 {
+    # Simple tuple destructuring
+    (a, b) := (10, 20);
+
+    # Destructuring from function return
+    (x, y) := pair()
+
+    R a + b + x + y
+}
