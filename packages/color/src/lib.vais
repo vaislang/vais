@@ -1,0 +1,300 @@
+# Terminal Color Output
+# Provides functions to colorize text output using ANSI escape codes
+#
+# ANSI color codes format: \x1b[<code>m<text>\x1b[0m
+# This module builds colored strings that can be printed to terminals
+# supporting ANSI escape sequences.
+
+# ANSI color codes as constants
+C ANSI_RESET: i64 = 0
+C ANSI_BOLD: i64 = 1
+C ANSI_DIM: i64 = 2
+C ANSI_ITALIC: i64 = 3
+C ANSI_UNDERLINE: i64 = 4
+
+C ANSI_BLACK: i64 = 30
+C ANSI_RED: i64 = 31
+C ANSI_GREEN: i64 = 32
+C ANSI_YELLOW: i64 = 33
+C ANSI_BLUE: i64 = 34
+C ANSI_MAGENTA: i64 = 35
+C ANSI_CYAN: i64 = 36
+C ANSI_WHITE: i64 = 37
+
+C ANSI_BG_BLACK: i64 = 40
+C ANSI_BG_RED: i64 = 41
+C ANSI_BG_GREEN: i64 = 42
+C ANSI_BG_YELLOW: i64 = 43
+C ANSI_BG_BLUE: i64 = 44
+C ANSI_BG_MAGENTA: i64 = 45
+C ANSI_BG_CYAN: i64 = 46
+C ANSI_BG_WHITE: i64 = 47
+
+# Helper: Format ANSI escape code string
+# Args: code - ANSI code number, text - text to colorize
+# Returns: Pointer to formatted string (allocated, caller must free)
+F ansi_format(code: i64, text: i64) -> i64 {
+    # Calculate lengths
+    text_len := strlen(text)
+
+    # Format: \x1b[<code>m<text>\x1b[0m
+    # Worst case: "\x1b[999m" (7) + text + "\x1b[0m" (4) + null (1)
+    buf_size := text_len + 20
+    buf := malloc(buf_size)
+
+    # Build escape sequence
+    pos := 0
+
+    # Write "\x1b["
+    store_byte(buf + pos, 27)  # ESC character
+    pos = pos + 1
+    store_byte(buf + pos, 91)  # '['
+    pos = pos + 1
+
+    # Write code as decimal digits
+    I code >= 100 {
+        digit := code / 100
+        store_byte(buf + pos, 48 + digit)  # ASCII '0' + digit
+        pos = pos + 1
+        code = code - (digit * 100)
+    }
+    I code >= 10 {
+        digit := code / 10
+        store_byte(buf + pos, 48 + digit)
+        pos = pos + 1
+        code = code - (digit * 10)
+    }
+    store_byte(buf + pos, 48 + code)
+    pos = pos + 1
+
+    # Write "m"
+    store_byte(buf + pos, 109)  # 'm'
+    pos = pos + 1
+
+    # Copy text
+    memcpy(buf + pos, text, text_len)
+    pos = pos + text_len
+
+    # Write reset sequence "\x1b[0m"
+    store_byte(buf + pos, 27)  # ESC
+    pos = pos + 1
+    store_byte(buf + pos, 91)  # '['
+    pos = pos + 1
+    store_byte(buf + pos, 48)  # '0'
+    pos = pos + 1
+    store_byte(buf + pos, 109)  # 'm'
+    pos = pos + 1
+
+    # Null terminator
+    store_byte(buf + pos, 0)
+
+    buf
+}
+
+# Colorize text in red
+# Args: text - text to colorize
+# Returns: Pointer to formatted string (allocated, caller must free)
+F red(text: i64) -> i64 {
+    ansi_format(ANSI_RED, text)
+}
+
+# Colorize text in green
+F green(text: i64) -> i64 {
+    ansi_format(ANSI_GREEN, text)
+}
+
+# Colorize text in yellow
+F yellow(text: i64) -> i64 {
+    ansi_format(ANSI_YELLOW, text)
+}
+
+# Colorize text in blue
+F blue(text: i64) -> i64 {
+    ansi_format(ANSI_BLUE, text)
+}
+
+# Colorize text in magenta
+F magenta(text: i64) -> i64 {
+    ansi_format(ANSI_MAGENTA, text)
+}
+
+# Colorize text in cyan
+F cyan(text: i64) -> i64 {
+    ansi_format(ANSI_CYAN, text)
+}
+
+# Colorize text in white
+F white(text: i64) -> i64 {
+    ansi_format(ANSI_WHITE, text)
+}
+
+# Colorize text in black
+F black(text: i64) -> i64 {
+    ansi_format(ANSI_BLACK, text)
+}
+
+# Make text bold
+F bold(text: i64) -> i64 {
+    ansi_format(ANSI_BOLD, text)
+}
+
+# Make text dim
+F dim(text: i64) -> i64 {
+    ansi_format(ANSI_DIM, text)
+}
+
+# Make text italic
+F italic(text: i64) -> i64 {
+    ansi_format(ANSI_ITALIC, text)
+}
+
+# Make text underlined
+F underline(text: i64) -> i64 {
+    ansi_format(ANSI_UNDERLINE, text)
+}
+
+# Background colors
+F bg_red(text: i64) -> i64 {
+    ansi_format(ANSI_BG_RED, text)
+}
+
+F bg_green(text: i64) -> i64 {
+    ansi_format(ANSI_BG_GREEN, text)
+}
+
+F bg_yellow(text: i64) -> i64 {
+    ansi_format(ANSI_BG_YELLOW, text)
+}
+
+F bg_blue(text: i64) -> i64 {
+    ansi_format(ANSI_BG_BLUE, text)
+}
+
+F bg_magenta(text: i64) -> i64 {
+    ansi_format(ANSI_BG_MAGENTA, text)
+}
+
+F bg_cyan(text: i64) -> i64 {
+    ansi_format(ANSI_BG_CYAN, text)
+}
+
+F bg_white(text: i64) -> i64 {
+    ansi_format(ANSI_BG_WHITE, text)
+}
+
+F bg_black(text: i64) -> i64 {
+    ansi_format(ANSI_BG_BLACK, text)
+}
+
+# Common semantic colors
+F success(text: i64) -> i64 {
+    green(text)
+}
+
+F error(text: i64) -> i64 {
+    red(text)
+}
+
+F warning(text: i64) -> i64 {
+    yellow(text)
+}
+
+F info(text: i64) -> i64 {
+    cyan(text)
+}
+
+# Check if terminal supports colors (checks TERM environment variable)
+# Returns: 1 if colors likely supported, 0 otherwise
+F supports_color() -> i64 {
+    term := getenv("TERM")
+    I term == 0 { R 0 }
+
+    # Check for common color-supporting terminals
+    I str_contains(term, "color") { R 1 }
+    I str_contains(term, "xterm") { R 1 }
+    I str_contains(term, "screen") { R 1 }
+    I str_contains(term, "tmux") { R 1 }
+    I str_contains(term, "linux") { R 1 }
+
+    # Check for NO_COLOR environment variable
+    no_color := getenv("NO_COLOR")
+    I no_color != 0 { R 0 }
+
+    1  # Default to supporting color
+}
+
+# Strip ANSI escape codes from string
+# Args: text - string potentially containing ANSI codes
+# Returns: Pointer to cleaned string (allocated, caller must free)
+F strip_ansi(text: i64) -> i64 {
+    I text == 0 { R 0 }
+
+    len := strlen(text)
+    buf := malloc(len + 1)
+
+    in_escape := 0
+    src := 0
+    dst := 0
+
+    L src < len {
+        c := load_byte(text + src)
+
+        # Start of escape sequence
+        I c == 27 {  # ESC
+            in_escape = 1
+            src = src + 1
+            C
+        }
+
+        # End of escape sequence
+        I in_escape {
+            I c == 109 {  # 'm'
+                in_escape = 0
+            }
+            src = src + 1
+            C
+        }
+
+        # Regular character
+        store_byte(buf + dst, c)
+        dst = dst + 1
+        src = src + 1
+    }
+
+    store_byte(buf + dst, 0)
+    buf
+}
+
+# Helper functions (require extern)
+X F getenv(name: i64) -> i64
+X F strlen(s: i64) -> i64
+X F malloc(size: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+
+# Helper: Check if string contains substring
+F str_contains(haystack: i64, needle: i64) -> i64 {
+    I haystack == 0 { R 0 }
+    I needle == 0 { R 0 }
+
+    h_len := strlen(haystack)
+    n_len := strlen(needle)
+
+    I n_len > h_len { R 0 }
+
+    i := 0
+    L i <= (h_len - n_len) {
+        match := 1
+        j := 0
+        L j < n_len {
+            I load_byte(haystack + i + j) != load_byte(needle + j) {
+                match = 0
+                B
+            }
+            j = j + 1
+        }
+        I match { R 1 }
+        i = i + 1
+    }
+
+    0
+}

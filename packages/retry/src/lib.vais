@@ -1,0 +1,196 @@
+# Retry Logic
+# Provides utilities for implementing retry logic with exponential backoff
+#
+# Features:
+# - Configurable max retries
+# - Exponential backoff with configurable factor
+# - Initial delay and max delay limits
+# - Simple API for retry decision logic
+
+C DEFAULT_MAX_RETRIES: i64 = 3
+C DEFAULT_DELAY_MS: i64 = 100
+C DEFAULT_BACKOFF_FACTOR: i64 = 2
+C MAX_DELAY_MS: i64 = 30000  # 30 seconds
+
+# RetryConfig - configuration for retry behavior
+S RetryConfig {
+    max_retries: i64,      # Maximum number of retry attempts
+    initial_delay_ms: i64, # Initial delay in milliseconds
+    backoff_factor: i64,   # Multiplier for exponential backoff (e.g., 2)
+    max_delay_ms: i64      # Maximum delay cap in milliseconds
+}
+
+# Implementation for RetryConfig
+X RetryConfig {
+    # Create a new retry configuration
+    # Args: max - max retries, delay - initial delay in ms
+    # Returns: RetryConfig with default backoff factor (2)
+    F new(max: i64, delay: i64) -> RetryConfig {
+        RetryConfig {
+            max_retries: max,
+            initial_delay_ms: delay,
+            backoff_factor: DEFAULT_BACKOFF_FACTOR,
+            max_delay_ms: MAX_DELAY_MS
+        }
+    }
+
+    # Create default retry configuration (3 retries, 100ms initial delay)
+    F default() -> RetryConfig {
+        RetryConfig {
+            max_retries: DEFAULT_MAX_RETRIES,
+            initial_delay_ms: DEFAULT_DELAY_MS,
+            backoff_factor: DEFAULT_BACKOFF_FACTOR,
+            max_delay_ms: MAX_DELAY_MS
+        }
+    }
+
+    # Create retry config with custom backoff factor
+    F with_backoff(max: i64, delay: i64, backoff: i64) -> RetryConfig {
+        RetryConfig {
+            max_retries: max,
+            initial_delay_ms: delay,
+            backoff_factor: backoff,
+            max_delay_ms: MAX_DELAY_MS
+        }
+    }
+
+    # Set maximum delay cap
+    F with_max_delay(&self, max_delay: i64) -> RetryConfig {
+        RetryConfig {
+            max_retries: self.max_retries,
+            initial_delay_ms: self.initial_delay_ms,
+            backoff_factor: self.backoff_factor,
+            max_delay_ms: max_delay
+        }
+    }
+}
+
+# Check if we should retry again
+# Args: config - retry configuration, attempt - current attempt number (0-based)
+# Returns: 1 if should retry, 0 if max retries reached
+F retry_should_continue(config: RetryConfig, attempt: i64) -> i64 {
+    I attempt < config.max_retries { 1 } E { 0 }
+}
+
+# Calculate delay for current attempt (exponential backoff)
+# Args: config - retry configuration, attempt - current attempt number (0-based)
+# Returns: Delay in milliseconds
+F retry_delay_for(config: RetryConfig, attempt: i64) -> i64 {
+    I attempt < 0 { R 0 }
+
+    # Calculate: initial_delay * (backoff_factor ^ attempt)
+    delay := config.initial_delay_ms
+    i := 0
+    L i < attempt {
+        delay = delay * config.backoff_factor
+        i = i + 1
+    }
+
+    # Cap at max_delay_ms
+    I delay > config.max_delay_ms {
+        delay = config.max_delay_ms
+    }
+
+    delay
+}
+
+# Sleep for specified milliseconds
+# Args: ms - milliseconds to sleep
+# Returns: 0 on success
+# Note: Requires platform-specific sleep implementation
+F retry_sleep_ms(ms: i64) -> i64 {
+    # Convert ms to microseconds for usleep
+    usleep(ms * 1000)
+}
+
+# Execute retry loop with callback
+# This is a simplified version - in practice, the user implements their own loop
+# Args: config - retry configuration
+# Returns: Attempt number on success, -1 if all retries failed
+F retry_execute(config: RetryConfig) -> i64 {
+    attempt := 0
+
+    L retry_should_continue(config, attempt) {
+        # User would implement their operation here
+        # For now, just return the attempt number
+        R attempt
+
+        # On failure, sleep and retry
+        delay := retry_delay_for(config, attempt)
+        retry_sleep_ms(delay)
+
+        attempt = attempt + 1
+    }
+
+    -1  # All retries exhausted
+}
+
+# Get total time spent on retries (sum of all delays)
+# Args: config - retry configuration
+# Returns: Total time in milliseconds
+F retry_total_time(config: RetryConfig) -> i64 {
+    total := 0
+    attempt := 0
+
+    L attempt < config.max_retries {
+        delay := retry_delay_for(config, attempt)
+        total = total + delay
+        attempt = attempt + 1
+    }
+
+    total
+}
+
+# Calculate next delay (helper for manual retry implementation)
+# Args: current_delay - current delay in ms, backoff_factor - multiplier
+# Returns: Next delay (capped at MAX_DELAY_MS)
+F retry_next_delay(current_delay: i64, backoff_factor: i64) -> i64 {
+    next := current_delay * backoff_factor
+    I next > MAX_DELAY_MS {
+        next = MAX_DELAY_MS
+    }
+    next
+}
+
+# Retry with linear backoff (no exponential growth)
+# Args: max_retries - max attempts, delay_ms - fixed delay between retries
+# Returns: RetryConfig with backoff factor of 1 (linear)
+F retry_linear(max_retries: i64, delay_ms: i64) -> RetryConfig {
+    RetryConfig {
+        max_retries: max_retries,
+        initial_delay_ms: delay_ms,
+        backoff_factor: 1,  # No exponential growth
+        max_delay_ms: delay_ms
+    }
+}
+
+# Retry with immediate retries (no delay)
+# Args: max_retries - max attempts
+# Returns: RetryConfig with zero delay
+F retry_immediate(max_retries: i64) -> RetryConfig {
+    RetryConfig {
+        max_retries: max_retries,
+        initial_delay_ms: 0,
+        backoff_factor: 1,
+        max_delay_ms: 0
+    }
+}
+
+# Check if this is the first attempt
+F retry_is_first_attempt(attempt: i64) -> i64 {
+    I attempt == 0 { 1 } E { 0 }
+}
+
+# Check if this is the last attempt
+F retry_is_last_attempt(config: RetryConfig, attempt: i64) -> i64 {
+    I attempt == (config.max_retries - 1) { 1 } E { 0 }
+}
+
+# Get retry progress (0-100)
+F retry_progress(config: RetryConfig, attempt: i64) -> i64 {
+    I config.max_retries == 0 { R 0 }
+    (attempt * 100) / config.max_retries
+}
+
+# Extern functions
+X F usleep(microseconds: i64) -> i64

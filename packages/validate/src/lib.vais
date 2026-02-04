@@ -1,0 +1,335 @@
+# Input Validation
+# Provides utilities for validating common input formats and constraints
+#
+# Features:
+# - Email validation
+# - URL validation
+# - Numeric string validation
+# - Range checks
+# - Length constraints
+# - Pattern matching helpers
+
+# Email validation (simplified)
+# Checks for basic email pattern: user@domain.tld
+# Args: s - string to validate
+# Returns: 1 if valid email format, 0 otherwise
+F is_email(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    len := strlen(s)
+    I len < 3 { R 0 }  # Minimum: a@b
+
+    at_pos := -1
+    dot_pos := -1
+
+    # Find @ and last .
+    i := 0
+    L i < len {
+        c := load_byte(s + i)
+
+        I c == 64 {  # '@'
+            I at_pos >= 0 { R 0 }  # Multiple @ not allowed
+            at_pos = i
+        }
+
+        I c == 46 {  # '.'
+            I at_pos >= 0 {  # Only count dots after @
+                dot_pos = i
+            }
+        }
+
+        i = i + 1
+    }
+
+    # Must have @ and . after @
+    I at_pos < 1 { R 0 }  # @ must not be first
+    I dot_pos < 0 { R 0 }  # No dot after @
+    I dot_pos <= (at_pos + 1) { R 0 }  # Dot must be after @
+    I dot_pos >= (len - 1) { R 0 }  # Dot must not be last
+
+    1
+}
+
+# URL validation (simplified)
+# Checks for http:// or https:// prefix and basic structure
+# Args: s - string to validate
+# Returns: 1 if valid URL format, 0 otherwise
+F is_url(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    len := strlen(s)
+    I len < 10 { R 0 }  # Minimum: http://a.b
+
+    # Check for http:// or https://
+    I str_starts_with(s, "http://") { R 1 }
+    I str_starts_with(s, "https://") { R 1 }
+    I str_starts_with(s, "ftp://") { R 1 }
+
+    0
+}
+
+# Check if string contains only digits
+# Args: s - string to validate
+# Returns: 1 if numeric, 0 otherwise
+F is_numeric(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    len := strlen(s)
+    I len == 0 { R 0 }
+
+    i := 0
+    L i < len {
+        c := load_byte(s + i)
+
+        # Allow leading minus sign
+        I i == 0 {
+            I c == 45 {  # '-'
+                i = i + 1
+                C
+            }
+        }
+
+        # Check if digit (0-9)
+        I c < 48 { R 0 }   # Less than '0'
+        I c > 57 { R 0 }   # Greater than '9'
+
+        i = i + 1
+    }
+
+    # Must have at least one digit after optional minus
+    I len == 1 {
+        c := load_byte(s)
+        I c == 45 { R 0 }  # Just "-" is not numeric
+    }
+
+    1
+}
+
+# Check if string is valid integer (allows negative)
+F is_integer(s: i64) -> i64 {
+    is_numeric(s)
+}
+
+# Check if string is valid positive integer
+F is_positive_integer(s: i64) -> i64 {
+    I s == 0 { R 0 }
+    I is_numeric(s) == 0 { R 0 }
+
+    # Check first char is not '-'
+    c := load_byte(s)
+    I c == 45 { R 0 }
+
+    1
+}
+
+# Check if value is in range [min, max] (inclusive)
+# Args: value - value to check, min - minimum, max - maximum
+# Returns: 1 if in range, 0 otherwise
+F in_range(value: i64, min: i64, max: i64) -> i64 {
+    I value < min { R 0 }
+    I value > max { R 0 }
+    1
+}
+
+# Check if string length meets minimum requirement
+# Args: s - string, min - minimum length
+# Returns: 1 if meets requirement, 0 otherwise
+F min_length(s: i64, min: i64) -> i64 {
+    I s == 0 { R 0 }
+    len := strlen(s)
+    I len >= min { 1 } E { 0 }
+}
+
+# Check if string length is within maximum
+# Args: s - string, max - maximum length
+# Returns: 1 if within limit, 0 otherwise
+F max_length(s: i64, max: i64) -> i64 {
+    I s == 0 { R 1 }  # Empty string is within any max
+    len := strlen(s)
+    I len <= max { 1 } E { 0 }
+}
+
+# Check if string length is exactly specified length
+F exact_length(s: i64, expected: i64) -> i64 {
+    I s == 0 { R I expected == 0 { 1 } E { 0 } }
+    len := strlen(s)
+    I len == expected { 1 } E { 0 }
+}
+
+# Check if string is empty or whitespace only
+F is_empty(s: i64) -> i64 {
+    I s == 0 { R 1 }
+
+    len := strlen(s)
+    I len == 0 { R 1 }
+
+    # Check if all whitespace
+    i := 0
+    L i < len {
+        c := load_byte(s + i)
+        I c != 32 { I c != 9 { I c != 10 { R 0 } } }  # Not space, tab, or newline
+        i = i + 1
+    }
+
+    1
+}
+
+# Check if string is not empty (has non-whitespace content)
+F is_not_empty(s: i64) -> i64 {
+    I is_empty(s) { 0 } E { 1 }
+}
+
+# Check if string contains only alphabetic characters
+F is_alpha(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    len := strlen(s)
+    I len == 0 { R 0 }
+
+    i := 0
+    L i < len {
+        c := load_byte(s + i)
+
+        # Check if letter (A-Z or a-z)
+        valid := 0
+        I c >= 65 { I c <= 90 { valid = 1 } }    # A-Z
+        I c >= 97 { I c <= 122 { valid = 1 } }   # a-z
+
+        I valid == 0 { R 0 }
+
+        i = i + 1
+    }
+
+    1
+}
+
+# Check if string contains only alphanumeric characters
+F is_alphanumeric(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    len := strlen(s)
+    I len == 0 { R 0 }
+
+    i := 0
+    L i < len {
+        c := load_byte(s + i)
+
+        # Check if letter or digit
+        valid := 0
+        I c >= 48 { I c <= 57 { valid = 1 } }    # 0-9
+        I c >= 65 { I c <= 90 { valid = 1 } }    # A-Z
+        I c >= 97 { I c <= 122 { valid = 1 } }   # a-z
+
+        I valid == 0 { R 0 }
+
+        i = i + 1
+    }
+
+    1
+}
+
+# Check if string contains substring
+F contains(haystack: i64, needle: i64) -> i64 {
+    I haystack == 0 { R 0 }
+    I needle == 0 { R 0 }
+
+    h_len := strlen(haystack)
+    n_len := strlen(needle)
+
+    I n_len == 0 { R 1 }  # Empty needle is always contained
+    I n_len > h_len { R 0 }
+
+    i := 0
+    L i <= (h_len - n_len) {
+        match := 1
+        j := 0
+        L j < n_len {
+            I load_byte(haystack + i + j) != load_byte(needle + j) {
+                match = 0
+                B
+            }
+            j = j + 1
+        }
+        I match { R 1 }
+        i = i + 1
+    }
+
+    0
+}
+
+# Check if string starts with prefix
+F starts_with(s: i64, prefix: i64) -> i64 {
+    str_starts_with(s, prefix)
+}
+
+# Check if string ends with suffix
+F ends_with(s: i64, suffix: i64) -> i64 {
+    I s == 0 { R 0 }
+    I suffix == 0 { R 0 }
+
+    s_len := strlen(s)
+    suffix_len := strlen(suffix)
+
+    I suffix_len > s_len { R 0 }
+    I suffix_len == 0 { R 1 }
+
+    # Compare from end
+    offset := s_len - suffix_len
+    i := 0
+    L i < suffix_len {
+        I load_byte(s + offset + i) != load_byte(suffix + i) { R 0 }
+        i = i + 1
+    }
+
+    1
+}
+
+# Check if value is positive
+F is_positive(value: i64) -> i64 {
+    I value > 0 { 1 } E { 0 }
+}
+
+# Check if value is negative
+F is_negative(value: i64) -> i64 {
+    I value < 0 { 1 } E { 0 }
+}
+
+# Check if value is zero
+F is_zero(value: i64) -> i64 {
+    I value == 0 { 1 } E { 0 }
+}
+
+# Check if value is even
+F is_even(value: i64) -> i64 {
+    I (value % 2) == 0 { 1 } E { 0 }
+}
+
+# Check if value is odd
+F is_odd(value: i64) -> i64 {
+    I (value % 2) != 0 { 1 } E { 0 }
+}
+
+# Helper: Check if string starts with prefix
+F str_starts_with(s: i64, prefix: i64) -> i64 {
+    I s == 0 { R 0 }
+    I prefix == 0 { R 0 }
+
+    prefix_len := strlen(prefix)
+    I prefix_len == 0 { R 1 }
+
+    i := 0
+    L i < prefix_len {
+        cs := load_byte(s + i)
+        cp := load_byte(prefix + i)
+
+        I cs == 0 { R 0 }  # s is shorter than prefix
+        I cs != cp { R 0 }
+
+        i = i + 1
+    }
+
+    1
+}
+
+# Extern functions
+X F strlen(s: i64) -> i64

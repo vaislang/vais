@@ -1,0 +1,169 @@
+# Environment Variable Utilities
+# Provides functions to get, set, and query environment variables
+#
+# This module wraps standard C library functions (getenv, setenv, unsetenv)
+# and provides additional utilities for common environment queries.
+
+# Extern C functions for environment variable access
+# getenv: Get environment variable value
+# Returns: Pointer to value string, or 0 if not found
+X F getenv(name: i64) -> i64
+
+# setenv: Set environment variable
+# Args: name, value, overwrite (1 to overwrite existing, 0 to keep existing)
+# Returns: 0 on success, -1 on error
+X F setenv(name: i64, value: i64, overwrite: i64) -> i64
+
+# unsetenv: Remove environment variable
+# Args: name
+# Returns: 0 on success, -1 on error
+X F unsetenv(name: i64) -> i64
+
+# Get environment variable value
+# Args: key - variable name (e.g., "PATH", "HOME")
+# Returns: Pointer to value string, or 0 if not found
+F env_get(key: i64) -> i64 {
+    getenv(key)
+}
+
+# Set environment variable
+# Args: key - variable name, value - variable value
+# Returns: 1 on success, 0 on error
+F env_set(key: i64, value: i64) -> i64 {
+    result := setenv(key, value, 1)
+    I result == 0 { 1 } E { 0 }
+}
+
+# Set environment variable without overwriting existing
+# Args: key - variable name, value - variable value
+# Returns: 1 on success, 0 on error
+F env_set_if_not_exists(key: i64, value: i64) -> i64 {
+    result := setenv(key, value, 0)
+    I result == 0 { 1 } E { 0 }
+}
+
+# Remove environment variable
+# Args: key - variable name
+# Returns: 1 on success, 0 on error
+F env_remove(key: i64) -> i64 {
+    result := unsetenv(key)
+    I result == 0 { 1 } E { 0 }
+}
+
+# Check if environment variable exists
+# Args: key - variable name
+# Returns: 1 if exists, 0 otherwise
+F env_exists(key: i64) -> i64 {
+    value := getenv(key)
+    I value == 0 { 0 } E { 1 }
+}
+
+# Get HOME directory path
+# Returns: Pointer to home directory string, or 0 if not found
+F env_home_dir() -> i64 {
+    getenv("HOME")
+}
+
+# Get USER name
+# Returns: Pointer to username string, or 0 if not found
+F env_user() -> i64 {
+    getenv("USER")
+}
+
+# Get PATH environment variable
+# Returns: Pointer to PATH string, or 0 if not found
+F env_path() -> i64 {
+    getenv("PATH")
+}
+
+# Get SHELL environment variable
+# Returns: Pointer to shell path string, or 0 if not found
+F env_shell() -> i64 {
+    getenv("SHELL")
+}
+
+# Get PWD (current working directory)
+# Returns: Pointer to working directory string, or 0 if not found
+F env_pwd() -> i64 {
+    getenv("PWD")
+}
+
+# Get TMPDIR or TMP directory
+# Returns: Pointer to temp directory string, or "/tmp" as fallback
+F env_temp_dir() -> i64 {
+    tmpdir := getenv("TMPDIR")
+    I tmpdir != 0 { R tmpdir }
+
+    tmp := getenv("TMP")
+    I tmp != 0 { R tmp }
+
+    # Fallback to /tmp
+    "/tmp"
+}
+
+# Get operating system name (via uname system call)
+# Returns: Pointer to OS name string
+# Note: This requires extern uname wrapper or direct system call
+F env_os_name() -> i64 {
+    # Try to get from environment first
+    ostype := getenv("OSTYPE")
+    I ostype != 0 { R ostype }
+
+    # Fallback: detect from system
+    # In a full implementation, this would call uname() or similar
+    # For now, return a generic string
+    "unknown"
+}
+
+# Get LANG environment variable
+# Returns: Pointer to locale string, or 0 if not found
+F env_lang() -> i64 {
+    getenv("LANG")
+}
+
+# Get EDITOR environment variable
+# Returns: Pointer to editor path string, or "vi" as fallback
+F env_editor() -> i64 {
+    editor := getenv("EDITOR")
+    I editor != 0 { R editor }
+
+    # Fallback to vi
+    "vi"
+}
+
+# Get TERM environment variable
+# Returns: Pointer to terminal type string, or 0 if not found
+F env_term() -> i64 {
+    getenv("TERM")
+}
+
+# Check if running in CI environment
+# Returns: 1 if in CI, 0 otherwise
+F env_is_ci() -> i64 {
+    ci := getenv("CI")
+    I ci != 0 { R 1 }
+
+    # Check common CI variables
+    I env_exists("JENKINS_HOME") { R 1 }
+    I env_exists("GITHUB_ACTIONS") { R 1 }
+    I env_exists("GITLAB_CI") { R 1 }
+    I env_exists("CIRCLECI") { R 1 }
+    I env_exists("TRAVIS") { R 1 }
+
+    0
+}
+
+# Get integer value from environment variable
+# Args: key - variable name, default_val - value to return if not found
+# Returns: Integer value, or default_val if not found or invalid
+F env_get_i64(key: i64, default_val: i64) -> i64 {
+    value := getenv(key)
+    I value == 0 { R default_val }
+
+    # Parse integer (requires atol)
+    parsed := atol_ptr(value)
+    parsed
+}
+
+# Helper: atol wrapper
+X F atol_ptr(s: i64) -> i64

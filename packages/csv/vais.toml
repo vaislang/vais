@@ -1,0 +1,12 @@
+[package]
+name = "csv"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "CSV parser and generator for Vais programs"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

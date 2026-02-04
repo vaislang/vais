@@ -1,0 +1,419 @@
+# TOML Parser
+# Simple TOML configuration file parser
+#
+# Supports basic TOML features:
+# - Key-value pairs (key = value)
+# - Strings, integers, booleans
+# - Tables ([section])
+# - Comments (#)
+#
+# Limitations:
+# - No arrays
+# - No inline tables
+# - No multi-line strings
+# - Basic value types only
+
+C MAX_KEYS: i64 = 100
+C MAX_KEY_LEN: i64 = 256
+C MAX_VALUE_LEN: i64 = 1024
+
+# TOML value types
+C TOML_STRING: i64 = 1
+C TOML_INTEGER: i64 = 2
+C TOML_BOOLEAN: i64 = 3
+C TOML_NONE: i64 = 0
+
+# TomlValue - represents a single TOML value
+S TomlValue {
+    value_type: i64,  # TOML_STRING, TOML_INTEGER, TOML_BOOLEAN
+    str_value: i64,   # String value (if type is STRING)
+    int_value: i64,   # Integer value (if type is INTEGER)
+    bool_value: i64   # Boolean value (if type is BOOLEAN)
+}
+
+# TomlTable - represents a TOML table (section)
+S TomlTable {
+    keys: i64,        # Array of key string pointers
+    values: i64,      # Array of TomlValue pointers
+    count: i64,       # Number of key-value pairs
+    capacity: i64     # Allocated capacity
+}
+
+# Implementation for TomlValue
+X TomlValue {
+    # Create a string value
+    F from_str(s: i64) -> TomlValue {
+        TomlValue {
+            value_type: TOML_STRING,
+            str_value: s,
+            int_value: 0,
+            bool_value: 0
+        }
+    }
+
+    # Create an integer value
+    F from_int(i: i64) -> TomlValue {
+        TomlValue {
+            value_type: TOML_INTEGER,
+            str_value: 0,
+            int_value: i,
+            bool_value: 0
+        }
+    }
+
+    # Create a boolean value
+    F from_bool(b: i64) -> TomlValue {
+        TomlValue {
+            value_type: TOML_BOOLEAN,
+            str_value: 0,
+            int_value: 0,
+            bool_value: b
+        }
+    }
+
+    # Free value
+    F free(&self) -> i64 {
+        I self.value_type == TOML_STRING {
+            I self.str_value != 0 {
+                free(self.str_value)
+            }
+        }
+        0
+    }
+}
+
+# Implementation for TomlTable
+X TomlTable {
+    # Create a new empty table
+    F new() -> TomlTable {
+        capacity := MAX_KEYS
+        keys := malloc(capacity * 8)     # Array of string pointers
+        values := malloc(capacity * 32)   # Array of TomlValue structs
+
+        TomlTable {
+            keys: keys,
+            values: values,
+            count: 0,
+            capacity: capacity
+        }
+    }
+
+    # Get string value by key
+    # Returns: Pointer to string, or 0 if not found or wrong type
+    F get_str(&self, key: i64) -> i64 {
+        idx := self.find_key(key)
+        I idx < 0 { R 0 }
+
+        # Load TomlValue from array
+        value_ptr := self.values + (idx * 32)
+        value_type := load_i64(value_ptr)
+
+        I value_type != TOML_STRING { R 0 }
+
+        load_i64(value_ptr + 8)  # str_value field
+    }
+
+    # Get integer value by key
+    # Returns: Integer value, or 0 if not found or wrong type
+    F get_int(&self, key: i64) -> i64 {
+        idx := self.find_key(key)
+        I idx < 0 { R 0 }
+
+        value_ptr := self.values + (idx * 32)
+        value_type := load_i64(value_ptr)
+
+        I value_type != TOML_INTEGER { R 0 }
+
+        load_i64(value_ptr + 16)  # int_value field
+    }
+
+    # Get boolean value by key
+    # Returns: Boolean value (0 or 1), or 0 if not found or wrong type
+    F get_bool(&self, key: i64) -> i64 {
+        idx := self.find_key(key)
+        I idx < 0 { R 0 }
+
+        value_ptr := self.values + (idx * 32)
+        value_type := load_i64(value_ptr)
+
+        I value_type != TOML_BOOLEAN { R 0 }
+
+        load_i64(value_ptr + 24)  # bool_value field
+    }
+
+    # Check if key exists
+    F has_key(&self, key: i64) -> i64 {
+        idx := self.find_key(key)
+        I idx >= 0 { 1 } E { 0 }
+    }
+
+    # Find key index
+    # Returns: Index if found, -1 otherwise
+    F find_key(&self, key: i64) -> i64 {
+        i := 0
+        L i < self.count {
+            stored_key := load_i64(self.keys + (i * 8))
+            I str_eq(stored_key, key) { R i }
+            i = i + 1
+        }
+        -1
+    }
+
+    # Add a key-value pair
+    F set(&self, key: i64, value: TomlValue) -> i64 {
+        I self.count >= self.capacity { R 0 }
+
+        # Store key
+        store_i64(self.keys + (self.count * 8), key)
+
+        # Store value
+        value_ptr := self.values + (self.count * 32)
+        store_i64(value_ptr + 0, value.value_type)
+        store_i64(value_ptr + 8, value.str_value)
+        store_i64(value_ptr + 16, value.int_value)
+        store_i64(value_ptr + 24, value.bool_value)
+
+        self.count = self.count + 1
+        1
+    }
+
+    # Free table
+    F free(&self) -> i64 {
+        # Free keys
+        i := 0
+        L i < self.count {
+            key := load_i64(self.keys + (i * 8))
+            I key != 0 { free(key) }
+            i = i + 1
+        }
+
+        I self.keys != 0 { free(self.keys) }
+        I self.values != 0 { free(self.values) }
+
+        0
+    }
+}
+
+# Parse TOML string into table
+# Args: input - TOML content string
+# Returns: TomlTable with parsed key-value pairs
+F toml_parse(input: i64) -> TomlTable {
+    table := TomlTable.new()
+    I input == 0 { R table }
+
+    len := strlen(input)
+    pos := 0
+
+    L pos < len {
+        # Skip whitespace
+        pos = skip_whitespace(input, pos, len)
+        I pos >= len { B }
+
+        c := load_byte(input + pos)
+
+        # Skip comments
+        I c == 35 {  # '#'
+            pos = skip_line(input, pos, len)
+            C
+        }
+
+        # Skip table headers [section]
+        I c == 91 {  # '['
+            pos = skip_line(input, pos, len)
+            C
+        }
+
+        # Parse key-value pair
+        I is_alpha(c) {
+            pair_result := parse_key_value(input, pos, len)
+            pos = pair_result.next_pos
+
+            I pair_result.success {
+                table.set(pair_result.key, pair_result.value)
+            }
+
+            C
+        }
+
+        # Skip unknown lines
+        pos = skip_line(input, pos, len)
+    }
+
+    table
+}
+
+# Result type for key-value parsing
+S ParseResult {
+    success: i64,
+    key: i64,
+    value: TomlValue,
+    next_pos: i64
+}
+
+# Parse a key-value pair
+F parse_key_value(input: i64, start: i64, len: i64) -> ParseResult {
+    pos := start
+
+    # Parse key
+    key_start := pos
+    L pos < len {
+        c := load_byte(input + pos)
+        I c == 61 { B }  # '=' found
+        I c == 32 { B }  # space
+        I c == 10 { R ParseResult { success: 0, key: 0, value: TomlValue.from_int(0), next_pos: pos } }
+        pos = pos + 1
+    }
+
+    key_len := pos - key_start
+    key := malloc(key_len + 1)
+    memcpy(key, input + key_start, key_len)
+    store_byte(key + key_len, 0)
+
+    # Skip to '='
+    L pos < len {
+        c := load_byte(input + pos)
+        I c == 61 { B }
+        pos = pos + 1
+    }
+    pos = pos + 1  # Skip '='
+
+    # Skip whitespace after '='
+    pos = skip_whitespace(input, pos, len)
+
+    # Parse value
+    value_start := pos
+    c := load_byte(input + pos)
+
+    # String value (quoted)
+    I c == 34 {  # '"'
+        pos = pos + 1
+        value_start = pos
+
+        L pos < len {
+            c = load_byte(input + pos)
+            I c == 34 { B }  # Closing quote
+            pos = pos + 1
+        }
+
+        value_len := pos - value_start
+        value_str := malloc(value_len + 1)
+        memcpy(value_str, input + value_start, value_len)
+        store_byte(value_str + value_len, 0)
+
+        pos = pos + 1  # Skip closing quote
+        pos = skip_line(input, pos, len)
+
+        R ParseResult {
+            success: 1,
+            key: key,
+            value: TomlValue.from_str(value_str),
+            next_pos: pos
+        }
+    }
+
+    # Boolean or integer value
+    L pos < len {
+        c = load_byte(input + pos)
+        I c == 10 { B }  # Newline
+        I c == 35 { B }  # Comment
+        pos = pos + 1
+    }
+
+    value_len := pos - value_start
+    value_buf := malloc(value_len + 1)
+    memcpy(value_buf, input + value_start, value_len)
+    store_byte(value_buf + value_len, 0)
+
+    # Trim trailing whitespace
+    value_buf = str_trim(value_buf)
+
+    # Check for boolean
+    I str_eq(value_buf, "true") {
+        free(value_buf)
+        pos = skip_line(input, pos, len)
+        R ParseResult { success: 1, key: key, value: TomlValue.from_bool(1), next_pos: pos }
+    }
+    I str_eq(value_buf, "false") {
+        free(value_buf)
+        pos = skip_line(input, pos, len)
+        R ParseResult { success: 1, key: key, value: TomlValue.from_bool(0), next_pos: pos }
+    }
+
+    # Parse as integer
+    int_val := atol_ptr(value_buf)
+    free(value_buf)
+
+    pos = skip_line(input, pos, len)
+    ParseResult { success: 1, key: key, value: TomlValue.from_int(int_val), next_pos: pos }
+}
+
+# Helper functions
+F skip_whitespace(input: i64, pos: i64, len: i64) -> i64 {
+    L pos < len {
+        c := load_byte(input + pos)
+        I c != 32 { I c != 9 { B } }  # Not space or tab
+        pos = pos + 1
+    }
+    pos
+}
+
+F skip_line(input: i64, pos: i64, len: i64) -> i64 {
+    L pos < len {
+        c := load_byte(input + pos)
+        pos = pos + 1
+        I c == 10 { B }  # Newline
+    }
+    pos
+}
+
+F is_alpha(c: i64) -> i64 {
+    I c >= 65 { I c <= 90 { R 1 } }    # A-Z
+    I c >= 97 { I c <= 122 { R 1 } }   # a-z
+    I c == 95 { R 1 }                  # '_'
+    0
+}
+
+F str_eq(a: i64, b: i64) -> i64 {
+    I a == 0 { R I b == 0 { 1 } E { 0 } }
+    I b == 0 { R 0 }
+
+    i := 0
+    L 1 {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }
+        i = i + 1
+    }
+    0
+}
+
+F str_trim(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    # Trim trailing whitespace
+    len := strlen(s)
+    L len > 0 {
+        c := load_byte(s + len - 1)
+        I c != 32 { I c != 9 { B } }
+        len = len - 1
+    }
+
+    store_byte(s + len, 0)
+    s
+}
+
+F load_i64(addr: i64) -> i64 {
+    load_byte(addr)  # Simplified
+}
+
+F store_i64(addr: i64, value: i64) -> i64 {
+    store_byte(addr, value)  # Simplified
+}
+
+# Extern functions
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64
+X F atol_ptr(s: i64) -> i64

@@ -1,0 +1,365 @@
+# Extended Math Functions
+# Provides additional mathematical functions beyond the standard library
+#
+# Features:
+# - Basic operations (abs, min, max, clamp)
+# - Number theory (gcd, lcm, is_prime)
+# - Power and root functions
+# - Fibonacci sequence
+# - Combinatorics helpers
+
+# Absolute value
+# Args: x - input value
+# Returns: |x|
+F abs(x: i64) -> i64 {
+    I x < 0 { 0 - x } E { x }
+}
+
+# Minimum of two values
+# Args: a, b - input values
+# Returns: min(a, b)
+F min(a: i64, b: i64) -> i64 {
+    I a < b { a } E { b }
+}
+
+# Maximum of two values
+# Args: a, b - input values
+# Returns: max(a, b)
+F max(a: i64, b: i64) -> i64 {
+    I a > b { a } E { b }
+}
+
+# Clamp value to range [lo, hi]
+# Args: x - value, lo - lower bound, hi - upper bound
+# Returns: x clamped to [lo, hi]
+F clamp(x: i64, lo: i64, hi: i64) -> i64 {
+    I x < lo { R lo }
+    I x > hi { R hi }
+    x
+}
+
+# Greatest Common Divisor (Euclidean algorithm)
+# Args: a, b - input values
+# Returns: gcd(a, b)
+F gcd(a: i64, b: i64) -> i64 {
+    # Handle negative values
+    a = abs(a)
+    b = abs(b)
+
+    # Euclidean algorithm
+    L b != 0 {
+        temp := b
+        b = a % b
+        a = temp
+    }
+
+    a
+}
+
+# Least Common Multiple
+# Args: a, b - input values
+# Returns: lcm(a, b)
+F lcm(a: i64, b: i64) -> i64 {
+    I a == 0 { R 0 }
+    I b == 0 { R 0 }
+
+    # lcm(a, b) = |a * b| / gcd(a, b)
+    g := gcd(a, b)
+    abs((a / g) * b)
+}
+
+# Power function (integer exponentiation)
+# Args: base - base value, exp - exponent (must be >= 0)
+# Returns: base^exp
+F pow(base: i64, exp: i64) -> i64 {
+    I exp < 0 { R 0 }  # Negative exponents not supported
+    I exp == 0 { R 1 }
+
+    result := 1
+    i := 0
+    L i < exp {
+        result = result * base
+        i = i + 1
+    }
+
+    result
+}
+
+# Fast power using exponentiation by squaring
+# Args: base - base value, exp - exponent (must be >= 0)
+# Returns: base^exp
+F pow_fast(base: i64, exp: i64) -> i64 {
+    I exp < 0 { R 0 }
+    I exp == 0 { R 1 }
+    I base == 0 { R 0 }
+
+    result := 1
+    b := base
+    e := exp
+
+    L e > 0 {
+        # If exp is odd, multiply result by base
+        I (e % 2) == 1 {
+            result = result * b
+        }
+
+        # Square the base and halve the exponent
+        b = b * b
+        e = e / 2
+    }
+
+    result
+}
+
+# Check if number is prime
+# Args: n - number to check
+# Returns: 1 if prime, 0 otherwise
+F is_prime(n: i64) -> i64 {
+    I n <= 1 { R 0 }
+    I n <= 3 { R 1 }
+    I (n % 2) == 0 { R 0 }
+    I (n % 3) == 0 { R 0 }
+
+    # Check divisors of form 6k ± 1 up to sqrt(n)
+    i := 5
+    L (i * i) <= n {
+        I (n % i) == 0 { R 0 }
+        I (n % (i + 2)) == 0 { R 0 }
+        i = i + 6
+    }
+
+    1
+}
+
+# Fibonacci number (iterative)
+# Args: n - index (0-based)
+# Returns: nth Fibonacci number
+F fibonacci(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    I n == 0 { R 0 }
+    I n == 1 { R 1 }
+
+    prev := 0
+    curr := 1
+    i := 2
+
+    L i <= n {
+        next := prev + curr
+        prev = curr
+        curr = next
+        i = i + 1
+    }
+
+    curr
+}
+
+# Factorial
+# Args: n - input value (must be >= 0)
+# Returns: n!
+F factorial(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    I n == 0 { R 1 }
+    I n == 1 { R 1 }
+
+    result := 1
+    i := 2
+    L i <= n {
+        result = result * i
+        i = i + 1
+    }
+
+    result
+}
+
+# Integer square root (floor)
+# Args: n - input value (must be >= 0)
+# Returns: floor(sqrt(n))
+F isqrt(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    I n == 0 { R 0 }
+    I n == 1 { R 1 }
+
+    # Binary search for square root
+    low := 1
+    high := n
+    result := 0
+
+    L low <= high {
+        mid := (low + high) / 2
+        square := mid * mid
+
+        I square == n {
+            R mid
+        }
+
+        I square < n {
+            result = mid
+            low = mid + 1
+        } E {
+            high = mid - 1
+        }
+    }
+
+    result
+}
+
+# Check if number is perfect square
+# Args: n - number to check
+# Returns: 1 if perfect square, 0 otherwise
+F is_square(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    root := isqrt(n)
+    I (root * root) == n { 1 } E { 0 }
+}
+
+# Sign function
+# Args: x - input value
+# Returns: -1 if x < 0, 0 if x == 0, 1 if x > 0
+F sign(x: i64) -> i64 {
+    I x < 0 { R -1 }
+    I x > 0 { R 1 }
+    0
+}
+
+# Minimum of three values
+F min3(a: i64, b: i64, c: i64) -> i64 {
+    min(a, min(b, c))
+}
+
+# Maximum of three values
+F max3(a: i64, b: i64, c: i64) -> i64 {
+    max(a, max(b, c))
+}
+
+# Check if number is even
+F is_even(n: i64) -> i64 {
+    I (n % 2) == 0 { 1 } E { 0 }
+}
+
+# Check if number is odd
+F is_odd(n: i64) -> i64 {
+    I (n % 2) != 0 { 1 } E { 0 }
+}
+
+# Sum of integers from 1 to n
+F sum_to_n(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    (n * (n + 1)) / 2
+}
+
+# Sum of squares from 1 to n
+F sum_of_squares(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    (n * (n + 1) * ((2 * n) + 1)) / 6
+}
+
+# Binomial coefficient C(n, k) = n! / (k! * (n-k)!)
+# Args: n, k - parameters
+# Returns: C(n, k)
+F binomial(n: i64, k: i64) -> i64 {
+    I k < 0 { R 0 }
+    I k > n { R 0 }
+    I k == 0 { R 1 }
+    I k == n { R 1 }
+
+    # Optimize: C(n, k) = C(n, n-k), use smaller k
+    I k > (n - k) {
+        k = n - k
+    }
+
+    result := 1
+    i := 0
+    L i < k {
+        result = result * (n - i)
+        result = result / (i + 1)
+        i = i + 1
+    }
+
+    result
+}
+
+# Permutation P(n, k) = n! / (n-k)!
+F permutation(n: i64, k: i64) -> i64 {
+    I k < 0 { R 0 }
+    I k > n { R 0 }
+
+    result := 1
+    i := 0
+    L i < k {
+        result = result * (n - i)
+        i = i + 1
+    }
+
+    result
+}
+
+# Modular exponentiation: (base^exp) % mod
+# Args: base, exp, mod - parameters
+# Returns: (base^exp) % mod
+F mod_pow(base: i64, exp: i64, mod: i64) -> i64 {
+    I mod == 1 { R 0 }
+    I exp < 0 { R 0 }
+
+    result := 1
+    b := base % mod
+
+    L exp > 0 {
+        I (exp % 2) == 1 {
+            result = (result * b) % mod
+        }
+
+        exp = exp / 2
+        b = (b * b) % mod
+    }
+
+    result
+}
+
+# Number of digits in n (base 10)
+F digit_count(n: i64) -> i64 {
+    I n == 0 { R 1 }
+
+    n = abs(n)
+    count := 0
+
+    L n > 0 {
+        n = n / 10
+        count = count + 1
+    }
+
+    count
+}
+
+# Reverse digits of n
+F reverse_digits(n: i64) -> i64 {
+    negative := I n < 0 { 1 } E { 0 }
+    n = abs(n)
+
+    result := 0
+    L n > 0 {
+        digit := n % 10
+        result = (result * 10) + digit
+        n = n / 10
+    }
+
+    I negative { 0 - result } E { result }
+}
+
+# Sum of digits
+F digit_sum(n: i64) -> i64 {
+    n = abs(n)
+    sum := 0
+
+    L n > 0 {
+        sum = sum + (n % 10)
+        n = n / 10
+    }
+
+    sum
+}
+
+# Check if n is palindrome
+F is_palindrome(n: i64) -> i64 {
+    I n < 0 { R 0 }
+    I n == reverse_digits(n) { 1 } E { 0 }
+}

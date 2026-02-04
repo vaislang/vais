@@ -1,0 +1,222 @@
+# DotEnv - .env File Loader
+# Load environment variables from .env files
+#
+# File format:
+# KEY=value
+# KEY="quoted value"
+# # Comments
+# export KEY=value  (export prefix ignored)
+#
+# Variables are loaded into the process environment using setenv()
+
+C MAX_LINE_LEN: i64 = 1024
+C MAX_VARS: i64 = 100
+
+# DotEnv state
+S DotEnv {
+    loaded: i64,    # Number of variables loaded
+    errors: i64     # Number of errors encountered
+}
+
+# Load .env file and set environment variables
+# Args: path - path to .env file
+# Returns: 0 on success, -1 on error
+F dotenv_load(path: i64) -> i64 {
+    # Open file for reading
+    file := fopen(path, "r")
+    I file == 0 { R -1 }
+
+    line_buf := malloc(MAX_LINE_LEN)
+    loaded := 0
+
+    L 1 {
+        # Read line
+        result := fgets_ptr(line_buf, MAX_LINE_LEN, file)
+        I result == 0 { B }  # EOF or error
+
+        # Parse and set variable
+        I dotenv_parse_line(line_buf) {
+            loaded = loaded + 1
+        }
+    }
+
+    free(line_buf)
+    fclose(file)
+
+    I loaded > 0 { 0 } E { -1 }
+}
+
+# Load .env file from default location (.env in current directory)
+# Returns: 0 on success, -1 on error
+F dotenv_load_default() -> i64 {
+    dotenv_load(".env")
+}
+
+# Parse and set a single line from .env file
+# Args: line - line to parse
+# Returns: 1 if variable was set, 0 otherwise
+F dotenv_parse_line(line: i64) -> i64 {
+    I line == 0 { R 0 }
+
+    # Skip leading whitespace
+    pos := 0
+    L 1 {
+        c := load_byte(line + pos)
+        I c == 0 { R 0 }
+        I c != 32 { I c != 9 { B } }  # Not space or tab
+        pos = pos + 1
+    }
+
+    # Skip empty lines and comments
+    c := load_byte(line + pos)
+    I c == 0 { R 0 }
+    I c == 10 { R 0 }  # Newline
+    I c == 13 { R 0 }  # Carriage return
+    I c == 35 { R 0 }  # Comment (#)
+
+    # Skip "export " prefix
+    I c == 101 {  # 'e'
+        I str_prefix_eq(line + pos, "export ", 7) {
+            pos = pos + 7
+        }
+    }
+
+    # Parse key
+    key_start := pos
+    L 1 {
+        c = load_byte(line + pos)
+        I c == 0 { R 0 }
+        I c == 61 { B }  # '=' found
+        I c == 32 { R 0 }  # Invalid: space before '='
+        pos = pos + 1
+    }
+
+    key_len := pos - key_start
+    I key_len == 0 { R 0 }
+
+    key := malloc(key_len + 1)
+    memcpy(key, line + key_start, key_len)
+    store_byte(key + key_len, 0)
+
+    # Skip '='
+    pos = pos + 1
+
+    # Parse value
+    value_start := pos
+    c = load_byte(line + pos)
+
+    # Quoted value
+    I c == 34 {  # '"'
+        pos = pos + 1
+        value_start = pos
+
+        L 1 {
+            c = load_byte(line + pos)
+            I c == 0 { B }
+            I c == 34 { B }  # Closing quote
+            pos = pos + 1
+        }
+
+        value_len := pos - value_start
+        value := malloc(value_len + 1)
+        memcpy(value, line + value_start, value_len)
+        store_byte(value + value_len, 0)
+
+        # Set environment variable
+        result := setenv(key, value, 1)
+
+        free(key)
+        free(value)
+
+        R I result == 0 { 1 } E { 0 }
+    }
+
+    # Unquoted value - read until newline or comment
+    L 1 {
+        c = load_byte(line + pos)
+        I c == 0 { B }
+        I c == 10 { B }  # Newline
+        I c == 13 { B }  # Carriage return
+        I c == 35 { B }  # Comment
+        pos = pos + 1
+    }
+
+    value_len := pos - value_start
+    value := malloc(value_len + 1)
+    memcpy(value, line + value_start, value_len)
+    store_byte(value + value_len, 0)
+
+    # Trim trailing whitespace
+    value = str_trim_end(value)
+
+    # Set environment variable
+    result := setenv(key, value, 1)
+
+    free(key)
+    free(value)
+
+    I result == 0 { 1 } E { 0 }
+}
+
+# Get environment variable loaded from .env
+# Args: key - variable name
+# Returns: Pointer to value string, or 0 if not found
+F dotenv_get(key: i64) -> i64 {
+    getenv(key)
+}
+
+# Check if environment variable exists
+# Args: key - variable name
+# Returns: 1 if exists, 0 otherwise
+F dotenv_has(key: i64) -> i64 {
+    value := getenv(key)
+    I value == 0 { 0 } E { 1 }
+}
+
+# Load .env file with custom name
+# Args: filename - name of .env file
+# Returns: 0 on success, -1 on error
+F dotenv_load_file(filename: i64) -> i64 {
+    dotenv_load(filename)
+}
+
+# Helper: Check string prefix
+F str_prefix_eq(str: i64, prefix: i64, len: i64) -> i64 {
+    I str == 0 { R 0 }
+    I prefix == 0 { R 0 }
+
+    i := 0
+    L i < len {
+        cs := load_byte(str + i)
+        cp := load_byte(prefix + i)
+        I cs != cp { R 0 }
+        i = i + 1
+    }
+    1
+}
+
+# Helper: Trim trailing whitespace
+F str_trim_end(s: i64) -> i64 {
+    I s == 0 { R s }
+
+    len := strlen(s)
+    L len > 0 {
+        c := load_byte(s + len - 1)
+        I c != 32 { I c != 9 { B } }  # Not space or tab
+        len = len - 1
+    }
+
+    store_byte(s + len, 0)
+    s
+}
+
+# Extern functions
+X F fopen(path: i64, mode: i64) -> i64
+X F fclose(file: i64) -> i64
+X F fgets_ptr(buffer: i64, size: i64, stream: i64) -> i64
+X F setenv(name: i64, value: i64, overwrite: i64) -> i64
+X F getenv(name: i64) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64

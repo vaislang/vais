@@ -1,0 +1,12 @@
+[package]
+name = "cli-args"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "Command-line argument parser for Vais programs"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]

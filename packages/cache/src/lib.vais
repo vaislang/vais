@@ -1,0 +1,334 @@
+# In-Memory LRU Cache
+# Provides a simple Least Recently Used (LRU) cache implementation
+#
+# Features:
+# - Fixed capacity with automatic eviction
+# - O(1) get, put, has operations (simplified implementation)
+# - String key-value storage
+# - Clear and remove operations
+#
+# Note: This is a simplified implementation using linear search.
+# A production LRU cache would use a hash table + doubly-linked list.
+
+C DEFAULT_CAPACITY: i64 = 100
+C MAX_KEY_LEN: i64 = 256
+C MAX_VALUE_LEN: i64 = 1024
+
+# CacheEntry - single cache entry
+S CacheEntry {
+    key: i64,           # Key string pointer
+    value: i64,         # Value string pointer
+    access_time: i64,   # Last access time (for LRU)
+    valid: i64          # 1 if valid, 0 if empty slot
+}
+
+# Cache - LRU cache structure
+S Cache {
+    entries: i64,    # Array of CacheEntry structs
+    capacity: i64,   # Maximum number of entries
+    count: i64,      # Current number of entries
+    clock: i64       # Monotonic clock for LRU tracking
+}
+
+# Implementation for Cache
+X Cache {
+    # Create a new cache with specified capacity
+    # Args: capacity - maximum number of entries
+    # Returns: Cache instance
+    F new(capacity: i64) -> Cache {
+        I capacity <= 0 {
+            capacity = DEFAULT_CAPACITY
+        }
+
+        # Allocate entries array (each entry is 32 bytes)
+        entry_size := 32
+        entries := malloc(capacity * entry_size)
+
+        # Initialize all entries as invalid
+        i := 0
+        L i < capacity {
+            entry_ptr := entries + (i * entry_size)
+            store_i64(entry_ptr + 24, 0)  # valid = 0
+            i = i + 1
+        }
+
+        Cache {
+            entries: entries,
+            capacity: capacity,
+            count: 0,
+            clock: 0
+        }
+    }
+
+    # Get value by key
+    # Args: key - lookup key
+    # Returns: Pointer to value string, or 0 if not found
+    F get(&self, key: i64) -> i64 {
+        I key == 0 { R 0 }
+
+        idx := self.find_entry(key)
+        I idx < 0 { R 0 }
+
+        # Update access time
+        entry_ptr := self.entries + (idx * 32)
+        self.clock = self.clock + 1
+        store_i64(entry_ptr + 16, self.clock)
+
+        # Return value
+        load_i64(entry_ptr + 8)
+    }
+
+    # Put key-value pair into cache
+    # Args: key - cache key, value - cache value
+    # Returns: 1 on success, 0 on error
+    F put(&self, key: i64, value: i64) -> i64 {
+        I key == 0 { R 0 }
+        I value == 0 { R 0 }
+
+        # Check if key already exists
+        existing_idx := self.find_entry(key)
+        I existing_idx >= 0 {
+            # Update existing entry
+            entry_ptr := self.entries + (existing_idx * 32)
+
+            # Free old value
+            old_value := load_i64(entry_ptr + 8)
+            I old_value != 0 {
+                free(old_value)
+            }
+
+            # Store new value
+            new_value := str_copy(value)
+            store_i64(entry_ptr + 8, new_value)
+
+            # Update access time
+            self.clock = self.clock + 1
+            store_i64(entry_ptr + 16, self.clock)
+
+            R 1
+        }
+
+        # Find empty slot or evict LRU entry
+        idx := -1
+        I self.count < self.capacity {
+            # Find first empty slot
+            idx = self.find_empty_slot()
+        } E {
+            # Cache is full, evict LRU entry
+            idx = self.find_lru_entry()
+            self.evict_entry(idx)
+        }
+
+        I idx < 0 { R 0 }
+
+        # Store new entry
+        entry_ptr := self.entries + (idx * 32)
+        new_key := str_copy(key)
+        new_value := str_copy(value)
+
+        store_i64(entry_ptr + 0, new_key)
+        store_i64(entry_ptr + 8, new_value)
+        self.clock = self.clock + 1
+        store_i64(entry_ptr + 16, self.clock)
+        store_i64(entry_ptr + 24, 1)  # valid = 1
+
+        self.count = self.count + 1
+        1
+    }
+
+    # Check if key exists in cache
+    # Args: key - lookup key
+    # Returns: 1 if exists, 0 otherwise
+    F has(&self, key: i64) -> i64 {
+        I key == 0 { R 0 }
+        idx := self.find_entry(key)
+        I idx >= 0 { 1 } E { 0 }
+    }
+
+    # Remove entry by key
+    # Args: key - key to remove
+    # Returns: 1 if removed, 0 if not found
+    F remove(&self, key: i64) -> i64 {
+        I key == 0 { R 0 }
+
+        idx := self.find_entry(key)
+        I idx < 0 { R 0 }
+
+        self.evict_entry(idx)
+        self.count = self.count - 1
+        1
+    }
+
+    # Clear all entries
+    # Returns: Number of entries cleared
+    F clear(&self) -> i64 {
+        cleared := 0
+        i := 0
+
+        L i < self.capacity {
+            entry_ptr := self.entries + (i * 32)
+            valid := load_i64(entry_ptr + 24)
+
+            I valid {
+                self.evict_entry(i)
+                cleared = cleared + 1
+            }
+
+            i = i + 1
+        }
+
+        self.count = 0
+        cleared
+    }
+
+    # Free cache and all entries
+    F free(&self) -> i64 {
+        self.clear()
+        I self.entries != 0 {
+            free(self.entries)
+        }
+        0
+    }
+
+    # Get current size
+    F size(&self) -> i64 {
+        self.count
+    }
+
+    # Check if cache is empty
+    F is_empty(&self) -> i64 {
+        I self.count == 0 { 1 } E { 0 }
+    }
+
+    # Check if cache is full
+    F is_full(&self) -> i64 {
+        I self.count >= self.capacity { 1 } E { 0 }
+    }
+
+    # Find entry by key (returns index or -1)
+    F find_entry(&self, key: i64) -> i64 {
+        i := 0
+        L i < self.capacity {
+            entry_ptr := self.entries + (i * 32)
+            valid := load_i64(entry_ptr + 24)
+
+            I valid {
+                entry_key := load_i64(entry_ptr + 0)
+                I str_eq(entry_key, key) {
+                    R i
+                }
+            }
+
+            i = i + 1
+        }
+        -1
+    }
+
+    # Find first empty slot (returns index or -1)
+    F find_empty_slot(&self) -> i64 {
+        i := 0
+        L i < self.capacity {
+            entry_ptr := self.entries + (i * 32)
+            valid := load_i64(entry_ptr + 24)
+
+            I valid == 0 {
+                R i
+            }
+
+            i = i + 1
+        }
+        -1
+    }
+
+    # Find least recently used entry (returns index)
+    F find_lru_entry(&self) -> i64 {
+        lru_idx := -1
+        lru_time := self.clock + 1
+
+        i := 0
+        L i < self.capacity {
+            entry_ptr := self.entries + (i * 32)
+            valid := load_i64(entry_ptr + 24)
+
+            I valid {
+                access_time := load_i64(entry_ptr + 16)
+                I access_time < lru_time {
+                    lru_time = access_time
+                    lru_idx = i
+                }
+            }
+
+            i = i + 1
+        }
+
+        lru_idx
+    }
+
+    # Evict entry at index
+    F evict_entry(&self, idx: i64) -> i64 {
+        I idx < 0 { R 0 }
+        I idx >= self.capacity { R 0 }
+
+        entry_ptr := self.entries + (idx * 32)
+
+        # Free key and value
+        key := load_i64(entry_ptr + 0)
+        value := load_i64(entry_ptr + 8)
+
+        I key != 0 { free(key) }
+        I value != 0 { free(value) }
+
+        # Mark as invalid
+        store_i64(entry_ptr + 0, 0)
+        store_i64(entry_ptr + 8, 0)
+        store_i64(entry_ptr + 16, 0)
+        store_i64(entry_ptr + 24, 0)
+
+        1
+    }
+}
+
+# Helper: String equality check
+F str_eq(a: i64, b: i64) -> i64 {
+    I a == 0 { R I b == 0 { 1 } E { 0 } }
+    I b == 0 { R 0 }
+
+    i := 0
+    L 1 {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }
+
+        i = i + 1
+    }
+    0
+}
+
+# Helper: Copy string
+F str_copy(s: i64) -> i64 {
+    I s == 0 { R 0 }
+
+    len := strlen(s)
+    buf := malloc(len + 1)
+    memcpy(buf, s, len)
+    store_byte(buf + len, 0)
+    buf
+}
+
+# Helper: Load i64 from memory
+F load_i64(addr: i64) -> i64 {
+    load_byte(addr)  # Simplified
+}
+
+# Helper: Store i64 to memory
+F store_i64(addr: i64, value: i64) -> i64 {
+    store_byte(addr, value)  # Simplified
+}
+
+# Extern functions
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F strlen(s: i64) -> i64
+X F memcpy(dest: i64, src: i64, n: i64) -> i64

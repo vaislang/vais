@@ -1,0 +1,187 @@
+# CLI Arguments Parser
+# Provides utilities for parsing command-line arguments in Vais programs
+#
+# This module uses extern functions to access argc/argv from the C runtime.
+# In a real implementation, these would be passed from main() or accessed via
+# platform-specific APIs.
+
+# Extern function to get argument count
+# Returns: Number of command-line arguments (including program name)
+X F get_argc() -> i64
+
+# Extern function to get argument at index
+# Args: idx - argument index (0 = program name, 1+ = arguments)
+# Returns: Pointer to null-terminated string, or 0 if index out of bounds
+X F get_argv(idx: i64) -> i64
+
+# Args structure to hold parsed command-line arguments
+S Args {
+    count: i64,      # Number of arguments (excluding program name)
+    prog_name: i64   # Pointer to program name string
+}
+
+# Implementation block for Args
+X Args {
+    # Create a new Args instance by parsing command-line arguments
+    # Returns: Args structure with count and program name
+    F new() -> Args {
+        argc := get_argc()
+        prog := get_argv(0)
+
+        # Count excludes program name
+        count := I argc > 0 { argc - 1 } E { 0 }
+
+        Args { count: count, prog_name: prog }
+    }
+
+    # Get argument at index (0-based, excludes program name)
+    # Args: idx - argument index
+    # Returns: Pointer to argument string, or 0 if out of bounds
+    F get(&self, idx: i64) -> i64 {
+        I idx < 0 { R 0 }
+        I idx >= self.count { R 0 }
+
+        # argv[0] is program name, so offset by 1
+        get_argv(idx + 1)
+    }
+
+    # Check if a flag is present (flags start with - or --)
+    # Args: name - flag name (e.g., "help", "v", "verbose")
+    # Returns: 1 if flag found, 0 otherwise
+    F has_flag(&self, name: i64) -> i64 {
+        I self.count == 0 { R 0 }
+
+        # Check each argument
+        idx := 0
+        L idx < self.count {
+            arg := self.get(idx)
+            I arg == 0 {
+                idx = idx + 1
+                C
+            }
+
+            # Check if arg starts with '-' or '--'
+            first := load_byte(arg)
+            I first == 45 {  # ASCII '-'
+                second := load_byte(arg + 1)
+
+                # Handle --name
+                I second == 45 {
+                    I str_eq(arg + 2, name) { R 1 }
+                }
+
+                # Handle -name
+                I str_eq(arg + 1, name) { R 1 }
+            }
+
+            idx = idx + 1
+        }
+
+        0
+    }
+
+    # Get value for a named option (e.g., --output=file or --output file)
+    # Args: name - option name
+    # Returns: Pointer to value string, or 0 if not found
+    F get_option(&self, name: i64) -> i64 {
+        I self.count == 0 { R 0 }
+
+        idx := 0
+        L idx < self.count {
+            arg := self.get(idx)
+            I arg == 0 {
+                idx = idx + 1
+                C
+            }
+
+            # Check for --name=value format
+            first := load_byte(arg)
+            I first == 45 {
+                second := load_byte(arg + 1)
+                I second == 45 {
+                    # Skip past "--"
+                    ptr := arg + 2
+
+                    # Compare name part
+                    name_len := strlen(name)
+                    I str_prefix_eq(ptr, name, name_len) {
+                        # Check for '=' separator
+                        eq_pos := load_byte(ptr + name_len)
+                        I eq_pos == 61 {  # ASCII '='
+                            R ptr + name_len + 1
+                        }
+                    }
+                }
+            }
+
+            # Check for --name value format (next arg is value)
+            I first == 45 {
+                second := load_byte(arg + 1)
+                I second == 45 {
+                    I str_eq(arg + 2, name) {
+                        # Return next argument as value
+                        I idx + 1 < self.count {
+                            R self.get(idx + 1)
+                        }
+                    }
+                }
+            }
+
+            idx = idx + 1
+        }
+
+        0
+    }
+
+    # Get program name
+    # Returns: Pointer to program name string
+    F program_name(&self) -> i64 {
+        self.prog_name
+    }
+}
+
+# Parse command-line arguments
+# Returns: Args structure
+F parse_args() -> Args {
+    Args.new()
+}
+
+# Helper: Compare two null-terminated strings for equality
+# Returns: 1 if equal, 0 otherwise
+F str_eq(a: i64, b: i64) -> i64 {
+    I a == 0 { R I b == 0 { 1 } E { 0 } }
+    I b == 0 { R 0 }
+
+    i := 0
+    L 1 {
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+
+        I ca != cb { R 0 }
+        I ca == 0 { R 1 }  # Both reached null terminator
+
+        i = i + 1
+    }
+
+    0
+}
+
+# Helper: Check if string starts with prefix
+# Returns: 1 if a starts with prefix of given length, 0 otherwise
+F str_prefix_eq(a: i64, prefix: i64, len: i64) -> i64 {
+    I a == 0 { R 0 }
+    I prefix == 0 { R 0 }
+
+    i := 0
+    L i < len {
+        ca := load_byte(a + i)
+        cp := load_byte(prefix + i)
+
+        I ca != cp { R 0 }
+        I ca == 0 { R 0 }  # a is shorter than prefix
+
+        i = i + 1
+    }
+
+    1
+}

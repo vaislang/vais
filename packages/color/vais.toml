@@ -1,0 +1,12 @@
+[package]
+name = "color"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "Terminal color output utilities using ANSI escape codes"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+
+[build]
