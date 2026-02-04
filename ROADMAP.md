@@ -947,23 +947,23 @@ Phase 34에서 8.5/10 수준을 달성한 Vais를 **9/10 이상**으로 끌어�
 
 **목표**: 표준 라이브러리 전체 65개 모듈의 API 레퍼런스 완성
 
-- [ ] 나머지 60개 모듈의 API 문서 자동 생성
-- [ ] 모듈 간 상호 참조 링크
-- [ ] 검색 가능한 인덱스 페이지
-- [ ] docs-site SUMMARY.md 전체 업데이트
-- **파일**: `docs-site/src/api/` (60개 파일 추가)
+- [x] 나머지 50+ 모듈의 API 문서 자동 생성 - 11개 카테고리로 분류
+- [x] 모듈 간 상호 참조 링크 - index.md에서 전체 모듈 탐색 가능
+- [x] 검색 가능한 인덱스 페이지 (`docs-site/src/api/index.md`)
+- [x] docs-site SUMMARY.md 전체 업데이트 - 55개 API 문서 엔트리
+- **파일**: `docs-site/src/api/` (50+ 파일 추가) + `docs-site/src/SUMMARY.md`
 - **의존성**: Stage 3 완료 권장 (자동 배포)
 
 ### Stage 6: 커뮤니티 인프라 구축
 
 **목표**: 오픈소스 프로젝트로서의 기본 인프라 완비
 
-- [ ] CONTRIBUTING.md - 기여 가이드 (이슈, PR, 코드 리뷰 절차)
-- [ ] CODE_OF_CONDUCT.md - 행동 강령
-- [ ] GitHub Issue/PR 템플릿 (버그 보고, 기능 요청, RFC)
-- [ ] CHANGELOG.md 자동 생성 설정 (conventional commits 기반)
-- [ ] README.md 대폭 개선 (배지, 기능 표, 빠른 시작, 스크린샷)
-- **파일**: 루트 디렉토리 + `.github/`
+- [x] CONTRIBUTING.md - 기여 가이드 (개발 환경, 테스트, PR 절차, 코드 스타일)
+- [x] CODE_OF_CONDUCT.md - Contributor Covenant v2.1 행동 강령
+- [x] GitHub Issue/PR 템플릿 (bug_report.yml, feature_request.yml, PR template) - Stage 3에서 완료
+- [x] CHANGELOG.md - Keep a Changelog 형식, v0.1.0~v1.0.0-rc.1 이력
+- [x] README.md - CI 배지, 기능 표, 빠른 시작, 문서/플레이그라운드 링크 포함
+- **파일**: 루트 디렉토리 (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `README.md`)
 - **의존성**: Stage 3 완료 권장
 
 ### Stage 7: v1.0 릴리스 준비

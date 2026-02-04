@@ -1,0 +1,45 @@
+# Arena API Reference
+
+> Region-based memory allocator - fast batch allocation, single free
+
+## Import
+
+```vais
+U std/arena
+```
+
+## Struct
+
+```vais
+S Arena {
+    chunks: i64,       # Chunk pointer list
+    chunk_count: i64,
+    chunk_size: i64,   # Size per chunk (default 64KB)
+    current: i64,      # Current chunk
+    offset: i64        # Offset in current chunk
+}
+```
+
+## Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `F new() -> Arena` | Create with 64KB chunks |
+| `with_chunk_size` | `F with_chunk_size(size: i64) -> Arena` | Custom chunk size |
+| `alloc` | `F alloc(&self, size: i64) -> i64` | Allocate bytes |
+| `reset` | `F reset(&self) -> i64` | Reset (reuse memory) |
+| `drop` | `F drop(&self) -> i64` | Free all chunks |
+
+## Usage
+
+```vais
+U std/arena
+
+F main() -> i64 {
+    a := Arena::new()
+    ptr1 := a.alloc(64)   # Fast allocation
+    ptr2 := a.alloc(128)
+    a.drop()               # Frees everything at once
+    0
+}
+```

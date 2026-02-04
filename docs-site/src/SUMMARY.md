@@ -73,11 +73,99 @@
 
 # API Reference
 
+- [Index](./api/index.md)
+
+## Core Types
+
+- [Option](./api/option.md)
+- [Result](./api/result.md)
+- [String](./api/string.md)
+- [OwnedString](./api/owned_string.md)
+- [ByteBuffer](./api/bytebuffer.md)
+- [Box](./api/box.md)
+- [Rc](./api/rc.md)
+- [Fmt](./api/fmt.md)
+
+## Collections
+
 - [Vec](./api/vec.md)
-- [JSON](./api/json.md)
+- [HashMap](./api/hashmap.md)
+- [StringMap](./api/stringmap.md)
+- [BTreeMap](./api/btreemap.md)
+- [Set](./api/set.md)
+- [Deque](./api/deque.md)
+- [PriorityQueue](./api/priority_queue.md)
+- [Collections](./api/collections.md)
+
+## I/O and Filesystem
+
+- [IO](./api/io.md)
+- [File](./api/file.md)
+- [Filesystem](./api/filesystem.md)
+
+## Networking and Web
+
+- [Net](./api/net.md)
 - [HTTP](./api/http.md)
-- [Log](./api/log.md)
+- [HTTP Client](./api/http_client.md)
+- [HTTP Server](./api/http_server.md)
+- [WebSocket](./api/websocket.md)
+- [TLS](./api/tls.md)
+- [URL](./api/url.md)
+
+## Concurrency
+
+- [Thread](./api/thread.md)
+- [Sync](./api/sync.md)
+- [Future](./api/future.md)
+- [Async](./api/async.md)
+- [Runtime](./api/runtime.md)
+- [Async Reactor](./api/async_reactor.md)
+
+## Data Processing
+
+- [JSON](./api/json.md)
+- [Regex](./api/regex.md)
+- [Base64](./api/base64.md)
+- [Template](./api/template.md)
 - [Compress](./api/compress.md)
+
+## Databases
+
+- [SQLite](./api/sqlite.md)
+- [PostgreSQL](./api/postgres.md)
+- [ORM](./api/orm.md)
+
+## Math and Algorithms
+
+- [Math](./api/math.md)
+- [Hash](./api/hash.md)
+- [Random](./api/random.md)
+- [UUID](./api/uuid.md)
+- [CRC32](./api/crc32.md)
+
+## Security and Crypto
+
+- [Crypto](./api/crypto.md)
+- [Log](./api/log.md)
+
+## Memory Management
+
+- [Memory](./api/memory.md)
+- [Allocator](./api/allocator.md)
+- [Arena](./api/arena.md)
+- [GC](./api/gc.md)
+
+## System and Runtime
+
+- [Time](./api/time.md)
+- [Profiler](./api/profiler.md)
+- [Test](./api/test.md)
+- [PropTest](./api/proptest.md)
+- [Contract](./api/contract.md)
+- [GPU](./api/gpu.md)
+- [Hot Reload](./api/hot.md)
+- [DynLoad](./api/dynload.md)
 
 ---
 
