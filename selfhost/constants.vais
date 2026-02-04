@@ -5,70 +5,110 @@
 # Token Constants
 # ============================================================================
 
-# Keyword tokens
-F TOK_KW_F() -> i64 = 1
-F TOK_KW_S() -> i64 = 2
-F TOK_KW_E() -> i64 = 3
-F TOK_KW_I() -> i64 = 4
-F TOK_KW_L() -> i64 = 5
-F TOK_KW_X() -> i64 = 8
-F TOK_KW_R() -> i64 = 13
-F TOK_KW_B() -> i64 = 14
+# Keyword tokens (1-30)
+F TOK_KW_F() -> i64 = 1        # function
+F TOK_KW_S() -> i64 = 2        # struct
+F TOK_KW_E() -> i64 = 3        # enum
+F TOK_KW_I() -> i64 = 4        # if
+F TOK_KW_L() -> i64 = 5        # loop
+F TOK_KW_M() -> i64 = 6        # match
+F TOK_KW_W() -> i64 = 7        # trait (With)
+F TOK_KW_X() -> i64 = 8        # impl (eXtend)
+F TOK_KW_T() -> i64 = 9        # type
+F TOK_KW_U() -> i64 = 10       # use
+F TOK_KW_P() -> i64 = 11       # pub
+F TOK_KW_A() -> i64 = 12       # async
+F TOK_KW_R() -> i64 = 13       # return
+F TOK_KW_B() -> i64 = 14       # break
+F TOK_KW_C() -> i64 = 15       # continue
+F TOK_KW_TRUE() -> i64 = 16
+F TOK_KW_FALSE() -> i64 = 17
 F TOK_KW_MUT() -> i64 = 18
-F TOK_KW_M() -> i64 = 6
-F TOK_KW_U() -> i64 = 7
+F TOK_KW_ELSE() -> i64 = 19
+F TOK_KW_D() -> i64 = 20       # defer
+F TOK_KW_O() -> i64 = 21       # union
+F TOK_KW_N() -> i64 = 22       # extern
+F TOK_KW_G() -> i64 = 23       # global
+F TOK_KW_Y() -> i64 = 24       # await (also "await" keyword)
 
-# Literal tokens
-F TOK_INT() -> i64 = 51
-F TOK_IDENT() -> i64 = 54
-F TOK_STRING() -> i64 = 53
+# Type keyword tokens (31-50)
+F TOK_TY_I8() -> i64 = 31
+F TOK_TY_I16() -> i64 = 32
+F TOK_TY_I32() -> i64 = 33
+F TOK_TY_I64() -> i64 = 34
+F TOK_TY_I128() -> i64 = 35
+F TOK_TY_U8() -> i64 = 36
+F TOK_TY_U16() -> i64 = 37
+F TOK_TY_U32() -> i64 = 38
+F TOK_TY_U64() -> i64 = 39
+F TOK_TY_U128() -> i64 = 40
+F TOK_TY_F32() -> i64 = 41
+F TOK_TY_F64() -> i64 = 42
+F TOK_TY_BOOL() -> i64 = 43
+F TOK_TY_STR() -> i64 = 44
 
-# Operator tokens
-F TOK_PLUS() -> i64 = 61
-F TOK_MINUS() -> i64 = 62
-F TOK_STAR() -> i64 = 63
-F TOK_SLASH() -> i64 = 64
-F TOK_PERCENT() -> i64 = 65
-F TOK_LT() -> i64 = 66
-F TOK_GT() -> i64 = 67
-F TOK_LT_EQ() -> i64 = 68
-F TOK_GT_EQ() -> i64 = 69
-F TOK_EQ_EQ() -> i64 = 70
-F TOK_NOT_EQ() -> i64 = 71
-F TOK_NOT() -> i64 = 78      # ! (logical not) - same as TOK_BANG
-F TOK_AMP() -> i64 = 72
-F TOK_PIPE() -> i64 = 73
-F TOK_AND() -> i64 = 79
-F TOK_OR() -> i64 = 80
+# Literal tokens (51-60)
+F TOK_INT() -> i64 = 51        # Integer literal
+F TOK_FLOAT() -> i64 = 52      # Float literal
+F TOK_STRING() -> i64 = 53     # String literal
+F TOK_IDENT() -> i64 = 54      # Identifier
 
-# Assignment tokens
-F TOK_EQ() -> i64 = 81
-F TOK_COLON_EQ() -> i64 = 82
+# Operator tokens (61-100)
+F TOK_PLUS() -> i64 = 61       # +
+F TOK_MINUS() -> i64 = 62      # -
+F TOK_STAR() -> i64 = 63       # *
+F TOK_SLASH() -> i64 = 64      # /
+F TOK_PERCENT() -> i64 = 65    # %
+F TOK_LT() -> i64 = 66         # <
+F TOK_GT() -> i64 = 67         # >
+F TOK_LT_EQ() -> i64 = 68      # <=
+F TOK_GT_EQ() -> i64 = 69      # >=
+F TOK_EQ_EQ() -> i64 = 70      # ==
+F TOK_NOT_EQ() -> i64 = 71     # !=
+F TOK_AMP() -> i64 = 72        # &
+F TOK_PIPE() -> i64 = 73       # |
+F TOK_CARET() -> i64 = 74      # ^
+F TOK_TILDE() -> i64 = 75      # ~
+F TOK_SHL() -> i64 = 76        # <<
+F TOK_SHR() -> i64 = 77        # >>
+F TOK_BANG() -> i64 = 78       # !
+F TOK_NOT() -> i64 = 78        # ! (logical not) - same as TOK_BANG
+F TOK_AND() -> i64 = 79        # &&
+F TOK_OR() -> i64 = 80         # ||
 
-# Delimiter tokens
-F TOK_LPAREN() -> i64 = 91
-F TOK_RPAREN() -> i64 = 92
-F TOK_LBRACE() -> i64 = 93
-F TOK_RBRACE() -> i64 = 94
-F TOK_LBRACKET() -> i64 = 95
-F TOK_RBRACKET() -> i64 = 96
+# Assignment tokens (81-90)
+F TOK_EQ() -> i64 = 81         # =
+F TOK_COLON_EQ() -> i64 = 82   # :=
+F TOK_PLUS_EQ() -> i64 = 83    # +=
+F TOK_MINUS_EQ() -> i64 = 84   # -=
+F TOK_STAR_EQ() -> i64 = 85    # *=
+F TOK_SLASH_EQ() -> i64 = 86   # /=
 
-# Punctuation tokens
-F TOK_COMMA() -> i64 = 101
-F TOK_COLON() -> i64 = 102
-F TOK_SEMI() -> i64 = 103
-F TOK_DOT() -> i64 = 104
-F TOK_ARROW() -> i64 = 107
-F TOK_FAT_ARROW() -> i64 = 108
-F TOK_AT() -> i64 = 111
+# Delimiter tokens (91-100)
+F TOK_LPAREN() -> i64 = 91     # (
+F TOK_RPAREN() -> i64 = 92     # )
+F TOK_LBRACE() -> i64 = 93     # {
+F TOK_RBRACE() -> i64 = 94     # }
+F TOK_LBRACKET() -> i64 = 95   # [
+F TOK_RBRACKET() -> i64 = 96   # ]
+
+# Punctuation tokens (101-120)
+F TOK_COMMA() -> i64 = 101     # ,
+F TOK_COLON() -> i64 = 102     # :
+F TOK_SEMI() -> i64 = 103      # ;
+F TOK_DOT() -> i64 = 104       # .
+F TOK_DOT_DOT() -> i64 = 105   # ..
+F TOK_DOT_DOT_EQ() -> i64 = 106 # ..=
+F TOK_ARROW() -> i64 = 107     # ->
+F TOK_FAT_ARROW() -> i64 = 108 # =>
+F TOK_COLON_COLON() -> i64 = 109 # ::
+F TOK_QUESTION() -> i64 = 110  # ?
+F TOK_AT() -> i64 = 111        # @
+F TOK_HASH() -> i64 = 112      # #
 
 # Special tokens
 F TOK_EOF() -> i64 = 200
-
-# Type token constants
-F TOK_TY_I64() -> i64 = 34
-F TOK_TY_STR() -> i64 = 35
-F TOK_TY_BOOL() -> i64 = 36
+F TOK_ERROR() -> i64 = 201
 
 # ============================================================================
 # AST Node Types

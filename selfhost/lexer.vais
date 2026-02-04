@@ -245,6 +245,11 @@ X Lexer {
             I c == 82 { R token_simple(TOK_KW_R(), start, self.pos) }
             I c == 66 { R token_simple(TOK_KW_B(), start, self.pos) }
             I c == 67 { R token_simple(TOK_KW_C(), start, self.pos) }
+            I c == 68 { R token_simple(TOK_KW_D(), start, self.pos) }
+            I c == 79 { R token_simple(TOK_KW_O(), start, self.pos) }
+            I c == 78 { R token_simple(TOK_KW_N(), start, self.pos) }
+            I c == 71 { R token_simple(TOK_KW_G(), start, self.pos) }
+            I c == 89 { R token_simple(TOK_KW_Y(), start, self.pos) }
             0
         } E {
             0

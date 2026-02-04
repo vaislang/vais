@@ -154,21 +154,62 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
         I c == 77 { kind = TOK_KW_M(); 0 } E { 0 }
         I c == 70 { kind = TOK_KW_F(); 0 }       # F
         E I c == 83 { kind = TOK_KW_S(); 0 }     # S
-        E I c == 88 { kind = TOK_KW_X(); 0 }     # X
+        E I c == 88 { kind = TOK_KW_X(); 0 }     # X (impl)
         E I c == 73 { kind = TOK_KW_I(); 0 }     # I
         E I c == 76 { kind = TOK_KW_L(); 0 }     # L
         E I c == 82 { kind = TOK_KW_R(); 0 }     # R
         E I c == 66 { kind = TOK_KW_B(); 0 }     # B
         E I c == 69 { kind = TOK_KW_E(); 0 }     # E
-        E I c == 85 { kind = TOK_KW_U(); 0 }     # U (import)
+        E I c == 85 { kind = TOK_KW_U(); 0 }     # U (use)
+        E I c == 87 { kind = TOK_KW_W(); 0 }     # W (trait)
+        E I c == 84 { kind = TOK_KW_T(); 0 }     # T (type)
+        E I c == 80 { kind = TOK_KW_P(); 0 }     # P (pub)
+        E I c == 65 { kind = TOK_KW_A(); 0 }     # A (async)
+        E I c == 67 { kind = TOK_KW_C(); 0 }     # C (continue)
+        E I c == 68 { kind = TOK_KW_D(); 0 }     # D (defer)
+        E I c == 79 { kind = TOK_KW_O(); 0 }     # O (union)
+        E I c == 78 { kind = TOK_KW_N(); 0 }     # N (extern)
+        E I c == 71 { kind = TOK_KW_G(); 0 }     # G (global)
         E { 0 }
+    } E I len == 2 {
+        c0 := load_byte(str_start)
+        c1 := load_byte(str_start + 1)
+        # Check for i8, u8
+        I c0 == 105 && c1 == 56 {
+            kind = TOK_TY_I8()
+            0
+        } E I c0 == 117 && c1 == 56 {
+            kind = TOK_TY_U8()
+            0
+        } E { 0 }
     } E I len == 3 {
         c0 := load_byte(str_start)
         c1 := load_byte(str_start + 1)
         c2 := load_byte(str_start + 2)
-        # Check for i64
-        I c0 == 105 && c1 == 54 && c2 == 52 {
+        # Check for i16, i32, i64, u16, u32, u64, f32, f64
+        I c0 == 105 && c1 == 49 && c2 == 54 {
+            kind = TOK_TY_I16()
+            0
+        } E I c0 == 105 && c1 == 51 && c2 == 50 {
+            kind = TOK_TY_I32()
+            0
+        } E I c0 == 105 && c1 == 54 && c2 == 52 {
             kind = TOK_TY_I64()
+            0
+        } E I c0 == 117 && c1 == 49 && c2 == 54 {
+            kind = TOK_TY_U16()
+            0
+        } E I c0 == 117 && c1 == 51 && c2 == 50 {
+            kind = TOK_TY_U32()
+            0
+        } E I c0 == 117 && c1 == 54 && c2 == 52 {
+            kind = TOK_TY_U64()
+            0
+        } E I c0 == 102 && c1 == 51 && c2 == 50 {
+            kind = TOK_TY_F32()
+            0
+        } E I c0 == 102 && c1 == 54 && c2 == 52 {
+            kind = TOK_TY_F64()
             0
         # Check for str
         } E I c0 == 115 && c1 == 116 && c2 == 114 {
@@ -184,9 +225,32 @@ F lexer_scan_ident(lex: i64, tokens: i64, count: i64) -> i64 {
         c1 := load_byte(str_start + 1)
         c2 := load_byte(str_start + 2)
         c3 := load_byte(str_start + 3)
-        # Check for bool
-        I c0 == 98 && c1 == 111 && c2 == 111 && c3 == 108 {
+        # Check for i128, u128, bool, true, else
+        I c0 == 105 && c1 == 49 && c2 == 50 && c3 == 56 {
+            kind = TOK_TY_I128()
+            0
+        } E I c0 == 117 && c1 == 49 && c2 == 50 && c3 == 56 {
+            kind = TOK_TY_U128()
+            0
+        } E I c0 == 98 && c1 == 111 && c2 == 111 && c3 == 108 {
             kind = TOK_TY_BOOL()
+            0
+        } E I c0 == 116 && c1 == 114 && c2 == 117 && c3 == 101 {
+            kind = TOK_KW_TRUE()
+            0
+        } E I c0 == 101 && c1 == 108 && c2 == 115 && c3 == 101 {
+            kind = TOK_KW_ELSE()
+            0
+        } E { 0 }
+    } E I len == 5 {
+        c0 := load_byte(str_start)
+        c1 := load_byte(str_start + 1)
+        c2 := load_byte(str_start + 2)
+        c3 := load_byte(str_start + 3)
+        c4 := load_byte(str_start + 4)
+        # Check for false
+        I c0 == 102 && c1 == 97 && c2 == 108 && c3 == 115 && c4 == 101 {
+            kind = TOK_KW_FALSE()
             0
         } E { 0 }
     } E { 0 }
@@ -219,36 +283,98 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
     E I c == 59 { kind = TOK_SEMI(); 0 }       # ;
     E I c == 64 { kind = TOK_AT(); 0 }         # @
     E I c == 58 {
-        # Check for :=
+        # Check for := or ::
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_COLON_EQ()
+            0
+        } E I lexer_peek(lex) == 58 {
+            lexer_advance(lex)
+            kind = TOK_COLON_COLON()
             0
         } E {
             kind = TOK_COLON()
             0
         }
     }
-    E I c == 46 { kind = TOK_DOT(); 0 }        # .
-    E I c == 43 { kind = TOK_PLUS(); 0 }       # +
+    E I c == 46 {
+        # . or .. or ..=
+        I lexer_peek(lex) == 46 {
+            lexer_advance(lex)
+            I lexer_peek(lex) == 61 {
+                lexer_advance(lex)
+                kind = TOK_DOT_DOT_EQ()
+                0
+            } E {
+                kind = TOK_DOT_DOT()
+                0
+            }
+        } E {
+            kind = TOK_DOT()
+            0
+        }
+    }
+    E I c == 43 {
+        # + or +=
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_PLUS_EQ()
+            0
+        } E {
+            kind = TOK_PLUS()
+            0
+        }
+    }
     E I c == 45 {
+        # - or -> or -=
         I lexer_peek(lex) == 62 {
             lexer_advance(lex)
             kind = TOK_ARROW()
+            0
+        } E I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_MINUS_EQ()
             0
         } E {
             kind = TOK_MINUS()
             0
         }
     }
-    E I c == 42 { kind = TOK_STAR(); 0 }       # *
-    E I c == 47 { kind = TOK_SLASH(); 0 }      # /
+    E I c == 42 {
+        # * or *=
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_STAR_EQ()
+            0
+        } E {
+            kind = TOK_STAR()
+            0
+        }
+    }
+    E I c == 47 {
+        # / or /=
+        I lexer_peek(lex) == 61 {
+            lexer_advance(lex)
+            kind = TOK_SLASH_EQ()
+            0
+        } E {
+            kind = TOK_SLASH()
+            0
+        }
+    }
     E I c == 37 { kind = TOK_PERCENT(); 0 }    # %
+    E I c == 94 { kind = TOK_CARET(); 0 }      # ^
+    E I c == 126 { kind = TOK_TILDE(); 0 }     # ~
+    E I c == 63 { kind = TOK_QUESTION(); 0 }   # ?
     E I c == 60 {
         # < or <= or <<
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_LT_EQ()
+            0
+        } E I lexer_peek(lex) == 60 {
+            lexer_advance(lex)
+            kind = TOK_SHL()
             0
         } E {
             kind = TOK_LT()
@@ -260,6 +386,10 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
         I lexer_peek(lex) == 61 {
             lexer_advance(lex)
             kind = TOK_GT_EQ()
+            0
+        } E I lexer_peek(lex) == 62 {
+            lexer_advance(lex)
+            kind = TOK_SHR()
             0
         } E {
             kind = TOK_GT()
