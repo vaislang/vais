@@ -1,0 +1,1154 @@
+# HTTP Client - Full-featured HTTP client library for Vais
+# Built on top of std/http.vais and std/net.vais
+#
+# Features:
+# - HttpRequest / HttpResponse structs
+# - GET/POST/PUT/DELETE/PATCH convenience functions
+# - URL parsing (host, port, path, query extraction)
+# - Header management
+# - Response parsing (status line, headers, body)
+# - JSON body helpers
+# - Timeout support via setsockopt
+# - Keep-alive connection reuse
+# - Connection pooling basics
+
+# ============================================
+# Constants
+# ============================================
+
+# HTTP Methods
+C CLIENT_GET: i64 = 1
+C CLIENT_POST: i64 = 2
+C CLIENT_PUT: i64 = 3
+C CLIENT_DELETE: i64 = 4
+C CLIENT_PATCH: i64 = 5
+C CLIENT_HEAD: i64 = 6
+C CLIENT_OPTIONS: i64 = 7
+
+# Buffer sizes
+C CLIENT_MAX_HEADERS: i64 = 8192
+C CLIENT_MAX_BODY: i64 = 1048576    # 1MB
+C CLIENT_RECV_CHUNK: i64 = 4096
+C CLIENT_MAX_URL_LEN: i64 = 2048
+
+# Default configuration
+C CLIENT_DEFAULT_TIMEOUT: i64 = 30000    # 30 seconds
+C CLIENT_DEFAULT_MAX_REDIRECTS: i64 = 10
+C CLIENT_DEFAULT_PORT_HTTP: i64 = 80
+C CLIENT_DEFAULT_PORT_HTTPS: i64 = 443
+
+# Connection pool
+C POOL_MAX_CONNECTIONS: i64 = 16
+C POOL_ENTRY_SIZE: i64 = 32   # host_ptr(8) + port(8) + fd(8) + alive(8)
+
+# Error codes
+C CLIENT_ERR_NONE: i64 = 0
+C CLIENT_ERR_DNS: i64 = -1
+C CLIENT_ERR_CONNECT: i64 = -2
+C CLIENT_ERR_SEND: i64 = -3
+C CLIENT_ERR_RECV: i64 = -4
+C CLIENT_ERR_TIMEOUT: i64 = -5
+C CLIENT_ERR_PARSE: i64 = -6
+C CLIENT_ERR_TOO_MANY_REDIRECTS: i64 = -7
+C CLIENT_ERR_INVALID_URL: i64 = -8
+
+# ============================================
+# URL Components
+# ============================================
+
+S Url {
+    scheme: str,        # "http" or "https"
+    host: str,          # hostname or IP
+    port: i64,          # port number (80/443 default)
+    path: str,          # path component
+    query: str,         # query string (without ?)
+    raw: str            # original URL string
+}
+
+X Url {
+    # Parse a URL string into components
+    F parse(raw_url: str) -> Url {
+        host := __hc_parse_url_host(raw_url)
+        port := __hc_parse_url_port(raw_url)
+        path := __hc_parse_url_path(raw_url)
+        query := __hc_parse_url_query(raw_url)
+        scheme := __hc_parse_url_scheme(raw_url)
+
+        # Default port based on scheme
+        I port == 0 {
+            I __str_eq(scheme, "https") == 1 {
+                port = CLIENT_DEFAULT_PORT_HTTPS
+            } E {
+                port = CLIENT_DEFAULT_PORT_HTTP
+            }
+        }
+
+        Url {
+            scheme: scheme,
+            host: host,
+            port: port,
+            path: path,
+            query: query,
+            raw: raw_url
+        }
+    }
+
+    # Check if URL uses HTTPS
+    F is_https(&self) -> i64 {
+        I __str_eq(self.scheme, "https") == 1 {
+            1
+        } E {
+            0
+        }
+    }
+
+    # Get full request path including query string
+    F request_path(&self) -> str {
+        query_len := __strlen(self.query)
+        I query_len > 0 {
+            __str_concat3(self.path, "?", self.query)
+        } E {
+            self.path
+        }
+    }
+
+    # Get host:port string for Host header
+    F host_header(&self) -> str {
+        # Only include port if non-default
+        I self.port == CLIENT_DEFAULT_PORT_HTTP | self.port == CLIENT_DEFAULT_PORT_HTTPS {
+            self.host
+        } E {
+            buf := __malloc(256)
+            pos := __str_copy_to(buf, self.host)
+            __store_byte(buf + pos, 58)  # ':'
+            pos = pos + 1
+            pos = pos + __i64_to_str(buf + pos, self.port)
+            __store_byte(buf + pos, 0)  # null terminate
+            buf as str
+        }
+    }
+}
+
+# ============================================
+# HTTP Request (Client-side)
+# ============================================
+
+S HttpRequest {
+    method: i64,
+    url: Url,
+    headers: i64,        # Pointer to header array (name/value pairs)
+    header_count: i64,
+    header_capacity: i64,
+    body: i64,           # Pointer to body data
+    body_len: i64,
+    timeout_ms: i64      # Request-level timeout
+}
+
+X HttpRequest {
+    # Create a new request with method and URL
+    F new(method: i64, url_str: str) -> HttpRequest {
+        capacity := 16
+        headers := __malloc(capacity * 16)
+        req := HttpRequest {
+            method: method,
+            url: Url::parse(url_str),
+            headers: headers,
+            header_count: 0,
+            header_capacity: capacity,
+            body: 0,
+            body_len: 0,
+            timeout_ms: CLIENT_DEFAULT_TIMEOUT
+        }
+        # Add default headers
+        req.add_header("User-Agent", "Vais-HttpClient/1.0")
+        req.add_header("Accept", "*/*")
+        req.add_header("Connection", "keep-alive")
+        req
+    }
+
+    # Convenience constructors
+    F get(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_GET, url)
+    }
+
+    F post(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_POST, url)
+    }
+
+    F put(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_PUT, url)
+    }
+
+    F delete(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_DELETE, url)
+    }
+
+    F patch(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_PATCH, url)
+    }
+
+    F head(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_HEAD, url)
+    }
+
+    F options(url: str) -> HttpRequest {
+        HttpRequest::new(CLIENT_OPTIONS, url)
+    }
+
+    # Add a header to the request
+    F add_header(&self, name: str, value: str) -> HttpRequest {
+        I self.header_count >= self.header_capacity {
+            new_capacity := self.header_capacity * 2
+            new_headers := __malloc(new_capacity * 16)
+            __memcpy(new_headers, self.headers, self.header_count * 16)
+            __free(self.headers)
+            self.headers = new_headers
+            self.header_capacity = new_capacity
+        }
+        offset := self.header_count * 16
+        __store_ptr(self.headers + offset, name as i64)
+        __store_ptr(self.headers + offset + 8, value as i64)
+        self.header_count = self.header_count + 1
+        self
+    }
+
+    # Set or replace a header
+    F set_header(&self, name: str, value: str) -> HttpRequest {
+        # Search for existing header
+        i := 0
+        L i < self.header_count {
+            offset := i * 16
+            header_name := __load_ptr(self.headers + offset) as str
+            I __str_eq_ignore_case(header_name, name) == 1 {
+                # Replace value
+                __store_ptr(self.headers + offset + 8, value as i64)
+                R self
+            }
+            i = i + 1
+        }
+        # Not found, add new
+        self.add_header(name, value)
+    }
+
+    # Remove a header by name
+    F remove_header(&self, name: str) -> HttpRequest {
+        i := 0
+        L i < self.header_count {
+            offset := i * 16
+            header_name := __load_ptr(self.headers + offset) as str
+            I __str_eq_ignore_case(header_name, name) == 1 {
+                # Shift remaining headers down
+                j := i
+                L j < self.header_count - 1 {
+                    src_offset := (j + 1) * 16
+                    dst_offset := j * 16
+                    __store_ptr(self.headers + dst_offset, __load_ptr(self.headers + src_offset))
+                    __store_ptr(self.headers + dst_offset + 8, __load_ptr(self.headers + src_offset + 8))
+                    j = j + 1
+                }
+                self.header_count = self.header_count - 1
+                R self
+            }
+            i = i + 1
+        }
+        self
+    }
+
+    # Get a header value by name
+    F get_header(&self, name: str) -> str? {
+        i := 0
+        L i < self.header_count {
+            offset := i * 16
+            header_name := __load_ptr(self.headers + offset) as str
+            I __str_eq_ignore_case(header_name, name) == 1 {
+                value := __load_ptr(self.headers + offset + 8) as str
+                R Some(value)
+            }
+            i = i + 1
+        }
+        None
+    }
+
+    # Set raw body data
+    F with_body(&self, data: i64, len: i64) -> HttpRequest {
+        self.body = data
+        self.body_len = len
+        self
+    }
+
+    # Set string body
+    F with_text(&self, text: str) -> HttpRequest {
+        self.body = text as i64
+        self.body_len = __strlen(text)
+        self.set_header("Content-Type", "text/plain; charset=utf-8")
+    }
+
+    # Set JSON body
+    F with_json(&self, json_str: str) -> HttpRequest {
+        self.body = json_str as i64
+        self.body_len = __strlen(json_str)
+        self.set_header("Content-Type", "application/json")
+    }
+
+    # Set form-encoded body
+    F with_form(&self, form_data: str) -> HttpRequest {
+        self.body = form_data as i64
+        self.body_len = __strlen(form_data)
+        self.set_header("Content-Type", "application/x-www-form-urlencoded")
+    }
+
+    # Set request timeout in milliseconds
+    F with_timeout(&self, ms: i64) -> HttpRequest {
+        self.timeout_ms = ms
+        self
+    }
+
+    # Set Authorization header (Bearer token)
+    F with_bearer_token(&self, token: str) -> HttpRequest {
+        buf := __malloc(512)
+        pos := __str_copy_to(buf, "Bearer ")
+        pos = pos + __str_copy_to(buf + pos, token)
+        __store_byte(buf + pos, 0)  # null terminate
+        self.set_header("Authorization", buf as str)
+    }
+
+    # Set basic auth header
+    F with_basic_auth(&self, encoded: str) -> HttpRequest {
+        buf := __malloc(512)
+        pos := __str_copy_to(buf, "Basic ")
+        pos = pos + __str_copy_to(buf + pos, encoded)
+        __store_byte(buf + pos, 0)  # null terminate
+        self.set_header("Authorization", buf as str)
+    }
+
+    # Get method as string
+    F method_str(&self) -> str {
+        M self.method {
+            1 => "GET",
+            2 => "POST",
+            3 => "PUT",
+            4 => "DELETE",
+            5 => "PATCH",
+            6 => "HEAD",
+            7 => "OPTIONS",
+            _ => "GET"
+        }
+    }
+
+    # Serialize the request to a buffer for sending
+    # Returns number of bytes written
+    F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
+        pos := 0
+
+        # Request line: METHOD PATH HTTP/1.1\r\n
+        method_s := self.method_str()
+        pos = pos + __str_copy_to(buffer + pos, method_s)
+        __store_byte(buffer + pos, 32)  # space
+        pos = pos + 1
+
+        req_path := self.url.request_path()
+        pos = pos + __str_copy_to(buffer + pos, req_path)
+        __store_byte(buffer + pos, 32)  # space
+        pos = pos + 1
+
+        pos = pos + __str_copy_to(buffer + pos, "HTTP/1.1")
+        __store_byte(buffer + pos, 13)  # \r
+        __store_byte(buffer + pos + 1, 10)  # \n
+        pos = pos + 2
+
+        # Host header (always first)
+        pos = pos + __str_copy_to(buffer + pos, "Host: ")
+        pos = pos + __str_copy_to(buffer + pos, self.url.host_header())
+        __store_byte(buffer + pos, 13)
+        __store_byte(buffer + pos + 1, 10)
+        pos = pos + 2
+
+        # User headers
+        i := 0
+        L i < self.header_count {
+            offset := i * 16
+            name := __load_ptr(self.headers + offset) as str
+            value := __load_ptr(self.headers + offset + 8) as str
+
+            # Skip Host header (already added)
+            I __str_eq_ignore_case(name, "Host") != 1 {
+                pos = pos + __str_copy_to(buffer + pos, name)
+                __store_byte(buffer + pos, 58)  # ':'
+                __store_byte(buffer + pos + 1, 32)  # space
+                pos = pos + 2
+                pos = pos + __str_copy_to(buffer + pos, value)
+                __store_byte(buffer + pos, 13)
+                __store_byte(buffer + pos + 1, 10)
+                pos = pos + 2
+            }
+            i = i + 1
+        }
+
+        # Content-Length if body present
+        I self.body_len > 0 {
+            pos = pos + __str_copy_to(buffer + pos, "Content-Length: ")
+            pos = pos + __i64_to_str(buffer + pos, self.body_len)
+            __store_byte(buffer + pos, 13)
+            __store_byte(buffer + pos + 1, 10)
+            pos = pos + 2
+        }
+
+        # End of headers (\r\n)
+        __store_byte(buffer + pos, 13)
+        __store_byte(buffer + pos + 1, 10)
+        pos = pos + 2
+
+        # Body
+        I self.body_len > 0 & self.body != 0 {
+            __memcpy(buffer + pos, self.body, self.body_len)
+            pos = pos + self.body_len
+        }
+
+        pos
+    }
+
+    # Free allocated memory
+    F drop(&self) -> i64 {
+        I self.headers != 0 {
+            __free(self.headers)
+            self.headers = 0
+        }
+        0
+    }
+}
+
+# ============================================
+# HTTP Response (Client-side)
+# ============================================
+
+S HttpResponse {
+    status: i64,
+    status_text: str,
+    version: str,
+    headers: i64,        # Pointer to header array
+    header_count: i64,
+    header_capacity: i64,
+    body: i64,           # Pointer to body data
+    body_len: i64,
+    error_code: i64      # 0 on success, negative on error
+}
+
+X HttpResponse {
+    # Create an error response (no actual HTTP data)
+    F error(code: i64) -> HttpResponse {
+        HttpResponse {
+            status: 0,
+            status_text: "Error",
+            version: "",
+            headers: 0,
+            header_count: 0,
+            header_capacity: 0,
+            body: 0,
+            body_len: 0,
+            error_code: code
+        }
+    }
+
+    # Check if request was successful (no transport error)
+    F is_ok(&self) -> i64 {
+        I self.error_code == 0 {
+            1
+        } E {
+            0
+        }
+    }
+
+    # Check if status is 2xx
+    F is_success(&self) -> i64 {
+        I self.error_code == 0 & self.status >= 200 & self.status < 300 {
+            1
+        } E {
+            0
+        }
+    }
+
+    # Check if status is 3xx redirect
+    F is_redirect(&self) -> i64 {
+        I self.error_code == 0 & self.status >= 300 & self.status < 400 {
+            1
+        } E {
+            0
+        }
+    }
+
+    # Check if status is 4xx client error
+    F is_client_error(&self) -> i64 {
+        I self.error_code == 0 & self.status >= 400 & self.status < 500 {
+            1
+        } E {
+            0
+        }
+    }
+
+    # Check if status is 5xx server error
+    F is_server_error(&self) -> i64 {
+        I self.error_code == 0 & self.status >= 500 & self.status < 600 {
+            1
+        } E {
+            0
+        }
+    }
+
+    # Get body as string
+    F body_text(&self) -> str {
+        I self.body != 0 & self.body_len > 0 {
+            self.body as str
+        } E {
+            ""
+        }
+    }
+
+    # Get a response header value by name (case-insensitive)
+    F get_header(&self, name: str) -> str? {
+        i := 0
+        L i < self.header_count {
+            offset := i * 16
+            header_name := __load_ptr(self.headers + offset) as str
+            I __str_eq_ignore_case(header_name, name) == 1 {
+                value := __load_ptr(self.headers + offset + 8) as str
+                R Some(value)
+            }
+            i = i + 1
+        }
+        None
+    }
+
+    # Check if a response header exists
+    F has_header(&self, name: str) -> i64 {
+        i := 0
+        L i < self.header_count {
+            offset := i * 16
+            header_name := __load_ptr(self.headers + offset) as str
+            I __str_eq_ignore_case(header_name, name) == 1 {
+                R 1
+            }
+            i = i + 1
+        }
+        0
+    }
+
+    # Get Content-Type header
+    F content_type(&self) -> str? {
+        self.get_header("Content-Type")
+    }
+
+    # Get Content-Length as i64 (-1 if not present)
+    F content_length(&self) -> i64 {
+        cl := self.get_header("Content-Length")
+        M cl {
+            Some(v) => __str_to_i64(v),
+            None => -1
+        }
+    }
+
+    # Get Location header (for redirects)
+    F location(&self) -> str? {
+        self.get_header("Location")
+    }
+
+    # Get the error description string
+    F error_text(&self) -> str {
+        M self.error_code {
+            0 => "Success",
+            -1 => "DNS resolution failed",
+            -2 => "Connection failed",
+            -3 => "Send failed",
+            -4 => "Receive failed",
+            -5 => "Request timed out",
+            -6 => "Response parse error",
+            -7 => "Too many redirects",
+            -8 => "Invalid URL",
+            _ => "Unknown error"
+        }
+    }
+
+    # Free allocated memory
+    F drop(&self) -> i64 {
+        I self.headers != 0 {
+            __free(self.headers)
+            self.headers = 0
+        }
+        I self.body != 0 {
+            __free(self.body)
+            self.body = 0
+        }
+        0
+    }
+}
+
+# ============================================
+# Connection Pool (Keep-Alive Reuse)
+# ============================================
+
+S ConnectionPool {
+    entries: i64,       # Array of pool entries
+    count: i64,
+    capacity: i64
+}
+
+X ConnectionPool {
+    F new() -> ConnectionPool {
+        capacity := POOL_MAX_CONNECTIONS
+        entries := __malloc(capacity * POOL_ENTRY_SIZE)
+        __memset(entries, 0, capacity * POOL_ENTRY_SIZE)
+        ConnectionPool {
+            entries: entries,
+            count: 0,
+            capacity: capacity
+        }
+    }
+
+    # Get a cached connection fd for host:port, or -1 if none
+    F get(&self, host: str, port: i64) -> i64 {
+        i := 0
+        L i < self.count {
+            offset := i * POOL_ENTRY_SIZE
+            entry_host := __load_ptr(self.entries + offset) as str
+            entry_port := __load_i64(self.entries + offset + 8)
+            entry_fd := __load_i64(self.entries + offset + 16)
+            entry_alive := __load_i64(self.entries + offset + 24)
+
+            I entry_alive == 1 & entry_port == port & __str_eq(entry_host, host) == 1 {
+                # Mark as consumed
+                __store_i64(self.entries + offset + 24, 0)
+                R entry_fd
+            }
+            i = i + 1
+        }
+        -1
+    }
+
+    # Return a connection to the pool for reuse
+    F put(&self, host: str, port: i64, fd: i64) -> i64 {
+        # Try to find an empty slot
+        i := 0
+        L i < self.count {
+            offset := i * POOL_ENTRY_SIZE
+            entry_alive := __load_i64(self.entries + offset + 24)
+            I entry_alive == 0 {
+                __store_ptr(self.entries + offset, host as i64)
+                __store_i64(self.entries + offset + 8, port)
+                __store_i64(self.entries + offset + 16, fd)
+                __store_i64(self.entries + offset + 24, 1)
+                R 0
+            }
+            i = i + 1
+        }
+
+        # Add new entry if capacity allows
+        I self.count < self.capacity {
+            offset := self.count * POOL_ENTRY_SIZE
+            __store_ptr(self.entries + offset, host as i64)
+            __store_i64(self.entries + offset + 8, port)
+            __store_i64(self.entries + offset + 16, fd)
+            __store_i64(self.entries + offset + 24, 1)
+            self.count = self.count + 1
+            R 0
+        }
+
+        # Pool full, close the connection
+        __tcp_close(fd)
+        -1
+    }
+
+    # Close all pooled connections
+    F close_all(&self) -> i64 {
+        i := 0
+        L i < self.count {
+            offset := i * POOL_ENTRY_SIZE
+            entry_alive := __load_i64(self.entries + offset + 24)
+            I entry_alive == 1 {
+                entry_fd := __load_i64(self.entries + offset + 16)
+                __tcp_close(entry_fd)
+                __store_i64(self.entries + offset + 24, 0)
+            }
+            i = i + 1
+        }
+        self.count = 0
+        0
+    }
+
+    # Free pool memory
+    F drop(&self) -> i64 {
+        self.close_all()
+        I self.entries != 0 {
+            __free(self.entries)
+            self.entries = 0
+        }
+        0
+    }
+}
+
+# ============================================
+# HTTP Client
+# ============================================
+
+S HttpClient {
+    timeout_ms: i64,
+    follow_redirects: i64,
+    max_redirects: i64,
+    keep_alive: i64,
+    pool: ConnectionPool,
+    default_headers: i64,       # Array of default headers
+    default_header_count: i64,
+    default_header_capacity: i64
+}
+
+X HttpClient {
+    F new() -> HttpClient {
+        capacity := 8
+        default_headers := __malloc(capacity * 16)
+        HttpClient {
+            timeout_ms: CLIENT_DEFAULT_TIMEOUT,
+            follow_redirects: 1,
+            max_redirects: CLIENT_DEFAULT_MAX_REDIRECTS,
+            keep_alive: 1,
+            pool: ConnectionPool::new(),
+            default_headers: default_headers,
+            default_header_count: 0,
+            default_header_capacity: capacity
+        }
+    }
+
+    # Set timeout in milliseconds
+    F timeout(&self, ms: i64) -> HttpClient {
+        self.timeout_ms = ms
+        self
+    }
+
+    # Enable or disable redirect following (1 = on, 0 = off)
+    F follow_redirects(&self, follow: i64) -> HttpClient {
+        self.follow_redirects = follow
+        self
+    }
+
+    # Set maximum number of redirects to follow
+    F max_redirects(&self, max: i64) -> HttpClient {
+        self.max_redirects = max
+        self
+    }
+
+    # Enable or disable keep-alive connection reuse
+    F keep_alive(&self, enabled: i64) -> HttpClient {
+        self.keep_alive = enabled
+        self
+    }
+
+    # Add a default header applied to every request
+    F default_header(&self, name: str, value: str) -> HttpClient {
+        I self.default_header_count >= self.default_header_capacity {
+            new_capacity := self.default_header_capacity * 2
+            new_headers := __malloc(new_capacity * 16)
+            __memcpy(new_headers, self.default_headers, self.default_header_count * 16)
+            __free(self.default_headers)
+            self.default_headers = new_headers
+            self.default_header_capacity = new_capacity
+        }
+        offset := self.default_header_count * 16
+        __store_ptr(self.default_headers + offset, name as i64)
+        __store_ptr(self.default_headers + offset + 8, value as i64)
+        self.default_header_count = self.default_header_count + 1
+        self
+    }
+
+    # Execute an HttpRequest and return an HttpResponse
+    F send(&self, request: &HttpRequest) -> HttpResponse {
+        # Apply default headers (if not already set)
+        i := 0
+        L i < self.default_header_count {
+            offset := i * 16
+            name := __load_ptr(self.default_headers + offset) as str
+            value := __load_ptr(self.default_headers + offset + 8) as str
+            existing := request.get_header(name)
+            M existing {
+                Some(v) => 0,   # already set, skip
+                None => {
+                    request.add_header(name, value)
+                    0
+                }
+            }
+            i = i + 1
+        }
+
+        # Use request timeout or client default
+        effective_timeout := request.timeout_ms
+        I effective_timeout <= 0 {
+            effective_timeout = self.timeout_ms
+        }
+
+        # Perform the request (with redirect following)
+        self.do_send(request, 0, effective_timeout)
+    }
+
+    # Internal: perform request with redirect count tracking
+    F do_send(&self, request: &HttpRequest, redirect_count: i64, timeout_ms: i64) -> HttpResponse {
+        host := request.url.host
+        port := request.url.port
+
+        # Try to get a pooled connection
+        fd := -1
+        I self.keep_alive == 1 {
+            fd = self.pool.get(host, port)
+        }
+
+        # Connect if no pooled connection
+        I fd < 0 {
+            # Resolve hostname and connect
+            fd = __hc_tcp_connect(host as i64, port, timeout_ms)
+            I fd < 0 {
+                R HttpResponse::error(CLIENT_ERR_CONNECT)
+            }
+        }
+
+        # Set socket timeout
+        I timeout_ms > 0 {
+            __hc_set_timeout(fd, timeout_ms)
+        }
+
+        # Serialize request
+        send_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
+        req_len := request.serialize(send_buf, CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
+
+        # Send request
+        sent := __tcp_send(fd, send_buf, req_len)
+        __free(send_buf)
+
+        I sent < 0 {
+            __tcp_close(fd)
+            R HttpResponse::error(CLIENT_ERR_SEND)
+        }
+
+        # Receive response
+        recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
+        total_recv := 0
+
+        L true {
+            n := __tcp_recv(fd, recv_buf + total_recv, CLIENT_RECV_CHUNK)
+            I n <= 0 {
+                B
+            }
+            total_recv = total_recv + n
+
+            # Check for complete headers
+            header_end := __find_header_end(recv_buf, total_recv)
+            I header_end >= 0 {
+                # Check Content-Length to see if we need more body data
+                content_len := __hc_get_content_length(recv_buf, total_recv)
+                I content_len >= 0 {
+                    body_received := total_recv - header_end
+                    I body_received >= content_len {
+                        B
+                    }
+                } E {
+                    B
+                }
+            }
+        }
+
+        I total_recv <= 0 {
+            __tcp_close(fd)
+            __free(recv_buf)
+            R HttpResponse::error(CLIENT_ERR_RECV)
+        }
+
+        # Parse response
+        response := __hc_parse_response(recv_buf, total_recv)
+        __free(recv_buf)
+
+        # Handle keep-alive: return connection to pool or close it
+        I self.keep_alive == 1 {
+            conn_header := response.get_header("Connection")
+            should_close := 0
+            M conn_header {
+                Some(v) => {
+                    I __str_eq_ignore_case(v, "close") == 1 {
+                        should_close = 1
+                    }
+                    0
+                },
+                None => 0
+            }
+            I should_close == 1 {
+                __tcp_close(fd)
+            } E {
+                self.pool.put(host, port, fd)
+            }
+        } E {
+            __tcp_close(fd)
+        }
+
+        # Handle redirects
+        I self.follow_redirects == 1 & response.is_redirect() == 1 {
+            I redirect_count >= self.max_redirects {
+                R HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
+            }
+            location := response.location()
+            M location {
+                Some(new_url) => {
+                    # Build redirect request (GET for 301/302/303)
+                    redirect_req := HttpRequest::get(new_url)
+                    redirect_req.timeout_ms = request.timeout_ms
+                    R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
+                },
+                None => response
+            }
+        } E {
+            response
+        }
+    }
+
+    # Convenience: GET request
+    F get(&self, url: str) -> HttpResponse {
+        request := HttpRequest::get(url)
+        self.send(&request)
+    }
+
+    # Convenience: POST with JSON body
+    F post_json(&self, url: str, json_body: str) -> HttpResponse {
+        request := HttpRequest::post(url).with_json(json_body)
+        self.send(&request)
+    }
+
+    # Convenience: POST with form data
+    F post_form(&self, url: str, form_data: str) -> HttpResponse {
+        request := HttpRequest::post(url).with_form(form_data)
+        self.send(&request)
+    }
+
+    # Convenience: POST with text body
+    F post_text(&self, url: str, text: str) -> HttpResponse {
+        request := HttpRequest::post(url).with_text(text)
+        self.send(&request)
+    }
+
+    # Convenience: PUT with JSON body
+    F put_json(&self, url: str, json_body: str) -> HttpResponse {
+        request := HttpRequest::put(url).with_json(json_body)
+        self.send(&request)
+    }
+
+    # Convenience: PATCH with JSON body
+    F patch_json(&self, url: str, json_body: str) -> HttpResponse {
+        request := HttpRequest::patch(url).with_json(json_body)
+        self.send(&request)
+    }
+
+    # Convenience: DELETE request
+    F delete(&self, url: str) -> HttpResponse {
+        request := HttpRequest::delete(url)
+        self.send(&request)
+    }
+
+    # Convenience: HEAD request
+    F head(&self, url: str) -> HttpResponse {
+        request := HttpRequest::head(url)
+        self.send(&request)
+    }
+
+    # Close all pooled connections and free resources
+    F close(&self) -> i64 {
+        self.pool.close_all()
+        0
+    }
+
+    # Free all memory
+    F drop(&self) -> i64 {
+        self.pool.drop()
+        I self.default_headers != 0 {
+            __free(self.default_headers)
+            self.default_headers = 0
+        }
+        0
+    }
+}
+
+# ============================================
+# JSON Body Builder Helpers
+# ============================================
+
+# Build a simple JSON object with one key-value pair (string value)
+# Result: {"key":"value"}
+F json_kv(key: str, value: str) -> str {
+    buf := __malloc(1024)
+    pos := 0
+    __store_byte(buf + pos, 123)  # {
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, key)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 58)   # :
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, value)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 125)  # }
+    pos = pos + 1
+    __store_byte(buf + pos, 0)    # null terminate
+    buf as str
+}
+
+# Build a JSON object with two key-value pairs (string values)
+# Result: {"k1":"v1","k2":"v2"}
+F json_kv2(k1: str, v1: str, k2: str, v2: str) -> str {
+    buf := __malloc(2048)
+    pos := 0
+    __store_byte(buf + pos, 123)  # {
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, k1)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 58)   # :
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, v1)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 44)   # ,
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, k2)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 58)   # :
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, v2)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 125)  # }
+    pos = pos + 1
+    __store_byte(buf + pos, 0)    # null terminate
+    buf as str
+}
+
+# Build a JSON object with integer value
+# Result: {"key":123}
+F json_kv_int(key: str, value: i64) -> str {
+    buf := __malloc(512)
+    pos := 0
+    __store_byte(buf + pos, 123)  # {
+    pos = pos + 1
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, key)
+    __store_byte(buf + pos, 34)   # "
+    pos = pos + 1
+    __store_byte(buf + pos, 58)   # :
+    pos = pos + 1
+    pos = pos + __i64_to_str(buf + pos, value)
+    __store_byte(buf + pos, 125)  # }
+    pos = pos + 1
+    __store_byte(buf + pos, 0)    # null terminate
+    buf as str
+}
+
+# ============================================
+# Top-Level Convenience Functions
+# ============================================
+
+# Create a new HTTP client with default configuration
+F http_client() -> HttpClient {
+    HttpClient::new()
+}
+
+# Simple GET request (creates a one-shot client)
+F http_get(url: str) -> HttpResponse {
+    client := HttpClient::new()
+    client.keep_alive = 0
+    response := client.get(url)
+    client.drop()
+    response
+}
+
+# Simple POST with JSON body (creates a one-shot client)
+F http_post(url: str, json_body: str) -> HttpResponse {
+    client := HttpClient::new()
+    client.keep_alive = 0
+    response := client.post_json(url, json_body)
+    client.drop()
+    response
+}
+
+# Simple PUT with JSON body (creates a one-shot client)
+F http_put(url: str, json_body: str) -> HttpResponse {
+    client := HttpClient::new()
+    client.keep_alive = 0
+    response := client.put_json(url, json_body)
+    client.drop()
+    response
+}
+
+# Simple DELETE request (creates a one-shot client)
+F http_delete(url: str) -> HttpResponse {
+    client := HttpClient::new()
+    client.keep_alive = 0
+    response := client.delete(url)
+    client.drop()
+    response
+}
+
+# Simple PATCH with JSON body (creates a one-shot client)
+F http_patch(url: str, json_body: str) -> HttpResponse {
+    client := HttpClient::new()
+    client.keep_alive = 0
+    response := client.patch_json(url, json_body)
+    client.drop()
+    response
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+# TCP operations (from http_runtime.c)
+X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+X F __tcp_close(fd: i64) -> i64
+
+# HTTP client runtime (from http_client_runtime.c)
+X F __hc_tcp_connect(host: i64, port: i64, timeout_ms: i64) -> i64
+X F __hc_set_timeout(fd: i64, timeout_ms: i64) -> i64
+X F __hc_parse_url_host(url: str) -> str
+X F __hc_parse_url_port(url: str) -> i64
+X F __hc_parse_url_path(url: str) -> str
+X F __hc_parse_url_query(url: str) -> str
+X F __hc_parse_url_scheme(url: str) -> str
+X F __hc_parse_response(buffer: i64, len: i64) -> HttpResponse
+X F __hc_get_content_length(buffer: i64, len: i64) -> i64
+
+# HTTP parsing (shared with http_runtime.c)
+X F __find_header_end(buffer: i64, len: i64) -> i64
+
+# String operations
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __str_eq_ignore_case(a: str, b: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+X F __str_to_i64(s: str) -> i64
+X F __str_concat3(a: str, b: str, c: str) -> str
+
+# Memory operations
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __memcpy(dst: i64, src: i64, len: i64) -> i64
+X F __memset(dst: i64, value: i64, len: i64) -> i64
+X F __store_byte(ptr: i64, value: i64) -> i64
+X F __store_ptr(ptr: i64, value: i64) -> i64
+X F __store_i64(ptr: i64, value: i64) -> i64
+X F __load_ptr(ptr: i64) -> i64
+X F __load_i64(ptr: i64) -> i64

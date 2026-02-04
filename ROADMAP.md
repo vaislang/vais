@@ -511,19 +511,22 @@ Vais로 웹 서버, DB 연동, 풀스택 애플리케이션 개발이 가능하�
 - `std/http.vais` (867줄) + `std/http_runtime.c` (531줄) - HTTP 파싱, 요청/응답
 - `std/json.vais` (840줄) - JSON 파서/생성자/stringify
 
-### Stage 1: HTTP 서버 프레임워크
-- [ ] 라우터 (경로 매칭, HTTP 메서드별 핸들러 등록)
-- [ ] 미들웨어 체인 (로깅, CORS, 인증)
-- [ ] 정적 파일 서빙
-- [ ] 요청/응답 빌더 (헤더, 상태코드, JSON 응답)
+### Stage 1: HTTP 서버 프레임워크 ✅
+- [x] 라우터 (경로 매칭, HTTP 메서드별 핸들러 등록)
+- [x] 미들웨어 체인 (로깅, CORS, 인증)
+- [x] 정적 파일 서빙
+- [x] 요청/응답 빌더 (헤더, 상태코드, JSON 응답)
 - **파일**: `std/http_server.vais`
 - **의존성**: `std/net.vais`, `std/http.vais`, `std/json.vais`, `std/file.vais`
 
-### Stage 2: HTTP 클라이언트
-- [ ] GET/POST/PUT/DELETE 요청
-- [ ] 커스텀 헤더, 타임아웃
-- [ ] JSON 요청/응답 편의 함수
-- **파일**: `std/http_client.vais`
+### Stage 2: HTTP 클라이언트 ✅
+- [x] GET/POST/PUT/DELETE 요청
+- [x] 커스텀 헤더, 타임아웃
+- [x] JSON 요청/응답 편의 함수
+- [x] Keep-alive 커넥션 풀링
+- [x] 리다이렉트 자동 추적
+- [x] 인증 헬퍼 (Bearer, Basic)
+- **파일**: `std/http_client.vais` + `std/http_client_runtime.c`
 - **의존성**: `std/net.vais`, `std/http.vais`, `std/json.vais`
 
 ### Stage 3: SQLite 바인딩
