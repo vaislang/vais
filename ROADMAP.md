@@ -1002,4 +1002,130 @@ Phase 34에서 8.5/10 수준을 달성한 Vais를 **9/10 이상**으로 끌어�
 
 ---
 
+## Phase 36: 대형 프로젝트 도입 준비 (Production Readiness)
+
+> **기준일**: 2026-02-05
+> **배경**: 종합 평가 결과 코드 분석 점수 4.35/5.0 → 실행 검증 후 3.55/5.0으로 하향.
+> **핵심 결격 사유**: 모듈 import 시스템 미작동 (use 문이 있는 예제 19/26 실패)
+
+### Stage 1: 모듈 시스템 수정 (Critical - 최우선)
+
+**목표**: `use` 문이 동작하여 std/ 라이브러리를 실제로 import 할 수 있게 함
+
+- [ ] E022 에러 원인 분석: 모듈 경로 해석기(module resolver) 디버깅
+- [ ] std/ 디렉토리 검색 경로 설정: 컴파일러에 표준 라이브러리 경로 자동 감지
+- [ ] `use std::vec`, `use std::json` 등 기본 import 동작 확인
+- [ ] 상대 경로 / 절대 경로 import 테스트
+- [ ] 순환 import 감지 및 방지
+- [ ] examples/ 중 E022 실패 19개 파일 전부 빌드 성공 확인
+- [ ] 의존성: 없음
+
+**검증**: examples/ 빌드 성공률 80.1% → 95%+ 달성
+
+### Stage 2: i18n 에러 메시지 수정 (High)
+
+**목표**: 에러 메시지에서 번역 키(`type.E022.title`)가 아닌 실제 메시지 출력
+
+- [ ] i18n fallback 로직 디버깅: 키 해석 실패 시 영어 메시지 출력
+- [ ] E022 에러에 대한 번역 키 추가 (en.json, ko.json, ja.json, zh.json)
+- [ ] 모든 에러 코드(E001~E022+, P001~P003)의 번역 키 존재 여부 검증
+- [ ] 에러 메시지 E2E 테스트 추가: 번역 키가 그대로 출력되면 실패하는 테스트
+- [ ] 의존성: 없음 (Stage 1과 병렬 가능)
+
+**검증**: `cargo run --bin vaisc -- examples/simple_vec_test.vais` 실행 시 사람이 읽을 수 있는 에러 메시지 출력
+
+### Stage 3: 모듈 간 타입 해석 (High)
+
+**목표**: import된 모듈의 타입/함수가 타입 체커에서 정상 해석
+
+- [ ] import된 심볼의 타입 정보 전파
+- [ ] 크로스 모듈 타입 추론 동작 확인
+- [ ] 크로스 모듈 제네릭 인스턴스화
+- [ ] examples/ 중 E001 실패 4개 파일 해결
+- [ ] 의존성: Stage 1 완료
+
+**검증**: examples/ 빌드 성공률 95% → 98%+ 달성
+
+### Stage 4: selfhost 토큰 ID 통합 및 키워드 보강 (Medium)
+
+**목표**: selfhost 컴파일러 준비도 45% → 75%
+
+- [ ] `constants.vais`와 `token.vais` 토큰 ID 통합 (충돌 해소)
+- [ ] `self`, `Self`, `as`, `const` 키워드 추가 (Critical for self-hosting)
+- [ ] 누락 단일 문자 키워드 5개 추가 (D, N, G, Y, O)
+- [ ] lexer_s1.vais에 true/false/else, 복합 대입 연산자, float 지원 추가
+- [ ] 문자열 이스케이프 디코딩 구현
+- [ ] 의존성: Stage 1 완료 (import가 되어야 selfhost 테스트 가능)
+
+**검증**: selfhost lexer가 기본 Vais 프로그램 20개를 Rust lexer와 동일하게 토큰화
+
+### Stage 5: 소유권 시스템 strict 모드 (Medium)
+
+**목표**: 프로젝트 수준에서 소유권 검사 강제 가능
+
+- [ ] `vais.toml` 또는 컴파일러 플래그로 `ownership = "strict"` 설정
+- [ ] strict 모드에서 기존 examples/ 빌드 가능 여부 확인 및 수정
+- [ ] borrow checker 에러 메시지 개선
+- [ ] 의존성: Stage 1, 2 완료
+
+**검증**: `--strict-ownership` 플래그로 hello.vais ~ trait_test.vais 정상 빌드
+
+### Stage 6: CI/CD 및 자동화 (Medium)
+
+**목표**: GitHub Actions CI 파이프라인 구축
+
+- [ ] `.github/workflows/ci.yml`: cargo test, clippy, 예제 빌드 자동화
+- [ ] cargo-fuzz 또는 AFL 기반 퍼즈 테스트 도입
+- [ ] cargo-tarpaulin 또는 llvm-cov로 코드 커버리지 측정 자동화
+- [ ] miri로 unsafe 코드 검증
+- [ ] 의존성: Stage 1 완료
+
+**검증**: PR 머지 시 자동 테스트 + 커버리지 리포트 생성
+
+### Stage 7: 대규모 코드베이스 벤치마크 (Low)
+
+**목표**: 5만줄+ 프로젝트 컴파일 성능 검증
+
+- [ ] 모듈 시스템 동작 후 대규모 멀티파일 프로젝트 생성 (5만줄+)
+- [ ] 전체 컴파일 시간, 증분 컴파일 시간 측정
+- [ ] 메모리 사용량 프로파일링
+- [ ] 비교 벤치마크: 동급 Rust/Go 프로젝트 대비
+- [ ] 의존성: Stage 1, 3 완료
+
+**검증**: 5만줄 프로젝트 전체 빌드 10초 이내, 증분 빌드 1초 이내
+
+### Stage 8: async 런타임 실전 검증 (Low)
+
+**목표**: 동시성 워크로드에서 안정성 검증
+
+- [ ] 1만 동시 TCP 연결 벤치마크
+- [ ] 장시간 실행 메모리 누수 테스트 (24시간+)
+- [ ] GC pause time 측정 및 최적화
+- [ ] 의존성: Stage 1, 3 완료
+
+**검증**: 1만 동시 연결에서 p99 레이턴시 < 10ms, 24시간 실행 시 메모리 증가 < 5%
+
+### 우선순위 요약
+
+```
+Critical:  Stage 1 (모듈 시스템) ──→ Stage 3 (크로스 모듈 타입)
+                                  ╲
+High:      Stage 2 (i18n 수정) ────→ Stage 5 (소유권 strict)
+                                  ╱
+Medium:    Stage 4 (selfhost) ───→ Stage 6 (CI/CD)
+
+Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
+           ※ Stage 1, 3 완료 후 진행 가능
+```
+
+### 마일스톤 목표
+
+| 마일스톤 | 포함 Stage | 목표 점수 | 기대 효과 |
+|----------|-----------|----------|----------|
+| M1: 기본 동작 | 1, 2 | 4.0/5.0 | std import 동작, 에러 메시지 정상 |
+| M2: 실용 수준 | 3, 4, 5 | 4.5/5.0 | 멀티 모듈 프로젝트 가능, 소유권 강제 |
+| M3: 프로덕션 준비 | 6, 7, 8 | 4.8/5.0 | CI 자동화, 성능 검증, 안정성 확인 |
+
+---
+
 **메인테이너**: Steve
