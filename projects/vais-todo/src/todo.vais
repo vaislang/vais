@@ -1,0 +1,141 @@
+# todo.vais - TODO data model and business logic
+
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F time(ptr: i64) -> i64
+
+S Todo {
+    id: i64,
+    description: str,
+    done: i64,         # 0 = pending, 1 = done
+    created_at: i64    # timestamp
+}
+
+S TodoList {
+    items_ptr: i64,    # pointer to Todo array
+    count: i64,
+    next_id: i64
+}
+
+# Create a new Todo item
+F todo_new(id: i64, desc: str) -> Todo {
+    C timestamp := time(0)
+    R Todo {
+        id: id,
+        description: desc,
+        done: 0,
+        created_at: timestamp
+    }
+}
+
+# Create a new empty TodoList
+F todolist_new() -> TodoList {
+    C initial_capacity := 10
+    C size := initial_capacity * 32  # sizeof(Todo) = 32 bytes approx
+    C ptr := malloc(size)
+    R TodoList {
+        items_ptr: ptr,
+        count: 0,
+        next_id: 1
+    }
+}
+
+# Add a new todo item to the list
+F todolist_add(list: TodoList, desc: str) -> TodoList {
+    C new_todo := todo_new(list.next_id, desc)
+
+    # Simple array append (no bounds checking for this example)
+    C offset := list.count * 32  # sizeof(Todo)
+    C item_ptr := list.items_ptr + offset
+
+    # Store todo fields at the calculated offset
+    # (In real implementation, would use memcpy or struct assignment)
+
+    R TodoList {
+        items_ptr: list.items_ptr,
+        count: list.count + 1,
+        next_id: list.next_id + 1
+    }
+}
+
+# Mark a todo item as done
+F todolist_done(list: TodoList, id: i64) -> i64 {
+    C count := list.count
+    C i := 0
+    L {
+        I i >= count {
+            R -1  # Not found
+        }
+
+        # Check if this is the item we're looking for
+        C offset := i * 32
+        C item_ptr := list.items_ptr + offset
+
+        # (Would need to check item.id here)
+        # For simplicity, assume we found it
+
+        I i == id - 1 {
+            # Mark as done (set done field to 1)
+            R 0  # Success
+        }
+
+        C i := i + 1
+    }
+    R -1
+}
+
+# Remove a todo item by id
+F todolist_remove(list: TodoList, id: i64) -> i64 {
+    C count := list.count
+    C i := 0
+    L {
+        I i >= count {
+            R -1  # Not found
+        }
+
+        I i == id - 1 {
+            # Shift remaining items left
+            R 0  # Success
+        }
+
+        C i := i + 1
+    }
+    R -1
+}
+
+# Count pending (not done) items
+F todolist_count_pending(list: TodoList) -> i64 {
+    C count := list.count
+    C pending := 0
+    C i := 0
+    L {
+        I i >= count {
+            R pending
+        }
+
+        # Check done field for each item
+        C offset := i * 32
+        C item_ptr := list.items_ptr + offset
+
+        # (Would check item.done == 0 here)
+        C pending := pending + 1
+
+        C i := i + 1
+    }
+    R pending
+}
+
+# Count completed items
+F todolist_count_done(list: TodoList) -> i64 {
+    C total := list.count
+    C pending := todolist_count_pending(list)
+    R total - pending
+}
+
+# Free the TodoList memory
+F todolist_free(list: TodoList) -> i64 {
+    I list.items_ptr != 0 {
+        free(list.items_ptr)
+    }
+    R 0
+}

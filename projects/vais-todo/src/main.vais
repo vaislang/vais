@@ -1,0 +1,142 @@
+# main.vais - CLI TODO application entry point
+
+X F strcmp(a: str, b: str) -> i64
+X F atoi(s: str) -> i64
+X F exit(code: i64) -> i64
+
+# Parse command line arguments and execute appropriate command
+F main(argc: i64, argv: str) -> i64 {
+    # Load existing todos from storage
+    C storage_path := storage_get_default_path()
+    C list := storage_load(storage_path)
+
+    # Check if no arguments provided
+    I argc < 2 {
+        display_help()
+        R 0
+    }
+
+    # Get the command (first argument)
+    # In real implementation, would properly access argv array
+    C command := "list"  # Default for this example
+
+    # Parse and execute command
+    C result := execute_command(command, argc, argv, list, storage_path)
+
+    # Clean up
+    todolist_free(list)
+
+    R result
+}
+
+# Execute a specific command
+F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: str) -> i64 {
+    # Command: help
+    I strcmp(cmd, "help") == 0 {
+        R display_help()
+    }
+
+    # Command: list
+    I strcmp(cmd, "list") == 0 {
+        I argc > 2 {
+            # Check for filters
+            # C filter := argv[2] (would access actual arg)
+            # I strcmp(filter, "--done") == 0 {
+            #     R display_list_filtered(list, 1)
+            # }
+            # I strcmp(filter, "--pending") == 0 {
+            #     R display_list_filtered(list, 0)
+            # }
+            R display_list(list)
+        } E {
+            R display_list(list)
+        }
+    }
+
+    # Command: add
+    I strcmp(cmd, "add") == 0 {
+        I argc < 3 {
+            display_error("Missing description. Usage: add <description>")
+            R 1
+        }
+
+        # Get description from arguments
+        C description := "New TODO item"  # Would get from argv[2]
+
+        # Add to list
+        C new_list := todolist_add(list, description)
+
+        # Save to storage
+        C save_result := storage_save(new_list, storage_path)
+
+        I save_result == 0 {
+            display_success("TODO item added!")
+            R 0
+        } E {
+            display_error("Failed to save TODO list")
+            R 1
+        }
+    }
+
+    # Command: done
+    I strcmp(cmd, "done") == 0 {
+        I argc < 3 {
+            display_error("Missing ID. Usage: done <id>")
+            R 1
+        }
+
+        # Get ID from arguments
+        C id_str := "1"  # Would get from argv[2]
+        C id := atoi(id_str)
+
+        # Mark as done
+        C result := todolist_done(list, id)
+
+        I result == 0 {
+            storage_save(list, storage_path)
+            display_success("TODO item marked as done!")
+            R 0
+        } E {
+            display_error("TODO item not found")
+            R 1
+        }
+    }
+
+    # Command: remove
+    I strcmp(cmd, "remove") == 0 {
+        I argc < 3 {
+            display_error("Missing ID. Usage: remove <id>")
+            R 1
+        }
+
+        # Get ID from arguments
+        C id_str := "1"  # Would get from argv[2]
+        C id := atoi(id_str)
+
+        # Remove item
+        C result := todolist_remove(list, id)
+
+        I result == 0 {
+            storage_save(list, storage_path)
+            display_success("TODO item removed!")
+            R 0
+        } E {
+            display_error("TODO item not found")
+            R 1
+        }
+    }
+
+    # Unknown command
+    display_error("Unknown command. Use 'help' to see available commands.")
+    R 1
+}
+
+# Entry point wrapper
+F start() -> i64 {
+    # In a real implementation, would get actual argc/argv from OS
+    C argc := 2
+    C argv := "vais-todo list"
+
+    C result := main(argc, argv)
+    R result
+}

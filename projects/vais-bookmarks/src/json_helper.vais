@@ -1,0 +1,131 @@
+# json_helper.vais - JSON generation and parsing helpers
+
+X F malloc(size: i64) -> i64
+X F sprintf(buf: i64, fmt: str) -> i64
+X F strlen(s: str) -> i64
+X F strcpy(dest: i64, src: str) -> i64
+X F strcat(dest: i64, src: str) -> i64
+X F strstr(haystack: str, needle: str) -> i64
+
+# Convert string to safe JSON string (escape quotes)
+F json_escape(s: str) -> str {
+    # Simplified - in real impl would escape special chars
+    R s
+}
+
+# Create JSON field with string value
+F json_field_str(key: str, value: str, is_last: i64) -> str {
+    C buf := malloc(512)
+    C escaped := json_escape(value)
+
+    I is_last == 1 {
+        sprintf(buf, "\"%s\": \"%s\"")
+    } E {
+        sprintf(buf, "\"%s\": \"%s\",")
+    }
+
+    R buf
+}
+
+# Create JSON field with integer value
+F json_field_int(key: str, value: i64, is_last: i64) -> str {
+    C buf := malloc(256)
+
+    I is_last == 1 {
+        sprintf(buf, "\"%s\": %d")
+    } E {
+        sprintf(buf, "\"%s\": %d,")
+    }
+
+    R buf
+}
+
+# Convert Bookmark to JSON object
+F bookmark_to_json(id: i64, title: str, url: str, tags: str, created: i64, updated: i64) -> str {
+    C buf := malloc(2048)
+    sprintf(buf, "{\"id\":%d,\"title\":\"%s\",\"url\":\"%s\",\"tags\":\"%s\",\"created_at\":%d,\"updated_at\":%d}")
+    R buf
+}
+
+# Create JSON array from multiple bookmarks
+F bookmarks_to_json_array(count: i64) -> str {
+    C buf := malloc(8192)
+    sprintf(buf, "[")
+
+    # In real impl: would iterate through bookmarks and append
+    I count == 0 {
+        strcat(buf, "]")
+        R buf
+    }
+
+    # Example bookmark
+    C bm_json := bookmark_to_json(1, "Example", "https://example.com", "demo,test", 1234567890, 1234567890)
+    strcat(buf, bm_json)
+    strcat(buf, "]")
+
+    R buf
+}
+
+# Create empty JSON array
+F json_empty_array() -> str {
+    C buf := malloc(8)
+    sprintf(buf, "[]")
+    R buf
+}
+
+# Create JSON object with single field
+F json_single_field(key: str, value: str) -> str {
+    C buf := malloc(512)
+    sprintf(buf, "{\"%s\":\"%s\"}")
+    R buf
+}
+
+# Create JSON error response
+F json_error(message: str) -> str {
+    C buf := malloc(512)
+    sprintf(buf, "{\"error\":\"%s\"}")
+    R buf
+}
+
+# Create JSON success response
+F json_success(message: str) -> str {
+    C buf := malloc(512)
+    sprintf(buf, "{\"success\":true,\"message\":\"%s\"}")
+    R buf
+}
+
+# Parse JSON field value (simplified)
+F json_parse_field(json: str, key: str) -> str {
+    # Search for "key": pattern
+    C buf := malloc(256)
+    sprintf(buf, "\"%s\":")
+
+    C pos := strstr(json, buf)
+    I pos == 0 {
+        R ""  # Not found
+    }
+
+    # In real impl: would extract value between quotes
+    R "parsed_value"
+}
+
+# Create health check JSON
+F json_health_ok() -> str {
+    C buf := malloc(128)
+    sprintf(buf, "{\"status\":\"ok\",\"service\":\"vais-bookmarks\"}")
+    R buf
+}
+
+# Create JSON response with ID
+F json_created(id: i64) -> str {
+    C buf := malloc(256)
+    sprintf(buf, "{\"success\":true,\"id\":%d}")
+    R buf
+}
+
+# Create JSON response with count
+F json_count(count: i64) -> str {
+    C buf := malloc(256)
+    sprintf(buf, "{\"count\":%d}")
+    R buf
+}

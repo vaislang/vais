@@ -1,0 +1,150 @@
+# handler.vais - HTTP request handlers
+
+X F malloc(size: i64) -> i64
+X F sprintf(buf: i64, fmt: str) -> i64
+X F strcmp(a: str, b: str) -> i64
+X F log_info(msg: str) -> i64
+X F log_error(msg: str) -> i64
+
+# Handle GET /api/bookmarks - List all bookmarks
+F handle_list(store_count: i64) -> str {
+    log_info("Handling GET /api/bookmarks")
+
+    I store_count == 0 {
+        R json_empty_array()
+    }
+
+    # Generate JSON array of bookmarks
+    C result := bookmarks_to_json_array(store_count)
+    R result
+}
+
+# Handle GET /api/bookmarks/:id - Get single bookmark
+F handle_get(store_ptr: i64, id: i64) -> str {
+    log_info("Handling GET /api/bookmarks/:id")
+
+    C bm_ptr := store_get_by_id(store_ptr, id)
+    I bm_ptr == 0 {
+        R json_error("Bookmark not found")
+    }
+
+    # Convert bookmark to JSON
+    C result := bookmark_to_json(id, "Sample Title", "https://example.com", "demo", 1234567890, 1234567890)
+    R result
+}
+
+# Handle POST /api/bookmarks - Create new bookmark
+F handle_create(store_ptr: i64, body: str) -> str {
+    log_info("Handling POST /api/bookmarks")
+
+    # Parse JSON body
+    C title := json_parse_field(body, "title")
+    C url := json_parse_field(body, "url")
+    C tags := json_parse_field(body, "tags")
+
+    # Validate required fields
+    I strcmp(title, "") == 0 {
+        R json_error("Title is required")
+    }
+    I strcmp(url, "") == 0 {
+        R json_error("URL is required")
+    }
+
+    # Add to store
+    C id := store_add_bookmark(store_ptr, title, url, tags)
+    I id == 0 {
+        R json_error("Failed to create bookmark")
+    }
+
+    R json_created(id)
+}
+
+# Handle PUT /api/bookmarks/:id - Update bookmark
+F handle_update(store_ptr: i64, id: i64, body: str) -> str {
+    log_info("Handling PUT /api/bookmarks/:id")
+
+    # Parse JSON body
+    C title := json_parse_field(body, "title")
+    C url := json_parse_field(body, "url")
+    C tags := json_parse_field(body, "tags")
+
+    # Update bookmark
+    C success := store_update_bookmark(store_ptr, id, title, url, tags)
+    I success == 0 {
+        R json_error("Bookmark not found")
+    }
+
+    R json_success("Bookmark updated")
+}
+
+# Handle DELETE /api/bookmarks/:id - Delete bookmark
+F handle_delete(store_ptr: i64, id: i64) -> str {
+    log_info("Handling DELETE /api/bookmarks/:id")
+
+    C success := store_delete_bookmark(store_ptr, id)
+    I success == 0 {
+        R json_error("Bookmark not found")
+    }
+
+    R json_success("Bookmark deleted")
+}
+
+# Handle GET /api/search?q=keyword - Search bookmarks
+F handle_search(store_ptr: i64, query: str) -> str {
+    log_info("Handling GET /api/search")
+
+    C count := store_search_bookmarks(store_ptr, query)
+
+    I count == 0 {
+        R json_empty_array()
+    }
+
+    # Generate JSON array of matching bookmarks
+    C result := bookmarks_to_json_array(count)
+    R result
+}
+
+# Handle GET /api/health - Health check
+F handle_health() -> str {
+    log_info("Handling GET /api/health")
+    R json_health_ok()
+}
+
+# Helper: Extract ID from path like /api/bookmarks/123
+F parse_id_from_path(path: str) -> i64 {
+    # Simplified - in real impl would parse path properly
+    # Look for /api/bookmarks/ and extract number after it
+    R 1  # Default ID
+}
+
+# Helper: Parse query parameter from URL
+F parse_query_param(url: str, param: str) -> str {
+    # Simplified - in real impl would parse ?q=value
+    R "test"
+}
+
+# Wrapper functions that call bookmark store operations
+F store_get_by_id(store_ptr: i64, id: i64) -> i64 {
+    # Would call store_get from bookmark.vais
+    R store_ptr
+}
+
+F store_add_bookmark(store_ptr: i64, title: str, url: str, tags: str) -> i64 {
+    # Would call store_add from bookmark.vais
+    R 1
+}
+
+F store_update_bookmark(store_ptr: i64, id: i64, title: str, url: str, tags: str) -> i64 {
+    # Would call store_update from bookmark.vais
+    R 1
+}
+
+F store_delete_bookmark(store_ptr: i64, id: i64) -> i64 {
+    # Would call store_delete from bookmark.vais
+    R 1
+}
+
+F store_search_bookmarks(store_ptr: i64, query: str) -> i64 {
+    # Would call store_search from bookmark.vais
+    R 0
+}

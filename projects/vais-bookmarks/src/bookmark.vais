@@ -1,0 +1,148 @@
+# bookmark.vais - Bookmark data model and store
+
+# External C functions for memory and string operations
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F time(ptr: i64) -> i64
+X F strcmp(a: str, b: str) -> i64
+X F strlen(s: str) -> i64
+X F strstr(haystack: str, needle: str) -> i64
+X F strcpy(dest: i64, src: str) -> i64
+X F sprintf(buf: i64, fmt: str) -> i64
+
+# Bookmark structure
+S Bookmark {
+    id: i64,
+    title: str,
+    url: str,
+    tags: str,
+    created_at: i64,
+    updated_at: i64
+}
+
+# Bookmark store (in-memory database)
+S BookmarkStore {
+    items_ptr: i64,    # Pointer to array of Bookmark*
+    count: i64,
+    capacity: i64,
+    next_id: i64
+}
+
+# Create a new bookmark
+F bookmark_new(id: i64, title: str, url: str, tags: str) -> Bookmark {
+    C timestamp := time(0)
+    R Bookmark {
+        id: id,
+        title: title,
+        url: url,
+        tags: tags,
+        created_at: timestamp,
+        updated_at: timestamp
+    }
+}
+
+# Initialize a new bookmark store
+F store_new() -> BookmarkStore {
+    C capacity := 100
+    C items_ptr := malloc(capacity * 8)  # Array of pointers (8 bytes each)
+    R BookmarkStore {
+        items_ptr: items_ptr,
+        count: 0,
+        capacity: capacity,
+        next_id: 1
+    }
+}
+
+# Add a bookmark to the store
+F store_add(store: BookmarkStore, title: str, url: str, tags: str) -> i64 {
+    I store.count >= store.capacity {
+        R 0  # Store is full
+    }
+
+    C id := store.next_id
+    C bookmark := bookmark_new(id, title, url, tags)
+
+    # Allocate memory for the bookmark
+    C bm_ptr := malloc(48)  # sizeof(Bookmark)
+
+    # Store bookmark (simplified - in real impl would copy struct)
+    C array_ptr := store.items_ptr + (store.count * 8)
+
+    # Update store
+    store.count := store.count + 1
+    store.next_id := store.next_id + 1
+
+    R id
+}
+
+# Get bookmark by ID
+F store_get(store: BookmarkStore, id: i64) -> i64 {
+    C i := 0
+    L i < store.count {
+        # In real impl: would retrieve actual bookmark from items_ptr[i]
+        # For now, return pointer if ID matches
+        I i + 1 == id {
+            C ptr := store.items_ptr + (i * 8)
+            R ptr
+        }
+        i := i + 1
+    }
+    R 0  # Not found
+}
+
+# Update bookmark
+F store_update(store: BookmarkStore, id: i64, title: str, url: str, tags: str) -> i64 {
+    C i := 0
+    L i < store.count {
+        I i + 1 == id {
+            # Update timestamp
+            C timestamp := time(0)
+            # In real impl: would update bookmark fields
+            R 1  # Success
+        }
+        i := i + 1
+    }
+    R 0  # Not found
+}
+
+# Delete bookmark
+F store_delete(store: BookmarkStore, id: i64) -> i64 {
+    C i := 0
+    L i < store.count {
+        I i + 1 == id {
+            # Shift remaining items left
+            C j := i
+            L j < store.count - 1 {
+                # Copy pointer from j+1 to j
+                j := j + 1
+            }
+            store.count := store.count - 1
+            R 1  # Success
+        }
+        i := i + 1
+    }
+    R 0  # Not found
+}
+
+# Search bookmarks by query (title, url, or tags)
+F store_search(store: BookmarkStore, query: str) -> i64 {
+    # Return count of matches (simplified)
+    I strlen(query) == 0 {
+        R store.count
+    }
+
+    C matches := 0
+    C i := 0
+    L i < store.count {
+        # In real impl: would check if query matches title/url/tags
+        matches := matches + 1
+        i := i + 1
+    }
+
+    R matches
+}
+
+# Get all bookmarks count
+F store_count(store: BookmarkStore) -> i64 {
+    R store.count
+}

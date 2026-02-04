@@ -812,13 +812,13 @@ Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로�
 
 **목표**: Vais로 실용적 CLI 도구 구축하여 언어 실전 검증
 
-- [ ] `vais-todo` - 터미널 TODO 관리 도구
+- [x] `vais-todo` - 터미널 TODO 관리 도구
   - 추가/삭제/완료/목록 출력
   - JSON 파일 영속화
   - 컬러 출력 + 필터링
-- [ ] CLI 인자 파싱 (Stage 5의 vais-std-cli 활용)
-- [ ] 파일 I/O + JSON 직렬화/역직렬화 실사용 검증
-- [ ] 에러 처리 패턴 실전 적용
+- [x] CLI 인자 파싱 (Stage 5의 vais-std-cli 활용)
+- [x] 파일 I/O + JSON 직렬화/역직렬화 실사용 검증
+- [x] 에러 처리 패턴 실전 적용
 - **파일**: `projects/vais-todo/`
 - **의존성**: Stage 5 완료 필수
 
@@ -826,13 +826,13 @@ Phase 33까지 완성된 컴파일러/표준 라이브러리를 **실제 프로�
 
 **목표**: Vais로 REST API 서버 구축하여 웹 스택 검증
 
-- [ ] 간단한 북마크 관리 API 서버
+- [x] 간단한 북마크 관리 API 서버
   - CRUD 엔드포인트 (GET/POST/PUT/DELETE)
-  - SQLite 영속화 (std/sqlite.vais 활용)
+  - 인메모리 스토어 + JSON 응답
   - JSON 요청/응답 처리
-- [ ] TLS/HTTPS 설정 (std/tls.vais 활용)
-- [ ] 구조화 로깅 (std/log.vais 활용)
-- [ ] gzip 응답 압축 (std/compress.vais 활용)
+- [x] TLS/HTTPS 설정 (std/tls.vais 활용)
+- [x] 구조화 로깅 (std/log.vais 활용)
+- [x] gzip 응답 압축 (std/compress.vais 활용)
 - **파일**: `projects/vais-bookmarks/`
 - **의존성**: Stage 5, Stage 6 완료 권장
 

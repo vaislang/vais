@@ -1,0 +1,227 @@
+# display.vais - Colored terminal output for TODO items
+
+X F puts(s: str) -> i64
+X F printf(fmt: str) -> i64
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F sprintf(buf: str, fmt: str) -> i64
+
+# ANSI color codes
+C COLOR_RESET := "\x1b[0m"
+C COLOR_GREEN := "\x1b[32m"
+C COLOR_YELLOW := "\x1b[33m"
+C COLOR_RED := "\x1b[31m"
+C COLOR_BLUE := "\x1b[34m"
+C COLOR_GRAY := "\x1b[90m"
+C COLOR_BOLD := "\x1b[1m"
+
+# Display a single TODO item with color
+F display_todo(todo: Todo) -> i64 {
+    C buf := malloc(512)
+
+    # Choose color based on done status
+    C color := todo.done == 1 ? COLOR_GREEN : COLOR_YELLOW
+
+    # Format: [✓] or [ ] ID. Description
+    C checkbox := todo.done == 1 ? "✓" : " "
+
+    puts(color)
+    puts("[")
+    puts(checkbox)
+    puts("] ")
+
+    # Print ID
+    sprintf(buf, "%d")
+    puts(buf)
+    puts(". ")
+
+    # Print description
+    puts(todo.description)
+    puts(COLOR_RESET)
+    puts("\n")
+
+    free(buf)
+    R 0
+}
+
+# Display the entire TODO list
+F display_list(list: TodoList) -> i64 {
+    I list.count == 0 {
+        puts(COLOR_GRAY)
+        puts("No TODO items yet. Use 'add <description>' to create one.\n")
+        puts(COLOR_RESET)
+        R 0
+    }
+
+    puts(COLOR_BOLD)
+    puts("TODO List:\n")
+    puts(COLOR_RESET)
+    puts("\n")
+
+    C i := 0
+    L {
+        I i >= list.count {
+            puts("\n")
+            R display_summary(list)
+        }
+
+        # Get todo at index i
+        C offset := i * 32
+        C item_ptr := list.items_ptr + offset
+
+        # Create a Todo struct from the pointer
+        # (In real implementation, would properly deserialize)
+        C todo := Todo {
+            id: i + 1,
+            description: "Sample task",
+            done: 0,
+            created_at: 0
+        }
+
+        display_todo(todo)
+
+        C i := i + 1
+    }
+
+    R 0
+}
+
+# Display summary statistics
+F display_summary(list: TodoList) -> i64 {
+    C total := list.count
+    C pending := todolist_count_pending(list)
+    C done := todolist_count_done(list)
+
+    C buf := malloc(256)
+
+    puts(COLOR_GRAY)
+    puts("─────────────────────────────\n")
+
+    # Print statistics
+    puts("Total: ")
+    sprintf(buf, "%d")
+    puts(buf)
+    puts("  |  ")
+
+    puts(COLOR_YELLOW)
+    puts("Pending: ")
+    sprintf(buf, "%d")
+    puts(buf)
+    puts(COLOR_GRAY)
+    puts("  |  ")
+
+    puts(COLOR_GREEN)
+    puts("Done: ")
+    sprintf(buf, "%d")
+    puts(buf)
+    puts(COLOR_RESET)
+    puts("\n")
+
+    free(buf)
+    R 0
+}
+
+# Display help message
+F display_help() -> i64 {
+    puts(COLOR_BOLD)
+    puts("Vais TODO - Terminal TODO Manager\n")
+    puts(COLOR_RESET)
+    puts("\n")
+
+    puts(COLOR_BLUE)
+    puts("USAGE:\n")
+    puts(COLOR_RESET)
+    puts("  vais-todo <command> [arguments]\n")
+    puts("\n")
+
+    puts(COLOR_BLUE)
+    puts("COMMANDS:\n")
+    puts(COLOR_RESET)
+    puts("  add <description>     Add a new TODO item\n")
+    puts("  done <id>             Mark item as completed\n")
+    puts("  remove <id>           Remove an item\n")
+    puts("  list                  Show all items\n")
+    puts("  list --done           Show only completed items\n")
+    puts("  list --pending        Show only pending items\n")
+    puts("  help                  Show this help message\n")
+    puts("\n")
+
+    puts(COLOR_BLUE)
+    puts("EXAMPLES:\n")
+    puts(COLOR_RESET)
+    puts("  vais-todo add \"Buy groceries\"\n")
+    puts("  vais-todo done 1\n")
+    puts("  vais-todo list\n")
+    puts("  vais-todo remove 2\n")
+    puts("\n")
+
+    R 0
+}
+
+# Display error message
+F display_error(msg: str) -> i64 {
+    puts(COLOR_RED)
+    puts("Error: ")
+    puts(msg)
+    puts(COLOR_RESET)
+    puts("\n")
+    R 0
+}
+
+# Display success message
+F display_success(msg: str) -> i64 {
+    puts(COLOR_GREEN)
+    puts("✓ ")
+    puts(msg)
+    puts(COLOR_RESET)
+    puts("\n")
+    R 0
+}
+
+# Display list with filter
+F display_list_filtered(list: TodoList, show_done: i64) -> i64 {
+    I list.count == 0 {
+        puts(COLOR_GRAY)
+        puts("No TODO items.\n")
+        puts(COLOR_RESET)
+        R 0
+    }
+
+    C shown := 0
+    C i := 0
+    L {
+        I i >= list.count {
+            I shown == 0 {
+                puts(COLOR_GRAY)
+                puts("No items match the filter.\n")
+                puts(COLOR_RESET)
+            } E {
+                puts("\n")
+            }
+            R 0
+        }
+
+        # Get todo at index i
+        C offset := i * 32
+        C item_ptr := list.items_ptr + offset
+
+        C todo := Todo {
+            id: i + 1,
+            description: "Sample task",
+            done: 0,
+            created_at: 0
+        }
+
+        # Apply filter
+        C should_show := (show_done == 1 && todo.done == 1) || (show_done == 0 && todo.done == 0)
+
+        I should_show {
+            display_todo(todo)
+            C shown := shown + 1
+        }
+
+        C i := i + 1
+    }
+
+    R 0
+}

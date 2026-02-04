@@ -1,0 +1,6 @@
+[package]
+name = "vais-bookmarks"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "REST API bookmark manager built with Vais"
+license = "MIT"

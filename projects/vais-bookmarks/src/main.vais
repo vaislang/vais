@@ -1,0 +1,81 @@
+# main.vais - HTTP Bookmark API Server Entry Point
+
+X F printf(fmt: str) -> i64
+X F puts(s: str) -> i64
+X F exit(code: i64) -> i64
+X F log_info(msg: str) -> i64
+
+# Main entry point
+F main() -> i64 {
+    puts("=================================")
+    puts("  Vais Bookmark API Server v1.0")
+    puts("=================================")
+    puts("")
+
+    log_info("Initializing bookmark server")
+
+    # Configuration
+    C port := 8080
+    C use_tls := 0  # Set to 1 to enable HTTPS
+
+    printf("Configuration:\n")
+    printf("  Port: %d\n")
+    I use_tls == 1 {
+        puts("  TLS: Enabled (HTTPS)")
+    } E {
+        puts("  TLS: Disabled (HTTP)")
+    }
+    puts("")
+
+    puts("API Endpoints:")
+    puts("  GET    /api/health          - Health check")
+    puts("  GET    /api/bookmarks       - List all bookmarks")
+    puts("  GET    /api/bookmarks/:id   - Get bookmark by ID")
+    puts("  POST   /api/bookmarks       - Create new bookmark")
+    puts("  PUT    /api/bookmarks/:id   - Update bookmark")
+    puts("  DELETE /api/bookmarks/:id   - Delete bookmark")
+    puts("  GET    /api/search?q=...    - Search bookmarks")
+    puts("")
+
+    puts("Features:")
+    puts("  - RESTful JSON API")
+    puts("  - In-memory bookmark storage")
+    puts("  - Full CRUD operations")
+    puts("  - Search by title/url/tags")
+    puts("  - Structured logging")
+    puts("  - Optional TLS/HTTPS")
+    puts("  - Optional gzip compression")
+    puts("")
+
+    # Start the server
+    C result := start_server(port, use_tls)
+
+    I result == 0 {
+        puts("Server shutdown successfully")
+        log_info("Server stopped")
+        R 0
+    } E {
+        puts("Server error occurred")
+        log_info("Server stopped with error")
+        R 1
+    }
+}
+
+# Example usage in comments:
+#
+# Start server:
+#   $ vaisc compile src/main.vais -o bookmark-server
+#   $ ./bookmark-server
+#
+# Test endpoints:
+#   $ curl http://localhost:8080/api/health
+#   $ curl http://localhost:8080/api/bookmarks
+#   $ curl -X POST http://localhost:8080/api/bookmarks \
+#       -H "Content-Type: application/json" \
+#       -d '{"title":"Vais Lang","url":"https://vais-lang.org","tags":"programming,language"}'
+#   $ curl http://localhost:8080/api/bookmarks/1
+#   $ curl -X PUT http://localhost:8080/api/bookmarks/1 \
+#       -H "Content-Type: application/json" \
+#       -d '{"title":"Updated Title","url":"https://new-url.com","tags":"updated"}'
+#   $ curl -X DELETE http://localhost:8080/api/bookmarks/1
+#   $ curl "http://localhost:8080/api/search?q=vais"

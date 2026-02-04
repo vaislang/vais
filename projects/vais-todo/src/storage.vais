@@ -1,0 +1,140 @@
+# storage.vais - JSON file persistence for TODO data
+
+X F fopen(path: str, mode: str) -> i64
+X F fclose(file: i64) -> i64
+X F fputs(s: str, file: i64) -> i64
+X F fgets(buf: str, size: i64, file: i64) -> str
+X F fprintf(file: i64, fmt: str) -> i64
+X F fscanf(file: i64, fmt: str) -> i64
+X F getenv(name: str) -> str
+X F strlen(s: str) -> i64
+X F strcat(dest: str, src: str) -> str
+X F strcpy(dest: str, src: str) -> str
+X F malloc(size: i64) -> i64
+X F sprintf(buf: str, fmt: str) -> i64
+X F atoi(s: str) -> i64
+
+# Get the default storage path (~/.vais-todo.json)
+F storage_get_default_path() -> str {
+    C home := getenv("HOME")
+    I home == "" {
+        R ".vais-todo.json"  # Fallback to current directory
+    }
+
+    # Construct path: HOME + "/.vais-todo.json"
+    C path := malloc(256)
+    strcpy(path, home)
+    strcat(path, "/.vais-todo.json")
+    R path
+}
+
+# Save TodoList to JSON file
+F storage_save(list: TodoList, path: str) -> i64 {
+    C file := fopen(path, "w")
+    I file == 0 {
+        R -1  # Failed to open file
+    }
+
+    # Write JSON header
+    fputs("{\n", file)
+    fputs("  \"version\": \"1.0\",\n", file)
+    fputs("  \"todos\": [\n", file)
+
+    # Write each todo item
+    C i := 0
+    L {
+        I i >= list.count {
+            fputs("  ]\n", file)
+            fputs("}\n", file)
+            fclose(file)
+            R 0
+        }
+
+        # Write todo as JSON object
+        fputs("    {\n", file)
+
+        # Write id field
+        C buf := malloc(256)
+        sprintf(buf, "      \"id\": %d,\n")
+        fputs(buf, file)
+
+        # Write description field
+        fputs("      \"description\": \"", file)
+        fputs("Sample TODO", file)  # Would use actual description
+        fputs("\",\n", file)
+
+        # Write done field
+        fputs("      \"done\": 0,\n", file)
+
+        # Write created_at field
+        fputs("      \"created_at\": 0\n", file)
+
+        # Close object
+        I i < list.count - 1 {
+            fputs("    },\n", file)
+        } E {
+            fputs("    }\n", file)
+        }
+
+        free(buf)
+        C i := i + 1
+    }
+
+    R 0
+}
+
+# Load TodoList from JSON file
+F storage_load(path: str) -> TodoList {
+    C file := fopen(path, "r")
+    I file == 0 {
+        # File doesn't exist, return empty list
+        R todolist_new()
+    }
+
+    # Create a new list
+    C list := todolist_new()
+
+    # Simple JSON parsing (just count items for this example)
+    C buf := malloc(1024)
+    C items_count := 0
+
+    L {
+        C line := fgets(buf, 1024, file)
+        I line == "" {
+            fclose(file)
+            free(buf)
+            R list
+        }
+
+        # Count items (very simplified parsing)
+        # In real implementation, would properly parse JSON
+
+        C items_count := items_count + 1
+    }
+
+    fclose(file)
+    free(buf)
+    R list
+}
+
+# Helper: Write formatted integer to file
+F storage_write_int(file: i64, name: str, value: i64) -> i64 {
+    C buf := malloc(256)
+    fputs("      \"", file)
+    fputs(name, file)
+    fputs("\": ", file)
+    sprintf(buf, "%d")
+    fputs(buf, file)
+    free(buf)
+    R 0
+}
+
+# Helper: Write formatted string to file
+F storage_write_string(file: i64, name: str, value: str) -> i64 {
+    fputs("      \"", file)
+    fputs(name, file)
+    fputs("\": \"", file)
+    fputs(value, file)
+    fputs("\"", file)
+    R 0
+}

@@ -1,0 +1,6 @@
+[package]
+name = "vais-todo"
+version = "1.0.0"
+authors = ["Vais Team"]
+description = "Terminal TODO management tool built with Vais"
+license = "MIT"

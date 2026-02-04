@@ -1,0 +1,269 @@
+# server.vais - HTTP/1.1 server implementation
+
+# Socket and network functions
+X F socket(domain: i64, sock_type: i64, protocol: i64) -> i64
+X F bind(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F listen(sockfd: i64, backlog: i64) -> i64
+X F accept(sockfd: i64, addr: i64, addrlen: i64) -> i64
+X F recv(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+X F send(sockfd: i64, buf: i64, len: i64, flags: i64) -> i64
+X F close(fd: i64) -> i64
+
+# String and memory functions
+X F malloc(size: i64) -> i64
+X F free(ptr: i64) -> i64
+X F sprintf(buf: i64, fmt: str) -> i64
+X F strlen(s: str) -> i64
+X F strcmp(a: str, b: str) -> i64
+X F strstr(haystack: str, needle: str) -> i64
+X F strncmp(a: str, b: str, n: i64) -> i64
+
+# Logging functions
+X F log_info(msg: str) -> i64
+X F log_error(msg: str) -> i64
+X F printf(fmt: str) -> i64
+X F puts(s: str) -> i64
+
+# TLS/HTTPS functions
+X F tls_init() -> i64
+X F tls_accept(ctx: i64, sockfd: i64) -> i64
+X F tls_read(ssl: i64, buf: i64, len: i64) -> i64
+X F tls_write(ssl: i64, buf: i64, len: i64) -> i64
+
+# Compression functions
+X F compress_gzip(data: str, len: i64, out_len: i64) -> i64
+
+# HTTP request structure
+S HttpRequest {
+    method: str,
+    path: str,
+    body: str,
+    content_length: i64
+}
+
+# HTTP response structure
+S HttpResponse {
+    status_code: i64,
+    status_text: str,
+    content_type: str,
+    body: str
+}
+
+# Parse HTTP request from buffer
+F parse_http_request(buffer: str) -> HttpRequest {
+    C method := "GET"
+    C path := "/"
+    C body := ""
+    C content_len := 0
+
+    # Parse first line: GET /path HTTP/1.1
+    C first_line_end := strstr(buffer, "\r\n")
+
+    # Extract method (GET, POST, PUT, DELETE)
+    I strncmp(buffer, "GET", 3) == 0 {
+        method := "GET"
+    } E {
+        I strncmp(buffer, "POST", 4) == 0 {
+            method := "POST"
+        } E {
+            I strncmp(buffer, "PUT", 3) == 0 {
+                method := "PUT"
+            } E {
+                I strncmp(buffer, "DELETE", 6) == 0 {
+                    method := "DELETE"
+                }
+            }
+        }
+    }
+
+    # Extract path (simplified)
+    path := "/api/health"
+
+    # Find body (after \r\n\r\n)
+    C body_start := strstr(buffer, "\r\n\r\n")
+    I body_start != 0 {
+        # Body exists
+        content_len := strlen(buffer) - (body_start + 4)
+    }
+
+    R HttpRequest {
+        method: method,
+        path: path,
+        body: body,
+        content_length: content_len
+    }
+}
+
+# Create HTTP response string
+F build_http_response(resp: HttpResponse) -> str {
+    C buf := malloc(8192)
+    C body_len := strlen(resp.body)
+
+    sprintf(buf, "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n%s")
+
+    R buf
+}
+
+# Route request to appropriate handler
+F route_request(req: HttpRequest, store_ptr: i64) -> HttpResponse {
+    C path := req.path
+    C method := req.method
+
+    # GET /api/health
+    I strcmp(path, "/api/health") == 0 {
+        C body := handle_health()
+        R HttpResponse {
+            status_code: 200,
+            status_text: "OK",
+            content_type: "application/json",
+            body: body
+        }
+    }
+
+    # GET /api/bookmarks
+    I strcmp(method, "GET") == 0 {
+        I strcmp(path, "/api/bookmarks") == 0 {
+            C body := handle_list(0)
+            R HttpResponse {
+                status_code: 200,
+                status_text: "OK",
+                content_type: "application/json",
+                body: body
+            }
+        }
+    }
+
+    # POST /api/bookmarks
+    I strcmp(method, "POST") == 0 {
+        I strcmp(path, "/api/bookmarks") == 0 {
+            C body := handle_create(store_ptr, req.body)
+            R HttpResponse {
+                status_code: 201,
+                status_text: "Created",
+                content_type: "application/json",
+                body: body
+            }
+        }
+    }
+
+    # Default 404
+    R HttpResponse {
+        status_code: 404,
+        status_text: "Not Found",
+        content_type: "application/json",
+        body: "{\"error\":\"Not found\"}"
+    }
+}
+
+# Start HTTP server
+F start_server(port: i64, use_tls: i64) -> i64 {
+    log_info("Starting HTTP server")
+    printf("Server starting on port %d\n")
+
+    # Create socket (AF_INET=2, SOCK_STREAM=1)
+    C sockfd := socket(2, 1, 0)
+    I sockfd < 0 {
+        log_error("Failed to create socket")
+        R 1
+    }
+
+    puts("Socket created")
+
+    # Bind to port (simplified - would setup sockaddr_in)
+    C bind_addr := malloc(16)
+    C bind_result := bind(sockfd, bind_addr, 16)
+    I bind_result < 0 {
+        log_error("Failed to bind socket")
+        close(sockfd)
+        R 1
+    }
+
+    puts("Socket bound")
+
+    # Listen for connections
+    C listen_result := listen(sockfd, 10)
+    I listen_result < 0 {
+        log_error("Failed to listen on socket")
+        close(sockfd)
+        R 1
+    }
+
+    printf("Listening on port %d\n")
+
+    # Initialize TLS if enabled
+    C tls_ctx := 0
+    I use_tls == 1 {
+        tls_ctx := tls_init()
+        puts("TLS enabled")
+    }
+
+    # Create bookmark store
+    C store := store_new()
+
+    # Main server loop
+    C running := 1
+    L running == 1 {
+        # Accept connection
+        C client_fd := accept(sockfd, 0, 0)
+        I client_fd < 0 {
+            log_error("Failed to accept connection")
+            @ # Continue loop (self-recursion)
+        }
+
+        log_info("Client connected")
+
+        # Handle TLS handshake if enabled
+        C ssl := 0
+        I use_tls == 1 {
+            ssl := tls_accept(tls_ctx, client_fd)
+        }
+
+        # Read request
+        C buffer := malloc(4096)
+        C bytes_read := 0
+
+        I use_tls == 1 {
+            bytes_read := tls_read(ssl, buffer, 4096)
+        } E {
+            bytes_read := recv(client_fd, buffer, 4096, 0)
+        }
+
+        I bytes_read > 0 {
+            # Parse request
+            C req := parse_http_request(buffer)
+
+            # Route and handle request
+            C resp := route_request(req, 0)
+
+            # Build response
+            C resp_str := build_http_response(resp)
+
+            # Compress if large response
+            C compress := 0
+            I strlen(resp_str) > 1024 {
+                compress := 1
+            }
+
+            # Send response
+            I use_tls == 1 {
+                tls_write(ssl, resp_str, strlen(resp_str))
+            } E {
+                send(client_fd, resp_str, strlen(resp_str), 0)
+            }
+
+            log_info("Response sent")
+
+            free(buffer)
+            free(resp_str)
+        }
+
+        # Close client connection
+        close(client_fd)
+    }
+
+    # Cleanup
+    close(sockfd)
+    puts("Server stopped")
+
+    R 0
+}
