@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  registry:
+    build:
+      context: .
+      dockerfile: Dockerfile.registry
+    container_name: vais-registry
+    ports:
+      - "3000:3000"
+    volumes:
+      - registry-data:/data
+    environment:
+      - VAIS_REGISTRY_HOST=0.0.0.0
+      - VAIS_REGISTRY_PORT=3000
+      - VAIS_REGISTRY_DB=/data/registry.db
+      - VAIS_REGISTRY_STORAGE=/data/packages
+      - VAIS_REGISTRY_ADMIN_USER=${ADMIN_USER:-admin}
+      - VAIS_REGISTRY_ADMIN_PASS=${ADMIN_PASSWORD:-changeme}
+      - RUST_LOG=vais_registry_server=info,tower_http=debug
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  registry-data:
+    driver: local

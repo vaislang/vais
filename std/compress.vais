@@ -1,0 +1,386 @@
+# Compression Library - gzip/deflate compression and decompression
+# Built on zlib FFI for RFC 1951 (deflate) and RFC 1952 (gzip)
+#
+# Features:
+# - Deflate compression/decompression (raw RFC 1951)
+# - Gzip compression/decompression (RFC 1952 with header + CRC32)
+# - Streaming compression (chunk-by-chunk processing)
+# - Multiple compression levels (fast/default/best)
+# - HTTP Content-Encoding integration helpers
+#
+# Dependencies: zlib
+# Link flags: -lz
+#
+# Usage (one-shot gzip):
+#   data := "Hello, World!"
+#   result := gzip_compress(data as i64, __strlen(data))
+#   I result.status == COMPRESS_OK {
+#       # result.data_ptr and result.data_len contain compressed data
+#       __free(result.data_ptr)
+#   }
+#
+# Usage (streaming compression):
+#   compressor := Compressor::deflate(COMPRESS_LEVEL_DEFAULT)
+#   I compressor.is_valid() == 1 {
+#       compressor.stream_begin()
+#       result1 := compressor.stream_write(chunk1_ptr, chunk1_len)
+#       result2 := compressor.stream_write(chunk2_ptr, chunk2_len)
+#       final := compressor.stream_finish()
+#       compressor.free()
+#   }
+#
+# Usage (decompression):
+#   result := gzip_decompress(compressed_ptr, compressed_len)
+#   I result.status == COMPRESS_OK {
+#       # result.data_ptr and result.data_len contain decompressed data
+#       __free(result.data_ptr)
+#   }
+
+# ============================================
+# Constants
+# ============================================
+
+# Status codes
+C COMPRESS_OK: i64 = 0
+C COMPRESS_ERR_INIT: i64 = -1
+C COMPRESS_ERR_PARAM: i64 = -2
+C COMPRESS_ERR_MEMORY: i64 = -3
+C COMPRESS_ERR_DATA: i64 = -4
+C COMPRESS_ERR_STREAM: i64 = -5
+C COMPRESS_ERR_VERSION: i64 = -6
+C COMPRESS_ERR_BUFFER: i64 = -7
+
+# Compression modes
+C COMPRESS_DEFLATE: i64 = 0
+C COMPRESS_GZIP: i64 = 1
+
+# Compression levels (1-9)
+C COMPRESS_LEVEL_FAST: i64 = 1
+C COMPRESS_LEVEL_DEFAULT: i64 = 6
+C COMPRESS_LEVEL_BEST: i64 = 9
+
+# Buffer sizes
+C COMPRESS_CHUNK_SIZE: i64 = 16384
+C COMPRESS_MAX_OUTPUT: i64 = 10485760    # 10MB default max
+
+# ============================================
+# Compression Result
+# ============================================
+
+S CompressResult {
+    data_ptr: i64,      # Pointer to output data (caller must free)
+    data_len: i64,      # Length of output data
+    status: i64         # COMPRESS_OK or error code
+}
+
+X CompressResult {
+    # Check if compression was successful
+    F is_ok(&self) -> i64 {
+        I self.status == COMPRESS_OK { 1 } E { 0 }
+    }
+
+    # Free the result data
+    F free(&self) -> i64 {
+        I self.data_ptr != 0 {
+            __free(self.data_ptr)
+            self.data_ptr = 0
+            self.data_len = 0
+        }
+        0
+    }
+}
+
+# ============================================
+# Compressor (stateful compression)
+# ============================================
+
+S Compressor {
+    handle: i64,        # Opaque pointer to z_stream
+    mode: i64,          # COMPRESS_DEFLATE or COMPRESS_GZIP
+    level: i64,         # Compression level (1-9)
+    streaming: i64      # 1 if streaming mode is active
+}
+
+X Compressor {
+    # Create a new deflate compressor (raw RFC 1951)
+    F deflate(level: i64) -> Compressor {
+        # Clamp level to valid range
+        actual_level := level
+        I level < 1 { actual_level = 1 }
+        I level > 9 { actual_level = 9 }
+
+        h := __compress_new(COMPRESS_DEFLATE, actual_level)
+        Compressor {
+            handle: h,
+            mode: COMPRESS_DEFLATE,
+            level: actual_level,
+            streaming: 0
+        }
+    }
+
+    # Create a new gzip compressor (RFC 1952)
+    F gzip(level: i64) -> Compressor {
+        # Clamp level to valid range
+        actual_level := level
+        I level < 1 { actual_level = 1 }
+        I level > 9 { actual_level = 9 }
+
+        h := __compress_new(COMPRESS_GZIP, actual_level)
+        Compressor {
+            handle: h,
+            mode: COMPRESS_GZIP,
+            level: actual_level,
+            streaming: 0
+        }
+    }
+
+    # Check if compressor was created successfully
+    F is_valid(&self) -> i64 {
+        I self.handle != 0 { 1 } E { 0 }
+    }
+
+    # One-shot compression (entire input at once)
+    F compress(&self, data_ptr: i64, data_len: i64) -> CompressResult {
+        I self.handle == 0 {
+            R CompressResult {
+                data_ptr: 0,
+                data_len: 0,
+                status: COMPRESS_ERR_INIT
+            }
+        }
+
+        out_ptr := 0
+        out_len := 0
+        status := __compress_data(self.handle, data_ptr, data_len, out_ptr, out_len)
+
+        CompressResult {
+            data_ptr: out_ptr,
+            data_len: out_len,
+            status: status
+        }
+    }
+
+    # Decompress data (entire input at once)
+    F decompress(&self, data_ptr: i64, data_len: i64) -> CompressResult {
+        I self.handle == 0 {
+            R CompressResult {
+                data_ptr: 0,
+                data_len: 0,
+                status: COMPRESS_ERR_INIT
+            }
+        }
+
+        out_ptr := 0
+        out_len := 0
+        status := __decompress_data(self.handle, data_ptr, data_len, out_ptr, out_len)
+
+        CompressResult {
+            data_ptr: out_ptr,
+            data_len: out_len,
+            status: status
+        }
+    }
+
+    # Begin streaming compression
+    F stream_begin(&self) -> i64 {
+        I self.handle == 0 { R COMPRESS_ERR_INIT }
+        status := __compress_stream_begin(self.handle)
+        I status == 0 {
+            self.streaming = 1
+        }
+        status
+    }
+
+    # Write a chunk to the stream
+    F stream_write(&self, chunk_ptr: i64, chunk_len: i64) -> CompressResult {
+        I self.handle == 0 | self.streaming == 0 {
+            R CompressResult {
+                data_ptr: 0,
+                data_len: 0,
+                status: COMPRESS_ERR_STREAM
+            }
+        }
+
+        out_ptr := 0
+        out_len := 0
+        status := __compress_stream_write(self.handle, chunk_ptr, chunk_len, out_ptr, out_len)
+
+        CompressResult {
+            data_ptr: out_ptr,
+            data_len: out_len,
+            status: status
+        }
+    }
+
+    # Finish streaming compression and get final chunk
+    F stream_finish(&self) -> CompressResult {
+        I self.handle == 0 | self.streaming == 0 {
+            R CompressResult {
+                data_ptr: 0,
+                data_len: 0,
+                status: COMPRESS_ERR_STREAM
+            }
+        }
+
+        out_ptr := 0
+        out_len := 0
+        status := __compress_stream_finish(self.handle, out_ptr, out_len)
+        self.streaming = 0
+
+        CompressResult {
+            data_ptr: out_ptr,
+            data_len: out_len,
+            status: status
+        }
+    }
+
+    # Free compressor resources
+    F free(&self) -> i64 {
+        I self.handle != 0 {
+            __compress_free(self.handle)
+            self.handle = 0
+        }
+        self.streaming = 0
+        0
+    }
+}
+
+# ============================================
+# HTTP Helper Functions
+# ============================================
+
+# One-shot gzip compression (for HTTP Content-Encoding: gzip)
+F gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult {
+    I data_ptr == 0 | data_len <= 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_PARAM
+        }
+    }
+
+    compressor := Compressor::gzip(COMPRESS_LEVEL_DEFAULT)
+    I compressor.is_valid() == 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_INIT
+        }
+    }
+
+    result := compressor.compress(data_ptr, data_len)
+    compressor.free()
+    result
+}
+
+# One-shot gzip decompression (for HTTP Content-Encoding: gzip)
+F gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
+    I data_ptr == 0 | data_len <= 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_PARAM
+        }
+    }
+
+    compressor := Compressor::gzip(COMPRESS_LEVEL_DEFAULT)
+    I compressor.is_valid() == 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_INIT
+        }
+    }
+
+    result := compressor.decompress(data_ptr, data_len)
+    compressor.free()
+    result
+}
+
+# One-shot deflate compression (raw deflate)
+F deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult {
+    I data_ptr == 0 | data_len <= 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_PARAM
+        }
+    }
+
+    compressor := Compressor::deflate(COMPRESS_LEVEL_DEFAULT)
+    I compressor.is_valid() == 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_INIT
+        }
+    }
+
+    result := compressor.compress(data_ptr, data_len)
+    compressor.free()
+    result
+}
+
+# One-shot deflate decompression (raw deflate)
+F deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
+    I data_ptr == 0 | data_len <= 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_PARAM
+        }
+    }
+
+    compressor := Compressor::deflate(COMPRESS_LEVEL_DEFAULT)
+    I compressor.is_valid() == 0 {
+        R CompressResult {
+            data_ptr: 0,
+            data_len: 0,
+            status: COMPRESS_ERR_INIT
+        }
+    }
+
+    result := compressor.decompress(data_ptr, data_len)
+    compressor.free()
+    result
+}
+
+# ============================================
+# Error Description Helper
+# ============================================
+
+F compress_error_text(code: i64) -> str {
+    M code {
+        0 => "Success",
+        -1 => "Compression initialization failed",
+        -2 => "Invalid parameter",
+        -3 => "Memory allocation failed",
+        -4 => "Invalid or corrupted data",
+        -5 => "Stream error",
+        -6 => "Version mismatch",
+        -7 => "Buffer error",
+        _ => "Unknown compression error"
+    }
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+# Compressor lifecycle (from compress_runtime.c)
+X F __compress_new(mode: i64, level: i64) -> i64
+X F __compress_free(handle: i64) -> i64
+
+# One-shot compression/decompression (from compress_runtime.c)
+X F __compress_data(handle: i64, data_ptr: i64, data_len: i64, out_ptr: i64, out_len: i64) -> i64
+X F __decompress_data(handle: i64, data_ptr: i64, data_len: i64, out_ptr: i64, out_len: i64) -> i64
+
+# Streaming compression (from compress_runtime.c)
+X F __compress_stream_begin(handle: i64) -> i64
+X F __compress_stream_write(handle: i64, chunk_ptr: i64, chunk_len: i64, out_ptr: i64, out_len: i64) -> i64
+X F __compress_stream_finish(handle: i64, out_ptr: i64, out_len: i64) -> i64
+
+# Memory operations (shared)
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __strlen(s: str) -> i64

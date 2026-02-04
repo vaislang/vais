@@ -3386,6 +3386,50 @@ fn cmd_pkg_publish(
         println!("  Server responded with status {}", status);
     }
 
+    // Verify checksum by fetching package metadata from registry
+    if verbose {
+        println!("{} Verifying checksum...", "Info".cyan());
+    }
+
+    let verify_url = format!(
+        "{}/packages/{}/{}",
+        registry_url.trim_end_matches('/'),
+        pkg_name,
+        pkg_version
+    );
+
+    let verify_response = ureq::get(&verify_url)
+        .set("Authorization", &format!("Bearer {}", auth_token))
+        .call();
+
+    match verify_response {
+        Ok(resp) => {
+            if let Ok(body) = resp.into_string() {
+                if let Ok(pkg_info) = serde_json::from_str::<serde_json::Value>(&body) {
+                    if let Some(server_checksum) = pkg_info.get("checksum").and_then(|c| c.as_str()) {
+                        if server_checksum == checksum {
+                            if verbose {
+                                println!("  Checksum verified: {}", &checksum[..16]);
+                            }
+                        } else {
+                            eprintln!(
+                                "{} Warning: checksum mismatch (local: {}, server: {})",
+                                "⚠".yellow(),
+                                &checksum[..16],
+                                &server_checksum[..16]
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            if verbose {
+                eprintln!("{} Could not verify checksum: {}", "⚠".yellow(), e);
+            }
+        }
+    }
+
     // Clean up temp files
     let _ = fs::remove_dir_all(&tmp_dir);
 

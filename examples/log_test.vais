@@ -1,0 +1,348 @@
+# Structured Logging Example
+# Demonstrates basic logging, structured fields, JSON output, and span tracing
+#
+# Build:
+#   vaisc --emit-ir examples/log_test.vais
+#   clang -o log_test examples/log_test.ll std/log_runtime.c -lpthread
+#
+# Run:
+#   ./log_test
+
+# External function declarations (from log_runtime.c)
+X F __log_init(level: i64) -> i64
+X F __log_set_level(level: i64) -> i64
+X F __log_set_output(target: i64) -> i64
+X F __log_set_file(path: str) -> i64
+X F __log_set_format(format: i64) -> i64
+X F __log_write(level: i64, msg: str) -> i64
+X F __log_with_field(level: i64, msg: str, key: str, value: str) -> i64
+X F __log_with_fields(level: i64, msg: str, fields: str) -> i64
+X F __span_start(name: str) -> i64
+X F __span_end(span_id: i64) -> i64
+X F __span_log(span_id: i64, level: i64, msg: str) -> i64
+X F __span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64
+X F __span_trace_id(span_id: i64) -> str
+
+# Helper functions
+X F puts(s: str) -> i64
+X F printf(fmt: str, x: i64) -> i64
+
+# Constants - Log Levels
+C LOG_LEVEL_TRACE: i64 = 0
+C LOG_LEVEL_DEBUG: i64 = 1
+C LOG_LEVEL_INFO: i64 = 2
+C LOG_LEVEL_WARN: i64 = 3
+C LOG_LEVEL_ERROR: i64 = 4
+
+# Constants - Output Targets
+C LOG_OUTPUT_STDOUT: i64 = 0
+C LOG_OUTPUT_STDERR: i64 = 1
+C LOG_OUTPUT_FILE: i64 = 2
+
+# Constants - Output Formats
+C LOG_FORMAT_TEXT: i64 = 0
+C LOG_FORMAT_JSON: i64 = 1
+
+# Constants - Error Codes
+C LOG_OK: i64 = 0
+C LOG_ERR_INIT: i64 = -1
+C LOG_ERR_FILE: i64 = -2
+C LOG_ERR_INVALID_LEVEL: i64 = -3
+C LOG_ERR_INVALID_OUTPUT: i64 = -4
+C LOG_ERR_INVALID_FORMAT: i64 = -5
+C LOG_ERR_SPAN: i64 = -6
+C LOG_ERR_WRITE: i64 = -7
+
+# Helper: log convenience functions
+F log_trace(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_TRACE, msg)
+}
+
+F log_debug(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_DEBUG, msg)
+}
+
+F log_info(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_INFO, msg)
+}
+
+F log_warn(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_WARN, msg)
+}
+
+F log_error(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_ERROR, msg)
+}
+
+F info_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_INFO, msg, key, value)
+}
+
+F warn_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_WARN, msg, key, value)
+}
+
+F error_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_ERROR, msg, key, value)
+}
+
+F log_error_text(code: i64) -> str {
+    I code == 0 { R "Success" }
+    I code == -1 { R "Logger initialization failed" }
+    I code == -2 { R "Failed to open log file" }
+    I code == -3 { R "Invalid log level" }
+    I code == -4 { R "Invalid output target" }
+    I code == -5 { R "Invalid output format" }
+    I code == -6 { R "Span error (invalid ID or operation)" }
+    I code == -7 { R "Write error" }
+    "Unknown logging error"
+}
+
+# ============================================
+# Example 1: Basic Logging
+# ============================================
+
+F test_basic_logging() -> i64 {
+    puts("=== Test 1: Basic Logging ===")
+
+    # Initialize logger at INFO level
+    result := __log_init(LOG_LEVEL_INFO)
+    I result == LOG_OK {
+        puts("Logger initialized successfully")
+    } E {
+        puts("Failed to initialize logger")
+        R 0
+    }
+
+    # Log messages at different levels
+    log_trace("This is a TRACE message (not visible)")
+    log_debug("This is a DEBUG message (not visible)")
+    log_info("This is an INFO message")
+    log_warn("This is a WARN message")
+    log_error("This is an ERROR message")
+
+    puts("")
+    0
+}
+
+# ============================================
+# Example 2: Structured Logging
+# ============================================
+
+F test_structured_logging() -> i64 {
+    puts("=== Test 2: Structured Logging with Fields ===")
+
+    # Single field
+    __log_with_field(LOG_LEVEL_INFO, "User logged in", "user_id", "12345")
+    __log_with_field(LOG_LEVEL_WARN, "High memory usage", "usage_mb", "850")
+
+    # Multiple fields
+    __log_with_fields(LOG_LEVEL_ERROR, "Request failed", "status=500,method=POST,path=/api/users")
+    __log_with_fields(LOG_LEVEL_INFO, "Request completed", "status=200,duration_ms=45,user=alice")
+
+    # Convenience functions
+    info_field("Payment processed", "amount", "99.99")
+    warn_field("Cache miss", "key", "user:profile:12345")
+    error_field("Database timeout", "table", "orders")
+
+    puts("")
+    0
+}
+
+# ============================================
+# Example 3: JSON Output Format
+# ============================================
+
+F test_json_logging() -> i64 {
+    puts("=== Test 3: JSON Output Format ===")
+
+    # Switch to JSON format
+    __log_set_format(LOG_FORMAT_JSON)
+
+    log_info("Server started")
+    __log_with_field(LOG_LEVEL_INFO, "Configuration loaded", "env", "production")
+    __log_with_fields(LOG_LEVEL_WARN, "Rate limit approaching", "current=950,limit=1000,endpoint=/api")
+
+    # Switch back to text format
+    __log_set_format(LOG_FORMAT_TEXT)
+    puts("")
+    0
+}
+
+# ============================================
+# Example 4: Log Levels
+# ============================================
+
+F test_log_levels() -> i64 {
+    puts("=== Test 4: Log Level Filtering ===")
+
+    # Set to DEBUG level - TRACE still hidden
+    puts("Setting level to DEBUG:")
+    __log_set_level(LOG_LEVEL_DEBUG)
+    log_trace("TRACE: Hidden")
+    log_debug("DEBUG: Visible")
+    log_info("INFO: Visible")
+
+    # Set to WARN level - only WARN and ERROR visible
+    puts("\nSetting level to WARN:")
+    __log_set_level(LOG_LEVEL_WARN)
+    log_debug("DEBUG: Hidden")
+    log_info("INFO: Hidden")
+    log_warn("WARN: Visible")
+    log_error("ERROR: Visible")
+
+    # Reset to INFO
+    __log_set_level(LOG_LEVEL_INFO)
+    puts("")
+    0
+}
+
+# ============================================
+# Example 5: Span-Based Tracing
+# ============================================
+
+F process_order(order_id: str) -> i64 {
+    log_info("Processing order")
+    0
+}
+
+F test_span_tracing() -> i64 {
+    puts("=== Test 5: Span-Based Tracing ===")
+
+    # Start a span for request tracking
+    span_id := __span_start("handle_request")
+    I span_id < 0 {
+        puts("Failed to start span")
+        R 0
+    }
+
+    # All logs within this span will include trace_id
+    __span_log(span_id, LOG_LEVEL_INFO, "Request received")
+    __span_log(span_id, LOG_LEVEL_DEBUG, "Validating input")
+
+    # Log with additional fields
+    __span_log_field(span_id, LOG_LEVEL_INFO, "Processing payment", "amount", "49.99")
+
+    # Simulate nested work
+    process_order("ORD-12345")
+
+    __span_log(span_id, LOG_LEVEL_INFO, "Request completed successfully")
+
+    # Get the trace ID
+    trace_id := __span_trace_id(span_id)
+    puts("Trace ID: ")
+    puts(trace_id)
+
+    # End the span
+    result := __span_end(span_id)
+    I result == LOG_OK {
+        puts("Span ended successfully")
+    }
+
+    puts("")
+    0
+}
+
+# ============================================
+# Example 6: Multiple Spans (Concurrent Requests)
+# ============================================
+
+F test_multiple_spans() -> i64 {
+    puts("=== Test 6: Multiple Concurrent Spans ===")
+
+    # Simulate two concurrent requests
+    span1 := __span_start("request_1")
+    span2 := __span_start("request_2")
+
+    __span_log(span1, LOG_LEVEL_INFO, "Request 1: started")
+    __span_log(span2, LOG_LEVEL_INFO, "Request 2: started")
+
+    __span_log_field(span1, LOG_LEVEL_INFO, "Request 1: processing", "user", "alice")
+    __span_log_field(span2, LOG_LEVEL_INFO, "Request 2: processing", "user", "bob")
+
+    __span_log(span1, LOG_LEVEL_INFO, "Request 1: completed")
+    __span_log(span2, LOG_LEVEL_INFO, "Request 2: completed")
+
+    __span_end(span1)
+    __span_end(span2)
+
+    puts("")
+    0
+}
+
+# ============================================
+# Example 7: Error Handling
+# ============================================
+
+F test_error_handling() -> i64 {
+    puts("=== Test 7: Error Handling ===")
+
+    # Try to set invalid log level
+    result := __log_init(100)
+    I result < 0 {
+        puts("Error: ")
+        puts(log_error_text(result))
+    }
+
+    # Try to open invalid file
+    result = __log_set_file("/invalid/path/that/does/not/exist/log.txt")
+    I result < 0 {
+        puts("Error: ")
+        puts(log_error_text(result))
+    }
+
+    # Try to end invalid span
+    result = __span_end(99999)
+    I result < 0 {
+        puts("Error: ")
+        puts(log_error_text(result))
+    }
+
+    puts("")
+    0
+}
+
+# ============================================
+# Example 8: JSON Format with Spans
+# ============================================
+
+F test_json_with_spans() -> i64 {
+    puts("=== Test 8: JSON Format with Span Tracing ===")
+
+    # Enable JSON output
+    __log_set_format(LOG_FORMAT_JSON)
+
+    span_id := __span_start("api_endpoint")
+    __span_log(span_id, LOG_LEVEL_INFO, "Endpoint called")
+    __span_log_field(span_id, LOG_LEVEL_INFO, "Query executed", "rows", "42")
+    __span_log(span_id, LOG_LEVEL_INFO, "Response sent")
+    __span_end(span_id)
+
+    # Switch back to text
+    __log_set_format(LOG_FORMAT_TEXT)
+    puts("")
+    0
+}
+
+# ============================================
+# Main Entry Point
+# ============================================
+
+F main() -> i64 {
+    puts("Vais Structured Logging Test Suite")
+    puts("===================================\n")
+
+    # Run all tests
+    test_basic_logging()
+    test_structured_logging()
+    test_json_logging()
+    test_log_levels()
+    test_span_tracing()
+    test_multiple_spans()
+    test_error_handling()
+    test_json_with_spans()
+
+    puts("All tests completed!")
+
+    0
+}

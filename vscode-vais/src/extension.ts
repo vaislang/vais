@@ -7,10 +7,13 @@ import {
     ServerOptions,
     Executable,
 } from 'vscode-languageclient/node';
+import { activateDebugger } from './debugAdapter';
 
 let client: LanguageClient | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
+    // Activate debugger support
+    activateDebugger(context);
     // Get configuration
     const config = vscode.workspace.getConfiguration('vais');
     const serverPath = config.get<string>('languageServer.path', 'vais-lsp');

@@ -1,0 +1,358 @@
+# Structured Logging & Error Tracing Library
+# Production-grade logging with levels, structured fields, spans, and JSON output
+#
+# Features:
+# - Log levels: TRACE, DEBUG, INFO, WARN, ERROR
+# - Structured key-value fields for rich context
+# - JSON and text output formats
+# - File, stdout, stderr output targets
+# - Span-based tracing with unique IDs for request tracking
+# - Thread-safe logging via C runtime
+# - ISO8601 timestamps
+#
+# Dependencies: Standard C library (stdio, time, pthread)
+#
+# Usage (basic logging):
+#   log_init(LOG_LEVEL_INFO)
+#   log_info("Server started")
+#   log_warn("Low memory")
+#   log_error("Failed to connect")
+#
+# Usage (structured logging):
+#   log_with_field(LOG_LEVEL_INFO, "User login", "user_id", "12345")
+#   log_with_fields(LOG_LEVEL_ERROR, "Request failed", "status=500,url=/api")
+#
+# Usage (JSON format):
+#   log_init(LOG_LEVEL_INFO)
+#   log_set_format(LOG_FORMAT_JSON)
+#   log_info("Request completed")  # {"timestamp":"2026-02-04T10:30:00Z","level":"INFO","msg":"Request completed"}
+#
+# Usage (file output):
+#   log_init(LOG_LEVEL_DEBUG)
+#   log_set_output(LOG_OUTPUT_FILE)
+#   log_set_file("/var/log/app.log")
+#   log_debug("Debug info written to file")
+#
+# Usage (span tracing):
+#   span_id := span_start("handle_request")
+#   span_log(span_id, LOG_LEVEL_INFO, "Processing")
+#   # ... work ...
+#   span_log(span_id, LOG_LEVEL_DEBUG, "Step completed")
+#   span_end(span_id)
+#   # All logs within span include trace_id for correlation
+
+# ============================================
+# Constants - Log Levels
+# ============================================
+
+C LOG_LEVEL_TRACE: i64 = 0
+C LOG_LEVEL_DEBUG: i64 = 1
+C LOG_LEVEL_INFO: i64 = 2
+C LOG_LEVEL_WARN: i64 = 3
+C LOG_LEVEL_ERROR: i64 = 4
+
+# ============================================
+# Constants - Output Targets
+# ============================================
+
+C LOG_OUTPUT_STDOUT: i64 = 0
+C LOG_OUTPUT_STDERR: i64 = 1
+C LOG_OUTPUT_FILE: i64 = 2
+
+# ============================================
+# Constants - Output Formats
+# ============================================
+
+C LOG_FORMAT_TEXT: i64 = 0
+C LOG_FORMAT_JSON: i64 = 1
+
+# ============================================
+# Constants - Error Codes
+# ============================================
+
+C LOG_OK: i64 = 0
+C LOG_ERR_INIT: i64 = -1
+C LOG_ERR_FILE: i64 = -2
+C LOG_ERR_INVALID_LEVEL: i64 = -3
+C LOG_ERR_INVALID_OUTPUT: i64 = -4
+C LOG_ERR_INVALID_FORMAT: i64 = -5
+C LOG_ERR_SPAN: i64 = -6
+C LOG_ERR_WRITE: i64 = -7
+
+# ============================================
+# Logger Configuration
+# ============================================
+
+S Logger {
+    level: i64,        # Minimum log level (LOG_LEVEL_*)
+    output: i64,       # Output target (LOG_OUTPUT_*)
+    format: i64,       # Output format (LOG_FORMAT_*)
+    file_path: str,    # Log file path (if output is LOG_OUTPUT_FILE)
+    initialized: i64   # 1 if logger is initialized
+}
+
+X Logger {
+    # Create a new logger with default settings (INFO level, stdout, text format)
+    F new() -> Logger {
+        Logger {
+            level: LOG_LEVEL_INFO,
+            output: LOG_OUTPUT_STDOUT,
+            format: LOG_FORMAT_TEXT,
+            file_path: "",
+            initialized: 0
+        }
+    }
+
+    # Initialize logger with specified level
+    F init(level: i64) -> Logger {
+        result := __log_init(level)
+        I result == LOG_OK {
+            Logger {
+                level: level,
+                output: LOG_OUTPUT_STDOUT,
+                format: LOG_FORMAT_TEXT,
+                file_path: "",
+                initialized: 1
+            }
+        } E {
+            Logger {
+                level: LOG_LEVEL_INFO,
+                output: LOG_OUTPUT_STDOUT,
+                format: LOG_FORMAT_TEXT,
+                file_path: "",
+                initialized: 0
+            }
+        }
+    }
+
+    # Set log level
+    F set_level(&self, level: i64) -> Logger {
+        I level < LOG_LEVEL_TRACE | level > LOG_LEVEL_ERROR {
+            R self
+        }
+        self.level = level
+        __log_set_level(level)
+        self
+    }
+
+    # Set output target
+    F set_output(&self, target: i64) -> Logger {
+        I target < LOG_OUTPUT_STDOUT | target > LOG_OUTPUT_FILE {
+            R self
+        }
+        self.output = target
+        __log_set_output(target)
+        self
+    }
+
+    # Set log file path (only effective if output is LOG_OUTPUT_FILE)
+    F set_file(&self, path: str) -> i64 {
+        self.file_path = path
+        __log_set_file(path)
+    }
+
+    # Set output format
+    F set_format(&self, format: i64) -> Logger {
+        I format < LOG_FORMAT_TEXT | format > LOG_FORMAT_JSON {
+            R self
+        }
+        self.format = format
+        __log_set_format(format)
+        self
+    }
+
+    # Check if logger is initialized
+    F is_initialized(&self) -> i64 {
+        self.initialized
+    }
+}
+
+# ============================================
+# Global Logger Initialization
+# ============================================
+
+# Initialize global logger with specified level
+# Returns LOG_OK (0) on success, negative error code on failure
+F log_init(level: i64) -> i64 {
+    __log_init(level)
+}
+
+# Set global log level
+F log_set_level(level: i64) -> i64 {
+    __log_set_level(level)
+}
+
+# Set global output target (stdout/stderr/file)
+F log_set_output(target: i64) -> i64 {
+    __log_set_output(target)
+}
+
+# Set log file path (call this before setting output to LOG_OUTPUT_FILE)
+# Returns LOG_OK (0) on success, negative error code on failure
+F log_set_file(path: str) -> i64 {
+    __log_set_file(path)
+}
+
+# Set output format (text or JSON)
+F log_set_format(format: i64) -> i64 {
+    __log_set_format(format)
+}
+
+# ============================================
+# Basic Logging Functions
+# ============================================
+
+# Log a TRACE level message
+F log_trace(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_TRACE, msg)
+}
+
+# Log a DEBUG level message
+F log_debug(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_DEBUG, msg)
+}
+
+# Log an INFO level message
+F log_info(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_INFO, msg)
+}
+
+# Log a WARN level message
+F log_warn(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_WARN, msg)
+}
+
+# Log an ERROR level message
+F log_error(msg: str) -> i64 {
+    __log_write(LOG_LEVEL_ERROR, msg)
+}
+
+# ============================================
+# Structured Logging (Single Field)
+# ============================================
+
+# Log a message with a single structured key-value field
+# Example: log_with_field(LOG_LEVEL_INFO, "User login", "user_id", "12345")
+F log_with_field(level: i64, msg: str, key: str, value: str) -> i64 {
+    __log_with_field(level, msg, key, value)
+}
+
+# ============================================
+# Structured Logging (Multiple Fields)
+# ============================================
+
+# Log a message with multiple structured fields (comma-separated key=value pairs)
+# Example: log_with_fields(LOG_LEVEL_ERROR, "Request failed", "status=500,method=GET,path=/api/users")
+F log_with_fields(level: i64, msg: str, fields: str) -> i64 {
+    __log_with_fields(level, msg, fields)
+}
+
+# ============================================
+# Span-Based Tracing
+# ============================================
+
+# Start a new span for request tracing
+# Returns a unique span ID (positive integer) or negative error code
+# Example: span_id := span_start("process_order")
+F span_start(name: str) -> i64 {
+    __span_start(name)
+}
+
+# End a span (cleans up span state)
+# Returns LOG_OK (0) on success, negative error code on failure
+F span_end(span_id: i64) -> i64 {
+    __span_end(span_id)
+}
+
+# Log a message within a span (automatically includes span's trace_id)
+# Example: span_log(span_id, LOG_LEVEL_INFO, "Processing payment")
+F span_log(span_id: i64, level: i64, msg: str) -> i64 {
+    __span_log(span_id, level, msg)
+}
+
+# Log a message with a field within a span
+F span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64 {
+    __span_log_field(span_id, level, msg, key, value)
+}
+
+# Get the trace ID for a span (returns empty string if span not found)
+F span_trace_id(span_id: i64) -> str {
+    __span_trace_id(span_id)
+}
+
+# ============================================
+# Convenience Logging Functions with Fields
+# ============================================
+
+# Log TRACE with single field
+F trace_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_TRACE, msg, key, value)
+}
+
+# Log DEBUG with single field
+F debug_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_DEBUG, msg, key, value)
+}
+
+# Log INFO with single field
+F info_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_INFO, msg, key, value)
+}
+
+# Log WARN with single field
+F warn_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_WARN, msg, key, value)
+}
+
+# Log ERROR with single field
+F error_field(msg: str, key: str, value: str) -> i64 {
+    __log_with_field(LOG_LEVEL_ERROR, msg, key, value)
+}
+
+# ============================================
+# Error Description Helper
+# ============================================
+
+F log_error_text(code: i64) -> str {
+    M code {
+        0 => "Success",
+        -1 => "Logger initialization failed",
+        -2 => "Failed to open log file",
+        -3 => "Invalid log level",
+        -4 => "Invalid output target",
+        -5 => "Invalid output format",
+        -6 => "Span error (invalid ID or operation)",
+        -7 => "Write error",
+        _ => "Unknown logging error"
+    }
+}
+
+# ============================================
+# External Functions (Runtime Bindings)
+# ============================================
+
+# Logger initialization and configuration (from log_runtime.c)
+X F __log_init(level: i64) -> i64
+X F __log_set_level(level: i64) -> i64
+X F __log_set_output(target: i64) -> i64
+X F __log_set_file(path: str) -> i64
+X F __log_set_format(format: i64) -> i64
+
+# Basic logging (from log_runtime.c)
+X F __log_write(level: i64, msg: str) -> i64
+
+# Structured logging (from log_runtime.c)
+X F __log_with_field(level: i64, msg: str, key: str, value: str) -> i64
+X F __log_with_fields(level: i64, msg: str, fields: str) -> i64
+
+# Span tracing (from log_runtime.c)
+X F __span_start(name: str) -> i64
+X F __span_end(span_id: i64) -> i64
+X F __span_log(span_id: i64, level: i64, msg: str) -> i64
+X F __span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64
+X F __span_trace_id(span_id: i64) -> str
+
+# Shared functions (from runtime or other stdlib)
+X F __strlen(s: str) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64

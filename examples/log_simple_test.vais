@@ -1,0 +1,62 @@
+# Simple Logging Test
+# Basic test of the structured logging library
+#
+# Build:
+#   vaisc --emit-ir examples/log_simple_test.vais
+#   clang -o log_simple_test examples/log_simple_test.ll std/log_runtime.c -lpthread
+#
+# Run:
+#   ./log_simple_test
+
+# External function declarations
+X F __log_init(level: i64) -> i64
+X F __log_write(level: i64, msg: str) -> i64
+X F __log_with_field(level: i64, msg: str, key: str, value: str) -> i64
+X F __log_set_format(format: i64) -> i64
+X F __span_start(name: str) -> i64
+X F __span_end(span_id: i64) -> i64
+X F __span_log(span_id: i64, level: i64, msg: str) -> i64
+
+# Helper functions
+X F puts(s: str) -> i64
+
+# Constants
+C LOG_LEVEL_INFO: i64 = 2
+C LOG_FORMAT_TEXT: i64 = 0
+C LOG_FORMAT_JSON: i64 = 1
+
+F main() -> i64 {
+    puts("=== Simple Logging Test ===\n")
+
+    # Initialize
+    __log_init(LOG_LEVEL_INFO)
+    puts("Logger initialized\n")
+
+    # Basic log
+    __log_write(LOG_LEVEL_INFO, "Hello from Vais logging!")
+    puts("Basic log done\n")
+
+    # Structured log
+    __log_with_field(LOG_LEVEL_INFO, "User login", "user_id", "42")
+    puts("Structured log done\n")
+
+    # JSON format
+    __log_set_format(LOG_FORMAT_JSON)
+    __log_write(LOG_LEVEL_INFO, "JSON formatted message")
+    puts("JSON log done\n")
+
+    # Switch back to text
+    __log_set_format(LOG_FORMAT_TEXT)
+
+    # Test span
+    puts("Starting span...\n")
+    span_id := __span_start("test_span")
+    puts("Span started\n")
+    __span_log(span_id, LOG_LEVEL_INFO, "Inside span")
+    puts("Span log done\n")
+    __span_end(span_id)
+    puts("Span ended\n")
+
+    puts("\nAll tests passed!")
+    0
+}

@@ -1,0 +1,52 @@
+# Multi-stage build for Vais Registry Server
+# Stage 1: Build the registry server
+FROM rust:1.83-bookworm AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    libsqlite3-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /build
+
+# Copy the entire project
+COPY . .
+
+# Build the registry server in release mode
+RUN cargo build --release -p vais-registry-server
+
+# Stage 2: Runtime image
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for data and packages
+RUN mkdir -p /data/packages
+
+# Copy the compiled registry binary from builder stage
+COPY --from=builder /build/target/release/vais-registry-server /usr/local/bin/vais-registry-server
+
+# Set working directory
+WORKDIR /app
+
+# Environment variables with defaults
+ENV VAIS_REGISTRY_HOST=0.0.0.0
+ENV VAIS_REGISTRY_PORT=3000
+ENV VAIS_REGISTRY_DB=/data/registry.db
+ENV VAIS_REGISTRY_STORAGE=/data/packages
+ENV RUST_LOG=vais_registry_server=info,tower_http=debug
+
+# Expose the registry port
+EXPOSE 3000
+
+# Volume for persistent data
+VOLUME ["/data"]
+
+# Set the registry server as the entrypoint
+ENTRYPOINT ["vais-registry-server"]

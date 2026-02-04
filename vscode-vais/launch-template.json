@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "vais",
+      "request": "launch",
+      "name": "Debug Vais Program",
+      "program": "${workspaceFolder}/main.vais",
+      "stopOnEntry": true,
+      "autoCompile": true,
+      "optLevel": 0,
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {}
+    },
+    {
+      "type": "vais",
+      "request": "launch",
+      "name": "Debug Current File",
+      "program": "${file}",
+      "stopOnEntry": true,
+      "autoCompile": true,
+      "optLevel": 0
+    },
+    {
+      "type": "vais",
+      "request": "launch",
+      "name": "Debug (No Stop on Entry)",
+      "program": "${workspaceFolder}/main.vais",
+      "stopOnEntry": false,
+      "autoCompile": true
+    },
+    {
+      "type": "vais",
+      "request": "launch",
+      "name": "Debug Pre-compiled Binary",
+      "program": "${workspaceFolder}/main.vais",
+      "binary": "${workspaceFolder}/main",
+      "autoCompile": false,
+      "stopOnEntry": true
+    },
+    {
+      "type": "vais",
+      "request": "attach",
+      "name": "Attach to Process by PID",
+      "pid": "${command:pickProcess}",
+      "stopOnAttach": true
+    },
+    {
+      "type": "vais",
+      "request": "attach",
+      "name": "Attach to Process (Manual PID)",
+      "pid": 0,
+      "program": "${workspaceFolder}/main",
+      "stopOnAttach": true
+    }
+  ]
+}

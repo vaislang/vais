@@ -1,0 +1,134 @@
+# Compression Library Example
+# Demonstrates gzip and deflate compression/decompression
+
+F main() -> i64 {
+    __println("=== Vais Compression Library Demo ===\n")
+
+    # Test data
+    original := "Hello, World! This is a test of the compression library. "
+    original = original + original + original  # Make it longer for better compression
+
+    __println("Original data length: ")
+    __print_i64(__strlen(original))
+    __println("")
+
+    # Test 1: Gzip compression
+    __println("\n--- Test 1: Gzip Compression ---")
+    gzip_result := gzip_compress(original as i64, __strlen(original))
+    I gzip_result.is_ok() == 1 {
+        __println("Gzip compressed length: ")
+        __print_i64(gzip_result.data_len)
+        __println("")
+
+        ratio := (__strlen(original) * 100) / gzip_result.data_len
+        __println("Compression ratio: ")
+        __print_i64(ratio)
+        __println("%")
+
+        # Test decompression
+        decomp_result := gzip_decompress(gzip_result.data_ptr, gzip_result.data_len)
+        I decomp_result.is_ok() == 1 {
+            __println("Decompressed length: ")
+            __print_i64(decomp_result.data_len)
+            __println("")
+            __println("Decompression successful!")
+            decomp_result.free()
+        } E {
+            __println("Decompression failed!")
+        }
+
+        gzip_result.free()
+    } E {
+        __println("Gzip compression failed! Error: ")
+        __print_i64(gzip_result.status)
+        __println("")
+    }
+
+    # Test 2: Deflate compression
+    __println("\n--- Test 2: Deflate Compression ---")
+    deflate_result := deflate_compress(original as i64, __strlen(original))
+    I deflate_result.is_ok() == 1 {
+        __println("Deflate compressed length: ")
+        __print_i64(deflate_result.data_len)
+        __println("")
+
+        # Deflate should be slightly smaller than gzip (no header)
+        deflate_result.free()
+    } E {
+        __println("Deflate compression failed!")
+    }
+
+    # Test 3: Streaming compression
+    __println("\n--- Test 3: Streaming Compression ---")
+    compressor := Compressor::gzip(COMPRESS_LEVEL_BEST)
+    I compressor.is_valid() == 1 {
+        status := compressor.stream_begin()
+        I status == COMPRESS_OK {
+            __println("Stream started successfully")
+
+            # Compress in chunks
+            chunk1 := "First chunk of data. "
+            chunk2 := "Second chunk of data. "
+            chunk3 := "Third and final chunk."
+
+            r1 := compressor.stream_write(chunk1 as i64, __strlen(chunk1))
+            r2 := compressor.stream_write(chunk2 as i64, __strlen(chunk2))
+            r3 := compressor.stream_write(chunk3 as i64, __strlen(chunk3))
+            final := compressor.stream_finish()
+
+            I final.is_ok() == 1 {
+                __println("Streaming compression successful!")
+                __println("Final compressed size: ")
+                __print_i64(final.data_len)
+                __println("")
+                final.free()
+            }
+
+            # Free intermediate results
+            r1.free()
+            r2.free()
+            r3.free()
+        }
+        compressor.free()
+    } E {
+        __println("Failed to create compressor")
+    }
+
+    # Test 4: Different compression levels
+    __println("\n--- Test 4: Compression Levels ---")
+    test_data := "Test data for compression levels. " * 10
+
+    fast_comp := Compressor::gzip(COMPRESS_LEVEL_FAST)
+    fast_result := fast_comp.compress(test_data as i64, __strlen(test_data))
+    __println("Fast compression (level 1): ")
+    __print_i64(fast_result.data_len)
+    __println(" bytes")
+    fast_result.free()
+    fast_comp.free()
+
+    default_comp := Compressor::gzip(COMPRESS_LEVEL_DEFAULT)
+    default_result := default_comp.compress(test_data as i64, __strlen(test_data))
+    __println("Default compression (level 6): ")
+    __print_i64(default_result.data_len)
+    __println(" bytes")
+    default_result.free()
+    default_comp.free()
+
+    best_comp := Compressor::gzip(COMPRESS_LEVEL_BEST)
+    best_result := best_comp.compress(test_data as i64, __strlen(test_data))
+    __println("Best compression (level 9): ")
+    __print_i64(best_result.data_len)
+    __println(" bytes")
+    best_result.free()
+    best_comp.free()
+
+    __println("\n=== All tests completed ===")
+    0
+}
+
+# External functions needed for demo
+X F __println(s: str) -> i64
+X F __print_i64(n: i64) -> i64
+X F __strlen(s: str) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
