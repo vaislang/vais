@@ -604,12 +604,12 @@ Vais를 프로덕션 환경의 대형 프로젝트에 도입할 수 있도록, �
 - **압축 라이브러리 없음**: HTTP gzip, 데이터 직렬화에 필수
 
 ### Stage 1: TLS/HTTPS 표준 라이브러리
-- [ ] TLS 컨텍스트 생성/해제 (OpenSSL/LibreSSL FFI)
-- [ ] 인증서 로드 (PEM 파일, CA 번들)
-- [ ] TLS 핸드셰이크 (클라이언트/서버)
-- [ ] 암호화 읽기/쓰기 (`tls_read`, `tls_write`)
-- [ ] HTTPS 서버 통합 (기존 `http_server.vais` 확장)
-- [ ] HTTPS 클라이언트 통합 (기존 `http_client.vais` 확장)
+- [x] TLS 컨텍스트 생성/해제 (OpenSSL/LibreSSL FFI)
+- [x] 인증서 로드 (PEM 파일, CA 번들)
+- [x] TLS 핸드셰이크 (클라이언트/서버)
+- [x] 암호화 읽기/쓰기 (`tls_read`, `tls_write`)
+- [x] HTTPS 서버 통합 (기존 `http_server.vais` 확장)
+- [x] HTTPS 클라이언트 통합 (기존 `http_client.vais` 확장)
 - **파일**: `std/tls.vais` + `std/tls_runtime.c`
 - **의존성**: FFI (libssl, libcrypto)
 

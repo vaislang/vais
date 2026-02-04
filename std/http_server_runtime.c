@@ -317,6 +317,12 @@ long __print_server_start(const char* host, long port) {
     return 0;
 }
 
+long __print_server_start_tls(const char* host, long port) {
+    fprintf(stderr, "HTTPS server listening on %s:%ld (TLS enabled)\n",
+            host ? host : "0.0.0.0", port);
+    return 0;
+}
+
 // ============================================
 // CORS Handler Factory
 // ============================================

@@ -51,6 +51,8 @@ C CLIENT_ERR_TIMEOUT: i64 = -5
 C CLIENT_ERR_PARSE: i64 = -6
 C CLIENT_ERR_TOO_MANY_REDIRECTS: i64 = -7
 C CLIENT_ERR_INVALID_URL: i64 = -8
+C CLIENT_ERR_TLS_INIT: i64 = -9
+C CLIENT_ERR_TLS_HANDSHAKE: i64 = -10
 
 # ============================================
 # URL Components
@@ -563,6 +565,8 @@ X HttpResponse {
             -6 => "Response parse error",
             -7 => "Too many redirects",
             -8 => "Invalid URL",
+            -9 => "TLS initialization failed",
+            -10 => "TLS handshake failed",
             _ => "Unknown error"
         }
     }
@@ -789,10 +793,11 @@ X HttpClient {
     F do_send(&self, request: &HttpRequest, redirect_count: i64, timeout_ms: i64) -> HttpResponse {
         host := request.url.host
         port := request.url.port
+        is_https := request.url.is_https()
 
-        # Try to get a pooled connection
+        # Try to get a pooled connection (only for plain HTTP)
         fd := -1
-        I self.keep_alive == 1 {
+        I self.keep_alive == 1 & is_https == 0 {
             fd = self.pool.get(host, port)
         }
 
@@ -814,91 +819,193 @@ X HttpClient {
         send_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
         req_len := request.serialize(send_buf, CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
 
-        # Send request
-        sent := __tcp_send(fd, send_buf, req_len)
-        __free(send_buf)
-
-        I sent < 0 {
-            __tcp_close(fd)
-            R HttpResponse::error(CLIENT_ERR_SEND)
-        }
-
-        # Receive response
-        recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
-        total_recv := 0
-
-        L true {
-            n := __tcp_recv(fd, recv_buf + total_recv, CLIENT_RECV_CHUNK)
-            I n <= 0 {
-                B
+        # HTTPS path: use TLS for send/recv
+        I is_https == 1 {
+            # Create TLS context and connection
+            tls_ctx := __tls_ctx_new(0)  # client mode
+            I tls_ctx == 0 {
+                __free(send_buf)
+                __tcp_close(fd)
+                R HttpResponse::error(CLIENT_ERR_TLS_INIT)
             }
-            total_recv = total_recv + n
+            __tls_ctx_set_default_verify(tls_ctx)
 
-            # Check for complete headers
-            header_end := __find_header_end(recv_buf, total_recv)
-            I header_end >= 0 {
-                # Check Content-Length to see if we need more body data
-                content_len := __hc_get_content_length(recv_buf, total_recv)
-                I content_len >= 0 {
-                    body_received := total_recv - header_end
-                    I body_received >= content_len {
-                        B
-                    }
-                } E {
+            tls := __tls_new(tls_ctx, fd)
+            I tls == 0 {
+                __free(send_buf)
+                __tls_ctx_free(tls_ctx)
+                __tcp_close(fd)
+                R HttpResponse::error(CLIENT_ERR_TLS_INIT)
+            }
+
+            # Set SNI hostname
+            __tls_set_hostname(tls, host)
+
+            # TLS handshake
+            hs_result := __tls_connect(tls)
+            I hs_result != 0 {
+                __free(send_buf)
+                __tls_free(tls)
+                __tls_ctx_free(tls_ctx)
+                __tcp_close(fd)
+                R HttpResponse::error(CLIENT_ERR_TLS_HANDSHAKE)
+            }
+
+            # Send request via TLS
+            sent := __tls_write(tls, send_buf, req_len)
+            __free(send_buf)
+
+            I sent < 0 {
+                __tls_shutdown(tls)
+                __tls_free(tls)
+                __tls_ctx_free(tls_ctx)
+                __tcp_close(fd)
+                R HttpResponse::error(CLIENT_ERR_SEND)
+            }
+
+            # Receive response via TLS
+            recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
+            total_recv := 0
+
+            L true {
+                n := __tls_read(tls, recv_buf + total_recv, CLIENT_RECV_CHUNK)
+                I n <= 0 {
                     B
                 }
-            }
-        }
+                total_recv = total_recv + n
 
-        I total_recv <= 0 {
-            __tcp_close(fd)
-            __free(recv_buf)
-            R HttpResponse::error(CLIENT_ERR_RECV)
-        }
-
-        # Parse response
-        response := __hc_parse_response(recv_buf, total_recv)
-        __free(recv_buf)
-
-        # Handle keep-alive: return connection to pool or close it
-        I self.keep_alive == 1 {
-            conn_header := response.get_header("Connection")
-            should_close := 0
-            M conn_header {
-                Some(v) => {
-                    I __str_eq_ignore_case(v, "close") == 1 {
-                        should_close = 1
+                header_end := __find_header_end(recv_buf, total_recv)
+                I header_end >= 0 {
+                    content_len := __hc_get_content_length(recv_buf, total_recv)
+                    I content_len >= 0 {
+                        body_received := total_recv - header_end
+                        I body_received >= content_len {
+                            B
+                        }
+                    } E {
+                        B
                     }
-                    0
-                },
-                None => 0
+                }
             }
-            I should_close == 1 {
-                __tcp_close(fd)
-            } E {
-                self.pool.put(host, port, fd)
-            }
-        } E {
-            __tcp_close(fd)
-        }
 
-        # Handle redirects
-        I self.follow_redirects == 1 & response.is_redirect() == 1 {
-            I redirect_count >= self.max_redirects {
-                R HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
+            # Cleanup TLS
+            __tls_shutdown(tls)
+            __tls_free(tls)
+            __tls_ctx_free(tls_ctx)
+            __tcp_close(fd)
+
+            I total_recv <= 0 {
+                __free(recv_buf)
+                R HttpResponse::error(CLIENT_ERR_RECV)
             }
-            location := response.location()
-            M location {
-                Some(new_url) => {
-                    # Build redirect request (GET for 301/302/303)
-                    redirect_req := HttpRequest::get(new_url)
-                    redirect_req.timeout_ms = request.timeout_ms
-                    R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
-                },
-                None => response
+
+            response := __hc_parse_response(recv_buf, total_recv)
+            __free(recv_buf)
+
+            # Handle redirects
+            I self.follow_redirects == 1 & response.is_redirect() == 1 {
+                I redirect_count >= self.max_redirects {
+                    R HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
+                }
+                location := response.location()
+                M location {
+                    Some(new_url) => {
+                        redirect_req := HttpRequest::get(new_url)
+                        redirect_req.timeout_ms = request.timeout_ms
+                        R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
+                    },
+                    None => response
+                }
+            } E {
+                response
             }
         } E {
-            response
+            # Plain HTTP path (unchanged)
+            sent := __tcp_send(fd, send_buf, req_len)
+            __free(send_buf)
+
+            I sent < 0 {
+                __tcp_close(fd)
+                R HttpResponse::error(CLIENT_ERR_SEND)
+            }
+
+            # Receive response
+            recv_buf := __malloc(CLIENT_MAX_HEADERS + CLIENT_MAX_BODY)
+            total_recv := 0
+
+            L true {
+                n := __tcp_recv(fd, recv_buf + total_recv, CLIENT_RECV_CHUNK)
+                I n <= 0 {
+                    B
+                }
+                total_recv = total_recv + n
+
+                # Check for complete headers
+                header_end := __find_header_end(recv_buf, total_recv)
+                I header_end >= 0 {
+                    # Check Content-Length to see if we need more body data
+                    content_len := __hc_get_content_length(recv_buf, total_recv)
+                    I content_len >= 0 {
+                        body_received := total_recv - header_end
+                        I body_received >= content_len {
+                            B
+                        }
+                    } E {
+                        B
+                    }
+                }
+            }
+
+            I total_recv <= 0 {
+                __tcp_close(fd)
+                __free(recv_buf)
+                R HttpResponse::error(CLIENT_ERR_RECV)
+            }
+
+            # Parse response
+            response := __hc_parse_response(recv_buf, total_recv)
+            __free(recv_buf)
+
+            # Handle keep-alive: return connection to pool or close it
+            I self.keep_alive == 1 {
+                conn_header := response.get_header("Connection")
+                should_close := 0
+                M conn_header {
+                    Some(v) => {
+                        I __str_eq_ignore_case(v, "close") == 1 {
+                            should_close = 1
+                        }
+                        0
+                    },
+                    None => 0
+                }
+                I should_close == 1 {
+                    __tcp_close(fd)
+                } E {
+                    self.pool.put(host, port, fd)
+                }
+            } E {
+                __tcp_close(fd)
+            }
+
+            # Handle redirects
+            I self.follow_redirects == 1 & response.is_redirect() == 1 {
+                I redirect_count >= self.max_redirects {
+                    R HttpResponse::error(CLIENT_ERR_TOO_MANY_REDIRECTS)
+                }
+                location := response.location()
+                M location {
+                    Some(new_url) => {
+                        # Build redirect request (GET for 301/302/303)
+                        redirect_req := HttpRequest::get(new_url)
+                        redirect_req.timeout_ms = request.timeout_ms
+                        R self.do_send(&redirect_req, redirect_count + 1, timeout_ms)
+                    },
+                    None => response
+                }
+            } E {
+                response
+            }
         }
     }
 
@@ -1132,6 +1239,18 @@ X F __hc_get_content_length(buffer: i64, len: i64) -> i64
 
 # HTTP parsing (shared with http_runtime.c)
 X F __find_header_end(buffer: i64, len: i64) -> i64
+
+# TLS operations (from tls_runtime.c)
+X F __tls_ctx_new(mode: i64) -> i64
+X F __tls_ctx_free(handle: i64) -> i64
+X F __tls_ctx_set_default_verify(handle: i64) -> i64
+X F __tls_new(ctx: i64, fd: i64) -> i64
+X F __tls_free(handle: i64) -> i64
+X F __tls_set_hostname(handle: i64, hostname: str) -> i64
+X F __tls_connect(handle: i64) -> i64
+X F __tls_read(handle: i64, buf: i64, len: i64) -> i64
+X F __tls_write(handle: i64, data: i64, len: i64) -> i64
+X F __tls_shutdown(handle: i64) -> i64
 
 # String operations
 X F __strlen(s: str) -> i64

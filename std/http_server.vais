@@ -968,7 +968,9 @@ S App {
     route_capacity: i64,
     middleware: MiddlewareChain,
     static_files: i64,  # Pointer to StaticFiles (0 if none)
-    running: i64
+    running: i64,
+    tls_ctx: i64,       # TLS context handle (0 = plain HTTP)
+    tls_enabled: i64    # 1 if HTTPS mode, 0 for HTTP
 }
 
 X App {
@@ -983,7 +985,9 @@ X App {
             route_capacity: route_capacity,
             middleware: MiddlewareChain::new(),
             static_files: 0,
-            running: 0
+            running: 0,
+            tls_ctx: 0,
+            tls_enabled: 0
         }
     }
 
@@ -991,6 +995,27 @@ X App {
         app := App::new(port)
         app.host = host
         app
+    }
+
+    # Enable HTTPS with certificate and key files
+    F with_tls(&self, cert_path: str, key_path: str) -> App {
+        ctx := __tls_ctx_new(1)  # server mode
+        I ctx == 0 {
+            R self
+        }
+        cert_result := __tls_ctx_load_cert(ctx, cert_path)
+        I cert_result != 0 {
+            __tls_ctx_free(ctx)
+            R self
+        }
+        key_result := __tls_ctx_load_key(ctx, key_path)
+        I key_result != 0 {
+            __tls_ctx_free(ctx)
+            R self
+        }
+        self.tls_ctx = ctx
+        self.tls_enabled = 1
+        self
     }
 
     # Add a route with pattern matching
@@ -1058,7 +1083,11 @@ X App {
         }
 
         self.running = 1
-        __print_server_start(self.host, self.port)
+        I self.tls_enabled == 1 {
+            __print_server_start_tls(self.host, self.port)
+        } E {
+            __print_server_start(self.host, self.port)
+        }
 
         L self.running == 1 {
             client_fd := __tcp_accept(listener_fd)
@@ -1066,15 +1095,25 @@ X App {
                 C
             }
 
-            self.handle_request(client_fd)
+            I self.tls_enabled == 1 {
+                self.handle_request_tls(client_fd)
+            } E {
+                self.handle_request(client_fd)
+            }
             __tcp_close(client_fd)
+        }
+
+        # Cleanup TLS context
+        I self.tls_ctx != 0 {
+            __tls_ctx_free(self.tls_ctx)
+            self.tls_ctx = 0
         }
 
         __tcp_close(listener_fd)
         0
     }
 
-    # Handle a single request
+    # Handle a single request (plain HTTP)
     F handle_request(&self, fd: i64) -> i64 {
         # Read request data
         buffer := __malloc(8192 + 1048576)  # header + body max
@@ -1118,6 +1157,73 @@ X App {
         resp_len := response.serialize(resp_buffer, 8192 + 1048576)
         __tcp_send(fd, resp_buffer, resp_len)
         __free(resp_buffer)
+
+        0
+    }
+
+    # Handle a single request over TLS (HTTPS)
+    F handle_request_tls(&self, fd: i64) -> i64 {
+        # Create TLS connection
+        tls := __tls_new(self.tls_ctx, fd)
+        I tls == 0 {
+            R -1
+        }
+
+        # TLS handshake (server accept)
+        hs_result := __tls_accept(tls)
+        I hs_result != 0 {
+            __tls_free(tls)
+            R -1
+        }
+
+        # Read request data via TLS
+        buffer := __malloc(8192 + 1048576)
+        total := 0
+
+        L 1 {
+            n := __tls_read(tls, buffer + total, 4096)
+            I n <= 0 {
+                B
+            }
+            total = total + n
+            I __find_header_end(buffer, total) >= 0 {
+                B
+            }
+        }
+
+        I total <= 0 {
+            __free(buffer)
+            __tls_shutdown(tls)
+            __tls_free(tls)
+            R -1
+        }
+
+        # Parse raw request
+        raw_req := __parse_request(buffer, total)
+        __free(buffer)
+
+        # Create RequestCtx from raw request
+        ctx := RequestCtx::from_raw(
+            raw_req.method, raw_req.path, raw_req.version,
+            raw_req.headers.items, raw_req.headers.count, raw_req.headers.capacity,
+            raw_req.body, raw_req.body_len
+        )
+
+        # Find matching route
+        response := self.find_and_handle(&ctx)
+
+        # Execute middleware chain (post-processing)
+        response = self.middleware.execute(&ctx, response)
+
+        # Send response via TLS
+        resp_buffer := __malloc(8192 + 1048576)
+        resp_len := response.serialize(resp_buffer, 8192 + 1048576)
+        __tls_write(tls, resp_buffer, resp_len)
+        __free(resp_buffer)
+
+        # Shutdown TLS
+        __tls_shutdown(tls)
+        __tls_free(tls)
 
         0
     }
@@ -1316,6 +1422,19 @@ X F __match_path(seg_types: i64, seg_values: i64, seg_count: i64, path: str, par
 # Logging
 X F __log_request(method: str, path: str, status: i64) -> i64
 X F __print_server_start(host: str, port: i64) -> i64
+X F __print_server_start_tls(host: str, port: i64) -> i64
 
 # CORS handler factory
 X F __make_cors_handler(origin: i64) -> i64
+
+# TLS operations (from tls_runtime.c)
+X F __tls_ctx_new(mode: i64) -> i64
+X F __tls_ctx_free(handle: i64) -> i64
+X F __tls_ctx_load_cert(handle: i64, path: str) -> i64
+X F __tls_ctx_load_key(handle: i64, path: str) -> i64
+X F __tls_new(ctx: i64, fd: i64) -> i64
+X F __tls_free(handle: i64) -> i64
+X F __tls_accept(handle: i64) -> i64
+X F __tls_read(handle: i64, buf: i64, len: i64) -> i64
+X F __tls_write(handle: i64, data: i64, len: i64) -> i64
+X F __tls_shutdown(handle: i64) -> i64
