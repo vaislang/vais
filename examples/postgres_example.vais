@@ -29,6 +29,7 @@ X F __pg_error_message(handle: i64) -> str
 X F __pg_result_status(result: i64) -> i64
 X F __malloc(size: i64) -> i64
 X F __free(ptr: i64) -> i64
+X F puts(s: str) -> i64
 
 F main() -> i64 {
     puts("=== Vais PostgreSQL Example ===")

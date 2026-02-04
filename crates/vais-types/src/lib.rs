@@ -266,7 +266,7 @@ impl TypeChecker {
             },
         );
 
-        // puts: (str) -> i32
+        // puts: (str) -> i64
         self.functions.insert(
             "puts".to_string(),
             FunctionSig {
@@ -274,7 +274,7 @@ impl TypeChecker {
                 generics: vec![],
                 generic_bounds: HashMap::new(),
                 params: vec![("s".to_string(), ResolvedType::Str, false)],
-                ret: ResolvedType::I32,
+                ret: ResolvedType::I64,
                 is_async: false,
                 is_vararg: false,
                 required_params: None,
@@ -3199,10 +3199,19 @@ impl TypeChecker {
             FunctionBody::Block(stmts) => self.check_block(stmts)?,
         };
 
-        // Check return type
+        // Check return type (with auto-deref: &T unifies with T)
         let expected_ret = self.current_fn_ret.clone()
             .expect("Internal compiler error: current_fn_ret should be set during function checking");
-        self.unify(&expected_ret, &body_type)?;
+        let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
+            if self.unify(&expected_ret, inner).is_ok() {
+                *inner.clone()
+            } else {
+                body_type.clone()
+            }
+        } else {
+            body_type.clone()
+        };
+        self.unify(&expected_ret, &body_type_deref)?;
 
         // Resolve inferred parameter types after body type checking.
         // Parameters declared without type annotations (Type::Infer) get Var(id) types
@@ -3386,10 +3395,19 @@ impl TypeChecker {
             FunctionBody::Block(stmts) => self.check_block(stmts)?,
         };
 
-        // Check return type
+        // Check return type (with auto-deref: &T unifies with T)
         let expected_ret = self.current_fn_ret.clone()
             .expect("Internal compiler error: current_fn_ret should be set during function checking");
-        self.unify(&expected_ret, &body_type)?;
+        let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
+            if self.unify(&expected_ret, inner).is_ok() {
+                *inner.clone()
+            } else {
+                body_type.clone()
+            }
+        } else {
+            body_type.clone()
+        };
+        self.unify(&expected_ret, &body_type_deref)?;
 
         // Resolve inferred parameter types for impl methods (same as check_function)
         if method.params.iter().any(|p| matches!(p.ty.node, Type::Infer)) {
@@ -3498,7 +3516,17 @@ impl TypeChecker {
                     ResolvedType::Unit
                 };
                 if let Some(expected) = self.current_fn_ret.clone() {
-                    self.unify(&expected, &ret_type)?;
+                    // Auto-deref: if returning &T but expected is T, allow implicit deref
+                    let ret_type_deref = if let ResolvedType::Ref(inner) = &ret_type {
+                        if self.unify(&expected, inner).is_ok() {
+                            *inner.clone()
+                        } else {
+                            ret_type.clone()
+                        }
+                    } else {
+                        ret_type.clone()
+                    };
+                    self.unify(&expected, &ret_type_deref)?;
                 }
                 // Return has "Never" type because execution doesn't continue past it
                 Ok(ResolvedType::Never)
@@ -3675,6 +3703,11 @@ impl TypeChecker {
                         Ok(ResolvedType::Bool)
                     }
                     BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr => {
+                        // Allow bool operands for BitAnd (&) and BitOr (|) as logical and/or
+                        if matches!(left_type, ResolvedType::Bool) && matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor) {
+                            self.unify(&left_type, &right_type)?;
+                            return Ok(ResolvedType::Bool);
+                        }
                         if !left_type.is_integer() {
                             return Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
@@ -3739,8 +3772,12 @@ impl TypeChecker {
 
                 if let Some(else_branch) = else_ {
                     let else_type = self.check_if_else(else_branch)?;
-                    self.unify(&then_type, &else_type)?;
-                    Ok(then_type)
+                    // If branch types don't unify, treat if-else as statement (Unit type)
+                    if self.unify(&then_type, &else_type).is_ok() {
+                        Ok(then_type)
+                    } else {
+                        Ok(ResolvedType::Unit)
+                    }
                 } else {
                     Ok(ResolvedType::Unit)
                 }
@@ -4795,7 +4832,11 @@ impl TypeChecker {
 
                 if let Some(else_branch) = else_ {
                     let else_type = self.check_if_else(else_branch)?;
-                    self.unify(&then_type, &else_type)?;
+                    // If branch types don't unify, treat as statement (Unit type)
+                    if self.unify(&then_type, &else_type).is_ok() {
+                        return Ok(then_type);
+                    }
+                    return Ok(ResolvedType::Unit);
                 }
 
                 Ok(then_type)
