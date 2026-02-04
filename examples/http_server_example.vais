@@ -1,0 +1,225 @@
+# HTTP Server Framework Example
+# Demonstrates routing, path parameters, and JSON API endpoints
+#
+# Build: vaisc --emit-ir examples/http_server_example.vais
+#        clang -o http_server examples/http_server_example.ll std/http_runtime.c std/http_server_runtime.c
+# Run:   ./http_server
+# Test:  curl http://localhost:8080/
+#        curl http://localhost:8080/api/hello
+#        curl http://localhost:8080/users/42
+#        curl http://localhost:8080/health
+
+# External function declarations
+X F __tcp_listen(port: i64) -> i64
+X F __tcp_accept(listener_fd: i64) -> i64
+X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
+X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+X F __tcp_close(fd: i64) -> i64
+X F __strlen(s: str) -> i64
+X F __str_copy_to(dst: i64, src: str) -> i64
+X F __str_eq(a: str, b: str) -> i64
+X F __i64_to_str(dst: i64, value: i64) -> i64
+X F __malloc(size: i64) -> i64
+X F __free(ptr: i64) -> i64
+X F __memcpy(dst: i64, src: i64, len: i64) -> i64
+X F __find_header_end(buffer: i64, len: i64) -> i64
+X F __str_starts_with(s: str, prefix: str) -> i64
+X F __substr(s: str, start: i64, len: i64) -> str
+X F __log_request(method: str, path: str, status: i64) -> i64
+X F __print_server_start(host: str, port: i64) -> i64
+
+# Build a JSON body buffer from key and value strings
+# Returns pointer to null-terminated JSON string (caller must free)
+F make_json(key: str, value: str) -> i64 {
+    buf := __malloc(512)
+    pos := 0
+    store_byte(buf + pos, 123)
+    pos = pos + 1
+    store_byte(buf + pos, 34)
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, key)
+    store_byte(buf + pos, 34)
+    pos = pos + 1
+    store_byte(buf + pos, 58)
+    pos = pos + 1
+    store_byte(buf + pos, 34)
+    pos = pos + 1
+    pos = pos + __str_copy_to(buf + pos, value)
+    store_byte(buf + pos, 34)
+    pos = pos + 1
+    store_byte(buf + pos, 125)
+    pos = pos + 1
+    store_byte(buf + pos, 0)
+    buf
+}
+
+# Send an HTTP response (plain text body, single str param)
+F send_ok(fd: i64, body: str) -> i64 {
+    buf := __malloc(4096)
+    pos := 0
+    pos = pos + __str_copy_to(buf + pos, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ")
+    pos = pos + __i64_to_str(buf + pos, __strlen(body))
+    pos = pos + __str_copy_to(buf + pos, "\r\n\r\n")
+    pos = pos + __str_copy_to(buf + pos, body)
+    __tcp_send(fd, buf, pos)
+    __free(buf)
+    0
+}
+
+F send_html(fd: i64, body: str) -> i64 {
+    buf := __malloc(4096)
+    pos := 0
+    pos = pos + __str_copy_to(buf + pos, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ")
+    pos = pos + __i64_to_str(buf + pos, __strlen(body))
+    pos = pos + __str_copy_to(buf + pos, "\r\n\r\n")
+    pos = pos + __str_copy_to(buf + pos, body)
+    __tcp_send(fd, buf, pos)
+    __free(buf)
+    0
+}
+
+F send_404(fd: i64) -> i64 {
+    j := make_json("error", "Not Found")
+    buf := __malloc(4096)
+    pos := 0
+    pos = pos + __str_copy_to(buf + pos, "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ")
+    pos = pos + __i64_to_str(buf + pos, __strlen(j as str))
+    pos = pos + __str_copy_to(buf + pos, "\r\n\r\n")
+    pos = pos + __str_copy_to(buf + pos, j as str)
+    __tcp_send(fd, buf, pos)
+    __free(buf)
+    __free(j)
+    0
+}
+
+# Extract HTTP method from raw request buffer
+F extract_method(buffer: i64, len: i64) -> str {
+    pos := 0
+    L pos < len {
+        I load_byte(buffer + pos) == 32 { B }
+        pos = pos + 1
+    }
+    m := __malloc(pos + 1)
+    __memcpy(m, buffer, pos)
+    store_byte(m + pos, 0)
+    m as str
+}
+
+# Extract HTTP path from raw request buffer
+F extract_path(buffer: i64, len: i64) -> str {
+    pos := 0
+    L pos < len {
+        I load_byte(buffer + pos) == 32 { B }
+        pos = pos + 1
+    }
+    pos = pos + 1
+    path_start := pos
+    L pos < len {
+        I load_byte(buffer + pos) == 32 { B }
+        pos = pos + 1
+    }
+    path_len := pos - path_start
+    p := __malloc(path_len + 1)
+    __memcpy(p, buffer + path_start, path_len)
+    store_byte(p + path_len, 0)
+    p as str
+}
+
+F main() -> i64 {
+    port := 8080
+    __print_server_start("0.0.0.0", port)
+
+    listener := __tcp_listen(port)
+    I listener < 0 {
+        puts("Failed to start server")
+        R 1
+    }
+
+    # Accept and handle connections in a loop
+    L true {
+        client := __tcp_accept(listener)
+        I client < 0 { C }
+
+        # Read request data
+        buffer := __malloc(8192)
+        total := 0
+        L true {
+            n := __tcp_recv(client, buffer + total, 4096)
+            I n <= 0 { B }
+            total = total + n
+            I __find_header_end(buffer, total) >= 0 { B }
+        }
+
+        I total > 0 {
+            method := extract_method(buffer, total)
+            path := extract_path(buffer, total)
+            handled := 0
+
+            # GET / - Home page
+            I handled == 0 {
+                I __str_eq(path, "/") == 1 {
+                    send_html(client, "<h1>Vais HTTP Server</h1><p>Routes: /api/hello, /users/:id, /health</p>")
+                    __log_request(method, path, 200)
+                    handled = 1
+                }
+            }
+
+            # GET /api/hello - JSON API
+            I handled == 0 {
+                I __str_eq(path, "/api/hello") == 1 {
+                    j := make_json("message", "Hello from Vais!")
+                    send_ok(client, j as str)
+                    __free(j)
+                    __log_request(method, path, 200)
+                    handled = 1
+                }
+            }
+
+            # GET /users/:id - Path parameter example
+            I handled == 0 {
+                I __str_starts_with(path, "/users/") == 1 {
+                    user_id := __substr(path, 7, __strlen(path) - 7)
+                    j := make_json("user_id", user_id)
+                    send_ok(client, j as str)
+                    __free(j)
+                    __log_request(method, path, 200)
+                    handled = 1
+                }
+            }
+
+            # GET /health - Health check
+            I handled == 0 {
+                I __str_eq(path, "/health") == 1 {
+                    j := make_json("status", "ok")
+                    send_ok(client, j as str)
+                    __free(j)
+                    __log_request(method, path, 200)
+                    handled = 1
+                }
+            }
+
+            # POST /api/echo - Echo endpoint
+            I handled == 0 {
+                I __str_eq(path, "/api/echo") == 1 {
+                    j := make_json("echo", "received")
+                    send_ok(client, j as str)
+                    __free(j)
+                    __log_request(method, path, 200)
+                    handled = 1
+                }
+            }
+
+            # 404 Not Found
+            I handled == 0 {
+                send_404(client)
+                __log_request(method, path, 404)
+            }
+        }
+
+        __free(buffer)
+        __tcp_close(client)
+    }
+
+    __tcp_close(listener)
+    0
+}

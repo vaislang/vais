@@ -106,6 +106,7 @@ examples/tilde_mut
 examples/type_infer_params
 examples/type_infer_params_advanced
 examples/void_phi_assert
+examples/http_server_example
 examples/projects/benchmark/benchmark
 examples/projects/benchmark/benchmark_c
 examples/projects/num-convert/file_stats
