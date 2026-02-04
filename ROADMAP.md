@@ -96,7 +96,8 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **30** | **성능 최적화** | **✅ 완료** | **29/29 (100%)** |
 | **31** | **VaisDB 사전 준비 - 표준 라이브러리 시스템 프로그래밍 보강** | **✅ 완료** | **30/30 (100%)** |
 | **32** | **표준 라이브러리 확장 - 웹/DB/템플릿** | **✅ 완료** | **7/7 (100%)** |
-| | *Phase 33~37: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
+| **33** | **대형 프로젝트 도입 준비 - 프로덕션 블로커 해소** | **⏳ 예정** | **0/7 (0%)** |
+| | *Phase 34~: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
 
@@ -584,6 +585,109 @@ Vais로 웹 서버, DB 연동, 풀스택 애플리케이션 개발이 가능하�
 | Stage 5 | HTML 템플릿 렌더링 E2E |
 | Stage 6 | WebSocket echo 서버 E2E |
 | Stage 7 | ORM으로 CRUD 수행 E2E |
+
+---
+
+## Phase 33: 대형 프로젝트 도입 준비 - 프로덕션 블로커 해소
+
+> 브랜치: `develop` → 완료 후 `main`에 merge
+
+### 목표
+Vais를 프로덕션 환경의 대형 프로젝트에 도입할 수 있도록, 보안(TLS), 크로스플랫폼 비동기 I/O, 패키지 생태계, 디버깅, 관측성(로깅), 압축 등 핵심 블로커를 해소한다.
+
+### 현재 블로커 분석
+- **TLS/HTTPS 부재**: 보안 웹 서비스 불가 (Phase 32 HTTP 서버/클라이언트가 평문 전용)
+- **Async 런타임 macOS 전용**: kqueue만 구현, Linux(epoll)/Windows(IOCP) 미지원
+- **패키지 레지스트리 미배포**: 서버 코드 존재하나 공개 운영 없음
+- **디버거 미검증**: DAP 서버 존재하나 실제 디버깅 워크플로 테스트 없음
+- **구조화 로깅 없음**: 프로덕션 모니터링/트레이싱 불가
+- **압축 라이브러리 없음**: HTTP gzip, 데이터 직렬화에 필수
+
+### Stage 1: TLS/HTTPS 표준 라이브러리
+- [ ] TLS 컨텍스트 생성/해제 (OpenSSL/LibreSSL FFI)
+- [ ] 인증서 로드 (PEM 파일, CA 번들)
+- [ ] TLS 핸드셰이크 (클라이언트/서버)
+- [ ] 암호화 읽기/쓰기 (`tls_read`, `tls_write`)
+- [ ] HTTPS 서버 통합 (기존 `http_server.vais` 확장)
+- [ ] HTTPS 클라이언트 통합 (기존 `http_client.vais` 확장)
+- **파일**: `std/tls.vais` + `std/tls_runtime.c`
+- **의존성**: FFI (libssl, libcrypto)
+
+### Stage 2: Async 런타임 크로스플랫폼
+- [ ] Linux epoll 백엔드 (`std/async_epoll.c`)
+- [ ] Windows IOCP 백엔드 (`std/async_iocp.c`)
+- [ ] 통합 이벤트 루프 추상화 (`std/async_reactor.vais`)
+- [ ] 타이머/타임아웃 지원
+- [ ] Async TCP accept/read/write
+- [ ] 플랫폼 자동 감지 (`#ifdef` 기반 빌드)
+- **파일**: `std/async_reactor.vais` + `std/async_epoll.c` + `std/async_iocp.c`
+- **의존성**: 기존 `std/async.vais` 확장
+
+### Stage 3: 패키지 레지스트리 배포 준비
+- [ ] `vais publish` CLI 명령 구현 (tarball 생성 + 업로드)
+- [ ] `vais install` CLI 명령 구현 (의존성 해결 + 다운로드)
+- [ ] Semver 의존성 해석기 (^, ~, >= 지원)
+- [ ] 패키지 서명 검증 (SHA-256 체크섬)
+- [ ] 레지스트리 서버 Docker 이미지 작성
+- **파일**: `crates/vaisc/src/pkg_cli.rs` + `Dockerfile.registry`
+- **의존성**: 기존 `vais-registry-server`
+
+### Stage 4: 디버거(DAP) 실사용 검증
+- [ ] 브레이크포인트 설정/해제 E2E 테스트
+- [ ] 변수 검사 (locals, globals) 검증
+- [ ] 스텝 오버/스텝 인/스텝 아웃 검증
+- [ ] 콜 스택 조회 검증
+- [ ] VSCode launch.json 자동 생성
+- [ ] 발견된 버그 수정
+- **파일**: `crates/vais-dap/tests/` + `vscode-vais/`
+- **의존성**: 기존 `vais-dap`
+
+### Stage 5: 구조화 로깅 + 에러 트레이싱
+- [ ] 로그 레벨 (TRACE, DEBUG, INFO, WARN, ERROR)
+- [ ] 구조화 필드 (key=value 형식)
+- [ ] JSON 로그 출력 포맷
+- [ ] 파일/stdout/stderr 출력 대상 선택
+- [ ] 스팬(span) 기반 트레이싱 (요청 추적)
+- **파일**: `std/log.vais` + `std/log_runtime.c`
+- **의존성**: 없음 (순수 구현)
+
+### Stage 6: 압축 라이브러리 (gzip/deflate)
+- [ ] Deflate 압축/해제 (RFC 1951)
+- [ ] Gzip 래핑 (RFC 1952, 헤더/CRC32)
+- [ ] 스트리밍 압축 (청크 단위)
+- [ ] HTTP Content-Encoding 통합
+- **파일**: `std/compress.vais` + `std/compress_runtime.c`
+- **의존성**: FFI (zlib) 또는 순수 C 구현
+
+### Stage 7: 통합 E2E 검증 + 벤치마크
+- [ ] HTTPS 서버 + TLS 클라이언트 통합 테스트
+- [ ] Async I/O 크로스플랫폼 테스트 (macOS/Linux)
+- [ ] 패키지 publish/install 라운드트립 테스트
+- [ ] 구조화 로깅 출력 검증
+- [ ] 성능 벤치마크 (HTTP throughput, DB ops/sec, TLS handshake latency)
+- [ ] 프로덕션 체크리스트 문서 작성
+- **파일**: `crates/vaisc/tests/` + `benches/` + `docs-site/`
+- **의존성**: Stage 1~6 완료 필수
+
+### 검증 기준
+
+| 단계 | 검증 항목 |
+|------|----------|
+| Stage 1 | HTTPS 서버로 curl 요청 성공 + 인증서 검증 |
+| Stage 2 | Linux에서 async TCP echo 서버 동작 |
+| Stage 3 | `vais publish` → `vais install` 라운드트립 |
+| Stage 4 | VSCode에서 브레이크포인트 → 변수 검사 워크플로 |
+| Stage 5 | JSON 로그 파일 출력 + 스팬 추적 |
+| Stage 6 | gzip 압축/해제 라운드트립 + HTTP Content-Encoding |
+| Stage 7 | 전체 통합 테스트 통과 + 벤치마크 보고서 |
+
+### 완료 후 기대 효과
+- HTTPS 지원으로 보안 웹 서비스 구축 가능
+- Linux/Windows에서 고성능 비동기 서버 운영 가능
+- 패키지 생태계로 외부 라이브러리 활용 가능
+- 디버거 검증으로 개발자 생산성 보장
+- 구조화 로깅으로 프로덕션 모니터링 가능
+- 압축 지원으로 HTTP 성능 최적화 + 데이터 직렬화 효율화
 
 ---
 
