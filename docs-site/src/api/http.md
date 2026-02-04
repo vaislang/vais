@@ -31,12 +31,29 @@ The HTTP module provides a full-featured HTTP/1.1 implementation with:
 |----------|-------|-------------|
 | `HTTP_OK` | 200 | Success |
 | `HTTP_CREATED` | 201 | Resource created |
+| `HTTP_ACCEPTED` | 202 | Request accepted for processing |
 | `HTTP_NO_CONTENT` | 204 | No content |
+| `HTTP_MOVED_PERMANENTLY` | 301 | Resource moved permanently |
+| `HTTP_FOUND` | 302 | Resource found at different URI |
+| `HTTP_NOT_MODIFIED` | 304 | Resource not modified |
 | `HTTP_BAD_REQUEST` | 400 | Bad request |
 | `HTTP_UNAUTHORIZED` | 401 | Unauthorized |
 | `HTTP_FORBIDDEN` | 403 | Forbidden |
 | `HTTP_NOT_FOUND` | 404 | Not found |
+| `HTTP_METHOD_NOT_ALLOWED` | 405 | HTTP method not allowed |
+| `HTTP_CONFLICT` | 409 | Request conflict |
 | `HTTP_INTERNAL_ERROR` | 500 | Internal server error |
+| `HTTP_NOT_IMPLEMENTED` | 501 | Not implemented |
+| `HTTP_BAD_GATEWAY` | 502 | Bad gateway |
+| `HTTP_SERVICE_UNAVAILABLE` | 503 | Service unavailable |
+
+### Buffer Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `HTTP_MAX_HEADER_SIZE` | 8192 | Maximum size for HTTP headers (8KB) |
+| `HTTP_MAX_BODY_SIZE` | 1048576 | Maximum size for HTTP body (1MB) |
+| `HTTP_DEFAULT_BUFFER` | 4096 | Default buffer size for reading (4KB) |
 
 ## Request
 
@@ -227,6 +244,32 @@ F run(&self) -> i64
 ```
 
 Run the server (blocking).
+
+## Handler Trait
+
+### Handler Trait
+
+```vais
+W Handler {
+    F handle(&self, req: &Request) -> Response
+}
+```
+
+The Handler trait defines the interface for request handlers. Any type implementing this trait can be used as a route handler in the HTTP server.
+
+## Route
+
+### Route Struct
+
+```vais
+S Route {
+    method: i64,
+    path: str,
+    handler_ptr: i64
+}
+```
+
+Represents a single route mapping an HTTP method and path to a handler function.
 
 ## Router
 

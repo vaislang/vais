@@ -18,7 +18,7 @@ Step-by-step guide to using the Vais Playground.
 #### Header Bar
 
 - **Logo**: Shows you're in Vais Playground
-- **Version**: Current Vais version (v0.0.1)
+- **Version**: Current Vais version (v1.0.0)
 - **GitHub Link**: Opens Vais repository
 - **Docs Link**: Opens language documentation
 
