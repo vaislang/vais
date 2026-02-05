@@ -892,48 +892,52 @@ impl CodeGenerator {
 
         // === Platform I/O syscalls for async reactor ===
 
-        // kqueue: create kqueue instance (macOS)
-        register_extern!(self, "kqueue", vec![], ResolvedType::I64);
+        // kqueue helpers: only on macOS (uses kevent syscall)
+        #[cfg(target_os = "macos")]
+        {
+            // kqueue: create kqueue instance (macOS)
+            register_extern!(self, "kqueue", vec![], ResolvedType::I64);
 
-        // kevent_register: register event with kqueue
-        register_helper!(self, "kevent_register" => "__kevent_register",
-            vec![
-                ("kq".to_string(), ResolvedType::I64),
-                ("fd".to_string(), ResolvedType::I64),
-                ("filter".to_string(), ResolvedType::I64),
-                ("flags".to_string(), ResolvedType::I64),
-            ],
-            ResolvedType::I64
-        );
+            // kevent_register: register event with kqueue
+            register_helper!(self, "kevent_register" => "__kevent_register",
+                vec![
+                    ("kq".to_string(), ResolvedType::I64),
+                    ("fd".to_string(), ResolvedType::I64),
+                    ("filter".to_string(), ResolvedType::I64),
+                    ("flags".to_string(), ResolvedType::I64),
+                ],
+                ResolvedType::I64
+            );
 
-        // kevent_wait: wait for events
-        register_helper!(self, "kevent_wait" => "__kevent_wait",
-            vec![
-                ("kq".to_string(), ResolvedType::I64),
-                ("events_buf".to_string(), ResolvedType::I64),
-                ("max_events".to_string(), ResolvedType::I64),
-                ("timeout_ms".to_string(), ResolvedType::I64),
-            ],
-            ResolvedType::I64
-        );
+            // kevent_wait: wait for events
+            register_helper!(self, "kevent_wait" => "__kevent_wait",
+                vec![
+                    ("kq".to_string(), ResolvedType::I64),
+                    ("events_buf".to_string(), ResolvedType::I64),
+                    ("max_events".to_string(), ResolvedType::I64),
+                    ("timeout_ms".to_string(), ResolvedType::I64),
+                ],
+                ResolvedType::I64
+            );
 
-        // kevent_get_fd: get fd from event at index
-        register_helper!(self, "kevent_get_fd" => "__kevent_get_fd",
-            vec![
-                ("events_buf".to_string(), ResolvedType::I64),
-                ("index".to_string(), ResolvedType::I64),
-            ],
-            ResolvedType::I64
-        );
+            // kevent_get_fd: get fd from event at index
+            register_helper!(self, "kevent_get_fd" => "__kevent_get_fd",
+                vec![
+                    ("events_buf".to_string(), ResolvedType::I64),
+                    ("index".to_string(), ResolvedType::I64),
+                ],
+                ResolvedType::I64
+            );
 
-        // kevent_get_filter: get filter from event at index
-        register_helper!(self, "kevent_get_filter" => "__kevent_get_filter",
-            vec![
-                ("events_buf".to_string(), ResolvedType::I64),
-                ("index".to_string(), ResolvedType::I64),
-            ],
-            ResolvedType::I64
-        );
+            // kevent_get_filter: get filter from event at index
+            register_helper!(self, "kevent_get_filter" => "__kevent_get_filter",
+                vec![
+                    ("events_buf".to_string(), ResolvedType::I64),
+                    ("index".to_string(), ResolvedType::I64),
+                ],
+                ResolvedType::I64
+            );
+        }
 
         // close: close file descriptor
         register_extern!(
