@@ -1317,9 +1317,9 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 
 ## 🚀 Phase 38: 셀프호스팅 100% 달성 (Self-Hosting Complete)
 
-> **상태**: 📋 계획
+> **상태**: 🚧 진행 중
 > **목표**: Vais 컴파일러를 100% Vais로 작성하여 자기 자신을 컴파일
-> **현재 진도**: 75% (Lexer 100%, Parser 65%, Type Checker 40%, Codegen 70%)
+> **현재 진도**: 77% (Lexer 100%, Parser 70%, Type Checker 40%, Codegen 70%)
 > **예상 규모**: 17,871 LOC → ~42,000 LOC (2.3배 증가)
 
 ### 현재 상태 요약
@@ -1329,7 +1329,7 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 | **Lexer** | vais-lexer | lexer.vais + lexer_s1.vais | **100%** | ✅ 완료 |
 | **Token** | vais-lexer | token.vais + constants.vais | **100%** | ✅ 완료 |
 | **AST** | vais-ast | ast.vais | 85% | ⚠️ 진행 중 |
-| **Parser** | vais-parser | parser.vais + parser_s1.vais | 65% | ⚠️ 진행 중 |
+| **Parser** | vais-parser | parser.vais + parser_s1.vais | 70% | ⚠️ 진행 중 |
 | **Type Checker** | vais-types | type_checker.vais | 40% | ❌ 미완성 |
 | **Codegen** | vais-codegen | codegen.vais + codegen_s1.vais | 70% | ⚠️ 진행 중 |
 | **MIR** | vais-mir | - | 0% | ❌ 미구현 |
@@ -1344,11 +1344,12 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
   - [x] 제네릭 함수 `F foo<T>(x: T) -> T`
   - [x] 제네릭 구조체 `S Vec<T> { ... }`
   - [x] 제네릭 열거형 `E Option<T> { Some(T), None }`
-- [ ] **Trait 시스템 파싱**
-  - [ ] Trait 정의 `T Trait { ... }`
-  - [ ] Trait bounds `where T: Clone + Debug`
-  - [ ] Trait impl `impl Trait for Type { ... }`
-  - [ ] Associated types 파싱
+- [x] **Trait 시스템 파싱** ✅
+  - [x] Trait 정의 `W Trait { ... }`
+  - [x] Trait bounds `T: Clone + Debug` (generic parameters)
+  - [x] Super traits `W Trait: SuperTrait1 + SuperTrait2`
+  - [x] Trait impl `X Type: Trait { ... }`
+  - [x] Associated types 파싱 (AST 준비, codegen 미구현)
 - [ ] **패턴 매칭 완전 구현**
   - [ ] 구조체 패턴 `S { field, .. }`
   - [ ] 열거형 패턴 `E::Variant(x, y)`
