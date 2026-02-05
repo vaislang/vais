@@ -140,6 +140,16 @@ F TYPE_POINTER() -> i64 = 66
 F TYPE_REF() -> i64 = 67
 F TYPE_UNIT() -> i64 = 70
 
+# Pattern types
+F PAT_WILDCARD() -> i64 = 80
+F PAT_IDENT() -> i64 = 81
+F PAT_LITERAL() -> i64 = 82
+F PAT_TUPLE() -> i64 = 83
+F PAT_STRUCT() -> i64 = 84
+F PAT_VARIANT() -> i64 = 85
+F PAT_RANGE() -> i64 = 86
+F PAT_OR() -> i64 = 87
+
 # Binary operators
 F BINOP_ADD() -> i64 = 1
 F BINOP_SUB() -> i64 = 2
@@ -350,6 +360,64 @@ X TypeNode {
     F unit_type(start: i64, end: i64) -> TypeNode = TypeNode {
         kind: TYPE_UNIT(), span_start: start, span_end: end,
         field0: 0, field1: 0, field2: 0, field3: 0
+    }
+}
+
+# ============================================================================
+# PatternNode (for match arms and destructuring)
+# ============================================================================
+
+S PatternNode {
+    kind: i64,
+    span_start: i64,
+    span_end: i64,
+    field0: i64,
+    field1: i64,
+    field2: i64,
+    field3: i64
+}
+
+X PatternNode {
+    F size() -> i64 = 56
+
+    F wildcard(start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_WILDCARD(), span_start: start, span_end: end,
+        field0: 0, field1: 0, field2: 0, field3: 0
+    }
+
+    F ident(name_idx: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_IDENT(), span_start: start, span_end: end,
+        field0: name_idx, field1: 0, field2: 0, field3: 0
+    }
+
+    F int_literal(value: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_LITERAL(), span_start: start, span_end: end,
+        field0: value, field1: 0, field2: 0, field3: 0
+    }
+
+    F tuple_pat(patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_TUPLE(), span_start: start, span_end: end,
+        field0: patterns_ptr, field1: patterns_len, field2: 0, field3: 0
+    }
+
+    F struct_pat(name_idx: i64, fields_ptr: i64, fields_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_STRUCT(), span_start: start, span_end: end,
+        field0: name_idx, field1: fields_ptr, field2: fields_len, field3: 0
+    }
+
+    F variant(name_idx: i64, patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_VARIANT(), span_start: start, span_end: end,
+        field0: name_idx, field1: patterns_ptr, field2: patterns_len, field3: 0
+    }
+
+    F range_pat(start_ptr: i64, end_ptr: i64, inclusive: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_RANGE(), span_start: start, span_end: end,
+        field0: start_ptr, field1: end_ptr, field2: inclusive, field3: 0
+    }
+
+    F or_pat(patterns_ptr: i64, patterns_len: i64, start: i64, end: i64) -> PatternNode = PatternNode {
+        kind: PAT_OR(), span_start: start, span_end: end,
+        field0: patterns_ptr, field1: patterns_len, field2: 0, field3: 0
     }
 }
 

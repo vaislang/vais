@@ -146,6 +146,16 @@ F EXPR_BLOCK() -> i64 = 42
 F EXPR_ASSIGN() -> i64 = 48
 F EXPR_MATCH() -> i64 = 49
 
+# Pattern types
+F PAT_WILDCARD() -> i64 = 80
+F PAT_IDENT() -> i64 = 81
+F PAT_LITERAL() -> i64 = 82
+F PAT_TUPLE() -> i64 = 83
+F PAT_STRUCT() -> i64 = 84
+F PAT_VARIANT() -> i64 = 85
+F PAT_RANGE() -> i64 = 86
+F PAT_OR() -> i64 = 87
+
 # Binary operators
 F BINOP_ADD() -> i64 = 1
 F BINOP_SUB() -> i64 = 2

@@ -100,6 +100,18 @@ F parser_current_value(p: i64) -> i64 {
     token_get_value(tokens, pos)
 }
 
+F parser_current_span_start(p: i64) -> i64 {
+    tokens := parser_get_tokens(p)
+    pos := parser_get_pos(p)
+    token_get_span_start(tokens, pos)
+}
+
+F parser_current_span_end(p: i64) -> i64 {
+    tokens := parser_get_tokens(p)
+    pos := parser_get_pos(p)
+    token_get_span_end(tokens, pos)
+}
+
 # ============================================================================
 # Expression Parsing
 # ============================================================================
@@ -203,22 +215,152 @@ F parser_parse_ident_expr(p: i64, str_ptr: i64, str_len: i64) -> i64 {
     result
 }
 
-# Parse single match arm: pattern => body
+# Parse pattern - returns pointer to PatternNode or 0 on error
+# Handles: wildcard (_), identifier binding, integer literals, or patterns (|), range patterns (.., ..=)
+F parser_parse_pattern(p: i64) -> i64 {
+    start := parser_current_span_start(p)
+    kind := parser_current_kind(p)
+
+    # Integer literal pattern
+    I kind == TOK_INT() {
+        value := parser_current_value(p)
+        end := parser_current_span_end(p)
+        parser_advance(p)
+
+        # Check for range pattern: 5..10 or 5..=10
+        I parser_current_kind(p) == TOK_DOT_DOT() || parser_current_kind(p) == TOK_DOT_DOT_EQ() {
+            inclusive := parser_current_kind(p) == TOK_DOT_DOT_EQ() ? 1 : 0
+            parser_advance(p)
+
+            # Parse end value
+            I parser_current_kind(p) != TOK_INT() { R 0 } E { 0 }
+            end_value := parser_current_value(p)
+            end_span := parser_current_span_end(p)
+            parser_advance(p)
+
+            # Create two literal patterns and a range pattern
+            start_pat := malloc(56)
+            store_pattern_node(start_pat, PAT_LITERAL(), start, end, value, 0, 0, 0)
+            end_pat := malloc(56)
+            store_pattern_node(end_pat, PAT_LITERAL(), start, end_span, end_value, 0, 0, 0)
+
+            pat := malloc(56)
+            store_pattern_node(pat, PAT_RANGE(), start, end_span, start_pat, end_pat, inclusive, 0)
+            R pat
+        } E { 0 }
+
+        # Just a literal
+        pat := malloc(56)
+        store_pattern_node(pat, PAT_LITERAL(), start, end, value, 0, 0, 0)
+        R pat
+    } E { 0 }
+
+    # Identifier pattern (binding, wildcard, or variant)
+    I kind == TOK_IDENT() {
+        str_ptr := parser_current_str_ptr(p)
+        str_len := parser_current_str_len(p)
+        end := parser_current_span_end(p)
+        parser_advance(p)
+
+        # Check if it's the wildcard "_"
+        I str_len == 1 {
+            c := load_byte(str_ptr)
+            I c == 95 {  # '_' character
+                pat := malloc(56)
+                store_pattern_node(pat, PAT_WILDCARD(), start, end, 0, 0, 0, 0)
+                R pat
+            } E { 0 }
+        } E { 0 }
+
+        # Check for variant pattern: Some(x) or Point { x, y }
+        # For now, just handle simple identifier binding
+        pat := malloc(56)
+        store_pattern_node(pat, PAT_IDENT(), start, end, str_ptr, str_len, 0, 0)
+        R pat
+    } E { 0 }
+
+    # No pattern matched
+    0
+}
+
+# Parse or-pattern: tries to parse multiple patterns separated by |
+# Returns pointer to PAT_OR node with array of patterns, or single pattern if no |
+F parser_parse_or_pattern(p: i64) -> i64 {
+    first_pat := parser_parse_pattern(p)
+    I first_pat == 0 { R 0 } E { 0 }
+
+    # Check for | operator
+    I parser_current_kind(p) != TOK_PIPE() { R first_pat } E { 0 }
+
+    # We have an or-pattern, collect all alternatives
+    patterns := malloc(32 * 8)  # up to 32 patterns
+    store_i64(patterns, first_pat)
+    count: mut i64 = 1
+
+    L {
+        I parser_current_kind(p) != TOK_PIPE() { B } E { 0 }
+        parser_advance(p)  # consume |
+
+        next_pat := parser_parse_pattern(p)
+        I next_pat == 0 { B } E { 0 }
+
+        store_i64(patterns + count * 8, next_pat)
+        count = count + 1
+    }
+
+    # Create OR pattern node
+    start := load_i64(first_pat + 8)  # span_start from first pattern
+    last_pat := load_i64(patterns + (count - 1) * 8)
+    end := load_i64(last_pat + 16)  # span_end from last pattern
+
+    or_pat := malloc(56)
+    store_pattern_node(or_pat, PAT_OR(), start, end, patterns, count, 0, 0)
+    or_pat
+}
+
+# Helper to store PatternNode fields
+F store_pattern_node(ptr: i64, kind: i64, start: i64, end: i64, f0: i64, f1: i64, f2: i64, f3: i64) -> i64 {
+    store_i64(ptr + 0, kind)
+    store_i64(ptr + 8, start)
+    store_i64(ptr + 16, end)
+    store_i64(ptr + 24, f0)
+    store_i64(ptr + 32, f1)
+    store_i64(ptr + 40, f2)
+    store_i64(ptr + 48, f3)
+    1
+}
+
+# Parse single match arm: pattern => body or pattern I guard => body
+# Returns 1 on success, 0 on failure
+# Each arm is stored as: pattern_ptr(8) + guard_ptr(8) + body_ptr(8) = 24 bytes
 F parser_parse_match_arm(p: i64, arms: i64, arm_count_ptr: i64) -> i64 {
     arm_count := load_i64(arm_count_ptr)
 
-    I parser_current_kind(p) != TOK_INT() { R 0 } E { 0 }
+    # Parse pattern (or-pattern)
+    pattern := parser_parse_or_pattern(p)
+    I pattern == 0 { R 0 } E { 0 }
 
-    pattern_val := parser_current_value(p)
-    parser_advance(p)
+    # Check for guard: I condition
+    guard: mut i64 = 0
+    I parser_current_kind(p) == TOK_KW_I() {
+        parser_advance(p)  # consume I
+        guard = parser_parse_expr(p)
+        I guard == 0 { R 0 } E { 0 }
+    } E { 0 }
 
+    # Expect =>
     I parser_expect(p, TOK_FAT_ARROW()) == 0 { R 0 } E { 0 }
 
+    # Parse body
     body := parser_parse_expr(p)
     I body == 0 { R 0 } E { 0 }
 
-    store_i64(arms + arm_count * 16, pattern_val)
-    store_i64(arms + arm_count * 16 + 8, body)
+    # Store arm: pattern_ptr, guard_ptr, body_ptr (24 bytes per arm)
+    arm_ptr := arms + arm_count * 24
+    store_i64(arm_ptr + 0, pattern)
+    store_i64(arm_ptr + 8, guard)
+    store_i64(arm_ptr + 16, body)
+
     store_i64(arm_count_ptr, arm_count + 1)
     1
 }
@@ -227,18 +369,14 @@ F parser_parse_match_arm(p: i64, arms: i64, arm_count_ptr: i64) -> i64 {
 F parser_parse_match(p: i64) -> i64 {
     parser_advance(p)  # consume M
 
-    I parser_current_kind(p) != TOK_IDENT() { R 0 } E { 0 }
-    str_ptr := parser_current_str_ptr(p)
-    str_len := parser_current_str_len(p)
-    parser_advance(p)
-
-    scrutinee := expr_new(EXPR_IDENT())
-    expr_set_field0(scrutinee, str_ptr)
-    expr_set_field1(scrutinee, str_len)
+    # Parse scrutinee expression
+    scrutinee := parser_parse_expr(p)
+    I scrutinee == 0 { R 0 } E { 0 }
 
     I parser_expect(p, TOK_LBRACE()) == 0 { R 0 } E { 0 }
 
-    arms := malloc(64 * 16)
+    # Allocate arms array (24 bytes per arm: pattern_ptr, guard_ptr, body_ptr)
+    arms := malloc(64 * 24)
     arm_count := malloc(8)
     store_i64(arm_count, 0)
 

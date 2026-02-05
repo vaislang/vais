@@ -116,6 +116,8 @@ F token_get_kind(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 0)
 F token_get_value(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 8)
 F token_get_str_ptr(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 16)
 F token_get_str_len(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 24)
+F token_get_span_start(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 32)
+F token_get_span_end(tokens: i64, idx: i64) -> i64 = load_i64(tokens + idx * 48 + 40)
 
 F lexer_scan_number(lex: i64, tokens: i64, count: i64) -> i64 {
     start := lexer_get_pos(lex)
