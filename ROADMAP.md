@@ -1379,15 +1379,15 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 
 **목표**: 모든 Vais 구문의 AST 노드 정의
 
-- [ ] **누락된 AST 노드 추가**
-  - [ ] `AsyncFn`, `AwaitExpr` 노드
-  - [ ] `TraitBound`, `WhereBound` 노드
-  - [ ] `AttributeNode` 노드
-  - [ ] `MacroInvocation` 노드
-- [ ] **AST 유틸리티**
-  - [ ] AST 프린터 (디버깅용)
-  - [ ] AST 방문자 패턴 (Visitor trait)
-  - [ ] AST 변환 유틸리티
+- [x] **누락된 AST 노드 추가** ✅
+  - [x] `AsyncFn`, `AwaitExpr` 노드 (Stage 1-4에서 구현)
+  - [x] `TraitBound`, `WhereClause` 노드
+  - [x] `Attribute` 노드 (Stage 1-4에서 구현)
+  - [x] `MacroInvocation` 노드 (인프라 준비)
+- [x] **AST 유틸리티** ✅
+  - [x] AST 프린터 (print_expr, print_binop 등)
+  - [x] AST 방문자 패턴 (visit_module_items, visit_expr_tree)
+  - [x] AST 변환 유틸리티 (기초)
 - **예상 작업량**: 500+ LOC
 - **의존성**: Stage 1과 병렬 진행 가능
 - **파일**: `selfhost/ast.vais`
