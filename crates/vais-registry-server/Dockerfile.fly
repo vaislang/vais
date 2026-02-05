@@ -10,8 +10,10 @@ WORKDIR /app
 # Copy workspace Cargo files first for layer caching
 COPY Cargo.toml Cargo.lock ./
 
-# Copy all crates (required for workspace resolution)
+# Copy all workspace members (required for workspace resolution)
 COPY crates ./crates
+COPY examples/plugins ./examples/plugins
+COPY benches ./benches
 
 # Build only the registry server in release mode
 RUN cargo build --release --package vais-registry-server --bin vais-registry-server

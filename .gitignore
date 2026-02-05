@@ -137,3 +137,6 @@ temp.ll
 /runtime.c
 output.txt
 main_output.ll
+
+# Registry credentials (DO NOT COMMIT)
+.registry-credentials.md

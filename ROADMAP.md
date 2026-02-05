@@ -1220,7 +1220,7 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - **의존성**: Stage 1과 병렬 가능
 - **검증**: `cargo audit` 성공 + `cargo test` 2000+ 테스트 통과
 
-### Stage 4: 패키지 레지스트리 실배포 (High) - 진행 중
+### Stage 4: 패키지 레지스트리 실배포 (High) ✅ 완료
 
 **목표**: 공개 레지스트리에서 `vaisc pkg install` 동작
 
@@ -1231,11 +1231,12 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - [x] 로컬 E2E 검증 (publish → search → download 라운드트립 성공)
 - [x] PORT 환경변수 지원 추가 (Fly.io 호환)
 - [x] 루트 레벨 `/health` 엔드포인트 추가
-- [ ] 실제 Fly.io 배포 (flyctl 필요)
-- [ ] 도메인 설정 (예: registry.vais.dev)
-- [ ] `vaisc pkg install vais-std-cli` → 다운로드 → 프로젝트에서 사용 가능 확인
+- [x] **Fly.io 배포 완료**: https://vais-registry.fly.dev
+- [x] 10개 패키지 프로덕션 퍼블리시 (cli-args, color, csv, dotenv, env, math-ext, retry, toml-parser, validate, cache)
+- [x] E2E 검증: 외부 네트워크에서 search → download 라운드트립 성공
+- [ ] `vaisc pkg install` 클라이언트 통합 (Stage 7에서 진행)
 - **의존성**: Stage 1, 3 완료 ✅
-- **검증**: Docker 로컬 테스트 완료, Fly.io 배포 시 외부 네트워크에서 라운드트립 검증 필요
+- **검증**: https://vais-registry.fly.dev/api/v1/popular 에서 10개 패키지 확인 가능
 
 ### Stage 5: 셀프호스팅 75% 달성 (Medium)
 
