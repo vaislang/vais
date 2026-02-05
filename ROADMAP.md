@@ -1238,7 +1238,7 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - **의존성**: Stage 1, 3 완료 ✅
 - **검증**: https://vais-registry.fly.dev/api/v1/popular 에서 10개 패키지 확인 가능
 
-### Stage 5: 셀프호스팅 75% 달성 (Medium) - 진행 중
+### Stage 5: 셀프호스팅 75% 달성 (Medium) ✅ 완료
 
 **목표**: Vais 컴파일러의 lexer + token 모듈을 Vais로 완전히 대체 가능
 
@@ -1255,9 +1255,10 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
   - 추가 연산자: |> (PipeArrow), ... (Ellipsis), $ (Dollar), #[ (HashBracket), ' (Lifetime)
   - SIMD 타입 지원: Vec2f32, Vec4f32, Vec8f32, Vec2f64, Vec4f64, Vec4i32, Vec8i32, Vec2i64, Vec4i64
   - selfhost_lexer_tests.rs에 13개 신규 테스트 추가 (총 114개)
-- [ ] selfhost parser 기초 구현 시작
 - **의존성**: Stage 1 완료 ✅
 - **검증**: selfhost lexer가 전체 examples/ 145개 파일을 Rust lexer와 **100% 동일**하게 토큰화 ✅
+
+> **Note**: selfhost parser 기초 구현은 Phase 38 또는 별도 Stage로 분리 예정
 
 ### Stage 6: 대규모 벤치마크 + Async 검증 (Medium)
 
