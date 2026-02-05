@@ -26,6 +26,15 @@ F TOK_KW_TRUE() -> i64 = 16
 F TOK_KW_FALSE() -> i64 = 17
 F TOK_KW_MUT() -> i64 = 18
 F TOK_KW_ELSE() -> i64 = 19
+F TOK_KW_D() -> i64 = 20       # defer
+F TOK_KW_O() -> i64 = 21       # union
+F TOK_KW_N() -> i64 = 22       # extern
+F TOK_KW_G() -> i64 = 23       # global
+F TOK_KW_Y() -> i64 = 24       # await
+F TOK_KW_SELF() -> i64 = 25    # self
+F TOK_KW_SELF_UPPER() -> i64 = 26 # Self
+F TOK_KW_AS() -> i64 = 27      # as
+F TOK_KW_CONST() -> i64 = 28   # const
 
 # Type keyword tokens (31-50)
 F TOK_TY_I8() -> i64 = 31
@@ -263,6 +272,48 @@ X TokenList {
         free(self.data)
         1
     }
+}
+
+# Global helper functions for token creation (used by lexer)
+F token_simple(kind: i64, start: i64, end: i64) -> Token = Token {
+    kind: kind,
+    value: 0,
+    str_ptr: 0,
+    str_len: 0,
+    span_start: start,
+    span_end: end
+}
+
+F token_int_lit(val: i64, start: i64, end: i64) -> Token = Token {
+    kind: TOK_INT(),
+    value: val,
+    str_ptr: 0,
+    str_len: 0,
+    span_start: start,
+    span_end: end
+}
+
+F token_float_lit(val: i64, start: i64, end: i64) -> Token = Token {
+    kind: TOK_FLOAT(),
+    value: val,
+    str_ptr: 0,
+    str_len: 0,
+    span_start: start,
+    span_end: end
+}
+
+F token_string(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = Token {
+    kind: kind,
+    value: 0,
+    str_ptr: ptr,
+    str_len: len,
+    span_start: start,
+    span_end: end
+}
+
+F tokenlist_new(capacity: i64) -> TokenList {
+    data := malloc(capacity * 48)
+    TokenList { data: data, len: 0, cap: capacity }
 }
 
 # Helper functions for token storage (using memory primitives)

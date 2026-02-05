@@ -1238,15 +1238,19 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - **의존성**: Stage 1, 3 완료 ✅
 - **검증**: https://vais-registry.fly.dev/api/v1/popular 에서 10개 패키지 확인 가능
 
-### Stage 5: 셀프호스팅 75% 달성 (Medium)
+### Stage 5: 셀프호스팅 75% 달성 (Medium) - 진행 중
 
 **목표**: Vais 컴파일러의 lexer + token 모듈을 Vais로 완전히 대체 가능
 
-- [ ] `self`, `Self`, `as`, `const` 키워드 추가 (Phase 36 Stage 4 잔여)
-- [ ] 문자열 이스케이프 디코딩 구현 (Phase 36 Stage 4 잔여)
+- [x] `self`, `Self`, `as`, `const` 키워드 추가 (Phase 36 Stage 4 잔여)
+  - D, O, N, G, Y 단일문자 키워드도 추가
+  - token.vais에 9개 새 토큰 상수 추가
+- [x] 문자열 이스케이프 디코딩 구현 (Phase 36 Stage 4 잔여)
+  - `\n`, `\t`, `\r`, `\\`, `\"`, `\0`, `\xHH` 지원
+  - scan_string() 함수 재작성
 - [ ] selfhost lexer와 Rust lexer의 100% 동일 출력 검증 (전체 examples/ 대상)
 - [ ] selfhost parser 기초 구현 시작
-- **의존성**: Stage 1 완료
+- **의존성**: Stage 1 완료 ✅
 - **검증**: selfhost lexer가 전체 examples/ 131개 파일을 Rust lexer와 동일하게 토큰화
 
 ### Stage 6: 대규모 벤치마크 + Async 검증 (Medium)

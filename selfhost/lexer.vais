@@ -250,6 +250,7 @@ X Lexer {
             I c == 78 { R token_simple(TOK_KW_N(), start, self.pos) }
             I c == 71 { R token_simple(TOK_KW_G(), start, self.pos) }
             I c == 89 { R token_simple(TOK_KW_Y(), start, self.pos) }
+            I c == 68 { R token_simple(TOK_KW_D(), start, self.pos) }
             0
         } E {
             0
@@ -261,6 +262,8 @@ X Lexer {
             c1 := load_byte(str_start + 1)
             I c0 == 105 && c1 == 56 { R token_simple(TOK_TY_I8(), start, self.pos) }
             I c0 == 117 && c1 == 56 { R token_simple(TOK_TY_U8(), start, self.pos) }
+            # as (97='a', 115='s')
+            I c0 == 97 && c1 == 115 { R token_simple(TOK_KW_AS(), start, self.pos) }
             0
         } E {
             0
@@ -295,6 +298,10 @@ X Lexer {
             I c0 == 105 && c1 == 49 && c2 == 50 && c3 == 56 { R token_simple(TOK_TY_I128(), start, self.pos) }
             I c0 == 117 && c1 == 49 && c2 == 50 && c3 == 56 { R token_simple(TOK_TY_U128(), start, self.pos) }
             I c0 == 101 && c1 == 108 && c2 == 115 && c3 == 101 { R token_simple(TOK_KW_ELSE(), start, self.pos) }
+            # self (115='s', 101='e', 108='l', 102='f')
+            I c0 == 115 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF(), start, self.pos) }
+            # Self (83='S', 101='e', 108='l', 102='f')
+            I c0 == 83 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF_UPPER(), start, self.pos) }
             0
         } E {
             0
@@ -307,6 +314,8 @@ X Lexer {
             c3 := load_byte(str_start + 3)
             c4 := load_byte(str_start + 4)
             I c0 == 102 && c1 == 97 && c2 == 108 && c3 == 115 && c4 == 101 { R token_simple(TOK_KW_FALSE(), start, self.pos) }
+            # const (99='c', 111='o', 110='n', 115='s', 116='t')
+            I c0 == 99 && c1 == 111 && c2 == 110 && c3 == 115 && c4 == 116 { R token_simple(TOK_KW_CONST(), start, self.pos) }
             0
         } E {
             0
@@ -316,32 +325,98 @@ X Lexer {
         token_string(TOK_IDENT(), str_start, len, start, self.pos)
     }
 
-    # Scan a string literal
+    # Scan a string literal with escape sequence decoding
+    # Supports: \n \t \r \\ \" \0 \xHH
     F scan_string(&self) -> Token {
         start := self.pos
-        @.advance()
-        str_start := self.source + self.pos
+        @.advance()  # Skip opening "
+
+        # Allocate buffer for decoded string (worst case: same length as source)
+        max_len := self.source_len - self.pos
+        buf := malloc(max_len + 1)
+        buf_len: mut i64 = 0
 
         L {
             I @.is_eof() == 1 { B }
             c := @.peek()
-            I c == 34 { B }
+            I c == 34 { B }  # End quote
             I c == 92 {
-                @.advance()
-                I @.is_eof() == 0 {
-                    @.advance()
+                # Escape sequence
+                @.advance()  # Skip backslash
+                I @.is_eof() == 1 { B }
+                esc := @.advance()
+                # \n = newline (10)
+                I esc == 110 {
+                    store_byte(buf + buf_len, 10)
+                    buf_len = buf_len + 1
                     0
+                # \t = tab (9)
+                } E I esc == 116 {
+                    store_byte(buf + buf_len, 9)
+                    buf_len = buf_len + 1
+                    0
+                # \r = carriage return (13)
+                } E I esc == 114 {
+                    store_byte(buf + buf_len, 13)
+                    buf_len = buf_len + 1
+                    0
+                # \\ = backslash (92)
+                } E I esc == 92 {
+                    store_byte(buf + buf_len, 92)
+                    buf_len = buf_len + 1
+                    0
+                # \" = double quote (34)
+                } E I esc == 34 {
+                    store_byte(buf + buf_len, 34)
+                    buf_len = buf_len + 1
+                    0
+                # \0 = null (0)
+                } E I esc == 48 {
+                    store_byte(buf + buf_len, 0)
+                    buf_len = buf_len + 1
+                    0
+                # \x = hex escape
+                } E I esc == 120 {
+                    # Read two hex digits
+                    I @.is_eof() == 0 && is_hex_digit(@.peek()) == 1 {
+                        h1 := hex_digit_value(@.advance())
+                        I @.is_eof() == 0 && is_hex_digit(@.peek()) == 1 {
+                            h2 := hex_digit_value(@.advance())
+                            store_byte(buf + buf_len, h1 * 16 + h2)
+                            buf_len = buf_len + 1
+                            0
+                        } E {
+                            # Only one hex digit - store it
+                            store_byte(buf + buf_len, h1)
+                            buf_len = buf_len + 1
+                            0
+                        }
+                    } E {
+                        # No hex digits - keep \x as-is
+                        store_byte(buf + buf_len, 92)
+                        buf_len = buf_len + 1
+                        store_byte(buf + buf_len, 120)
+                        buf_len = buf_len + 1
+                        0
+                    }
                 } E {
+                    # Unknown escape - keep backslash and char
+                    store_byte(buf + buf_len, 92)
+                    buf_len = buf_len + 1
+                    store_byte(buf + buf_len, esc)
+                    buf_len = buf_len + 1
                     0
                 }
             } E {
+                # Regular character
+                store_byte(buf + buf_len, c)
+                buf_len = buf_len + 1
                 @.advance()
                 0
             }
         }
 
-        len := self.source + self.pos - str_start
-
+        # Skip closing quote
         I @.is_eof() == 0 && @.peek() == 34 {
             @.advance()
             0
@@ -349,7 +424,10 @@ X Lexer {
             0
         }
 
-        token_string(TOK_STRING(), str_start, len, start, self.pos)
+        # Null-terminate the buffer
+        store_byte(buf + buf_len, 0)
+
+        token_string(TOK_STRING(), buf, buf_len, start, self.pos)
     }
 
     # Scan an operator or punctuation
