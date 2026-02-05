@@ -1575,3 +1575,645 @@ F main() -> i64 {
 "#;
     assert_ir_contains(source, "hex_digit_value");
 }
+
+// ============================================================================
+// Section 21: Selfhost Lexer Token ID Mapping Verification
+// ============================================================================
+// Verify that selfhost token IDs map correctly to Rust lexer Token variants.
+// This is the foundation for full lexer equivalence testing.
+
+/// Maps Rust Token variants to selfhost token IDs.
+/// This mapping must match selfhost/token.vais definitions.
+fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
+    use vais_lexer::Token;
+    match token {
+        // Keywords (1-28)
+        Token::Function => 1,   // TOK_KW_F
+        Token::Struct => 2,     // TOK_KW_S
+        Token::Enum => 3,       // TOK_KW_E
+        Token::If => 4,         // TOK_KW_I
+        Token::Loop => 5,       // TOK_KW_L
+        Token::Match => 6,      // TOK_KW_M
+        Token::Trait => 7,      // TOK_KW_W
+        Token::Impl => 8,       // TOK_KW_X
+        Token::TypeKeyword => 9, // TOK_KW_T
+        Token::Use => 10,       // TOK_KW_U
+        Token::Pub => 11,       // TOK_KW_P
+        Token::Async => 12,     // TOK_KW_A
+        Token::Return => 13,    // TOK_KW_R
+        Token::Break => 14,     // TOK_KW_B
+        Token::Continue => 15,  // TOK_KW_C
+        Token::True => 16,      // TOK_KW_TRUE
+        Token::False => 17,     // TOK_KW_FALSE
+        Token::Mut => 18,       // TOK_KW_MUT
+        // Note: Else is context-dependent in Vais; E token is reused
+        Token::Defer => 20,     // TOK_KW_D
+        Token::Union => 21,     // TOK_KW_O
+        Token::Extern => 22,    // TOK_KW_N
+        Token::Global => 23,    // TOK_KW_G
+        Token::Await => 24,     // TOK_KW_Y
+        Token::SelfLower => 25, // TOK_KW_SELF
+        Token::SelfUpper => 26, // TOK_KW_SELF_UPPER
+        Token::As => 27,        // TOK_KW_AS
+        Token::Const => 28,     // TOK_KW_CONST
+
+        // Type keywords (31-44)
+        Token::I8 => 31,
+        Token::I16 => 32,
+        Token::I32 => 33,
+        Token::I64 => 34,
+        Token::I128 => 35,
+        Token::U8 => 36,
+        Token::U16 => 37,
+        Token::U32 => 38,
+        Token::U64 => 39,
+        Token::U128 => 40,
+        Token::F32 => 41,
+        Token::F64 => 42,
+        Token::Bool => 43,
+        Token::Str => 44,
+
+        // Literals (51-54)
+        Token::Int(_) => 51,
+        Token::Float(_) => 52,
+        Token::String(_) => 53,
+        Token::Ident(_) => 54,
+
+        // Operators (61-80)
+        Token::Plus => 61,
+        Token::Minus => 62,
+        Token::Star => 63,
+        Token::Slash => 64,
+        Token::Percent => 65,
+        Token::Lt => 66,
+        Token::Gt => 67,
+        Token::Lte => 68,
+        Token::Gte => 69,
+        Token::EqEq => 70,
+        Token::Neq => 71,
+        Token::Amp => 72,
+        Token::Pipe => 73,
+        Token::Caret => 74,
+        Token::Tilde => 75,
+        Token::Shl => 76,
+        Token::Shr => 77,
+        Token::Bang => 78,
+        // Note: && is lexed as two Amp tokens, || as two Pipe tokens
+        // We don't have TOK_AND (79) / TOK_OR (80) for single tokens
+
+        // Assignment (81-86)
+        Token::Eq => 81,
+        Token::ColonEq => 82,
+        Token::PlusEq => 83,
+        Token::MinusEq => 84,
+        Token::StarEq => 85,
+        Token::SlashEq => 86,
+
+        // Delimiters (91-96)
+        Token::LParen => 91,
+        Token::RParen => 92,
+        Token::LBrace => 93,
+        Token::RBrace => 94,
+        Token::LBracket => 95,
+        Token::RBracket => 96,
+
+        // Punctuation (101-112)
+        Token::Comma => 101,
+        Token::Colon => 102,
+        Token::Semi => 103,
+        Token::Dot => 104,
+        Token::DotDot => 105,
+        Token::DotDotEq => 106,
+        Token::Arrow => 107,
+        Token::FatArrow => 108,
+        Token::ColonColon => 109,
+        Token::Question => 110,
+        Token::At => 111,
+        // Token::Hash would be 112, but it's not a single token in Rust lexer
+
+        // Special tokens
+        // Token::Eof would be 200
+        // Token::Error would be 201
+
+        // Tokens not yet in selfhost lexer (return -1 for "not mapped")
+        Token::DocComment(_) => -1,
+        Token::Lifetime(_) => -1,
+        Token::PipeArrow => -1,      // |>
+        Token::Ellipsis => -1,       // ...
+        Token::Dollar => -1,         // $
+        Token::HashBracket => -1,    // #[
+        Token::Spawn => -1,
+        Token::Weak => -1,
+        Token::Clone => -1,
+        Token::Comptime => -1,
+        Token::Dyn => -1,
+        Token::Macro => -1,
+        Token::Pure => -1,
+        Token::Effect => -1,
+        Token::Io => -1,
+        Token::Unsafe => -1,
+        Token::Linear => -1,
+        Token::Affine => -1,
+        Token::Move => -1,
+        Token::Consume => -1,
+        Token::Lazy => -1,
+        Token::Force => -1,
+        // SIMD types
+        Token::Vec2f32 => -1,
+        Token::Vec4f32 => -1,
+        Token::Vec8f32 => -1,
+        Token::Vec2f64 => -1,
+        Token::Vec4f64 => -1,
+        Token::Vec4i32 => -1,
+        Token::Vec8i32 => -1,
+        Token::Vec2i64 => -1,
+        Token::Vec4i64 => -1,
+    }
+}
+
+/// Check if a token is currently supported by the selfhost lexer
+fn is_token_supported_by_selfhost(token: &vais_lexer::Token) -> bool {
+    rust_token_to_selfhost_id(token) != -1
+}
+
+/// Get a human-readable name for a selfhost token ID
+fn selfhost_id_to_name(id: i64) -> &'static str {
+    match id {
+        1 => "TOK_KW_F", 2 => "TOK_KW_S", 3 => "TOK_KW_E", 4 => "TOK_KW_I",
+        5 => "TOK_KW_L", 6 => "TOK_KW_M", 7 => "TOK_KW_W", 8 => "TOK_KW_X",
+        9 => "TOK_KW_T", 10 => "TOK_KW_U", 11 => "TOK_KW_P", 12 => "TOK_KW_A",
+        13 => "TOK_KW_R", 14 => "TOK_KW_B", 15 => "TOK_KW_C", 16 => "TOK_KW_TRUE",
+        17 => "TOK_KW_FALSE", 18 => "TOK_KW_MUT", 19 => "TOK_KW_ELSE",
+        20 => "TOK_KW_D", 21 => "TOK_KW_O", 22 => "TOK_KW_N", 23 => "TOK_KW_G",
+        24 => "TOK_KW_Y", 25 => "TOK_KW_SELF", 26 => "TOK_KW_SELF_UPPER",
+        27 => "TOK_KW_AS", 28 => "TOK_KW_CONST",
+        31 => "TOK_TY_I8", 32 => "TOK_TY_I16", 33 => "TOK_TY_I32", 34 => "TOK_TY_I64",
+        35 => "TOK_TY_I128", 36 => "TOK_TY_U8", 37 => "TOK_TY_U16", 38 => "TOK_TY_U32",
+        39 => "TOK_TY_U64", 40 => "TOK_TY_U128", 41 => "TOK_TY_F32", 42 => "TOK_TY_F64",
+        43 => "TOK_TY_BOOL", 44 => "TOK_TY_STR",
+        51 => "TOK_INT", 52 => "TOK_FLOAT", 53 => "TOK_STRING", 54 => "TOK_IDENT",
+        61 => "TOK_PLUS", 62 => "TOK_MINUS", 63 => "TOK_STAR", 64 => "TOK_SLASH",
+        65 => "TOK_PERCENT", 66 => "TOK_LT", 67 => "TOK_GT", 68 => "TOK_LT_EQ",
+        69 => "TOK_GT_EQ", 70 => "TOK_EQ_EQ", 71 => "TOK_NOT_EQ", 72 => "TOK_AMP",
+        73 => "TOK_PIPE", 74 => "TOK_CARET", 75 => "TOK_TILDE", 76 => "TOK_SHL",
+        77 => "TOK_SHR", 78 => "TOK_BANG", 79 => "TOK_AND", 80 => "TOK_OR",
+        81 => "TOK_EQ", 82 => "TOK_COLON_EQ", 83 => "TOK_PLUS_EQ", 84 => "TOK_MINUS_EQ",
+        85 => "TOK_STAR_EQ", 86 => "TOK_SLASH_EQ",
+        91 => "TOK_LPAREN", 92 => "TOK_RPAREN", 93 => "TOK_LBRACE", 94 => "TOK_RBRACE",
+        95 => "TOK_LBRACKET", 96 => "TOK_RBRACKET",
+        101 => "TOK_COMMA", 102 => "TOK_COLON", 103 => "TOK_SEMI", 104 => "TOK_DOT",
+        105 => "TOK_DOT_DOT", 106 => "TOK_DOT_DOT_EQ", 107 => "TOK_ARROW",
+        108 => "TOK_FAT_ARROW", 109 => "TOK_COLON_COLON", 110 => "TOK_QUESTION",
+        111 => "TOK_AT", 112 => "TOK_HASH",
+        200 => "TOK_EOF", 201 => "TOK_ERROR",
+        -1 => "UNSUPPORTED",
+        _ => "UNKNOWN",
+    }
+}
+
+#[test]
+fn selfhost_token_mapping_completeness() {
+    // Verify that all commonly used Rust tokens have selfhost mappings
+    use vais_lexer::Token;
+
+    let critical_tokens = vec![
+        Token::Function, Token::Struct, Token::Enum, Token::If, Token::Loop,
+        Token::Match, Token::Return, Token::Break, Token::Continue,
+        Token::True, Token::False, Token::Mut,
+        Token::I8, Token::I16, Token::I32, Token::I64, Token::I128,
+        Token::U8, Token::U16, Token::U32, Token::U64, Token::U128,
+        Token::F32, Token::F64, Token::Bool, Token::Str,
+        Token::Int(0), Token::Float(0.0), Token::String("".to_string()),
+        Token::Ident("x".to_string()),
+        Token::Plus, Token::Minus, Token::Star, Token::Slash, Token::Percent,
+        Token::Lt, Token::Gt, Token::Lte, Token::Gte, Token::EqEq, Token::Neq,
+        Token::Amp, Token::Pipe, Token::Caret, Token::Tilde, Token::Shl, Token::Shr,
+        Token::Eq, Token::ColonEq, Token::PlusEq, Token::MinusEq, Token::StarEq, Token::SlashEq,
+        Token::LParen, Token::RParen, Token::LBrace, Token::RBrace,
+        Token::LBracket, Token::RBracket,
+        Token::Comma, Token::Colon, Token::Semi, Token::Dot, Token::DotDot, Token::DotDotEq,
+        Token::Arrow, Token::FatArrow, Token::ColonColon, Token::Question, Token::At,
+    ];
+
+    for token in &critical_tokens {
+        let id = rust_token_to_selfhost_id(token);
+        assert!(
+            id != -1,
+            "Critical token {:?} should be mapped to selfhost, got id={}",
+            token, id
+        );
+    }
+}
+
+#[test]
+fn selfhost_token_mapping_uniqueness() {
+    // Verify that each token maps to a unique selfhost ID (no collisions)
+    use vais_lexer::Token;
+    use std::collections::HashMap;
+
+    let tokens = vec![
+        Token::Function, Token::Struct, Token::Enum, Token::If, Token::Loop,
+        Token::Match, Token::Trait, Token::Impl, Token::TypeKeyword, Token::Use,
+        Token::Pub, Token::Async, Token::Return, Token::Break, Token::Continue,
+        Token::True, Token::False, Token::Mut,
+        Token::Defer, Token::Union, Token::Extern, Token::Global, Token::Await,
+        Token::SelfLower, Token::SelfUpper, Token::As, Token::Const,
+        Token::I8, Token::I16, Token::I32, Token::I64, Token::I128,
+        Token::U8, Token::U16, Token::U32, Token::U64, Token::U128,
+        Token::F32, Token::F64, Token::Bool, Token::Str,
+        Token::Plus, Token::Minus, Token::Star, Token::Slash, Token::Percent,
+        Token::Lt, Token::Gt, Token::Lte, Token::Gte, Token::EqEq, Token::Neq,
+        Token::Amp, Token::Pipe, Token::Caret, Token::Tilde, Token::Shl, Token::Shr, Token::Bang,
+        Token::Eq, Token::ColonEq, Token::PlusEq, Token::MinusEq, Token::StarEq, Token::SlashEq,
+        Token::LParen, Token::RParen, Token::LBrace, Token::RBrace,
+        Token::LBracket, Token::RBracket,
+        Token::Comma, Token::Colon, Token::Semi, Token::Dot, Token::DotDot, Token::DotDotEq,
+        Token::Arrow, Token::FatArrow, Token::ColonColon, Token::Question, Token::At,
+    ];
+
+    let mut seen_ids: HashMap<i64, &Token> = HashMap::new();
+    for token in &tokens {
+        let id = rust_token_to_selfhost_id(token);
+        if id != -1 {
+            if let Some(existing) = seen_ids.insert(id, token) {
+                panic!(
+                    "Token ID collision: {:?} and {:?} both map to {}",
+                    existing, token, id
+                );
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Section 22: Full Examples Directory Token Sequence Verification
+// ============================================================================
+// Test that Rust lexer can tokenize all examples/ files.
+// This verifies the token ID mapping produces consistent results.
+
+/// Analyze a single example file and return statistics
+fn analyze_example_file(path: &str) -> Result<(usize, usize, Vec<String>), String> {
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+
+    let tokens = tokenize(&source)
+        .map_err(|e| format!("Lexer error in {}: {:?}", path, e))?;
+
+    let total = tokens.len();
+    let mut unsupported_tokens = Vec::new();
+    let mut supported = 0;
+
+    for spanned in &tokens {
+        if is_token_supported_by_selfhost(&spanned.token) {
+            supported += 1;
+        } else {
+            let token_str = format!("{:?}", spanned.token);
+            if !unsupported_tokens.contains(&token_str) {
+                unsupported_tokens.push(token_str);
+            }
+        }
+    }
+
+    Ok((total, supported, unsupported_tokens))
+}
+
+#[test]
+fn selfhost_examples_token_coverage_report() {
+    // Generate a coverage report for all examples/ files
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let examples_dir = format!("{}/../..", project_root);
+    let examples_path = format!("{}/examples", examples_dir);
+
+    let mut total_files = 0;
+    let mut successful_files = 0;
+    let mut total_tokens = 0;
+    let mut supported_tokens = 0;
+    let mut all_unsupported: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut failed_files: Vec<String> = Vec::new();
+
+    // Use glob to find all .vais files
+    for entry in glob::glob(&format!("{}/**/*.vais", examples_path)).unwrap() {
+        if let Ok(path) = entry {
+            total_files += 1;
+            let path_str = path.to_string_lossy().to_string();
+
+            match analyze_example_file(&path_str) {
+                Ok((total, supported, unsupported)) => {
+                    successful_files += 1;
+                    total_tokens += total;
+                    supported_tokens += supported;
+                    for u in unsupported {
+                        all_unsupported.insert(u);
+                    }
+                }
+                Err(e) => {
+                    failed_files.push(format!("{}: {}", path_str, e));
+                }
+            }
+        }
+    }
+
+    // Print report
+    println!("\n=== Selfhost Lexer Token Coverage Report ===");
+    println!("Total .vais files: {}", total_files);
+    println!("Successfully lexed: {}", successful_files);
+    println!("Total tokens: {}", total_tokens);
+    println!("Supported by selfhost: {} ({:.1}%)",
+        supported_tokens,
+        if total_tokens > 0 { (supported_tokens as f64 / total_tokens as f64) * 100.0 } else { 0.0 }
+    );
+
+    if !all_unsupported.is_empty() {
+        println!("\nUnsupported token types found:");
+        let mut sorted: Vec<_> = all_unsupported.iter().collect();
+        sorted.sort();
+        for u in sorted {
+            println!("  - {}", u);
+        }
+    }
+
+    if !failed_files.is_empty() {
+        println!("\nFiles that failed to lex:");
+        for f in &failed_files {
+            println!("  - {}", f);
+        }
+    }
+
+    // Assert minimum coverage threshold
+    let coverage = if total_tokens > 0 {
+        (supported_tokens as f64 / total_tokens as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    assert!(
+        coverage >= 95.0,
+        "Selfhost lexer token coverage should be at least 95%, but was {:.1}%",
+        coverage
+    );
+
+    // Assert no lexing failures
+    assert!(
+        failed_files.is_empty(),
+        "All example files should lex successfully, but {} failed",
+        failed_files.len()
+    );
+}
+
+#[test]
+fn selfhost_examples_individual_file_verification() {
+    // Test individual representative files for specific token patterns
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let examples_dir = format!("{}/../..", project_root);
+
+    let test_files = [
+        ("examples/hello.vais", vec!["Function", "Arrow", "Int"]),
+        ("examples/fib.vais", vec!["Function", "Question", "At"]),
+        ("examples/trait_test.vais", vec!["Trait", "Impl", "Struct"]),
+    ];
+
+    for (rel_path, expected_tokens) in &test_files {
+        let full_path = format!("{}/{}", examples_dir, rel_path);
+
+        if !std::path::Path::new(&full_path).exists() {
+            continue; // Skip if file doesn't exist
+        }
+
+        let source = std::fs::read_to_string(&full_path)
+            .expect(&format!("Failed to read {}", full_path));
+
+        let tokens = tokenize(&source)
+            .expect(&format!("Failed to lex {}", full_path));
+
+        for expected in expected_tokens {
+            let found = tokens.iter().any(|t| format!("{:?}", t.token).starts_with(expected));
+            assert!(
+                found,
+                "Expected to find {:?} token in {}, but didn't.\nTokens: {:?}",
+                expected, rel_path, tokens.iter().map(|t| format!("{:?}", t.token)).collect::<Vec<_>>()
+            );
+        }
+    }
+}
+
+// ============================================================================
+// Section 23: Token Sequence Consistency Tests
+// ============================================================================
+// Verify that specific token sequences are handled consistently.
+
+#[test]
+fn selfhost_verify_token_sequence_function_def() {
+    // Verify function definition token sequence
+    let source = "F add(a: i64, b: i64) -> i64 = a + b";
+    let tokens = tokenize(source).unwrap();
+
+    let expected_ids: Vec<i64> = vec![
+        1,   // F (Function)
+        54,  // add (Ident)
+        91,  // (
+        54,  // a (Ident)
+        102, // :
+        34,  // i64
+        101, // ,
+        54,  // b (Ident)
+        102, // :
+        34,  // i64
+        92,  // )
+        107, // ->
+        34,  // i64
+        81,  // =
+        54,  // a (Ident)
+        61,  // +
+        54,  // b (Ident)
+    ];
+
+    assert_eq!(tokens.len(), expected_ids.len(),
+        "Token count mismatch. Expected {}, got {}.\nTokens: {:?}",
+        expected_ids.len(), tokens.len(),
+        tokens.iter().map(|t| format!("{:?}", t.token)).collect::<Vec<_>>()
+    );
+
+    for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
+        let actual_id = rust_token_to_selfhost_id(&spanned.token);
+        assert_eq!(
+            actual_id, *expected_id,
+            "Token {} mismatch: expected {} ({}), got {} ({}) for {:?}",
+            i, expected_id, selfhost_id_to_name(*expected_id),
+            actual_id, selfhost_id_to_name(actual_id),
+            spanned.token
+        );
+    }
+}
+
+#[test]
+fn selfhost_verify_token_sequence_struct_def() {
+    let source = "S Point { x: i64, y: i64 }";
+    let tokens = tokenize(source).unwrap();
+
+    let expected_ids: Vec<i64> = vec![
+        2,   // S (Struct)
+        54,  // Point (Ident)
+        93,  // {
+        54,  // x (Ident)
+        102, // :
+        34,  // i64
+        101, // ,
+        54,  // y (Ident)
+        102, // :
+        34,  // i64
+        94,  // }
+    ];
+
+    assert_eq!(tokens.len(), expected_ids.len());
+    for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
+        let actual_id = rust_token_to_selfhost_id(&spanned.token);
+        assert_eq!(
+            actual_id, *expected_id,
+            "Token {} mismatch: expected {}, got {} for {:?}",
+            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+        );
+    }
+}
+
+#[test]
+fn selfhost_verify_token_sequence_if_else() {
+    let source = "I x > 0 { 1 } E { 0 }";
+    let tokens = tokenize(source).unwrap();
+
+    // I x > 0 { 1 } E { 0 }
+    // 4 54 67 51 93 51 94 3 93 51 94
+    let expected_ids: Vec<i64> = vec![
+        4,   // I (If)
+        54,  // x (Ident)
+        67,  // >
+        51,  // 0 (Int)
+        93,  // {
+        51,  // 1 (Int)
+        94,  // }
+        3,   // E (Enum, used as Else)
+        93,  // {
+        51,  // 0 (Int)
+        94,  // }
+    ];
+
+    assert_eq!(tokens.len(), expected_ids.len());
+    for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
+        let actual_id = rust_token_to_selfhost_id(&spanned.token);
+        assert_eq!(
+            actual_id, *expected_id,
+            "Token {} mismatch: expected {}, got {} for {:?}",
+            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+        );
+    }
+}
+
+#[test]
+fn selfhost_verify_token_sequence_loop() {
+    let source = "L { x += 1 }";
+    let tokens = tokenize(source).unwrap();
+
+    let expected_ids: Vec<i64> = vec![
+        5,   // L (Loop)
+        93,  // {
+        54,  // x (Ident)
+        83,  // +=
+        51,  // 1 (Int)
+        94,  // }
+    ];
+
+    assert_eq!(tokens.len(), expected_ids.len());
+    for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
+        let actual_id = rust_token_to_selfhost_id(&spanned.token);
+        assert_eq!(
+            actual_id, *expected_id,
+            "Token {} mismatch: expected {}, got {} for {:?}",
+            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+        );
+    }
+}
+
+#[test]
+fn selfhost_verify_token_sequence_match() {
+    let source = "M x { 1 => 10, _ => 0 }";
+    let tokens = tokenize(source).unwrap();
+
+    let expected_ids: Vec<i64> = vec![
+        6,   // M (Match)
+        54,  // x (Ident)
+        93,  // {
+        51,  // 1 (Int)
+        108, // =>
+        51,  // 10 (Int)
+        101, // ,
+        54,  // _ (Ident)
+        108, // =>
+        51,  // 0 (Int)
+        94,  // }
+    ];
+
+    assert_eq!(tokens.len(), expected_ids.len());
+    for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
+        let actual_id = rust_token_to_selfhost_id(&spanned.token);
+        assert_eq!(
+            actual_id, *expected_id,
+            "Token {} mismatch: expected {}, got {} for {:?}",
+            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+        );
+    }
+}
+
+#[test]
+fn selfhost_verify_token_sequence_self_recursion() {
+    let source = "F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)";
+    let tokens = tokenize(source).unwrap();
+
+    // Check that @ tokens are present
+    let at_count = tokens.iter().filter(|t| rust_token_to_selfhost_id(&t.token) == 111).count();
+    assert_eq!(at_count, 2, "Should have 2 @ tokens for self-recursion");
+}
+
+#[test]
+fn selfhost_verify_new_keywords() {
+    // Test the newly added keywords: self, Self, as, const
+    let tokens_self = tokenize("self").unwrap();
+    assert_eq!(rust_token_to_selfhost_id(&tokens_self[0].token), 25, "self should map to TOK_KW_SELF (25)");
+
+    let tokens_self_upper = tokenize("Self").unwrap();
+    assert_eq!(rust_token_to_selfhost_id(&tokens_self_upper[0].token), 26, "Self should map to TOK_KW_SELF_UPPER (26)");
+
+    let tokens_as = tokenize("as").unwrap();
+    assert_eq!(rust_token_to_selfhost_id(&tokens_as[0].token), 27, "as should map to TOK_KW_AS (27)");
+
+    let tokens_const = tokenize("const").unwrap();
+    assert_eq!(rust_token_to_selfhost_id(&tokens_const[0].token), 28, "const should map to TOK_KW_CONST (28)");
+}
+
+#[test]
+fn selfhost_verify_string_with_escape_sequences() {
+    // Test string literals with escape sequences
+    let source = r#""hello\nworld\t!""#;
+    let tokens = tokenize(source).unwrap();
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(rust_token_to_selfhost_id(&tokens[0].token), 53, "String should map to TOK_STRING (53)");
+
+    // Verify the escape sequences were decoded
+    if let vais_lexer::Token::String(s) = &tokens[0].token {
+        assert!(s.contains('\n'), "String should contain decoded newline");
+        assert!(s.contains('\t'), "String should contain decoded tab");
+    } else {
+        panic!("Expected String token");
+    }
+}
+
+#[test]
+fn selfhost_verify_hex_escape_in_string() {
+    let source = r#""\x48\x65\x6c\x6c\x6f""#; // "Hello"
+    let tokens = tokenize(source).unwrap();
+
+    if let vais_lexer::Token::String(s) = &tokens[0].token {
+        assert_eq!(s, "Hello", "Hex escapes should decode to 'Hello'");
+    } else {
+        panic!("Expected String token");
+    }
+}

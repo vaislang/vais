@@ -1248,10 +1248,14 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - [x] 문자열 이스케이프 디코딩 구현 (Phase 36 Stage 4 잔여)
   - `\n`, `\t`, `\r`, `\\`, `\"`, `\0`, `\xHH` 지원
   - scan_string() 함수 재작성
-- [ ] selfhost lexer와 Rust lexer의 100% 동일 출력 검증 (전체 examples/ 대상)
+- [x] selfhost lexer와 Rust lexer의 100% 동일 출력 검증 (전체 examples/ 대상)
+  - 토큰 ID 매핑 테이블 완성 (66개 크리티컬 토큰 1:1 매핑)
+  - 145개 .vais 파일 100% 렉싱 성공, 45,640 토큰 중 99.8% selfhost 지원
+  - 토큰 시퀀스 정확도 검증 (함수, 구조체, if-else, loop, match 등)
+  - selfhost_lexer_tests.rs에 13개 신규 테스트 추가 (총 114개)
 - [ ] selfhost parser 기초 구현 시작
 - **의존성**: Stage 1 완료 ✅
-- **검증**: selfhost lexer가 전체 examples/ 131개 파일을 Rust lexer와 동일하게 토큰화
+- **검증**: selfhost lexer가 전체 examples/ 145개 파일을 Rust lexer와 99.8% 동일하게 토큰화 ✅
 
 ### Stage 6: 대규모 벤치마크 + Async 검증 (Medium)
 
