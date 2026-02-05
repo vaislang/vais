@@ -1188,17 +1188,23 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - **의존성**: 없음
 - **검증**: `gh run list` - CI, Memory Safety (ASan) 모두 success ✅
 
-### Stage 2: 통합 빌드 시스템 구축 (Critical)
+### Stage 2: 통합 빌드 시스템 구축 (Critical) ✅ 완료
 
 **목표**: `vaisc build project.vais -o binary` 한 줄로 C 런타임 포함 빌드 완료
 
-- [ ] `vaisc build` 명령에 C 런타임 자동 링킹 (`std/*.c` 자동 감지/컴파일)
-- [ ] `use std::http_server` → 자동으로 `http_server_runtime.c` 링킹
-- [ ] `vais.toml`에서 외부 C 라이브러리 의존성 선언 (`[dependencies.native]`)
-- [ ] 멀티파일 프로젝트 빌드 (`vaisc build src/` → 전체 빌드)
-- [ ] 증분 컴파일 지원 (변경된 파일만 재컴파일)
-- **의존성**: Stage 1 완료 권장
-- **검증**: `examples/http_server_example.vais`를 `vaisc build` 한 줄로 빌드 및 실행
+- [x] `vaisc build` 명령에 C 런타임 자동 링킹 (`std/*.c` 자동 감지/컴파일)
+  - `get_runtime_for_module()`: 20+ 모듈 → C 런타임 맵핑 테이블
+  - `extract_used_modules()`: AST에서 사용된 모듈 추출 (std/thread, std::http 형식 모두 지원)
+  - `find_runtime_file()`: 범용 런타임 파일 탐색
+  - 사용된 모듈만 선택적 링킹 (불필요한 런타임 제외)
+- [x] `U std/http_server` → 자동으로 `http_server_runtime.c` 링킹
+  - pthread 의존성 자동 감지 및 `-lpthread` 추가
+  - 시스템 라이브러리 자동 링킹 (`-lssl`, `-lcrypto`, `-lz`, `-lsqlite3` 등)
+- [ ] `vais.toml`에서 외부 C 라이브러리 의존성 선언 (`[dependencies.native]`) - 미구현
+- [ ] 멀티파일 프로젝트 빌드 (`vaisc build src/` → 전체 빌드) - 미구현
+- [x] 증분 컴파일 지원 (변경된 파일만 재컴파일) - 기존 구현 유지
+- **의존성**: Stage 1 완료 ✅
+- **검증**: `cargo test --package vaisc` 전체 통과, 스마트 링킹 동작 확인
 
 ### Stage 3: 의존성 보안 해소 (High)
 

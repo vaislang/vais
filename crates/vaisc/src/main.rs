@@ -1869,6 +1869,23 @@ fn cmd_build(
 
     // If not emit_ir only, compile to binary
     if !emit_ir {
+        // Extract used modules from AST for smart C runtime linking
+        let used_modules = extract_used_modules(&final_ast);
+        if verbose && !used_modules.is_empty() {
+            let std_modules: Vec<_> = used_modules
+                .iter()
+                .filter(|m| m.starts_with("std::"))
+                .map(|m| m.strip_prefix("std::").unwrap_or(m))
+                .collect();
+            if !std_modules.is_empty() {
+                println!(
+                    "{} Detected std modules: {}",
+                    "info:".blue().bold(),
+                    std_modules.join(", ")
+                );
+            }
+        }
+
         // Determine output extension based on target and hot mode
         let default_ext = if hot {
             // Generate dylib for hot reload
@@ -1912,6 +1929,7 @@ fn cmd_build(
             hot,
             &lto_mode,
             &pgo_mode,
+            &used_modules,
         )?;
     }
 
@@ -2441,6 +2459,217 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
     Ok(canonical_path)
 }
 
+/// Runtime file information for a module
+#[derive(Debug, Clone)]
+struct RuntimeInfo {
+    /// The C runtime file name (e.g., "http_runtime.c")
+    file: &'static str,
+    /// Whether this runtime requires pthread linking
+    needs_pthread: bool,
+    /// Additional system libraries required (e.g., "-lssl", "-lcrypto")
+    libs: &'static [&'static str],
+}
+
+/// Get the C runtime file info for a given module path.
+/// Returns None if the module doesn't have a C runtime dependency.
+fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
+    match module_path {
+        // Network modules
+        "std::http" => Some(RuntimeInfo {
+            file: "http_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
+        "std::http_server" => Some(RuntimeInfo {
+            file: "http_server_runtime.c",
+            needs_pthread: true,
+            libs: &[],
+        }),
+        "std::http_client" => Some(RuntimeInfo {
+            file: "http_client_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
+        "std::websocket" => Some(RuntimeInfo {
+            file: "websocket_runtime.c",
+            needs_pthread: true,
+            libs: &[],
+        }),
+        "std::tls" => Some(RuntimeInfo {
+            file: "tls_runtime.c",
+            needs_pthread: false,
+            libs: &["-lssl", "-lcrypto"],
+        }),
+
+        // Concurrency modules
+        "std::thread" => Some(RuntimeInfo {
+            file: "thread_runtime.c",
+            needs_pthread: true,
+            libs: &[],
+        }),
+        "std::sync" => Some(RuntimeInfo {
+            file: "sync_runtime.c",
+            needs_pthread: true,
+            libs: &[],
+        }),
+
+        // Database modules
+        "std::sqlite" => Some(RuntimeInfo {
+            file: "sqlite_runtime.c",
+            needs_pthread: false,
+            libs: &["-lsqlite3"],
+        }),
+        "std::postgres" => Some(RuntimeInfo {
+            file: "postgres_runtime.c",
+            needs_pthread: false,
+            libs: &["-lpq"],
+        }),
+        "std::orm" => Some(RuntimeInfo {
+            file: "orm_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
+
+        // GPU modules
+        "std::gpu" => Some(RuntimeInfo {
+            file: "gpu_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
+        "std::opencl" => Some(RuntimeInfo {
+            file: "opencl_runtime.c",
+            needs_pthread: false,
+            libs: &["-framework", "OpenCL"],
+        }),
+
+        // Utility modules
+        "std::compress" => Some(RuntimeInfo {
+            file: "compress_runtime.c",
+            needs_pthread: false,
+            libs: &["-lz"],
+        }),
+        "std::template" => Some(RuntimeInfo {
+            file: "template_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
+        "std::log" => Some(RuntimeInfo {
+            file: "log_runtime.c",
+            needs_pthread: true,
+            libs: &[],
+        }),
+        "std::contract" => Some(RuntimeInfo {
+            file: "contract_runtime.c",
+            needs_pthread: false,
+            libs: &[],
+        }),
+
+        // Async I/O modules (platform-specific, selected at compile time)
+        "std::async" => {
+            #[cfg(target_os = "macos")]
+            return Some(RuntimeInfo {
+                file: "async_kqueue.c",
+                needs_pthread: true,
+                libs: &[],
+            });
+            #[cfg(target_os = "linux")]
+            return Some(RuntimeInfo {
+                file: "async_epoll.c",
+                needs_pthread: true,
+                libs: &[],
+            });
+            #[cfg(target_os = "windows")]
+            return Some(RuntimeInfo {
+                file: "async_iocp.c",
+                needs_pthread: false,
+                libs: &["-lws2_32"],
+            });
+            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            None
+        }
+
+        _ => None,
+    }
+}
+
+/// Extract all module paths used via `use` statements from the AST.
+/// Returns a set of module paths like "std::http", "std::thread", etc.
+/// Handles both "std/thread" (file path style) and "std::thread" (module path style).
+fn extract_used_modules(ast: &Module) -> HashSet<String> {
+    let mut modules = HashSet::new();
+
+    for item in &ast.items {
+        if let Item::Use(use_stmt) = &item.node {
+            // Build module path from the use statement path
+            let path_parts: Vec<&str> = use_stmt.path.iter().map(|s| s.node.as_str()).collect();
+
+            if path_parts.is_empty() {
+                continue;
+            }
+
+            // Check if first part contains "/" (file path style like "std/thread")
+            let first = path_parts[0];
+            if first.contains('/') {
+                // File path style: "std/thread" or "std/http_server"
+                let parts: Vec<&str> = first.split('/').collect();
+                if parts.len() >= 2 && parts[0] == "std" {
+                    // Normalize to std::module format
+                    let module_path = format!("std::{}", parts[1]);
+                    modules.insert(module_path);
+                } else {
+                    // Keep as-is but with :: separator
+                    modules.insert(parts.join("::"));
+                }
+            } else if path_parts.len() >= 2 && first == "std" {
+                // Module path style: std::http or std::thread::spawn
+                // Use first two parts as the module identifier
+                let module_path = format!("{}::{}", first, path_parts[1]);
+                modules.insert(module_path);
+            } else {
+                // Non-std imports, use the full path
+                modules.insert(path_parts.join("::"));
+            }
+        }
+    }
+
+    modules
+}
+
+/// Find a runtime C file in the std directory.
+/// Searches: std/ relative to cwd, then next to compiler executable.
+fn find_runtime_file(filename: &str) -> Option<PathBuf> {
+    // Try std/ relative to current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        let rt_path = cwd.join("std").join(filename);
+        if rt_path.exists() {
+            return Some(rt_path);
+        }
+    }
+
+    // Try next to the compiler executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // Check ../std/ relative to the binary
+            if let Some(parent) = exe_dir.parent() {
+                let rt_path = parent.join("std").join(filename);
+                if rt_path.exists() {
+                    return Some(rt_path);
+                }
+            }
+        }
+    }
+
+    // Try VAIS_STD_DIR environment variable
+    if let Ok(std_dir) = std::env::var("VAIS_STD_DIR") {
+        let rt_path = PathBuf::from(&std_dir).join(filename);
+        if rt_path.exists() {
+            return Some(rt_path);
+        }
+    }
+
+    None
+}
+
 /// Find the HTTP runtime C source file for linking.
 /// Searches: std/ relative to cwd, then next to compiler executable.
 fn find_http_runtime() -> Option<PathBuf> {
@@ -2586,6 +2815,7 @@ fn compile_ir_to_binary(
     hot: bool,
     lto_mode: &vais_codegen::optimize::LtoMode,
     pgo_mode: &vais_codegen::optimize::PgoMode,
+    used_modules: &HashSet<String>,
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
@@ -2593,7 +2823,7 @@ fn compile_ir_to_binary(
             compile_to_wasi(ir_path, bin_path, opt_level, verbose)
         }
         _ => compile_to_native(
-            ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode,
+            ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode, used_modules,
         ),
     }
 }
@@ -2608,6 +2838,7 @@ fn compile_to_native(
     hot: bool,
     lto_mode: &vais_codegen::optimize::LtoMode,
     pgo_mode: &vais_codegen::optimize::PgoMode,
+    used_modules: &HashSet<String>,
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
@@ -2702,59 +2933,99 @@ fn compile_to_native(
         }
     }
 
-    // Link HTTP runtime if available (for std/http.vais support)
-    if let Some(http_rt_path) = find_http_runtime() {
-        args.push(
-            http_rt_path
-                .to_str()
-                .unwrap_or("http_runtime.c")
-                .to_string(),
-        );
-        if verbose {
-            println!(
-                "{} Linking HTTP runtime from: {}",
-                "info:".blue().bold(),
-                http_rt_path.display()
-            );
-        }
-    }
-
-    // Track if we need to link pthread (used by thread and sync runtimes)
+    // Link C runtimes based on used modules (smart linking)
     let mut needs_pthread = false;
+    let mut linked_libs: HashSet<&str> = HashSet::new();
+    let mut linked_runtimes: Vec<String> = Vec::new();
 
-    // Link thread runtime if available (for std/thread.vais support)
-    if let Some(thread_rt_path) = find_thread_runtime() {
-        args.push(
-            thread_rt_path
-                .to_str()
-                .unwrap_or("thread_runtime.c")
-                .to_string(),
-        );
-        needs_pthread = true;
-        if verbose {
-            println!(
-                "{} Linking thread runtime from: {}",
-                "info:".blue().bold(),
-                thread_rt_path.display()
-            );
+    for module in used_modules {
+        if let Some(runtime_info) = get_runtime_for_module(module) {
+            // Find and link the runtime C file
+            if let Some(rt_path) = find_runtime_file(runtime_info.file) {
+                let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
+                if !linked_runtimes.contains(&rt_str) {
+                    linked_runtimes.push(rt_str.clone());
+                    args.push(rt_str);
+                    if verbose {
+                        println!(
+                            "{} Linking {} runtime from: {}",
+                            "info:".blue().bold(),
+                            module.strip_prefix("std::").unwrap_or(module),
+                            rt_path.display()
+                        );
+                    }
+                }
+            }
+
+            // Track pthread requirement
+            if runtime_info.needs_pthread {
+                needs_pthread = true;
+            }
+
+            // Add required system libraries
+            for lib in runtime_info.libs {
+                if !linked_libs.contains(lib) {
+                    linked_libs.insert(lib);
+                    args.push(lib.to_string());
+                }
+            }
         }
     }
 
-    // Link sync runtime if available (for std/sync.vais support)
-    if let Some(sync_rt_path) = find_sync_runtime() {
-        args.push(
-            sync_rt_path
-                .to_str()
-                .unwrap_or("sync_runtime.c")
-                .to_string(),
-        );
-        needs_pthread = true;
-        if verbose {
-            println!(
-                "{} Linking sync runtime from: {}",
-                "info:".blue().bold(),
-                sync_rt_path.display()
+    // Fallback: Also check for legacy find_*_runtime functions for backwards compatibility
+    // This ensures existing projects still work even if they don't use the new module detection
+    if linked_runtimes.is_empty() {
+        // Link HTTP runtime if available (legacy fallback)
+        if let Some(http_rt_path) = find_http_runtime() {
+            args.push(
+                http_rt_path
+                    .to_str()
+                    .unwrap_or("http_runtime.c")
+                    .to_string(),
             );
+            if verbose {
+                println!(
+                    "{} Linking HTTP runtime from: {} (legacy fallback)",
+                    "info:".blue().bold(),
+                    http_rt_path.display()
+                );
+            }
+        }
+
+        // Link thread runtime if available (legacy fallback)
+        if let Some(thread_rt_path) = find_thread_runtime() {
+            args.push(
+                thread_rt_path
+                    .to_str()
+                    .unwrap_or("thread_runtime.c")
+                    .to_string(),
+            );
+            needs_pthread = true;
+            if verbose {
+                println!(
+                    "{} Linking thread runtime from: {} (legacy fallback)",
+                    "info:".blue().bold(),
+                    thread_rt_path.display()
+                );
+            }
+        }
+
+        // Link sync runtime if available (legacy fallback)
+        if let Some(sync_rt_path) = find_sync_runtime() {
+            args.push(
+                sync_rt_path
+                    .to_str()
+                    .unwrap_or("sync_runtime.c")
+                    .to_string(),
+            );
+            needs_pthread = true;
+            if verbose {
+                println!(
+                    "{} Linking sync runtime from: {} (legacy fallback)",
+                    "info:".blue().bold(),
+                    sync_rt_path.display()
+                );
+            }
         }
     }
 
