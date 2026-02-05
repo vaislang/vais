@@ -1,11 +1,20 @@
+# Fly.io optimized Dockerfile for Vais Package Registry
+# Build from project root: flyctl deploy
+
 # Build stage
 # Requires Rust 1.85+ for edition2024 support (wasmtime 41+ dependency)
 FROM rust:1.85-bookworm AS builder
 
 WORKDIR /app
-COPY . .
 
-RUN cargo build --release --bin vais-registry-server
+# Copy workspace Cargo files first for layer caching
+COPY Cargo.toml Cargo.lock ./
+
+# Copy all crates (required for workspace resolution)
+COPY crates ./crates
+
+# Build only the registry server in release mode
+RUN cargo build --release --package vais-registry-server --bin vais-registry-server
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -20,17 +29,16 @@ WORKDIR /app
 COPY --from=builder /app/target/release/vais-registry-server /app/vais-registry-server
 COPY --from=builder /app/crates/vais-registry-server/static /app/static
 
-RUN mkdir -p /app/data/packages
+RUN mkdir -p /data/packages
 
+# Use PORT env var (Fly.io standard) with fallback to 8080
+ENV PORT=8080
 ENV VAIS_REGISTRY_HOST=0.0.0.0
-ENV VAIS_REGISTRY_PORT=3000
-ENV VAIS_REGISTRY_DB=/app/data/registry.db
-ENV VAIS_REGISTRY_STORAGE=/app/data/packages
+ENV VAIS_REGISTRY_DB=/data/registry.db
+ENV VAIS_REGISTRY_STORAGE=/data/packages
 ENV VAIS_REGISTRY_CORS_ALL=true
 ENV VAIS_REGISTRY_LOGGING=true
 
-EXPOSE 3000
-
-VOLUME ["/app/data"]
+EXPOSE 8080
 
 CMD ["/app/vais-registry-server"]

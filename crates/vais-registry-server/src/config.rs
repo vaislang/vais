@@ -103,6 +103,7 @@ impl ServerConfig {
         Self {
             host: std::env::var("VAIS_REGISTRY_HOST").unwrap_or_else(|_| default_host()),
             port: std::env::var("VAIS_REGISTRY_PORT")
+                .or_else(|_| std::env::var("PORT")) // Fly.io sets PORT
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or_else(default_port),

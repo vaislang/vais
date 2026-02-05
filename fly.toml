@@ -1,15 +1,26 @@
-app = "vais-playground"
-primary_region = "nrt"
+# Fly.io configuration for Vais Package Registry
+# Deploy with: flyctl deploy --dockerfile Dockerfile
+# Prerequisites:
+#   1. flyctl auth login
+#   2. flyctl apps create vais-registry (or let fly auto-create)
+#   3. flyctl volumes create vais_registry_data --size 1 --region nrt
+#   4. flyctl secrets set VAIS_REGISTRY_ADMIN_USER=admin VAIS_REGISTRY_ADMIN_PASS=<secure-password>
+
+app = "vais-registry"
+primary_region = "nrt"  # Tokyo, closest to Korea
 
 [build]
-  dockerfile = "Dockerfile.playground"
+  # Build from project root with registry-specific Dockerfile
+  dockerfile = "crates/vais-registry-server/Dockerfile.fly"
 
 [env]
-  PLAYGROUND_HOST = "0.0.0.0"
-  PLAYGROUND_PORT = "8080"
-  PLAYGROUND_MAX_CONCURRENT = "4"
-  PLAYGROUND_TIMEOUT = "10"
-  RUST_LOG = "info"
+  VAIS_REGISTRY_HOST = "0.0.0.0"
+  VAIS_REGISTRY_PORT = "8080"
+  VAIS_REGISTRY_DB = "/data/registry.db"
+  VAIS_REGISTRY_STORAGE = "/data/packages"
+  VAIS_REGISTRY_CORS_ALL = "true"
+  VAIS_REGISTRY_LOGGING = "true"
+  RUST_LOG = "vais_registry_server=info,tower_http=info"
 
 [http_service]
   internal_port = 8080
@@ -18,7 +29,22 @@ primary_region = "nrt"
   auto_start_machines = true
   min_machines_running = 0
 
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  path = "/health"
+  timeout = "5s"
+
+[mounts]
+  source = "vais_registry_data"
+  destination = "/data"
+
 [[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
-  cpus = 1
+  size = "shared-cpu-1x"
+  memory = "256mb"
