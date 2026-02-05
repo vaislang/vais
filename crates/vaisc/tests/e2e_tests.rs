@@ -3736,6 +3736,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "macos"), ignore = "msync flags differ on Linux (MS_SYNC=16 on macOS, 4 on Linux)")]
 fn e2e_mmap_write_and_msync() {
     // Test: mmap a file for read-write, modify, msync, read back
     let source = r#"
@@ -4908,6 +4909,7 @@ F main() -> i64 {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "macos"), ignore = "stat struct layout differs between platforms")]
 fn e2e_stat_file_size() {
     let source = r#"
 F main() -> i64 {
