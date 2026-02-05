@@ -1587,7 +1587,7 @@ F main() -> i64 {
 fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
     use vais_lexer::Token;
     match token {
-        // Keywords (1-28)
+        // Keywords (1-30)
         Token::Function => 1,   // TOK_KW_F
         Token::Struct => 2,     // TOK_KW_S
         Token::Enum => 3,       // TOK_KW_E
@@ -1616,6 +1616,18 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::SelfUpper => 26, // TOK_KW_SELF_UPPER
         Token::As => 27,        // TOK_KW_AS
         Token::Const => 28,     // TOK_KW_CONST
+        Token::Spawn => 29,     // TOK_KW_SPAWN
+        Token::Macro => 30,     // TOK_KW_MACRO
+
+        // Additional keywords (121-128)
+        Token::Comptime => 121, // TOK_KW_COMPTIME
+        Token::Dyn => 122,      // TOK_KW_DYN
+        Token::Linear => 123,   // TOK_KW_LINEAR
+        Token::Affine => 124,   // TOK_KW_AFFINE
+        Token::Move => 125,     // TOK_KW_MOVE
+        Token::Consume => 126,  // TOK_KW_CONSUME
+        Token::Lazy => 127,     // TOK_KW_LAZY
+        Token::Force => 128,    // TOK_KW_FORCE
 
         // Type keywords (31-44)
         Token::I8 => 31,
@@ -1632,6 +1644,17 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::F64 => 42,
         Token::Bool => 43,
         Token::Str => 44,
+
+        // SIMD vector types (45-50, 141-143)
+        Token::Vec2f32 => 45,
+        Token::Vec4f32 => 46,
+        Token::Vec8f32 => 47,
+        Token::Vec2f64 => 48,
+        Token::Vec4f64 => 49,
+        Token::Vec4i32 => 50,
+        Token::Vec8i32 => 141,
+        Token::Vec2i64 => 142,
+        Token::Vec4i64 => 143,
 
         // Literals (51-54)
         Token::Int(_) => 51,
@@ -1677,7 +1700,7 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::LBracket => 95,
         Token::RBracket => 96,
 
-        // Punctuation (101-112)
+        // Punctuation (101-117)
         Token::Comma => 101,
         Token::Colon => 102,
         Token::Semi => 103,
@@ -1689,45 +1712,26 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::ColonColon => 109,
         Token::Question => 110,
         Token::At => 111,
-        // Token::Hash would be 112, but it's not a single token in Rust lexer
+        // Token::Hash would be 112, but # is comment start in Vais
+        Token::PipeArrow => 113,   // |>
+        Token::Ellipsis => 114,    // ...
+        Token::Dollar => 115,      // $
+        Token::HashBracket => 116, // #[
+        Token::Lifetime(_) => 117, // 'a, 'static, etc.
 
         // Special tokens
         // Token::Eof would be 200
         // Token::Error would be 201
 
         // Tokens not yet in selfhost lexer (return -1 for "not mapped")
-        Token::DocComment(_) => -1,
-        Token::Lifetime(_) => -1,
-        Token::PipeArrow => -1,      // |>
-        Token::Ellipsis => -1,       // ...
-        Token::Dollar => -1,         // $
-        Token::HashBracket => -1,    // #[
-        Token::Spawn => -1,
-        Token::Weak => -1,
-        Token::Clone => -1,
-        Token::Comptime => -1,
-        Token::Dyn => -1,
-        Token::Macro => -1,
-        Token::Pure => -1,
-        Token::Effect => -1,
-        Token::Io => -1,
-        Token::Unsafe => -1,
-        Token::Linear => -1,
-        Token::Affine => -1,
-        Token::Move => -1,
-        Token::Consume => -1,
-        Token::Lazy => -1,
-        Token::Force => -1,
-        // SIMD types
-        Token::Vec2f32 => -1,
-        Token::Vec4f32 => -1,
-        Token::Vec8f32 => -1,
-        Token::Vec2f64 => -1,
-        Token::Vec4f64 => -1,
-        Token::Vec4i32 => -1,
-        Token::Vec8i32 => -1,
-        Token::Vec2i64 => -1,
-        Token::Vec4i64 => -1,
+        // These are rarely used features that can be added later if needed
+        Token::DocComment(_) => -1,  // Doc comments are stripped by the lexer anyway
+        Token::Weak => -1,           // weak references (rare)
+        Token::Clone => -1,          // clone (rare)
+        Token::Pure => -1,           // pure functions (effect system)
+        Token::Effect => -1,         // effect system
+        Token::Io => -1,             // io effect
+        Token::Unsafe => -1,         // unsafe blocks
     }
 }
 
@@ -1765,6 +1769,12 @@ fn selfhost_id_to_name(id: i64) -> &'static str {
         105 => "TOK_DOT_DOT", 106 => "TOK_DOT_DOT_EQ", 107 => "TOK_ARROW",
         108 => "TOK_FAT_ARROW", 109 => "TOK_COLON_COLON", 110 => "TOK_QUESTION",
         111 => "TOK_AT", 112 => "TOK_HASH",
+        113 => "TOK_PIPE_ARROW", 114 => "TOK_ELLIPSIS", 115 => "TOK_DOLLAR",
+        116 => "TOK_HASH_BRACKET", 117 => "TOK_LIFETIME",
+        121 => "TOK_KW_COMPTIME", 122 => "TOK_KW_DYN", 123 => "TOK_KW_LINEAR",
+        124 => "TOK_KW_AFFINE", 125 => "TOK_KW_MOVE", 126 => "TOK_KW_CONSUME",
+        127 => "TOK_KW_LAZY", 128 => "TOK_KW_FORCE",
+        141 => "TOK_TY_VEC8I32", 142 => "TOK_TY_VEC2I64", 143 => "TOK_TY_VEC4I64",
         200 => "TOK_EOF", 201 => "TOK_ERROR",
         -1 => "UNSUPPORTED",
         _ => "UNKNOWN",

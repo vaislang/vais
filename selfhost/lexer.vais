@@ -120,12 +120,16 @@ X Lexer {
         0
     }
 
-    # Check if current char is whitespace or comment start
+    # Check if current char is whitespace or a comment (# not followed by [)
     F is_skip_char(&self) -> i64 {
         I @.is_eof() == 1 { R 0 }
         c := @.peek()
         I is_whitespace(c) == 1 { R 1 }
-        I c == 35 { R 1 }
+        # # is a comment UNLESS followed by [ (attribute)
+        I c == 35 {
+            I @.peek_next() == 91 { R 0 }  # #[ is not a comment
+            R 1
+        }
         0
     }
 
@@ -137,11 +141,28 @@ X Lexer {
             I is_whitespace(c) == 1 {
                 @.advance()
             } E {
-                # Must be '#' (comment)
+                # Must be '#' (comment, not #[)
                 @.skip_comment()
             }
         }
         1
+    }
+
+    # Scan a lifetime identifier ('a, 'static, etc.)
+    F scan_lifetime(&self) -> Token {
+        start := self.pos
+        @.advance()  # Skip '
+
+        # Scan the identifier part
+        str_start := self.source + self.pos
+        L {
+            I @.is_eof() == 1 { B }
+            I is_ident_char(@.peek()) == 0 { B }
+            @.advance()
+        }
+
+        len := self.pos - start - 1  # -1 for the leading '
+        token_string(TOK_LIFETIME(), str_start, len, start, self.pos)
     }
 
     # Scan a number literal (integer or float)
@@ -283,6 +304,8 @@ X Lexer {
             I c0 == 102 && c1 == 51 && c2 == 50 { R token_simple(TOK_TY_F32(), start, self.pos) }
             I c0 == 115 && c1 == 116 && c2 == 114 { R token_simple(TOK_TY_STR(), start, self.pos) }
             I c0 == 109 && c1 == 117 && c2 == 116 { R token_simple(TOK_KW_MUT(), start, self.pos) }
+            # dyn (100='d', 121='y', 110='n')
+            I c0 == 100 && c1 == 121 && c2 == 110 { R token_simple(TOK_KW_DYN(), start, self.pos) }
             0
         } E {
             0
@@ -302,6 +325,10 @@ X Lexer {
             I c0 == 115 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF(), start, self.pos) }
             # Self (83='S', 101='e', 108='l', 102='f')
             I c0 == 83 && c1 == 101 && c2 == 108 && c3 == 102 { R token_simple(TOK_KW_SELF_UPPER(), start, self.pos) }
+            # move (109='m', 111='o', 118='v', 101='e')
+            I c0 == 109 && c1 == 111 && c2 == 118 && c3 == 101 { R token_simple(TOK_KW_MOVE(), start, self.pos) }
+            # lazy (108='l', 97='a', 122='z', 121='y')
+            I c0 == 108 && c1 == 97 && c2 == 122 && c3 == 121 { R token_simple(TOK_KW_LAZY(), start, self.pos) }
             0
         } E {
             0
@@ -316,6 +343,79 @@ X Lexer {
             I c0 == 102 && c1 == 97 && c2 == 108 && c3 == 115 && c4 == 101 { R token_simple(TOK_KW_FALSE(), start, self.pos) }
             # const (99='c', 111='o', 110='n', 115='s', 116='t')
             I c0 == 99 && c1 == 111 && c2 == 110 && c3 == 115 && c4 == 116 { R token_simple(TOK_KW_CONST(), start, self.pos) }
+            # spawn (115='s', 112='p', 97='a', 119='w', 110='n')
+            I c0 == 115 && c1 == 112 && c2 == 97 && c3 == 119 && c4 == 110 { R token_simple(TOK_KW_SPAWN(), start, self.pos) }
+            # macro (109='m', 97='a', 99='c', 114='r', 111='o')
+            I c0 == 109 && c1 == 97 && c2 == 99 && c3 == 114 && c4 == 111 { R token_simple(TOK_KW_MACRO(), start, self.pos) }
+            # force (102='f', 111='o', 114='r', 99='c', 101='e')
+            I c0 == 102 && c1 == 111 && c2 == 114 && c3 == 99 && c4 == 101 { R token_simple(TOK_KW_FORCE(), start, self.pos) }
+            0
+        } E {
+            0
+        }
+
+        I len == 6 {
+            c0 := load_byte(str_start)
+            c1 := load_byte(str_start + 1)
+            c2 := load_byte(str_start + 2)
+            c3 := load_byte(str_start + 3)
+            c4 := load_byte(str_start + 4)
+            c5 := load_byte(str_start + 5)
+            # linear (108='l', 105='i', 110='n', 101='e', 97='a', 114='r')
+            I c0 == 108 && c1 == 105 && c2 == 110 && c3 == 101 && c4 == 97 && c5 == 114 { R token_simple(TOK_KW_LINEAR(), start, self.pos) }
+            # affine (97='a', 102='f', 102='f', 105='i', 110='n', 101='e')
+            I c0 == 97 && c1 == 102 && c2 == 102 && c3 == 105 && c4 == 110 && c5 == 101 { R token_simple(TOK_KW_AFFINE(), start, self.pos) }
+            0
+        } E {
+            0
+        }
+
+        I len == 7 {
+            c0 := load_byte(str_start)
+            c1 := load_byte(str_start + 1)
+            c2 := load_byte(str_start + 2)
+            c3 := load_byte(str_start + 3)
+            c4 := load_byte(str_start + 4)
+            c5 := load_byte(str_start + 5)
+            c6 := load_byte(str_start + 6)
+            # consume (99='c', 111='o', 110='n', 115='s', 117='u', 109='m', 101='e')
+            I c0 == 99 && c1 == 111 && c2 == 110 && c3 == 115 && c4 == 117 && c5 == 109 && c6 == 101 { R token_simple(TOK_KW_CONSUME(), start, self.pos) }
+            # comptime (99='c', 111='o', 109='m', 112='p', 116='t', 105='i', 109='m', 101='e')
+            # Wait, comptime is 8 chars, not 7
+            # Vec4f32 (86='V', 101='e', 99='c', 52='4', 102='f', 51='3', 50='2')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 52 && c4 == 102 && c5 == 51 && c6 == 50 { R token_simple(TOK_TY_VEC4F32(), start, self.pos) }
+            # Vec4i32 (86='V', 101='e', 99='c', 52='4', 105='i', 51='3', 50='2')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 52 && c4 == 105 && c5 == 51 && c6 == 50 { R token_simple(TOK_TY_VEC4I32(), start, self.pos) }
+            # Vec2f32 (86='V', 101='e', 99='c', 50='2', 102='f', 51='3', 50='2')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 50 && c4 == 102 && c5 == 51 && c6 == 50 { R token_simple(TOK_TY_VEC2F32(), start, self.pos) }
+            # Vec8f32 (86='V', 101='e', 99='c', 56='8', 102='f', 51='3', 50='2')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 56 && c4 == 102 && c5 == 51 && c6 == 50 { R token_simple(TOK_TY_VEC8F32(), start, self.pos) }
+            # Vec2f64 (86='V', 101='e', 99='c', 50='2', 102='f', 54='6', 52='4')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 50 && c4 == 102 && c5 == 54 && c6 == 52 { R token_simple(TOK_TY_VEC2F64(), start, self.pos) }
+            # Vec4f64 (86='V', 101='e', 99='c', 52='4', 102='f', 54='6', 52='4')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 52 && c4 == 102 && c5 == 54 && c6 == 52 { R token_simple(TOK_TY_VEC4F64(), start, self.pos) }
+            # Vec8i32 (86='V', 101='e', 99='c', 56='8', 105='i', 51='3', 50='2')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 56 && c4 == 105 && c5 == 51 && c6 == 50 { R token_simple(TOK_TY_VEC8I32(), start, self.pos) }
+            # Vec2i64 (86='V', 101='e', 99='c', 50='2', 105='i', 54='6', 52='4')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 50 && c4 == 105 && c5 == 54 && c6 == 52 { R token_simple(TOK_TY_VEC2I64(), start, self.pos) }
+            # Vec4i64 (86='V', 101='e', 99='c', 52='4', 105='i', 54='6', 52='4')
+            I c0 == 86 && c1 == 101 && c2 == 99 && c3 == 52 && c4 == 105 && c5 == 54 && c6 == 52 { R token_simple(TOK_TY_VEC4I64(), start, self.pos) }
+            0
+        } E {
+            0
+        }
+
+        I len == 8 {
+            c0 := load_byte(str_start)
+            c1 := load_byte(str_start + 1)
+            c2 := load_byte(str_start + 2)
+            c3 := load_byte(str_start + 3)
+            c4 := load_byte(str_start + 4)
+            c5 := load_byte(str_start + 5)
+            c6 := load_byte(str_start + 6)
+            c7 := load_byte(str_start + 7)
+            # comptime (99='c', 111='o', 109='m', 112='p', 116='t', 105='i', 109='m', 101='e')
+            I c0 == 99 && c1 == 111 && c2 == 109 && c3 == 112 && c4 == 116 && c5 == 105 && c6 == 109 && c7 == 101 { R token_simple(TOK_KW_COMPTIME(), start, self.pos) }
             0
         } E {
             0
@@ -535,7 +635,16 @@ X Lexer {
                 @.advance()
                 R token_simple(TOK_OR(), start, self.pos)
             }
+            # |> pipe arrow
+            I @.peek() == 62 {
+                @.advance()
+                R token_simple(TOK_PIPE_ARROW(), start, self.pos)
+            }
             R token_simple(TOK_PIPE(), start, self.pos)
+        }
+        # $ dollar sign
+        I c == 36 {
+            R token_simple(TOK_DOLLAR(), start, self.pos)
         }
         I c == 58 {
             I @.peek() == 61 {
@@ -551,6 +660,10 @@ X Lexer {
         I c == 46 {
             I @.peek() == 46 {
                 @.advance()
+                I @.peek() == 46 {
+                    @.advance()
+                    R token_simple(TOK_ELLIPSIS(), start, self.pos)
+                }
                 I @.peek() == 61 {
                     @.advance()
                     R token_simple(TOK_DOT_DOT_EQ(), start, self.pos)
@@ -583,6 +696,19 @@ X Lexer {
 
         I c == 34 {
             R @.scan_string()
+        }
+
+        # Lifetime 'a, 'static, etc.
+        I c == 39 {
+            R @.scan_lifetime()
+        }
+
+        # #[ attribute marker
+        I c == 35 && @.peek_next() == 91 {
+            start := self.pos
+            @.advance()  # Skip #
+            @.advance()  # Skip [
+            R token_simple(TOK_HASH_BRACKET(), start, self.pos)
         }
 
         @.scan_operator()

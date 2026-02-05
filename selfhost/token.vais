@@ -35,6 +35,18 @@ F TOK_KW_SELF() -> i64 = 25    # self
 F TOK_KW_SELF_UPPER() -> i64 = 26 # Self
 F TOK_KW_AS() -> i64 = 27      # as
 F TOK_KW_CONST() -> i64 = 28   # const
+F TOK_KW_SPAWN() -> i64 = 29   # spawn
+F TOK_KW_MACRO() -> i64 = 30   # macro
+
+# Additional keywords (121-140)
+F TOK_KW_COMPTIME() -> i64 = 121  # comptime
+F TOK_KW_DYN() -> i64 = 122       # dyn
+F TOK_KW_LINEAR() -> i64 = 123    # linear
+F TOK_KW_AFFINE() -> i64 = 124    # affine
+F TOK_KW_MOVE() -> i64 = 125      # move
+F TOK_KW_CONSUME() -> i64 = 126   # consume
+F TOK_KW_LAZY() -> i64 = 127      # lazy
+F TOK_KW_FORCE() -> i64 = 128     # force
 
 # Type keyword tokens (31-50)
 F TOK_TY_I8() -> i64 = 31
@@ -51,6 +63,17 @@ F TOK_TY_F32() -> i64 = 41
 F TOK_TY_F64() -> i64 = 42
 F TOK_TY_BOOL() -> i64 = 43
 F TOK_TY_STR() -> i64 = 44
+
+# SIMD vector types (45-50)
+F TOK_TY_VEC2F32() -> i64 = 45
+F TOK_TY_VEC4F32() -> i64 = 46
+F TOK_TY_VEC8F32() -> i64 = 47
+F TOK_TY_VEC2F64() -> i64 = 48
+F TOK_TY_VEC4F64() -> i64 = 49
+F TOK_TY_VEC4I32() -> i64 = 50
+F TOK_TY_VEC8I32() -> i64 = 141
+F TOK_TY_VEC2I64() -> i64 = 142
+F TOK_TY_VEC4I64() -> i64 = 143
 
 # Literal tokens (51-60)
 F TOK_INT() -> i64 = 51        # Integer literal
@@ -109,6 +132,11 @@ F TOK_COLON_COLON() -> i64 = 109 # ::
 F TOK_QUESTION() -> i64 = 110  # ?
 F TOK_AT() -> i64 = 111        # @
 F TOK_HASH() -> i64 = 112      # #
+F TOK_PIPE_ARROW() -> i64 = 113  # |>
+F TOK_ELLIPSIS() -> i64 = 114    # ...
+F TOK_DOLLAR() -> i64 = 115      # $
+F TOK_HASH_BRACKET() -> i64 = 116 # #[
+F TOK_LIFETIME() -> i64 = 117    # 'a, 'static, etc.
 
 # Special tokens
 F TOK_EOF() -> i64 = 200
