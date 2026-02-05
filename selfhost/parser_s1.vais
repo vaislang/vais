@@ -729,6 +729,58 @@ F parser_parse_type(p: i64) -> i64 {
     } E { 0 }
 }
 
+# Parse generic parameters like <T, U, V>
+# Returns pointer to generics array, stores count at ptr - 8
+F parser_parse_generics(p: i64) -> i64 {
+    # Check if there are generics
+    I parser_current_kind(p) != TOK_LT() {
+        # No generics, return null with 0 length stored at ptr - 8
+        result := malloc(16)
+        store_i64(result, 0)  # length = 0
+        R result + 8
+    }
+
+    parser_advance(p)  # consume <
+
+    # Allocate space for generics (max 16 type parameters)
+    generics_ptr := malloc(16 * 16 + 8)  # 16 bytes per param, 16 max
+    store_i64(generics_ptr, 0)  # length stored at start
+    generics_ptr = generics_ptr + 8
+    generics_len: mut i64 = 0
+
+    L {
+        I parser_current_kind(p) == TOK_GT() { B } E { 0 }
+        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+
+        # Expect identifier (type parameter name)
+        I parser_current_kind(p) != TOK_IDENT() { B } E { 0 }
+
+        name_ptr := parser_current_str_ptr(p)
+        name_len := parser_current_str_len(p)
+        parser_advance(p)
+
+        # Store generic param info (just name for now)
+        param_ptr := generics_ptr + generics_len * 16
+        store_i64(param_ptr + 0, name_ptr)  # name_ptr
+        store_i64(param_ptr + 8, name_len)  # name_len
+        generics_len = generics_len + 1
+
+        # Optional comma
+        I parser_current_kind(p) == TOK_COMMA() {
+            parser_advance(p)
+            0
+        } E { 0 }
+    }
+
+    # Expect >
+    parser_expect(p, TOK_GT())
+
+    # Store length at generics_ptr - 8
+    store_i64(generics_ptr - 8, generics_len)
+
+    generics_ptr
+}
+
 # Parse parameter
 F parser_parse_param(p: i64) -> i64 {
     I parser_current_kind(p) == TOK_AMP() {
@@ -768,6 +820,10 @@ F parser_parse_function_item(p: i64) -> i64 {
     name_ptr := parser_current_str_ptr(p)
     name_len := parser_current_str_len(p)
     parser_advance(p)
+
+    # Parse generic parameters (optional)
+    generics := parser_parse_generics(p)
+    generics_len := load_i64(generics - 8)
 
     I parser_expect(p, TOK_LPAREN()) == 0 { R 0 }
 
@@ -843,6 +899,10 @@ F parser_parse_struct_item(p: i64) -> i64 {
     name_len := parser_current_str_len(p)
     parser_advance(p)
 
+    # Parse generic parameters (optional)
+    generics := parser_parse_generics(p)
+    generics_len := load_i64(generics - 8)
+
     I parser_expect(p, TOK_LBRACE()) == 0 { R 0 }
 
     fields := malloc(32 * 8)
@@ -881,6 +941,10 @@ F parser_parse_impl_item(p: i64) -> i64 {
     name_ptr := parser_current_str_ptr(p)
     name_len := parser_current_str_len(p)
     parser_advance(p)
+
+    # Parse generic parameters (optional)
+    generics := parser_parse_generics(p)
+    generics_len := load_i64(generics - 8)
 
     I parser_expect(p, TOK_LBRACE()) == 0 { R 0 }
 

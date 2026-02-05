@@ -443,6 +443,77 @@ X ImplDef {
 }
 
 # ============================================================================
+# GenericParam
+# ============================================================================
+
+S GenericParam {
+    name_idx: i64,
+    bounds_ptr: i64,
+    bounds_len: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X GenericParam {
+    F new(name_idx: i64, start: i64, end: i64) -> GenericParam = GenericParam {
+        name_idx: name_idx, bounds_ptr: 0, bounds_len: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 40
+}
+
+# ============================================================================
+# Variant (enum variant)
+# ============================================================================
+
+S Variant {
+    name_idx: i64,
+    fields_kind: i64,  # 0 = unit, 1 = tuple, 2 = struct
+    fields_ptr: i64,
+    fields_len: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X Variant {
+    F new(name_idx: i64, start: i64, end: i64) -> Variant = Variant {
+        name_idx: name_idx,
+        fields_kind: 0, fields_ptr: 0, fields_len: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 48
+}
+
+# ============================================================================
+# EnumDef
+# ============================================================================
+
+S EnumDef {
+    name_idx: i64,
+    generics_ptr: i64,
+    generics_len: i64,
+    variants_ptr: i64,
+    variants_len: i64,
+    is_pub: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X EnumDef {
+    F new(name_idx: i64, start: i64, end: i64) -> EnumDef = EnumDef {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        variants_ptr: 0, variants_len: 0,
+        is_pub: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 64
+}
+
+# ============================================================================
 # Param (function parameter)
 # ============================================================================
 
@@ -830,14 +901,18 @@ X Parser {
         tok := @.advance()
         name_idx := @.intern_string(tok.str_ptr, tok.str_len)
 
+        # Parse generic parameters (optional)
+        generics_ptr := @.parse_generics()
+        generics_len := load_i64(generics_ptr - 8)
+
         # Allocate FunctionDef
         func_ptr := malloc(FunctionDef.size())
         func := FunctionDef.new(name_idx, start, 0)
 
         # Store initial values
         store_i64(func_ptr + 0, func.name_idx)
-        store_i64(func_ptr + 8, 0)   # generics_ptr
-        store_i64(func_ptr + 16, 0)  # generics_len
+        store_i64(func_ptr + 8, generics_ptr)   # generics_ptr
+        store_i64(func_ptr + 16, generics_len)  # generics_len
         store_i64(func_ptr + 24, 0)  # params_ptr
         store_i64(func_ptr + 32, 0)  # params_len
         store_i64(func_ptr + 40, 0)  # ret_type_ptr
@@ -910,11 +985,15 @@ X Parser {
         tok := @.advance()
         name_idx := @.intern_string(tok.str_ptr, tok.str_len)
 
+        # Parse generic parameters (optional)
+        generics_ptr := @.parse_generics()
+        generics_len := load_i64(generics_ptr - 8)
+
         # Allocate StructDef
         struct_ptr := malloc(StructDef.size())
         store_i64(struct_ptr + 0, name_idx)
-        store_i64(struct_ptr + 8, 0)   # generics_ptr
-        store_i64(struct_ptr + 16, 0)  # generics_len
+        store_i64(struct_ptr + 8, generics_ptr)   # generics_ptr
+        store_i64(struct_ptr + 16, generics_len)  # generics_len
         store_i64(struct_ptr + 24, 0)  # fields_ptr
         store_i64(struct_ptr + 32, 0)  # fields_len
         store_i64(struct_ptr + 40, is_pub)
@@ -977,22 +1056,26 @@ X Parser {
         tok := @.advance()
         type_name_idx := @.intern_string(tok.str_ptr, tok.str_len)
 
-        # Create TypeNode for target type
+        # Parse generic parameters for impl (e.g., X Pair<T> { ... })
+        impl_generics_ptr := @.parse_generics()
+        impl_generics_len := load_i64(impl_generics_ptr - 8)
+
+        # Create TypeNode for target type with generics
         type_ptr := malloc(TypeNode.size())
         store_i64(type_ptr + 0, TYPE_NAMED())
         store_i64(type_ptr + 8, tok.span_start)
         store_i64(type_ptr + 16, tok.span_end)
         store_i64(type_ptr + 24, type_name_idx)
-        store_i64(type_ptr + 32, 0)  # generics_ptr
-        store_i64(type_ptr + 40, 0)  # generics_len
+        store_i64(type_ptr + 32, impl_generics_ptr)  # generics_ptr
+        store_i64(type_ptr + 40, impl_generics_len)  # generics_len
         store_i64(type_ptr + 48, 0)
 
         # Allocate ImplDef
         impl_ptr := malloc(ImplDef.size())
         store_i64(impl_ptr + 0, type_ptr)
         store_i64(impl_ptr + 8, 0 - 1)  # trait_name_idx (-1 = no trait)
-        store_i64(impl_ptr + 16, 0)     # generics_ptr
-        store_i64(impl_ptr + 24, 0)     # generics_len
+        store_i64(impl_ptr + 16, impl_generics_ptr)  # generics_ptr
+        store_i64(impl_ptr + 24, impl_generics_len)  # generics_len
         store_i64(impl_ptr + 32, 0)     # methods_ptr
         store_i64(impl_ptr + 40, 0)     # methods_len
         store_i64(impl_ptr + 48, start)
@@ -1095,23 +1178,103 @@ X Parser {
         @.add_item(ITEM_IMPL(), impl_ptr, start, end)
     }
 
-    # =========== Parse Enum (stub) ===========
+    # =========== Parse Enum ===========
 
     F parse_enum(&self, is_pub: i64, start: i64) -> i64 {
-        # For now, skip enum body
-        I @.check(TOK_IDENT()) == 0 { R 0 }
-        @.advance()
+        # Parse enum name
+        I @.check(TOK_IDENT()) == 0 {
+            @.set_error_expected(TOK_IDENT())
+            R 0
+        }
+        tok := @.advance()
+        name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+        # Parse generic parameters (optional)
+        generics_ptr := @.parse_generics()
+        generics_len := load_i64(generics_ptr - 8)
+
+        # Allocate EnumDef
+        enum_ptr := malloc(EnumDef.size())
+        store_i64(enum_ptr + 0, name_idx)
+        store_i64(enum_ptr + 8, generics_ptr)   # generics_ptr
+        store_i64(enum_ptr + 16, generics_len)  # generics_len
+        store_i64(enum_ptr + 24, 0)  # variants_ptr
+        store_i64(enum_ptr + 32, 0)  # variants_len
+        store_i64(enum_ptr + 40, is_pub)
+        store_i64(enum_ptr + 48, start)
+        store_i64(enum_ptr + 56, 0)  # span_end
+
+        # Expect {
         I @.expect(TOK_LBRACE()) == 0 { R 0 }
 
-        # Skip until }
+        # Parse variants
+        variants_ptr := malloc(32 * Variant.size())
+        variants_len: mut i64 = 0
+
         L {
             I @.check(TOK_RBRACE()) == 1 { B }
             I @.is_at_end() == 1 { B }
-            @.advance()
+            I self.has_error == 1 { B }
+
+            variant_start := @.current_span_start()
+
+            # Parse variant name
+            I @.check(TOK_IDENT()) == 0 { B }
+            variant_tok := @.advance()
+            variant_name_idx := @.intern_string(variant_tok.str_ptr, variant_tok.str_len)
+
+            # Store Variant
+            variant_ptr := variants_ptr + variants_len * Variant.size()
+            store_i64(variant_ptr + 0, variant_name_idx)  # name_idx
+            store_i64(variant_ptr + 8, 0)    # fields_kind (0 = unit)
+            store_i64(variant_ptr + 16, 0)   # fields_ptr
+            store_i64(variant_ptr + 24, 0)   # fields_len
+            store_i64(variant_ptr + 32, variant_start)
+            store_i64(variant_ptr + 40, variant_tok.span_end)
+
+            # Check for tuple variant: Variant(T) or Variant(T, U)
+            I @.check(TOK_LPAREN()) == 1 {
+                @.advance()
+                store_i64(variant_ptr + 8, 1)  # fields_kind = 1 (tuple)
+
+                # Parse tuple fields (types only)
+                fields_ptr := malloc(8 * TypeNode.size())
+                fields_len: mut i64 = 0
+
+                L {
+                    I @.check(TOK_RPAREN()) == 1 { B }
+                    I @.is_at_end() == 1 { B }
+
+                    field_type := @.parse_type()
+                    store_i64(fields_ptr + fields_len * 8, field_type)
+                    fields_len = fields_len + 1
+
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                }
+
+                I @.expect(TOK_RPAREN()) == 0 { B }
+
+                store_i64(variant_ptr + 16, fields_ptr)
+                store_i64(variant_ptr + 24, fields_len)
+                store_i64(variant_ptr + 40, @.current_span_start())
+                0
+            } E { 0 }
+
+            variants_len = variants_len + 1
+
+            # Optional comma
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
         }
 
+        store_i64(enum_ptr + 24, variants_ptr)
+        store_i64(enum_ptr + 32, variants_len)
+
         I @.expect(TOK_RBRACE()) == 0 { R 0 }
-        1
+
+        end := @.current_span_start()
+        store_i64(enum_ptr + 56, end)
+
+        @.add_item(ITEM_ENUM(), enum_ptr, start, end)
     }
 
     # =========== Parse Parameters ===========
@@ -1181,6 +1344,67 @@ X Parser {
         }
 
         params_ptr
+    }
+
+    # =========== Parse Generics ===========
+    # Parses generic parameters like <T, U, V>
+    # Returns pointer to array of GenericParam, stores count at ptr - 8
+
+    F parse_generics(&self) -> i64 {
+        # Check if there are generics
+        I @.check(TOK_LT()) == 0 {
+            # No generics, return null with 0 length stored at ptr - 8
+            result := malloc(16)
+            store_i64(result, 0)  # length = 0
+            R result + 8
+        }
+
+        @.advance()  # consume <
+
+        # Allocate space for generics (max 16 type parameters)
+        generics_ptr := malloc(16 * GenericParam.size() + 8)
+        store_i64(generics_ptr, 0)  # length stored at start
+        generics_ptr = generics_ptr + 8
+        generics_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_GT()) == 1 { B }
+            I @.is_at_end() == 1 { B }
+            I self.has_error == 1 { B }
+
+            param_start := @.current_span_start()
+
+            # Expect identifier (type parameter name)
+            I @.check(TOK_IDENT()) == 0 {
+                @.set_error_expected(TOK_IDENT())
+                B
+            }
+            tok := @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+            # TODO: Parse trait bounds (: Clone + Debug)
+            # For now, we skip bounds
+
+            # Store GenericParam
+            param_ptr := generics_ptr + generics_len * GenericParam.size()
+            store_i64(param_ptr + 0, name_idx)      # name_idx
+            store_i64(param_ptr + 8, 0)             # bounds_ptr (none for now)
+            store_i64(param_ptr + 16, 0)            # bounds_len
+            store_i64(param_ptr + 24, param_start)  # span_start
+            store_i64(param_ptr + 32, tok.span_end) # span_end
+            generics_len = generics_len + 1
+
+            # Optional comma
+            I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+        }
+
+        # Expect >
+        I @.expect(TOK_GT()) == 0 { R 0 }
+
+        # Store length at generics_ptr - 8
+        store_i64(generics_ptr - 8, generics_len)
+
+        generics_ptr
     }
 
     # =========== Parse Type ===========

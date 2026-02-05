@@ -123,7 +123,7 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 - [ ] Guard expressions (pattern if cond => ...)
 
 ### Type System
-- [ ] Generic types <T>
+- [x] Generic types <T> parsing ✅ (parser.vais, parser_s1.vais)
 - [ ] Type inference improvements
 - [ ] Option<T> / Result<T, E>
 
