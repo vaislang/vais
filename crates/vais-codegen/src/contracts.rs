@@ -24,7 +24,7 @@
 //! ```
 
 use crate::{CodeGenerator, CodegenResult};
-use vais_ast::{Function, Expr, Spanned, IfElse, BinOp, Type};
+use vais_ast::{BinOp, Expr, Function, IfElse, Spanned, Type};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -47,13 +47,8 @@ impl CodeGenerator {
         for (idx, attr) in f.attributes.iter().enumerate() {
             if attr.name == "requires" {
                 if let Some(expr) = &attr.expr {
-                    let check_ir = self.generate_contract_check(
-                        expr,
-                        &f.name.node,
-                        "requires",
-                        idx,
-                        counter,
-                    )?;
+                    let check_ir =
+                        self.generate_contract_check(expr, &f.name.node, "requires", idx, counter)?;
                     ir.push_str(&check_ir);
                 }
             }
@@ -110,13 +105,8 @@ impl CodeGenerator {
         for (idx, attr) in f.attributes.iter().enumerate() {
             if attr.name == "ensures" {
                 if let Some(expr) = &attr.expr {
-                    let check_ir = self.generate_contract_check(
-                        expr,
-                        &f.name.node,
-                        "ensures",
-                        idx,
-                        counter,
-                    )?;
+                    let check_ir =
+                        self.generate_contract_check(expr, &f.name.node, "ensures", idx, counter)?;
                     ir.push_str(&check_ir);
                 }
             }
@@ -145,7 +135,7 @@ impl CodeGenerator {
         &mut self,
         expr: &Spanned<Expr>,
         func_name: &str,
-        kind: &str,  // "requires" or "ensures"
+        kind: &str, // "requires" or "ensures"
         idx: usize,
         counter: &mut usize,
     ) -> CodegenResult<String> {
@@ -163,10 +153,7 @@ impl CodeGenerator {
         // VAIS uses i64 for bool, but LLVM branch needs i1
         let cond_i1 = format!("%contract_cond_i1_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!(
-            "  {} = icmp ne i64 {}, 0\n",
-            cond_i1, cond_value
-        ));
+        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
 
         // Branch based on condition
         ir.push_str(&format!(
@@ -181,10 +168,12 @@ impl CodeGenerator {
         let kind_value = if kind == "requires" { 1 } else { 2 };
 
         // Create string constants for error message
-        let condition_str = self.get_or_create_contract_string(
-            &format!("{} condition #{}", kind, idx)
-        );
-        let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+        let condition_str =
+            self.get_or_create_contract_string(&format!("{} condition #{}", kind, idx));
+        let file_name = self
+            .current_file
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -208,18 +197,27 @@ impl CodeGenerator {
     fn get_or_create_contract_string(&mut self, s: &str) -> String {
         // Check if we already have this string
         if let Some(name) = self.contract_string_constants.get(s) {
-            return format!("getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
-                s.len() + 1, s.len() + 1, name);
+            return format!(
+                "getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
+                s.len() + 1,
+                s.len() + 1,
+                name
+            );
         }
 
         // Create a new string constant
         let const_name = format!("@.str.contract.{}", self.contract_string_counter);
         self.contract_string_counter += 1;
 
-        self.contract_string_constants.insert(s.to_string(), const_name.clone());
+        self.contract_string_constants
+            .insert(s.to_string(), const_name.clone());
 
-        format!("getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
-            s.len() + 1, s.len() + 1, const_name)
+        format!(
+            "getelementptr inbounds ([{} x i8], [{} x i8]* {}, i64 0, i64 0)",
+            s.len() + 1,
+            s.len() + 1,
+            const_name
+        )
     }
 
     /// Generate declarations for contract runtime functions
@@ -259,7 +257,9 @@ impl CodeGenerator {
     /// Check if a function has any contract attributes
     #[allow(dead_code)]
     pub(crate) fn has_contracts(f: &Function) -> bool {
-        f.attributes.iter().any(|a| a.name == "requires" || a.name == "ensures" || a.name == "contract")
+        f.attributes
+            .iter()
+            .any(|a| a.name == "requires" || a.name == "ensures" || a.name == "contract")
     }
 
     /// Check if a function has the #[contract] attribute with specific options
@@ -392,10 +392,11 @@ impl CodeGenerator {
         ir.push_str(&format!("{}:\n", fail_label));
 
         let kind_value = 1; // CONTRACT_REQUIRES
-        let condition_str = self.get_or_create_contract_string(
-            &format!("{} != null", param_name)
-        );
-        let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+        let condition_str = self.get_or_create_contract_string(&format!("{} != null", param_name));
+        let file_name = self
+            .current_file
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -438,7 +439,9 @@ impl CodeGenerator {
         let mut divisors = Vec::new();
 
         // Collect integer parameter names
-        let int_params: Vec<String> = f.params.iter()
+        let int_params: Vec<String> = f
+            .params
+            .iter()
             .filter(|p| self.is_integer_type(&p.ty.node))
             .map(|p| p.name.node.clone())
             .collect();
@@ -462,7 +465,10 @@ impl CodeGenerator {
     fn is_integer_type(&self, ty: &Type) -> bool {
         match ty {
             Type::Named { name, .. } => {
-                matches!(name.as_str(), "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize" | "usize")
+                matches!(
+                    name.as_str(),
+                    "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize" | "usize"
+                )
             }
             _ => false,
         }
@@ -471,7 +477,9 @@ impl CodeGenerator {
     /// Find divisor variables in an expression
     fn find_divisors_in_expr(&self, expr: &Expr, params: &[String], divisors: &mut Vec<String>) {
         match expr {
-            Expr::Binary { op, right, left, .. } => {
+            Expr::Binary {
+                op, right, left, ..
+            } => {
                 if matches!(op, BinOp::Div | BinOp::Mod) {
                     // Check if right-hand side is a parameter
                     if let Expr::Ident(name) = &right.node {
@@ -492,7 +500,9 @@ impl CodeGenerator {
                     self.find_divisors_in_expr(&arg.node, params, divisors);
                 }
             }
-            Expr::If { cond, then, else_, .. } => {
+            Expr::If {
+                cond, then, else_, ..
+            } => {
                 self.find_divisors_in_expr(&cond.node, params, divisors);
                 for stmt in then {
                     self.find_divisors_in_stmt(&stmt.node, params, divisors);
@@ -511,7 +521,12 @@ impl CodeGenerator {
     }
 
     /// Find divisor variables in a statement
-    fn find_divisors_in_stmt(&self, stmt: &vais_ast::Stmt, params: &[String], divisors: &mut Vec<String>) {
+    fn find_divisors_in_stmt(
+        &self,
+        stmt: &vais_ast::Stmt,
+        params: &[String],
+        divisors: &mut Vec<String>,
+    ) {
         match stmt {
             vais_ast::Stmt::Let { value, .. } => {
                 self.find_divisors_in_expr(&value.node, params, divisors);
@@ -527,7 +542,12 @@ impl CodeGenerator {
     }
 
     /// Find divisors in if-else branches
-    fn find_divisors_in_if_else(&self, branch: &IfElse, params: &[String], divisors: &mut Vec<String>) {
+    fn find_divisors_in_if_else(
+        &self,
+        branch: &IfElse,
+        params: &[String],
+        divisors: &mut Vec<String>,
+    ) {
         match branch {
             IfElse::ElseIf(cond, then, else_) => {
                 self.find_divisors_in_expr(&cond.node, params, divisors);
@@ -565,10 +585,7 @@ impl CodeGenerator {
         // Check if not zero
         let cond_i1 = format!("%nonzero_cond_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!(
-            "  {} = icmp ne i64 {}, 0\n",
-            cond_i1, param_ref
-        ));
+        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, param_ref));
 
         ir.push_str(&format!(
             "  br i1 {}, label %{}, label %{}\n",
@@ -579,10 +596,12 @@ impl CodeGenerator {
         ir.push_str(&format!("{}:\n", fail_label));
 
         let kind_value = 1; // CONTRACT_REQUIRES
-        let condition_str = self.get_or_create_contract_string(
-            &format!("{} != 0 (division by zero)", param_name)
-        );
-        let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+        let condition_str =
+            self.get_or_create_contract_string(&format!("{} != 0 (division by zero)", param_name));
+        let file_name = self
+            .current_file
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let file_str = self.get_or_create_contract_string(&file_name);
         let func_str = self.get_or_create_contract_string(func_name);
 
@@ -662,10 +681,7 @@ impl CodeGenerator {
         // Convert condition to i1
         let cond_i1 = format!("%assert_cond_i1_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!(
-            "  {} = icmp ne i64 {}, 0\n",
-            cond_i1, cond_value
-        ));
+        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
 
         // Branch based on condition
         ir.push_str(&format!(
@@ -684,19 +700,17 @@ impl CodeGenerator {
             msg_val
         } else {
             // Default message
-            let default_msg = format!("Assertion failed at {}:{}",
+            let default_msg = format!(
+                "Assertion failed at {}:{}",
                 self.current_file.as_deref().unwrap_or("unknown"),
                 self.debug_info.offset_to_line(condition.span.start)
             );
-            
+
             self.get_or_create_contract_string(&default_msg)
         };
 
         // Call __panic to terminate
-        ir.push_str(&format!(
-            "  call i64 @__panic(i8* {})\n",
-            msg_str
-        ));
+        ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_str));
         ir.push_str("  unreachable\n");
 
         // Success block
@@ -724,17 +738,11 @@ impl CodeGenerator {
         // Convert condition to i1
         let cond_i1 = format!("%assume_cond_i1_{}", *counter);
         *counter += 1;
-        ir.push_str(&format!(
-            "  {} = icmp ne i64 {}, 0\n",
-            cond_i1, cond_value
-        ));
+        ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
 
         if self.release_mode {
             // In release mode, use LLVM assume intrinsic for optimization hints
-            ir.push_str(&format!(
-                "  call void @llvm.assume(i1 {})\n",
-                cond_i1
-            ));
+            ir.push_str(&format!("  call void @llvm.assume(i1 {})\n", cond_i1));
         } else {
             // In debug mode, check the assumption
             let ok_label = format!("assume_ok_{}", *counter);
@@ -749,16 +757,14 @@ impl CodeGenerator {
             // Failure block
             ir.push_str(&format!("{}:\n", fail_label));
 
-            let fail_msg = format!("Assumption violated at {}:{}",
+            let fail_msg = format!(
+                "Assumption violated at {}:{}",
                 self.current_file.as_deref().unwrap_or("unknown"),
                 self.debug_info.offset_to_line(condition.span.start)
             );
             let msg_const = self.get_or_create_contract_string(&fail_msg);
 
-            ir.push_str(&format!(
-                "  call i64 @__panic(i8* {})\n",
-                msg_const
-            ));
+            ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_const));
             ir.push_str("  unreachable\n");
 
             // Success block
@@ -786,7 +792,8 @@ impl CodeGenerator {
 
         // Look up struct's invariant attributes
         let struct_info = self.structs.get(struct_name).cloned();
-        let invariants = struct_info.as_ref()
+        let invariants = struct_info
+            .as_ref()
             .map(|s| s.invariants.clone())
             .unwrap_or_default();
 
@@ -831,10 +838,7 @@ impl CodeGenerator {
 
             let cond_i1 = format!("%invariant_cond_i1_{}", *counter);
             *counter += 1;
-            ir.push_str(&format!(
-                "  {} = icmp ne i64 {}, 0\n",
-                cond_i1, cond_value
-            ));
+            ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_i1, cond_value));
 
             ir.push_str(&format!(
                 "  br i1 {}, label %{}, label %{}\n",
@@ -845,13 +849,18 @@ impl CodeGenerator {
             ir.push_str(&format!("{}:\n", fail_label));
 
             let kind_value = 3; // CONTRACT_INVARIANT
-            let condition_str = self.get_or_create_contract_string(
-                &format!("invariant #{} of {}", idx, struct_name)
-            );
-            let file_name = self.current_file.clone().unwrap_or_else(|| "unknown".to_string());
+            let condition_str = self
+                .get_or_create_contract_string(&format!("invariant #{} of {}", idx, struct_name));
+            let file_name = self
+                .current_file
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
             let file_str = self.get_or_create_contract_string(&file_name);
             let func_str = self.get_or_create_contract_string(
-                &self.current_function.clone().unwrap_or_else(|| "unknown".to_string())
+                &self
+                    .current_function
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string()),
             );
             let line = self.debug_info.offset_to_line(invariant_expr.span.start) as i64;
 
@@ -916,10 +925,7 @@ impl CodeGenerator {
                 let ty = self.infer_expr_type(inner);
                 let llvm_ty = self.type_to_llvm(&ty);
 
-                ir.push_str(&format!(
-                    "  %{} = alloca {}\n",
-                    snapshot_name, llvm_ty
-                ));
+                ir.push_str(&format!("  %{} = alloca {}\n", snapshot_name, llvm_ty));
                 ir.push_str(&format!(
                     "  store {} {}, {}* %{}\n",
                     llvm_ty, value, llvm_ty, snapshot_name
@@ -1035,14 +1041,8 @@ impl CodeGenerator {
 
                     // Store the initial value for comparison in recursive calls
                     let storage_name = format!("__decreases_{}_{}", f.name.node, idx);
-                    ir.push_str(&format!(
-                        "  %{} = alloca i64\n",
-                        storage_name
-                    ));
-                    ir.push_str(&format!(
-                        "  store i64 {}, i64* %{}\n",
-                        value, storage_name
-                    ));
+                    ir.push_str(&format!("  %{} = alloca i64\n", storage_name));
+                    ir.push_str(&format!("  store i64 {}, i64* %{}\n", value, storage_name));
 
                     // Store decreases info for recursive call checking
                     self.current_decreases_info = Some(crate::DecreasesInfo {
@@ -1058,10 +1058,7 @@ impl CodeGenerator {
 
                     let cmp_result = format!("%decreases_cmp_{}", *counter);
                     *counter += 1;
-                    ir.push_str(&format!(
-                        "  {} = icmp sge i64 {}, 0\n",
-                        cmp_result, value
-                    ));
+                    ir.push_str(&format!("  {} = icmp sge i64 {}, 0\n", cmp_result, value));
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
                         cmp_result, ok_label, fail_label
@@ -1070,12 +1067,12 @@ impl CodeGenerator {
                     // Failure block
                     ir.push_str(&format!("{}:\n", fail_label));
 
-                    let fail_msg = format!("decreases expression must be non-negative in function '{}'", f.name.node);
+                    let fail_msg = format!(
+                        "decreases expression must be non-negative in function '{}'",
+                        f.name.node
+                    );
                     let msg_const = self.get_or_create_contract_string(&fail_msg);
-                    ir.push_str(&format!(
-                        "  call i64 @__panic(i8* {})\n",
-                        msg_const
-                    ));
+                    ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_const));
                     ir.push_str("  unreachable\n");
 
                     // Success block
@@ -1143,7 +1140,10 @@ impl CodeGenerator {
                     *counter += 1;
                     let ty = self.type_to_llvm(param_type);
                     ir.push_str(&format!("  %{} = alloca {}\n", temp_var, ty));
-                    ir.push_str(&format!("  store {} {}, {}* %{}\n", ty, arg_val, ty, temp_var));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* %{}\n",
+                        ty, arg_val, ty, temp_var
+                    ));
 
                     // Register in locals so generate_expr can find it
                     self.locals.insert(
@@ -1192,10 +1192,7 @@ impl CodeGenerator {
             decreases_info.function_name
         );
         let msg_const = self.get_or_create_contract_string(&fail_msg);
-        ir.push_str(&format!(
-            "  call i64 @__panic(i8* {})\n",
-            msg_const
-        ));
+        ir.push_str(&format!("  call i64 @__panic(i8* {})\n", msg_const));
         ir.push_str("  unreachable\n");
 
         // Success block
@@ -1218,6 +1215,8 @@ impl CodeGenerator {
     /// Get the function name with decreases clause (if any)
     #[allow(dead_code)]
     pub(crate) fn get_decreases_function_name(&self) -> Option<String> {
-        self.current_decreases_info.as_ref().map(|info| info.function_name.clone())
+        self.current_decreases_info
+            .as_ref()
+            .map(|info| info.function_name.clone())
     }
 }

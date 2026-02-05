@@ -4,16 +4,16 @@
 
 mod token_conv;
 
-use pyo3::prelude::*;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
+use vais_ast::Module;
+use vais_codegen::optimize::{optimize_ir, OptLevel};
+use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_lexer::tokenize as vais_tokenize;
 use vais_parser::{parse as vais_parse, ParseError};
-use vais_ast::Module;
 use vais_types::TypeChecker;
-use vais_codegen::{CodeGenerator, TargetTriple};
-use vais_codegen::optimize::{optimize_ir, OptLevel};
 
 /// Represents a compilation error
 #[pyclass]
@@ -31,9 +31,14 @@ pub struct Error {
 impl Error {
     fn __repr__(&self) -> String {
         match self.span {
-            Some((start, end)) => format!("Error(type='{}', message='{}', span=({}, {}))",
-                self.error_type, self.message, start, end),
-            None => format!("Error(type='{}', message='{}')", self.error_type, self.message),
+            Some((start, end)) => format!(
+                "Error(type='{}', message='{}', span=({}, {}))",
+                self.error_type, self.message, start, end
+            ),
+            None => format!(
+                "Error(type='{}', message='{}')",
+                self.error_type, self.message
+            ),
         }
     }
 }
@@ -54,10 +59,14 @@ pub struct TokenInfo {
 impl TokenInfo {
     fn __repr__(&self) -> String {
         match &self.text {
-            Some(text) => format!("Token(type='{}', span=({}, {}), text='{}')",
-                self.token_type, self.span.0, self.span.1, text),
-            None => format!("Token(type='{}', span=({}, {}))",
-                self.token_type, self.span.0, self.span.1),
+            Some(text) => format!(
+                "Token(type='{}', span=({}, {}), text='{}')",
+                self.token_type, self.span.0, self.span.1, text
+            ),
+            None => format!(
+                "Token(type='{}', span=({}, {}))",
+                self.token_type, self.span.0, self.span.1
+            ),
         }
     }
 }
@@ -80,8 +89,10 @@ pub struct CompileResult {
 impl CompileResult {
     fn __repr__(&self) -> String {
         if self.success {
-            format!("CompileResult(success=True, ir_length={})",
-                self.ir.as_ref().map(|s| s.len()).unwrap_or(0))
+            format!(
+                "CompileResult(success=True, ir_length={})",
+                self.ir.as_ref().map(|s| s.len()).unwrap_or(0)
+            )
         } else {
             format!("CompileResult(success=False, errors={})", self.errors.len())
         }
@@ -89,7 +100,8 @@ impl CompileResult {
 
     /// Get the LLVM IR if compilation succeeded
     fn get_ir(&self) -> PyResult<String> {
-        self.ir.clone()
+        self.ir
+            .clone()
             .ok_or_else(|| PyRuntimeError::new_err("Compilation failed, no IR available"))
     }
 }
@@ -133,16 +145,17 @@ impl RunResult {
 ///     ValueError: If the source code contains lexical errors
 #[pyfunction]
 fn tokenize(source: String) -> PyResult<Vec<TokenInfo>> {
-    let tokens = vais_tokenize(&source)
-        .map_err(|e| PyValueError::new_err(format!("Lexer error: {}", e)))?;
+    let tokens =
+        vais_tokenize(&source).map_err(|e| PyValueError::new_err(format!("Lexer error: {}", e)))?;
 
-    Ok(tokens.iter().map(|st| {
-        TokenInfo {
+    Ok(tokens
+        .iter()
+        .map(|st| TokenInfo {
             token_type: token_conv::token_to_string(&st.token),
             span: (st.span.start, st.span.end),
             text: token_conv::token_text(&st.token, &source, &st.span),
-        }
-    }).collect())
+        })
+        .collect())
 }
 
 /// Serialize AST to Python dict
@@ -173,21 +186,25 @@ fn module_to_dict(module: &Module) -> PyResult<PyObject> {
 ///     ValueError: If the source code contains syntax errors
 #[pyfunction]
 fn parse(source: String) -> PyResult<PyObject> {
-    let ast = vais_parse(&source)
-        .map_err(|e| {
-            let error_msg = match &e {
-                ParseError::UnexpectedToken { found, expected, span } => {
-                    format!("Unexpected token {:?} at {:?}, expected {}", found, span, expected)
-                }
-                ParseError::UnexpectedEof { span } => {
-                    format!("Unexpected end of file at {:?}", span)
-                }
-                ParseError::InvalidExpression => {
-                    "Invalid expression".to_string()
-                }
-            };
-            PyValueError::new_err(error_msg)
-        })?;
+    let ast = vais_parse(&source).map_err(|e| {
+        let error_msg = match &e {
+            ParseError::UnexpectedToken {
+                found,
+                expected,
+                span,
+            } => {
+                format!(
+                    "Unexpected token {:?} at {:?}, expected {}",
+                    found, span, expected
+                )
+            }
+            ParseError::UnexpectedEof { span } => {
+                format!("Unexpected end of file at {:?}", span)
+            }
+            ParseError::InvalidExpression => "Invalid expression".to_string(),
+        };
+        PyValueError::new_err(error_msg)
+    })?;
 
     module_to_dict(&ast)
 }
@@ -206,15 +223,19 @@ fn check(source: String) -> PyResult<Vec<Error>> {
         Ok(ast) => ast,
         Err(e) => {
             let (message, span) = match &e {
-                ParseError::UnexpectedToken { found, expected, span } => {
-                    (format!("Unexpected token {:?}, expected {}", found, expected), Some((span.start, span.end)))
-                }
-                ParseError::UnexpectedEof { span } => {
-                    ("Unexpected end of file".to_string(), Some((span.start, span.end)))
-                }
-                ParseError::InvalidExpression => {
-                    ("Invalid expression".to_string(), None)
-                }
+                ParseError::UnexpectedToken {
+                    found,
+                    expected,
+                    span,
+                } => (
+                    format!("Unexpected token {:?}, expected {}", found, expected),
+                    Some((span.start, span.end)),
+                ),
+                ParseError::UnexpectedEof { span } => (
+                    "Unexpected end of file".to_string(),
+                    Some((span.start, span.end)),
+                ),
+                ParseError::InvalidExpression => ("Invalid expression".to_string(), None),
             };
             return Ok(vec![Error {
                 message,
@@ -228,13 +249,11 @@ fn check(source: String) -> PyResult<Vec<Error>> {
     let mut checker = TypeChecker::new();
     match checker.check_module(&ast) {
         Ok(_) => Ok(vec![]),
-        Err(e) => {
-            Ok(vec![Error {
-                message: e.to_string(),
-                span: None,
-                error_type: "TypeError".to_string(),
-            }])
-        }
+        Err(e) => Ok(vec![Error {
+            message: e.to_string(),
+            span: None,
+            error_type: "TypeError".to_string(),
+        }]),
     }
 }
 
@@ -273,15 +292,19 @@ fn compile_to_result(
         Ok(ast) => ast,
         Err(e) => {
             let (message, span) = match &e {
-                ParseError::UnexpectedToken { found, expected, span } => {
-                    (format!("Unexpected token {:?}, expected {}", found, expected), Some((span.start, span.end)))
-                }
-                ParseError::UnexpectedEof { span } => {
-                    ("Unexpected end of file".to_string(), Some((span.start, span.end)))
-                }
-                ParseError::InvalidExpression => {
-                    ("Invalid expression".to_string(), None)
-                }
+                ParseError::UnexpectedToken {
+                    found,
+                    expected,
+                    span,
+                } => (
+                    format!("Unexpected token {:?}, expected {}", found, expected),
+                    Some((span.start, span.end)),
+                ),
+                ParseError::UnexpectedEof { span } => (
+                    "Unexpected end of file".to_string(),
+                    Some((span.start, span.end)),
+                ),
+                ParseError::InvalidExpression => ("Invalid expression".to_string(), None),
             };
             errors.push(Error {
                 message,
@@ -374,7 +397,9 @@ fn compile(
     if result.success {
         result.get_ir()
     } else {
-        let error_msgs: Vec<String> = result.errors.iter()
+        let error_msgs: Vec<String> = result
+            .errors
+            .iter()
             .map(|e| format!("{}: {}", e.error_type, e.message))
             .collect();
         Err(PyRuntimeError::new_err(error_msgs.join("\n")))
@@ -396,10 +421,7 @@ fn compile(
 ///     execute it separately with your preferred LLVM toolchain.
 #[pyfunction]
 #[pyo3(signature = (source, opt_level=0))]
-fn compile_and_run(
-    source: String,
-    opt_level: u8,
-) -> PyResult<RunResult> {
+fn compile_and_run(source: String, opt_level: u8) -> PyResult<RunResult> {
     // First compile
     let compile_result = compile_to_result(source, opt_level, None, None)?;
 

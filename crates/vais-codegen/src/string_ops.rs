@@ -5,7 +5,7 @@
 //! Interops with existing malloc/memcpy via inttoptr/ptrtoint conversions.
 
 use crate::{CodeGenerator, CodegenError, CodegenResult};
-use vais_ast::{Spanned, Expr, BinOp};
+use vais_ast::{BinOp, Expr, Spanned};
 
 impl CodeGenerator {
     /// Generate LLVM IR for string binary operations (+, ==, !=, <, >)
@@ -42,10 +42,7 @@ impl CodeGenerator {
                     eq_result, cmp_result
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i1 {} to i64\n",
-                    result, eq_result
-                ));
+                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, eq_result));
                 Ok((result, ir))
             }
             BinOp::Neq => {
@@ -60,10 +57,7 @@ impl CodeGenerator {
                     neq_result, cmp_result
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i1 {} to i64\n",
-                    result, neq_result
-                ));
+                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, neq_result));
                 Ok((result, ir))
             }
             BinOp::Lt => {
@@ -78,10 +72,7 @@ impl CodeGenerator {
                     lt_result, cmp_result
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i1 {} to i64\n",
-                    result, lt_result
-                ));
+                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, lt_result));
                 Ok((result, ir))
             }
             BinOp::Gt => {
@@ -96,14 +87,12 @@ impl CodeGenerator {
                     gt_result, cmp_result
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i1 {} to i64\n",
-                    result, gt_result
-                ));
+                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, gt_result));
                 Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
-                "string operation {:?} not supported", op
+                "string operation {:?} not supported",
+                op
             ))),
         }
     }
@@ -132,7 +121,7 @@ impl CodeGenerator {
             "charAt" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(
-                        "charAt requires an index argument".to_string()
+                        "charAt requires an index argument".to_string(),
                     ));
                 }
                 let (idx_val, idx_ir) = self.generate_expr(&args[0], counter)?;
@@ -144,21 +133,15 @@ impl CodeGenerator {
                     ptr, recv_val, idx_val
                 ));
                 let byte = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load i8, i8* {}\n",
-                    byte, ptr
-                ));
+                ir.push_str(&format!("  {} = load i8, i8* {}\n", byte, ptr));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i8 {} to i64\n",
-                    result, byte
-                ));
+                ir.push_str(&format!("  {} = zext i8 {} to i64\n", result, byte));
                 Ok((result, ir))
             }
             "contains" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(
-                        "contains requires a string argument".to_string()
+                        "contains requires a string argument".to_string(),
                     ));
                 }
                 let (substr_val, substr_ir) = self.generate_expr(&args[0], counter)?;
@@ -175,16 +158,13 @@ impl CodeGenerator {
                     is_null, strstr_result
                 ));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i1 {} to i64\n",
-                    result, is_null
-                ));
+                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, is_null));
                 Ok((result, ir))
             }
             "indexOf" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(
-                        "indexOf requires a string argument".to_string()
+                        "indexOf requires a string argument".to_string(),
                     ));
                 }
                 let (substr_val, substr_ir) = self.generate_expr(&args[0], counter)?;
@@ -200,7 +180,7 @@ impl CodeGenerator {
             "substring" => {
                 if args.len() < 2 {
                     return Err(CodegenError::Unsupported(
-                        "substring requires start and end arguments".to_string()
+                        "substring requires start and end arguments".to_string(),
                     ));
                 }
                 let (start_val, start_ir) = self.generate_expr(&args[0], counter)?;
@@ -218,7 +198,7 @@ impl CodeGenerator {
             "startsWith" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(
-                        "startsWith requires a string argument".to_string()
+                        "startsWith requires a string argument".to_string(),
                     ));
                 }
                 let (prefix_val, prefix_ir) = self.generate_expr(&args[0], counter)?;
@@ -234,7 +214,7 @@ impl CodeGenerator {
             "endsWith" => {
                 if args.is_empty() {
                     return Err(CodegenError::Unsupported(
-                        "endsWith requires a string argument".to_string()
+                        "endsWith requires a string argument".to_string(),
                     ));
                 }
                 let (suffix_val, suffix_ir) = self.generate_expr(&args[0], counter)?;
@@ -249,24 +229,16 @@ impl CodeGenerator {
             }
             "isEmpty" => {
                 let byte = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = load i8, i8* {}\n",
-                    byte, recv_val
-                ));
+                ir.push_str(&format!("  {} = load i8, i8* {}\n", byte, recv_val));
                 let is_zero = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp eq i8 {}, 0\n",
-                    is_zero, byte
-                ));
+                ir.push_str(&format!("  {} = icmp eq i8 {}, 0\n", is_zero, byte));
                 let result = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = zext i1 {} to i64\n",
-                    result, is_zero
-                ));
+                ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, is_zero));
                 Ok((result, ir))
             }
             _ => Err(CodegenError::Unsupported(format!(
-                "string method '{}' not supported", method_name
+                "string method '{}' not supported",
+                method_name
             ))),
         }
     }

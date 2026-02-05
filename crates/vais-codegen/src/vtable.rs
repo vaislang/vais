@@ -158,16 +158,17 @@ done:
         // - methods: fn_ptr*...    ; method function pointers
 
         let mut fields = vec![
-            "i8*".to_string(),  // drop function or null
-            "i64".to_string(),  // size
-            "i64".to_string(),  // align
+            "i8*".to_string(), // drop function or null
+            "i64".to_string(), // size
+            "i64".to_string(), // align
         ];
 
         // Add method function pointer types
         for method_sig in trait_def.methods.values() {
             // Method signature: (self: i8*, params...) -> ret
             let mut param_types = vec!["i8*".to_string()]; // self pointer
-            for (_param_name, _param_ty, _) in &method_sig.params[1..] { // Skip self
+            for (_param_name, _param_ty, _) in &method_sig.params[1..] {
+                // Skip self
                 param_types.push("i64".to_string()); // Simplified: all args as i64
             }
 
@@ -202,9 +203,9 @@ done:
         let drop_fn_ptr = format!("i8* bitcast (void(i8*)* @{} to i8*)", drop_fn_name);
 
         let mut values = vec![
-            drop_fn_ptr,                           // drop function pointer
-            format!("i64 {}", type_size),          // size
-            format!("i64 {}", type_align),         // align
+            drop_fn_ptr,                   // drop function pointer
+            format!("i64 {}", type_size),  // size
+            format!("i64 {}", type_align), // align
         ];
 
         // Add method function pointers
@@ -233,16 +234,15 @@ done:
                         concrete_param_types.push("i64".to_string());
                     }
 
-                    let vtable_fn_type = format!("{}({})*", ret_type, vtable_param_types.join(", "));
-                    let concrete_fn_type = format!("{}({})*", ret_type, concrete_param_types.join(", "));
+                    let vtable_fn_type =
+                        format!("{}({})*", ret_type, vtable_param_types.join(", "));
+                    let concrete_fn_type =
+                        format!("{}({})*", ret_type, concrete_param_types.join(", "));
 
                     // Cast from concrete function type to vtable function type
                     values.push(format!(
                         "{} bitcast ({} @{} to {})",
-                        vtable_fn_type,
-                        concrete_fn_type,
-                        impl_name,
-                        vtable_fn_type
+                        vtable_fn_type, concrete_fn_type, impl_name, vtable_fn_type
                     ));
                 } else {
                     values.push("null".to_string());
@@ -303,7 +303,9 @@ done:
 
         ir.push_str(&format!(
             "  {} = bitcast {}* {} to i8*\n",
-            vtable_cast, "%vtable_type", vtable_info.global_name // Placeholder type
+            vtable_cast,
+            "%vtable_type",
+            vtable_info.global_name // Placeholder type
         ));
 
         // Create the trait object { data_ptr, vtable_ptr }
@@ -398,7 +400,9 @@ done:
         let result = if ret_type == "void" {
             ir.push_str(&format!(
                 "  call {} {}({})\n",
-                ret_type, fn_ptr, call_args.join(", ")
+                ret_type,
+                fn_ptr,
+                call_args.join(", ")
             ));
             "".to_string()
         } else {
@@ -407,7 +411,10 @@ done:
 
             ir.push_str(&format!(
                 "  {} = call {} {}({})\n",
-                result_name, ret_type, fn_ptr, call_args.join(", ")
+                result_name,
+                ret_type,
+                fn_ptr,
+                call_args.join(", ")
             ));
             result_name
         };
@@ -428,28 +435,40 @@ mod tests {
 
     fn create_test_trait() -> TraitDef {
         let mut methods = HashMap::new();
-        methods.insert("speak".to_string(), TraitMethodSig {
-            name: "speak".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-            ],
-            ret: ResolvedType::I64,
-            has_default: false,
-            is_async: false,
-            is_const: false,
-        });
-        methods.insert("move_to".to_string(), TraitMethodSig {
-            name: "move_to".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-                ("x".to_string(), ResolvedType::I64, false),
-                ("y".to_string(), ResolvedType::I64, false),
-            ],
-            ret: ResolvedType::Unit,
-            has_default: false,
-            is_async: false,
-            is_const: false,
-        });
+        methods.insert(
+            "speak".to_string(),
+            TraitMethodSig {
+                name: "speak".to_string(),
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::I64,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
+        methods.insert(
+            "move_to".to_string(),
+            TraitMethodSig {
+                name: "move_to".to_string(),
+                params: vec![
+                    (
+                        "self".to_string(),
+                        ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                        false,
+                    ),
+                    ("x".to_string(), ResolvedType::I64, false),
+                    ("y".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::Unit,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
 
         TraitDef {
             name: "Animal".to_string(),
@@ -549,7 +568,13 @@ mod tests {
 
     #[test]
     fn test_drop_function_name() {
-        assert_eq!(VtableGenerator::get_drop_function_name("MyType"), "__drop_MyType");
-        assert_eq!(VtableGenerator::get_drop_function_name("Vec_i64"), "__drop_Vec_i64");
+        assert_eq!(
+            VtableGenerator::get_drop_function_name("MyType"),
+            "__drop_MyType"
+        );
+        assert_eq!(
+            VtableGenerator::get_drop_function_name("Vec_i64"),
+            "__drop_Vec_i64"
+        );
     }
 }

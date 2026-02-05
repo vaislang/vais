@@ -122,7 +122,8 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Dot => "Dot",
         Token::ColonColon => "ColonColon",
         Token::HashBracket => "HashBracket",
-    }.to_string()
+    }
+    .to_string()
 }
 
 /// Extract text from token if it contains data

@@ -8,10 +8,10 @@
 //! Luc Maranget, adapted for Vais's type system.
 
 use crate::ResolvedType;
-use vais_ast::{Literal, MatchArm, Pattern, Spanned};
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use vais_ast::{Literal, MatchArm, Pattern, Spanned};
 
 /// Result of exhaustiveness check
 #[derive(Debug, Clone)]
@@ -159,10 +159,9 @@ impl ExhaustivenessChecker {
     /// Convert a type to its full pattern space
     fn type_to_pattern_space(&self, ty: &ResolvedType) -> PatternSpace {
         match ty {
-            ResolvedType::Bool => PatternSpace::Or(vec![
-                PatternSpace::Bool(true),
-                PatternSpace::Bool(false),
-            ]),
+            ResolvedType::Bool => {
+                PatternSpace::Or(vec![PatternSpace::Bool(true), PatternSpace::Bool(false)])
+            }
             ResolvedType::I8 => PatternSpace::IntRange(i8::MIN as i64, i8::MAX as i64),
             ResolvedType::I16 => PatternSpace::IntRange(i16::MIN as i64, i16::MAX as i64),
             ResolvedType::I32 => PatternSpace::IntRange(i32::MIN as i64, i32::MAX as i64),
@@ -216,7 +215,10 @@ impl ExhaustivenessChecker {
             }
             ResolvedType::Tuple(types) => PatternSpace::Constructor {
                 name: "".to_string(), // Anonymous tuple
-                fields: types.iter().map(|t| self.type_to_pattern_space(t)).collect(),
+                fields: types
+                    .iter()
+                    .map(|t| self.type_to_pattern_space(t))
+                    .collect(),
             },
             // Other types need wildcard
             _ => PatternSpace::Any,
@@ -389,7 +391,10 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces.into_iter().next().expect("length verified to be 1")
+                    new_spaces
+                        .into_iter()
+                        .next()
+                        .expect("length verified to be 1")
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -481,7 +486,10 @@ impl ExhaustivenessChecker {
                     PatternSpace::Empty
                 } else if new_spaces.len() == 1 {
                     // SAFETY: length checked to be exactly 1
-                    new_spaces.into_iter().next().expect("length verified to be 1")
+                    new_spaces
+                        .into_iter()
+                        .next()
+                        .expect("length verified to be 1")
                 } else {
                     PatternSpace::Or(new_spaces)
                 }
@@ -594,7 +602,10 @@ mod tests {
     }
 
     fn make_bool_pattern(b: bool) -> Spanned<Pattern> {
-        Spanned::new(Pattern::Literal(Literal::Bool(b)), vais_ast::Span::default())
+        Spanned::new(
+            Pattern::Literal(Literal::Bool(b)),
+            vais_ast::Span::default(),
+        )
     }
 
     fn make_arm(pattern: Spanned<Pattern>) -> MatchArm {
@@ -640,10 +651,7 @@ mod tests {
     #[test]
     fn test_non_exhaustive_int_match() {
         let mut checker = ExhaustivenessChecker::new();
-        let arms = vec![
-            make_arm(make_int_pattern(0)),
-            make_arm(make_int_pattern(1)),
-        ];
+        let arms = vec![make_arm(make_int_pattern(0)), make_arm(make_int_pattern(1))];
         let result = checker.check_match(&ResolvedType::I64, &arms);
         assert!(!result.is_exhaustive);
     }

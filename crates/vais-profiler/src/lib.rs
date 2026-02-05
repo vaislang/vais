@@ -1,7 +1,7 @@
 pub mod collector;
-pub mod reporter;
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub mod ffi;
+pub mod reporter;
 
 use collector::{CallGraph, MemoryTracker, SampleCollector};
 use parking_lot::RwLock;
@@ -130,7 +130,9 @@ impl Profiler {
         }
 
         let mut state = self.state.write();
-        state.sample_collector.add_sample(function_name, instruction_pointer);
+        state
+            .sample_collector
+            .add_sample(function_name, instruction_pointer);
     }
 
     pub fn record_allocation(&self, size: usize, address: usize) {

@@ -105,11 +105,11 @@ fn test_very_large_string_literal() {
 fn test_unicode_edge_cases() {
     let test_cases = [
         r#"F test() -> str = "Hello World""#, // ASCII
-        r#"F test() -> str = "안녕하세요""#,     // Korean
-        r#"F test() -> str = "日本語""#,        // Japanese
-        r#"F test() -> str = "中文""#,          // Chinese
-        r#"F test() -> str = "العربية""#,      // Arabic (RTL)
-        r#"F test() -> str = "Привет""#,       // Cyrillic
+        r#"F test() -> str = "안녕하세요""#,  // Korean
+        r#"F test() -> str = "日本語""#,      // Japanese
+        r#"F test() -> str = "中文""#,        // Chinese
+        r#"F test() -> str = "العربية""#,     // Arabic (RTL)
+        r#"F test() -> str = "Привет""#,      // Cyrillic
     ];
 
     for source in test_cases {
@@ -292,7 +292,7 @@ fn test_boundary_integers() {
         "F f() -> i64 = 0",
         "F f() -> i64 = 1",
         "F f() -> i64 = -1",
-        "F f() -> i64 = 9223372036854775807", // i64::MAX
+        "F f() -> i64 = 9223372036854775807",  // i64::MAX
         "F f() -> i64 = -9223372036854775808", // i64::MIN (as expression)
     ];
 
@@ -398,13 +398,13 @@ fn test_complex_nested_allocations() {
 fn test_error_recovery_no_leaks() {
     // Intentionally malformed programs should not leak memory
     let malformed_programs = [
-        "F f(",           // Incomplete function
-        "F f() ->",       // Incomplete return type
-        "F f() -> i64",   // Missing body
-        "S Point {",      // Incomplete struct
-        "E Color {",      // Incomplete enum
-        "{ { { {",        // Unbalanced braces
-        "))))",           // Unbalanced parentheses
+        "F f(",               // Incomplete function
+        "F f() ->",           // Incomplete return type
+        "F f() -> i64",       // Missing body
+        "S Point {",          // Incomplete struct
+        "E Color {",          // Incomplete enum
+        "{ { { {",            // Unbalanced braces
+        "))))",               // Unbalanced parentheses
         "F f() -> i64 = 1 +", // Incomplete expression
     ];
 

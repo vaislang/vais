@@ -95,7 +95,6 @@ pub enum DependencyKind {
     Build,
 }
 
-
 /// Package owner (for shared ownership)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageOwner {

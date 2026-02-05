@@ -135,7 +135,11 @@ impl SecurityFinding {
     }
 
     /// Creates a hardcoded secret finding
-    pub fn hardcoded_secret(description: impl Into<String>, location: Span, severity: Severity) -> Self {
+    pub fn hardcoded_secret(
+        description: impl Into<String>,
+        location: Span,
+        severity: Severity,
+    ) -> Self {
         Self::new(
             severity,
             FindingCategory::HardcodedSecret,
@@ -203,7 +207,11 @@ impl SecurityFinding {
 
 impl std::fmt::Display for SecurityFinding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "[{}] {} at {}..{}", self.severity, self.category, self.location.start, self.location.end)?;
+        writeln!(
+            f,
+            "[{}] {} at {}..{}",
+            self.severity, self.category, self.location.start, self.location.end
+        )?;
         writeln!(f, "  Description: {}", self.description)?;
         writeln!(f, "  Recommendation: {}", self.recommendation)?;
         Ok(())

@@ -3,14 +3,14 @@
 //! This module implements the Debug Adapter Protocol specification.
 //! See: https://microsoft.github.io/debug-adapter-protocol/
 
-pub mod types;
+pub mod codec;
+pub mod events;
 pub mod requests;
 pub mod responses;
-pub mod events;
-pub mod codec;
+pub mod types;
 
-pub use types::*;
+pub use codec::DapCodec;
+pub use events::*;
 pub use requests::*;
 pub use responses::*;
-pub use events::*;
-pub use codec::DapCodec;
+pub use types::*;

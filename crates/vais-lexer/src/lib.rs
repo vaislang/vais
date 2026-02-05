@@ -20,15 +20,16 @@ use std::fmt;
 /// assert_eq!(tokens[0].token, Token::Function);
 /// ```
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \t\r\n]+")]  // Skip whitespace
+#[logos(skip r"[ \t\r\n]+")] // Skip whitespace
 pub enum Token {
     // === Doc Comments ===
     #[regex(r"///[^\n]*", |lex| lex.slice()[3..].trim().to_string(), priority = 5)]
     DocComment(String),
 
     // === Regular Comments (lower priority than doc comments) ===
-    #[regex(r"#[^/\[\n][^\n]*", logos::skip)]     // Skip regular comments (but not doc comments or #[)
-    #[regex(r"#\n", logos::skip)]                  // Skip empty # lines
+    #[regex(r"#[^/\[\n][^\n]*", logos::skip)] // Skip regular comments (but not doc comments or #[)
+    #[regex(r"#\n", logos::skip)]
+    // Skip empty # lines
 
     // === Keywords (single-letter for token efficiency) ===
     // Higher priority than identifiers
@@ -638,10 +639,11 @@ mod tests {
         let tokens = tokenize(source).unwrap();
 
         // Verify lowercase 's' is lexed as Ident, not Struct
-        let s_tokens: Vec<_> = tokens.iter()
+        let s_tokens: Vec<_> = tokens
+            .iter()
             .filter(|t| matches!(&t.token, Token::Ident(s) if s == "s"))
             .collect();
-        assert_eq!(s_tokens.len(), 3);  // s:=0, s+=x, final s
+        assert_eq!(s_tokens.len(), 3); // s:=0, s+=x, final s
     }
 
     // ==================== Edge Case Tests ====================
@@ -797,7 +799,7 @@ mod tests {
         assert_eq!(tokens[7].token, Token::Break);
         assert_eq!(tokens[8].token, Token::Continue);
         assert_eq!(tokens[9].token, Token::TypeKeyword);
-        assert_eq!(tokens[10].token, Token::Trait);  // W is Trait
+        assert_eq!(tokens[10].token, Token::Trait); // W is Trait
         assert_eq!(tokens[11].token, Token::Async);
         assert_eq!(tokens[12].token, Token::Pub);
         assert_eq!(tokens[13].token, Token::Use);
@@ -923,7 +925,10 @@ F add(a:i64,
     fn test_unicode_in_string() {
         let source = r#""안녕하세요 🚀 世界""#;
         let tokens = tokenize(source).unwrap();
-        assert_eq!(tokens[0].token, Token::String("안녕하세요 🚀 世界".to_string()));
+        assert_eq!(
+            tokens[0].token,
+            Token::String("안녕하세요 🚀 世界".to_string())
+        );
     }
 
     #[test]
@@ -962,10 +967,18 @@ F add(a:i64,
 
         // Verify proper tokenization of nested generics
         assert!(tokens.iter().any(|t| t.token == Token::Struct));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Container")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Vec")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "HashMap")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Option")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Container")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Vec")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "HashMap")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Option")));
 
         // Count angle brackets (should be balanced with spaces)
         let lt_count = tokens.iter().filter(|t| t.token == Token::Lt).count();
@@ -992,12 +1005,21 @@ F add(a:i64,
         let source = r#"F get_items()->Option<Vec<str> >="""#;
         let tokens = tokenize(source).unwrap();
 
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Option")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Vec")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Option")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Vec")));
         let lt_count = tokens.iter().filter(|t| t.token == Token::Lt).count();
         let gt_count = tokens.iter().filter(|t| t.token == Token::Gt).count();
         // With space separation, both should be 2
-        assert!(lt_count >= 1 && gt_count >= 1, "Should have at least 1 Lt and 1 Gt, got lt={}, gt={}", lt_count, gt_count);
+        assert!(
+            lt_count >= 1 && gt_count >= 1,
+            "Should have at least 1 Lt and 1 Gt, got lt={}, gt={}",
+            lt_count,
+            gt_count
+        );
     }
 
     #[test]
@@ -1018,7 +1040,9 @@ F add(a:i64,
         let source = "F max_i64()->i64=9223372036854775807";
         let tokens = tokenize(source).unwrap();
 
-        assert!(tokens.iter().any(|t| t.token == Token::Int(9223372036854775807)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.token == Token::Int(9223372036854775807)));
     }
 
     #[test]
@@ -1035,7 +1059,10 @@ F add(a:i64,
                 // If it succeeds, check that no Int token was produced with a valid i64
                 let has_int_token = tokens.iter().any(|t| matches!(t.token, Token::Int(_)));
                 // The overflow value shouldn't be tokenized as a valid Int
-                assert!(!has_int_token, "i64 overflow should not be tokenized as valid Int");
+                assert!(
+                    !has_int_token,
+                    "i64 overflow should not be tokenized as valid Int"
+                );
             }
             Err(_) => {
                 // Expected: tokenization fails for overflow
@@ -1062,8 +1089,12 @@ F add(a:i64,
         let tokens = tokenize(source).unwrap();
 
         assert!(tokens.iter().any(|t| t.token == Token::Match));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Some")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "None")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Some")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "None")));
 
         // Count parentheses
         let lparen_count = tokens.iter().filter(|t| t.token == Token::LParen).count();
@@ -1089,9 +1120,15 @@ F add(a:i64,
         let source = "F transform<A:Clone,B:Default,C:Ord>(a:A,b:B,c:C)->C=c";
         let tokens = tokenize(source).unwrap();
 
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Clone")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Default")));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Ord")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Clone")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Default")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Ord")));
     }
 
     #[test]
@@ -1103,7 +1140,9 @@ F add(a:i64,
         assert!(tokens.iter().any(|t| t.token == Token::Float(0.0)));
         assert!(tokens.iter().any(|t| t.token == Token::Float(1.0)));
         assert!(tokens.iter().any(|t| t.token == Token::Float(0.5)));
-        assert!(tokens.iter().any(|t| t.token == Token::Float(999999.999999)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.token == Token::Float(999999.999999)));
     }
 
     #[test]
@@ -1148,7 +1187,9 @@ F add(a:i64,
         assert!(tokens.iter().any(|t| t.token == Token::Lt));
         assert!(tokens.iter().any(|t| t.token == Token::Gt));
         // But Vec should be an identifier
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "Vec")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "Vec")));
     }
 
     #[test]
@@ -1210,7 +1251,9 @@ F add(a:i64,
         let tokens = tokenize(source).unwrap();
 
         assert!(tokens.iter().any(|t| t.token == Token::Macro));
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
         assert!(tokens.iter().any(|t| t.token == Token::Bang));
     }
 
@@ -1229,7 +1272,9 @@ F add(a:i64,
         let source = "vec!(1, 2, 3)";
         let tokens = tokenize(source).unwrap();
 
-        assert!(tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.token, Token::Ident(s) if s == "vec")));
         assert!(tokens.iter().any(|t| t.token == Token::Bang));
         assert!(tokens.iter().any(|t| t.token == Token::LParen));
     }

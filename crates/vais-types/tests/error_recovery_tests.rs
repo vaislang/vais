@@ -3,8 +3,8 @@
 //! Validates that error messages are clear, contain error codes,
 //! and provide helpful suggestions for common mistakes.
 
-use vais_types::TypeChecker;
 use vais_parser::parse;
+use vais_types::TypeChecker;
 
 /// Helper: type-check source and return the error string
 fn check_error(source: &str) -> Option<vais_types::TypeError> {
@@ -24,8 +24,11 @@ fn test_error_code_type_mismatch() {
     if let Some(err) = check_error(source) {
         assert_eq!(err.error_code(), "E001");
         let msg = format!("{}", err);
-        assert!(msg.contains("mismatch") || msg.contains("Mismatch"),
-            "Type mismatch error should mention 'mismatch': {}", msg);
+        assert!(
+            msg.contains("mismatch") || msg.contains("Mismatch"),
+            "Type mismatch error should mention 'mismatch': {}",
+            msg
+        );
     }
 }
 
@@ -39,11 +42,17 @@ fn test_error_code_undefined_variable() {
     if let Some(err) = check_error(source) {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();
-        assert!(help.is_some(), "Undefined variable should have help message");
+        assert!(
+            help.is_some(),
+            "Undefined variable should have help message"
+        );
         let help_msg = help.unwrap();
         // Should suggest "count" for typo "cont"
-        assert!(help_msg.contains("count") || help_msg.contains("cont"),
-            "Help should suggest similar name: {}", help_msg);
+        assert!(
+            help_msg.contains("count") || help_msg.contains("cont"),
+            "Help should suggest similar name: {}",
+            help_msg
+        );
     }
 }
 
@@ -68,8 +77,11 @@ fn test_error_code_undefined_function() {
         // Type checker may report as E002 (UndefinedVar) or E004 (UndefinedFunction)
         // depending on resolution order
         let code = err.error_code();
-        assert!(code == "E002" || code == "E004",
-            "Expected E002 or E004, got: {}", code);
+        assert!(
+            code == "E002" || code == "E004",
+            "Expected E002 or E004, got: {}",
+            code
+        );
         let help = err.help();
         assert!(help.is_some(), "Undefined identifier should have help");
     }
@@ -85,8 +97,11 @@ fn test_error_code_arg_count() {
     if let Some(err) = check_error(source) {
         assert_eq!(err.error_code(), "E006");
         let msg = format!("{}", err);
-        assert!(msg.contains("expected") && msg.contains("got"),
-            "Arg count error should state expected vs got: {}", msg);
+        assert!(
+            msg.contains("expected") && msg.contains("got"),
+            "Arg count error should state expected vs got: {}",
+            msg
+        );
     }
 }
 
@@ -121,7 +136,11 @@ fn test_all_error_codes_are_assigned() {
             suggestion: None,
         },
         TypeError::NotCallable("i64".to_string(), None),
-        TypeError::ArgCount { expected: 2, got: 1, span: None },
+        TypeError::ArgCount {
+            expected: 2,
+            got: 1,
+            span: None,
+        },
         TypeError::CannotInfer,
         TypeError::Duplicate("x".to_string(), None),
         TypeError::ImmutableAssign("x".to_string(), None),
@@ -131,10 +150,22 @@ fn test_all_error_codes_are_assigned() {
 
     for err in &test_errors {
         let code = err.error_code();
-        assert!(code.starts_with('E'), "Error code should start with 'E': {}", code);
-        assert!(code.len() == 4, "Error code should be 4 chars (e.g., E001): {}", code);
+        assert!(
+            code.starts_with('E'),
+            "Error code should start with 'E': {}",
+            code
+        );
+        assert!(
+            code.len() == 4,
+            "Error code should be 4 chars (e.g., E001): {}",
+            code
+        );
         let num: Result<u16, _> = code[1..].parse();
-        assert!(num.is_ok(), "Error code should have numeric suffix: {}", code);
+        assert!(
+            num.is_ok(),
+            "Error code should have numeric suffix: {}",
+            code
+        );
     }
 }
 
@@ -150,8 +181,11 @@ fn test_help_message_for_immutable_assign() {
     let help = err.help();
     assert!(help.is_some());
     let help_msg = help.unwrap();
-    assert!(help_msg.contains("mutable") || help_msg.contains("mut"),
-        "Immutable assign help should suggest mut: {}", help_msg);
+    assert!(
+        help_msg.contains("mutable") || help_msg.contains("mut"),
+        "Immutable assign help should suggest mut: {}",
+        help_msg
+    );
 }
 
 #[test]
@@ -166,8 +200,11 @@ fn test_help_message_for_undefined_var_with_suggestion() {
     let help = err.help();
     assert!(help.is_some());
     let help_msg = help.unwrap();
-    assert!(help_msg.contains("count"),
-        "Help should contain suggestion 'count': {}", help_msg);
+    assert!(
+        help_msg.contains("count"),
+        "Help should contain suggestion 'count': {}",
+        help_msg
+    );
 }
 
 #[test]
@@ -182,8 +219,11 @@ fn test_help_message_for_type_mismatch_numeric() {
     let help = err.help();
     assert!(help.is_some());
     let help_msg = help.unwrap();
-    assert!(help_msg.contains("convert"),
-        "Numeric mismatch help should suggest conversion: {}", help_msg);
+    assert!(
+        help_msg.contains("convert"),
+        "Numeric mismatch help should suggest conversion: {}",
+        help_msg
+    );
 }
 
 // =============================================================
@@ -258,7 +298,10 @@ fn test_find_similar_name_none() {
 
     let candidates = vec!["count", "counter", "total"];
     let result = find_similar_name("zzzzzzzzz", candidates.into_iter());
-    assert!(result.is_none(), "Should not find similar name for very different input");
+    assert!(
+        result.is_none(),
+        "Should not find similar name for very different input"
+    );
 }
 
 // =============================================================
@@ -272,8 +315,11 @@ fn test_parse_error_unexpected_token() {
     assert!(result.is_err(), "Should fail to parse");
     let err = result.unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("Unexpected") || msg.contains("unexpected"),
-        "Parse error should indicate unexpected token: {}", msg);
+    assert!(
+        msg.contains("Unexpected") || msg.contains("unexpected"),
+        "Parse error should indicate unexpected token: {}",
+        msg
+    );
 }
 
 #[test]
@@ -282,4 +328,3 @@ fn test_parse_error_unexpected_eof() {
     let result = parse(source);
     assert!(result.is_err(), "Should fail to parse incomplete input");
 }
-

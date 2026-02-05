@@ -10,7 +10,11 @@ use vais_ast::{Expr, IfElse, Param, Pattern, Spanned, Stmt};
 impl CodeGenerator {
     /// Find free variables in a lambda expression
     /// Returns variables that are used in the body but not bound by parameters
-    pub(crate) fn find_lambda_captures(&self, params: &[Param], body: &Spanned<Expr>) -> Vec<String> {
+    pub(crate) fn find_lambda_captures(
+        &self,
+        params: &[Param],
+        body: &Spanned<Expr>,
+    ) -> Vec<String> {
         let param_names: HashSet<_> = params.iter().map(|p| p.name.node.clone()).collect();
         let mut free_vars = Vec::new();
         self.collect_free_vars_in_expr(&body.node, &param_names, &mut free_vars);

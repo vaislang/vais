@@ -21,8 +21,8 @@
 //! let msg = get("type.E001.message", &[("expected", "i64"), ("found", "Str")]);
 //! ```
 
-mod locale;
 mod loader;
+mod locale;
 mod message;
 
 pub use locale::Locale;
@@ -121,7 +121,10 @@ mod tests {
         let title = get_simple("type.E001.title");
         assert_eq!(title, "Type mismatch");
 
-        let msg = get("type.E001.message", &[("expected", "i64"), ("found", "Str")]);
+        let msg = get(
+            "type.E001.message",
+            &[("expected", "i64"), ("found", "Str")],
+        );
         assert_eq!(msg, "expected i64, found Str");
     }
 

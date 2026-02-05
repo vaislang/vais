@@ -155,7 +155,11 @@ impl Parser {
             Box::new(Spanned::new(Type::Unit, Span::new(span.start, span.end)))
         };
 
-        Ok(Type::FnPtr { params, ret, is_vararg })
+        Ok(Type::FnPtr {
+            params,
+            ret,
+            is_vararg,
+        })
     }
 }
 
@@ -237,7 +241,9 @@ mod tests {
             Item::Function(f) => {
                 assert_eq!(f.params.len(), 1);
                 match &f.params[0].ty.node {
-                    Type::FnPtr { params, is_vararg, .. } => {
+                    Type::FnPtr {
+                        params, is_vararg, ..
+                    } => {
                         assert_eq!(params.len(), 2);
                         assert!(!(*is_vararg));
                     }

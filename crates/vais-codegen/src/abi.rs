@@ -175,9 +175,9 @@ pub mod vtable {
     /// LLVM type for VTable with N methods
     pub fn vtable_type_with_methods(num_methods: usize) -> String {
         let mut fields = vec![
-            "i8*".to_string(),  // drop_fn
-            "i64".to_string(),  // size
-            "i64".to_string(),  // align
+            "i8*".to_string(), // drop_fn
+            "i64".to_string(), // size
+            "i64".to_string(), // align
         ];
 
         // Add method slots
@@ -332,14 +332,38 @@ mod tests {
 
     #[test]
     fn test_calling_convention_from_str() {
-        assert_eq!(CallingConvention::parse_abi("C"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::parse_abi("ccc"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::parse_abi("Vais"), Some(CallingConvention::Vais));
-        assert_eq!(CallingConvention::parse_abi("Fast"), Some(CallingConvention::Fast));
-        assert_eq!(CallingConvention::parse_abi("fastcc"), Some(CallingConvention::Fast));
-        assert_eq!(CallingConvention::parse_abi("stdcall"), Some(CallingConvention::StdCall));
-        assert_eq!(CallingConvention::parse_abi("fastcall"), Some(CallingConvention::FastCall));
-        assert_eq!(CallingConvention::parse_abi("system"), Some(CallingConvention::System));
+        assert_eq!(
+            CallingConvention::parse_abi("C"),
+            Some(CallingConvention::C)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("ccc"),
+            Some(CallingConvention::C)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("Vais"),
+            Some(CallingConvention::Vais)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("Fast"),
+            Some(CallingConvention::Fast)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("fastcc"),
+            Some(CallingConvention::Fast)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("stdcall"),
+            Some(CallingConvention::StdCall)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("fastcall"),
+            Some(CallingConvention::FastCall)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("system"),
+            Some(CallingConvention::System)
+        );
         assert_eq!(CallingConvention::parse_abi("invalid"), None);
     }
 
@@ -416,10 +440,7 @@ mod tests {
     #[test]
     fn test_vtable_type_with_methods() {
         // VTable with 0 methods
-        assert_eq!(
-            vtable::vtable_type_with_methods(0),
-            "{ i8*, i64, i64 }"
-        );
+        assert_eq!(vtable::vtable_type_with_methods(0), "{ i8*, i64, i64 }");
 
         // VTable with 1 method
         assert_eq!(

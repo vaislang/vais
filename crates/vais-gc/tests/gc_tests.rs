@@ -127,8 +127,10 @@ fn test_stress_allocation() {
 
 #[test]
 fn test_ffi_integration() {
-    use vais_gc::{vais_gc_init, vais_gc_alloc, vais_gc_collect,
-                  vais_gc_bytes_allocated, vais_gc_objects_count};
+    use vais_gc::{
+        vais_gc_alloc, vais_gc_bytes_allocated, vais_gc_collect, vais_gc_init,
+        vais_gc_objects_count,
+    };
 
     // Initialize GC
     vais_gc_init();

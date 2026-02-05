@@ -3,13 +3,15 @@
 //! These tests verify that the compiler correctly identifies which traits
 //! can be used as `dyn Trait` (trait objects).
 
-use vais_types::{TypeChecker, ObjectSafetyViolation};
 use vais_parser::parse;
+use vais_types::{ObjectSafetyViolation, TypeChecker};
 
 fn check_module(source: &str) -> Result<TypeChecker, String> {
     let module = parse(source).map_err(|e| format!("Parse error: {:?}", e))?;
     let mut checker = TypeChecker::new();
-    checker.check_module(&module).map_err(|e| format!("Type error: {:?}", e))?;
+    checker
+        .check_module(&module)
+        .map_err(|e| format!("Type error: {:?}", e))?;
     Ok(checker)
 }
 

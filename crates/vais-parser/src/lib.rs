@@ -3,8 +3,8 @@
 //! Recursive descent parser for AI-optimized syntax.
 
 mod expr;
-mod stmt;
 mod ffi;
+mod stmt;
 
 use thiserror::Error;
 use vais_ast::*;
@@ -30,7 +30,7 @@ pub enum ParseError {
     #[error("Unexpected end of file")]
     UnexpectedEof {
         /// Location where EOF was encountered
-        span: std::ops::Range<usize>
+        span: std::ops::Range<usize>,
     },
     /// Invalid or malformed expression
     #[error("Invalid expression")]
@@ -66,18 +66,14 @@ impl ParseError {
     pub fn localized_message(&self) -> String {
         let key = format!("parse.{}.message", self.error_code());
         match self {
-            ParseError::UnexpectedToken { found, expected, .. } => {
-                vais_i18n::get(&key, &[
-                    ("found", &format!("{:?}", found)),
-                    ("expected", expected),
-                ])
-            }
-            ParseError::UnexpectedEof { .. } => {
-                vais_i18n::get_simple(&key)
-            }
-            ParseError::InvalidExpression => {
-                vais_i18n::get_simple(&key)
-            }
+            ParseError::UnexpectedToken {
+                found, expected, ..
+            } => vais_i18n::get(
+                &key,
+                &[("found", &format!("{:?}", found)), ("expected", expected)],
+            ),
+            ParseError::UnexpectedEof { .. } => vais_i18n::get_simple(&key),
+            ParseError::InvalidExpression => vais_i18n::get_simple(&key),
         }
     }
 }
@@ -155,9 +151,15 @@ impl Parser {
         if self.depth > MAX_PARSE_DEPTH {
             let span = self.current_span();
             Err(ParseError::UnexpectedToken {
-                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".to_string())),
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".to_string())),
                 span,
-                expected: format!("expression (maximum nesting depth of {} exceeded)", MAX_PARSE_DEPTH),
+                expected: format!(
+                    "expression (maximum nesting depth of {} exceeded)",
+                    MAX_PARSE_DEPTH
+                ),
             })
         } else {
             Ok(())
@@ -209,15 +211,28 @@ impl Parser {
                         break;
                     }
                     // Statement-starting tokens (keywords)
-                    Token::Return | Token::Break | Token::Continue | Token::Defer |
-                    Token::If | Token::Loop | Token::Match => {
+                    Token::Return
+                    | Token::Break
+                    | Token::Continue
+                    | Token::Defer
+                    | Token::If
+                    | Token::Loop
+                    | Token::Match => {
                         break;
                     }
                     // Item-level keywords - if we hit these, we've gone too far
                     // (likely missing a closing brace in the function body)
-                    Token::Function | Token::Struct | Token::Enum | Token::Union |
-                    Token::Use | Token::Trait | Token::Impl |
-                    Token::Macro | Token::Pub | Token::Async | Token::Extern => {
+                    Token::Function
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::Union
+                    | Token::Use
+                    | Token::Trait
+                    | Token::Impl
+                    | Token::Macro
+                    | Token::Pub
+                    | Token::Async
+                    | Token::Extern => {
                         break;
                     }
                     _ => {
@@ -252,9 +267,17 @@ impl Parser {
             if let Some(tok) = self.peek() {
                 match &tok.token {
                     // Top-level item keywords
-                    Token::Function | Token::Struct | Token::Enum | Token::Union |
-                    Token::TypeKeyword | Token::Use | Token::Trait | Token::Impl |
-                    Token::Macro | Token::Pub | Token::Async => {
+                    Token::Function
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::Union
+                    | Token::TypeKeyword
+                    | Token::Use
+                    | Token::Trait
+                    | Token::Impl
+                    | Token::Macro
+                    | Token::Pub
+                    | Token::Async => {
                         break;
                     }
                     // Attributes can also start items
@@ -313,7 +336,9 @@ impl Parser {
                         }
                     }
                     // At top level (not nested), these are boundaries
-                    Token::Comma | Token::Semi if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
+                    Token::Comma | Token::Semi
+                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
+                    {
                         break;
                     }
                     _ => {}
@@ -454,9 +479,13 @@ impl Parser {
             Item::Global(self.parse_global_def(is_pub)?)
         } else {
             return Err(ParseError::UnexpectedToken {
-                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
-                expected: "F, S, E, O, T, U, W, X, N (extern), C (const), G (global), or macro".into(),
+                expected: "F, S, E, O, T, U, W, X, N (extern), C (const), G (global), or macro"
+                    .into(),
             });
         };
 
@@ -547,7 +576,11 @@ impl Parser {
             Vec::new()
         };
 
-        Ok(Attribute { name, args, expr: None })
+        Ok(Attribute {
+            name,
+            args,
+            expr: None,
+        })
     }
 
     /// Reconstruct expression string from token range (for error messages)
@@ -560,7 +593,12 @@ impl Parser {
     }
 
     /// Parse function: `name(params)->ret=expr` or `name(params)->ret{...}`
-    fn parse_function(&mut self, is_pub: bool, is_async: bool, attributes: Vec<Attribute>) -> ParseResult<Function> {
+    fn parse_function(
+        &mut self,
+        is_pub: bool,
+        is_async: bool,
+        attributes: Vec<Attribute>,
+    ) -> ParseResult<Function> {
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
@@ -587,7 +625,10 @@ impl Parser {
             FunctionBody::Block(stmts)
         } else {
             return Err(ParseError::UnexpectedToken {
-                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
                 expected: "= or {".into(),
             });
@@ -607,7 +648,6 @@ impl Parser {
 
     /// Parse struct: `Name{fields}` with optional methods
     fn parse_struct(&mut self, is_pub: bool, attributes: Vec<Attribute>) -> ParseResult<Struct> {
-
         let name = self.parse_ident()?;
         let generics = self.parse_generics()?;
 
@@ -1027,7 +1067,11 @@ impl Parser {
 
         self.expect_closing(&Token::RBrace, lbrace_span)?;
 
-        Ok(MacroDef { name, rules, is_pub })
+        Ok(MacroDef {
+            name,
+            rules,
+            is_pub,
+        })
     }
 
     /// Parse a single macro rule: `pattern => template`
@@ -1092,7 +1136,10 @@ impl Parser {
                 self.expect(&Token::RParen)?;
 
                 // Parse optional separator (e.g., `,`)
-                let separator = if !self.check(&Token::Star) && !self.check(&Token::Plus) && !self.check(&Token::Question) {
+                let separator = if !self.check(&Token::Star)
+                    && !self.check(&Token::Plus)
+                    && !self.check(&Token::Question)
+                {
                     let sep = self.parse_macro_token()?;
                     Some(sep)
                 } else {
@@ -1111,7 +1158,10 @@ impl Parser {
                     RepetitionKind::ZeroOrOne
                 } else {
                     return Err(ParseError::UnexpectedToken {
-                        found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                        found: self
+                            .peek()
+                            .map(|t| t.token.clone())
+                            .unwrap_or(Token::Ident("EOF".into())),
                         span: self.current_span(),
                         expected: "*, +, or ? for repetition".into(),
                     });
@@ -1129,11 +1179,16 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let kind_name = self.parse_ident()?.node;
 
-            let kind = kind_name.parse::<MetaVarKind>().map_err(|_| ParseError::UnexpectedToken {
-                found: Token::Ident(kind_name.clone()),
-                span: self.current_span(),
-                expected: "metavariable kind (expr, ty, ident, pat, stmt, block, item, lit, tt)".into(),
-            })?;
+            let kind =
+                kind_name
+                    .parse::<MetaVarKind>()
+                    .map_err(|_| ParseError::UnexpectedToken {
+                        found: Token::Ident(kind_name.clone()),
+                        span: self.current_span(),
+                        expected:
+                            "metavariable kind (expr, ty, ident, pat, stmt, block, item, lit, tt)"
+                                .into(),
+                    })?;
 
             return Ok(MacroPatternElement::MetaVar { name, kind });
         }
@@ -1177,7 +1232,9 @@ impl Parser {
     /// Parse a single macro token
     fn parse_macro_token(&mut self) -> ParseResult<MacroToken> {
         let span = self.current_span();
-        let tok = self.advance().ok_or(ParseError::UnexpectedEof { span: span.clone() })?;
+        let tok = self
+            .advance()
+            .ok_or(ParseError::UnexpectedEof { span: span.clone() })?;
 
         let macro_token = match &tok.token {
             Token::Ident(s) => MacroToken::Ident(s.clone()),
@@ -1264,7 +1321,10 @@ impl Parser {
                 self.expect(&Token::RParen)?;
 
                 // Parse optional separator
-                let separator = if !self.check(&Token::Star) && !self.check(&Token::Plus) && !self.check(&Token::Question) {
+                let separator = if !self.check(&Token::Star)
+                    && !self.check(&Token::Plus)
+                    && !self.check(&Token::Question)
+                {
                     let sep = self.parse_macro_token()?;
                     Some(sep)
                 } else {
@@ -1283,7 +1343,10 @@ impl Parser {
                     RepetitionKind::ZeroOrOne
                 } else {
                     return Err(ParseError::UnexpectedToken {
-                        found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                        found: self
+                            .peek()
+                            .map(|t| t.token.clone())
+                            .unwrap_or(Token::Ident("EOF".into())),
                         span: self.current_span(),
                         expected: "*, +, or ? for repetition".into(),
                     });
@@ -1338,7 +1401,9 @@ impl Parser {
     }
 
     /// Parse template elements until right paren
-    fn parse_macro_template_elements_until_rparen(&mut self) -> ParseResult<Vec<MacroTemplateElement>> {
+    fn parse_macro_template_elements_until_rparen(
+        &mut self,
+    ) -> ParseResult<Vec<MacroTemplateElement>> {
         let mut elements = Vec::new();
 
         while !self.check(&Token::RParen) && !self.is_at_end() {
@@ -1349,7 +1414,9 @@ impl Parser {
     }
 
     /// Parse template elements until right bracket
-    fn parse_macro_template_elements_until_rbracket(&mut self) -> ParseResult<Vec<MacroTemplateElement>> {
+    fn parse_macro_template_elements_until_rbracket(
+        &mut self,
+    ) -> ParseResult<Vec<MacroTemplateElement>> {
         let mut elements = Vec::new();
 
         while !self.check(&Token::RBracket) && !self.is_at_end() {
@@ -1380,13 +1447,20 @@ impl Parser {
             (Delimiter::Brace, tokens)
         } else {
             return Err(ParseError::UnexpectedToken {
-                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
                 expected: "'(', '[', or '{' for macro invocation".into(),
             });
         };
 
-        Ok(MacroInvoke { name, delimiter, tokens })
+        Ok(MacroInvoke {
+            name,
+            delimiter,
+            tokens,
+        })
     }
 
     /// Collect tokens until a specific delimiter, handling nesting
@@ -1403,7 +1477,10 @@ impl Parser {
             }
 
             // Track nesting
-            if self.check(&Token::LParen) || self.check(&Token::LBracket) || self.check(&Token::LBrace) {
+            if self.check(&Token::LParen)
+                || self.check(&Token::LBracket)
+                || self.check(&Token::LBrace)
+            {
                 depth += 1;
             }
 
@@ -1630,7 +1707,11 @@ impl Parser {
                     Token::Lt => angle_depth += 1,
                     Token::Gt => angle_depth -= 1,
                     // Stop at delimiters that indicate we've escaped the generic list
-                    Token::LParen | Token::LBrace | Token::Function | Token::Struct | Token::Enum => {
+                    Token::LParen
+                    | Token::LBrace
+                    | Token::Function
+                    | Token::Struct
+                    | Token::Enum => {
                         return;
                     }
                     _ => {}
@@ -1770,7 +1851,14 @@ impl Parser {
                 None
             };
 
-            params.push(Param { name, ty, is_mut, is_vararg: false, ownership, default_value });
+            params.push(Param {
+                name,
+                ty,
+                is_mut,
+                is_vararg: false,
+                ownership,
+                default_value,
+            });
 
             if !self.check(&Token::RParen) {
                 self.expect(&Token::Comma)?;
@@ -1922,7 +2010,10 @@ impl Parser {
             } else {
                 Vec::new()
             };
-            Type::DynTrait { trait_name, generics }
+            Type::DynTrait {
+                trait_name,
+                generics,
+            }
         } else if self.check(&Token::Linear) {
             // linear T - must be used exactly once
             self.advance();
@@ -2233,7 +2324,10 @@ impl Parser {
         }
 
         Err(ParseError::UnexpectedToken {
-            found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+            found: self
+                .peek()
+                .map(|t| t.token.clone())
+                .unwrap_or(Token::Ident("EOF".into())),
             span,
             expected: "const expression (integer literal or identifier)".into(),
         })
@@ -2272,7 +2366,10 @@ impl Parser {
             })
         } else {
             Err(ParseError::UnexpectedToken {
-                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
                 expected: Self::token_to_friendly_name(expected),
             })
@@ -2282,7 +2379,11 @@ impl Parser {
     /// Expect a closing delimiter with enhanced error recovery.
     /// When the expected closer is not found, records an error with the opening
     /// delimiter's location and attempts to synchronize.
-    fn expect_closing(&mut self, expected: &Token, open_span: std::ops::Range<usize>) -> ParseResult<SpannedToken> {
+    fn expect_closing(
+        &mut self,
+        expected: &Token,
+        open_span: std::ops::Range<usize>,
+    ) -> ParseResult<SpannedToken> {
         if self.check(expected) {
             return self.advance().ok_or_else(|| ParseError::UnexpectedEof {
                 span: self.current_span(),
@@ -2299,13 +2400,19 @@ impl Parser {
             _ => "opening delimiter",
         };
 
-        let found = self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into()));
+        let found = self
+            .peek()
+            .map(|t| t.token.clone())
+            .unwrap_or(Token::Ident("EOF".into()));
         let span = self.current_span();
 
         let err = ParseError::UnexpectedToken {
             found,
             span: span.clone(),
-            expected: format!("{} to match {} at position {}", closer_name, opener_name, open_span.start),
+            expected: format!(
+                "{} to match {} at position {}",
+                closer_name, opener_name, open_span.start
+            ),
         };
 
         if self.recovery_mode {
@@ -2586,7 +2693,10 @@ mod tests {
         let FunctionBody::Expr(expr) = &f.body else {
             unreachable!("Expected expression body");
         };
-        assert!(matches!(expr.node, Expr::Ternary { .. }), "Expected ternary expression");
+        assert!(
+            matches!(expr.node, Expr::Ternary { .. }),
+            "Expected ternary expression"
+        );
     }
 
     #[test]
@@ -3454,7 +3564,8 @@ F sum(n:Nested)->i64=M n{
     #[test]
     fn test_pattern_guard_with_multiple_conditions() {
         // Test guard with multiple && || conditions
-        let source = "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
+        let source =
+            "F check(x:i64,y:i64)->bool=M (x,y){(a,b) I a>0&&b>0||a<0&&b<0=>true,_=>false}";
         let module = parse(source).unwrap();
 
         let Item::Function(f) = &module.items[0].node else {
@@ -3748,7 +3859,10 @@ S ValidStruct{x:i64}
         }
 
         // The parser should recover after the error and parse remaining valid items
-        assert!(valid_function_count >= 1, "Should have parsed at least 1 valid function");
+        assert!(
+            valid_function_count >= 1,
+            "Should have parsed at least 1 valid function"
+        );
         assert_eq!(valid_struct_count, 1, "Should have parsed 1 valid struct");
         assert!(error_count >= 1, "Should have at least 1 error node");
     }
@@ -3829,10 +3943,14 @@ F good(a:i64,b:i64)->i64=a+b
         assert!(!errors.is_empty(), "Expected errors for broken function");
 
         // Should have recovered and parsed the good function
-        let has_good_function = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Function(f) if f.name.node == "good")
-        });
-        assert!(has_good_function, "Should have parsed 'good' function after recovery");
+        let has_good_function = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
+        assert!(
+            has_good_function,
+            "Should have parsed 'good' function after recovery"
+        );
     }
 
     #[test]
@@ -3847,9 +3965,10 @@ S Point{x:f64,y:f64}
 
         assert!(!errors.is_empty());
 
-        let has_struct = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Struct(s) if s.name.node == "Point")
-        });
+        let has_struct = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Struct(s) if s.name.node == "Point"));
         assert!(has_struct, "Should have parsed Point struct after recovery");
     }
 
@@ -3873,7 +3992,10 @@ S Point{x:f64,y:f64}
 
         let errors = parser.take_errors();
         assert!(!errors.is_empty(), "take_errors should return errors");
-        assert!(parser.errors().is_empty(), "errors should be empty after take");
+        assert!(
+            parser.errors().is_empty(),
+            "errors should be empty after take"
+        );
     }
 
     #[test]
@@ -3895,9 +4017,10 @@ E Good{X,Y}
 
         assert!(!errors.is_empty());
 
-        let has_good_enum = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Enum(e) if e.name.node == "Good")
-        });
+        let has_good_enum = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Enum(e) if e.name.node == "Good"));
         assert!(has_good_enum, "Should have parsed Good enum after recovery");
     }
 
@@ -3916,17 +4039,26 @@ W MyTrait{F method()->i64}
         assert!(!errors.is_empty(), "Should have errors for broken struct");
 
         // Count valid items
-        let valid_functions = module.items.iter().filter(|item| {
-            matches!(&item.node, Item::Function(_))
-        }).count();
-        let valid_enums = module.items.iter().filter(|item| {
-            matches!(&item.node, Item::Enum(_))
-        }).count();
-        let valid_traits = module.items.iter().filter(|item| {
-            matches!(&item.node, Item::Trait(_))
-        }).count();
+        let valid_functions = module
+            .items
+            .iter()
+            .filter(|item| matches!(&item.node, Item::Function(_)))
+            .count();
+        let valid_enums = module
+            .items
+            .iter()
+            .filter(|item| matches!(&item.node, Item::Enum(_)))
+            .count();
+        let valid_traits = module
+            .items
+            .iter()
+            .filter(|item| matches!(&item.node, Item::Trait(_)))
+            .count();
 
-        assert!(valid_functions >= 2, "Should have at least 2 valid functions");
+        assert!(
+            valid_functions >= 2,
+            "Should have at least 2 valid functions"
+        );
         assert!(valid_enums >= 1, "Should have at least 1 valid enum");
         assert!(valid_traits >= 1, "Should have at least 1 valid trait");
     }
@@ -3941,10 +4073,14 @@ F good() -> i64 = 42
         assert!(!errors.is_empty(), "Expected error for missing ')'");
 
         // Should still parse the good function
-        let has_good = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Function(f) if f.name.node == "good")
-        });
-        assert!(has_good, "Should have parsed 'good' function after recovery");
+        let has_good = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
+        assert!(
+            has_good,
+            "Should have parsed 'good' function after recovery"
+        );
     }
 
     #[test]
@@ -3959,10 +4095,14 @@ F good() -> i64 = 42
         let (module, errors) = parse_with_recovery(source);
         assert!(!errors.is_empty(), "Expected error for missing '}}'");
 
-        let has_good = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Function(f) if f.name.node == "good")
-        });
-        assert!(has_good, "Should have parsed 'good' function after recovery");
+        let has_good = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
+        assert!(
+            has_good,
+            "Should have parsed 'good' function after recovery"
+        );
     }
 
     #[test]
@@ -3974,10 +4114,14 @@ F good() -> i64 = 42
         let (module, errors) = parse_with_recovery(source);
         assert!(!errors.is_empty(), "Expected error for missing '>'");
 
-        let has_good = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Function(f) if f.name.node == "good")
-        });
-        assert!(has_good, "Should have parsed 'good' function after recovery");
+        let has_good = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
+        assert!(
+            has_good,
+            "Should have parsed 'good' function after recovery"
+        );
     }
 
     #[test]
@@ -3987,12 +4131,19 @@ F broken<T, 123, U>(x: T) -> T = x
 F good() -> i64 = 42
 "#;
         let (module, errors) = parse_with_recovery(source);
-        assert!(!errors.is_empty(), "Expected error for invalid generic param");
+        assert!(
+            !errors.is_empty(),
+            "Expected error for invalid generic param"
+        );
 
-        let has_good = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Function(f) if f.name.node == "good")
-        });
-        assert!(has_good, "Should have parsed 'good' function after recovery");
+        let has_good = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
+        assert!(
+            has_good,
+            "Should have parsed 'good' function after recovery"
+        );
     }
 
     #[test]
@@ -4007,9 +4158,13 @@ F good() -> i64 = 42
         let (module, errors) = parse_with_recovery(source);
         assert!(!errors.is_empty(), "Expected error for mismatched brackets");
 
-        let has_good = module.items.iter().any(|item| {
-            matches!(&item.node, Item::Function(f) if f.name.node == "good")
-        });
-        assert!(has_good, "Should have parsed 'good' function after recovery");
+        let has_good = module
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Function(f) if f.name.node == "good"));
+        assert!(
+            has_good,
+            "Should have parsed 'good' function after recovery"
+        );
     }
 }

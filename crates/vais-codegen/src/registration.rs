@@ -3,35 +3,48 @@
 //! This module contains functions for registering functions, methods,
 //! structs, enums, and unions during the first pass of code generation.
 
-use crate::types::{EnumInfo, EnumVariantFields, EnumVariantInfo, FunctionInfo, StructInfo, UnionInfo};
+use crate::types::{
+    EnumInfo, EnumVariantFields, EnumVariantInfo, FunctionInfo, StructInfo, UnionInfo,
+};
 use crate::{CodeGenerator, CodegenResult};
-use vais_ast::{Function, Struct, VariantFields, ExternFunction};
-use vais_types::{ResolvedType, FunctionSig};
+use vais_ast::{ExternFunction, Function, Struct, VariantFields};
+use vais_types::{FunctionSig, ResolvedType};
 
 impl CodeGenerator {
     pub(crate) fn register_function(&mut self, f: &Function) -> CodegenResult<()> {
         // Use resolved function signatures from type checker when available
         // (needed for functions with inferred parameter types - Type::Infer)
-        let has_inferred = f.params.iter().any(|p| matches!(p.ty.node, vais_ast::Type::Infer));
+        let has_inferred = f
+            .params
+            .iter()
+            .any(|p| matches!(p.ty.node, vais_ast::Type::Infer));
         let params: Vec<_> = if has_inferred {
             if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
                 resolved_sig.params.clone()
             } else {
-                f.params.iter().map(|p| {
-                    let ty = self.ast_type_to_resolved(&p.ty.node);
-                    let ty = if matches!(ty, ResolvedType::Unknown) && matches!(p.ty.node, vais_ast::Type::Infer) {
-                        ResolvedType::I64 // default to i64 for unresolved inferred types
-                    } else {
-                        ty
-                    };
-                    (p.name.node.to_string(), ty, p.is_mut)
-                }).collect()
+                f.params
+                    .iter()
+                    .map(|p| {
+                        let ty = self.ast_type_to_resolved(&p.ty.node);
+                        let ty = if matches!(ty, ResolvedType::Unknown)
+                            && matches!(p.ty.node, vais_ast::Type::Infer)
+                        {
+                            ResolvedType::I64 // default to i64 for unresolved inferred types
+                        } else {
+                            ty
+                        };
+                        (p.name.node.to_string(), ty, p.is_mut)
+                    })
+                    .collect()
             }
         } else {
-            f.params.iter().map(|p| {
-                let ty = self.ast_type_to_resolved(&p.ty.node);
-                (p.name.node.to_string(), ty, p.is_mut)
-            }).collect()
+            f.params
+                .iter()
+                .map(|p| {
+                    let ty = self.ast_type_to_resolved(&p.ty.node);
+                    (p.name.node.to_string(), ty, p.is_mut)
+                })
+                .collect()
         };
 
         let ret_type = f
@@ -46,8 +59,15 @@ impl CodeGenerator {
                 signature: FunctionSig {
                     name: f.name.node.to_string(),
                     generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
-                    generic_bounds: f.generics.iter()
-                        .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                    generic_bounds: f
+                        .generics
+                        .iter()
+                        .map(|g| {
+                            (
+                                g.name.node.clone(),
+                                g.bounds.iter().map(|b| b.node.clone()).collect(),
+                            )
+                        })
                         .collect(),
                     params,
                     ret: ret_type,
@@ -112,8 +132,15 @@ impl CodeGenerator {
                 signature: FunctionSig {
                     name: method_name.clone(),
                     generics: f.generics.iter().map(|g| g.name.node.clone()).collect(),
-                    generic_bounds: f.generics.iter()
-                        .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                    generic_bounds: f
+                        .generics
+                        .iter()
+                        .map(|g| {
+                            (
+                                g.name.node.clone(),
+                                g.bounds.iter().map(|b| b.node.clone()).collect(),
+                            )
+                        })
                         .collect(),
                     params,
                     ret: ret_type,
@@ -143,7 +170,9 @@ impl CodeGenerator {
             .collect();
 
         // Extract invariant expressions from attributes
-        let invariants: Vec<_> = s.attributes.iter()
+        let invariants: Vec<_> = s
+            .attributes
+            .iter()
             .filter(|a| a.name == "invariant")
             .filter_map(|a| a.expr.as_ref().map(|e| (**e).clone()))
             .collect();
@@ -153,7 +182,10 @@ impl CodeGenerator {
             StructInfo {
                 name: s.name.node.to_string(),
                 fields,
-                repr_c: s.attributes.iter().any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
+                repr_c: s
+                    .attributes
+                    .iter()
+                    .any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
                 invariants,
             },
         );
@@ -225,7 +257,11 @@ impl CodeGenerator {
         Ok(())
     }
 
-    pub(crate) fn register_extern_function(&mut self, func: &ExternFunction, abi: &str) -> CodegenResult<()> {
+    pub(crate) fn register_extern_function(
+        &mut self,
+        func: &ExternFunction,
+        abi: &str,
+    ) -> CodegenResult<()> {
         let func_name = func.name.node.to_string();
 
         // Check if this is already registered as a builtin helper function
@@ -292,7 +328,10 @@ impl CodeGenerator {
     }
 
     /// Register a global variable definition
-    pub(crate) fn register_global(&mut self, global_def: &vais_ast::GlobalDef) -> CodegenResult<()> {
+    pub(crate) fn register_global(
+        &mut self,
+        global_def: &vais_ast::GlobalDef,
+    ) -> CodegenResult<()> {
         // Store global in the globals map for later code generation
         self.globals.insert(
             global_def.name.node.clone(),

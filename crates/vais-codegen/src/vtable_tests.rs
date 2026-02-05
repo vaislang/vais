@@ -2,34 +2,44 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{CodeGenerator, vtable::*};
+    use crate::{vtable::*, CodeGenerator};
     use std::collections::HashMap;
     use vais_types::{ResolvedType, TraitDef, TraitMethodSig};
 
     fn create_drawable_trait() -> TraitDef {
         let mut methods = HashMap::new();
 
-        methods.insert("draw".to_string(), TraitMethodSig {
-            name: "draw".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-            ],
-            ret: ResolvedType::Unit,
-            has_default: false,
-            is_async: false,
-            is_const: false,
-        });
+        methods.insert(
+            "draw".to_string(),
+            TraitMethodSig {
+                name: "draw".to_string(),
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::Unit,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
 
-        methods.insert("area".to_string(), TraitMethodSig {
-            name: "area".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-            ],
-            ret: ResolvedType::I64,
-            has_default: false,
-            is_async: false,
-            is_const: false,
-        });
+        methods.insert(
+            "area".to_string(),
+            TraitMethodSig {
+                name: "area".to_string(),
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::I64,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
 
         TraitDef {
             name: "Drawable".to_string(),
@@ -147,12 +157,8 @@ mod tests {
         };
 
         let mut counter = 0;
-        let (ir, result) = gen.create_trait_object(
-            "%circle_val",
-            "i64",
-            &vtable_info,
-            &mut counter,
-        );
+        let (ir, result) =
+            gen.create_trait_object("%circle_val", "i64", &vtable_info, &mut counter);
 
         // Should allocate memory and create fat pointer
         assert!(ir.contains("@malloc"));
@@ -241,16 +247,21 @@ mod tests {
         let trait1 = create_drawable_trait();
 
         let mut methods2 = HashMap::new();
-        methods2.insert("describe".to_string(), TraitMethodSig {
-            name: "describe".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-            ],
-            ret: ResolvedType::Str,
-            has_default: false,
-            is_async: false,
-            is_const: false,
-        });
+        methods2.insert(
+            "describe".to_string(),
+            TraitMethodSig {
+                name: "describe".to_string(),
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::Str,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
 
         let trait2 = TraitDef {
             name: "Describable".to_string(),
@@ -265,9 +276,7 @@ mod tests {
             ("draw".to_string(), "Widget_draw".to_string()),
             ("area".to_string(), "Widget_area".to_string()),
         ]);
-        let impls2 = HashMap::from([
-            ("describe".to_string(), "Widget_describe".to_string()),
-        ]);
+        let impls2 = HashMap::from([("describe".to_string(), "Widget_describe".to_string())]);
 
         let vtable1 = gen.generate_vtable("Widget", &trait1, &impls1);
         let vtable2 = gen.generate_vtable("Widget", &trait2, &impls2);
@@ -282,29 +291,41 @@ mod tests {
         let mut methods = HashMap::new();
 
         // Async method: fetch returns Future<i64>
-        methods.insert("fetch".to_string(), TraitMethodSig {
-            name: "fetch".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-                ("url".to_string(), ResolvedType::Str, false),
-            ],
-            ret: ResolvedType::I64,
-            has_default: false,
-            is_async: true,
-            is_const: false,
-        });
+        methods.insert(
+            "fetch".to_string(),
+            TraitMethodSig {
+                name: "fetch".to_string(),
+                params: vec![
+                    (
+                        "self".to_string(),
+                        ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                        false,
+                    ),
+                    ("url".to_string(), ResolvedType::Str, false),
+                ],
+                ret: ResolvedType::I64,
+                has_default: false,
+                is_async: true,
+                is_const: false,
+            },
+        );
 
         // Sync method
-        methods.insert("name".to_string(), TraitMethodSig {
-            name: "name".to_string(),
-            params: vec![
-                ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))), false),
-            ],
-            ret: ResolvedType::Str,
-            has_default: false,
-            is_async: false,
-            is_const: false,
-        });
+        methods.insert(
+            "name".to_string(),
+            TraitMethodSig {
+                name: "name".to_string(),
+                params: vec![(
+                    "self".to_string(),
+                    ResolvedType::Ref(Box::new(ResolvedType::Generic("Self".to_string()))),
+                    false,
+                )],
+                ret: ResolvedType::Str,
+                has_default: false,
+                is_async: false,
+                is_const: false,
+            },
+        );
 
         TraitDef {
             name: "Service".to_string(),
@@ -331,8 +352,14 @@ mod tests {
         assert_eq!(vtable.methods.len(), 2);
 
         let method_map: HashMap<_, _> = vtable.methods.iter().cloned().collect();
-        assert_eq!(method_map.get("fetch"), Some(&"HttpService_fetch".to_string()));
-        assert_eq!(method_map.get("name"), Some(&"HttpService_name".to_string()));
+        assert_eq!(
+            method_map.get("fetch"),
+            Some(&"HttpService_fetch".to_string())
+        );
+        assert_eq!(
+            method_map.get("name"),
+            Some(&"HttpService_name".to_string())
+        );
     }
 
     #[test]

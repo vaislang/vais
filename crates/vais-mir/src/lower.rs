@@ -7,10 +7,12 @@
 //! Expressions that are not yet supported fall back to opaque `Constant::Int(0)`
 //! placeholders, allowing the rest of the MIR pipeline to proceed.
 
-use vais_ast::{Module, Item, Expr, Spanned, BinOp as AstBinOp, UnaryOp as AstUnOp,
-               Literal, Pattern, FunctionBody, Stmt, Type as AstType, IfElse};
-use crate::types::*;
 use crate::builder::MirBuilder;
+use crate::types::*;
+use vais_ast::{
+    BinOp as AstBinOp, Expr, FunctionBody, IfElse, Item, Literal, Module, Pattern, Spanned, Stmt,
+    Type as AstType, UnaryOp as AstUnOp,
+};
 
 /// Lower an AST module to MIR.
 pub fn lower_module(module: &Module) -> MirModule {
@@ -19,11 +21,14 @@ pub fn lower_module(module: &Module) -> MirModule {
     for item in &module.items {
         match &item.node {
             Item::Function(func) => {
-                let param_types: Vec<MirType> = func.params
+                let param_types: Vec<MirType> = func
+                    .params
                     .iter()
                     .map(|p| ast_type_to_mir(&p.ty.node))
                     .collect();
-                let ret_type = func.ret_type.as_ref()
+                let ret_type = func
+                    .ret_type
+                    .as_ref()
                     .map(|t| ast_type_to_mir(&t.node))
                     .unwrap_or(MirType::I64);
 
@@ -39,10 +44,9 @@ pub fn lower_module(module: &Module) -> MirModule {
                 match &func.body {
                     FunctionBody::Expr(expr) => {
                         let result = lowerer.lower_expr(expr);
-                        lowerer.builder.assign(
-                            lowerer.builder.return_place(),
-                            Rvalue::Use(result),
-                        );
+                        lowerer
+                            .builder
+                            .assign(lowerer.builder.return_place(), Rvalue::Use(result));
                         lowerer.builder.return_();
                     }
                     FunctionBody::Block(stmts) => {
@@ -50,10 +54,9 @@ pub fn lower_module(module: &Module) -> MirModule {
                         for stmt in stmts {
                             last_operand = lowerer.lower_stmt(stmt);
                         }
-                        lowerer.builder.assign(
-                            lowerer.builder.return_place(),
-                            Rvalue::Use(last_operand),
-                        );
+                        lowerer
+                            .builder
+                            .assign(lowerer.builder.return_place(), Rvalue::Use(last_operand));
                         lowerer.builder.return_();
                     }
                 }
@@ -61,7 +64,8 @@ pub fn lower_module(module: &Module) -> MirModule {
                 mir_module.bodies.push(lowerer.builder.build());
             }
             Item::Struct(s) => {
-                let mir_fields: Vec<(String, MirType)> = s.fields
+                let mir_fields: Vec<(String, MirType)> = s
+                    .fields
                     .iter()
                     .map(|f| (f.name.node.clone(), ast_type_to_mir(&f.ty.node)))
                     .collect();
@@ -144,7 +148,8 @@ impl FunctionLowerer {
             Stmt::Expr(expr) => self.lower_expr(expr),
             Stmt::Return(Some(expr)) => {
                 let val = self.lower_expr(expr);
-                self.builder.assign(self.builder.return_place(), Rvalue::Use(val));
+                self.builder
+                    .assign(self.builder.return_place(), Rvalue::Use(val));
                 self.builder.return_();
                 let dead_bb = self.builder.new_block();
                 self.builder.switch_to_block(dead_bb);
@@ -202,16 +207,12 @@ impl FunctionLowerer {
                     AstUnOp::Not | AstUnOp::BitNot => UnOp::Not,
                 };
                 let result = self.new_temp(MirType::I64);
-                self.builder.assign(
-                    Place::local(result),
-                    Rvalue::UnaryOp(mir_op, operand),
-                );
+                self.builder
+                    .assign(Place::local(result), Rvalue::UnaryOp(mir_op, operand));
                 Operand::Copy(Place::local(result))
             }
 
-            Expr::Block(stmts) => {
-                self.lower_stmts(stmts)
-            }
+            Expr::Block(stmts) => self.lower_stmts(stmts),
 
             Expr::If { cond, then, else_ } => {
                 let cond_val = self.lower_expr(cond);
@@ -221,21 +222,27 @@ impl FunctionLowerer {
                 let bb_else = self.builder.new_block();
                 let bb_merge = self.builder.new_block();
 
-                self.builder.switch_int(cond_val, vec![(1, bb_then)], bb_else);
+                self.builder
+                    .switch_int(cond_val, vec![(1, bb_then)], bb_else);
 
                 // Then branch (block of statements)
                 self.builder.switch_to_block(bb_then);
                 let then_val = self.lower_stmts(then);
-                self.builder.assign(Place::local(result), Rvalue::Use(then_val));
+                self.builder
+                    .assign(Place::local(result), Rvalue::Use(then_val));
                 self.builder.goto(bb_merge);
 
                 // Else branch
                 self.builder.switch_to_block(bb_else);
                 if let Some(else_branch) = else_ {
                     let else_val = self.lower_if_else(else_branch);
-                    self.builder.assign(Place::local(result), Rvalue::Use(else_val));
+                    self.builder
+                        .assign(Place::local(result), Rvalue::Use(else_val));
                 } else {
-                    self.builder.assign(Place::local(result), Rvalue::Use(Operand::Constant(Constant::Int(0))));
+                    self.builder.assign(
+                        Place::local(result),
+                        Rvalue::Use(Operand::Constant(Constant::Int(0))),
+                    );
                 }
                 self.builder.goto(bb_merge);
 
@@ -251,16 +258,19 @@ impl FunctionLowerer {
                 let bb_else = self.builder.new_block();
                 let bb_merge = self.builder.new_block();
 
-                self.builder.switch_int(cond_val, vec![(1, bb_then)], bb_else);
+                self.builder
+                    .switch_int(cond_val, vec![(1, bb_then)], bb_else);
 
                 self.builder.switch_to_block(bb_then);
                 let then_val = self.lower_expr(then);
-                self.builder.assign(Place::local(result), Rvalue::Use(then_val));
+                self.builder
+                    .assign(Place::local(result), Rvalue::Use(then_val));
                 self.builder.goto(bb_merge);
 
                 self.builder.switch_to_block(bb_else);
                 let else_val = self.lower_expr(else_);
-                self.builder.assign(Place::local(result), Rvalue::Use(else_val));
+                self.builder
+                    .assign(Place::local(result), Rvalue::Use(else_val));
                 self.builder.goto(bb_merge);
 
                 self.builder.switch_to_block(bb_merge);
@@ -289,19 +299,18 @@ impl FunctionLowerer {
                     let result = self.new_temp(MirType::I64);
                     let next_bb = self.builder.new_block();
 
-                    self.builder.call(
-                        &func_name,
-                        mir_args,
-                        Place::local(result),
-                        next_bb,
-                    );
+                    self.builder
+                        .call(&func_name, mir_args, Place::local(result), next_bb);
 
                     self.builder.switch_to_block(next_bb);
                     Operand::Copy(Place::local(result))
                 }
             }
 
-            Expr::Match { expr: match_expr, arms } => {
+            Expr::Match {
+                expr: match_expr,
+                arms,
+            } => {
                 let disc = self.lower_expr(match_expr);
                 let result = self.new_temp(MirType::I64);
                 let bb_merge = self.builder.new_block();
@@ -348,7 +357,8 @@ impl FunctionLowerer {
                     }
 
                     let arm_val = self.lower_expr(&arm.body);
-                    self.builder.assign(Place::local(result), Rvalue::Use(arm_val));
+                    self.builder
+                        .assign(Place::local(result), Rvalue::Use(arm_val));
                     self.builder.goto(bb_merge);
                 }
 
@@ -374,9 +384,7 @@ impl FunctionLowerer {
     /// Lower an IfElse branch.
     fn lower_if_else(&mut self, if_else: &IfElse) -> Operand {
         match if_else {
-            IfElse::Else(stmts) => {
-                self.lower_stmts(stmts)
-            }
+            IfElse::Else(stmts) => self.lower_stmts(stmts),
             IfElse::ElseIf(cond, then_stmts, else_branch) => {
                 let cond_val = self.lower_expr(cond);
                 let result = self.new_temp(MirType::I64);
@@ -385,19 +393,25 @@ impl FunctionLowerer {
                 let bb_else = self.builder.new_block();
                 let bb_merge = self.builder.new_block();
 
-                self.builder.switch_int(cond_val, vec![(1, bb_then)], bb_else);
+                self.builder
+                    .switch_int(cond_val, vec![(1, bb_then)], bb_else);
 
                 self.builder.switch_to_block(bb_then);
                 let then_val = self.lower_stmts(then_stmts);
-                self.builder.assign(Place::local(result), Rvalue::Use(then_val));
+                self.builder
+                    .assign(Place::local(result), Rvalue::Use(then_val));
                 self.builder.goto(bb_merge);
 
                 self.builder.switch_to_block(bb_else);
                 if let Some(else_b) = else_branch {
                     let else_val = self.lower_if_else(else_b);
-                    self.builder.assign(Place::local(result), Rvalue::Use(else_val));
+                    self.builder
+                        .assign(Place::local(result), Rvalue::Use(else_val));
                 } else {
-                    self.builder.assign(Place::local(result), Rvalue::Use(Operand::Constant(Constant::Int(0))));
+                    self.builder.assign(
+                        Place::local(result),
+                        Rvalue::Use(Operand::Constant(Constant::Int(0))),
+                    );
                 }
                 self.builder.goto(bb_merge);
 
@@ -487,13 +501,17 @@ mod tests {
         let module = vais_parser::parse(source).expect("Parse failed");
         let mut mir = lower_module(&module);
 
-        let before_stmts: usize = mir.bodies[0].basic_blocks.iter()
+        let before_stmts: usize = mir.bodies[0]
+            .basic_blocks
+            .iter()
             .map(|bb| bb.statements.len())
             .sum();
 
         crate::optimize::optimize_mir_module(&mut mir);
 
-        let after_stmts: usize = mir.bodies[0].basic_blocks.iter()
+        let after_stmts: usize = mir.bodies[0]
+            .basic_blocks
+            .iter()
             .map(|bb| bb.statements.len())
             .sum();
 

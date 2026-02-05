@@ -3,9 +3,9 @@
 //! This module provides an interpreter that evaluates expressions at compile time.
 //! It supports arithmetic operations, conditionals, loops, and pure function calls.
 
+use crate::types::{TypeError, TypeResult};
 use std::collections::HashMap;
 use vais_ast::*;
-use crate::types::{TypeError, TypeResult};
 
 /// Compile-time value
 #[derive(Debug, Clone, PartialEq)]
@@ -149,7 +149,8 @@ impl ComptimeEvaluator {
             }
 
             Expr::Ident(name) => {
-                self.vars.get(name)
+                self.vars
+                    .get(name)
                     .cloned()
                     .ok_or_else(|| TypeError::UndefinedVar {
                         name: name.clone(),
@@ -180,7 +181,11 @@ impl ComptimeEvaluator {
                 }
             }
 
-            Expr::Loop { pattern, iter, body } => {
+            Expr::Loop {
+                pattern,
+                iter,
+                body,
+            } => {
                 if let (Some(pattern), Some(iter)) = (pattern, iter) {
                     self.eval_for_loop(pattern, iter, body)
                 } else {
@@ -192,9 +197,7 @@ impl ComptimeEvaluator {
                 }
             }
 
-            Expr::Block(stmts) => {
-                self.eval_block(stmts)
-            }
+            Expr::Block(stmts) => self.eval_block(stmts),
 
             Expr::Ternary { cond, then, else_ } => {
                 let cond_val = self.eval(cond)?;
@@ -205,9 +208,7 @@ impl ComptimeEvaluator {
                 }
             }
 
-            Expr::Call { func, args } => {
-                self.eval_function_call(func, args, expr.span)
-            }
+            Expr::Call { func, args } => self.eval_function_call(func, args, expr.span),
 
             Expr::Assert { condition, message } => {
                 self.eval_assert(condition, message.as_deref(), expr.span)
@@ -224,17 +225,21 @@ impl ComptimeEvaluator {
                 self.eval(body)
             }
 
-            _ => {
-                Err(TypeError::Mismatch {
-                    expected: "comptime-evaluable expression".to_string(),
-                    found: format!("{:?}", expr.node),
-                    span: Some(expr.span),
-                })
-            }
+            _ => Err(TypeError::Mismatch {
+                expected: "comptime-evaluable expression".to_string(),
+                found: format!("{:?}", expr.node),
+                span: Some(expr.span),
+            }),
         }
     }
 
-    fn eval_binary_op(&self, op: BinOp, left: ComptimeValue, right: ComptimeValue, span: Span) -> TypeResult<ComptimeValue> {
+    fn eval_binary_op(
+        &self,
+        op: BinOp,
+        left: ComptimeValue,
+        right: ComptimeValue,
+        span: Span,
+    ) -> TypeResult<ComptimeValue> {
         match (op, &left, &right) {
             // String concatenation
             (BinOp::Add, ComptimeValue::String(l), ComptimeValue::String(r)) => {
@@ -243,24 +248,30 @@ impl ComptimeEvaluator {
 
             // Integer arithmetic
             (BinOp::Add, ComptimeValue::Int(l), ComptimeValue::Int(r)) => {
-                Ok(ComptimeValue::Int(l.checked_add(*r).ok_or_else(|| TypeError::Mismatch {
-                    expected: "no overflow".to_string(),
-                    found: "integer overflow".to_string(),
-                    span: Some(span),
+                Ok(ComptimeValue::Int(l.checked_add(*r).ok_or_else(|| {
+                    TypeError::Mismatch {
+                        expected: "no overflow".to_string(),
+                        found: "integer overflow".to_string(),
+                        span: Some(span),
+                    }
                 })?))
             }
             (BinOp::Sub, ComptimeValue::Int(l), ComptimeValue::Int(r)) => {
-                Ok(ComptimeValue::Int(l.checked_sub(*r).ok_or_else(|| TypeError::Mismatch {
-                    expected: "no overflow".to_string(),
-                    found: "integer overflow".to_string(),
-                    span: Some(span),
+                Ok(ComptimeValue::Int(l.checked_sub(*r).ok_or_else(|| {
+                    TypeError::Mismatch {
+                        expected: "no overflow".to_string(),
+                        found: "integer overflow".to_string(),
+                        span: Some(span),
+                    }
                 })?))
             }
             (BinOp::Mul, ComptimeValue::Int(l), ComptimeValue::Int(r)) => {
-                Ok(ComptimeValue::Int(l.checked_mul(*r).ok_or_else(|| TypeError::Mismatch {
-                    expected: "no overflow".to_string(),
-                    found: "integer overflow".to_string(),
-                    span: Some(span),
+                Ok(ComptimeValue::Int(l.checked_mul(*r).ok_or_else(|| {
+                    TypeError::Mismatch {
+                        expected: "no overflow".to_string(),
+                        found: "integer overflow".to_string(),
+                        span: Some(span),
+                    }
                 })?))
             }
             (BinOp::Div, ComptimeValue::Int(l), ComptimeValue::Int(r)) => {
@@ -359,20 +370,17 @@ impl ComptimeEvaluator {
         }
     }
 
-    fn eval_unary_op(&self, op: UnaryOp, val: ComptimeValue, span: Span) -> TypeResult<ComptimeValue> {
+    fn eval_unary_op(
+        &self,
+        op: UnaryOp,
+        val: ComptimeValue,
+        span: Span,
+    ) -> TypeResult<ComptimeValue> {
         match (op, &val) {
-            (UnaryOp::Neg, ComptimeValue::Int(n)) => {
-                Ok(ComptimeValue::Int(-n))
-            }
-            (UnaryOp::Neg, ComptimeValue::Float(f)) => {
-                Ok(ComptimeValue::Float(-f))
-            }
-            (UnaryOp::Not, ComptimeValue::Bool(b)) => {
-                Ok(ComptimeValue::Bool(!b))
-            }
-            (UnaryOp::BitNot, ComptimeValue::Int(n)) => {
-                Ok(ComptimeValue::Int(!n))
-            }
+            (UnaryOp::Neg, ComptimeValue::Int(n)) => Ok(ComptimeValue::Int(-n)),
+            (UnaryOp::Neg, ComptimeValue::Float(f)) => Ok(ComptimeValue::Float(-f)),
+            (UnaryOp::Not, ComptimeValue::Bool(b)) => Ok(ComptimeValue::Bool(!b)),
+            (UnaryOp::BitNot, ComptimeValue::Int(n)) => Ok(ComptimeValue::Int(!n)),
             _ => Err(TypeError::Mismatch {
                 expected: format!("compatible operand for {:?}", op),
                 found: format!("{:?}", val),
@@ -454,11 +462,20 @@ impl ComptimeEvaluator {
         }
     }
 
-    fn eval_for_loop(&mut self, pattern: &Spanned<Pattern>, iter: &Spanned<Expr>, body: &[Spanned<Stmt>]) -> TypeResult<ComptimeValue> {
+    fn eval_for_loop(
+        &mut self,
+        pattern: &Spanned<Pattern>,
+        iter: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+    ) -> TypeResult<ComptimeValue> {
         // For now, support Range expressions and Arrays
         // Don't call self.eval(iter) for Range - handle it directly
         match &iter.node {
-            Expr::Range { start, end, inclusive } => {
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => {
                 let start_val = if let Some(s) = start {
                     self.eval(s)?.as_i64()?
                 } else {
@@ -576,7 +593,12 @@ impl ComptimeEvaluator {
         }
     }
 
-    fn eval_function_call(&mut self, func: &Spanned<Expr>, args: &[Spanned<Expr>], span: Span) -> TypeResult<ComptimeValue> {
+    fn eval_function_call(
+        &mut self,
+        func: &Spanned<Expr>,
+        args: &[Spanned<Expr>],
+        span: Span,
+    ) -> TypeResult<ComptimeValue> {
         // Extract function name
         let func_name = match &func.node {
             Expr::Ident(name) => name.as_str(),
@@ -624,8 +646,12 @@ impl ComptimeEvaluator {
                     });
                 }
                 match (&arg_vals[0], &arg_vals[1]) {
-                    (ComptimeValue::Int(a), ComptimeValue::Int(b)) => Ok(ComptimeValue::Int(*a.min(b))),
-                    (ComptimeValue::Float(a), ComptimeValue::Float(b)) => Ok(ComptimeValue::Float(a.min(*b))),
+                    (ComptimeValue::Int(a), ComptimeValue::Int(b)) => {
+                        Ok(ComptimeValue::Int(*a.min(b)))
+                    }
+                    (ComptimeValue::Float(a), ComptimeValue::Float(b)) => {
+                        Ok(ComptimeValue::Float(a.min(*b)))
+                    }
                     _ => Err(TypeError::Mismatch {
                         expected: "two numeric values".to_string(),
                         found: format!("{:?}, {:?}", arg_vals[0], arg_vals[1]),
@@ -642,8 +668,12 @@ impl ComptimeEvaluator {
                     });
                 }
                 match (&arg_vals[0], &arg_vals[1]) {
-                    (ComptimeValue::Int(a), ComptimeValue::Int(b)) => Ok(ComptimeValue::Int(*a.max(b))),
-                    (ComptimeValue::Float(a), ComptimeValue::Float(b)) => Ok(ComptimeValue::Float(a.max(*b))),
+                    (ComptimeValue::Int(a), ComptimeValue::Int(b)) => {
+                        Ok(ComptimeValue::Int(*a.max(b)))
+                    }
+                    (ComptimeValue::Float(a), ComptimeValue::Float(b)) => {
+                        Ok(ComptimeValue::Float(a.max(*b)))
+                    }
                     _ => Err(TypeError::Mismatch {
                         expected: "two numeric values".to_string(),
                         found: format!("{:?}, {:?}", arg_vals[0], arg_vals[1]),
@@ -706,7 +736,12 @@ impl ComptimeEvaluator {
         }
     }
 
-    fn eval_assert(&mut self, condition: &Spanned<Expr>, message: Option<&Spanned<Expr>>, span: Span) -> TypeResult<ComptimeValue> {
+    fn eval_assert(
+        &mut self,
+        condition: &Spanned<Expr>,
+        message: Option<&Spanned<Expr>>,
+        span: Span,
+    ) -> TypeResult<ComptimeValue> {
         let cond_val = self.eval(condition)?;
         let cond_bool = cond_val.as_bool()?;
 
@@ -731,7 +766,12 @@ impl ComptimeEvaluator {
         Ok(ComptimeValue::Unit)
     }
 
-    fn eval_index(&self, array: ComptimeValue, index: ComptimeValue, span: Span) -> TypeResult<ComptimeValue> {
+    fn eval_index(
+        &self,
+        array: ComptimeValue,
+        index: ComptimeValue,
+        span: Span,
+    ) -> TypeResult<ComptimeValue> {
         let idx = index.as_i64()?;
 
         match array {
@@ -805,7 +845,10 @@ mod tests {
             }
             Err(e) => {
                 // If parsing fails, skip for now - this is a known limitation
-                println!("Parse error (expected for complex comptime blocks): {:?}", e);
+                println!(
+                    "Parse error (expected for complex comptime blocks): {:?}",
+                    e
+                );
             }
         }
     }
@@ -821,8 +864,14 @@ mod tests {
     #[test]
     fn test_comptime_string_concatenation() {
         let mut evaluator = ComptimeEvaluator::new();
-        let left = Box::new(Spanned::new(Expr::String("hello".to_string()), Span::new(0, 7)));
-        let right = Box::new(Spanned::new(Expr::String(" world".to_string()), Span::new(8, 16)));
+        let left = Box::new(Spanned::new(
+            Expr::String("hello".to_string()),
+            Span::new(0, 7),
+        ));
+        let right = Box::new(Spanned::new(
+            Expr::String(" world".to_string()),
+            Span::new(8, 16),
+        ));
         let expr = Spanned::new(
             Expr::Binary {
                 op: BinOp::Add,
@@ -875,7 +924,10 @@ mod tests {
     #[test]
     fn test_comptime_builtin_abs() {
         let mut evaluator = ComptimeEvaluator::new();
-        let func = Box::new(Spanned::new(Expr::Ident("abs".to_string()), Span::new(0, 3)));
+        let func = Box::new(Spanned::new(
+            Expr::Ident("abs".to_string()),
+            Span::new(0, 3),
+        ));
         let args = vec![Spanned::new(Expr::Int(-42), Span::new(4, 7))];
         let expr = Spanned::new(Expr::Call { func, args }, Span::new(0, 8));
         let result = evaluator.eval(&expr).unwrap();
@@ -885,7 +937,10 @@ mod tests {
     #[test]
     fn test_comptime_builtin_min() {
         let mut evaluator = ComptimeEvaluator::new();
-        let func = Box::new(Spanned::new(Expr::Ident("min".to_string()), Span::new(0, 3)));
+        let func = Box::new(Spanned::new(
+            Expr::Ident("min".to_string()),
+            Span::new(0, 3),
+        ));
         let args = vec![
             Spanned::new(Expr::Int(10), Span::new(4, 6)),
             Spanned::new(Expr::Int(20), Span::new(7, 9)),
@@ -898,7 +953,10 @@ mod tests {
     #[test]
     fn test_comptime_builtin_max() {
         let mut evaluator = ComptimeEvaluator::new();
-        let func = Box::new(Spanned::new(Expr::Ident("max".to_string()), Span::new(0, 3)));
+        let func = Box::new(Spanned::new(
+            Expr::Ident("max".to_string()),
+            Span::new(0, 3),
+        ));
         let args = vec![
             Spanned::new(Expr::Int(10), Span::new(4, 6)),
             Spanned::new(Expr::Int(20), Span::new(7, 9)),
@@ -911,7 +969,10 @@ mod tests {
     #[test]
     fn test_comptime_builtin_pow() {
         let mut evaluator = ComptimeEvaluator::new();
-        let func = Box::new(Spanned::new(Expr::Ident("pow".to_string()), Span::new(0, 3)));
+        let func = Box::new(Spanned::new(
+            Expr::Ident("pow".to_string()),
+            Span::new(0, 3),
+        ));
         let args = vec![
             Spanned::new(Expr::Int(2), Span::new(4, 5)),
             Spanned::new(Expr::Int(10), Span::new(6, 8)),
@@ -924,8 +985,14 @@ mod tests {
     #[test]
     fn test_comptime_builtin_len_string() {
         let mut evaluator = ComptimeEvaluator::new();
-        let func = Box::new(Spanned::new(Expr::Ident("len".to_string()), Span::new(0, 3)));
-        let args = vec![Spanned::new(Expr::String("hello".to_string()), Span::new(4, 11))];
+        let func = Box::new(Spanned::new(
+            Expr::Ident("len".to_string()),
+            Span::new(0, 3),
+        ));
+        let args = vec![Spanned::new(
+            Expr::String("hello".to_string()),
+            Span::new(4, 11),
+        )];
         let expr = Spanned::new(Expr::Call { func, args }, Span::new(0, 12));
         let result = evaluator.eval(&expr).unwrap();
         assert_eq!(result, ComptimeValue::Int(5));
@@ -934,7 +1001,10 @@ mod tests {
     #[test]
     fn test_comptime_builtin_len_array() {
         let mut evaluator = ComptimeEvaluator::new();
-        let func = Box::new(Spanned::new(Expr::Ident("len".to_string()), Span::new(0, 3)));
+        let func = Box::new(Spanned::new(
+            Expr::Ident("len".to_string()),
+            Span::new(0, 3),
+        ));
         let args = vec![Spanned::new(
             Expr::Array(vec![
                 Spanned::new(Expr::Int(1), Span::new(0, 1)),
@@ -972,10 +1042,7 @@ mod tests {
             Expr::String("test failed".to_string()),
             Span::new(6, 19),
         )));
-        let expr = Spanned::new(
-            Expr::Assert { condition, message },
-            Span::new(0, 20),
-        );
+        let expr = Spanned::new(Expr::Assert { condition, message }, Span::new(0, 20));
         let result = evaluator.eval(&expr);
         assert!(result.is_err());
     }
@@ -1000,7 +1067,10 @@ mod tests {
 
         // Simple body that just iterates
         let body = vec![Spanned::new(
-            Stmt::Expr(Box::new(Spanned::new(Expr::Ident("i".to_string()), Span::new(0, 1)))),
+            Stmt::Expr(Box::new(Spanned::new(
+                Expr::Ident("i".to_string()),
+                Span::new(0, 1),
+            ))),
             Span::new(0, 1),
         )];
 
@@ -1037,7 +1107,10 @@ mod tests {
 
         // Simple body that just iterates
         let body = vec![Spanned::new(
-            Stmt::Expr(Box::new(Spanned::new(Expr::Ident("i".to_string()), Span::new(0, 1)))),
+            Stmt::Expr(Box::new(Spanned::new(
+                Expr::Ident("i".to_string()),
+                Span::new(0, 1),
+            ))),
             Span::new(0, 1),
         )];
 

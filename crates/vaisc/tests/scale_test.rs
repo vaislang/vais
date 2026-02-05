@@ -180,7 +180,12 @@ impl BenchResult {
     }
 }
 
-fn benchmark_compilation(name: &str, source: &str, expected_items: usize, estimated_lines: usize) -> BenchResult {
+fn benchmark_compilation(
+    name: &str,
+    source: &str,
+    expected_items: usize,
+    estimated_lines: usize,
+) -> BenchResult {
     // Lexer
     let start = Instant::now();
     let _tokens = tokenize(source).expect("Lexer failed");
@@ -413,16 +418,15 @@ fn test_deep_call_chain() {
         if i == 0 {
             source.push_str("F func0(x: i64) -> i64 = x + 1\n");
         } else {
-            source.push_str(&format!("F func{}(x: i64) -> i64 = func{}(x + 1)\n", i, i - 1));
+            source.push_str(&format!(
+                "F func{}(x: i64) -> i64 = func{}(x + 1)\n",
+                i,
+                i - 1
+            ));
         }
     }
 
-    let result = benchmark_compilation(
-        "Deep call chain (100 levels)",
-        &source,
-        depth,
-        depth,
-    );
+    let result = benchmark_compilation("Deep call chain (100 levels)", &source, depth, depth);
     result.print();
 }
 
@@ -452,7 +456,7 @@ fn test_wide_match_expression() {
     let result = benchmark_compilation(
         "Wide match expression (100 branches)",
         &source,
-        2, // 1 enum + 1 function
+        2,   // 1 enum + 1 function
         102, // Approximate line count
     );
     result.print();
@@ -498,7 +502,10 @@ fn test_lexer_only_100_items() {
     println!("\n=== Lexer Only - 100 items ===");
     println!("  Tokens: {}", tokens.len());
     println!("  Time:   {} ms", elapsed.as_millis());
-    println!("  Rate:   {:.0} tokens/sec", (tokens.len() as f64 / elapsed.as_secs_f64()));
+    println!(
+        "  Rate:   {:.0} tokens/sec",
+        (tokens.len() as f64 / elapsed.as_secs_f64())
+    );
 }
 
 #[test]
@@ -514,7 +521,10 @@ fn test_lexer_only_10000_items() {
     println!("\n=== Lexer Only - 10,000 items ===");
     println!("  Tokens: {}", tokens.len());
     println!("  Time:   {} ms", elapsed.as_millis());
-    println!("  Rate:   {:.0} tokens/sec", (tokens.len() as f64 / elapsed.as_secs_f64()));
+    println!(
+        "  Rate:   {:.0} tokens/sec",
+        (tokens.len() as f64 / elapsed.as_secs_f64())
+    );
 }
 
 // ==================== Parser-Specific Tests ====================
@@ -534,7 +544,10 @@ fn test_parser_only_10000_items() {
     println!("\n=== Parser Only - 10,000 items ===");
     println!("  Items:  {}", module.items.len());
     println!("  Time:   {} ms", elapsed.as_millis());
-    println!("  Rate:   {:.0} items/sec", (module.items.len() as f64 / elapsed.as_secs_f64()));
+    println!(
+        "  Rate:   {:.0} items/sec",
+        (module.items.len() as f64 / elapsed.as_secs_f64())
+    );
 }
 
 // ==================== Type Checker-Specific Tests ====================
@@ -557,7 +570,10 @@ fn test_type_checker_only_10000_items() {
     println!("\n=== Type Checker Only - 10,000 items ===");
     println!("  Items:  {}", module.items.len());
     println!("  Time:   {} ms", elapsed.as_millis());
-    println!("  Rate:   {:.0} items/sec", (module.items.len() as f64 / elapsed.as_secs_f64()));
+    println!(
+        "  Rate:   {:.0} items/sec",
+        (module.items.len() as f64 / elapsed.as_secs_f64())
+    );
 }
 
 // ==================== Combined Stress Test ====================

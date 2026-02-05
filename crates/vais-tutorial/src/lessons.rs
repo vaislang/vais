@@ -35,20 +35,21 @@ Type annotations are optional when the type can be inferred:
 
     let x: i32 = 42;
     let y = 3.14;  // inferred as f64
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Create a variable named 'answer' with value 42
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"let answer = 42;
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Code should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Code should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use the 'let' keyword to declare a variable".to_string(),
                     "Variable syntax: let name = value;".to_string(),
@@ -77,22 +78,24 @@ The last expression in a function is automatically returned:
     fn double(x: i32) -> i32 {
         x * 2  // no semicolon = return value
     }
-"#.to_string(),
-                code_template: r#"// Write a function named 'square' that takes an i32 and returns its square
+"#
+                .to_string(),
+                code_template:
+                    r#"// Write a function named 'square' that takes an i32 and returns its square
 // Your code here
-"#.to_string(),
+"#
+                    .to_string(),
                 solution: r#"fn square(x: i32) -> i32 {
     x * x
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Function syntax: fn name(params) -> return_type { body }".to_string(),
                     "Multiply x by itself".to_string(),
@@ -122,25 +125,26 @@ String: str (string slice) and String (owned string)
 
 Characters: char
     let c: char = 'A';
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Create variables with different types:
 // - An i32 named 'age' with value 25
 // - A bool named 'is_student' with value true
 // - A str named 'name' with value "Alice"
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"let age: i32 = 25;
 let is_student: bool = true;
 let name: str = "Alice";
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "All variables should be declared with correct types".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "All variables should be declared with correct types".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Declare each variable on a separate line".to_string(),
                     "Use type annotations: let name: type = value;".to_string(),
@@ -181,23 +185,25 @@ You can add 'else' and 'else if' branches:
 Since 'if' is an expression, it returns a value:
 
     let abs = if x >= 0 { x } else { -x };
-"#.to_string(),
-                code_template: r#"// Write a function 'max' that returns the larger of two i32 values
+"#
+                .to_string(),
+                code_template:
+                    r#"// Write a function 'max' that returns the larger of two i32 values
 // Use an if expression
 // Your code here
-"#.to_string(),
+"#
+                    .to_string(),
                 solution: r#"fn max(a: i32, b: i32) -> i32 {
     if a > b { a } else { b }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use if-else as an expression to return a value".to_string(),
                     "Compare a and b with the > operator".to_string(),
@@ -236,11 +242,13 @@ Use 'break' to exit and 'continue' to skip:
         if i == 5 { break; }
         if i % 2 == 0 { continue; }
     }
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'sum_range' that sums numbers from 1 to n
 // Use a for loop with a range
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn sum_range(n: i32) -> i32 {
     let mut sum = 0;
     for i in 1..=n {
@@ -248,15 +256,14 @@ Use 'break' to exit and 'continue' to skip:
     }
     sum
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use 1..=n for an inclusive range (1 to n)".to_string(),
                     "Accumulate the sum in a mutable variable".to_string(),
@@ -291,14 +298,17 @@ You can match ranges and use guards:
         _ if age >= 65 => "senior",
         _ => "adult",
     }
-"#.to_string(),
-                code_template: r#"// Write a function 'describe_number' that takes an i32 and returns:
+"#
+                .to_string(),
+                code_template:
+                    r#"// Write a function 'describe_number' that takes an i32 and returns:
 // - "zero" if 0
 // - "positive" if > 0
 // - "negative" if < 0
 // Use a match expression
 // Your code here
-"#.to_string(),
+"#
+                    .to_string(),
                 solution: r#"fn describe_number(n: i32) -> str {
     match n {
         0 => "zero",
@@ -306,15 +316,14 @@ You can match ranges and use guards:
         _ => "negative",
     }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use guards with 'if' to check conditions".to_string(),
                     "The _ pattern matches anything".to_string(),
@@ -359,11 +368,13 @@ Common operations:
     v.len()     // length
     v.is_empty() // check if empty
     v.pop()     // remove and return last element
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'create_range_vec' that creates a vector
 // containing numbers from 1 to n
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn create_range_vec(n: i32) -> Vec<i32> {
     let mut v = Vec::new();
     for i in 1..=n {
@@ -371,15 +382,14 @@ Common operations:
     }
     v
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Create an empty vector with Vec::new()".to_string(),
                     "Use a for loop to add elements".to_string(),
@@ -412,11 +422,13 @@ Iterating:
 Updating values:
     scores.insert("Blue", 25);  // overwrites
     scores.entry("Yellow").or_insert(50);
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'word_count' that takes a vector of strings
 // and returns a HashMap with word counts
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn word_count(words: Vec<str>) -> HashMap<str, i32> {
     let mut counts = HashMap::new();
     for word in words {
@@ -425,15 +437,14 @@ Updating values:
     }
     counts
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use HashMap::new() to create a new map".to_string(),
                     "Use entry().or_insert() to initialize counts".to_string(),
@@ -467,11 +478,13 @@ Set operations:
     a.union(&b)         // {1, 2, 3, 4}
     a.intersection(&b)  // {2, 3}
     a.difference(&b)    // {1}
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'unique_elements' that takes a Vec<i32>
 // and returns a HashSet with unique elements
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn unique_elements(nums: Vec<i32>) -> HashSet<i32> {
     let mut set = HashSet::new();
     for num in nums {
@@ -479,15 +492,14 @@ Set operations:
     }
     set
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Create an empty HashSet".to_string(),
                     "Insert each element from the vector".to_string(),
@@ -532,11 +544,13 @@ Useful methods:
     option.unwrap()            // get value or panic
     option.unwrap_or(default)  // get value or default
     option.map(|x| x * 2)      // transform if Some
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'safe_divide' that returns Option<i32>
 // Return Some(a/b) if b != 0, None otherwise
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn safe_divide(a: i32, b: i32) -> Option<i32> {
     if b == 0 {
         None
@@ -544,15 +558,14 @@ Useful methods:
         Some(a / b)
     }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Check if b is zero first".to_string(),
                     "Return None for division by zero".to_string(),
@@ -592,12 +605,14 @@ Useful methods:
     result.is_err()
     result.unwrap()
     result.unwrap_or(default)
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'parse_positive' that parses a string to i32
 // Return Ok(number) if positive, Err("not positive") otherwise
 // Assume parse() works and returns a valid i32
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn parse_positive(s: str) -> Result<i32, str> {
     let num = parse_int(s);
     if num > 0 {
@@ -606,15 +621,14 @@ Useful methods:
         Err("not positive")
     }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Parse the string first".to_string(),
                     "Check if the parsed number is positive".to_string(),
@@ -644,12 +658,14 @@ unwrap_or_else - compute default:
         print("Error:", e);
         0
     })
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a function 'double_if_positive' that takes Option<i32>
 // Returns Some(x*2) if x > 0, None otherwise
 // Use map and filter-like logic
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn double_if_positive(opt: Option<i32>) -> Option<i32> {
     opt.and_then(|x| {
         if x > 0 {
@@ -659,15 +675,14 @@ unwrap_or_else - compute default:
         }
     })
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use and_then to handle the Option".to_string(),
                     "Check if the value is positive inside".to_string(),
@@ -712,11 +727,13 @@ Methods are defined in impl blocks:
             ((self.x * self.x + self.y * self.y) as f64).sqrt()
         }
     }
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Define a struct 'Rectangle' with width and height (both i32)
 // Add a method 'area' that returns i32
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"struct Rectangle {
     width: i32,
     height: i32,
@@ -727,15 +744,14 @@ impl Rectangle {
         self.width * self.height
     }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Struct and method should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Struct and method should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Define the struct with two fields".to_string(),
                     "Use impl Rectangle to add methods".to_string(),
@@ -773,11 +789,13 @@ Trait bounds constrain generics:
             item.print();
         }
     }
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Define a trait 'Shape' with a method 'area' that returns f64
 // Implement it for a struct 'Circle' with radius: f64
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"trait Shape {
     fn area(&self) -> f64;
 }
@@ -791,15 +809,14 @@ impl Shape for Circle {
         3.14159 * self.radius * self.radius
     }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Trait and implementation should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Trait and implementation should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Define the trait with one method".to_string(),
                     "Create a Circle struct with radius field".to_string(),
@@ -836,26 +853,27 @@ Generic implementations:
             Pair { first, second }
         }
     }
-"#.to_string(),
+"#
+                .to_string(),
                 code_template: r#"// Write a generic function 'swap' that takes Pair<T, U>
 // and returns Pair<U, T>
 // Your code here
-"#.to_string(),
+"#
+                .to_string(),
                 solution: r#"fn swap<T, U>(pair: Pair<T, U>) -> Pair<U, T> {
     Pair {
         first: pair.second,
         second: pair.first,
     }
 }
-"#.to_string(),
-                test_cases: vec![
-                    TestCase {
-                        description: "Generic function should compile".to_string(),
-                        expected_output: None,
-                        should_compile: true,
-                        validation_fn: None,
-                    },
-                ],
+"#
+                .to_string(),
+                test_cases: vec![TestCase {
+                    description: "Generic function should compile".to_string(),
+                    expected_output: None,
+                    should_compile: true,
+                    validation_fn: None,
+                }],
                 hints: vec![
                     "Use type parameters <T, U>".to_string(),
                     "Swap the first and second fields".to_string(),
@@ -904,7 +922,11 @@ mod tests {
 
         for chapter in chapters {
             for lesson in chapter.lessons {
-                assert!(ids.insert(lesson.id.clone()), "Duplicate lesson ID: {}", lesson.id);
+                assert!(
+                    ids.insert(lesson.id.clone()),
+                    "Duplicate lesson ID: {}",
+                    lesson.id
+                );
             }
         }
     }

@@ -1,10 +1,10 @@
 //! File system watching for source file changes
 
+use crate::error::{HotReloadError, Result};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, SystemTime};
-use crate::error::{HotReloadError, Result};
 
 /// Events emitted by the file watcher
 #[derive(Debug, Clone)]
@@ -77,7 +77,9 @@ impl FileWatcher {
                         // Check debouncing
                         let now = SystemTime::now();
                         if let Some(last_time) = self.last_event_time {
-                            if now.duration_since(last_time).unwrap_or(Duration::ZERO) < self.debounce_duration {
+                            if now.duration_since(last_time).unwrap_or(Duration::ZERO)
+                                < self.debounce_duration
+                            {
                                 continue; // Skip this event due to debouncing
                             }
                         }
@@ -103,7 +105,9 @@ impl FileWatcher {
                             // Check debouncing
                             let now = SystemTime::now();
                             if let Some(last_time) = self.last_event_time {
-                                if now.duration_since(last_time).unwrap_or(Duration::ZERO) < self.debounce_duration {
+                                if now.duration_since(last_time).unwrap_or(Duration::ZERO)
+                                    < self.debounce_duration
+                                {
                                     continue; // Skip this event due to debouncing
                                 }
                             }
@@ -114,9 +118,11 @@ impl FileWatcher {
                     }
                     Err(e) => return Err(HotReloadError::WatchError(e)),
                 },
-                Err(_) => return Err(HotReloadError::WatchError(
-                    notify::Error::generic("watcher channel closed")
-                )),
+                Err(_) => {
+                    return Err(HotReloadError::WatchError(notify::Error::generic(
+                        "watcher channel closed",
+                    )))
+                }
             }
         }
     }
@@ -161,9 +167,10 @@ impl FileWatcher {
                     None
                 }
             }
-            EventKind::Remove(_) => {
-                event.paths.first().map(|path| WatchEvent::Removed(path.clone()))
-            }
+            EventKind::Remove(_) => event
+                .paths
+                .first()
+                .map(|path| WatchEvent::Removed(path.clone())),
             _ => None,
         };
 

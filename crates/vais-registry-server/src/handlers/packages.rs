@@ -26,9 +26,11 @@ pub async fn publish(
     let mut archive_data: Option<Vec<u8>> = None;
 
     // Parse multipart form
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        ServerError::BadRequest(format!("Failed to read multipart field: {}", e))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ServerError::BadRequest(format!("Failed to read multipart field: {}", e)))?
+    {
         let name = field.name().unwrap_or("").to_string();
 
         match name.as_str() {
@@ -57,7 +59,8 @@ pub async fn publish(
         }
     }
 
-    let metadata = metadata.ok_or_else(|| ServerError::BadRequest("Missing metadata".to_string()))?;
+    let metadata =
+        metadata.ok_or_else(|| ServerError::BadRequest("Missing metadata".to_string()))?;
     let archive_data =
         archive_data.ok_or_else(|| ServerError::BadRequest("Missing archive".to_string()))?;
 

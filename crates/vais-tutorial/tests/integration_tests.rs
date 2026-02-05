@@ -1,5 +1,5 @@
-use vais_tutorial::{Tutorial, TutorialError};
 use tempfile::NamedTempFile;
+use vais_tutorial::{Tutorial, TutorialError};
 
 #[test]
 fn test_tutorial_initialization() {
@@ -157,11 +157,7 @@ fn test_lesson_ids_are_unique() {
 
     for chapter in &tutorial.chapters {
         for lesson in &chapter.lessons {
-            assert!(
-                ids.insert(&lesson.id),
-                "Duplicate lesson ID: {}",
-                lesson.id
-            );
+            assert!(ids.insert(&lesson.id), "Duplicate lesson ID: {}", lesson.id);
         }
     }
 }

@@ -6,7 +6,7 @@ use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use vais_ast::{Item, Module, Function, Struct, Enum, Trait, ConstDef, ExternFunction};
+use vais_ast::{ConstDef, Enum, ExternFunction, Function, Item, Module, Struct, Trait};
 use vais_parser::parse;
 
 /// Documentation item extracted from source
@@ -70,8 +70,7 @@ pub fn run(input: &PathBuf, output: &PathBuf, format: &str) -> Result<(), String
     );
 
     // Create output directory
-    fs::create_dir_all(output)
-        .map_err(|e| format!("Cannot create output directory: {}", e))?;
+    fs::create_dir_all(output).map_err(|e| format!("Cannot create output directory: {}", e))?;
 
     // Collect source files
     let files = if input.is_dir() {
@@ -90,8 +89,8 @@ pub fn run(input: &PathBuf, output: &PathBuf, format: &str) -> Result<(), String
         let source = fs::read_to_string(file)
             .map_err(|e| format!("Cannot read '{}': {}", file.display(), e))?;
 
-        let ast = parse(&source)
-            .map_err(|e| format!("Parse error in '{}': {}", file.display(), e))?;
+        let ast =
+            parse(&source).map_err(|e| format!("Parse error in '{}': {}", file.display(), e))?;
 
         let doc = extract_documentation(file, &ast, &source);
         all_docs.push(doc);
@@ -322,7 +321,11 @@ fn extract_function_doc(f: &Function, docs: Vec<String>) -> DocItem {
         returns,
         examples,
         _generics: generics,
-        visibility: if f.is_pub { Visibility::Public } else { Visibility::Private },
+        visibility: if f.is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        },
     }
 }
 
@@ -382,7 +385,11 @@ fn extract_struct_doc(s: &Struct, docs: Vec<String>) -> DocItem {
         returns: None,
         examples,
         _generics: generics,
-        visibility: if s.is_pub { Visibility::Public } else { Visibility::Private },
+        visibility: if s.is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        },
     }
 }
 
@@ -397,11 +404,7 @@ fn extract_enum_doc(e: &Enum, docs: Vec<String>) -> DocItem {
         })
         .collect();
 
-    let variants: Vec<String> = e
-        .variants
-        .iter()
-        .map(|v| v.name.node.clone())
-        .collect();
+    let variants: Vec<String> = e.variants.iter().map(|v| v.name.node.clone()).collect();
 
     let mut signature = String::new();
     if e.is_pub {
@@ -439,7 +442,11 @@ fn extract_enum_doc(e: &Enum, docs: Vec<String>) -> DocItem {
         returns: None,
         examples,
         _generics: generics,
-        visibility: if e.is_pub { Visibility::Public } else { Visibility::Private },
+        visibility: if e.is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        },
     }
 }
 
@@ -449,7 +456,10 @@ fn extract_const_doc(c: &ConstDef, docs: Vec<String>) -> DocItem {
     if c.is_pub {
         signature.push_str("P ");
     }
-    signature.push_str(&format!("C {}: {} = {:?}", c.name.node, c.ty.node, c.value.node));
+    signature.push_str(&format!(
+        "C {}: {} = {:?}",
+        c.name.node, c.ty.node, c.value.node
+    ));
 
     DocItem {
         name: c.name.node.clone(),
@@ -460,7 +470,11 @@ fn extract_const_doc(c: &ConstDef, docs: Vec<String>) -> DocItem {
         returns: None,
         examples: vec![],
         _generics: vec![],
-        visibility: if c.is_pub { Visibility::Public } else { Visibility::Private },
+        visibility: if c.is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        },
     }
 }
 
@@ -519,11 +533,7 @@ fn extract_trait_doc(t: &Trait, docs: Vec<String>) -> DocItem {
         })
         .collect();
 
-    let methods: Vec<String> = t
-        .methods
-        .iter()
-        .map(|m| m.name.node.clone())
-        .collect();
+    let methods: Vec<String> = t.methods.iter().map(|m| m.name.node.clone()).collect();
 
     let mut signature = String::new();
     if t.is_pub {
@@ -572,7 +582,11 @@ fn extract_trait_doc(t: &Trait, docs: Vec<String>) -> DocItem {
         returns: None,
         examples,
         _generics: generics,
-        visibility: if t.is_pub { Visibility::Public } else { Visibility::Private },
+        visibility: if t.is_pub {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        },
     }
 }
 
@@ -718,10 +732,8 @@ fn generate_markdown_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), Strin
                     content.push_str("**Parameters:**\n\n");
                     for param in &item.params {
                         let mutability = if param.is_mut { " (mutable)" } else { "" };
-                        content.push_str(&format!(
-                            "- `{}`: {}{}\n",
-                            param.name, param.ty, mutability
-                        ));
+                        content
+                            .push_str(&format!("- `{}`: {}{}\n", param.name, param.ty, mutability));
                     }
                     content.push('\n');
                 }
@@ -760,10 +772,8 @@ fn generate_markdown_docs(docs: &[ModuleDoc], output: &Path) -> Result<(), Strin
                     content.push_str("**Parameters:**\n\n");
                     for param in &item.params {
                         let mutability = if param.is_mut { " (mutable)" } else { "" };
-                        content.push_str(&format!(
-                            "- `{}`: {}{}\n",
-                            param.name, param.ty, mutability
-                        ));
+                        content
+                            .push_str(&format!("- `{}`: {}{}\n", param.name, param.ty, mutability));
                     }
                     content.push('\n');
                 }
@@ -936,7 +946,9 @@ a:hover {
         let mut content = String::new();
         content.push_str("<!DOCTYPE html>\n<html>\n<head>\n");
         content.push_str("<meta charset=\"UTF-8\">\n");
-        content.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
+        content.push_str(
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n",
+        );
         content.push_str(&format!("<title>{} - Vais API</title>\n", doc.name));
         content.push_str(&format!("<style>{}</style>\n", style));
         content.push_str("</head>\n<body>\n");
@@ -947,17 +959,44 @@ a:hover {
         content.push_str("<h2><a href=\"index.html\">← Back</a></h2>\n");
 
         // Build sections
-        let constants: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Constant)).collect();
-        let structs: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Struct)).collect();
-        let enums: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Enum)).collect();
-        let traits: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Trait)).collect();
-        let functions: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::Function)).collect();
-        let extern_functions: Vec<_> = doc.items.iter().filter(|i| matches!(i.kind, DocKind::ExternFunction)).collect();
+        let constants: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::Constant))
+            .collect();
+        let structs: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::Struct))
+            .collect();
+        let enums: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::Enum))
+            .collect();
+        let traits: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::Trait))
+            .collect();
+        let functions: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::Function))
+            .collect();
+        let extern_functions: Vec<_> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, DocKind::ExternFunction))
+            .collect();
 
         if !constants.is_empty() {
             content.push_str("<h2>Constants</h2>\n<ul>\n");
             for item in &constants {
-                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+                content.push_str(&format!(
+                    "<li><a href=\"#{}\">{}</a></li>\n",
+                    item.name, item.name
+                ));
             }
             content.push_str("</ul>\n");
         }
@@ -965,7 +1004,10 @@ a:hover {
         if !structs.is_empty() {
             content.push_str("<h2>Structs</h2>\n<ul>\n");
             for item in &structs {
-                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+                content.push_str(&format!(
+                    "<li><a href=\"#{}\">{}</a></li>\n",
+                    item.name, item.name
+                ));
             }
             content.push_str("</ul>\n");
         }
@@ -973,7 +1015,10 @@ a:hover {
         if !enums.is_empty() {
             content.push_str("<h2>Enums</h2>\n<ul>\n");
             for item in &enums {
-                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+                content.push_str(&format!(
+                    "<li><a href=\"#{}\">{}</a></li>\n",
+                    item.name, item.name
+                ));
             }
             content.push_str("</ul>\n");
         }
@@ -981,7 +1026,10 @@ a:hover {
         if !traits.is_empty() {
             content.push_str("<h2>Traits</h2>\n<ul>\n");
             for item in &traits {
-                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+                content.push_str(&format!(
+                    "<li><a href=\"#{}\">{}</a></li>\n",
+                    item.name, item.name
+                ));
             }
             content.push_str("</ul>\n");
         }
@@ -989,7 +1037,10 @@ a:hover {
         if !functions.is_empty() {
             content.push_str("<h2>Functions</h2>\n<ul>\n");
             for item in &functions {
-                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+                content.push_str(&format!(
+                    "<li><a href=\"#{}\">{}</a></li>\n",
+                    item.name, item.name
+                ));
             }
             content.push_str("</ul>\n");
         }
@@ -997,7 +1048,10 @@ a:hover {
         if !extern_functions.is_empty() {
             content.push_str("<h2>External Functions</h2>\n<ul>\n");
             for item in &extern_functions {
-                content.push_str(&format!("<li><a href=\"#{}\">{}</a></li>\n", item.name, item.name));
+                content.push_str(&format!(
+                    "<li><a href=\"#{}\">{}</a></li>\n",
+                    item.name, item.name
+                ));
             }
             content.push_str("</ul>\n");
         }
@@ -1021,14 +1075,23 @@ a:hover {
                 DocKind::Module => "module",
             };
 
-            content.push_str(&format!("<h3 id=\"{}\"><span class=\"signature\">{}</span>", item.name, item.name));
-            content.push_str(&format!("<span class=\"badge {}\">{}</span>", kind_str, kind_str));
+            content.push_str(&format!(
+                "<h3 id=\"{}\"><span class=\"signature\">{}</span>",
+                item.name, item.name
+            ));
+            content.push_str(&format!(
+                "<span class=\"badge {}\">{}</span>",
+                kind_str, kind_str
+            ));
             if item.visibility == Visibility::Public {
                 content.push_str("<span class=\"badge public\">public</span>");
             }
             content.push_str("</h3>\n");
 
-            content.push_str(&format!("<pre><code>{}</code></pre>\n", html_escape(&item.signature)));
+            content.push_str(&format!(
+                "<pre><code>{}</code></pre>\n",
+                html_escape(&item.signature)
+            ));
 
             if !item.docs.is_empty() {
                 content.push_str("<div class=\"doc-block\">\n");
@@ -1044,7 +1107,11 @@ a:hover {
                 content.push_str("<h4>Parameters</h4>\n");
                 content.push_str("<div class=\"param-list\">\n");
                 for param in &item.params {
-                    let mutability = if param.is_mut { " <em>(mutable)</em>" } else { "" };
+                    let mutability = if param.is_mut {
+                        " <em>(mutable)</em>"
+                    } else {
+                        ""
+                    };
                     content.push_str(&format!(
                         "<div class=\"param-item\"><code>{}</code>: {}{}</div>\n",
                         html_escape(&param.name),
@@ -1056,13 +1123,19 @@ a:hover {
             }
 
             if let Some(ret) = &item.returns {
-                content.push_str(&format!("<h4>Returns</h4>\n<p><code>{}</code></p>\n", html_escape(ret)));
+                content.push_str(&format!(
+                    "<h4>Returns</h4>\n<p><code>{}</code></p>\n",
+                    html_escape(ret)
+                ));
             }
 
             if !item.examples.is_empty() {
                 content.push_str("<h4>Examples</h4>\n");
                 for example in &item.examples {
-                    content.push_str(&format!("<pre><code>{}</code></pre>\n", html_escape(example)));
+                    content.push_str(&format!(
+                        "<pre><code>{}</code></pre>\n",
+                        html_escape(example)
+                    ));
                 }
             }
         }
@@ -1090,7 +1163,7 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use vais_parser::parse;
 
     #[test]

@@ -93,7 +93,10 @@ mod tests {
 
         let messages = parse_messages(json).unwrap();
 
-        assert_eq!(messages.get("type.E001.title"), Some(&"Type mismatch".to_string()));
+        assert_eq!(
+            messages.get("type.E001.title"),
+            Some(&"Type mismatch".to_string())
+        );
         assert_eq!(
             messages.get("type.E001.message"),
             Some(&"expected {expected}, found {found}".to_string())

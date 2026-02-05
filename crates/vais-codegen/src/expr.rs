@@ -3,17 +3,14 @@
 //! This module contains helper functions for generating LLVM IR from Vais expressions.
 //! The main generate_expr function remains in lib.rs but delegates to these helpers.
 
-use crate::{CodeGenerator, CodegenResult, CodegenError};
-use vais_ast::{Spanned, Expr, BinOp, UnaryOp};
+use crate::{CodeGenerator, CodegenError, CodegenResult};
+use vais_ast::{BinOp, Expr, Spanned, UnaryOp};
 use vais_types::ResolvedType;
 
 #[allow(dead_code)]
 impl CodeGenerator {
     /// Generate code for a literal expression (Int, Float, Bool, String, Unit)
-    pub(crate) fn generate_literal(
-        &mut self,
-        expr: &Expr,
-    ) -> CodegenResult<(String, String)> {
+    pub(crate) fn generate_literal(&mut self, expr: &Expr) -> CodegenResult<(String, String)> {
         match expr {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
             Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
@@ -24,12 +21,17 @@ impl CodeGenerator {
                 self.string_constants.push((name.clone(), s.clone()));
                 let len = s.len() + 1;
                 Ok((
-                    format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+                    format!(
+                        "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                        len, len, name
+                    ),
                     String::new(),
                 ))
             }
             Expr::Unit => Ok(("void".to_string(), String::new())),
-            _ => Err(CodegenError::Unsupported("Not a literal expression".to_string())),
+            _ => Err(CodegenError::Unsupported(
+                "Not a literal expression".to_string(),
+            )),
         }
     }
 
@@ -69,10 +71,14 @@ impl CodeGenerator {
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
                 other => other.clone(),
             };
-            if let ResolvedType::Named { name: type_name, .. } = &self_type {
+            if let ResolvedType::Named {
+                name: type_name, ..
+            } = &self_type
+            {
                 let resolved_name = self.resolve_struct_name(type_name);
                 if let Some(struct_info) = self.structs.get(&resolved_name).cloned() {
-                    if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == name) {
+                    if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == name)
+                    {
                         let field_ty = &struct_info.fields[field_idx].1;
                         let llvm_ty = self.type_to_llvm(field_ty);
                         let mut ir = String::new();
@@ -106,7 +112,10 @@ impl CodeGenerator {
             candidates.push("self");
             let suggestions = crate::suggest_similar(name, &candidates, 3);
             let suggestion_text = crate::format_did_you_mean(&suggestions);
-            Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
+            Err(CodegenError::UndefinedVar(format!(
+                "{}{}",
+                name, suggestion_text
+            )))
         } else {
             // Collect all available symbols for suggestions
             let mut candidates: Vec<&str> = Vec::new();
@@ -130,7 +139,10 @@ impl CodeGenerator {
             let suggestions = crate::suggest_similar(name, &candidates, 3);
             let suggestion_text = crate::format_did_you_mean(&suggestions);
 
-            Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
+            Err(CodegenError::UndefinedVar(format!(
+                "{}{}",
+                name, suggestion_text
+            )))
         }
     }
 
@@ -164,7 +176,12 @@ impl CodeGenerator {
         let result_type = if is_cmp {
             "i1".to_string()
         } else if is_float {
-            if matches!(left_type, ResolvedType::F32) { "float" } else { "double" }.to_string()
+            if matches!(left_type, ResolvedType::F32) {
+                "float"
+            } else {
+                "double"
+            }
+            .to_string()
         } else {
             format!("i{}", bits)
         };
@@ -224,7 +241,11 @@ impl CodeGenerator {
         let result_ir = match op {
             UnaryOp::Neg => {
                 if is_float {
-                    let float_ty = if matches!(expr_type, ResolvedType::F32) { "float" } else { "double" };
+                    let float_ty = if matches!(expr_type, ResolvedType::F32) {
+                        "float"
+                    } else {
+                        "double"
+                    };
                     format!("{}  {} = fneg {} {}{}\n", ir, tmp, float_ty, val, dbg_info)
                 } else {
                     format!("{}  {} = sub i{} 0, {}{}\n", ir, tmp, bits, val, dbg_info)
@@ -261,23 +282,28 @@ impl CodeGenerator {
                     Ok((val.clone(), ir))
                 } else {
                     // Collect all available symbols for suggestions
-                    let candidates: Vec<&str> = self.locals.keys()
-                        .map(|s| s.as_str())
-                        .collect();
+                    let candidates: Vec<&str> = self.locals.keys().map(|s| s.as_str()).collect();
 
                     let suggestions = crate::suggest_similar(name, &candidates, 3);
                     let suggestion_text = crate::format_did_you_mean(&suggestions);
 
-                    Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
+                    Err(CodegenError::UndefinedVar(format!(
+                        "{}{}",
+                        name, suggestion_text
+                    )))
                 }
             }
-            Expr::Index { expr: arr_expr, index } => {
-                self.generate_index_assignment(arr_expr, index, &val, &val_ir, counter)
-            }
-            Expr::Field { expr: obj_expr, field } => {
-                self.generate_field_assignment(obj_expr, field, &val, &val_ir, counter)
-            }
-            _ => Err(CodegenError::Unsupported("Invalid assignment target".to_string())),
+            Expr::Index {
+                expr: arr_expr,
+                index,
+            } => self.generate_index_assignment(arr_expr, index, &val, &val_ir, counter),
+            Expr::Field {
+                expr: obj_expr,
+                field,
+            } => self.generate_field_assignment(obj_expr, field, &val, &val_ir, counter),
+            _ => Err(CodegenError::Unsupported(
+                "Invalid assignment target".to_string(),
+            )),
         }
     }
 
@@ -332,23 +358,33 @@ impl CodeGenerator {
         let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
         let obj_type = self.infer_expr_type(obj_expr);
 
-        if let ResolvedType::Named { name: struct_name, .. } = &obj_type {
+        if let ResolvedType::Named {
+            name: struct_name, ..
+        } = &obj_type
+        {
             if let Some(struct_info) = self.structs.get(struct_name).cloned() {
-                let field_idx = struct_info.fields.iter()
+                let field_idx = struct_info
+                    .fields
+                    .iter()
                     .position(|(n, _)| n == &field.node);
 
                 let field_idx = if let Some(idx) = field_idx {
                     idx
                 } else {
                     // Suggest similar field names
-                    let candidates: Vec<&str> = struct_info.fields.iter()
+                    let candidates: Vec<&str> = struct_info
+                        .fields
+                        .iter()
                         .map(|(name, _)| name.as_str())
                         .collect();
 
                     let suggestions = crate::suggest_similar(&field.node, &candidates, 3);
                     let suggestion_text = crate::format_did_you_mean(&suggestions);
 
-                    return Err(CodegenError::UndefinedVar(format!("field {}{}", field.node, suggestion_text)));
+                    return Err(CodegenError::UndefinedVar(format!(
+                        "field {}{}",
+                        field.node, suggestion_text
+                    )));
                 };
 
                 let struct_llvm = self.type_to_llvm(&obj_type);
@@ -356,14 +392,18 @@ impl CodeGenerator {
                 let field_llvm = self.type_to_llvm(field_ty);
 
                 let field_ptr = self.next_temp(counter);
-                let ir = format!(
+                let ir =
+                    format!(
                     "{}{}  {} = getelementptr {}, {}* {}, i32 0, i32 {}\n  store {} {}, {}* {}\n",
                     val_ir, obj_ir, field_ptr, struct_llvm, struct_llvm, obj_val, field_idx,
                     field_llvm, val, field_llvm, field_ptr
                 );
                 Ok((val.to_string(), ir))
             } else {
-                Err(CodegenError::UndefinedVar(format!("struct {} not found", struct_name)))
+                Err(CodegenError::UndefinedVar(format!(
+                    "struct {} not found",
+                    struct_name
+                )))
             }
         } else {
             let type_name = format!("{:?}", obj_type);
@@ -393,7 +433,12 @@ impl CodeGenerator {
 
         let (op_str, _) = self.get_binary_op_str(op, is_float, bits);
         let result_type = if is_float {
-            if matches!(target_type, ResolvedType::F32) { "float" } else { "double" }.to_string()
+            if matches!(target_type, ResolvedType::F32) {
+                "float"
+            } else {
+                "double"
+            }
+            .to_string()
         } else {
             format!("i{}", bits)
         };
@@ -417,7 +462,9 @@ impl CodeGenerator {
                     Err(CodegenError::UndefinedVar(name.clone()))
                 }
             }
-            _ => Err(CodegenError::Unsupported("Compound assignment to complex target".to_string())),
+            _ => Err(CodegenError::Unsupported(
+                "Compound assignment to complex target".to_string(),
+            )),
         }
     }
 }

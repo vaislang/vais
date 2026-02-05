@@ -1,11 +1,13 @@
+use vais_parser::parse;
 /// Comprehensive tests for Generic Associated Types (GAT)
 use vais_types::TypeChecker;
-use vais_parser::parse;
 
 fn check_module(source: &str) -> Result<(), String> {
     let module = parse(source).map_err(|e| format!("{:?}", e))?;
     let mut checker = TypeChecker::new();
-    checker.check_module(&module).map_err(|e| format!("{:?}", e))?;
+    checker
+        .check_module(&module)
+        .map_err(|e| format!("{:?}", e))?;
     Ok(())
 }
 
@@ -24,7 +26,7 @@ fn test_gat_basic_trait_definition() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {}, // Success
+        Ok(_) => {} // Success
         Err(e) => {
             // GAT syntax might not be fully supported yet, so this is expected
             eprintln!("Note: GAT syntax not fully supported: {}", e);
@@ -47,7 +49,7 @@ fn test_gat_with_multiple_params() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: Multi-param GAT not fully supported: {}", e);
         }
@@ -110,9 +112,12 @@ fn test_trait_with_associated_type_default() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
-            eprintln!("Note: Default associated types might not be fully supported: {}", e);
+            eprintln!(
+                "Note: Default associated types might not be fully supported: {}",
+                e
+            );
         }
     }
 }
@@ -132,7 +137,7 @@ fn test_associated_type_in_function() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: Associated type usage in signatures: {}", e);
         }
@@ -154,7 +159,7 @@ fn test_gat_with_lifetime() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: GAT with lifetimes not fully supported: {}", e);
         }
@@ -176,7 +181,7 @@ fn test_associated_type_with_bounds() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: Associated type bounds: {}", e);
         }
@@ -205,7 +210,7 @@ fn test_gat_impl_concrete() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: GAT impl: {}", e);
         }
@@ -250,7 +255,7 @@ fn test_super_trait_with_associated_type() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: Super trait with associated type: {}", e);
         }
@@ -283,7 +288,7 @@ fn test_associated_type_projection_syntax() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: Associated type projection syntax: {}", e);
         }
@@ -324,7 +329,7 @@ fn test_gat_where_clause() {
     "#;
 
     match check_module(source) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Note: GAT where clause: {}", e);
         }

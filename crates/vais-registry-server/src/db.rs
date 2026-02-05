@@ -465,14 +465,16 @@ pub async fn update_package(pool: &DbPool, pkg: &Package) -> ServerResult<()> {
     Ok(())
 }
 
-pub async fn is_package_owner(pool: &DbPool, package_id: Uuid, user_id: Uuid) -> ServerResult<bool> {
-    let row = sqlx::query(
-        "SELECT 1 FROM package_owners WHERE package_id = ? AND user_id = ?",
-    )
-    .bind(package_id.to_string())
-    .bind(user_id.to_string())
-    .fetch_optional(pool)
-    .await?;
+pub async fn is_package_owner(
+    pool: &DbPool,
+    package_id: Uuid,
+    user_id: Uuid,
+) -> ServerResult<bool> {
+    let row = sqlx::query("SELECT 1 FROM package_owners WHERE package_id = ? AND user_id = ?")
+        .bind(package_id.to_string())
+        .bind(user_id.to_string())
+        .fetch_optional(pool)
+        .await?;
 
     Ok(row.is_some())
 }
@@ -548,7 +550,10 @@ pub async fn get_version(
     }))
 }
 
-pub async fn get_all_versions(pool: &DbPool, package_id: Uuid) -> ServerResult<Vec<PackageVersion>> {
+pub async fn get_all_versions(
+    pool: &DbPool,
+    package_id: Uuid,
+) -> ServerResult<Vec<PackageVersion>> {
     let rows = sqlx::query(
         r#"
         SELECT id, package_id, version, checksum, size, yanked, readme, published_by, created_at, downloads
@@ -585,14 +590,13 @@ pub async fn set_version_yanked(
     version: &str,
     yanked: bool,
 ) -> ServerResult<bool> {
-    let result = sqlx::query(
-        "UPDATE package_versions SET yanked = ? WHERE package_id = ? AND version = ?",
-    )
-    .bind(yanked)
-    .bind(package_id.to_string())
-    .bind(version)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE package_versions SET yanked = ? WHERE package_id = ? AND version = ?")
+            .bind(yanked)
+            .bind(package_id.to_string())
+            .bind(version)
+            .execute(pool)
+            .await?;
 
     Ok(result.rows_affected() > 0)
 }
@@ -709,15 +713,22 @@ pub async fn search_packages_advanced(
 
     // Build WHERE clause dynamically
     let mut where_clauses = vec![
-        "(LOWER(p.name) LIKE ?1 OR LOWER(p.description) LIKE ?1 OR LOWER(p.keywords) LIKE ?1)".to_string(),
+        "(LOWER(p.name) LIKE ?1 OR LOWER(p.description) LIKE ?1 OR LOWER(p.keywords) LIKE ?1)"
+            .to_string(),
     ];
 
     if let Some(cat) = category {
-        where_clauses.push(format!("LOWER(p.categories) LIKE '%{}%'", cat.to_lowercase().replace('\'', "''")));
+        where_clauses.push(format!(
+            "LOWER(p.categories) LIKE '%{}%'",
+            cat.to_lowercase().replace('\'', "''")
+        ));
     }
 
     if let Some(kw) = keyword {
-        where_clauses.push(format!("LOWER(p.keywords) LIKE '%{}%'", kw.to_lowercase().replace('\'', "''")));
+        where_clauses.push(format!(
+            "LOWER(p.keywords) LIKE '%{}%'",
+            kw.to_lowercase().replace('\'', "''")
+        ));
     }
 
     let where_sql = where_clauses.join(" AND ");
@@ -771,7 +782,8 @@ pub async fn search_packages_advanced(
                 latest_version: v,
                 downloads: r.get("downloads"),
                 keywords: serde_json::from_str(r.get::<&str, _>("keywords")).unwrap_or_default(),
-                categories: serde_json::from_str(r.get::<&str, _>("categories")).unwrap_or_default(),
+                categories: serde_json::from_str(r.get::<&str, _>("categories"))
+                    .unwrap_or_default(),
                 updated_at: DateTime::parse_from_rfc3339(r.get("updated_at"))
                     .unwrap()
                     .with_timezone(&Utc),
@@ -783,9 +795,7 @@ pub async fn search_packages_advanced(
 }
 
 /// Get category counts for faceted search
-pub async fn get_category_counts(
-    pool: &DbPool,
-) -> ServerResult<Vec<CategoryCount>> {
+pub async fn get_category_counts(pool: &DbPool) -> ServerResult<Vec<CategoryCount>> {
     // Since categories are stored as JSON arrays, we need to aggregate
     let rows = sqlx::query(
         r#"

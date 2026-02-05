@@ -5,8 +5,8 @@
 use bytes::{Buf, BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
+use super::types::{Event, MessageType, ProtocolMessage, Request, Response};
 use crate::error::{DapError, DapResult};
-use super::types::{Request, Response, Event, MessageType, ProtocolMessage};
 
 const CONTENT_LENGTH: &str = "Content-Length: ";
 const HEADER_DELIMITER: &[u8] = b"\r\n\r\n";
@@ -45,7 +45,11 @@ impl DapMessage {
     }
 
     /// Create a request message
-    pub fn request(seq: i64, command: impl Into<String>, arguments: Option<serde_json::Value>) -> Self {
+    pub fn request(
+        seq: i64,
+        command: impl Into<String>,
+        arguments: Option<serde_json::Value>,
+    ) -> Self {
         DapMessage::Request(Request {
             base: ProtocolMessage {
                 seq,
@@ -216,7 +220,9 @@ fn parse_content_length(header: &str) -> DapResult<usize> {
                 .map_err(|e| DapError::Protocol(format!("Invalid Content-Length: {}", e)));
         }
     }
-    Err(DapError::Protocol("Missing Content-Length header".to_string()))
+    Err(DapError::Protocol(
+        "Missing Content-Length header".to_string(),
+    ))
 }
 
 #[cfg(test)]
@@ -228,7 +234,8 @@ mod tests {
         let mut codec = DapCodec::new();
         let mut buf = BytesMut::new();
 
-        let json = r#"{"seq":1,"type":"request","command":"initialize","arguments":{"clientID":"test"}}"#;
+        let json =
+            r#"{"seq":1,"type":"request","command":"initialize","arguments":{"clientID":"test"}}"#;
         let header = format!("Content-Length: {}\r\n\r\n", json.len());
 
         buf.extend_from_slice(header.as_bytes());

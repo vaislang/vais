@@ -3,10 +3,10 @@
 //! Provides a secure sandbox environment for executing WASM plugins
 //! with resource limits and capability-based security.
 
+use parking_lot::Mutex;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
-use parking_lot::Mutex;
 use wasmtime::*;
 
 use crate::error::{DynloadError, Result};
@@ -144,9 +144,10 @@ impl WasmSandbox {
     /// Create a new WASM sandbox with custom configuration
     pub fn with_config(config: SandboxConfig) -> Result<Self> {
         // Validate configuration
-        config.limits.validate().map_err(|e| {
-            DynloadError::ConfigError(format!("Invalid resource limits: {}", e))
-        })?;
+        config
+            .limits
+            .validate()
+            .map_err(|e| DynloadError::ConfigError(format!("Invalid resource limits: {}", e)))?;
 
         // Create engine configuration
         let mut engine_config = Config::new();
@@ -384,7 +385,10 @@ impl WasmInstance {
     }
 
     /// Get a typed function
-    pub fn get_typed_func<Params, Results>(&mut self, name: &str) -> Result<TypedFunc<Params, Results>>
+    pub fn get_typed_func<Params, Results>(
+        &mut self,
+        name: &str,
+    ) -> Result<TypedFunc<Params, Results>>
     where
         Params: WasmParams,
         Results: WasmResults,
@@ -426,9 +430,8 @@ impl WasmInstance {
     /// Read a string from memory
     pub fn read_string(&mut self, offset: usize, len: usize) -> Result<String> {
         let bytes = self.read_memory(offset, len)?;
-        String::from_utf8(bytes).map_err(|e| {
-            DynloadError::WasmExecutionError(format!("Invalid UTF-8 string: {}", e))
-        })
+        String::from_utf8(bytes)
+            .map_err(|e| DynloadError::WasmExecutionError(format!("Invalid UTF-8 string: {}", e)))
     }
 
     /// Get resource usage
@@ -467,9 +470,7 @@ impl WasmInstance {
     fn get_memory(&mut self) -> Result<Memory> {
         self.instance
             .get_memory(&mut self.store, "memory")
-            .ok_or_else(|| {
-                DynloadError::WasmExecutionError("No memory export found".to_string())
-            })
+            .ok_or_else(|| DynloadError::WasmExecutionError("No memory export found".to_string()))
     }
 
     fn track_call(&mut self) {

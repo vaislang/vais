@@ -42,7 +42,10 @@ fn compile_and_run(source: &str) -> Result<RunResult, String> {
 }
 
 /// Compile source with additional C source files and linker flags
-fn compile_and_run_with_extra_sources(source: &str, extra_c_sources: &[&str]) -> Result<RunResult, String> {
+fn compile_and_run_with_extra_sources(
+    source: &str,
+    extra_c_sources: &[&str],
+) -> Result<RunResult, String> {
     let ir = compile_to_ir(source)?;
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
@@ -62,7 +65,8 @@ fn compile_and_run_with_extra_sources(source: &str, extra_c_sources: &[&str]) ->
         cmd.arg(c_source);
     }
 
-    let clang_output = cmd.output()
+    let clang_output = cmd
+        .output()
         .map_err(|e| format!("Failed to run clang: {}", e))?;
 
     if !clang_output.status.success() {
@@ -419,12 +423,12 @@ F main() -> i64 {
     0
 }
 "#;
-    
+
     let result = compile_and_run_with_extra_sources(
         source,
-        &["/Users/sswoo/study/projects/vais/std/log_runtime.c"]
+        &["/Users/sswoo/study/projects/vais/std/log_runtime.c"],
     );
-    
+
     match result {
         Ok(res) => {
             assert_eq!(res.exit_code, 0);
@@ -458,12 +462,12 @@ F main() -> i64 {
     0
 }
 "#;
-    
+
     let result = compile_and_run_with_extra_sources(
         source,
-        &["/Users/sswoo/study/projects/vais/std/log_runtime.c"]
+        &["/Users/sswoo/study/projects/vais/std/log_runtime.c"],
     );
-    
+
     match result {
         Ok(res) => {
             assert_eq!(res.exit_code, 0);
@@ -611,12 +615,12 @@ F main() -> i64 {
     0
 }
 "#;
-    
+
     let result = compile_and_run_with_extra_sources(
         source,
-        &["/Users/sswoo/study/projects/vais/std/compress_runtime.c"]
+        &["/Users/sswoo/study/projects/vais/std/compress_runtime.c"],
     );
-    
+
     match result {
         Ok(res) => {
             // May fail if zlib is not available, but should compile

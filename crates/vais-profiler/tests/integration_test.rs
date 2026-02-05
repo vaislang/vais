@@ -1,6 +1,6 @@
-use vais_profiler::{Profiler, ProfilerConfig, ProfilerMode};
-use vais_profiler::reporter::{TextReport, ProfileStats, CompactReport};
 use std::time::Duration;
+use vais_profiler::reporter::{CompactReport, ProfileStats, TextReport};
+use vais_profiler::{Profiler, ProfilerConfig, ProfilerMode};
 
 #[test]
 fn test_end_to_end_profiling() {

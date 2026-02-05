@@ -75,7 +75,9 @@ fn test_function_pointer_type() {
         Item::Function(f) => {
             assert_eq!(f.params.len(), 1);
             match &f.params[0].ty.node {
-                Type::FnPtr { params, is_vararg, .. } => {
+                Type::FnPtr {
+                    params, is_vararg, ..
+                } => {
                     assert_eq!(params.len(), 2);
                     assert!(!is_vararg);
                 }
@@ -94,14 +96,12 @@ fn test_function_pointer_vararg() {
     let module = parser.parse_module().unwrap();
 
     match &module.items[0].node {
-        Item::Function(f) => {
-            match &f.params[0].ty.node {
-                Type::FnPtr { is_vararg, .. } => {
-                    assert!(is_vararg);
-                }
-                _ => panic!("Expected FnPtr type"),
+        Item::Function(f) => match &f.params[0].ty.node {
+            Type::FnPtr { is_vararg, .. } => {
+                assert!(is_vararg);
             }
-        }
+            _ => panic!("Expected FnPtr type"),
+        },
         _ => panic!("Expected Function"),
     }
 }

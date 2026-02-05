@@ -7,11 +7,11 @@ mod token_conv;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+use vais_codegen::optimize::{optimize_ir, OptLevel};
+use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_lexer::tokenize as vais_tokenize;
 use vais_parser::{parse as vais_parse, ParseError};
 use vais_types::TypeChecker;
-use vais_codegen::{CodeGenerator, TargetTriple};
-use vais_codegen::optimize::{optimize_ir, OptLevel};
 
 /// Represents a compilation error
 #[napi(object)]
@@ -69,16 +69,17 @@ pub fn tokenize(source: String) -> Result<Vec<VaisToken>> {
     let tokens = vais_tokenize(&source)
         .map_err(|e| Error::new(Status::InvalidArg, format!("Lexer error: {}", e)))?;
 
-    Ok(tokens.iter().map(|st| {
-        VaisToken {
+    Ok(tokens
+        .iter()
+        .map(|st| VaisToken {
             token_type: token_conv::token_to_string(&st.token),
             span: VaisSpan {
                 start: st.span.start as u32,
                 end: st.span.end as u32,
             },
             text: token_conv::token_text(&st.token, &source, &st.span),
-        }
-    }).collect())
+        })
+        .collect())
 }
 
 /// Parse Vais source code into an AST
@@ -96,21 +97,25 @@ pub fn tokenize(source: String) -> Result<Vec<VaisToken>> {
 /// Throws an error if the source code contains syntax errors
 #[napi]
 pub fn parse(env: Env, source: String) -> Result<Object> {
-    let ast = vais_parse(&source)
-        .map_err(|e| {
-            let error_msg = match &e {
-                ParseError::UnexpectedToken { found, expected, span } => {
-                    format!("Unexpected token {:?} at {:?}, expected {}", found, span, expected)
-                }
-                ParseError::UnexpectedEof { span } => {
-                    format!("Unexpected end of file at {:?}", span)
-                }
-                ParseError::InvalidExpression => {
-                    "Invalid expression".to_string()
-                }
-            };
-            Error::new(Status::InvalidArg, error_msg)
-        })?;
+    let ast = vais_parse(&source).map_err(|e| {
+        let error_msg = match &e {
+            ParseError::UnexpectedToken {
+                found,
+                expected,
+                span,
+            } => {
+                format!(
+                    "Unexpected token {:?} at {:?}, expected {}",
+                    found, span, expected
+                )
+            }
+            ParseError::UnexpectedEof { span } => {
+                format!("Unexpected end of file at {:?}", span)
+            }
+            ParseError::InvalidExpression => "Invalid expression".to_string(),
+        };
+        Error::new(Status::InvalidArg, error_msg)
+    })?;
 
     // Create simplified AST representation
     let mut obj = env.create_object()?;
@@ -141,17 +146,25 @@ pub fn check(source: String) -> Result<Vec<VaisError>> {
         Ok(ast) => ast,
         Err(e) => {
             let (message, span) = match &e {
-                ParseError::UnexpectedToken { found, expected, span } => {
-                    (format!("Unexpected token {:?}, expected {}", found, expected),
-                     Some(VaisSpan { start: span.start as u32, end: span.end as u32 }))
-                }
-                ParseError::UnexpectedEof { span } => {
-                    ("Unexpected end of file".to_string(),
-                     Some(VaisSpan { start: span.start as u32, end: span.end as u32 }))
-                }
-                ParseError::InvalidExpression => {
-                    ("Invalid expression".to_string(), None)
-                }
+                ParseError::UnexpectedToken {
+                    found,
+                    expected,
+                    span,
+                } => (
+                    format!("Unexpected token {:?}, expected {}", found, expected),
+                    Some(VaisSpan {
+                        start: span.start as u32,
+                        end: span.end as u32,
+                    }),
+                ),
+                ParseError::UnexpectedEof { span } => (
+                    "Unexpected end of file".to_string(),
+                    Some(VaisSpan {
+                        start: span.start as u32,
+                        end: span.end as u32,
+                    }),
+                ),
+                ParseError::InvalidExpression => ("Invalid expression".to_string(), None),
             };
             return Ok(vec![VaisError {
                 message,
@@ -165,13 +178,11 @@ pub fn check(source: String) -> Result<Vec<VaisError>> {
     let mut checker = TypeChecker::new();
     match checker.check_module(&ast) {
         Ok(_) => Ok(vec![]),
-        Err(e) => {
-            Ok(vec![VaisError {
-                message: e.to_string(),
-                span: None,
-                error_type: "TypeError".to_string(),
-            }])
-        }
+        Err(e) => Ok(vec![VaisError {
+            message: e.to_string(),
+            span: None,
+            error_type: "TypeError".to_string(),
+        }]),
     }
 }
 
@@ -208,12 +219,14 @@ pub fn compile(source: String, options: Option<CompileOptions>) -> Result<String
 
     // Type check
     let mut checker = TypeChecker::new();
-    checker.check_module(&ast)
+    checker
+        .check_module(&ast)
         .map_err(|e| Error::new(Status::InvalidArg, format!("Type error: {}", e)))?;
 
     // Generate code
     let mut codegen = CodeGenerator::new_with_target(&module_name, target);
-    let raw_ir = codegen.generate_module(&ast)
+    let raw_ir = codegen
+        .generate_module(&ast)
         .map_err(|e| Error::new(Status::GenericFailure, format!("Codegen error: {}", e)))?;
 
     // Optimize

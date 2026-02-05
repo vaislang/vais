@@ -127,7 +127,9 @@ optimizer = { level = "aggressive" }
 
         let lint_config = config.plugins.config.get("lint").unwrap();
         assert_eq!(
-            lint_config.get("max_complexity").and_then(|v| v.as_integer()),
+            lint_config
+                .get("max_complexity")
+                .and_then(|v| v.as_integer()),
             Some(10)
         );
     }

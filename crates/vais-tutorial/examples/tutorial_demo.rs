@@ -26,7 +26,14 @@ fn main() {
     println!("Title: {}", lesson_title);
     println!("Description: {}", lesson_desc);
     println!("\nContent Preview:");
-    println!("{}", lesson_content.lines().take(5).collect::<Vec<_>>().join("\n"));
+    println!(
+        "{}",
+        lesson_content
+            .lines()
+            .take(5)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     println!("...\n");
 
     println!("Code Template:");
@@ -64,16 +71,24 @@ fn main() {
     // Test lesson completion
     println!("\n=== Testing Progress Tracking ===");
     let test_lesson = "ch1_variables";
-    println!("Lesson '{}' completed: {}", test_lesson, tutorial.is_lesson_complete(test_lesson));
+    println!(
+        "Lesson '{}' completed: {}",
+        test_lesson,
+        tutorial.is_lesson_complete(test_lesson)
+    );
 
     tutorial.mark_lesson_complete(test_lesson);
-    println!("After marking complete: {}", tutorial.is_lesson_complete(test_lesson));
+    println!(
+        "After marking complete: {}",
+        tutorial.is_lesson_complete(test_lesson)
+    );
 
     // Show overall progress
     println!("\n=== Overall Progress ===");
     let total_lessons: usize = tutorial.chapters.iter().map(|ch| ch.lessons.len()).sum();
     let completed = tutorial.progress.completed_lessons.len();
-    println!("Completed: {}/{} lessons ({:.1}%)",
+    println!(
+        "Completed: {}/{} lessons ({:.1}%)",
         completed,
         total_lessons,
         (completed as f64 / total_lessons as f64 * 100.0)
@@ -81,21 +96,24 @@ fn main() {
 
     // Demonstrate navigation
     println!("\n=== Testing Navigation ===");
-    println!("Current position: Chapter {}, Lesson {}",
-        tutorial.progress.current_chapter,
-        tutorial.progress.current_lesson
+    println!(
+        "Current position: Chapter {}, Lesson {}",
+        tutorial.progress.current_chapter, tutorial.progress.current_lesson
     );
 
     if let Some((ch_id, lesson_idx)) = tutorial.next_lesson() {
-        if let (Some(chapter), Some(lesson)) = (tutorial.get_chapter(ch_id), tutorial.get_lesson(ch_id, lesson_idx)) {
+        if let (Some(chapter), Some(lesson)) = (
+            tutorial.get_chapter(ch_id),
+            tutorial.get_lesson(ch_id, lesson_idx),
+        ) {
             println!("Next lesson: {} - {}", chapter.title, lesson.title);
         }
     }
 
     tutorial.advance_lesson();
-    println!("After advance: Chapter {}, Lesson {}",
-        tutorial.progress.current_chapter,
-        tutorial.progress.current_lesson
+    println!(
+        "After advance: Chapter {}, Lesson {}",
+        tutorial.progress.current_chapter, tutorial.progress.current_lesson
     );
 
     // Test goto_lesson

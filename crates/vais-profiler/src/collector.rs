@@ -272,8 +272,12 @@ mod tests {
         assert_eq!(samples.len(), 3);
         assert_eq!(samples[0], ("main".to_string(), 3));
         // Order of foo and bar is not guaranteed (both have 1 sample)
-        assert!(samples.iter().any(|(name, count)| name == "foo" && *count == 1));
-        assert!(samples.iter().any(|(name, count)| name == "bar" && *count == 1));
+        assert!(samples
+            .iter()
+            .any(|(name, count)| name == "foo" && *count == 1));
+        assert!(samples
+            .iter()
+            .any(|(name, count)| name == "bar" && *count == 1));
     }
 
     #[test]

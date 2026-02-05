@@ -6,7 +6,9 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, Linkage, Module};
 
-use vais_ast::{BinOp, Expr, Function, FunctionBody, Item, Module as AstModule, Spanned, Stmt, Type, UnaryOp};
+use vais_ast::{
+    BinOp, Expr, Function, FunctionBody, Item, Module as AstModule, Spanned, Stmt, Type, UnaryOp,
+};
 use vais_types::ResolvedType;
 
 use crate::runtime::JitRuntime;
@@ -153,9 +155,7 @@ impl JitCompiler {
         }
 
         // Declare the function
-        let func_id = self
-            .module
-            .declare_function(name, Linkage::Local, &sig)?;
+        let func_id = self.module.declare_function(name, Linkage::Local, &sig)?;
 
         self.compiled_functions.insert(name.clone(), func_id);
 
@@ -170,7 +170,9 @@ impl JitCompiler {
         self.ctx.clear();
 
         // Pre-resolve parameter types (before borrowing builder_context)
-        let param_types: Vec<_> = func.params.iter()
+        let param_types: Vec<_> = func
+            .params
+            .iter()
             .map(|param| {
                 let ty = self.resolve_type(&param.ty.node);
                 self.type_mapper.map_type(&ty)
@@ -197,8 +199,7 @@ impl JitCompiler {
         self.ctx.func.signature = sig;
 
         // Create function builder
-        let mut builder =
-            FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+        let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
         // Create entry block
         let entry_block = builder.create_block();
@@ -272,34 +273,32 @@ impl JitCompiler {
     /// Resolves a vais_ast::Type to a ResolvedType.
     fn resolve_type(&self, ty: &Type) -> ResolvedType {
         match ty {
-            Type::Named { name, generics } => {
-                match name.as_str() {
-                    "i8" => ResolvedType::I8,
-                    "i16" => ResolvedType::I16,
-                    "i32" => ResolvedType::I32,
-                    "i64" => ResolvedType::I64,
-                    "i128" => ResolvedType::I128,
-                    "u8" => ResolvedType::U8,
-                    "u16" => ResolvedType::U16,
-                    "u32" => ResolvedType::U32,
-                    "u64" => ResolvedType::U64,
-                    "u128" => ResolvedType::U128,
-                    "f32" => ResolvedType::F32,
-                    "f64" => ResolvedType::F64,
-                    "bool" => ResolvedType::Bool,
-                    "str" => ResolvedType::Str,
-                    _ => {
-                        let resolved_generics: Vec<_> = generics
-                            .iter()
-                            .map(|g| self.resolve_type(&g.node))
-                            .collect();
-                        ResolvedType::Named {
-                            name: name.clone(),
-                            generics: resolved_generics,
-                        }
+            Type::Named { name, generics } => match name.as_str() {
+                "i8" => ResolvedType::I8,
+                "i16" => ResolvedType::I16,
+                "i32" => ResolvedType::I32,
+                "i64" => ResolvedType::I64,
+                "i128" => ResolvedType::I128,
+                "u8" => ResolvedType::U8,
+                "u16" => ResolvedType::U16,
+                "u32" => ResolvedType::U32,
+                "u64" => ResolvedType::U64,
+                "u128" => ResolvedType::U128,
+                "f32" => ResolvedType::F32,
+                "f64" => ResolvedType::F64,
+                "bool" => ResolvedType::Bool,
+                "str" => ResolvedType::Str,
+                _ => {
+                    let resolved_generics: Vec<_> = generics
+                        .iter()
+                        .map(|g| self.resolve_type(&g.node))
+                        .collect();
+                    ResolvedType::Named {
+                        name: name.clone(),
+                        generics: resolved_generics,
                     }
                 }
-            }
+            },
             Type::Unit => ResolvedType::Unit,
             Type::Pointer(inner) => ResolvedType::Pointer(Box::new(self.resolve_type(&inner.node))),
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.resolve_type(&inner.node))),
@@ -330,7 +329,10 @@ impl JitCompiler {
                 }
             }
             Type::Infer => ResolvedType::Unknown,
-            Type::DynTrait { trait_name, generics } => {
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 let resolved_generics: Vec<_> = generics
                     .iter()
                     .map(|g| self.resolve_type(&g.node))
@@ -340,11 +342,13 @@ impl JitCompiler {
                     generics: resolved_generics,
                 }
             }
-            Type::FnPtr { params, ret, is_vararg } => {
-                let resolved_params: Vec<_> = params
-                    .iter()
-                    .map(|p| self.resolve_type(&p.node))
-                    .collect();
+            Type::FnPtr {
+                params,
+                ret,
+                is_vararg,
+            } => {
+                let resolved_params: Vec<_> =
+                    params.iter().map(|p| self.resolve_type(&p.node)).collect();
                 ResolvedType::FnPtr {
                     params: resolved_params,
                     ret: Box::new(self.resolve_type(&ret.node)),
@@ -352,7 +356,12 @@ impl JitCompiler {
                     effects: None,
                 }
             }
-            Type::Associated { base, trait_name, assoc_name, generics } => {
+            Type::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => {
                 let resolved_base = self.resolve_type(&base.node);
                 let resolved_generics: Vec<_> = generics
                     .iter()
@@ -365,34 +374,28 @@ impl JitCompiler {
                     generics: resolved_generics,
                 }
             }
-            Type::Linear(inner) => {
-                ResolvedType::Linear(Box::new(self.resolve_type(&inner.node)))
-            }
-            Type::Affine(inner) => {
-                ResolvedType::Affine(Box::new(self.resolve_type(&inner.node)))
-            }
-            Type::Dependent { var_name, base, predicate } => {
+            Type::Linear(inner) => ResolvedType::Linear(Box::new(self.resolve_type(&inner.node))),
+            Type::Affine(inner) => ResolvedType::Affine(Box::new(self.resolve_type(&inner.node))),
+            Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => {
                 ResolvedType::Dependent {
                     var_name: var_name.clone(),
                     base: Box::new(self.resolve_type(&base.node)),
                     predicate: format!("{:?}", predicate.node), // Store predicate as string representation
                 }
             }
-            Type::RefLifetime { lifetime, inner } => {
-                ResolvedType::RefLifetime {
-                    lifetime: lifetime.clone(),
-                    inner: Box::new(self.resolve_type(&inner.node)),
-                }
-            }
-            Type::RefMutLifetime { lifetime, inner } => {
-                ResolvedType::RefMutLifetime {
-                    lifetime: lifetime.clone(),
-                    inner: Box::new(self.resolve_type(&inner.node)),
-                }
-            }
-            Type::Lazy(inner) => {
-                ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node)))
-            }
+            Type::RefLifetime { lifetime, inner } => ResolvedType::RefLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.resolve_type(&inner.node)),
+            },
+            Type::RefMutLifetime { lifetime, inner } => ResolvedType::RefMutLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.resolve_type(&inner.node)),
+            },
+            Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
         }
     }
 
@@ -484,15 +487,11 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
                 if let Expr::Ident(name) = &func.node {
                     self.compile_call(name, args)
                 } else {
-                    Err(JitError::Unsupported(
-                        "Indirect function calls".to_string(),
-                    ))
+                    Err(JitError::Unsupported("Indirect function calls".to_string()))
                 }
             }
 
-            Expr::If { cond, then, else_ } => {
-                self.compile_if(&cond.node, then, else_.as_ref())
-            }
+            Expr::If { cond, then, else_ } => self.compile_if(&cond.node, then, else_.as_ref()),
 
             Expr::Block(stmts) => {
                 let mut last_val = None;
@@ -558,35 +557,33 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
                 Ok(())
             }
 
-            Stmt::Break(_) => {
-                Err(JitError::Unsupported("break outside of loop context".to_string()))
-            }
+            Stmt::Break(_) => Err(JitError::Unsupported(
+                "break outside of loop context".to_string(),
+            )),
 
-            Stmt::Continue => {
-                Err(JitError::Unsupported("continue outside of loop context".to_string()))
-            }
+            Stmt::Continue => Err(JitError::Unsupported(
+                "continue outside of loop context".to_string(),
+            )),
 
             Stmt::Defer(_) => {
                 // Defer is not yet supported in JIT mode
-                Err(JitError::Unsupported("defer not yet supported in JIT mode".to_string()))
+                Err(JitError::Unsupported(
+                    "defer not yet supported in JIT mode".to_string(),
+                ))
             }
 
-            Stmt::Error { message, .. } => {
-                Err(JitError::Unsupported(format!("Parse error in statement: {}", message)))
-            }
-            Stmt::LetDestructure { .. } => {
-                Err(JitError::Unsupported("tuple destructuring not yet supported in JIT mode".to_string()))
-            }
+            Stmt::Error { message, .. } => Err(JitError::Unsupported(format!(
+                "Parse error in statement: {}",
+                message
+            ))),
+            Stmt::LetDestructure { .. } => Err(JitError::Unsupported(
+                "tuple destructuring not yet supported in JIT mode".to_string(),
+            )),
         }
     }
 
     /// Compiles a binary operation.
-    fn compile_binary_op(
-        &mut self,
-        op: BinOp,
-        lhs: Value,
-        rhs: Value,
-    ) -> Result<Value, JitError> {
+    fn compile_binary_op(&mut self, op: BinOp, lhs: Value, rhs: Value) -> Result<Value, JitError> {
         let result = match op {
             BinOp::Add => self.builder.ins().iadd(lhs, rhs),
             BinOp::Sub => self.builder.ins().isub(lhs, rhs),
@@ -630,27 +627,15 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
             }
             BinOp::And => {
                 // Logical AND: convert to bool, AND, extend back
-                let lhs_bool = self
-                    .builder
-                    .ins()
-                    .icmp_imm(IntCC::NotEqual, lhs, 0);
-                let rhs_bool = self
-                    .builder
-                    .ins()
-                    .icmp_imm(IntCC::NotEqual, rhs, 0);
+                let lhs_bool = self.builder.ins().icmp_imm(IntCC::NotEqual, lhs, 0);
+                let rhs_bool = self.builder.ins().icmp_imm(IntCC::NotEqual, rhs, 0);
                 let result = self.builder.ins().band(lhs_bool, rhs_bool);
                 self.builder.ins().uextend(types::I64, result)
             }
             BinOp::Or => {
                 // Logical OR: convert to bool, OR, extend back
-                let lhs_bool = self
-                    .builder
-                    .ins()
-                    .icmp_imm(IntCC::NotEqual, lhs, 0);
-                let rhs_bool = self
-                    .builder
-                    .ins()
-                    .icmp_imm(IntCC::NotEqual, rhs, 0);
+                let lhs_bool = self.builder.ins().icmp_imm(IntCC::NotEqual, lhs, 0);
+                let rhs_bool = self.builder.ins().icmp_imm(IntCC::NotEqual, rhs, 0);
                 let result = self.builder.ins().bor(lhs_bool, rhs_bool);
                 self.builder.ins().uextend(types::I64, result)
             }
@@ -711,9 +696,7 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
                 sig.params.push(AbiParam::new(types::I64));
             }
 
-            let func_id = self
-                .module
-                .declare_function(name, Linkage::Import, &sig)?;
+            let func_id = self.module.declare_function(name, Linkage::Import, &sig)?;
 
             self.external_functions.insert(name.to_string(), func_id);
 
@@ -743,14 +726,10 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         let merge_block = self.builder.create_block();
 
         // Add block parameter for the result
-        self.builder
-            .append_block_param(merge_block, types::I64);
+        self.builder.append_block_param(merge_block, types::I64);
 
         // Branch based on condition
-        let cond_bool = self
-            .builder
-            .ins()
-            .icmp_imm(IntCC::NotEqual, cond_val, 0);
+        let cond_bool = self.builder.ins().icmp_imm(IntCC::NotEqual, cond_val, 0);
         self.builder
             .ins()
             .brif(cond_bool, then_block, &[], else_block, &[]);
@@ -821,7 +800,9 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         self.builder.append_block_param(merge_block, types::I64);
 
         let cond_bool = self.builder.ins().icmp_imm(IntCC::NotEqual, cond_val, 0);
-        self.builder.ins().brif(cond_bool, then_block, &[], else_block, &[]);
+        self.builder
+            .ins()
+            .brif(cond_bool, then_block, &[], else_block, &[]);
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
@@ -886,12 +867,17 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
         desc.define(data.into_boxed_slice());
 
         // Declare and define the data
-        let data_id = self.module.declare_data(&name, Linkage::Local, false, false)?;
+        let data_id = self
+            .module
+            .declare_data(&name, Linkage::Local, false, false)?;
         self.module.define_data(data_id, &desc)?;
 
         // Get reference to data
         let local_data_id = self.module.declare_data_in_func(data_id, self.builder.func);
-        let ptr = self.builder.ins().symbol_value(self.type_mapper.pointer_type(), local_data_id);
+        let ptr = self
+            .builder
+            .ins()
+            .symbol_value(self.type_mapper.pointer_type(), local_data_id);
 
         Ok(ptr)
     }
@@ -995,19 +981,15 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let result = compile_and_run(
-            "F add(a:i64,b:i64)->i64{a+b} F main()->i64{add(3,4)}",
-        )
-        .unwrap();
+        let result =
+            compile_and_run("F add(a:i64,b:i64)->i64{a+b} F main()->i64{add(3,4)}").unwrap();
         assert_eq!(result, 7);
     }
 
     #[test]
     fn test_nested_calls() {
-        let result = compile_and_run(
-            "F double(x:i64)->i64{x*2} F main()->i64{double(double(5))}",
-        )
-        .unwrap();
+        let result =
+            compile_and_run("F double(x:i64)->i64{x*2} F main()->i64{double(double(5))}").unwrap();
         assert_eq!(result, 20);
     }
 

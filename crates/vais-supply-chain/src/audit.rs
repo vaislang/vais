@@ -292,10 +292,7 @@ impl DependencyAuditor {
 
     /// Get total vulnerability count in database
     pub fn vulnerability_count(&self) -> usize {
-        self.vulnerability_db
-            .values()
-            .map(|v| v.len())
-            .sum()
+        self.vulnerability_db.values().map(|v| v.len()).sum()
     }
 
     /// Get all packages with known vulnerabilities

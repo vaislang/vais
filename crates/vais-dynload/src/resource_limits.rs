@@ -21,9 +21,9 @@ pub struct MemoryLimit {
 impl Default for MemoryLimit {
     fn default() -> Self {
         Self {
-            max_bytes: 64 * 1024 * 1024,      // 64 MB
-            initial_bytes: 1024 * 1024,    // 1 MB
-            max_wasm_pages: 1024,              // 64 MB in WASM pages
+            max_bytes: 64 * 1024 * 1024, // 64 MB
+            initial_bytes: 1024 * 1024,  // 1 MB
+            max_wasm_pages: 1024,        // 64 MB in WASM pages
             track_usage: true,
         }
     }
@@ -85,8 +85,8 @@ pub struct TimeLimit {
 impl Default for TimeLimit {
     fn default() -> Self {
         Self {
-            max_duration_ms: 5000,           // 5 seconds
-            fuel_limit: Some(10_000_000),    // 10 million fuel units
+            max_duration_ms: 5000,        // 5 seconds
+            fuel_limit: Some(10_000_000), // 10 million fuel units
             check_interval_ms: 100,
             use_epoch_interruption: true,
         }
@@ -154,7 +154,7 @@ pub struct StackLimit {
 impl Default for StackLimit {
     fn default() -> Self {
         Self {
-            max_bytes: 1024 * 1024,  // 1 MB
+            max_bytes: 1024 * 1024, // 1 MB
             max_call_depth: 1000,
         }
     }

@@ -48,8 +48,14 @@ impl TutorialRunner {
     }
 
     fn print_welcome(&self) {
-        println!("\n{}", "╔═══════════════════════════════════════════╗".cyan());
-        println!("{}", "║   Welcome to Vais Interactive Tutorial   ║".cyan().bold());
+        println!(
+            "\n{}",
+            "╔═══════════════════════════════════════════╗".cyan()
+        );
+        println!(
+            "{}",
+            "║   Welcome to Vais Interactive Tutorial   ║".cyan().bold()
+        );
         println!("{}", "╚═══════════════════════════════════════════╝".cyan());
         println!();
         println!("Type {} to see available commands", "'help'".yellow());
@@ -162,13 +168,9 @@ impl TutorialRunner {
         let chapter_id = self.tutorial.progress.current_chapter;
         let lesson_idx = self.tutorial.progress.current_lesson;
 
-        let lesson = self
-            .tutorial
-            .get_lesson(chapter_id, lesson_idx)
-            .ok_or(TutorialError::LessonNotFound(format!(
-                "Chapter {} Lesson {}",
-                chapter_id, lesson_idx
-            )))?;
+        let lesson = self.tutorial.get_lesson(chapter_id, lesson_idx).ok_or(
+            TutorialError::LessonNotFound(format!("Chapter {} Lesson {}", chapter_id, lesson_idx)),
+        )?;
 
         let chapter = self.tutorial.get_chapter(chapter_id).unwrap();
 
@@ -242,13 +244,9 @@ impl TutorialRunner {
         let chapter_id = self.tutorial.progress.current_chapter;
         let lesson_idx = self.tutorial.progress.current_lesson;
 
-        let lesson = self
-            .tutorial
-            .get_lesson(chapter_id, lesson_idx)
-            .ok_or(TutorialError::LessonNotFound(format!(
-                "Chapter {} Lesson {}",
-                chapter_id, lesson_idx
-            )))?;
+        let lesson = self.tutorial.get_lesson(chapter_id, lesson_idx).ok_or(
+            TutorialError::LessonNotFound(format!("Chapter {} Lesson {}", chapter_id, lesson_idx)),
+        )?;
 
         println!("\n{}", "Checking your code...".cyan());
 
@@ -272,7 +270,12 @@ impl TutorialRunner {
         println!("\n{}", "Your Progress:".cyan().bold());
         println!();
 
-        let total_lessons: usize = self.tutorial.chapters.iter().map(|ch| ch.lessons.len()).sum();
+        let total_lessons: usize = self
+            .tutorial
+            .chapters
+            .iter()
+            .map(|ch| ch.lessons.len())
+            .sum();
         let completed = self.tutorial.progress.completed_lessons.len();
 
         println!(
@@ -331,7 +334,9 @@ pub struct CodeValidator {
 
 impl CodeValidator {
     pub fn new(lesson_id: String) -> Self {
-        Self { _lesson_id: lesson_id }
+        Self {
+            _lesson_id: lesson_id,
+        }
     }
 
     pub fn validate(&self, code: &str) -> Result<ValidationResult> {

@@ -1,9 +1,9 @@
 //! Tests for security analyzer
 
 use super::*;
+use vais_ast::*;
 use vais_lexer::tokenize;
 use vais_parser::Parser;
-use vais_ast::*;
 
 /// Helper function to parse Vais code and analyze it
 fn analyze_code(source: &str) -> Vec<SecurityFinding> {
@@ -71,7 +71,9 @@ fn test_pointer_arithmetic_detection() {
 
     let findings = analyze_code(source);
     assert!(has_finding(&findings, FindingCategory::UnsafePointer));
-    assert!(findings.iter().any(|f| f.description.contains("Pointer arithmetic")));
+    assert!(findings
+        .iter()
+        .any(|f| f.description.contains("Pointer arithmetic")));
 }
 
 #[test]
@@ -178,7 +180,8 @@ fn test_unsafe_c_functions_detection() {
     let findings = analyze_code(source);
     assert!(has_finding(&findings, FindingCategory::BufferOverflow));
     // Should detect at least strcpy, gets, sprintf
-    let unsafe_func_findings: Vec<_> = findings.iter()
+    let unsafe_func_findings: Vec<_> = findings
+        .iter()
         .filter(|f| f.category == FindingCategory::BufferOverflow)
         .collect();
     assert!(unsafe_func_findings.len() >= 3);
@@ -217,7 +220,8 @@ fn test_load_store_operations() {
 
     let findings = analyze_code(source);
     // Should detect multiple buffer overflow risks
-    let buffer_overflow_findings: Vec<_> = findings.iter()
+    let buffer_overflow_findings: Vec<_> = findings
+        .iter()
         .filter(|f| f.category == FindingCategory::BufferOverflow)
         .collect();
     assert!(buffer_overflow_findings.len() >= 3); // malloc, store_i64, load_i64, store_byte, load_byte
@@ -309,11 +313,19 @@ fn test_severity_levels() {
 
     // Should have multiple critical findings
     let critical = count_severity(&findings, Severity::Critical);
-    assert!(critical >= 2, "Expected at least 2 critical findings, got {}", critical);
+    assert!(
+        critical >= 2,
+        "Expected at least 2 critical findings, got {}",
+        critical
+    );
 
     // Should have at least one high severity finding
     let high = count_severity(&findings, Severity::High);
-    assert!(high >= 1, "Expected at least 1 high severity finding, got {}", high);
+    assert!(
+        high >= 1,
+        "Expected at least 1 high severity finding, got {}",
+        high
+    );
 }
 
 #[test]
@@ -368,10 +380,7 @@ fn test_string_operations_safe() {
 
 #[test]
 fn test_finding_display() {
-    let finding = SecurityFinding::buffer_overflow(
-        "Test buffer overflow",
-        Span::new(0, 10),
-    );
+    let finding = SecurityFinding::buffer_overflow("Test buffer overflow", Span::new(0, 10));
 
     let display = format!("{}", finding);
     assert!(display.contains("CRITICAL"));

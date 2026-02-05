@@ -69,8 +69,7 @@ impl LtoMode {
 /// # Phase 4: Re-compile with profile data
 /// vaisc build --profile-use=default.profdata main.vais -o main_optimized
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum PgoMode {
     /// No PGO - standard compilation
     #[default]
@@ -82,7 +81,6 @@ pub enum PgoMode {
     /// Contains the path to the merged .profdata file
     Use(String),
 }
-
 
 impl PgoMode {
     /// Parse PGO mode from command line arguments
@@ -135,17 +133,14 @@ impl PgoMode {
             PgoMode::None => vec![],
             PgoMode::Generate(_) => {
                 // Add instrumentation passes
-                vec![
-                    "-pgo-instr-gen",
-                    "-instrprof",
-                ]
+                vec!["-pgo-instr-gen", "-instrprof"]
             }
             PgoMode::Use(_) => {
                 // Add profile-guided optimization passes
                 vec![
                     "-pgo-instr-use",
-                    "-pgo-icall-prom",      // Indirect call promotion
-                    "-pgo-memop-opt",       // Memory operation optimization
+                    "-pgo-icall-prom", // Indirect call promotion
+                    "-pgo-memop-opt",  // Memory operation optimization
                 ]
             }
         }
@@ -268,7 +263,11 @@ pub fn apply_pgo_hints(ir: &str, _profile_path: &str) -> String {
 ///
 /// Hot functions get more aggressive inlining and optimization.
 /// Cold functions are optimized for size.
-pub fn annotate_function_hotness(ir: &str, hot_funcs: &HashSet<String>, cold_funcs: &HashSet<String>) -> String {
+pub fn annotate_function_hotness(
+    ir: &str,
+    hot_funcs: &HashSet<String>,
+    cold_funcs: &HashSet<String>,
+) -> String {
     let mut result = String::new();
 
     for line in ir.lines() {
@@ -391,7 +390,7 @@ pub fn optimize_ir_with_pgo(ir: &str, level: OptLevel, pgo: &PgoMode) -> String 
 /// This version includes interprocedural alias analysis, auto-vectorization hints,
 /// and cache-friendly data layout suggestions.
 pub fn optimize_ir_advanced(ir: &str, level: OptLevel) -> String {
-    use crate::advanced_opt::{AdvancedOptConfig, apply_advanced_optimizations};
+    use crate::advanced_opt::{apply_advanced_optimizations, AdvancedOptConfig};
 
     // First apply standard optimizations
     let result = optimize_ir(ir, level);
@@ -424,7 +423,9 @@ pub(crate) fn constant_folding(ir: &str) -> String {
             result.push('\n');
             continue;
         }
-        if let Some(folded) = try_fold_binary_op(trimmed, "sdiv", |a, b| if b != 0 { a / b } else { 0 }) {
+        if let Some(folded) =
+            try_fold_binary_op(trimmed, "sdiv", |a, b| if b != 0 { a / b } else { 0 })
+        {
             result.push_str(&folded);
             result.push('\n');
             continue;
@@ -464,7 +465,10 @@ where
     let b = operands[1].parse::<i64>().ok()?;
 
     let result = f(a, b);
-    Some(format!("  {} = add i64 0, {}  ; folded from {} {} {}", dest, result, a, op, b))
+    Some(format!(
+        "  {} = add i64 0, {}  ; folded from {} {} {}",
+        dest, result, a, op, b
+    ))
 }
 
 /// Dead store elimination - remove stores that are never read
@@ -483,7 +487,10 @@ pub(crate) fn dead_store_elimination(ir: &str) -> String {
             if let Some(ptr_start) = trimmed.rfind('%') {
                 let ptr = &trimmed[ptr_start..];
                 // Clean up the variable name
-                let var: String = ptr.chars().take_while(|c| c.is_alphanumeric() || *c == '%' || *c == '.' || *c == '_').collect();
+                let var: String = ptr
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '%' || *c == '.' || *c == '_')
+                    .collect();
                 loaded_vars.insert(var);
             }
         }
@@ -539,7 +546,10 @@ pub(crate) fn tail_call_optimization(ir: &str) -> String {
         }
 
         // Look for: %x = call TYPE @func(...) followed by ret TYPE %x
-        if trimmed.contains(" = call ") && !trimmed.starts_with("tail ") && !trimmed.starts_with("musttail ") {
+        if trimmed.contains(" = call ")
+            && !trimmed.starts_with("tail ")
+            && !trimmed.starts_with("musttail ")
+        {
             // Check if the next non-empty line is a ret with the same value
             if let Some(next_i) = (i + 1..lines.len()).find(|&j| !lines[j].trim().is_empty()) {
                 let next_trimmed = lines[next_i].trim();
@@ -549,16 +559,21 @@ pub(crate) fn tail_call_optimization(ir: &str) -> String {
                     // Check if next line is "ret TYPE %dest"
                     if next_trimmed.starts_with("ret ") && next_trimmed.contains(dest) {
                         // Check if this is a self-recursive call (calls the current function)
-                        let is_self_call = current_fn_name.as_ref().is_some_and(|fn_name| {
-                            trimmed.contains(&format!("@{}(", fn_name))
-                        });
+                        let is_self_call = current_fn_name
+                            .as_ref()
+                            .is_some_and(|fn_name| trimmed.contains(&format!("@{}(", fn_name)));
 
                         // Mark as tail call
                         let prefix = if is_self_call { "musttail" } else { "tail" };
                         let call_pos = trimmed.find(" = call ").unwrap();
                         let dest_part = &trimmed[..call_pos];
                         let call_part = &trimmed[call_pos + 3..]; // " = call ..."
-                        result.push(format!("  {} = {} {}", dest_part.trim(), prefix, call_part.trim()));
+                        result.push(format!(
+                            "  {} = {} {}",
+                            dest_part.trim(),
+                            prefix,
+                            call_part.trim()
+                        ));
                         continue;
                     }
                 }
@@ -689,7 +704,10 @@ fn try_strength_reduce_mul(line: &str) -> Option<String> {
 
     Some(format!(
         "  {} = shl i64 {}, {}  ; strength reduced from mul by {}",
-        dest, var, shift, 1i64 << shift
+        dest,
+        var,
+        shift,
+        1i64 << shift
     ))
 }
 
@@ -762,13 +780,19 @@ pub(crate) fn branch_optimization(ir: &str) -> String {
             if trimmed.contains("br i1 true,") || trimmed.contains("br i1 1,") {
                 // Always branch to 'then'
                 if let Some(then_label) = extract_branch_label(trimmed, true) {
-                    result.push(format!("  br label %{}  ; simplified from conditional", then_label));
+                    result.push(format!(
+                        "  br label %{}  ; simplified from conditional",
+                        then_label
+                    ));
                     continue;
                 }
             } else if trimmed.contains("br i1 false,") || trimmed.contains("br i1 0,") {
                 // Always branch to 'else'
                 if let Some(else_label) = extract_branch_label(trimmed, false) {
-                    result.push(format!("  br label %{}  ; simplified from conditional", else_label));
+                    result.push(format!(
+                        "  br label %{}  ; simplified from conditional",
+                        else_label
+                    ));
                     continue;
                 }
             }
@@ -784,7 +808,10 @@ pub(crate) fn branch_optimization(ir: &str) -> String {
                     let operands_part = &operands_str[type_end + 1..];
                     let operands: Vec<&str> = operands_part.split(',').map(|s| s.trim()).collect();
                     if operands.len() == 2 && operands[0] == operands[1] {
-                        result.push(format!("  {} = add i1 0, true  ; simplified: X == X", parts[0].trim()));
+                        result.push(format!(
+                            "  {} = add i1 0, true  ; simplified: X == X",
+                            parts[0].trim()
+                        ));
                         continue;
                     }
                 }
@@ -1019,10 +1046,14 @@ pub(crate) fn dead_code_elimination(ir: &str) -> String {
         }
 
         // Track uses (excluding the definition itself)
-        for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '_' && c != '.') {
+        for word in
+            trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '_' && c != '.')
+        {
             if word.starts_with('%') && !word.is_empty() {
                 // Check if this is a use, not just the definition
-                if !trimmed.starts_with(&format!("{} =", word)) && !trimmed.starts_with(&format!("  {} =", word)) {
+                if !trimmed.starts_with(&format!("{} =", word))
+                    && !trimmed.starts_with(&format!("  {} =", word))
+                {
                     used_vars.insert(word.to_string());
                 }
             }
@@ -1032,9 +1063,14 @@ pub(crate) fn dead_code_elimination(ir: &str) -> String {
     // Also mark return values, call arguments, and branch conditions as used
     for line in &lines {
         let trimmed = line.trim();
-        if trimmed.starts_with("ret ") || trimmed.starts_with("br ") ||
-           trimmed.starts_with("store ") || trimmed.contains("call ") {
-            for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '_' && c != '.') {
+        if trimmed.starts_with("ret ")
+            || trimmed.starts_with("br ")
+            || trimmed.starts_with("store ")
+            || trimmed.contains("call ")
+        {
+            for word in
+                trimmed.split(|c: char| !c.is_alphanumeric() && c != '%' && c != '_' && c != '.')
+            {
                 if word.starts_with('%') {
                     used_vars.insert(word.to_string());
                 }
@@ -1081,10 +1117,30 @@ fn extract_definition(line: &str) -> Option<String> {
 fn is_side_effect_free(line: &str) -> bool {
     let trimmed = line.trim();
     // Pure operations that can be eliminated if unused
-    let pure_ops = ["add ", "sub ", "mul ", "sdiv ", "udiv ", "and ", "or ", "xor ",
-                    "shl ", "ashr ", "lshr ", "icmp ", "fcmp ", "select ",
-                    "zext ", "sext ", "trunc ", "bitcast ", "getelementptr ",
-                    "extractvalue ", "insertvalue ", "load "];
+    let pure_ops = [
+        "add ",
+        "sub ",
+        "mul ",
+        "sdiv ",
+        "udiv ",
+        "and ",
+        "or ",
+        "xor ",
+        "shl ",
+        "ashr ",
+        "lshr ",
+        "icmp ",
+        "fcmp ",
+        "select ",
+        "zext ",
+        "sext ",
+        "trunc ",
+        "bitcast ",
+        "getelementptr ",
+        "extractvalue ",
+        "insertvalue ",
+        "load ",
+    ];
 
     for op in &pure_ops {
         if trimmed.contains(op) {
@@ -1225,15 +1281,17 @@ fn try_unroll_loop(lines: &[&str], start_idx: usize) -> Option<(Vec<String>, usi
             }
 
             // Detect increment pattern: %next = add i64 %i, INCREMENT
-            if trimmed.contains(" = add i64 ") && !induction_var.is_empty()
-                && trimmed.contains(&induction_var) {
-                    let parts: Vec<&str> = trimmed.split(',').collect();
-                    if parts.len() >= 2 {
-                        if let Ok(inc) = parts[1].trim().parse::<i64>() {
-                            increment = Some(inc);
-                        }
+            if trimmed.contains(" = add i64 ")
+                && !induction_var.is_empty()
+                && trimmed.contains(&induction_var)
+            {
+                let parts: Vec<&str> = trimmed.split(',').collect();
+                if parts.len() >= 2 {
+                    if let Ok(inc) = parts[1].trim().parse::<i64>() {
+                        increment = Some(inc);
                     }
                 }
+            }
 
             body_lines.push(trimmed.to_string());
         }
@@ -1371,7 +1429,8 @@ fn licm_pass(ir: &str) -> String {
                     // End of loop body - insert hoisted invariants before loop header
                     if !loop_invariants.is_empty() && !preheader_inserted {
                         // Create preheader
-                        let preheader_lines = create_preheader(&loop_invariants, loop_header_idx, &result);
+                        let preheader_lines =
+                            create_preheader(&loop_invariants, loop_header_idx, &result);
                         if let Some((new_results, skip)) = preheader_lines {
                             // Replace from loop_header_idx with new preheader + header
                             let pre_header: Vec<String> = result.drain(..loop_header_idx).collect();
@@ -1416,7 +1475,11 @@ fn licm_pass(ir: &str) -> String {
 }
 
 /// Create a loop preheader with hoisted invariants
-fn create_preheader(invariants: &[String], header_idx: usize, current_result: &[String]) -> Option<(Vec<String>, usize)> {
+fn create_preheader(
+    invariants: &[String],
+    header_idx: usize,
+    current_result: &[String],
+) -> Option<(Vec<String>, usize)> {
     if invariants.is_empty() || header_idx >= current_result.len() {
         return None;
     }
@@ -1442,7 +1505,9 @@ fn is_loop_invariant_with_context(line: &str, loop_vars: &HashSet<String>) -> bo
     let trimmed = line.trim();
 
     // Only pure operations
-    let pure_ops = [" = add ", " = sub ", " = mul ", " = sdiv ", " = shl ", " = ashr "];
+    let pure_ops = [
+        " = add ", " = sub ", " = mul ", " = sdiv ", " = shl ", " = ashr ",
+    ];
     let is_pure = pure_ops.iter().any(|op| trimmed.contains(op));
     if !is_pure {
         return false;
@@ -1474,7 +1539,7 @@ fn is_phi_or_load(line: &str) -> bool {
 #[derive(Debug, Clone)]
 struct InlinableFunction {
     name: String,
-    params: Vec<(String, String)>,  // (type, param_name)
+    params: Vec<(String, String)>, // (type, param_name)
     return_type: String,
     body: Vec<String>,
     has_side_effects: bool,
@@ -1513,8 +1578,12 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
     {
         eprintln!("DEBUG: Found {} inline candidates", inline_candidates.len());
         for func in &inline_candidates {
-            eprintln!("DEBUG: Candidate: {} ({} body lines, side_effects={})",
-                     func.name, func.body.len(), func.has_side_effects);
+            eprintln!(
+                "DEBUG: Candidate: {} ({} body lines, side_effects={})",
+                func.name,
+                func.body.len(),
+                func.has_side_effects
+            );
         }
     }
 
@@ -1535,8 +1604,12 @@ pub(crate) fn aggressive_inline(ir: &str) -> String {
     {
         for func in &inline_candidates {
             let count = call_counts.get(&func.name).copied().unwrap_or(0);
-            eprintln!("DEBUG: Inline priority: {} (calls={}, body={})",
-                     func.name, count, func.body.len());
+            eprintln!(
+                "DEBUG: Inline priority: {} (calls={}, body={})",
+                func.name,
+                count,
+                func.body.len()
+            );
         }
     }
 
@@ -1573,7 +1646,10 @@ fn find_inline_candidates(ir: &str) -> Vec<InlinableFunction> {
                 let body_size = func.body.len();
                 let is_main = func.name == "@main";
                 let is_internal = func.name.starts_with("@__") || func.name.starts_with("@_");
-                let is_recursive = func.body.iter().any(|l| l.contains(&format!("call {} {}", func.return_type, func.name)));
+                let is_recursive = func
+                    .body
+                    .iter()
+                    .any(|l| l.contains(&format!("call {} {}", func.return_type, func.name)));
 
                 // Never inline: main, internal helpers, recursive functions
                 if is_main || is_internal || is_recursive {
@@ -1813,7 +1889,10 @@ fn try_inline_call(line: &str, func: &InlinableFunction, counter: &mut u32) -> O
     // If there's a destination variable, assign the return value
     if let Some(dest) = dest_var {
         if !return_value.is_empty() && func.return_type != "void" {
-            inlined.push(format!("  {} = add {} 0, {}  ; inlined return value", dest, func.return_type, return_value));
+            inlined.push(format!(
+                "  {} = add {} 0, {}  ; inlined return value",
+                dest, func.return_type, return_value
+            ));
         }
     }
 
@@ -1935,7 +2014,11 @@ entry:
         let candidates = find_inline_candidates(ir);
         // square and add_one should be candidates (no side effects)
         // main should NOT be a candidate (it's main)
-        assert!(candidates.len() >= 2, "Expected at least 2 candidates, got {}", candidates.len());
+        assert!(
+            candidates.len() >= 2,
+            "Expected at least 2 candidates, got {}",
+            candidates.len()
+        );
         let names: Vec<&str> = candidates.iter().map(|f| f.name.as_str()).collect();
         assert!(names.contains(&"@square"), "square should be a candidate");
         assert!(names.contains(&"@add_one"), "add_one should be a candidate");
@@ -1958,8 +2041,11 @@ entry:
         let result = aggressive_inline(ir);
         println!("RESULT:\n{}", result);
         // After inlining, there should be INLINE comments
-        assert!(result.contains("INLINE") || !result.contains("call i64 @square"),
-                "Expected inlining to occur or call to be removed. Result:\n{}", result);
+        assert!(
+            result.contains("INLINE") || !result.contains("call i64 @square"),
+            "Expected inlining to occur or call to be removed. Result:\n{}",
+            result
+        );
     }
 
     #[test]
@@ -1984,8 +2070,10 @@ loop.end.0:
         let result = loop_unrolling(ir);
         println!("UNROLLED:\n{}", result);
         // Check that unrolling was attempted (comment should be present)
-        assert!(result.contains("LOOP UNROLLING") || result.contains("loop.start"),
-                "Expected loop unrolling to be attempted");
+        assert!(
+            result.contains("LOOP UNROLLING") || result.contains("loop.start"),
+            "Expected loop unrolling to be attempted"
+        );
     }
 
     #[test]
@@ -2010,15 +2098,21 @@ loop.end.0:
         let result = licm_pass(ir);
         println!("LICM RESULT:\n{}", result);
         // Check that LICM was attempted (comment should be present)
-        assert!(result.contains("LICM") || result.contains("loop.start"),
-                "Expected LICM to be attempted");
+        assert!(
+            result.contains("LICM") || result.contains("loop.start"),
+            "Expected LICM to be attempted"
+        );
     }
 
     #[test]
     fn test_rename_for_unroll() {
         let line = "%sum = add i64 %acc, %i";
         let renamed = rename_for_unroll(line, 2);
-        assert!(renamed.contains("_u2"), "Expected unroll suffix in: {}", renamed);
+        assert!(
+            renamed.contains("_u2"),
+            "Expected unroll suffix in: {}",
+            renamed
+        );
     }
 
     #[test]
@@ -2511,7 +2605,10 @@ fn basic_block_merging(ir: &str) -> String {
         }
 
         if skip_block {
-            if trimmed.starts_with("define ") || trimmed == "}" || (trimmed.ends_with(':') && !trimmed.starts_with(';')) {
+            if trimmed.starts_with("define ")
+                || trimmed == "}"
+                || (trimmed.ends_with(':') && !trimmed.starts_with(';'))
+            {
                 skip_block = false;
             } else {
                 continue; // Skip instructions in empty block
@@ -2601,7 +2698,10 @@ fn extract_uncond_branch_target(line: &str) -> Option<String> {
         return None;
     }
     let rest = &line["br label %".len()..];
-    let label: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
+    let label: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.')
+        .collect();
     if label.is_empty() {
         None
     } else {
@@ -2617,8 +2717,14 @@ fn extract_cond_branch_targets(line: &str) -> Option<(String, String)> {
     if parts.len() >= 3 {
         let then_part = parts[1].split(',').next()?.trim();
         let else_part = parts[2].trim().trim_end_matches([')', ';', ' ']);
-        let then_label: String = then_part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
-        let else_label: String = else_part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
+        let then_label: String = then_part
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.')
+            .collect();
+        let else_label: String = else_part
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.')
+            .collect();
         return Some((then_label, else_label));
     }
     None
@@ -2719,7 +2825,8 @@ mod pgo_tests {
 
     #[test]
     fn test_annotate_function_hotness() {
-        let ir = "define i64 @hot_func() {\n  ret i64 0\n}\ndefine i64 @cold_func() {\n  ret i64 1\n}";
+        let ir =
+            "define i64 @hot_func() {\n  ret i64 0\n}\ndefine i64 @cold_func() {\n  ret i64 1\n}";
 
         let hot = ["hot_func".to_string()].into_iter().collect();
         let cold = ["cold_func".to_string()].into_iter().collect();

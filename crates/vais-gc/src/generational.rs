@@ -255,8 +255,8 @@ pub struct GenGcConfig {
 impl Default for GenGcConfig {
     fn default() -> Self {
         Self {
-            young_threshold: 256 * 1024,     // 256 KB
-            old_threshold: 4 * 1024 * 1024,  // 4 MB
+            young_threshold: 256 * 1024,    // 256 KB
+            old_threshold: 4 * 1024 * 1024, // 4 MB
             promotion_age: 3,
             card_size: 512,
             max_heap_size: 64 * 1024 * 1024, // 64 MB
@@ -458,7 +458,8 @@ impl GenerationalGc {
         }
 
         // Sweep young generation
-        let young_to_free: Vec<usize> = self.young
+        let young_to_free: Vec<usize> = self
+            .young
             .iter()
             .filter(|(_, obj)| !obj.header.marked)
             .map(|(&ptr, _)| ptr)
@@ -472,7 +473,8 @@ impl GenerationalGc {
         }
 
         // Sweep old generation
-        let old_to_free: Vec<usize> = self.old
+        let old_to_free: Vec<usize> = self
+            .old
             .iter()
             .filter(|(_, obj)| !obj.header.marked)
             .map(|(&ptr, _)| ptr)
@@ -584,10 +586,10 @@ impl GenerationalGc {
 
         for offset in (0..size).step_by(ptr_size) {
             if offset + ptr_size <= data.len() {
-                let potential_ptr = unsafe {
-                    std::ptr::read(data.as_ptr().add(offset) as *const usize)
-                };
-                if self.young.contains_key(&potential_ptr) || self.old.contains_key(&potential_ptr) {
+                let potential_ptr =
+                    unsafe { std::ptr::read(data.as_ptr().add(offset) as *const usize) };
+                if self.young.contains_key(&potential_ptr) || self.old.contains_key(&potential_ptr)
+                {
                     children.push(potential_ptr);
                 }
             }
@@ -910,6 +912,9 @@ mod tests {
         }
 
         let stats = gc.get_stats();
-        assert!(stats.minor_collections > 0, "Minor GC should have been auto-triggered");
+        assert!(
+            stats.minor_collections > 0,
+            "Minor GC should have been auto-triggered"
+        );
     }
 }

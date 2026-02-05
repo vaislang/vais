@@ -3,9 +3,9 @@
 //! These tests verify that the optimization features work correctly
 //! and produce the same results as without caching.
 
-use vais_types::{TypeChecker, ExhaustivenessChecker, ResolvedType};
+use vais_ast::{Expr, Literal, MatchArm, Pattern, Span, Spanned};
 use vais_parser::parse;
-use vais_ast::{MatchArm, Pattern, Literal, Spanned, Span, Expr};
+use vais_types::{ExhaustivenessChecker, ResolvedType, TypeChecker};
 
 #[test]
 fn test_type_substitution_cache_correctness() {
@@ -37,18 +37,12 @@ fn test_exhaustiveness_cache_correctness() {
     // Test bool exhaustiveness
     let bool_arms = vec![
         MatchArm {
-            pattern: Spanned::new(
-                Pattern::Literal(Literal::Bool(true)),
-                Span::default()
-            ),
+            pattern: Spanned::new(Pattern::Literal(Literal::Bool(true)), Span::default()),
             guard: None,
             body: Box::new(Spanned::new(Expr::Int(1), Span::default())),
         },
         MatchArm {
-            pattern: Spanned::new(
-                Pattern::Literal(Literal::Bool(false)),
-                Span::default()
-            ),
+            pattern: Spanned::new(Pattern::Literal(Literal::Bool(false)), Span::default()),
             guard: None,
             body: Box::new(Spanned::new(Expr::Int(0), Span::default())),
         },
@@ -61,7 +55,10 @@ fn test_exhaustiveness_cache_correctness() {
 
     // Cached check should return same result
     let result2 = checker.check_match(&ResolvedType::Bool, &bool_arms);
-    assert!(result2.is_exhaustive, "Cached bool match should be exhaustive");
+    assert!(
+        result2.is_exhaustive,
+        "Cached bool match should be exhaustive"
+    );
     assert_eq!(result1.missing_patterns, result2.missing_patterns);
     assert_eq!(result1.unreachable_arms, result2.unreachable_arms);
 }
@@ -71,25 +68,26 @@ fn test_exhaustiveness_cache_with_non_exhaustive() {
     let mut checker = ExhaustivenessChecker::new();
 
     // Incomplete bool match
-    let incomplete_arms = vec![
-        MatchArm {
-            pattern: Spanned::new(
-                Pattern::Literal(Literal::Bool(true)),
-                Span::default()
-            ),
-            guard: None,
-            body: Box::new(Spanned::new(Expr::Int(1), Span::default())),
-        },
-    ];
+    let incomplete_arms = vec![MatchArm {
+        pattern: Spanned::new(Pattern::Literal(Literal::Bool(true)), Span::default()),
+        guard: None,
+        body: Box::new(Spanned::new(Expr::Int(1), Span::default())),
+    }];
 
     // First check
     let result1 = checker.check_match(&ResolvedType::Bool, &incomplete_arms);
-    assert!(!result1.is_exhaustive, "Incomplete match should not be exhaustive");
+    assert!(
+        !result1.is_exhaustive,
+        "Incomplete match should not be exhaustive"
+    );
     assert!(!result1.missing_patterns.is_empty());
 
     // Cached check should return same non-exhaustive result
     let result2 = checker.check_match(&ResolvedType::Bool, &incomplete_arms);
-    assert!(!result2.is_exhaustive, "Cached incomplete match should not be exhaustive");
+    assert!(
+        !result2.is_exhaustive,
+        "Cached incomplete match should not be exhaustive"
+    );
     assert_eq!(result1.missing_patterns, result2.missing_patterns);
 }
 
@@ -97,13 +95,11 @@ fn test_exhaustiveness_cache_with_non_exhaustive() {
 fn test_exhaustiveness_cache_invalidation() {
     let mut checker = ExhaustivenessChecker::new();
 
-    let arms = vec![
-        MatchArm {
-            pattern: Spanned::new(Pattern::Wildcard, Span::default()),
-            guard: None,
-            body: Box::new(Spanned::new(Expr::Int(1), Span::default())),
-        },
-    ];
+    let arms = vec![MatchArm {
+        pattern: Spanned::new(Pattern::Wildcard, Span::default()),
+        guard: None,
+        body: Box::new(Spanned::new(Expr::Int(1), Span::default())),
+    }];
 
     // Build cache
     let result1 = checker.check_match(&ResolvedType::I64, &arms);
@@ -132,7 +128,11 @@ fn test_complex_generic_substitution() {
 
     // Should handle nested generics correctly with caching
     let result = checker.check_module(&ast);
-    assert!(result.is_ok(), "Complex generic substitution failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Complex generic substitution failed: {:?}",
+        result
+    );
 }
 
 #[test]
@@ -152,7 +152,11 @@ fn test_pattern_matching_with_generics() {
     let mut checker = TypeChecker::new();
 
     let result = checker.check_module(&ast);
-    assert!(result.is_ok(), "Pattern matching with generics failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Pattern matching with generics failed: {:?}",
+        result
+    );
 }
 
 #[test]
@@ -170,7 +174,11 @@ fn test_multiple_instantiations_same_type() {
 
     // Multiple calls with same type should be efficiently cached
     let result = checker.check_module(&ast);
-    assert!(result.is_ok(), "Multiple instantiations failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Multiple instantiations failed: {:?}",
+        result
+    );
 }
 
 #[test]
@@ -183,15 +191,15 @@ fn test_exhaustiveness_with_integer_ranges() {
                 Pattern::Range {
                     start: Some(Box::new(Spanned::new(
                         Pattern::Literal(Literal::Int(0)),
-                        Span::default()
+                        Span::default(),
                     ))),
                     end: Some(Box::new(Spanned::new(
                         Pattern::Literal(Literal::Int(10)),
-                        Span::default()
+                        Span::default(),
                     ))),
                     inclusive: true,
                 },
-                Span::default()
+                Span::default(),
             ),
             guard: None,
             body: Box::new(Spanned::new(Expr::Int(1), Span::default())),
@@ -204,7 +212,10 @@ fn test_exhaustiveness_with_integer_ranges() {
     ];
 
     let result = checker.check_match(&ResolvedType::I64, &range_arms);
-    assert!(result.is_exhaustive, "Range pattern with wildcard should be exhaustive");
+    assert!(
+        result.is_exhaustive,
+        "Range pattern with wildcard should be exhaustive"
+    );
 
     // Test cache with same patterns
     let result2 = checker.check_match(&ResolvedType::I64, &range_arms);

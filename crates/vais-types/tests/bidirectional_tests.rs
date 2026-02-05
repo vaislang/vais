@@ -1,12 +1,14 @@
 //! Tests for bidirectional type checking
 
-use vais_types::{TypeChecker, CheckMode, ResolvedType};
 use vais_parser::parse;
+use vais_types::{CheckMode, ResolvedType, TypeChecker};
 
 fn check_module(source: &str) -> Result<(), String> {
     let module = parse(source).map_err(|e| format!("{:?}", e))?;
     let mut checker = TypeChecker::new();
-    checker.check_module(&module).map_err(|e| format!("{:?}", e))?;
+    checker
+        .check_module(&module)
+        .map_err(|e| format!("{:?}", e))?;
     Ok(())
 }
 

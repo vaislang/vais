@@ -188,9 +188,7 @@ pub fn parallel_optimize_ir(ir: &str, level: crate::optimize::OptLevel) -> Strin
 
         if level >= OptLevel::O2 {
             // Group 2: Strength reduction per function in parallel
-            let result = parallel_optimize_functions(&result, |fn_ir| {
-                strength_reduction(fn_ir)
-            });
+            let result = parallel_optimize_functions(&result, |fn_ir| strength_reduction(fn_ir));
 
             if level >= OptLevel::O3 {
                 // Inlining must be done globally (cross-function)

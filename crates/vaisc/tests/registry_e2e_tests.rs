@@ -110,22 +110,37 @@ impl SemVer {
 
         let parts: Vec<&str> = version_part.split('.').collect();
         if parts.is_empty() || parts.len() > 3 {
-            return Err(format!("expected 1-3 version components, got {}", parts.len()));
+            return Err(format!(
+                "expected 1-3 version components, got {}",
+                parts.len()
+            ));
         }
 
-        let major = parts[0].parse::<u64>().map_err(|_| format!("invalid major: {}", parts[0]))?;
+        let major = parts[0]
+            .parse::<u64>()
+            .map_err(|_| format!("invalid major: {}", parts[0]))?;
         let minor = if parts.len() > 1 {
-            parts[1].parse::<u64>().map_err(|_| format!("invalid minor: {}", parts[1]))?
+            parts[1]
+                .parse::<u64>()
+                .map_err(|_| format!("invalid minor: {}", parts[1]))?
         } else {
             0
         };
         let patch = if parts.len() > 2 {
-            parts[2].parse::<u64>().map_err(|_| format!("invalid patch: {}", parts[2]))?
+            parts[2]
+                .parse::<u64>()
+                .map_err(|_| format!("invalid patch: {}", parts[2]))?
         } else {
             0
         };
 
-        Ok(Self { major, minor, patch, pre, build })
+        Ok(Self {
+            major,
+            minor,
+            patch,
+            pre,
+            build,
+        })
     }
 
     fn is_valid_semver(s: &str) -> bool {
@@ -235,8 +250,7 @@ fn load_manifest(dir: &Path) -> Result<PackageManifest, String> {
     let path = dir.join("vais.toml");
     let content = fs::read_to_string(&path)
         .map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
-    toml::from_str(&content)
-        .map_err(|e| format!("failed to parse {}: {}", path.display(), e))
+    toml::from_str(&content).map_err(|e| format!("failed to parse {}: {}", path.display(), e))
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +330,10 @@ borrow_check = "warn"
     assert_eq!(manifest.package.name, "my-app");
     assert_eq!(manifest.package.version, "1.2.3");
     assert_eq!(manifest.package.authors.len(), 2);
-    assert_eq!(manifest.package.description.as_deref(), Some("A cool application"));
+    assert_eq!(
+        manifest.package.description.as_deref(),
+        Some("A cool application")
+    );
     assert_eq!(manifest.package.license.as_deref(), Some("Apache-2.0"));
 
     // Dependencies
@@ -375,7 +392,10 @@ fn test_manifest_parse_missing_version_fails() {
 name = "foo"
 "#;
     let result: Result<PackageManifest, _> = toml::from_str(toml_str);
-    assert!(result.is_err(), "manifest without package.version should fail");
+    assert!(
+        result.is_err(),
+        "manifest without package.version should fail"
+    );
 }
 
 #[test]
@@ -385,7 +405,10 @@ fn test_manifest_parse_missing_package_section_fails() {
 foo = "1.0.0"
 "#;
     let result: Result<PackageManifest, _> = toml::from_str(toml_str);
-    assert!(result.is_err(), "manifest without [package] section should fail");
+    assert!(
+        result.is_err(),
+        "manifest without [package] section should fail"
+    );
 }
 
 #[test]
@@ -400,7 +423,10 @@ fn test_manifest_roundtrip() {
         },
         dependencies: {
             let mut deps = HashMap::new();
-            deps.insert("lib-a".to_string(), Dependency::Version("1.0.0".to_string()));
+            deps.insert(
+                "lib-a".to_string(),
+                Dependency::Version("1.0.0".to_string()),
+            );
             deps.insert(
                 "lib-b".to_string(),
                 Dependency::Detailed(DetailedDependency {
@@ -979,8 +1005,16 @@ pkg-a = { path = "../pkg-a" }
 fn test_package_index_search_by_name() {
     // Simulate an in-memory package index and search
     let packages = vec![
-        ("json-parser", Some("A JSON parser for Vais"), vec!["json", "parser"]),
-        ("xml-parser", Some("XML parsing library"), vec!["xml", "parser"]),
+        (
+            "json-parser",
+            Some("A JSON parser for Vais"),
+            vec!["json", "parser"],
+        ),
+        (
+            "xml-parser",
+            Some("XML parsing library"),
+            vec!["xml", "parser"],
+        ),
         ("csv", Some("CSV reader/writer"), vec!["csv", "data"]),
         ("math-ext", Some("Extended math functions"), vec!["math"]),
     ];
@@ -1050,11 +1084,7 @@ fn test_package_list_best_version_selection() {
         SemVer::parse("2.0.0-alpha").unwrap(),
     ];
 
-    let best = versions
-        .iter()
-        .filter(|v| v.pre.is_none())
-        .max()
-        .unwrap();
+    let best = versions.iter().filter(|v| v.pre.is_none()).max().unwrap();
 
     assert_eq!(best.to_string(), "1.1.0");
 }
@@ -1245,11 +1275,7 @@ fn test_all_seed_packages_have_valid_manifests() {
         });
 
         let manifest: PackageManifest = toml::from_str(&content).unwrap_or_else(|e| {
-            panic!(
-                "failed to parse {}: {}",
-                manifest_path.display(),
-                e
-            );
+            panic!("failed to parse {}: {}", manifest_path.display(), e);
         });
 
         // Name should not be empty
@@ -1416,7 +1442,14 @@ fn test_pkg_init_creates_manifest() {
     let tmp = TempDir::new().unwrap();
     let output = Command::new("cargo")
         .args([
-            "run", "--bin", "vaisc", "--", "pkg", "init", "--name", "test-init-pkg",
+            "run",
+            "--bin",
+            "vaisc",
+            "--",
+            "pkg",
+            "init",
+            "--name",
+            "test-init-pkg",
         ])
         .current_dir(tmp.path())
         .env("CARGO_MANIFEST_DIR", project_root().join("crates/vaisc"))
@@ -1427,7 +1460,10 @@ fn test_pkg_init_creates_manifest() {
             if o.status.success() {
                 // Verify vais.toml was created
                 let manifest_path = tmp.path().join("vais.toml");
-                assert!(manifest_path.exists(), "vais.toml should be created by pkg init");
+                assert!(
+                    manifest_path.exists(),
+                    "vais.toml should be created by pkg init"
+                );
 
                 let content = fs::read_to_string(&manifest_path).unwrap();
                 let manifest: PackageManifest = toml::from_str(&content).unwrap();

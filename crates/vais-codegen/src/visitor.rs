@@ -3,8 +3,8 @@
 //! This module defines the visitor traits that decompose code generation into
 //! separate concerns for expressions, statements, and items.
 
-use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, MatchArm, Param, Type};
 use crate::CodegenResult;
+use vais_ast::{BinOp, Expr, MatchArm, Param, Spanned, Stmt, Type, UnaryOp};
 
 /// Result type for code generation: (value, ir_code)
 pub type GenResult = CodegenResult<(String, String)>;
@@ -271,7 +271,11 @@ pub trait StmtVisitor {
 /// Currently, item generation is handled directly in lib.rs.
 pub trait ItemVisitor {
     /// Generate code for a function
-    fn visit_function(&mut self, func: &vais_ast::Function, span: vais_ast::Span) -> CodegenResult<String>;
+    fn visit_function(
+        &mut self,
+        func: &vais_ast::Function,
+        span: vais_ast::Span,
+    ) -> CodegenResult<String>;
 
     /// Generate code for a method
     fn visit_method(

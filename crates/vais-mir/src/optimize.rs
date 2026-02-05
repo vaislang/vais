@@ -3,8 +3,8 @@
 //! These operate on the structured MIR CFG rather than text-based LLVM IR,
 //! providing more reliable and composable optimizations.
 
-use std::collections::{HashMap, HashSet};
 use crate::types::*;
+use std::collections::{HashMap, HashSet};
 
 /// Apply all MIR optimization passes to a module.
 pub fn optimize_mir_module(module: &mut MirModule) {
@@ -81,15 +81,21 @@ fn collect_rvalue_reads(rvalue: &Rvalue, used: &mut HashSet<Local>) {
             collect_operand_reads(rhs, used);
         }
         Rvalue::UnaryOp(_, op) => collect_operand_reads(op, used),
-        Rvalue::Ref(place) => { used.insert(place.local); }
+        Rvalue::Ref(place) => {
+            used.insert(place.local);
+        }
         Rvalue::Aggregate(_, ops) => {
             for op in ops {
                 collect_operand_reads(op, used);
             }
         }
-        Rvalue::Discriminant(place) => { used.insert(place.local); }
+        Rvalue::Discriminant(place) => {
+            used.insert(place.local);
+        }
         Rvalue::Cast(op, _) => collect_operand_reads(op, used),
-        Rvalue::Len(place) => { used.insert(place.local); }
+        Rvalue::Len(place) => {
+            used.insert(place.local);
+        }
     }
 }
 
@@ -116,7 +122,9 @@ fn collect_terminator_reads(term: &Terminator, used: &mut HashSet<Local>) {
         Terminator::SwitchInt { discriminant, .. } => {
             collect_operand_reads(discriminant, used);
         }
-        Terminator::Call { args, destination, .. } => {
+        Terminator::Call {
+            args, destination, ..
+        } => {
             for arg in args {
                 collect_operand_reads(arg, used);
             }
@@ -180,12 +188,8 @@ pub fn common_subexpression_elimination(body: &mut Body) {
 /// Generate a canonical key for an rvalue for CSE purposes.
 fn rvalue_key(rvalue: &Rvalue) -> Option<String> {
     match rvalue {
-        Rvalue::BinaryOp(op, lhs, rhs) => {
-            Some(format!("{:?}({:?},{:?})", op, lhs, rhs))
-        }
-        Rvalue::UnaryOp(op, operand) => {
-            Some(format!("{:?}({:?})", op, operand))
-        }
+        Rvalue::BinaryOp(op, lhs, rhs) => Some(format!("{:?}({:?},{:?})", op, lhs, rhs)),
+        Rvalue::UnaryOp(op, operand) => Some(format!("{:?}({:?})", op, operand)),
         // Don't CSE other rvalues (side effects, aggregates, etc.)
         _ => None,
     }
@@ -335,7 +339,9 @@ pub fn remove_unreachable_blocks(body: &mut Body) {
 fn terminator_successors(term: &Terminator) -> Vec<BasicBlockId> {
     match term {
         Terminator::Goto(bb) => vec![*bb],
-        Terminator::SwitchInt { targets, otherwise, .. } => {
+        Terminator::SwitchInt {
+            targets, otherwise, ..
+        } => {
             let mut succs: Vec<BasicBlockId> = targets.iter().map(|(_, bb)| *bb).collect();
             succs.push(*otherwise);
             succs
@@ -401,7 +407,9 @@ mod tests {
         common_subexpression_elimination(&mut body);
 
         // The second assignment should now be a copy of t1
-        if let Statement::Assign(_, Rvalue::Use(Operand::Copy(place))) = &body.basic_blocks[0].statements[1] {
+        if let Statement::Assign(_, Rvalue::Use(Operand::Copy(place))) =
+            &body.basic_blocks[0].statements[1]
+        {
             assert_eq!(place.local, t1);
         } else {
             panic!("Expected CSE to replace with copy");
@@ -434,7 +442,9 @@ mod tests {
         constant_propagation(&mut body);
 
         // The use of 'c' in the binop should be replaced with const 42
-        if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, _)) = &body.basic_blocks[0].statements[1] {
+        if let Statement::Assign(_, Rvalue::BinaryOp(_, lhs, _)) =
+            &body.basic_blocks[0].statements[1]
+        {
             assert_eq!(*lhs, Operand::Constant(Constant::Int(42)));
         } else {
             panic!("Expected constant propagation");
@@ -463,7 +473,10 @@ mod tests {
         remove_unreachable_blocks(&mut body);
 
         // bb2 should be replaced with unreachable
-        assert_eq!(body.basic_blocks[2].terminator, Some(Terminator::Unreachable));
+        assert_eq!(
+            body.basic_blocks[2].terminator,
+            Some(Terminator::Unreachable)
+        );
         assert!(body.basic_blocks[2].statements.is_empty());
     }
 }

@@ -4,20 +4,20 @@
 
 #[allow(dead_code)]
 mod doc_gen;
-mod repl;
 mod error_formatter;
 #[allow(dead_code)]
 mod incremental;
 mod package;
 #[allow(dead_code)]
 mod registry;
+mod repl;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, exit};
+use std::process::{exit, Command};
 
 use std::sync::OnceLock;
 use vais_ast::{Item, Module, Spanned};
@@ -40,12 +40,21 @@ fn generate_crash_report(info: &std::panic::PanicHookInfo<'_>) -> String {
 
     // Version info
     report.push_str(&format!("Compiler: vaisc {}\n", env!("CARGO_PKG_VERSION")));
-    report.push_str(&format!("OS: {} {}\n", std::env::consts::OS, std::env::consts::ARCH));
+    report.push_str(&format!(
+        "OS: {} {}\n",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
 
     // Panic info
     report.push_str(&format!("\nPanic: {}\n", info));
     if let Some(location) = info.location() {
-        report.push_str(&format!("Location: {}:{}:{}\n", location.file(), location.line(), location.column()));
+        report.push_str(&format!(
+            "Location: {}:{}:{}\n",
+            location.file(),
+            location.line(),
+            location.column()
+        ));
     }
 
     // Backtrace
@@ -69,15 +78,15 @@ fn configure_type_checker(checker: &mut TypeChecker) {
         None => checker.disable_ownership_check(),
     }
 }
-use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_codegen::optimize::{optimize_ir_with_pgo, OptLevel};
-use vais_lexer::tokenize;
-use vais_parser::parse;
-use vais_types::{TypeChecker};
+use vais_codegen::{CodeGenerator, TargetTriple};
 use vais_i18n::Locale;
-use vais_plugin::{PluginRegistry, PluginsConfig, find_config, Diagnostic, DiagnosticLevel};
-use vais_macro::{MacroRegistry, expand_macros, collect_macros, process_derives};
+use vais_lexer::tokenize;
+use vais_macro::{collect_macros, expand_macros, process_derives, MacroRegistry};
+use vais_parser::parse;
+use vais_plugin::{find_config, Diagnostic, DiagnosticLevel, PluginRegistry, PluginsConfig};
 use vais_query::QueryDatabase;
+use vais_types::TypeChecker;
 
 #[derive(Parser)]
 #[command(name = "vaisc")]
@@ -552,9 +561,7 @@ fn main() {
     let _ = OWNERSHIP_MODE.set(ownership_mode);
 
     // Initialize i18n system
-    let locale = cli.locale
-        .as_ref()
-        .and_then(|s| Locale::parse(s));
+    let locale = cli.locale.as_ref().and_then(|s| Locale::parse(s));
     vais_i18n::init(locale);
 
     // Load plugins
@@ -570,86 +577,141 @@ fn main() {
         let timeout = std::time::Duration::from_secs(timeout_secs);
         std::thread::spawn(move || {
             std::thread::sleep(timeout);
-            eprintln!("error: compilation timed out after {} seconds", timeout_secs);
+            eprintln!(
+                "error: compilation timed out after {} seconds",
+                timeout_secs
+            );
             exit(124);
         });
     }
 
     let result = match cli.command {
-        Some(Commands::Build { input, output, emit_ir, opt_level, debug, target, force_rebuild, hot, gpu, gpu_host, gpu_compile, lto, no_lto, profile_generate, profile_use, suggest_fixes, parallel, inkwell: _build_inkwell }) => {
+        Some(Commands::Build {
+            input,
+            output,
+            emit_ir,
+            opt_level,
+            debug,
+            target,
+            force_rebuild,
+            hot,
+            gpu,
+            gpu_host,
+            gpu_compile,
+            lto,
+            no_lto,
+            profile_generate,
+            profile_use,
+            suggest_fixes,
+            parallel,
+            inkwell: _build_inkwell,
+        }) => {
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
-                cmd_build_gpu(&input, output, gpu_target_str, gpu_host, gpu_compile, cli.verbose)
+                cmd_build_gpu(
+                    &input,
+                    output,
+                    gpu_target_str,
+                    gpu_host,
+                    gpu_compile,
+                    cli.verbose,
+                )
             } else {
+                let target_triple = target
+                    .as_ref()
+                    .and_then(|s| TargetTriple::parse(s))
+                    .unwrap_or(TargetTriple::Native);
 
-            let target_triple = target.as_ref()
-                .and_then(|s| TargetTriple::parse(s))
-                .unwrap_or(TargetTriple::Native);
-
-            // Parse LTO mode with automatic ThinLTO for O2/O3
-            let lto_mode = if no_lto {
-                // Explicitly disable LTO
-                vais_codegen::optimize::LtoMode::None
-            } else if let Some(mode_str) = lto.as_deref() {
-                // Explicitly specified LTO mode
-                vais_codegen::optimize::LtoMode::parse(mode_str)
-            } else {
-                // Auto-enable ThinLTO for O2/O3 (release builds)
-                if opt_level >= 2 {
-                    vais_codegen::optimize::LtoMode::Thin
-                } else {
+                // Parse LTO mode with automatic ThinLTO for O2/O3
+                let lto_mode = if no_lto {
+                    // Explicitly disable LTO
                     vais_codegen::optimize::LtoMode::None
-                }
-            };
+                } else if let Some(mode_str) = lto.as_deref() {
+                    // Explicitly specified LTO mode
+                    vais_codegen::optimize::LtoMode::parse(mode_str)
+                } else {
+                    // Auto-enable ThinLTO for O2/O3 (release builds)
+                    if opt_level >= 2 {
+                        vais_codegen::optimize::LtoMode::Thin
+                    } else {
+                        vais_codegen::optimize::LtoMode::None
+                    }
+                };
 
-            // Parse PGO mode (mutually exclusive: generate vs use)
-            let pgo_mode = if let Some(dir) = profile_generate.as_deref() {
-                vais_codegen::optimize::PgoMode::Generate(dir.to_string())
-            } else if let Some(path) = profile_use.as_deref() {
-                vais_codegen::optimize::PgoMode::Use(path.to_string())
-            } else {
-                vais_codegen::optimize::PgoMode::None
-            };
+                // Parse PGO mode (mutually exclusive: generate vs use)
+                let pgo_mode = if let Some(dir) = profile_generate.as_deref() {
+                    vais_codegen::optimize::PgoMode::Generate(dir.to_string())
+                } else if let Some(path) = profile_use.as_deref() {
+                    vais_codegen::optimize::PgoMode::Use(path.to_string())
+                } else {
+                    vais_codegen::optimize::PgoMode::None
+                };
 
-            // Configure parallel compilation
-            let parallel_config = parallel.map(|threads| {
-                vais_codegen::parallel::ParallelConfig::new(threads)
-            });
+                // Configure parallel compilation
+                let parallel_config =
+                    parallel.map(|threads| vais_codegen::parallel::ParallelConfig::new(threads));
 
-            // Default to inkwell when feature is available
-            #[cfg(feature = "inkwell")]
-            let use_inkwell = true;
-            #[cfg(not(feature = "inkwell"))]
-            let use_inkwell = build_inkwell || cli.inkwell;
-            cmd_build_with_timing(&input, output, emit_ir, opt_level, debug, cli.verbose, cli.time, &plugins, target_triple, force_rebuild, cli.gc, cli.gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config, use_inkwell)
+                // Default to inkwell when feature is available
+                #[cfg(feature = "inkwell")]
+                let use_inkwell = true;
+                #[cfg(not(feature = "inkwell"))]
+                let use_inkwell = build_inkwell || cli.inkwell;
+                cmd_build_with_timing(
+                    &input,
+                    output,
+                    emit_ir,
+                    opt_level,
+                    debug,
+                    cli.verbose,
+                    cli.time,
+                    &plugins,
+                    target_triple,
+                    force_rebuild,
+                    cli.gc,
+                    cli.gc_threshold,
+                    hot,
+                    lto_mode,
+                    pgo_mode,
+                    suggest_fixes,
+                    parallel_config,
+                    use_inkwell,
+                )
             }
         }
-        Some(Commands::Run { input, args }) => {
-            cmd_run(&input, &args, cli.verbose, &plugins)
-        }
-        Some(Commands::Check { input }) => {
-            cmd_check(&input, cli.verbose, &plugins)
-        }
-        Some(Commands::Repl) => {
-            repl::run()
-        }
-        Some(Commands::Doc { input, output, format }) => {
-            doc_gen::run(&input, &output, &format)
-        }
+        Some(Commands::Run { input, args }) => cmd_run(&input, &args, cli.verbose, &plugins),
+        Some(Commands::Check { input }) => cmd_check(&input, cli.verbose, &plugins),
+        Some(Commands::Repl) => repl::run(),
+        Some(Commands::Doc {
+            input,
+            output,
+            format,
+        }) => doc_gen::run(&input, &output, &format),
         Some(Commands::Version) => {
             println!("{} {}", "vaisc".bold(), env!("CARGO_PKG_VERSION"));
             println!("Vais 0.0.1 - AI-optimized systems programming language");
             Ok(())
         }
-        Some(Commands::Fmt { input, check, indent }) => {
-            cmd_fmt(&input, check, indent)
-        }
-        Some(Commands::Pkg(pkg_cmd)) => {
-            cmd_pkg(pkg_cmd, cli.verbose)
-        }
-        Some(Commands::Pgo { input, output, run_cmd, profile_dir, merge_only }) => {
-            cmd_pgo(&input, output, run_cmd, &profile_dir, merge_only, cli.verbose, &plugins)
-        }
+        Some(Commands::Fmt {
+            input,
+            check,
+            indent,
+        }) => cmd_fmt(&input, check, indent),
+        Some(Commands::Pkg(pkg_cmd)) => cmd_pkg(pkg_cmd, cli.verbose),
+        Some(Commands::Pgo {
+            input,
+            output,
+            run_cmd,
+            profile_dir,
+            merge_only,
+        }) => cmd_pgo(
+            &input,
+            output,
+            run_cmd,
+            &profile_dir,
+            merge_only,
+            cli.verbose,
+            &plugins,
+        ),
         Some(Commands::Watch { input, exec, args }) => {
             cmd_watch(&input, exec.as_deref(), &args, cli.verbose, &plugins)
         }
@@ -676,13 +738,20 @@ fn main() {
                     None, // parallel_config
                     {
                         #[cfg(feature = "inkwell")]
-                        { true }
+                        {
+                            true
+                        }
                         #[cfg(not(feature = "inkwell"))]
-                        { cli.inkwell }
+                        {
+                            cli.inkwell
+                        }
                     },
                 )
             } else {
-                println!("{}", "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow());
+                println!(
+                    "{}",
+                    "Usage: vaisc <FILE.vais> or vaisc build <FILE.vais>".yellow()
+                );
                 println!("Run 'vaisc --help' for more information.");
                 Ok(())
             }
@@ -707,11 +776,19 @@ fn cmd_build_gpu(
     use vais_gpu::{GpuCodeGenerator, GpuTarget};
 
     // Parse GPU target
-    let target = GpuTarget::parse(gpu_target)
-        .ok_or_else(|| format!("Unknown GPU target: '{}'. Valid targets: cuda, opencl, webgpu, metal", gpu_target))?;
+    let target = GpuTarget::parse(gpu_target).ok_or_else(|| {
+        format!(
+            "Unknown GPU target: '{}'. Valid targets: cuda, opencl, webgpu, metal",
+            gpu_target
+        )
+    })?;
 
     if verbose {
-        println!("{} Compiling for GPU target: {}", "info:".blue().bold(), target.name());
+        println!(
+            "{} Compiling for GPU target: {}",
+            "info:".blue().bold(),
+            target.name()
+        );
     }
 
     // Read source
@@ -719,17 +796,18 @@ fn cmd_build_gpu(
         .map_err(|e| format!("Failed to read {}: {}", input.display(), e))?;
 
     // Parse
-    let module = parse(&source)
-        .map_err(|e| format!("Parse error: {:?}", e))?;
+    let module = parse(&source).map_err(|e| format!("Parse error: {:?}", e))?;
 
     // Generate GPU code
     let mut generator = GpuCodeGenerator::new(target);
-    let gpu_code = generator.generate(&module)
+    let gpu_code = generator
+        .generate(&module)
         .map_err(|e| format!("GPU codegen error: {}", e))?;
 
     // Determine output file
     let out_path = output.unwrap_or_else(|| {
-        let stem = input.file_stem()
+        let stem = input
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("output");
         PathBuf::from(format!("{}.{}", stem, target.extension()))
@@ -739,14 +817,24 @@ fn cmd_build_gpu(
     fs::write(&out_path, &gpu_code)
         .map_err(|e| format!("Failed to write {}: {}", out_path.display(), e))?;
 
-    println!("{} Generated {} ({})", "✓".green().bold(), out_path.display(), target.name());
+    println!(
+        "{} Generated {} ({})",
+        "✓".green().bold(),
+        out_path.display(),
+        target.name()
+    );
 
     // Print kernel information
     let kernels = generator.kernels();
     if !kernels.is_empty() {
-        println!("\n{} {} kernel(s) generated:", "info:".blue().bold(), kernels.len());
+        println!(
+            "\n{} {} kernel(s) generated:",
+            "info:".blue().bold(),
+            kernels.len()
+        );
         for kernel in kernels {
-            println!("  - {} ({} params, block size: {:?})",
+            println!(
+                "  - {} ({} params, block size: {:?})",
                 kernel.name,
                 kernel.params.len(),
                 kernel.block_size
@@ -763,7 +851,8 @@ fn cmd_build_gpu(
             GpuTarget::WebGPU => "host.ts",
             GpuTarget::Metal => "host.swift",
         };
-        let host_path = input.file_stem()
+        let host_path = input
+            .file_stem()
             .and_then(|s| s.to_str())
             .map(|stem| PathBuf::from(format!("{}.{}", stem, host_ext)))
             .unwrap_or_else(|| PathBuf::from(format!("output.{}", host_ext)));
@@ -771,7 +860,12 @@ fn cmd_build_gpu(
         fs::write(&host_path, &host_code)
             .map_err(|e| format!("Failed to write host code {}: {}", host_path.display(), e))?;
 
-        println!("{} Generated host code: {} ({})", "✓".green().bold(), host_path.display(), target.name());
+        println!(
+            "{} Generated host code: {} ({})",
+            "✓".green().bold(),
+            host_path.display(),
+            target.name()
+        );
     }
 
     // Compile generated GPU code if --gpu-compile is specified
@@ -787,7 +881,10 @@ fn cmd_build_gpu(
                 compile_opencl(&out_path, emit_host, verbose)?;
             }
             _ => {
-                eprintln!("{} --gpu-compile is currently supported for CUDA, Metal, and OpenCL targets", "warning:".yellow().bold());
+                eprintln!(
+                    "{} --gpu-compile is currently supported for CUDA, Metal, and OpenCL targets",
+                    "warning:".yellow().bold()
+                );
             }
         }
     }
@@ -831,35 +928,40 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
     use std::process::Command;
 
     // Check if nvcc is available
-    let nvcc_check = Command::new("nvcc")
-        .arg("--version")
-        .output();
+    let nvcc_check = Command::new("nvcc").arg("--version").output();
 
     match nvcc_check {
         Err(_) => {
-            return Err(
-                "nvcc not found. Please install the CUDA Toolkit:\n\
+            return Err("nvcc not found. Please install the CUDA Toolkit:\n\
                  - Linux: https://developer.nvidia.com/cuda-downloads\n\
                  - macOS: CUDA is no longer supported on macOS (use Metal instead)\n\
-                 - Set CUDA_PATH or add nvcc to PATH".to_string()
-            );
+                 - Set CUDA_PATH or add nvcc to PATH"
+                .to_string());
         }
         Ok(output) if !output.status.success() => {
-            return Err("nvcc found but failed to run. Check CUDA Toolkit installation.".to_string());
+            return Err(
+                "nvcc found but failed to run. Check CUDA Toolkit installation.".to_string(),
+            );
         }
         Ok(output) => {
             if verbose {
                 let version = String::from_utf8_lossy(&output.stdout);
-                println!("{} {}", "nvcc:".blue().bold(), version.lines().last().unwrap_or("unknown"));
+                println!(
+                    "{} {}",
+                    "nvcc:".blue().bold(),
+                    version.lines().last().unwrap_or("unknown")
+                );
             }
         }
     }
 
     // Determine output binary name
-    let binary_name = cu_path.file_stem()
+    let binary_name = cu_path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("gpu_output");
-    let binary_path = cu_path.parent()
+    let binary_path = cu_path
+        .parent()
         .unwrap_or_else(|| std::path::Path::new("."))
         .join(binary_name);
 
@@ -879,7 +981,11 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
         if host_path.exists() {
             cmd.arg(&host_path);
             if verbose {
-                println!("{} Including host code: {}", "info:".blue().bold(), host_path.display());
+                println!(
+                    "{} Including host code: {}",
+                    "info:".blue().bold(),
+                    host_path.display()
+                );
             }
         }
     }
@@ -889,10 +995,18 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
         if rt_path.exists() {
             cmd.arg(rt_path);
             if verbose {
-                println!("{} Linking gpu_runtime: {}", "info:".blue().bold(), rt_path.display());
+                println!(
+                    "{} Linking gpu_runtime: {}",
+                    "info:".blue().bold(),
+                    rt_path.display()
+                );
             }
         } else if verbose {
-            println!("{} gpu_runtime.c not found at {}", "warning:".yellow().bold(), rt_path.display());
+            println!(
+                "{} gpu_runtime.c not found at {}",
+                "warning:".yellow().bold(),
+                rt_path.display()
+            );
         }
     }
 
@@ -903,11 +1017,17 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
     cmd.arg("-lcudart");
 
     if verbose {
-        println!("{} Running: nvcc {} -o {}", "info:".blue().bold(), cu_path.display(), binary_path.display());
+        println!(
+            "{} Running: nvcc {} -o {}",
+            "info:".blue().bold(),
+            cu_path.display(),
+            binary_path.display()
+        );
     }
 
     // Execute nvcc
-    let result = cmd.output()
+    let result = cmd
+        .output()
         .map_err(|e| format!("Failed to execute nvcc: {}", e))?;
 
     if !result.status.success() {
@@ -915,7 +1035,9 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
         return Err(format!(
             "nvcc compilation failed:\n{}{}",
             stderr,
-            if stderr.contains("No CUDA capable device") || stderr.contains("no CUDA-capable device") {
+            if stderr.contains("No CUDA capable device")
+                || stderr.contains("no CUDA-capable device")
+            {
                 "\n\nHint: No CUDA GPU detected. Ensure NVIDIA drivers are installed."
             } else if stderr.contains("unsupported gpu architecture") {
                 "\n\nHint: Try specifying a GPU architecture, e.g., --gpu-arch sm_70"
@@ -930,7 +1052,11 @@ fn compile_cuda(cu_path: &PathBuf, has_host: bool, verbose: bool) -> Result<(), 
         println!("{}", stdout);
     }
 
-    println!("{} Compiled GPU binary: {}", "✓".green().bold(), binary_path.display());
+    println!(
+        "{} Compiled GPU binary: {}",
+        "✓".green().bold(),
+        binary_path.display()
+    );
     Ok(())
 }
 
@@ -939,20 +1065,20 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
     use std::process::Command;
 
     // Check if xcrun metal compiler is available
-    let xcrun_check = Command::new("xcrun")
-        .args(["--find", "metal"])
-        .output();
+    let xcrun_check = Command::new("xcrun").args(["--find", "metal"]).output();
 
     match xcrun_check {
         Err(_) => {
             return Err(
                 "xcrun not found. Please install Xcode Command Line Tools:\n\
-                 xcode-select --install".to_string()
+                 xcode-select --install"
+                    .to_string(),
             );
         }
         Ok(output) if !output.status.success() => {
             return Err(
-                "Metal compiler not found via xcrun. Ensure Xcode is installed with Metal support.".to_string()
+                "Metal compiler not found via xcrun. Ensure Xcode is installed with Metal support."
+                    .to_string(),
             );
         }
         Ok(_) => {
@@ -965,7 +1091,12 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
     // Step 1: Compile .metal → .air (Apple Intermediate Representation)
     let air_path = metal_path.with_extension("air");
     if verbose {
-        println!("{} Compiling {} → {}", "info:".blue().bold(), metal_path.display(), air_path.display());
+        println!(
+            "{} Compiling {} → {}",
+            "info:".blue().bold(),
+            metal_path.display(),
+            air_path.display()
+        );
     }
 
     let air_result = Command::new("xcrun")
@@ -984,7 +1115,12 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
     // Step 2: Link .air → .metallib
     let metallib_path = metal_path.with_extension("metallib");
     if verbose {
-        println!("{} Linking {} → {}", "info:".blue().bold(), air_path.display(), metallib_path.display());
+        println!(
+            "{} Linking {} → {}",
+            "info:".blue().bold(),
+            air_path.display(),
+            metallib_path.display()
+        );
     }
 
     let lib_result = Command::new("xcrun")
@@ -1003,7 +1139,11 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
     // Clean up intermediate .air file
     let _ = std::fs::remove_file(&air_path);
 
-    println!("{} Compiled Metal library: {}", "✓".green().bold(), metallib_path.display());
+    println!(
+        "{} Compiled Metal library: {}",
+        "✓".green().bold(),
+        metallib_path.display()
+    );
 
     // Step 3: Compile host code with metal_runtime if available
     let std_dir = find_std_dir();
@@ -1011,10 +1151,12 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
 
     if let Some(ref rt_path) = runtime_path {
         if rt_path.exists() {
-            let binary_name = metal_path.file_stem()
+            let binary_name = metal_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("metal_output");
-            let binary_path = metal_path.parent()
+            let binary_path = metal_path
+                .parent()
                 .unwrap_or_else(|| std::path::Path::new("."))
                 .join(binary_name);
 
@@ -1022,14 +1164,26 @@ fn compile_metal(metal_path: &PathBuf, verbose: bool) -> Result<(), String> {
             let host_path = metal_path.with_extension("host.swift");
             if host_path.exists() {
                 if verbose {
-                    println!("{} Host Swift code found: {}", "info:".blue().bold(), host_path.display());
-                    println!("{} Note: Compile host code manually with:", "info:".blue().bold());
-                    println!("  swiftc {} -framework Metal -framework Foundation -o {}",
-                        host_path.display(), binary_path.display());
+                    println!(
+                        "{} Host Swift code found: {}",
+                        "info:".blue().bold(),
+                        host_path.display()
+                    );
+                    println!(
+                        "{} Note: Compile host code manually with:",
+                        "info:".blue().bold()
+                    );
+                    println!(
+                        "  swiftc {} -framework Metal -framework Foundation -o {}",
+                        host_path.display(),
+                        binary_path.display()
+                    );
                 }
             } else if verbose {
-                println!("{} No host code found. Use --gpu-host to generate host code template.",
-                    "info:".blue().bold());
+                println!(
+                    "{} No host code found. Use --gpu-host to generate host code template.",
+                    "info:".blue().bold()
+                );
             }
         }
     }
@@ -1042,10 +1196,12 @@ fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<()
     use std::process::Command;
 
     // Determine output binary name
-    let binary_name = cl_path.file_stem()
+    let binary_name = cl_path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("opencl_output");
-    let binary_path = cl_path.parent()
+    let binary_path = cl_path
+        .parent()
         .unwrap_or_else(|| std::path::Path::new("."))
         .join(binary_name);
 
@@ -1057,26 +1213,33 @@ fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<()
         Some(ref p) if p.exists() => p.clone(),
         _ => {
             return Err(
-                "opencl_runtime.c not found. Ensure the std/ directory is accessible.".to_string()
+                "opencl_runtime.c not found. Ensure the std/ directory is accessible.".to_string(),
             );
         }
     };
 
     if verbose {
-        println!("{} Linking opencl_runtime: {}", "info:".blue().bold(), rt_path.display());
+        println!(
+            "{} Linking opencl_runtime: {}",
+            "info:".blue().bold(),
+            rt_path.display()
+        );
     }
 
     // Build with cc (clang/gcc)
-    let compiler = if cfg!(target_os = "macos") { "clang" } else { "cc" };
+    let compiler = if cfg!(target_os = "macos") {
+        "clang"
+    } else {
+        "cc"
+    };
 
     // Check compiler availability
-    let cc_check = Command::new(compiler)
-        .arg("--version")
-        .output();
+    let cc_check = Command::new(compiler).arg("--version").output();
 
     if cc_check.is_err() {
         return Err(format!(
-            "{} not found. Please install a C compiler (clang or gcc).", compiler
+            "{} not found. Please install a C compiler (clang or gcc).",
+            compiler
         ));
     }
 
@@ -1091,7 +1254,11 @@ fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<()
         if host_path.exists() {
             cmd.arg(&host_path);
             if verbose {
-                println!("{} Including host code: {}", "info:".blue().bold(), host_path.display());
+                println!(
+                    "{} Including host code: {}",
+                    "info:".blue().bold(),
+                    host_path.display()
+                );
             }
         }
     }
@@ -1107,17 +1274,25 @@ fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<()
     }
 
     // Embed the .cl kernel source path as a define
-    let cl_abs = std::fs::canonicalize(cl_path)
-        .unwrap_or_else(|_| cl_path.clone());
-    cmd.arg(format!("-DVAIS_OPENCL_KERNEL_PATH=\"{}\"", cl_abs.display()));
+    let cl_abs = std::fs::canonicalize(cl_path).unwrap_or_else(|_| cl_path.clone());
+    cmd.arg(format!(
+        "-DVAIS_OPENCL_KERNEL_PATH=\"{}\"",
+        cl_abs.display()
+    ));
 
     if verbose {
-        println!("{} Running: {} {} -o {}", "info:".blue().bold(),
-            compiler, rt_path.display(), binary_path.display());
+        println!(
+            "{} Running: {} {} -o {}",
+            "info:".blue().bold(),
+            compiler,
+            rt_path.display(),
+            binary_path.display()
+        );
     }
 
     // Execute compiler
-    let result = cmd.output()
+    let result = cmd
+        .output()
         .map_err(|e| format!("Failed to execute {}: {}", compiler, e))?;
 
     if !result.status.success() {
@@ -1125,7 +1300,8 @@ fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<()
         return Err(format!(
             "OpenCL compilation failed:\n{}{}",
             stderr,
-            if stderr.contains("opencl") || stderr.contains("OpenCL") || stderr.contains("CL/cl.h") {
+            if stderr.contains("opencl") || stderr.contains("OpenCL") || stderr.contains("CL/cl.h")
+            {
                 "\n\nHint: Ensure OpenCL SDK is installed.\n\
                  - macOS: OpenCL is built-in (no extra install needed)\n\
                  - Linux: Install ocl-icd-opencl-dev or vendor SDK\n\
@@ -1141,7 +1317,11 @@ fn compile_opencl(cl_path: &PathBuf, has_host: bool, verbose: bool) -> Result<()
         println!("{}", stdout);
     }
 
-    println!("{} Compiled OpenCL binary: {}", "✓".green().bold(), binary_path.display());
+    println!(
+        "{} Compiled OpenCL binary: {}",
+        "✓".green().bold(),
+        binary_path.display()
+    );
     Ok(())
 }
 
@@ -1171,13 +1351,29 @@ fn cmd_build_with_timing(
 
     let start = Instant::now();
     let result = cmd_build(
-        input, output, emit_ir, opt_level, debug, verbose, plugins,
-        target, force_rebuild, gc, gc_threshold, hot, lto_mode, pgo_mode, suggest_fixes, parallel_config, use_inkwell
+        input,
+        output,
+        emit_ir,
+        opt_level,
+        debug,
+        verbose,
+        plugins,
+        target,
+        force_rebuild,
+        gc,
+        gc_threshold,
+        hot,
+        lto_mode,
+        pgo_mode,
+        suggest_fixes,
+        parallel_config,
+        use_inkwell,
     );
     let elapsed = start.elapsed();
 
     if time {
-        println!("\n{} Total compilation time: {:.3}s",
+        println!(
+            "\n{} Total compilation time: {:.3}s",
             "⏱".cyan().bold(),
             elapsed.as_secs_f64()
         );
@@ -1209,20 +1405,21 @@ fn generate_with_text_backend(
             codegen.set_gc_threshold(threshold);
         }
         if verbose {
-            println!("  {} (threshold: {} bytes)",
+            println!(
+                "  {} (threshold: {} bytes)",
                 "GC enabled".cyan(),
-                gc_threshold.unwrap_or(1048576));
+                gc_threshold.unwrap_or(1048576)
+            );
         }
     }
 
     // Enable debug info if requested
     if debug {
-        let source_file = input.file_name()
+        let source_file = input
+            .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown.vais");
-        let source_dir = input.parent()
-            .and_then(|p| p.to_str())
-            .unwrap_or(".");
+        let source_dir = input.parent().and_then(|p| p.to_str()).unwrap_or(".");
         codegen.enable_debug(source_file, source_dir, main_source);
 
         if verbose {
@@ -1243,11 +1440,16 @@ fn generate_with_text_backend(
         codegen.generate_module(final_ast)
     } else {
         codegen.generate_module_with_instantiations(final_ast, instantiations)
-    }.map_err(|e| format!("Codegen error: {}", e))?;
+    }
+    .map_err(|e| format!("Codegen error: {}", e))?;
     let codegen_time = codegen_start.elapsed();
 
     if verbose {
-        println!("  {} Codegen time: {:.3}s", "⏱".cyan(), codegen_time.as_secs_f64());
+        println!(
+            "  {} Codegen time: {:.3}s",
+            "⏱".cyan(),
+            codegen_time.as_secs_f64()
+        );
     }
 
     Ok(raw_ir)
@@ -1273,7 +1475,7 @@ fn cmd_build(
     parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
     use_inkwell: bool,
 ) -> Result<(), String> {
-    use incremental::{IncrementalCache, CompilationOptions, get_cache_dir};
+    use incremental::{get_cache_dir, CompilationOptions, IncrementalCache};
 
     // Initialize incremental compilation cache
     let cache_dir = get_cache_dir(input);
@@ -1295,20 +1497,28 @@ fn cmd_build(
                 Ok(dirty_set) => {
                     if dirty_set.is_empty() {
                         if verbose {
-                            println!("{} {} (no changes detected)", "Skipping".cyan().bold(), input.display());
+                            println!(
+                                "{} {} (no changes detected)",
+                                "Skipping".cyan().bold(),
+                                input.display()
+                            );
                             let stats = c.stats();
-                            println!("  {} files cached, {} dependencies tracked",
-                                stats.total_files, stats.total_dependencies);
+                            println!(
+                                "  {} files cached, {} dependencies tracked",
+                                stats.total_files, stats.total_dependencies
+                            );
                         }
                         // Still need to output the binary path if not emit_ir
                         if !emit_ir {
                             let default_ext = match target {
-                                TargetTriple::Wasm32Unknown | TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => "wasm",
+                                TargetTriple::Wasm32Unknown
+                                | TargetTriple::WasiPreview1
+                                | TargetTriple::WasiPreview2 => "wasm",
                                 _ => "",
                             };
-                            let bin_path = output.clone().unwrap_or_else(|| {
-                                input.with_extension(default_ext)
-                            });
+                            let bin_path = output
+                                .clone()
+                                .unwrap_or_else(|| input.with_extension(default_ext));
                             if bin_path.exists() {
                                 if !verbose {
                                     println!("{}", bin_path.display());
@@ -1316,7 +1526,8 @@ fn cmd_build(
                                 return Ok(());
                             }
                         } else {
-                            let ir_path = output.clone().unwrap_or_else(|| input.with_extension("ll"));
+                            let ir_path =
+                                output.clone().unwrap_or_else(|| input.with_extension("ll"));
                             if ir_path.exists() {
                                 if !verbose {
                                     println!("{}", ir_path.display());
@@ -1325,7 +1536,11 @@ fn cmd_build(
                             }
                         }
                     } else if verbose {
-                        println!("{} {} file(s) changed", "Rebuilding".yellow().bold(), dirty_set.count());
+                        println!(
+                            "{} {} file(s) changed",
+                            "Rebuilding".yellow().bold(),
+                            dirty_set.count()
+                        );
                     }
                 }
                 Err(e) => {
@@ -1344,9 +1559,11 @@ fn cmd_build(
     if let Some(ref config) = parallel_config {
         config.init_thread_pool()?;
         if verbose {
-            println!("{} Parallel compilation enabled ({} threads)",
+            println!(
+                "{} Parallel compilation enabled ({} threads)",
                 "⚡".cyan().bold(),
-                config.effective_threads());
+                config.effective_threads()
+            );
         }
     }
 
@@ -1361,15 +1578,34 @@ fn cmd_build(
     let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let merged_ast = if use_parallel {
-        load_module_with_imports_parallel(input, &mut loaded_modules, verbose, &main_source, &query_db)?
+        load_module_with_imports_parallel(
+            input,
+            &mut loaded_modules,
+            verbose,
+            &main_source,
+            &query_db,
+        )?
     } else {
-        load_module_with_imports_internal(input, &mut loaded_modules, verbose, &main_source, &query_db)?
+        load_module_with_imports_internal(
+            input,
+            &mut loaded_modules,
+            verbose,
+            &main_source,
+            &query_db,
+        )?
     };
     let parse_time = parse_start.elapsed();
 
     if verbose {
-        println!("  {} total items (including imports)", merged_ast.items.len());
-        println!("  {} Parse time: {:.3}s", "⏱".cyan(), parse_time.as_secs_f64());
+        println!(
+            "  {} total items (including imports)",
+            merged_ast.items.len()
+        );
+        println!(
+            "  {} Parse time: {:.3}s",
+            "⏱".cyan(),
+            parse_time.as_secs_f64()
+        );
     }
 
     // Run lint plugins
@@ -1379,7 +1615,9 @@ fn cmd_build(
             print_plugin_diagnostics(&diagnostics, &main_source, input);
 
             // Check if any errors (not just warnings)
-            let has_errors = diagnostics.iter().any(|d| d.level == DiagnosticLevel::Error);
+            let has_errors = diagnostics
+                .iter()
+                .any(|d| d.level == DiagnosticLevel::Error);
             if has_errors {
                 return Err("Plugin lint check failed".to_string());
             }
@@ -1388,7 +1626,8 @@ fn cmd_build(
 
     // Run transform plugins
     let transformed_ast = if !plugins.is_empty() {
-        plugins.run_transform(merged_ast)
+        plugins
+            .run_transform(merged_ast)
             .map_err(|e| format!("Plugin transform error: {}", e))?
     } else {
         merged_ast
@@ -1405,8 +1644,7 @@ fn cmd_build(
 
     // 3. Process #[derive(...)] attributes
     let mut final_ast = macro_expanded_ast;
-    process_derives(&mut final_ast)
-        .map_err(|e| format!("Derive macro error: {}", e))?;
+    process_derives(&mut final_ast).map_err(|e| format!("Derive macro error: {}", e))?;
 
     if verbose {
         let macro_count = macro_registry.macros_count();
@@ -1421,10 +1659,11 @@ fn cmd_build(
     configure_type_checker(&mut checker);
 
     // Calculate imported item count so ownership checker can skip imported items
-    let input_canonical = input.canonicalize()
-        .unwrap_or_else(|_| input.to_path_buf());
+    let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
     if let Ok(original_ast) = query_db.parse(&input_canonical) {
-        let original_non_use_count = original_ast.items.iter()
+        let original_non_use_count = original_ast
+            .items
+            .iter()
             .filter(|item| !matches!(item.node, Item::Use(_)))
             .count();
         let imported_count = final_ast.items.len().saturating_sub(original_non_use_count);
@@ -1444,7 +1683,9 @@ fn cmd_build(
     let typecheck_time = typecheck_start.elapsed();
 
     // Print ownership warnings if any
-    let ownership_warnings: Vec<_> = checker.get_warnings().iter()
+    let ownership_warnings: Vec<_> = checker
+        .get_warnings()
+        .iter()
         .filter(|w| w.starts_with("[ownership]"))
         .collect();
     if !ownership_warnings.is_empty() {
@@ -1455,13 +1696,15 @@ fn cmd_build(
 
     if verbose {
         println!("  {}", "Type check passed".green());
-        println!("  {} Type check time: {:.3}s", "⏱".cyan(), typecheck_time.as_secs_f64());
+        println!(
+            "  {} Type check time: {:.3}s",
+            "⏱".cyan(),
+            typecheck_time.as_secs_f64()
+        );
     }
 
     // Generate LLVM IR
-    let module_name = input.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("main");
+    let module_name = input.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
 
     if verbose && !matches!(target, TargetTriple::Native) {
         println!("  {} {}", "Target:".cyan(), target.triple_str());
@@ -1472,10 +1715,16 @@ fn cmd_build(
     let raw_ir = if use_inkwell {
         // Warn about unsupported features in inkwell backend
         if gc {
-            eprintln!("{}: --gc is not yet supported with the inkwell backend, ignoring", "warning".yellow().bold());
+            eprintln!(
+                "{}: --gc is not yet supported with the inkwell backend, ignoring",
+                "warning".yellow().bold()
+            );
         }
         if debug {
-            eprintln!("{}: -g/--debug is not yet supported with the inkwell backend, ignoring", "warning".yellow().bold());
+            eprintln!(
+                "{}: -g/--debug is not yet supported with the inkwell backend, ignoring",
+                "warning".yellow().bold()
+            );
         }
 
         if verbose {
@@ -1484,32 +1733,59 @@ fn cmd_build(
 
         let codegen_start = std::time::Instant::now();
         let context = ::inkwell::context::Context::create();
-        let mut gen = vais_codegen::InkwellCodeGenerator::new_with_target(&context, module_name, target.clone());
+        let mut gen = vais_codegen::InkwellCodeGenerator::new_with_target(
+            &context,
+            module_name,
+            target.clone(),
+        );
         gen.generate_module(&final_ast)
             .map_err(|e| format!("Inkwell codegen error: {}", e))?;
         let ir = gen.get_ir_string();
         let codegen_time = codegen_start.elapsed();
 
         if verbose {
-            println!("  {} Codegen time: {:.3}s", "⏱".cyan(), codegen_time.as_secs_f64());
+            println!(
+                "  {} Codegen time: {:.3}s",
+                "⏱".cyan(),
+                codegen_time.as_secs_f64()
+            );
         }
 
         ir
     } else {
         generate_with_text_backend(
-            module_name, &target, gc, gc_threshold, debug, input, &main_source,
-            &checker, &final_ast, verbose,
+            module_name,
+            &target,
+            gc,
+            gc_threshold,
+            debug,
+            input,
+            &main_source,
+            &checker,
+            &final_ast,
+            verbose,
         )?
     };
 
     #[cfg(not(feature = "inkwell"))]
     let raw_ir = {
         if use_inkwell {
-            return Err("Inkwell backend not available. Recompile with: cargo build --features inkwell".to_string());
+            return Err(
+                "Inkwell backend not available. Recompile with: cargo build --features inkwell"
+                    .to_string(),
+            );
         }
         generate_with_text_backend(
-            module_name, &target, gc, gc_threshold, debug, input, &main_source,
-            &checker, &final_ast, verbose,
+            module_name,
+            &target,
+            gc,
+            gc_threshold,
+            debug,
+            input,
+            &main_source,
+            &checker,
+            &final_ast,
+            verbose,
         )?
     };
 
@@ -1539,7 +1815,8 @@ fn cmd_build(
         _ => vais_plugin::OptLevel::O3,
     };
     let ir = if !plugins.is_empty() {
-        plugins.run_optimize(&ir, plugin_opt)
+        plugins
+            .run_optimize(&ir, plugin_opt)
             .map_err(|e| format!("Plugin optimize error: {}", e))?
     } else {
         ir
@@ -1552,7 +1829,10 @@ fn cmd_build(
         }
         println!("{} {}", "Optimizing".cyan().bold(), opt_info);
     } else if verbose && debug && opt_level > 0 {
-        println!("{} Optimizations disabled for debug build", "Note".yellow().bold());
+        println!(
+            "{} Optimizations disabled for debug build",
+            "Note".yellow().bold()
+        );
     }
 
     // Determine output paths
@@ -1565,8 +1845,7 @@ fn cmd_build(
     };
 
     // Write IR
-    fs::write(&ir_path, &ir)
-        .map_err(|e| format!("Cannot write '{}': {}", ir_path.display(), e))?;
+    fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write '{}': {}", ir_path.display(), e))?;
 
     if verbose || emit_ir {
         println!("{} {}", "Wrote".green().bold(), ir_path.display());
@@ -1603,7 +1882,9 @@ fn cmd_build(
             ext
         } else {
             match target {
-                TargetTriple::Wasm32Unknown | TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => "wasm",
+                TargetTriple::Wasm32Unknown
+                | TargetTriple::WasiPreview1
+                | TargetTriple::WasiPreview2 => "wasm",
                 _ => "",
             }
         };
@@ -1612,14 +1893,27 @@ fn cmd_build(
             if hot {
                 // For hot reload, prefix with 'lib' and use dylib extension
                 let parent = input.parent().unwrap_or(Path::new("."));
-                let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+                let stem = input
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("output");
                 parent.join(format!("lib{}.{}", stem, default_ext))
             } else {
                 input.with_extension(default_ext)
             }
         });
 
-        compile_ir_to_binary(&ir_path, &bin_path, effective_opt_level, debug, verbose, &target, hot, &lto_mode, &pgo_mode)?;
+        compile_ir_to_binary(
+            &ir_path,
+            &bin_path,
+            effective_opt_level,
+            debug,
+            verbose,
+            &target,
+            hot,
+            &lto_mode,
+            &pgo_mode,
+        )?;
     }
 
     // Update incremental compilation cache after successful build
@@ -1628,7 +1922,12 @@ fn cmd_build(
         for loaded_path in &loaded_modules {
             if let Err(e) = c.update_file(loaded_path) {
                 if verbose {
-                    eprintln!("{}: Cache update for '{}': {}", "Warning".yellow(), loaded_path.display(), e);
+                    eprintln!(
+                        "{}: Cache update for '{}': {}",
+                        "Warning".yellow(),
+                        loaded_path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -1640,10 +1939,12 @@ fn cmd_build(
             }
         } else if verbose {
             let stats = c.stats();
-            println!("{} {} files, {} dependencies",
+            println!(
+                "{} {} files, {} dependencies",
                 "Cache updated:".cyan(),
                 stats.total_files,
-                stats.total_dependencies);
+                stats.total_dependencies
+            );
         }
     }
 
@@ -1658,9 +1959,10 @@ fn cmd_build(
 /// Main functions should only exist in the top-level module being compiled,
 /// not in imported modules (which may have their own test main functions)
 fn filter_imported_items(items: Vec<Spanned<Item>>) -> Vec<Spanned<Item>> {
-    items.into_iter().filter(|item| {
-        !matches!(&item.node, Item::Function(f) if f.name.node == "main")
-    }).collect()
+    items
+        .into_iter()
+        .filter(|item| !matches!(&item.node, Item::Function(f) if f.name.node == "main"))
+        .collect()
 }
 
 /// Load a module and recursively resolve its imports
@@ -1670,8 +1972,8 @@ fn load_module_with_imports(
     verbose: bool,
     query_db: &QueryDatabase,
 ) -> Result<Module, String> {
-    let source = fs::read_to_string(path)
-        .map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
     load_module_with_imports_internal(path, loaded, verbose, &source, query_db)
 }
 
@@ -1684,7 +1986,8 @@ fn load_module_with_imports_internal(
     query_db: &QueryDatabase,
 ) -> Result<Module, String> {
     // Canonicalize path to avoid duplicate loading
-    let canonical = path.canonicalize()
+    let canonical = path
+        .canonicalize()
         .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
 
     // Skip if already loaded
@@ -1699,20 +2002,24 @@ fn load_module_with_imports_internal(
 
     if verbose {
         let cache_tag = if cached { " (cached)" } else { "" };
-        println!("{} {}{}", "Compiling".green().bold(), path.display(), cache_tag);
+        println!(
+            "{} {}{}",
+            "Compiling".green().bold(),
+            path.display(),
+            cache_tag
+        );
     }
 
-    let ast = query_db.parse(&canonical)
-        .map_err(|e| match e {
-            vais_query::QueryError::Parse(msg) => {
-                // Try to provide formatted error using the original parser
-                match vais_parser::parse(source) {
-                    Err(parse_err) => error_formatter::format_parse_error(&parse_err, source, path),
-                    Ok(_) => msg,
-                }
+    let ast = query_db.parse(&canonical).map_err(|e| match e {
+        vais_query::QueryError::Parse(msg) => {
+            // Try to provide formatted error using the original parser
+            match vais_parser::parse(source) {
+                Err(parse_err) => error_formatter::format_parse_error(&parse_err, source, path),
+                Ok(_) => msg,
             }
-            other => format!("Error in '{}': {}", path.display(), other),
-        })?;
+        }
+        other => format!("Error in '{}': {}", path.display(), other),
+    })?;
 
     if verbose {
         println!("  {} items", ast.items.len());
@@ -1761,7 +2068,8 @@ fn load_module_with_imports_parallel(
     use rayon::prelude::*;
 
     // Canonicalize path
-    let canonical = path.canonicalize()
+    let canonical = path
+        .canonicalize()
         .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
 
     if loaded.contains(&canonical) {
@@ -1775,10 +2083,16 @@ fn load_module_with_imports_parallel(
 
     if verbose {
         let cache_tag = if cached { " (cached)" } else { "" };
-        println!("{} {} (parallel){}", "Compiling".green().bold(), path.display(), cache_tag);
+        println!(
+            "{} {} (parallel){}",
+            "Compiling".green().bold(),
+            path.display(),
+            cache_tag
+        );
     }
 
-    let ast = query_db.parse(&canonical)
+    let ast = query_db
+        .parse(&canonical)
         .map_err(|e| format!("Error in '{}': {}", path.display(), e))?;
 
     if verbose {
@@ -1794,7 +2108,8 @@ fn load_module_with_imports_parallel(
     for (idx, item) in ast.items.iter().enumerate() {
         if let Item::Use(use_stmt) = &item.node {
             let module_path = resolve_import_path(base_dir, &use_stmt.path)?;
-            let module_canonical = module_path.canonicalize()
+            let module_canonical = module_path
+                .canonicalize()
                 .map_err(|e| format!("Cannot resolve path '{}': {}", module_path.display(), e))?;
             if !loaded.contains(&module_canonical) {
                 import_paths.push(module_path);
@@ -1808,7 +2123,11 @@ fn load_module_with_imports_parallel(
     #[allow(clippy::type_complexity)]
     let parsed_results: Vec<(PathBuf, Result<Module, String>)> = if import_paths.len() > 1 {
         if verbose {
-            println!("  {} Parsing {} imports in parallel", "⚡".cyan(), import_paths.len());
+            println!(
+                "  {} Parsing {} imports in parallel",
+                "⚡".cyan(),
+                import_paths.len()
+            );
         }
         import_paths
             .par_iter()
@@ -1816,30 +2135,41 @@ fn load_module_with_imports_parallel(
                 let result = (|| -> Result<Module, String> {
                     let src = fs::read_to_string(p)
                         .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
-                    let p_canonical = p.canonicalize()
+                    let p_canonical = p
+                        .canonicalize()
                         .map_err(|e| format!("Cannot resolve path '{}': {}", p.display(), e))?;
                     query_db.set_source_text(&p_canonical, &src);
-                    let module = query_db.parse(&p_canonical)
+                    let module = query_db
+                        .parse(&p_canonical)
                         .map_err(|e| format!("Error in '{}': {}", p.display(), e))?;
-                    Ok(Module { items: module.items.to_vec() })
+                    Ok(Module {
+                        items: module.items.to_vec(),
+                    })
                 })();
                 (p.clone(), result)
             })
             .collect()
     } else {
-        import_paths.iter().map(|p| {
-            let result = (|| -> Result<Module, String> {
-                let src = fs::read_to_string(p)
-                    .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
-                let p_canonical = p.canonicalize()
-                    .map_err(|e| format!("Cannot resolve path '{}': {}", p.display(), e))?;
-                query_db.set_source_text(&p_canonical, &src);
-                let module = query_db.parse(&p_canonical)
-                    .map_err(|e| format!("Error in '{}': {}", p.display(), e))?;
-                Ok(Module { items: module.items.to_vec() })
-            })();
-            (p.clone(), result)
-        }).collect()
+        import_paths
+            .iter()
+            .map(|p| {
+                let result = (|| -> Result<Module, String> {
+                    let src = fs::read_to_string(p)
+                        .map_err(|e| format!("Cannot read '{}': {}", p.display(), e))?;
+                    let p_canonical = p
+                        .canonicalize()
+                        .map_err(|e| format!("Cannot resolve path '{}': {}", p.display(), e))?;
+                    query_db.set_source_text(&p_canonical, &src);
+                    let module = query_db
+                        .parse(&p_canonical)
+                        .map_err(|e| format!("Error in '{}': {}", p.display(), e))?;
+                    Ok(Module {
+                        items: module.items.to_vec(),
+                    })
+                })();
+                (p.clone(), result)
+            })
+            .collect()
     };
 
     // Build a map from path -> parsed module
@@ -1854,7 +2184,8 @@ fn load_module_with_imports_parallel(
             match &item.node {
                 Item::Use(use_stmt) => {
                     let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
-                    let sub_imported = load_module_with_imports(&sub_path, loaded, verbose, query_db)?;
+                    let sub_imported =
+                        load_module_with_imports(&sub_path, loaded, verbose, query_db)?;
                     // Filter out main functions from imported modules to avoid conflicts
                     sub_items.extend(filter_imported_items(sub_imported.items));
                 }
@@ -1932,7 +2263,10 @@ fn get_std_path() -> Option<PathBuf> {
 }
 
 /// Resolve import path to file path with security validation
-fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> Result<PathBuf, String> {
+fn resolve_import_path(
+    base_dir: &Path,
+    path: &[vais_ast::Spanned<String>],
+) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Err("Empty import path".to_string());
     }
@@ -1944,7 +2278,10 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
         // For std imports, use the standard library path
         match get_std_path() {
             Some(std_path) => std_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
-            None => return Err("Cannot find Vais standard library. Set VAIS_STD_PATH or run from project root.".to_string()),
+            None => return Err(
+                "Cannot find Vais standard library. Set VAIS_STD_PATH or run from project root."
+                    .to_string(),
+            ),
         }
     } else {
         base_dir.to_path_buf()
@@ -1952,7 +2289,8 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
 
     // Canonicalize the search base to get the absolute path
     // This resolves symlinks and normalizes the path
-    let canonical_base = search_base.canonicalize()
+    let canonical_base = search_base
+        .canonicalize()
         .map_err(|_| format!("Cannot resolve base directory: {}", search_base.display()))?;
 
     // Convert module path to file path
@@ -1987,17 +2325,29 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
                             let dep_as_dir = dep_file_path.join(&seg.node).join("mod.vais");
                             let dep_as_lib = dep_file_path.join(&seg.node).join("lib.vais");
                             if dep_as_file.exists() {
-                                let dep_canonical = dep_base.canonicalize()
-                                    .map_err(|_| format!("Cannot resolve dep directory: {}", dep_base.display()))?;
-                                return validate_and_canonicalize_import(&dep_as_file, &dep_canonical);
+                                let dep_canonical = dep_base.canonicalize().map_err(|_| {
+                                    format!("Cannot resolve dep directory: {}", dep_base.display())
+                                })?;
+                                return validate_and_canonicalize_import(
+                                    &dep_as_file,
+                                    &dep_canonical,
+                                );
                             } else if dep_as_dir.exists() {
-                                let dep_canonical = dep_base.canonicalize()
-                                    .map_err(|_| format!("Cannot resolve dep directory: {}", dep_base.display()))?;
-                                return validate_and_canonicalize_import(&dep_as_dir, &dep_canonical);
+                                let dep_canonical = dep_base.canonicalize().map_err(|_| {
+                                    format!("Cannot resolve dep directory: {}", dep_base.display())
+                                })?;
+                                return validate_and_canonicalize_import(
+                                    &dep_as_dir,
+                                    &dep_canonical,
+                                );
                             } else if dep_as_lib.exists() {
-                                let dep_canonical = dep_base.canonicalize()
-                                    .map_err(|_| format!("Cannot resolve dep directory: {}", dep_base.display()))?;
-                                return validate_and_canonicalize_import(&dep_as_lib, &dep_canonical);
+                                let dep_canonical = dep_base.canonicalize().map_err(|_| {
+                                    format!("Cannot resolve dep directory: {}", dep_base.display())
+                                })?;
+                                return validate_and_canonicalize_import(
+                                    &dep_as_lib,
+                                    &dep_canonical,
+                                );
                             }
                         } else {
                             dep_file_path = dep_file_path.join(&seg.node);
@@ -2029,13 +2379,12 @@ fn resolve_import_path(base_dir: &Path, path: &[vais_ast::Spanned<String>]) -> R
 /// 4. Prevents symlink attacks
 fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<PathBuf, String> {
     // Canonicalize the path to resolve symlinks and get absolute path
-    let canonical_path = path.canonicalize()
+    let canonical_path = path
+        .canonicalize()
         .map_err(|e| format!("Cannot access file '{}': {}", path.display(), e))?;
 
     // Get the project root for additional validation
-    let project_root = std::env::current_dir()
-        .and_then(|p| p.canonicalize())
-        .ok();
+    let project_root = std::env::current_dir().and_then(|p| p.canonicalize()).ok();
 
     // Get std library path for validation
     let std_root = get_std_path()
@@ -2046,19 +2395,24 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
     let is_within_allowed = canonical_path.starts_with(allowed_base);
 
     // Also check if it's within project root or std library
-    let is_within_project = project_root.as_ref()
+    let is_within_project = project_root
+        .as_ref()
         .map(|root| canonical_path.starts_with(root))
         .unwrap_or(false);
 
-    let is_within_std = std_root.as_ref()
+    let is_within_std = std_root
+        .as_ref()
         .map(|root| canonical_path.starts_with(root))
         .unwrap_or(false);
 
     // Check if within dependency cache paths (set by pkg build)
-    let is_within_dep_cache = std::env::var("VAIS_DEP_PATHS").ok()
+    let is_within_dep_cache = std::env::var("VAIS_DEP_PATHS")
+        .ok()
         .map(|dep_paths| {
             dep_paths.split(':').any(|dp| {
-                Path::new(dp).canonicalize().ok()
+                Path::new(dp)
+                    .canonicalize()
+                    .ok()
                     .map(|cp| canonical_path.starts_with(&cp))
                     .unwrap_or(false)
             })
@@ -2074,7 +2428,11 @@ fn validate_and_canonicalize_import(path: &Path, allowed_base: &Path) -> Result<
     }
 
     // Verify the file has .vais extension for additional safety
-    if canonical_path.extension().map(|e| e != "vais").unwrap_or(true) {
+    if canonical_path
+        .extension()
+        .map(|e| e != "vais")
+        .unwrap_or(true)
+    {
         return Err(format!(
             "Invalid import file type: '{}' (only .vais files allowed)",
             canonical_path.display()
@@ -2232,8 +2590,12 @@ fn compile_ir_to_binary(
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
-        TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => compile_to_wasi(ir_path, bin_path, opt_level, verbose),
-        _ => compile_to_native(ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode),
+        TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => {
+            compile_to_wasi(ir_path, bin_path, opt_level, verbose)
+        }
+        _ => compile_to_native(
+            ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode,
+        ),
     }
 }
 
@@ -2257,13 +2619,13 @@ fn compile_to_native(
 
     // Add debug flag if requested
     if debug {
-        args.push("-g".to_string());  // Generate debug symbols
+        args.push("-g".to_string()); // Generate debug symbols
     }
 
     // Add dylib flags if hot reload mode
     if hot {
-        args.push("-shared".to_string());  // Generate shared library
-        args.push("-fPIC".to_string());    // Position-independent code
+        args.push("-shared".to_string()); // Generate shared library
+        args.push("-fPIC".to_string()); // Position-independent code
     }
 
     // Add LTO flags
@@ -2284,27 +2646,44 @@ fn compile_to_native(
                 .map_err(|e| format!("Failed to create profile directory '{}': {}", dir, e))?;
         }
         if verbose {
-            println!("{} Profile data will be written to: {}/", "info:".blue().bold(), dir);
+            println!(
+                "{} Profile data will be written to: {}/",
+                "info:".blue().bold(),
+                dir
+            );
         }
     }
 
     // Show PGO info
     if let Some(path) = pgo_mode.profile_file() {
         if !Path::new(path).exists() {
-            return Err(format!("Profile data file not found: '{}'. Run the instrumented binary first.", path));
+            return Err(format!(
+                "Profile data file not found: '{}'. Run the instrumented binary first.",
+                path
+            ));
         }
         if verbose {
-            println!("{} Using profile data from: {}", "info:".blue().bold(), path);
+            println!(
+                "{} Using profile data from: {}",
+                "info:".blue().bold(),
+                path
+            );
         }
     }
 
     args.push("-o".to_string());
-    args.push(bin_path.to_str()
-        .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
-        .to_string());
-    args.push(ir_path.to_str()
-        .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
-        .to_string());
+    args.push(
+        bin_path
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
+            .to_string(),
+    );
+    args.push(
+        ir_path
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?
+            .to_string(),
+    );
 
     // Link math library (required on Linux for sqrt, sin, cos, etc.)
     #[cfg(not(target_os = "macos"))]
@@ -2316,15 +2695,28 @@ fn compile_to_native(
         let static_lib = gc_lib_path.join("libvais_gc.a");
         args.push(static_lib.to_str().unwrap_or("libvais_gc.a").to_string());
         if verbose {
-            println!("{} Linking GC runtime from: {}", "info:".blue().bold(), static_lib.display());
+            println!(
+                "{} Linking GC runtime from: {}",
+                "info:".blue().bold(),
+                static_lib.display()
+            );
         }
     }
 
     // Link HTTP runtime if available (for std/http.vais support)
     if let Some(http_rt_path) = find_http_runtime() {
-        args.push(http_rt_path.to_str().unwrap_or("http_runtime.c").to_string());
+        args.push(
+            http_rt_path
+                .to_str()
+                .unwrap_or("http_runtime.c")
+                .to_string(),
+        );
         if verbose {
-            println!("{} Linking HTTP runtime from: {}", "info:".blue().bold(), http_rt_path.display());
+            println!(
+                "{} Linking HTTP runtime from: {}",
+                "info:".blue().bold(),
+                http_rt_path.display()
+            );
         }
     }
 
@@ -2333,19 +2725,37 @@ fn compile_to_native(
 
     // Link thread runtime if available (for std/thread.vais support)
     if let Some(thread_rt_path) = find_thread_runtime() {
-        args.push(thread_rt_path.to_str().unwrap_or("thread_runtime.c").to_string());
+        args.push(
+            thread_rt_path
+                .to_str()
+                .unwrap_or("thread_runtime.c")
+                .to_string(),
+        );
         needs_pthread = true;
         if verbose {
-            println!("{} Linking thread runtime from: {}", "info:".blue().bold(), thread_rt_path.display());
+            println!(
+                "{} Linking thread runtime from: {}",
+                "info:".blue().bold(),
+                thread_rt_path.display()
+            );
         }
     }
 
     // Link sync runtime if available (for std/sync.vais support)
     if let Some(sync_rt_path) = find_sync_runtime() {
-        args.push(sync_rt_path.to_str().unwrap_or("sync_runtime.c").to_string());
+        args.push(
+            sync_rt_path
+                .to_str()
+                .unwrap_or("sync_runtime.c")
+                .to_string(),
+        );
         needs_pthread = true;
         if verbose {
-            println!("{} Linking sync runtime from: {}", "info:".blue().bold(), sync_rt_path.display());
+            println!(
+                "{} Linking sync runtime from: {}",
+                "info:".blue().bold(),
+                sync_rt_path.display()
+            );
         }
     }
 
@@ -2364,18 +2774,24 @@ fn compile_to_native(
         } else if pgo_mode.is_use() {
             features.push("PGO=use".to_string());
         }
-        println!("{} Compiling with: {}", "info:".blue().bold(), features.join(", "));
+        println!(
+            "{} Compiling with: {}",
+            "info:".blue().bold(),
+            features.join(", ")
+        );
     }
 
-    let status = Command::new("clang")
-        .args(&args)
-        .status();
+    let status = Command::new("clang").args(&args).status();
 
     match status {
         Ok(s) if s.success() => {
             if verbose {
                 if debug {
-                    println!("{} {} (with debug symbols)", "Compiled".green().bold(), bin_path.display());
+                    println!(
+                        "{} {} (with debug symbols)",
+                        "Compiled".green().bold(),
+                        bin_path.display()
+                    );
                 } else {
                     println!("{} {}", "Compiled".green().bold(), bin_path.display());
                 }
@@ -2384,12 +2800,11 @@ fn compile_to_native(
             }
             Ok(())
         }
-        Ok(s) => {
-            Err(format!("clang exited with code {}", s.code().unwrap_or(-1)))
-        }
-        Err(_) => {
-            Err("clang not found. Install LLVM/clang or use --emit-ir to output LLVM IR only.".to_string())
-        }
+        Ok(s) => Err(format!("clang exited with code {}", s.code().unwrap_or(-1))),
+        Err(_) => Err(
+            "clang not found. Install LLVM/clang or use --emit-ir to output LLVM IR only."
+                .to_string(),
+        ),
     }
 }
 
@@ -2401,9 +2816,11 @@ fn compile_to_wasm32(
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
-    let ir_str = ir_path.to_str()
+    let ir_str = ir_path
+        .to_str()
         .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?;
-    let bin_str = bin_path.to_str()
+    let bin_str = bin_path
+        .to_str()
         .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?;
 
     // WebAssembly 32-bit compilation
@@ -2414,13 +2831,12 @@ fn compile_to_wasm32(
         "-Wl,--allow-undefined",
         "-Wl,--export-all",
         &opt_flag,
-        "-o", bin_str,
+        "-o",
+        bin_str,
         ir_str,
     ];
 
-    let status = Command::new("clang")
-        .args(&args)
-        .status();
+    let status = Command::new("clang").args(&args).status();
 
     match status {
         Ok(s) if s.success() => {
@@ -2448,22 +2864,17 @@ fn compile_to_wasi(
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
-    let ir_str = ir_path.to_str()
+    let ir_str = ir_path
+        .to_str()
         .ok_or_else(|| "Invalid UTF-8 in IR path".to_string())?;
-    let bin_str = bin_path.to_str()
+    let bin_str = bin_path
+        .to_str()
         .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?;
 
     // WASI compilation
-    let args = vec![
-        "--target=wasm32-wasi",
-        &opt_flag,
-        "-o", bin_str,
-        ir_str,
-    ];
+    let args = vec!["--target=wasm32-wasi", &opt_flag, "-o", bin_str, ir_str];
 
-    let status = Command::new("clang")
-        .args(&args)
-        .status();
+    let status = Command::new("clang").args(&args).status();
 
     match status {
         Ok(s) if s.success() => {
@@ -2483,7 +2894,12 @@ fn compile_to_wasi(
     }
 }
 
-fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegistry) -> Result<(), String> {
+fn cmd_run(
+    input: &PathBuf,
+    args: &[String],
+    verbose: bool,
+    plugins: &PluginRegistry,
+) -> Result<(), String> {
     // Build first (no debug for run command by default, native target only, use incremental cache, no hot reload, no LTO/PGO)
     let bin_path = input.with_extension("");
     cmd_build(
@@ -2502,7 +2918,7 @@ fn cmd_run(input: &PathBuf, args: &[String], verbose: bool, plugins: &PluginRegi
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
         false,
-        None, // parallel_config
+        None,  // parallel_config
         false, // use_inkwell
     )?;
 
@@ -2532,12 +2948,11 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
     }
 
     // Tokenize
-    let _tokens = tokenize(&source)
-        .map_err(|e| format!("Lexer error: {}", e))?;
+    let _tokens = tokenize(&source).map_err(|e| format!("Lexer error: {}", e))?;
 
     // Parse
-    let ast = parse(&source)
-        .map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
+    let ast =
+        parse(&source).map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
 
     // Run lint plugins
     if !plugins.is_empty() {
@@ -2546,7 +2961,9 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
             print_plugin_diagnostics(&diagnostics, &source, input);
 
             // Check if any errors (not just warnings)
-            let has_errors = diagnostics.iter().any(|d| d.level == DiagnosticLevel::Error);
+            let has_errors = diagnostics
+                .iter()
+                .any(|d| d.level == DiagnosticLevel::Error);
             if has_errors {
                 return Err("Plugin lint check failed".to_string());
             }
@@ -2561,7 +2978,9 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
     }
 
     // Print ownership warnings if any
-    let ownership_warnings: Vec<_> = checker.get_warnings().iter()
+    let ownership_warnings: Vec<_> = checker
+        .get_warnings()
+        .iter()
         .filter(|w| w.starts_with("[ownership]"))
         .collect();
     if !ownership_warnings.is_empty() {
@@ -2575,7 +2994,7 @@ fn cmd_check(input: &PathBuf, verbose: bool, plugins: &PluginRegistry) -> Result
 }
 
 fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(), String> {
-    use vais_codegen::formatter::{Formatter, FormatConfig};
+    use vais_codegen::formatter::{FormatConfig, Formatter};
 
     // Handle directory or single file
     let files: Vec<PathBuf> = if input.is_dir() {
@@ -2609,7 +3028,11 @@ fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(), String> {
         if check {
             // Check mode: just report if file needs formatting
             if source != formatted {
-                println!("{} needs formatting: {}", "Would reformat".yellow(), file.display());
+                println!(
+                    "{} needs formatting: {}",
+                    "Would reformat".yellow(),
+                    file.display()
+                );
                 needs_formatting = true;
             }
         } else {
@@ -2636,24 +3059,26 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
     use package::*;
     use std::env;
 
-    let cwd = env::current_dir()
-        .map_err(|e| format!("failed to get current directory: {}", e))?;
+    let cwd = env::current_dir().map_err(|e| format!("failed to get current directory: {}", e))?;
 
     match cmd {
         PkgCommands::Init { name } => {
-            init_package(&cwd, name.as_deref())
-                .map_err(|e| e.to_string())?;
+            init_package(&cwd, name.as_deref()).map_err(|e| e.to_string())?;
             println!("{} Created package in {}", "✓".green(), cwd.display());
             Ok(())
         }
 
-        PkgCommands::Build { release, debug, hot } => {
+        PkgCommands::Build {
+            release,
+            debug,
+            hot,
+        } => {
             // Find manifest
-            let pkg_dir = find_manifest(&cwd)
-                .ok_or_else(|| "could not find vais.toml in current directory or parents".to_string())?;
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| {
+                "could not find vais.toml in current directory or parents".to_string()
+            })?;
 
-            let manifest = load_manifest(&pkg_dir)
-                .map_err(|e| e.to_string())?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 
             if verbose {
                 println!("{} {}", "Building".cyan(), manifest.package.name);
@@ -2661,11 +3086,8 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
 
             // Resolve dependencies (path + registry)
             let cache_root = package::default_registry_cache_root();
-            let deps = resolve_all_dependencies(
-                &manifest,
-                &pkg_dir,
-                cache_root.as_deref(),
-            ).map_err(|e| e.to_string())?;
+            let deps = resolve_all_dependencies(&manifest, &pkg_dir, cache_root.as_deref())
+                .map_err(|e| e.to_string())?;
 
             if verbose && !deps.is_empty() {
                 println!("{} dependencies:", "Resolved".cyan());
@@ -2675,18 +3097,21 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             }
 
             // Collect dependency source search paths for import resolution
-            let dep_search_paths: Vec<PathBuf> = deps.iter().filter_map(|dep| {
-                // Check for src/ directory in the dependency
-                let src_dir = dep.path.join("src");
-                if src_dir.exists() {
-                    Some(src_dir)
-                } else if dep.path.exists() {
-                    // Use the dependency root directly if no src/
-                    Some(dep.path.clone())
-                } else {
-                    None
-                }
-            }).collect();
+            let dep_search_paths: Vec<PathBuf> = deps
+                .iter()
+                .filter_map(|dep| {
+                    // Check for src/ directory in the dependency
+                    let src_dir = dep.path.join("src");
+                    if src_dir.exists() {
+                        Some(src_dir)
+                    } else if dep.path.exists() {
+                        // Use the dependency root directly if no src/
+                        Some(dep.path.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
             // Determine entry point
             let src_dir = pkg_dir.join("src");
@@ -2700,7 +3125,8 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
 
             // Set dependency search paths as environment variable for import resolution
             if !dep_search_paths.is_empty() {
-                let paths_str: Vec<String> = dep_search_paths.iter()
+                let paths_str: Vec<String> = dep_search_paths
+                    .iter()
                     .map(|p| p.display().to_string())
                     .collect();
                 std::env::set_var("VAIS_DEP_PATHS", paths_str.join(":"));
@@ -2742,12 +3168,16 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 lto_mode,
                 vais_codegen::optimize::PgoMode::None,
                 false,
-                None, // parallel_config
+                None,  // parallel_config
                 false, // use_inkwell
             )?;
 
             if hot {
-                println!("{} Built hot-reload dylib {}", "✓".green(), output.display());
+                println!(
+                    "{} Built hot-reload dylib {}",
+                    "✓".green(),
+                    output.display()
+                );
             } else {
                 println!("{} Built {}", "✓".green(), output.display());
             }
@@ -2755,11 +3185,10 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         }
 
         PkgCommands::Check => {
-            let pkg_dir = find_manifest(&cwd)
-                .ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
 
-            let manifest = load_manifest(&pkg_dir)
-                .map_err(|e| e.to_string())?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 
             let src_dir = pkg_dir.join("src");
             let entry = if src_dir.join("main.vais").exists() {
@@ -2773,13 +3202,21 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             let plugins = PluginRegistry::new();
             cmd_check(&entry, verbose, &plugins)?;
 
-            println!("{} {} type-checks correctly", "✓".green(), manifest.package.name);
+            println!(
+                "{} {} type-checks correctly",
+                "✓".green(),
+                manifest.package.name
+            );
             Ok(())
         }
 
-        PkgCommands::Add { name, path, version } => {
-            let pkg_dir = find_manifest(&cwd)
-                .ok_or_else(|| "could not find vais.toml".to_string())?;
+        PkgCommands::Add {
+            name,
+            path,
+            version,
+        } => {
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
 
             let manifest_path = pkg_dir.join("vais.toml");
             let is_registry_dep = path.is_none();
@@ -2811,20 +3248,19 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         }
 
         PkgCommands::Remove { name } => {
-            let pkg_dir = find_manifest(&cwd)
-                .ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
 
             let manifest_path = pkg_dir.join("vais.toml");
-            remove_dependency(&manifest_path, &name)
-                .map_err(|e| e.to_string())?;
+            remove_dependency(&manifest_path, &name).map_err(|e| e.to_string())?;
 
             println!("{} Removed dependency '{}'", "✓".green(), name);
             Ok(())
         }
 
         PkgCommands::Clean => {
-            let pkg_dir = find_manifest(&cwd)
-                .ok_or_else(|| "could not find vais.toml".to_string())?;
+            let pkg_dir =
+                find_manifest(&cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
 
             let target_dir = pkg_dir.join("target");
             let cache_dir = pkg_dir.join(".vais-cache");
@@ -2843,47 +3279,65 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
             Ok(())
         }
 
-        PkgCommands::Install { packages, update, offline } => {
-            cmd_pkg_install(&cwd, packages, update, offline, verbose)
-        }
+        PkgCommands::Install {
+            packages,
+            update,
+            offline,
+        } => cmd_pkg_install(&cwd, packages, update, offline, verbose),
 
         PkgCommands::Update { packages, offline } => {
             cmd_pkg_update(&cwd, packages, offline, verbose)
         }
 
-        PkgCommands::Search { query, limit, offline, sort, category, keyword } => {
-            cmd_pkg_search(&query, limit, offline, verbose, &sort, category.as_deref(), keyword.as_deref())
-        }
+        PkgCommands::Search {
+            query,
+            limit,
+            offline,
+            sort,
+            category,
+            keyword,
+        } => cmd_pkg_search(
+            &query,
+            limit,
+            offline,
+            verbose,
+            &sort,
+            category.as_deref(),
+            keyword.as_deref(),
+        ),
 
-        PkgCommands::Info { name } => {
-            cmd_pkg_info(&name, verbose)
-        }
+        PkgCommands::Info { name } => cmd_pkg_info(&name, verbose),
 
-        PkgCommands::Cache { action } => {
-            cmd_pkg_cache(action, verbose)
-        }
+        PkgCommands::Cache { action } => cmd_pkg_cache(action, verbose),
 
-        PkgCommands::Audit { format } => {
-            cmd_pkg_audit(&cwd, &format, verbose)
-        }
+        PkgCommands::Audit { format } => cmd_pkg_audit(&cwd, &format, verbose),
 
-        PkgCommands::Publish { registry, token, dry_run } => {
-            cmd_pkg_publish(&cwd, registry, token, dry_run, verbose)
-        }
+        PkgCommands::Publish {
+            registry,
+            token,
+            dry_run,
+        } => cmd_pkg_publish(&cwd, registry, token, dry_run, verbose),
 
-        PkgCommands::Yank { name, version, token, registry } => {
-            cmd_pkg_yank(&name, &version, token, registry, verbose)
-        }
+        PkgCommands::Yank {
+            name,
+            version,
+            token,
+            registry,
+        } => cmd_pkg_yank(&name, &version, token, registry, verbose),
 
-        PkgCommands::Login { registry } => {
-            cmd_pkg_login(registry, verbose)
-        }
+        PkgCommands::Login { registry } => cmd_pkg_login(registry, verbose),
     }
 }
 
 /// Install packages from registry
-fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: bool, verbose: bool) -> Result<(), String> {
-    use registry::{RegistryClient, RegistrySource, LockFile, DependencyResolver};
+fn cmd_pkg_install(
+    cwd: &Path,
+    packages: Vec<String>,
+    update: bool,
+    offline: bool,
+    verbose: bool,
+) -> Result<(), String> {
+    use registry::{DependencyResolver, LockFile, RegistryClient, RegistrySource};
 
     // Initialize registry client
     let source = RegistrySource::default();
@@ -2899,7 +3353,9 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
         println!("{} Using cached index (offline mode)", "Info".cyan());
     } else if !client.load_cached_index().map_err(|e| e.to_string())? {
         println!("{} Updating package index...", "Info".cyan());
-        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+        client
+            .update_index()
+            .map_err(|e| format!("failed to update index: {}", e))?;
     }
 
     // Load lock file if exists
@@ -2918,7 +3374,8 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
 
     for spec in &packages {
         let (name, version_req) = parse_package_spec(spec);
-        resolver.add(&name, &version_req)
+        resolver
+            .add(&name, &version_req)
             .map_err(|e| format!("invalid version requirement '{}': {}", version_req, e))?;
     }
 
@@ -2927,7 +3384,8 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
         println!("{} Resolving dependencies...", "Info".cyan());
     }
 
-    let resolved = resolver.resolve()
+    let resolved = resolver
+        .resolve()
         .map_err(|e| format!("dependency resolution failed: {}", e))?;
 
     if resolved.is_empty() {
@@ -2939,7 +3397,12 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
     for pkg in &resolved {
         if client.is_installed(&pkg.name, &pkg.version) {
             if verbose {
-                println!("{} {} {} (cached)", "Skipping".yellow(), pkg.name, pkg.version);
+                println!(
+                    "{} {} {} (cached)",
+                    "Skipping".yellow(),
+                    pkg.name,
+                    pkg.version
+                );
             }
         } else if offline {
             return Err(format!(
@@ -2948,14 +3411,16 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
             ));
         } else {
             println!("{} {} {}...", "Installing".green(), pkg.name, pkg.version);
-            client.download(&pkg.name, &pkg.version)
+            client
+                .download(&pkg.name, &pkg.version)
                 .map_err(|e| format!("failed to install {} {}: {}", pkg.name, pkg.version, e))?;
         }
     }
 
     // Save lock file
     let new_lock = resolver.generate_lock();
-    new_lock.save(&lock_path)
+    new_lock
+        .save(&lock_path)
         .map_err(|e| format!("failed to save lock file: {}", e))?;
 
     println!("{} Installed {} package(s)", "✓".green(), resolved.len());
@@ -2963,15 +3428,18 @@ fn cmd_pkg_install(cwd: &Path, packages: Vec<String>, update: bool, offline: boo
 }
 
 /// Update dependencies
-fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: bool) -> Result<(), String> {
-    use registry::{RegistryClient, RegistrySource, DependencyResolver};
+fn cmd_pkg_update(
+    cwd: &Path,
+    packages: Vec<String>,
+    offline: bool,
+    verbose: bool,
+) -> Result<(), String> {
     use package::{find_manifest, load_manifest};
+    use registry::{DependencyResolver, RegistryClient, RegistrySource};
 
     // Find and load manifest
-    let pkg_dir = find_manifest(cwd)
-        .ok_or_else(|| "could not find vais.toml".to_string())?;
-    let manifest = load_manifest(&pkg_dir)
-        .map_err(|e| e.to_string())?;
+    let pkg_dir = find_manifest(cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+    let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 
     // Initialize registry client
     let source = RegistrySource::default();
@@ -2985,35 +3453,36 @@ fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: boo
         println!("{} Using cached index (offline mode)", "Info".cyan());
     } else {
         println!("{} Updating package index...", "Info".cyan());
-        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+        client
+            .update_index()
+            .map_err(|e| format!("failed to update index: {}", e))?;
     }
 
     // Determine which packages to update
     let deps_to_update: Vec<(String, String)> = if packages.is_empty() {
         // Update all dependencies from manifest
-        manifest.dependencies.iter()
-            .filter_map(|(name, dep)| {
-                match dep {
-                    package::Dependency::Version(v) => Some((name.clone(), v.clone())),
-                    package::Dependency::Detailed(d) if d.version.is_some() => {
-                        Some((name.clone(), d.version.clone().unwrap()))
-                    }
-                    _ => None
+        manifest
+            .dependencies
+            .iter()
+            .filter_map(|(name, dep)| match dep {
+                package::Dependency::Version(v) => Some((name.clone(), v.clone())),
+                package::Dependency::Detailed(d) if d.version.is_some() => {
+                    Some((name.clone(), d.version.clone().unwrap()))
                 }
+                _ => None,
             })
             .collect()
     } else {
         // Update only specified packages
-        packages.iter()
+        packages
+            .iter()
             .filter_map(|name| {
-                manifest.dependencies.get(name).and_then(|dep| {
-                    match dep {
-                        package::Dependency::Version(v) => Some((name.clone(), v.clone())),
-                        package::Dependency::Detailed(d) if d.version.is_some() => {
-                            Some((name.clone(), d.version.clone().unwrap()))
-                        }
-                        _ => None
+                manifest.dependencies.get(name).and_then(|dep| match dep {
+                    package::Dependency::Version(v) => Some((name.clone(), v.clone())),
+                    package::Dependency::Detailed(d) if d.version.is_some() => {
+                        Some((name.clone(), d.version.clone().unwrap()))
                     }
+                    _ => None,
                 })
             })
             .collect()
@@ -3027,22 +3496,30 @@ fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: boo
     // Resolve with fresh versions (no lock file)
     let mut resolver = DependencyResolver::new(&client);
     for (name, req) in &deps_to_update {
-        resolver.add(name, req)
+        resolver
+            .add(name, req)
             .map_err(|e| format!("invalid version requirement '{}': {}", req, e))?;
     }
 
-    let resolved = resolver.resolve()
+    let resolved = resolver
+        .resolve()
         .map_err(|e| format!("dependency resolution failed: {}", e))?;
 
     // Install/update packages
     for pkg in &resolved {
         if client.is_installed(&pkg.name, &pkg.version) {
             if verbose {
-                println!("{} {} {} (up to date)", "Skipping".yellow(), pkg.name, pkg.version);
+                println!(
+                    "{} {} {} (up to date)",
+                    "Skipping".yellow(),
+                    pkg.name,
+                    pkg.version
+                );
             }
         } else {
             println!("{} {} {}...", "Updating".green(), pkg.name, pkg.version);
-            client.download(&pkg.name, &pkg.version)
+            client
+                .download(&pkg.name, &pkg.version)
                 .map_err(|e| format!("failed to update {} {}: {}", pkg.name, pkg.version, e))?;
         }
     }
@@ -3050,7 +3527,8 @@ fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: boo
     // Save new lock file
     let lock_path = pkg_dir.join("vais.lock");
     let new_lock = resolver.generate_lock();
-    new_lock.save(&lock_path)
+    new_lock
+        .save(&lock_path)
         .map_err(|e| format!("failed to save lock file: {}", e))?;
 
     println!("{} Updated {} package(s)", "✓".green(), resolved.len());
@@ -3058,7 +3536,15 @@ fn cmd_pkg_update(cwd: &Path, packages: Vec<String>, offline: bool, verbose: boo
 }
 
 /// Search for packages
-fn cmd_pkg_search(query: &str, limit: usize, offline: bool, verbose: bool, _sort: &str, _category: Option<&str>, _keyword: Option<&str>) -> Result<(), String> {
+fn cmd_pkg_search(
+    query: &str,
+    limit: usize,
+    offline: bool,
+    verbose: bool,
+    _sort: &str,
+    _category: Option<&str>,
+    _keyword: Option<&str>,
+) -> Result<(), String> {
     use registry::{RegistryClient, RegistrySource};
 
     let source = RegistrySource::default();
@@ -3075,10 +3561,13 @@ fn cmd_pkg_search(query: &str, limit: usize, offline: bool, verbose: bool, _sort
         }
     } else if !client.load_cached_index().map_err(|e| e.to_string())? {
         println!("{} Updating package index...", "Info".cyan());
-        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+        client
+            .update_index()
+            .map_err(|e| format!("failed to update index: {}", e))?;
     }
 
-    let results = client.search(query)
+    let results = client
+        .search(query)
         .map_err(|e| format!("search failed: {}", e))?;
 
     if results.is_empty() {
@@ -3089,7 +3578,8 @@ fn cmd_pkg_search(query: &str, limit: usize, offline: bool, verbose: bool, _sort
     println!("{} packages found:\n", results.len().min(limit));
 
     for pkg in results.iter().take(limit) {
-        let latest = pkg.latest_version()
+        let latest = pkg
+            .latest_version()
             .map(|v| v.version.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
@@ -3119,10 +3609,13 @@ fn cmd_pkg_info(name: &str, verbose: bool) -> Result<(), String> {
         .map_err(|e| format!("failed to initialize registry client: {}", e))?;
 
     if !client.load_cached_index().map_err(|e| e.to_string())? {
-        client.update_index().map_err(|e| format!("failed to update index: {}", e))?;
+        client
+            .update_index()
+            .map_err(|e| format!("failed to update index: {}", e))?;
     }
 
-    let pkg = client.get_package(name)
+    let pkg = client
+        .get_package(name)
         .map_err(|e| format!("package not found: {}", e))?;
 
     println!("{} {}", pkg.name.bold(), "package info".dimmed());
@@ -3159,7 +3652,14 @@ fn cmd_pkg_info(name: &str, verbose: bool) -> Result<(), String> {
         let marker = if i == 0 { " (latest)" } else { "" };
         println!("    {}{}", v.version, marker.green());
         if verbose && !v.dependencies.is_empty() {
-            println!("      deps: {}", v.dependencies.keys().cloned().collect::<Vec<_>>().join(", "));
+            println!(
+                "      deps: {}",
+                v.dependencies
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
     }
     if versions.len() > 10 {
@@ -3173,12 +3673,12 @@ fn cmd_pkg_info(name: &str, verbose: bool) -> Result<(), String> {
 fn cmd_pkg_cache(action: CacheAction, _verbose: bool) -> Result<(), String> {
     use registry::PackageCache;
 
-    let cache = PackageCache::new()
-        .map_err(|e| format!("failed to access cache: {}", e))?;
+    let cache = PackageCache::new().map_err(|e| format!("failed to access cache: {}", e))?;
 
     match action {
         CacheAction::Stats => {
-            let stats = cache.stats()
+            let stats = cache
+                .stats()
                 .map_err(|e| format!("failed to get cache stats: {}", e))?;
 
             println!("{}", "Cache Statistics".bold());
@@ -3188,12 +3688,14 @@ fn cmd_pkg_cache(action: CacheAction, _verbose: bool) -> Result<(), String> {
             println!("  {}: {}", "size".cyan(), stats.size_display());
         }
         CacheAction::Clear => {
-            cache.clear()
+            cache
+                .clear()
                 .map_err(|e| format!("failed to clear cache: {}", e))?;
             println!("{} Cache cleared", "✓".green());
         }
         CacheAction::List => {
-            let packages = cache.list_packages()
+            let packages = cache
+                .list_packages()
                 .map_err(|e| format!("failed to list packages: {}", e))?;
 
             if packages.is_empty() {
@@ -3203,7 +3705,8 @@ fn cmd_pkg_cache(action: CacheAction, _verbose: bool) -> Result<(), String> {
 
             println!("{}", "Cached packages:".bold());
             for name in packages {
-                let versions = cache.list_versions(&name)
+                let versions = cache
+                    .list_versions(&name)
                     .map_err(|e| format!("failed to list versions: {}", e))?;
                 let version_strs: Vec<String> = versions.iter().map(|v| v.to_string()).collect();
                 println!("  {} [{}]", name.bold(), version_strs.join(", "));
@@ -3219,30 +3722,29 @@ fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(), String> 
     use package::{find_manifest, load_manifest};
 
     // Find and load manifest
-    let pkg_dir = find_manifest(cwd)
-        .ok_or_else(|| "could not find vais.toml".to_string())?;
-    let manifest = load_manifest(&pkg_dir)
-        .map_err(|e| e.to_string())?;
+    let pkg_dir = find_manifest(cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+    let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 
     // Load lock file if exists
     let lock_path = pkg_dir.join("vais.lock");
     let locked_packages: Vec<(String, String)> = if lock_path.exists() {
         use registry::LockFile;
         let lock = LockFile::load(&lock_path).map_err(|e| e.to_string())?;
-        lock.packages.iter()
+        lock.packages
+            .iter()
             .map(|(name, pkg)| (name.clone(), pkg.version.to_string()))
             .collect()
     } else {
         // Use manifest dependencies if no lock file
-        manifest.dependencies.iter()
-            .filter_map(|(name, dep)| {
-                match dep {
-                    package::Dependency::Version(v) => Some((name.clone(), v.clone())),
-                    package::Dependency::Detailed(d) if d.version.is_some() => {
-                        Some((name.clone(), d.version.clone().unwrap()))
-                    }
-                    _ => None
+        manifest
+            .dependencies
+            .iter()
+            .filter_map(|(name, dep)| match dep {
+                package::Dependency::Version(v) => Some((name.clone(), v.clone())),
+                package::Dependency::Detailed(d) if d.version.is_some() => {
+                    Some((name.clone(), d.version.clone().unwrap()))
                 }
+                _ => None,
             })
             .collect()
     };
@@ -3253,20 +3755,27 @@ fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(), String> 
     }
 
     if verbose {
-        println!("{} Auditing {} package(s)...", "Info".cyan(), locked_packages.len());
+        println!(
+            "{} Auditing {} package(s)...",
+            "Info".cyan(),
+            locked_packages.len()
+        );
     }
 
     // Check for known vulnerabilities using OSV API
     use registry::VulnerabilityScanner;
 
     let scanner = VulnerabilityScanner::new();
-    let vulns_by_package = scanner.query_batch(&locked_packages)
-        .unwrap_or_else(|e| {
-            if verbose {
-                eprintln!("{} Failed to query vulnerability database: {}", "Warning".yellow(), e);
-            }
-            std::collections::HashMap::new()
-        });
+    let vulns_by_package = scanner.query_batch(&locked_packages).unwrap_or_else(|e| {
+        if verbose {
+            eprintln!(
+                "{} Failed to query vulnerability database: {}",
+                "Warning".yellow(),
+                e
+            );
+        }
+        std::collections::HashMap::new()
+    });
 
     // Flatten vulnerabilities into (package, version, advisory) tuples
     let mut vulnerabilities: Vec<(String, String, String)> = Vec::new();
@@ -3286,8 +3795,15 @@ fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(), String> 
             println!("  \"packages\": {},", locked_packages.len());
             println!("  \"vulnerabilities\": [");
             for (i, (pkg, ver, advisory)) in vulnerabilities.iter().enumerate() {
-                let comma = if i < vulnerabilities.len() - 1 { "," } else { "" };
-                println!("    {{ \"package\": \"{}\", \"version\": \"{}\", \"advisory\": \"{}\" }}{}", pkg, ver, advisory, comma);
+                let comma = if i < vulnerabilities.len() - 1 {
+                    ","
+                } else {
+                    ""
+                };
+                println!(
+                    "    {{ \"package\": \"{}\", \"version\": \"{}\", \"advisory\": \"{}\" }}{}",
+                    pkg, ver, advisory, comma
+                );
             }
             println!("  ]");
             println!("}}");
@@ -3299,13 +3815,20 @@ fn cmd_pkg_audit(cwd: &Path, format: &str, verbose: bool) -> Result<(), String> 
             if vulnerabilities.is_empty() {
                 println!("\n{} No known vulnerabilities found", "✓".green());
             } else {
-                println!("\n{} {} vulnerabilities found:", "⚠".yellow().bold(), vulnerabilities.len());
+                println!(
+                    "\n{} {} vulnerabilities found:",
+                    "⚠".yellow().bold(),
+                    vulnerabilities.len()
+                );
                 for (pkg, ver, advisory) in &vulnerabilities {
                     println!("  {} {} - {}", pkg.red(), ver, advisory);
                 }
             }
 
-            println!("\n{} For more information, visit: https://osv.dev", "ℹ".blue());
+            println!(
+                "\n{} For more information, visit: https://osv.dev",
+                "ℹ".blue()
+            );
         }
     }
 
@@ -3322,14 +3845,11 @@ fn cmd_pkg_publish(
 ) -> Result<(), String> {
     use package::{find_manifest, load_manifest};
 
-    let registry_url = registry
-        .unwrap_or_else(|| "https://registry.vais.dev".to_string());
+    let registry_url = registry.unwrap_or_else(|| "https://registry.vais.dev".to_string());
 
     // Find and load manifest
-    let pkg_dir = find_manifest(cwd)
-        .ok_or_else(|| "could not find vais.toml".to_string())?;
-    let manifest = load_manifest(&pkg_dir)
-        .map_err(|e| e.to_string())?;
+    let pkg_dir = find_manifest(cwd).ok_or_else(|| "could not find vais.toml".to_string())?;
+    let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
 
     let pkg_name = &manifest.package.name;
     let pkg_version = &manifest.package.version;
@@ -3343,16 +3863,15 @@ fn cmd_pkg_publish(
 
     // Pack the package into a temporary archive
     let tmp_dir = std::env::temp_dir().join(format!("vais-publish-{}", std::process::id()));
-    fs::create_dir_all(&tmp_dir)
-        .map_err(|e| format!("failed to create temp directory: {}", e))?;
+    fs::create_dir_all(&tmp_dir).map_err(|e| format!("failed to create temp directory: {}", e))?;
     let archive_path = tmp_dir.join(format!("{}-{}.tar.gz", pkg_name, pkg_version));
 
     registry::pack_package(&pkg_dir, &archive_path)
         .map_err(|e| format!("failed to pack package: {}", e))?;
 
     // Read archive and compute checksum
-    let archive_bytes = fs::read(&archive_path)
-        .map_err(|e| format!("failed to read archive: {}", e))?;
+    let archive_bytes =
+        fs::read(&archive_path).map_err(|e| format!("failed to read archive: {}", e))?;
     let checksum = registry::sha256_hex(&archive_bytes);
 
     if verbose {
@@ -3486,7 +4005,8 @@ fn cmd_pkg_publish(
         Ok(resp) => {
             if let Ok(body) = resp.into_string() {
                 if let Ok(pkg_info) = serde_json::from_str::<serde_json::Value>(&body) {
-                    if let Some(server_checksum) = pkg_info.get("checksum").and_then(|c| c.as_str()) {
+                    if let Some(server_checksum) = pkg_info.get("checksum").and_then(|c| c.as_str())
+                    {
                         if server_checksum == checksum {
                             if verbose {
                                 println!("  Checksum verified: {}", &checksum[..16]);
@@ -3531,8 +4051,7 @@ fn cmd_pkg_yank(
     registry: Option<String>,
     verbose: bool,
 ) -> Result<(), String> {
-    let registry_url = registry
-        .unwrap_or_else(|| "https://registry.vais.dev".to_string());
+    let registry_url = registry.unwrap_or_else(|| "https://registry.vais.dev".to_string());
 
     let auth_token = token
         .or_else(|| load_credentials_token(&registry_url))
@@ -3548,7 +4067,13 @@ fn cmd_pkg_yank(
     );
 
     if verbose {
-        println!("{} Yanking {}@{} from {}", "Info".cyan(), name, version, registry_url);
+        println!(
+            "{} Yanking {}@{} from {}",
+            "Info".cyan(),
+            name,
+            version,
+            registry_url
+        );
     }
 
     ureq::post(&yank_url)
@@ -3574,8 +4099,7 @@ fn cmd_pkg_yank(
 
 /// Login to a package registry and store credentials
 fn cmd_pkg_login(registry: Option<String>, verbose: bool) -> Result<(), String> {
-    let registry_url = registry
-        .unwrap_or_else(|| "https://registry.vais.dev".to_string());
+    let registry_url = registry.unwrap_or_else(|| "https://registry.vais.dev".to_string());
 
     println!("{} Logging in to {}", "Info".cyan(), registry_url);
 
@@ -3633,11 +4157,9 @@ fn cmd_pkg_login(registry: Option<String>, verbose: bool) -> Result<(), String> 
         .to_string();
 
     // Save token to ~/.vais/credentials.toml
-    let home = dirs::home_dir()
-        .ok_or_else(|| "could not determine home directory".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "could not determine home directory".to_string())?;
     let vais_dir = home.join(".vais");
-    fs::create_dir_all(&vais_dir)
-        .map_err(|e| format!("failed to create ~/.vais: {}", e))?;
+    fs::create_dir_all(&vais_dir).map_err(|e| format!("failed to create ~/.vais: {}", e))?;
 
     let creds_path = vais_dir.join("credentials.toml");
 
@@ -3645,7 +4167,9 @@ fn cmd_pkg_login(registry: Option<String>, verbose: bool) -> Result<(), String> 
     let mut creds: toml::Value = if creds_path.exists() {
         let content = fs::read_to_string(&creds_path)
             .map_err(|e| format!("failed to read credentials: {}", e))?;
-        content.parse().unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+        content
+            .parse()
+            .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
     } else {
         toml::Value::Table(toml::map::Map::new())
     };
@@ -3720,7 +4244,11 @@ fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -
     // Load configuration file if present
     let config = if let Some(config_path) = find_config() {
         if verbose {
-            println!("{} {}", "Loading plugin config".cyan(), config_path.display());
+            println!(
+                "{} {}",
+                "Loading plugin config".cyan(),
+                config_path.display()
+            );
         }
         match PluginsConfig::load(&config_path) {
             Ok(cfg) => cfg,
@@ -3738,11 +4266,21 @@ fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -
         match registry.load_from_path(plugin_path) {
             Ok(info) => {
                 if verbose {
-                    println!("  {} {} v{}", "Loaded plugin".green(), info.name, info.version);
+                    println!(
+                        "  {} {} v{}",
+                        "Loaded plugin".green(),
+                        info.name,
+                        info.version
+                    );
                 }
             }
             Err(e) => {
-                eprintln!("{}: Failed to load '{}': {}", "Warning".yellow(), plugin_path.display(), e);
+                eprintln!(
+                    "{}: Failed to load '{}': {}",
+                    "Warning".yellow(),
+                    plugin_path.display(),
+                    e
+                );
             }
         }
     }
@@ -3752,11 +4290,21 @@ fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -
         match registry.load_from_path(plugin_path) {
             Ok(info) => {
                 if verbose {
-                    println!("  {} {} v{}", "Loaded plugin".green(), info.name, info.version);
+                    println!(
+                        "  {} {} v{}",
+                        "Loaded plugin".green(),
+                        info.name,
+                        info.version
+                    );
                 }
             }
             Err(e) => {
-                eprintln!("{}: Failed to load '{}': {}", "Warning".yellow(), plugin_path.display(), e);
+                eprintln!(
+                    "{}: Failed to load '{}': {}",
+                    "Warning".yellow(),
+                    plugin_path.display(),
+                    e
+                );
             }
         }
     }
@@ -3764,7 +4312,12 @@ fn load_plugins(extra_plugins: &[PathBuf], verbose: bool, allow_plugins: bool) -
     // Apply configuration to loaded plugins
     for (name, plugin_config) in &config.plugins.config {
         if let Err(e) = registry.configure(name, plugin_config) {
-            eprintln!("{}: Failed to configure '{}': {}", "Warning".yellow(), name, e);
+            eprintln!(
+                "{}: Failed to configure '{}': {}",
+                "Warning".yellow(),
+                name,
+                e
+            );
         }
     }
 
@@ -3786,7 +4339,8 @@ fn cmd_pgo(
     verbose: bool,
     plugins: &PluginRegistry,
 ) -> Result<(), String> {
-    let bin_name = input.file_stem()
+    let bin_name = input
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("a.out");
     let output_path = output.unwrap_or_else(|| PathBuf::from(bin_name));
@@ -3794,7 +4348,10 @@ fn cmd_pgo(
 
     if !merge_only {
         // Step 1: Build with instrumentation
-        println!("{} Step 1/3: Building instrumented binary...", "[PGO]".cyan().bold());
+        println!(
+            "{} Step 1/3: Building instrumented binary...",
+            "[PGO]".cyan().bold()
+        );
         let instrumented_bin = PathBuf::from(format!("{}-instrumented", output_path.display()));
 
         cmd_build(
@@ -3813,27 +4370,41 @@ fn cmd_pgo(
             vais_codegen::optimize::LtoMode::None,
             vais_codegen::optimize::PgoMode::Generate(profile_dir.to_string()),
             false, // suggest_fixes
-            None, // parallel_config
+            None,  // parallel_config
             false, // use_inkwell
         )?;
 
-        println!("{} Instrumented binary: {}", "  ✓".green(), instrumented_bin.display());
+        println!(
+            "{} Instrumented binary: {}",
+            "  ✓".green(),
+            instrumented_bin.display()
+        );
 
         // Step 2: Run to collect profile data
-        println!("{} Step 2/3: Running to collect profile data...", "[PGO]".cyan().bold());
+        println!(
+            "{} Step 2/3: Running to collect profile data...",
+            "[PGO]".cyan().bold()
+        );
         let run_command = run_cmd.unwrap_or_else(|| instrumented_bin.display().to_string());
 
         let status = Command::new("sh")
             .arg("-c")
             .arg(&run_command)
-            .env("LLVM_PROFILE_FILE", format!("{}/default-%p.profraw", profile_dir))
+            .env(
+                "LLVM_PROFILE_FILE",
+                format!("{}/default-%p.profraw", profile_dir),
+            )
             .status()
             .map_err(|e| format!("failed to run instrumented binary: {}", e))?;
 
         if !status.success() {
             println!("{} Instrumented binary exited with non-zero status (profile data may still be usable)", "  ⚠".yellow());
         } else {
-            println!("{} Profile data collected in {}/", "  ✓".green(), profile_dir);
+            println!(
+                "{} Profile data collected in {}/",
+                "  ✓".green(),
+                profile_dir
+            );
         }
 
         // Clean up instrumented binary
@@ -3841,7 +4412,10 @@ fn cmd_pgo(
     }
 
     // Step 3: Merge profile data and rebuild
-    println!("{} Step 3/3: Merging profiles and rebuilding with optimization...", "[PGO]".cyan().bold());
+    println!(
+        "{} Step 3/3: Merging profiles and rebuilding with optimization...",
+        "[PGO]".cyan().bold()
+    );
 
     // Merge profraw files using llvm-profdata
     let merge_status = Command::new("llvm-profdata")
@@ -3869,7 +4443,10 @@ fn cmd_pgo(
                     println!("{} Merged profile data: {}", "  ✓".green(), profdata_path);
                 }
                 _ => {
-                    return Err("Failed to merge profile data. Ensure llvm-profdata is installed.".to_string());
+                    return Err(
+                        "Failed to merge profile data. Ensure llvm-profdata is installed."
+                            .to_string(),
+                    );
                 }
             }
         }
@@ -3892,11 +4469,15 @@ fn cmd_pgo(
         vais_codegen::optimize::LtoMode::Thin,
         vais_codegen::optimize::PgoMode::Use(profdata_path),
         false, // suggest_fixes
-        None, // parallel_config
+        None,  // parallel_config
         false, // use_inkwell
     )?;
 
-    println!("{} PGO-optimized binary: {}", "  ✓".green(), output_path.display());
+    println!(
+        "{} PGO-optimized binary: {}",
+        "  ✓".green(),
+        output_path.display()
+    );
     println!("\n{} PGO workflow complete!", "Done".green().bold());
 
     Ok(())
@@ -3910,16 +4491,18 @@ fn cmd_watch(
     verbose: bool,
     plugins: &PluginRegistry,
 ) -> Result<(), String> {
-    use std::time::Duration;
     use std::collections::HashSet;
+    use std::time::Duration;
 
     // Determine watch directory (parent of input file or current directory)
     let watch_dir = input.parent().unwrap_or(Path::new(".")).to_path_buf();
 
-    println!("{} {} (directory: {})",
+    println!(
+        "{} {} (directory: {})",
         "Watching".cyan().bold(),
         input.display(),
-        watch_dir.display());
+        watch_dir.display()
+    );
 
     // Collect all .vais files to watch (for import tracking)
     let mut watched_files: HashSet<PathBuf> = HashSet::new();
@@ -3932,8 +4515,8 @@ fn cmd_watch(
             if trimmed.starts_with("I ") || trimmed.starts_with("import ") {
                 // Extract import path: I "path/to/file" or import "path/to/file"
                 if let Some(start) = trimmed.find('"') {
-                    if let Some(end) = trimmed[start+1..].find('"') {
-                        let import_path = &trimmed[start+1..start+1+end];
+                    if let Some(end) = trimmed[start + 1..].find('"') {
+                        let import_path = &trimmed[start + 1..start + 1 + end];
                         let full_path = watch_dir.join(import_path);
                         if full_path.exists() {
                             if let Ok(canonical) = full_path.canonicalize() {
@@ -3947,7 +4530,11 @@ fn cmd_watch(
     }
 
     if verbose {
-        println!("{} Watching {} file(s)", "Info".blue().bold(), watched_files.len());
+        println!(
+            "{} Watching {} file(s)",
+            "Info".blue().bold(),
+            watched_files.len()
+        );
         for file in &watched_files {
             println!("  - {}", file.display());
         }
@@ -3971,7 +4558,7 @@ fn cmd_watch(
         vais_codegen::optimize::LtoMode::None,
         vais_codegen::optimize::PgoMode::None,
         false,
-        None, // parallel_config
+        None,  // parallel_config
         false, // use_inkwell
     )?;
 
@@ -3980,13 +4567,11 @@ fn cmd_watch(
         if verbose {
             println!("{} {}", "Running".green().bold(), cmd);
         }
-        let _ = Command::new(cmd)
-            .args(args)
-            .status();
+        let _ = Command::new(cmd).args(args).status();
     }
 
     // Create file watcher using notify crate
-    use notify::{Watcher, RecursiveMode, RecommendedWatcher};
+    use notify::{RecommendedWatcher, RecursiveMode, Watcher};
     use std::sync::mpsc::channel;
 
     let (tx, rx) = channel();
@@ -3995,10 +4580,12 @@ fn cmd_watch(
             let _ = tx.send(res);
         },
         notify::Config::default(),
-    ).map_err(|e| format!("Failed to create watcher: {}", e))?;
+    )
+    .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
     // Watch the directory recursively for .vais files
-    watcher.watch(&watch_dir, RecursiveMode::Recursive)
+    watcher
+        .watch(&watch_dir, RecursiveMode::Recursive)
         .map_err(|e| format!("Failed to watch directory: {}", e))?;
 
     println!("{} Press Ctrl+C to stop", "Ready".green().bold());
@@ -4018,15 +4605,18 @@ fn cmd_watch(
                 // Only recompile on modify events for .vais files
                 if matches!(event.kind, notify::EventKind::Modify(_)) {
                     // Check if the modified file is a .vais file
-                    let is_vais_file = event.paths.iter().any(|p| {
-                        p.extension().is_some_and(|ext| ext == "vais")
-                    });
+                    let is_vais_file = event
+                        .paths
+                        .iter()
+                        .any(|p| p.extension().is_some_and(|ext| ext == "vais"));
 
                     if !is_vais_file {
                         continue;
                     }
 
-                    let changed_files: Vec<_> = event.paths.iter()
+                    let changed_files: Vec<_> = event
+                        .paths
+                        .iter()
                         .filter(|p| p.extension().is_some_and(|ext| ext == "vais"))
                         .collect();
 
@@ -4057,7 +4647,7 @@ fn cmd_watch(
                         vais_codegen::optimize::LtoMode::None,
                         vais_codegen::optimize::PgoMode::None,
                         false,
-                        None, // parallel_config
+                        None,  // parallel_config
                         false, // use_inkwell
                     ) {
                         Ok(_) => {
@@ -4066,9 +4656,7 @@ fn cmd_watch(
                             // Execute if requested
                             if let Some(cmd) = exec {
                                 println!("{} {}", "Running".green().bold(), cmd);
-                                let _ = Command::new(cmd)
-                                    .args(args)
-                                    .status();
+                                let _ = Command::new(cmd).args(args).status();
                             }
                         }
                         Err(e) => {
@@ -4094,14 +4682,18 @@ fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str) {
     eprintln!("\n{} Suggested fixes:", "💡".cyan().bold());
 
     match error {
-        TypeError::UndefinedVar { name, suggestion, .. } => {
+        TypeError::UndefinedVar {
+            name, suggestion, ..
+        } => {
             if let Some(similar) = suggestion {
                 eprintln!("  {} Did you mean '{}'?", "•".green(), similar);
             } else {
                 eprintln!("  {} Define variable: L {}: i64 = 0", "•".green(), name);
             }
         }
-        TypeError::UndefinedFunction { name, suggestion, .. } => {
+        TypeError::UndefinedFunction {
+            name, suggestion, ..
+        } => {
             if let Some(similar) = suggestion {
                 eprintln!("  {} Did you mean '{}'?", "•".green(), similar);
             } else {
@@ -4122,7 +4714,9 @@ fn print_suggested_fixes(error: &vais_types::TypeError, _source: &str) {
                 }
             }
         }
-        TypeError::Mismatch { expected, found, .. } => {
+        TypeError::Mismatch {
+            expected, found, ..
+        } => {
             if (expected == "i64" && found == "f64") || (expected == "f64" && found == "i64") {
                 eprintln!("  {} Add type cast: value as {}", "•".green(), expected);
             }
@@ -4172,10 +4766,21 @@ fn print_plugin_diagnostics(diagnostics: &[Diagnostic], source: &str, path: &Pat
             let source_line = lines.get(line_num - 1).unwrap_or(&"");
 
             eprintln!("{}{} {}", level_colored, ":".bold(), diag.message);
-            eprintln!("  {} {}:{}:{}", "-->".blue().bold(), filename, line_num, col);
+            eprintln!(
+                "  {} {}:{}:{}",
+                "-->".blue().bold(),
+                filename,
+                line_num,
+                col
+            );
             eprintln!("   {}", "|".blue().bold());
             eprintln!("{:4}{} {}", line_num, "|".blue().bold(), source_line);
-            eprintln!("   {} {}{}", "|".blue().bold(), " ".repeat(col.saturating_sub(1)), "^".repeat(underline_len).yellow());
+            eprintln!(
+                "   {} {}{}",
+                "|".blue().bold(),
+                " ".repeat(col.saturating_sub(1)),
+                "^".repeat(underline_len).yellow()
+            );
             if let Some(help) = &diag.help {
                 eprintln!("   {} {} {}", "=".blue().bold(), "help:".cyan(), help);
             }

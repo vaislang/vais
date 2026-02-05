@@ -7,9 +7,9 @@
 //!
 //! The checker runs as a second pass after type checking, operating on the typed AST.
 
+use crate::types::{ResolvedType, TypeError, TypeResult};
 use std::collections::{HashMap, HashSet};
 use vais_ast::*;
-use crate::types::{ResolvedType, TypeError, TypeResult};
 
 /// Tracks the state of a value's ownership
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,17 +22,11 @@ pub enum OwnershipState {
         moved_at: Option<Span>,
     },
     /// Value has been partially moved (some fields moved)
-    PartiallyMoved {
-        moved_fields: HashSet<String>,
-    },
+    PartiallyMoved { moved_fields: HashSet<String> },
     /// Value is borrowed (immutably)
-    Borrowed {
-        borrow_count: usize,
-    },
+    Borrowed { borrow_count: usize },
     /// Value is mutably borrowed
-    MutBorrowed {
-        borrower: String,
-    },
+    MutBorrowed { borrower: String },
 }
 
 /// Information about an active borrow
@@ -156,7 +150,9 @@ impl OwnershipChecker {
             let current_depth = self.scope_depth;
 
             // Find references that point to variables in the dying scope
-            let dangling: Vec<(String, ReferenceInfo)> = self.reference_sources.iter()
+            let dangling: Vec<(String, ReferenceInfo)> = self
+                .reference_sources
+                .iter()
                 .filter(|(_, ref_info)| {
                     dying_vars.contains(&ref_info.source_var)
                         && ref_info.source_scope_depth >= current_depth
@@ -186,12 +182,14 @@ impl OwnershipChecker {
 
         // Invalidate borrows from this scope
         let scope_id = self.current_scope;
-        self.active_borrows.retain(|_, info| info.scope_id != scope_id);
+        self.active_borrows
+            .retain(|_, info| info.scope_id != scope_id);
 
         // Clean up reference tracking for variables going out of scope
         if let Some(dying_scope) = self.scopes.last() {
             let dying_vars: HashSet<String> = dying_scope.keys().cloned().collect();
-            self.reference_sources.retain(|name, _| !dying_vars.contains(name));
+            self.reference_sources
+                .retain(|name, _| !dying_vars.contains(name));
         }
 
         // Remove variables from the scope
@@ -235,16 +233,23 @@ impl OwnershipChecker {
         } else {
             return; // Source not tracked
         };
-        self.reference_sources.insert(ref_var.to_string(), ReferenceInfo {
-            source_var: source_var.to_string(),
-            source_scope_depth: source_scope,
-            source_defined_at,
-            is_mut,
-        });
+        self.reference_sources.insert(
+            ref_var.to_string(),
+            ReferenceInfo {
+                source_var: source_var.to_string(),
+                source_scope_depth: source_scope,
+                source_defined_at,
+                is_mut,
+            },
+        );
     }
 
     /// Check if returning a reference expression would create a dangling pointer
-    pub fn check_return_ref(&mut self, expr: &Spanned<Expr>, return_at: Option<Span>) -> TypeResult<()> {
+    pub fn check_return_ref(
+        &mut self,
+        expr: &Spanned<Expr>,
+        return_at: Option<Span>,
+    ) -> TypeResult<()> {
         if let Expr::Ref(inner) | Expr::Deref(inner) = &expr.node {
             if let Expr::Ident(name) = &inner.node {
                 return self.check_return_local_ref(name, return_at);
@@ -268,7 +273,11 @@ impl OwnershipChecker {
     }
 
     /// Check if returning a reference to a local variable
-    fn check_return_local_ref(&mut self, var_name: &str, return_at: Option<Span>) -> TypeResult<()> {
+    fn check_return_local_ref(
+        &mut self,
+        var_name: &str,
+        return_at: Option<Span>,
+    ) -> TypeResult<()> {
         if let Some(info) = self.lookup_var(var_name) {
             // If the variable is defined in the function scope (not a parameter at scope 0)
             // and is not 'static, it's a dangling reference
@@ -327,12 +336,10 @@ impl OwnershipChecker {
             | ResolvedType::Never => true,
 
             // References are Copy (the reference itself, not the referent)
-            ResolvedType::Ref(_)
-            | ResolvedType::RefLifetime { .. } => true,
+            ResolvedType::Ref(_) | ResolvedType::RefLifetime { .. } => true,
 
             // Mutable references are NOT Copy (uniqueness requirement)
-            ResolvedType::RefMut(_)
-            | ResolvedType::RefMutLifetime { .. } => false,
+            ResolvedType::RefMut(_) | ResolvedType::RefMutLifetime { .. } => false,
 
             // Tuples are Copy if all elements are Copy
             ResolvedType::Tuple(elems) => elems.iter().all(Self::is_copy_type),
@@ -341,9 +348,7 @@ impl OwnershipChecker {
             ResolvedType::ConstArray { element, .. } => Self::is_copy_type(element),
 
             // Dynamic arrays, strings, maps, and other heap-allocated types are NOT Copy
-            ResolvedType::Array(_)
-            | ResolvedType::Str
-            | ResolvedType::Map(_, _) => false,
+            ResolvedType::Array(_) | ResolvedType::Str | ResolvedType::Map(_, _) => false,
 
             // Named structs/enums: not Copy by default
             // (In a full implementation, we'd check for Copy trait impl)
@@ -417,7 +422,12 @@ impl OwnershipChecker {
     }
 
     /// Record an assignment to a variable (resets ownership state)
-    pub fn assign_var(&mut self, name: &str, new_ty: ResolvedType, assign_at: Option<Span>) -> TypeResult<()> {
+    pub fn assign_var(
+        &mut self,
+        name: &str,
+        new_ty: ResolvedType,
+        assign_at: Option<Span>,
+    ) -> TypeResult<()> {
         // Check for active borrows on this variable
         if let Some(borrow) = self.find_active_borrow_of(name) {
             let err = TypeError::AssignWhileBorrowed {
@@ -442,7 +452,12 @@ impl OwnershipChecker {
     // --- Borrow checking ---
 
     /// Record an immutable borrow of a variable
-    pub fn borrow_var(&mut self, borrower: &str, borrowed_from: &str, borrow_at: Option<Span>) -> TypeResult<()> {
+    pub fn borrow_var(
+        &mut self,
+        borrower: &str,
+        borrowed_from: &str,
+        borrow_at: Option<Span>,
+    ) -> TypeResult<()> {
         let info = match self.lookup_var(borrowed_from) {
             Some(info) => info.clone(),
             None => return Ok(()),
@@ -485,7 +500,12 @@ impl OwnershipChecker {
     }
 
     /// Record a mutable borrow of a variable
-    pub fn borrow_var_mut(&mut self, borrower: &str, borrowed_from: &str, borrow_at: Option<Span>) -> TypeResult<()> {
+    pub fn borrow_var_mut(
+        &mut self,
+        borrower: &str,
+        borrowed_from: &str,
+        borrow_at: Option<Span>,
+    ) -> TypeResult<()> {
         let info = match self.lookup_var(borrowed_from) {
             Some(info) => info.clone(),
             None => return Ok(()),
@@ -544,15 +564,21 @@ impl OwnershipChecker {
     // --- Borrow query helpers ---
 
     fn find_active_borrow_of(&self, var_name: &str) -> Option<&BorrowInfo> {
-        self.active_borrows.values().find(|b| b.borrowed_from == var_name)
+        self.active_borrows
+            .values()
+            .find(|b| b.borrowed_from == var_name)
     }
 
     fn find_active_mut_borrow_of(&self, var_name: &str) -> Option<&BorrowInfo> {
-        self.active_borrows.values().find(|b| b.borrowed_from == var_name && b.is_mut)
+        self.active_borrows
+            .values()
+            .find(|b| b.borrowed_from == var_name && b.is_mut)
     }
 
     fn find_any_active_borrow_of(&self, var_name: &str) -> Option<&BorrowInfo> {
-        self.active_borrows.values().find(|b| b.borrowed_from == var_name)
+        self.active_borrows
+            .values()
+            .find(|b| b.borrowed_from == var_name)
     }
 
     // --- Error reporting ---
@@ -589,21 +615,17 @@ impl OwnershipChecker {
         self.push_scope();
 
         // Check if function returns a reference type
-        let returns_ref = f.ret_type.as_ref().is_some_and(|rt| {
-            self.is_ref_ast_type(&rt.node)
-        });
+        let returns_ref = f
+            .ret_type
+            .as_ref()
+            .is_some_and(|rt| self.is_ref_ast_type(&rt.node));
         let prev_returns_ref = self.function_returns_ref;
         self.function_returns_ref = returns_ref;
 
         // Register parameters (at function scope depth, treated as "parameter" scope)
         for param in &f.params {
             let ty = self.ast_type_to_resolved(&param.ty.node);
-            self.define_var(
-                &param.name.node,
-                ty,
-                param.is_mut,
-                Some(param.name.span),
-            );
+            self.define_var(&param.name.node, ty, param.is_mut, Some(param.name.span));
         }
 
         // Check body
@@ -743,7 +765,6 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-
             Expr::Deref(inner) => {
                 self.check_expr_ownership(inner)?;
                 Ok(())
@@ -775,11 +796,7 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::If {
-                cond,
-                then,
-                else_,
-            } => {
+            Expr::If { cond, then, else_ } => {
                 self.check_expr_ownership(cond)?;
                 self.push_scope();
                 for stmt in then {
@@ -801,7 +818,12 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::Loop { body, pattern, iter, .. } => {
+            Expr::Loop {
+                body,
+                pattern,
+                iter,
+                ..
+            } => {
                 if let Some(iter_expr) = iter {
                     self.check_expr_ownership(iter_expr)?;
                 }
@@ -829,7 +851,10 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::Match { expr: scrutinee, arms } => {
+            Expr::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 self.check_expr_ownership(scrutinee)?;
                 self.check_move_from_expr(scrutinee)?;
                 for arm in arms {
@@ -878,7 +903,10 @@ impl OwnershipChecker {
                 Ok(())
             }
 
-            Expr::Index { expr: object, index } => {
+            Expr::Index {
+                expr: object,
+                index,
+            } => {
                 self.check_expr_ownership(object)?;
                 self.check_expr_ownership(index)?;
                 Ok(())
@@ -895,8 +923,12 @@ impl OwnershipChecker {
             }
 
             // Literals and other simple expressions don't have ownership concerns
-            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
-            | Expr::Unit | Expr::SelfCall => Ok(()),
+            Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Bool(_)
+            | Expr::String(_)
+            | Expr::Unit
+            | Expr::SelfCall => Ok(()),
 
             // Catch-all for other expression types
             _ => Ok(()),
@@ -982,11 +1014,12 @@ impl OwnershipChecker {
             Expr::Binary { left, .. } => self.infer_type_from_expr(left),
             Expr::Unary { expr: inner, .. } => self.infer_type_from_expr(inner),
             Expr::Ref(inner) => ResolvedType::Ref(Box::new(self.infer_type_from_expr(inner))),
-            Expr::Tuple(elems) => ResolvedType::Tuple(
-                elems.iter().map(|e| self.infer_type_from_expr(e)).collect(),
-            ),
+            Expr::Tuple(elems) => {
+                ResolvedType::Tuple(elems.iter().map(|e| self.infer_type_from_expr(e)).collect())
+            }
             Expr::Array(elems) => {
-                let elem_ty = elems.first()
+                let elem_ty = elems
+                    .first()
                     .map(|e| self.infer_type_from_expr(e))
                     .unwrap_or(ResolvedType::Unknown);
                 ResolvedType::Array(Box::new(elem_ty))
@@ -1017,13 +1050,23 @@ impl OwnershipChecker {
                 "f64" | "float" => ResolvedType::F64,
                 "bool" => ResolvedType::Bool,
                 "str" | "String" => ResolvedType::Str,
-                _ => ResolvedType::Named { name: name.clone(), generics: vec![] },
+                _ => ResolvedType::Named {
+                    name: name.clone(),
+                    generics: vec![],
+                },
             },
             Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved(&inner.node))),
-            Type::RefMut(inner) => ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node))),
-            Type::Array(inner) => ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node))),
+            Type::RefMut(inner) => {
+                ResolvedType::RefMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            Type::Array(inner) => {
+                ResolvedType::Array(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
             Type::Tuple(elems) => ResolvedType::Tuple(
-                elems.iter().map(|e| self.ast_type_to_resolved(&e.node)).collect(),
+                elems
+                    .iter()
+                    .map(|e| self.ast_type_to_resolved(&e.node))
+                    .collect(),
             ),
             Type::Unit => ResolvedType::Unit,
             Type::Infer => ResolvedType::Unknown,
@@ -1070,7 +1113,9 @@ mod tests {
         // Move the value
         assert!(checker.use_var("s", Some(make_span())).is_ok());
         // Reassign restores ownership
-        assert!(checker.assign_var("s", ResolvedType::Str, Some(make_span())).is_ok());
+        assert!(checker
+            .assign_var("s", ResolvedType::Str, Some(make_span()))
+            .is_ok());
         // Now we can use it again
         assert!(checker.use_var("s", Some(make_span())).is_ok());
     }
@@ -1078,7 +1123,15 @@ mod tests {
     #[test]
     fn test_immutable_borrow_allows_multiple() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, false, Some(make_span()));
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            false,
+            Some(make_span()),
+        );
 
         // Multiple immutable borrows are fine
         assert!(checker.borrow_var("r1", "x", Some(make_span())).is_ok());
@@ -1088,7 +1141,15 @@ mod tests {
     #[test]
     fn test_mutable_borrow_exclusive() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, true, Some(make_span()));
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            true,
+            Some(make_span()),
+        );
 
         // First mutable borrow is fine
         assert!(checker.borrow_var_mut("r1", "x", Some(make_span())).is_ok());
@@ -1099,7 +1160,15 @@ mod tests {
     #[test]
     fn test_mutable_borrow_after_release() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, true, Some(make_span()));
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            true,
+            Some(make_span()),
+        );
 
         // Borrow and release
         assert!(checker.borrow_var_mut("r1", "x", Some(make_span())).is_ok());
@@ -1112,10 +1181,20 @@ mod tests {
     #[test]
     fn test_cannot_mut_borrow_immutable_var() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, false, Some(make_span()));
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            false,
+            Some(make_span()),
+        );
 
         // Cannot mutably borrow an immutable variable
-        assert!(checker.borrow_var_mut("r1", "x", Some(make_span())).is_err());
+        assert!(checker
+            .borrow_var_mut("r1", "x", Some(make_span()))
+            .is_err());
     }
 
     #[test]
@@ -1132,18 +1211,43 @@ mod tests {
     #[test]
     fn test_assign_while_borrowed_fails() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, true, Some(make_span()));
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            true,
+            Some(make_span()),
+        );
 
         // Borrow x
         assert!(checker.borrow_var("r1", "x", Some(make_span())).is_ok());
         // Cannot assign while borrowed
-        assert!(checker.assign_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, Some(make_span())).is_err());
+        assert!(checker
+            .assign_var(
+                "x",
+                ResolvedType::Named {
+                    name: "Vec".to_string(),
+                    generics: vec![]
+                },
+                Some(make_span())
+            )
+            .is_err());
     }
 
     #[test]
     fn test_scope_releases_borrows() {
         let mut checker = OwnershipChecker::new();
-        checker.define_var("x", ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }, true, Some(make_span()));
+        checker.define_var(
+            "x",
+            ResolvedType::Named {
+                name: "Vec".to_string(),
+                generics: vec![],
+            },
+            true,
+            Some(make_span()),
+        );
 
         // Borrow in inner scope
         checker.push_scope();
@@ -1160,12 +1264,21 @@ mod tests {
         assert!(OwnershipChecker::is_copy_type(&ResolvedType::Bool));
         assert!(OwnershipChecker::is_copy_type(&ResolvedType::F64));
         assert!(OwnershipChecker::is_copy_type(&ResolvedType::Unit));
-        assert!(OwnershipChecker::is_copy_type(&ResolvedType::Ref(Box::new(ResolvedType::I64))));
+        assert!(OwnershipChecker::is_copy_type(&ResolvedType::Ref(
+            Box::new(ResolvedType::I64)
+        )));
 
         assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Str));
-        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Array(Box::new(ResolvedType::I64))));
-        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Named { name: "Vec".to_string(), generics: vec![] }));
-        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::RefMut(Box::new(ResolvedType::I64))));
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Array(
+            Box::new(ResolvedType::I64)
+        )));
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Named {
+            name: "Vec".to_string(),
+            generics: vec![]
+        }));
+        assert!(!OwnershipChecker::is_copy_type(&ResolvedType::RefMut(
+            Box::new(ResolvedType::I64)
+        )));
     }
 
     #[test]
@@ -1200,7 +1313,12 @@ mod tests {
         checker.define_var("x", ResolvedType::I64, false, Some(make_span()));
 
         checker.push_scope();
-        checker.define_var("r", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+        checker.define_var(
+            "r",
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+            Some(make_span()),
+        );
         checker.register_reference("r", "x", false);
         checker.pop_scope(); // r goes out of scope, no error since x outlives r
 
@@ -1213,7 +1331,12 @@ mod tests {
         let mut checker = OwnershipChecker::new_collecting();
 
         // Define r in the outer scope
-        checker.define_var("r", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+        checker.define_var(
+            "r",
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+            Some(make_span()),
+        );
 
         checker.push_scope();
         // Define x in inner scope
@@ -1252,7 +1375,12 @@ mod tests {
         let mut checker = OwnershipChecker::new();
 
         // Parameters are defined at scope 0 (before push_scope for function body)
-        checker.define_var("param", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+        checker.define_var(
+            "param",
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+            Some(make_span()),
+        );
 
         checker.push_scope(); // function body scope
 
@@ -1283,7 +1411,12 @@ mod tests {
         let mut checker = OwnershipChecker::new_collecting();
 
         // outer_ref in scope 0
-        checker.define_var("outer_ref", ResolvedType::Ref(Box::new(ResolvedType::I64)), false, Some(make_span()));
+        checker.define_var(
+            "outer_ref",
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+            Some(make_span()),
+        );
 
         checker.push_scope(); // scope 1
         checker.push_scope(); // scope 2
@@ -1294,7 +1427,10 @@ mod tests {
         checker.pop_scope(); // scope 2 ends - deep_local is dropped
 
         assert!(!checker.errors().is_empty());
-        assert!(matches!(checker.errors()[0], TypeError::DanglingReference { .. }));
+        assert!(matches!(
+            checker.errors()[0],
+            TypeError::DanglingReference { .. }
+        ));
 
         checker.pop_scope(); // scope 1 ends
     }

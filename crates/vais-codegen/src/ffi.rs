@@ -238,7 +238,7 @@ impl CodeGenerator {
                     // Large struct: use sret parameter, return void
                     (
                         "void".to_string(),
-                        Some(format!("{} sret({}) %sret_result", ret_llvm, ret_llvm))
+                        Some(format!("{} sret({}) %sret_result", ret_llvm, ret_llvm)),
                     )
                 } else {
                     (ret_llvm, None)
@@ -299,41 +299,45 @@ impl CodeGenerator {
     #[allow(dead_code)]
     fn ffi_ast_type_to_resolved(&self, ty: &Spanned<Type>) -> CodegenResult<ResolvedType> {
         match &ty.node {
-            Type::Named { name, generics } => {
-                match name.as_str() {
-                    "i8" => Ok(ResolvedType::I8),
-                    "i16" => Ok(ResolvedType::I16),
-                    "i32" => Ok(ResolvedType::I32),
-                    "i64" => Ok(ResolvedType::I64),
-                    "i128" => Ok(ResolvedType::I128),
-                    "u8" => Ok(ResolvedType::U8),
-                    "u16" => Ok(ResolvedType::U16),
-                    "u32" => Ok(ResolvedType::U32),
-                    "u64" => Ok(ResolvedType::U64),
-                    "u128" => Ok(ResolvedType::U128),
-                    "f32" => Ok(ResolvedType::F32),
-                    "f64" => Ok(ResolvedType::F64),
-                    "bool" => Ok(ResolvedType::Bool),
-                    "str" => Ok(ResolvedType::Str),
-                    _ => {
-                        let generic_types: Result<Vec<_>, _> = generics
-                            .iter()
-                            .map(|g| self.ffi_ast_type_to_resolved(g))
-                            .collect();
-                        Ok(ResolvedType::Named {
-                            name: name.clone(),
-                            generics: generic_types?,
-                        })
-                    }
+            Type::Named { name, generics } => match name.as_str() {
+                "i8" => Ok(ResolvedType::I8),
+                "i16" => Ok(ResolvedType::I16),
+                "i32" => Ok(ResolvedType::I32),
+                "i64" => Ok(ResolvedType::I64),
+                "i128" => Ok(ResolvedType::I128),
+                "u8" => Ok(ResolvedType::U8),
+                "u16" => Ok(ResolvedType::U16),
+                "u32" => Ok(ResolvedType::U32),
+                "u64" => Ok(ResolvedType::U64),
+                "u128" => Ok(ResolvedType::U128),
+                "f32" => Ok(ResolvedType::F32),
+                "f64" => Ok(ResolvedType::F64),
+                "bool" => Ok(ResolvedType::Bool),
+                "str" => Ok(ResolvedType::Str),
+                _ => {
+                    let generic_types: Result<Vec<_>, _> = generics
+                        .iter()
+                        .map(|g| self.ffi_ast_type_to_resolved(g))
+                        .collect();
+                    Ok(ResolvedType::Named {
+                        name: name.clone(),
+                        generics: generic_types?,
+                    })
                 }
-            }
+            },
             Type::Pointer(inner) => {
                 let inner_ty = self.ffi_ast_type_to_resolved(inner)?;
                 Ok(ResolvedType::Pointer(Box::new(inner_ty)))
             }
-            Type::FnPtr { params, ret, is_vararg } => {
-                let param_types: Result<Vec<_>, _> =
-                    params.iter().map(|p| self.ffi_ast_type_to_resolved(p)).collect();
+            Type::FnPtr {
+                params,
+                ret,
+                is_vararg,
+            } => {
+                let param_types: Result<Vec<_>, _> = params
+                    .iter()
+                    .map(|p| self.ffi_ast_type_to_resolved(p))
+                    .collect();
                 let ret_type = self.ffi_ast_type_to_resolved(ret)?;
                 Ok(ResolvedType::FnPtr {
                     params: param_types?,
@@ -344,8 +348,10 @@ impl CodeGenerator {
             }
             Type::Unit => Ok(ResolvedType::Unit),
             Type::Tuple(elements) => {
-                let elem_types: Result<Vec<_>, _> =
-                    elements.iter().map(|e| self.ffi_ast_type_to_resolved(e)).collect();
+                let elem_types: Result<Vec<_>, _> = elements
+                    .iter()
+                    .map(|e| self.ffi_ast_type_to_resolved(e))
+                    .collect();
                 Ok(ResolvedType::Tuple(elem_types?))
             }
             Type::Array(elem) => {
@@ -361,13 +367,23 @@ impl CodeGenerator {
 
     /// Generate function pointer type in LLVM
     #[allow(dead_code)]
-    pub(crate) fn generate_fn_ptr_type(&self, params: &[ResolvedType], ret: &ResolvedType, is_vararg: bool) -> String {
+    pub(crate) fn generate_fn_ptr_type(
+        &self,
+        params: &[ResolvedType],
+        ret: &ResolvedType,
+        is_vararg: bool,
+    ) -> String {
         let param_types: Vec<String> = params.iter().map(|p| self.type_to_llvm(p)).collect();
         let ret_type = self.type_to_llvm(ret);
 
         let vararg_suffix = if is_vararg { ", ..." } else { "" };
 
-        format!("{} ({}{})*", ret_type, param_types.join(", "), vararg_suffix)
+        format!(
+            "{} ({}{})*",
+            ret_type,
+            param_types.join(", "),
+            vararg_suffix
+        )
     }
 
     /// Generate variadic function call
@@ -382,9 +398,10 @@ impl CodeGenerator {
         let mut ir = String::new();
 
         // Look up function signature
-        let func_info = self.functions.get(func_name).ok_or_else(|| {
-            CodegenError::UndefinedFunction(func_name.to_string())
-        })?;
+        let func_info = self
+            .functions
+            .get(func_name)
+            .ok_or_else(|| CodegenError::UndefinedFunction(func_name.to_string()))?;
 
         if !func_info.signature.is_vararg {
             return Err(CodegenError::TypeError(format!(

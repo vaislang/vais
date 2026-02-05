@@ -25,37 +25,30 @@
 //! let expanded = expand_macros(module, &registry).unwrap();
 //! ```
 
-pub mod expansion;
-pub mod derive;
 pub mod async_macros;
-pub mod property_macros;
+pub mod derive;
+pub mod expansion;
 pub mod proc_macro;
+pub mod property_macros;
 
 use std::collections::HashMap;
 use thiserror::Error;
 use vais_ast::*;
 
 // Re-export main expansion functions
-pub use expansion::{
-    expand_macros, collect_macros, AstExpander,
-    HygienicContext, ExpansionError, ExpansionResult,
-};
-pub use derive::{
-    process_derives, DeriveRegistry, DeriveGenerator,
-    DeriveError, DeriveResult,
-};
 pub use async_macros::{
-    register_async_macros, AsyncMacroExpander,
-    SELECT_MACRO, JOIN_MACRO, TIMEOUT_MACRO,
+    register_async_macros, AsyncMacroExpander, JOIN_MACRO, SELECT_MACRO, TIMEOUT_MACRO,
 };
-pub use property_macros::{
-    register_property_macros, process_prop_attribute,
-    FORALL_MACRO, CHECK_MACRO, ASSERT_PROP_MACRO,
+pub use derive::{process_derives, DeriveError, DeriveGenerator, DeriveRegistry, DeriveResult};
+pub use expansion::{
+    collect_macros, expand_macros, AstExpander, ExpansionError, ExpansionResult, HygienicContext,
 };
 pub use proc_macro::{
-    TokenStream, TokenTree, LiteralToken,
-    ProcMacro, ProcMacroKind, ProcMacroRegistry,
-    ProcMacroError, ProcMacroResult,
+    LiteralToken, ProcMacro, ProcMacroError, ProcMacroKind, ProcMacroRegistry, ProcMacroResult,
+    TokenStream, TokenTree,
+};
+pub use property_macros::{
+    process_prop_attribute, register_property_macros, ASSERT_PROP_MACRO, CHECK_MACRO, FORALL_MACRO,
 };
 // Note: proc_macro::Delimiter is accessed as proc_macro::Delimiter
 // to avoid conflict with vais_ast::Delimiter
@@ -136,7 +129,10 @@ impl<'a> MacroExpander<'a> {
     /// Expand a macro invocation
     pub fn expand(&self, invoke: &MacroInvoke) -> MacroResult<Vec<MacroToken>> {
         let name = &invoke.name.node;
-        let def = self.registry.get(name).ok_or_else(|| MacroError::UndefinedMacro(name.clone()))?;
+        let def = self
+            .registry
+            .get(name)
+            .ok_or_else(|| MacroError::UndefinedMacro(name.clone()))?;
 
         // Try each rule until one matches
         for rule in &def.rules {
@@ -166,7 +162,9 @@ impl<'a> MacroExpander<'a> {
                 let mut bindings = HashMap::new();
                 let mut pos = 0;
 
-                if self.match_elements(elements, tokens, &mut pos, &mut bindings) && pos == tokens.len() {
+                if self.match_elements(elements, tokens, &mut pos, &mut bindings)
+                    && pos == tokens.len()
+                {
                     Some(bindings)
                 } else {
                     None
@@ -224,7 +222,11 @@ impl<'a> MacroExpander<'a> {
                     false
                 }
             }
-            MacroPatternElement::Repetition { patterns, separator, kind } => {
+            MacroPatternElement::Repetition {
+                patterns,
+                separator,
+                kind,
+            } => {
                 let mut repetitions = Vec::new();
                 let mut first = true;
 
@@ -393,13 +395,19 @@ impl<'a> MacroExpander<'a> {
     }
 
     /// Capture until fat arrow (for patterns)
-    fn capture_until_fat_arrow(&self, tokens: &[MacroToken], pos: &mut usize) -> Option<Vec<MacroToken>> {
+    fn capture_until_fat_arrow(
+        &self,
+        tokens: &[MacroToken],
+        pos: &mut usize,
+    ) -> Option<Vec<MacroToken>> {
         let mut result = Vec::new();
 
         while *pos < tokens.len() {
             // Check for => (two separate tokens: = and >)
             if *pos + 1 < tokens.len() {
-                if let (MacroToken::Punct('='), MacroToken::Punct('>')) = (&tokens[*pos], &tokens[*pos + 1]) {
+                if let (MacroToken::Punct('='), MacroToken::Punct('>')) =
+                    (&tokens[*pos], &tokens[*pos + 1])
+                {
                     break;
                 }
             }
@@ -443,7 +451,9 @@ impl<'a> MacroExpander<'a> {
             (MacroToken::Punct(a), MacroToken::Punct(b)) => a == b,
             (MacroToken::Literal(a), MacroToken::Literal(b)) => a == b,
             (MacroToken::Group(d1, t1), MacroToken::Group(d2, t2)) => {
-                d1 == d2 && t1.len() == t2.len() && t1.iter().zip(t2).all(|(a, b)| self.tokens_match(a, b))
+                d1 == d2
+                    && t1.len() == t2.len()
+                    && t1.iter().zip(t2).all(|(a, b)| self.tokens_match(a, b))
             }
             _ => false,
         }
@@ -489,7 +499,9 @@ impl<'a> MacroExpander<'a> {
         match element {
             MacroTemplateElement::Token(token) => Ok(vec![token.clone()]),
             MacroTemplateElement::MetaVar(name) => {
-                let binding = bindings.get(name).ok_or_else(|| MacroError::UndefinedMetaVar(name.clone()))?;
+                let binding = bindings
+                    .get(name)
+                    .ok_or_else(|| MacroError::UndefinedMetaVar(name.clone()))?;
 
                 match binding {
                     Binding::Single(tokens) => Ok(tokens.clone()),
@@ -506,7 +518,11 @@ impl<'a> MacroExpander<'a> {
                     }
                 }
             }
-            MacroTemplateElement::Repetition { elements, separator, kind: _ } => {
+            MacroTemplateElement::Repetition {
+                elements,
+                separator,
+                kind: _,
+            } => {
                 // Find the repetition count from bindings
                 let rep_count = self.find_repetition_count(elements, bindings)?;
 
@@ -552,7 +568,8 @@ pub fn tokens_to_string(tokens: &[MacroToken]) -> String {
     let mut prev_was_ident = false;
 
     for token in tokens {
-        let needs_space = prev_was_ident && matches!(token, MacroToken::Ident(_) | MacroToken::Literal(_));
+        let needs_space =
+            prev_was_ident && matches!(token, MacroToken::Ident(_) | MacroToken::Literal(_));
         if needs_space {
             result.push(' ');
         }
@@ -611,9 +628,9 @@ mod tests {
             name: Spanned::new("empty".to_string(), Span::new(0, 5)),
             rules: vec![MacroRule {
                 pattern: MacroPattern::Empty,
-                template: MacroTemplate::Sequence(vec![
-                    MacroTemplateElement::Token(MacroToken::Literal(MacroLiteral::Int(42))),
-                ]),
+                template: MacroTemplate::Sequence(vec![MacroTemplateElement::Token(
+                    MacroToken::Literal(MacroLiteral::Int(42)),
+                )]),
             }],
             is_pub: false,
         };
@@ -629,7 +646,10 @@ mod tests {
 
         let result = expander.expand(&invoke).unwrap();
         assert_eq!(result.len(), 1);
-        assert!(matches!(&result[0], MacroToken::Literal(MacroLiteral::Int(42))));
+        assert!(matches!(
+            &result[0],
+            MacroToken::Literal(MacroLiteral::Int(42))
+        ));
     }
 
     #[test]
@@ -640,12 +660,10 @@ mod tests {
         let macro_def = MacroDef {
             name: Spanned::new("double".to_string(), Span::new(0, 6)),
             rules: vec![MacroRule {
-                pattern: MacroPattern::Sequence(vec![
-                    MacroPatternElement::MetaVar {
-                        name: "x".to_string(),
-                        kind: MetaVarKind::Expr,
-                    },
-                ]),
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                    name: "x".to_string(),
+                    kind: MetaVarKind::Expr,
+                }]),
                 template: MacroTemplate::Sequence(vec![
                     MacroTemplateElement::MetaVar("x".to_string()),
                     MacroTemplateElement::Token(MacroToken::Punct('+')),
@@ -676,26 +694,22 @@ mod tests {
         let macro_def = MacroDef {
             name: Spanned::new("vec".to_string(), Span::new(0, 3)),
             rules: vec![MacroRule {
-                pattern: MacroPattern::Sequence(vec![
-                    MacroPatternElement::Repetition {
-                        patterns: vec![MacroPatternElement::MetaVar {
-                            name: "x".to_string(),
-                            kind: MetaVarKind::Expr,
-                        }],
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::Repetition {
+                    patterns: vec![MacroPatternElement::MetaVar {
+                        name: "x".to_string(),
+                        kind: MetaVarKind::Expr,
+                    }],
+                    separator: Some(MacroToken::Punct(',')),
+                    kind: RepetitionKind::ZeroOrMore,
+                }]),
+                template: MacroTemplate::Sequence(vec![MacroTemplateElement::Group {
+                    delimiter: Delimiter::Bracket,
+                    content: vec![MacroTemplateElement::Repetition {
+                        elements: vec![MacroTemplateElement::MetaVar("x".to_string())],
                         separator: Some(MacroToken::Punct(',')),
                         kind: RepetitionKind::ZeroOrMore,
-                    },
-                ]),
-                template: MacroTemplate::Sequence(vec![
-                    MacroTemplateElement::Group {
-                        delimiter: Delimiter::Bracket,
-                        content: vec![MacroTemplateElement::Repetition {
-                            elements: vec![MacroTemplateElement::MetaVar("x".to_string())],
-                            separator: Some(MacroToken::Punct(',')),
-                            kind: RepetitionKind::ZeroOrMore,
-                        }],
-                    },
-                ]),
+                    }],
+                }]),
             }],
             is_pub: false,
         };

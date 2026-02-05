@@ -13,22 +13,18 @@ pub mod bounds_check_elim;
 pub mod data_layout;
 
 pub use alias_analysis::{
-    AliasAnalysis, AliasResult, PointerInfo, FunctionSummary,
-    analyze_aliases, propagate_alias_info,
+    analyze_aliases, propagate_alias_info, AliasAnalysis, AliasResult, FunctionSummary, PointerInfo,
 };
 pub use auto_vectorize::{
-    AutoVectorizer, VectorizationCandidate, LoopDependence, VectorWidth,
-    ReductionKind, analyze_vectorization, generate_vectorization_hints,
-    detect_reductions,
+    analyze_vectorization, detect_reductions, generate_vectorization_hints, AutoVectorizer,
+    LoopDependence, ReductionKind, VectorWidth, VectorizationCandidate,
 };
 pub use bounds_check_elim::{
-    ValueRange, RangeAnalysis, BoundsCheck,
-    analyze_bounds_checks, eliminate_bounds_checks,
+    analyze_bounds_checks, eliminate_bounds_checks, BoundsCheck, RangeAnalysis, ValueRange,
 };
 pub use data_layout::{
-    DataLayoutOptimizer, StructLayout, FieldInfo, LayoutSuggestion,
-    optimize_struct_layout, suggest_aos_to_soa,
-    suggest_field_reorder, padding_savings,
+    optimize_struct_layout, padding_savings, suggest_aos_to_soa, suggest_field_reorder,
+    DataLayoutOptimizer, FieldInfo, LayoutSuggestion, StructLayout,
 };
 
 use crate::optimize::OptLevel;

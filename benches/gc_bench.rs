@@ -165,16 +165,13 @@ fn bench_tuning_presets(c: &mut Criterion) {
         (
             "throughput",
             GenGcConfig {
-                young_threshold: 1024 * 1024,       // 1 MB
-                old_threshold: 16 * 1024 * 1024,    // 16 MB
+                young_threshold: 1024 * 1024,    // 1 MB
+                old_threshold: 16 * 1024 * 1024, // 16 MB
                 promotion_age: 5,
                 ..GenGcConfig::default()
             },
         ),
-        (
-            "balanced",
-            GenGcConfig::default(),
-        ),
+        ("balanced", GenGcConfig::default()),
     ];
 
     for (name, config) in &presets {

@@ -140,10 +140,9 @@ impl TestCase {
                 }
                 Property::Idempotent => {
                     lines.push(format!("r1 := {}", call));
-                    let args2: Vec<String> =
-                        std::iter::once("r1".to_string())
-                            .chain(self.inputs[1..].iter().map(|v| format!("{}", v)))
-                            .collect();
+                    let args2: Vec<String> = std::iter::once("r1".to_string())
+                        .chain(self.inputs[1..].iter().map(|v| format!("{}", v)))
+                        .collect();
                     lines.push(format!(
                         "r2 := {}({})",
                         self.function_name,
@@ -309,7 +308,10 @@ impl TestGenerator {
         });
 
         // Negative one (for signed integers)
-        if param_types.iter().any(|t| matches!(t, TypeHint::I64 | TypeHint::I32)) {
+        if param_types
+            .iter()
+            .any(|t| matches!(t, TypeHint::I64 | TypeHint::I32))
+        {
             let neg_ones: Vec<TestValue> = param_types
                 .iter()
                 .map(|t| match t {
@@ -384,11 +386,13 @@ impl TestGenerator {
 
         // Heuristic: functions returning bool → non-zero check not needed
         // Functions returning i64 with "count", "len", "size" → returns >= 0
-        if matches!(return_type, TypeHint::I64 | TypeHint::I32 | TypeHint::U64 | TypeHint::U32)
-            && (name.contains("count")
-                || name.contains("len")
-                || name.contains("size")
-                || name.contains("abs"))
+        if matches!(
+            return_type,
+            TypeHint::I64 | TypeHint::I32 | TypeHint::U64 | TypeHint::U32
+        ) && (name.contains("count")
+            || name.contains("len")
+            || name.contains("size")
+            || name.contains("abs"))
         {
             let inputs: Vec<TestValue> = param_types
                 .iter()
@@ -415,9 +419,7 @@ impl TestGenerator {
             TypeHint::U64 | TypeHint::U32 => TestValue::Int(rng.gen_range(0..=1000)),
             TypeHint::U16 => TestValue::Int(rng.gen_range(0..=100)),
             TypeHint::U8 => TestValue::Int(rng.gen_range(0..=255)),
-            TypeHint::F64 | TypeHint::F32 => {
-                TestValue::Float(rng.gen_range(-100.0..=100.0))
-            }
+            TypeHint::F64 | TypeHint::F32 => TestValue::Float(rng.gen_range(-100.0..=100.0)),
             TypeHint::Bool => TestValue::Bool(rng.gen_bool(0.5)),
             TypeHint::Str => {
                 let len = rng.gen_range(0..=10);
@@ -439,8 +441,14 @@ impl TestGenerator {
 
     fn zero_value(&self, ty: &TypeHint) -> TestValue {
         match ty {
-            TypeHint::I64 | TypeHint::I32 | TypeHint::I16 | TypeHint::I8
-            | TypeHint::U64 | TypeHint::U32 | TypeHint::U16 | TypeHint::U8 => TestValue::Int(0),
+            TypeHint::I64
+            | TypeHint::I32
+            | TypeHint::I16
+            | TypeHint::I8
+            | TypeHint::U64
+            | TypeHint::U32
+            | TypeHint::U16
+            | TypeHint::U8 => TestValue::Int(0),
             TypeHint::F64 | TypeHint::F32 => TestValue::Float(0.0),
             TypeHint::Bool => TestValue::Bool(false),
             TypeHint::Str => TestValue::Str(String::new()),

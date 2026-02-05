@@ -17,12 +17,12 @@
 //! let ptx = gen.generate(&module)?;
 //! ```
 
-pub mod cuda;
-pub mod opencl;
-pub mod webgpu;
-pub mod metal;
-pub mod simd;
 mod common;
+pub mod cuda;
+pub mod metal;
+pub mod opencl;
+pub mod simd;
+pub mod webgpu;
 
 use thiserror::Error;
 use vais_ast::Module;

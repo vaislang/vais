@@ -1,10 +1,10 @@
 //! Dynamic library loading and unloading
 
+use crate::error::{HotReloadError, Result};
 use libloading::{Library, Symbol};
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use crate::error::{HotReloadError, Result};
+use std::path::{Path, PathBuf};
 
 /// Type alias for function pointers
 pub type FunctionSymbol = *mut std::ffi::c_void;
@@ -23,9 +23,10 @@ impl DylibLoader {
         let path = dylib_path.as_ref().to_path_buf();
 
         if !path.exists() {
-            return Err(HotReloadError::InvalidPath(
-                format!("Dylib not found: {}", path.display())
-            ));
+            return Err(HotReloadError::InvalidPath(format!(
+                "Dylib not found: {}",
+                path.display()
+            )));
         }
 
         Ok(DylibLoader {
@@ -66,7 +67,9 @@ impl DylibLoader {
 
     /// Get a function symbol from the loaded library
     pub fn get_function<T>(&mut self, name: &str) -> Result<Symbol<'_, T>> {
-        let lib = self.current_lib.as_ref()
+        let lib = self
+            .current_lib
+            .as_ref()
             .ok_or(HotReloadError::NotInitialized)?;
 
         unsafe {
@@ -82,11 +85,14 @@ impl DylibLoader {
             return Ok(ptr);
         }
 
-        let lib = self.current_lib.as_ref()
+        let lib = self
+            .current_lib
+            .as_ref()
             .ok_or(HotReloadError::NotInitialized)?;
 
         unsafe {
-            let symbol: Symbol<FunctionSymbol> = lib.get(name.as_bytes())
+            let symbol: Symbol<FunctionSymbol> = lib
+                .get(name.as_bytes())
                 .map_err(|_| HotReloadError::SymbolNotFound(name.to_string()))?;
             let ptr = *symbol;
             self.function_cache.insert(name.to_string(), ptr);
@@ -112,16 +118,16 @@ impl DylibLoader {
     /// Create a versioned copy of the dylib to allow reloading
     fn create_versioned_copy(&self) -> Result<PathBuf> {
         let original = &self.dylib_path;
-        let parent = original.parent()
+        let parent = original
+            .parent()
             .ok_or_else(|| HotReloadError::InvalidPath("No parent directory".to_string()))?;
 
-        let stem = original.file_stem()
+        let stem = original
+            .file_stem()
             .and_then(OsStr::to_str)
             .ok_or_else(|| HotReloadError::InvalidPath("Invalid file name".to_string()))?;
 
-        let ext = original.extension()
-            .and_then(OsStr::to_str)
-            .unwrap_or("");
+        let ext = original.extension().and_then(OsStr::to_str).unwrap_or("");
 
         let versioned_name = if ext.is_empty() {
             format!("{}.v{}", stem, self.version)
@@ -139,10 +145,14 @@ impl DylibLoader {
 
     /// Clean up old versioned copies
     pub fn cleanup_old_versions(&self) -> Result<()> {
-        let parent = self.dylib_path.parent()
+        let parent = self
+            .dylib_path
+            .parent()
             .ok_or_else(|| HotReloadError::InvalidPath("No parent directory".to_string()))?;
 
-        let stem = self.dylib_path.file_stem()
+        let stem = self
+            .dylib_path
+            .file_stem()
             .and_then(OsStr::to_str)
             .ok_or_else(|| HotReloadError::InvalidPath("Invalid file name".to_string()))?;
 
@@ -155,7 +165,9 @@ impl DylibLoader {
                     if name.starts_with(&format!("{}.v", stem)) {
                         // Extract version number
                         if let Some(version_str) = name.strip_prefix(&format!("{}.v", stem)) {
-                            if let Some(version_end) = version_str.find('.').or(Some(version_str.len())) {
+                            if let Some(version_end) =
+                                version_str.find('.').or(Some(version_str.len()))
+                            {
                                 if let Ok(version) = version_str[..version_end].parse::<usize>() {
                                     // Remove if older than current version
                                     if version < self.version {

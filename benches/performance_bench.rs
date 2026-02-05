@@ -171,11 +171,29 @@ fn bench_token_count(c: &mut Criterion) {
 
     // Print the comparison
     eprintln!("\n=== Token Count Comparison (Fibonacci) ===");
-    eprintln!("Vais:  {} tokens ({} chars)", vais_fib_tokens, FIBONACCI_VAIS.len());
-    eprintln!("Rust:  {} tokens ({} chars)", rust_fib_tokens, FIBONACCI_RUST.len());
-    eprintln!("C:     {} tokens ({} chars)", c_fib_tokens, FIBONACCI_C.len());
-    eprintln!("Vais/Rust ratio: {:.2}x", vais_fib_tokens as f64 / rust_fib_tokens as f64);
-    eprintln!("Vais/C ratio:    {:.2}x", vais_fib_tokens as f64 / c_fib_tokens as f64);
+    eprintln!(
+        "Vais:  {} tokens ({} chars)",
+        vais_fib_tokens,
+        FIBONACCI_VAIS.len()
+    );
+    eprintln!(
+        "Rust:  {} tokens ({} chars)",
+        rust_fib_tokens,
+        FIBONACCI_RUST.len()
+    );
+    eprintln!(
+        "C:     {} tokens ({} chars)",
+        c_fib_tokens,
+        FIBONACCI_C.len()
+    );
+    eprintln!(
+        "Vais/Rust ratio: {:.2}x",
+        vais_fib_tokens as f64 / rust_fib_tokens as f64
+    );
+    eprintln!(
+        "Vais/C ratio:    {:.2}x",
+        vais_fib_tokens as f64 / c_fib_tokens as f64
+    );
 
     // Quicksort token count
     let vais_qs_tokens = count_vais_tokens(QUICKSORT_VAIS);
@@ -183,11 +201,29 @@ fn bench_token_count(c: &mut Criterion) {
     let c_qs_tokens = approximate_token_count(QUICKSORT_C);
 
     eprintln!("\n=== Token Count Comparison (Quicksort) ===");
-    eprintln!("Vais:  {} tokens ({} chars)", vais_qs_tokens, QUICKSORT_VAIS.len());
-    eprintln!("Rust:  {} tokens ({} chars)", rust_qs_tokens, QUICKSORT_RUST.len());
-    eprintln!("C:     {} tokens ({} chars)", c_qs_tokens, QUICKSORT_C.len());
-    eprintln!("Vais/Rust ratio: {:.2}x", vais_qs_tokens as f64 / rust_qs_tokens as f64);
-    eprintln!("Vais/C ratio:    {:.2}x", vais_qs_tokens as f64 / c_qs_tokens as f64);
+    eprintln!(
+        "Vais:  {} tokens ({} chars)",
+        vais_qs_tokens,
+        QUICKSORT_VAIS.len()
+    );
+    eprintln!(
+        "Rust:  {} tokens ({} chars)",
+        rust_qs_tokens,
+        QUICKSORT_RUST.len()
+    );
+    eprintln!(
+        "C:     {} tokens ({} chars)",
+        c_qs_tokens,
+        QUICKSORT_C.len()
+    );
+    eprintln!(
+        "Vais/Rust ratio: {:.2}x",
+        vais_qs_tokens as f64 / rust_qs_tokens as f64
+    );
+    eprintln!(
+        "Vais/C ratio:    {:.2}x",
+        vais_qs_tokens as f64 / c_qs_tokens as f64
+    );
 
     group.bench_function("vais_fibonacci", |b| {
         b.iter(|| count_vais_tokens(black_box(FIBONACCI_VAIS)))
@@ -204,8 +240,12 @@ fn bench_token_count(c: &mut Criterion) {
 // ============================================================
 
 fn rust_matrix_mul(n: usize) -> Vec<Vec<i64>> {
-    let a: Vec<Vec<i64>> = (0..n).map(|i| (0..n).map(|j| (i * n + j) as i64).collect()).collect();
-    let b: Vec<Vec<i64>> = (0..n).map(|i| (0..n).map(|j| ((i + j) % n) as i64).collect()).collect();
+    let a: Vec<Vec<i64>> = (0..n)
+        .map(|i| (0..n).map(|j| (i * n + j) as i64).collect())
+        .collect();
+    let b: Vec<Vec<i64>> = (0..n)
+        .map(|i| (0..n).map(|j| ((i + j) % n) as i64).collect())
+        .collect();
     let mut c = vec![vec![0i64; n]; n];
     for i in 0..n {
         for j in 0..n {
@@ -261,7 +301,11 @@ fn count_nodes(tree: &Option<Box<BinaryTree>>) -> u64 {
 }
 
 fn rust_fibonacci(n: i64) -> i64 {
-    if n <= 1 { n } else { rust_fibonacci(n - 1) + rust_fibonacci(n - 2) }
+    if n <= 1 {
+        n
+    } else {
+        rust_fibonacci(n - 1) + rust_fibonacci(n - 2)
+    }
 }
 
 fn bench_runtime_algorithms(c: &mut Criterion) {
@@ -383,33 +427,25 @@ fn bench_memory_usage(c: &mut Criterion) {
         let source = generate_vais_code(loc);
 
         // Measure the size of generated IR as a proxy for memory usage
-        group.bench_with_input(
-            BenchmarkId::new("ir_size", loc),
-            &source,
-            |b, s| {
-                b.iter(|| {
-                    let ast = parse(black_box(s)).expect("parse");
-                    let mut checker = TypeChecker::new();
-                    checker.check_module(&ast).expect("typecheck");
-                    let mut codegen = CodeGenerator::new("bench");
-                    let ir = codegen.generate_module(&ast).expect("codegen");
-                    ir.len() // Return IR size as proxy for memory
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("ir_size", loc), &source, |b, s| {
+            b.iter(|| {
+                let ast = parse(black_box(s)).expect("parse");
+                let mut checker = TypeChecker::new();
+                checker.check_module(&ast).expect("typecheck");
+                let mut codegen = CodeGenerator::new("bench");
+                let ir = codegen.generate_module(&ast).expect("codegen");
+                ir.len() // Return IR size as proxy for memory
+            })
+        });
 
         // Measure AST node count as allocation proxy
-        group.bench_with_input(
-            BenchmarkId::new("ast_size", loc),
-            &source,
-            |b, s| {
-                b.iter(|| {
-                    let ast = parse(black_box(s)).expect("parse");
-                    // Count items as rough allocation metric
-                    ast.items.len()
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("ast_size", loc), &source, |b, s| {
+            b.iter(|| {
+                let ast = parse(black_box(s)).expect("parse");
+                // Count items as rough allocation metric
+                ast.items.len()
+            })
+        });
     }
 
     eprintln!("\n=== Memory Usage Estimation ===");

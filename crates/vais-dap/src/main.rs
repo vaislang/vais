@@ -98,8 +98,7 @@ async fn main() -> io::Result<()> {
         .with_max_level(args.log_level)
         .with_writer(io::stderr)
         .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     info!("Starting vais-dap server v{}", env!("CARGO_PKG_VERSION"));
 

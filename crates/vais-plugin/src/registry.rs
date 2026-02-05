@@ -94,20 +94,32 @@ impl PluginRegistry {
     /// Get the platform-specific library extension
     fn library_extension() -> &'static str {
         #[cfg(target_os = "macos")]
-        { "dylib" }
+        {
+            "dylib"
+        }
         #[cfg(target_os = "linux")]
-        { "so" }
+        {
+            "so"
+        }
         #[cfg(target_os = "windows")]
-        { "dll" }
+        {
+            "dll"
+        }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-        { "so" }
+        {
+            "so"
+        }
     }
 
     /// Load a plugin by name from installed locations
     ///
     /// Searches for a plugin library file in standard installation directories.
     /// The library file should be named `lib{name}.{ext}` or `{name}.{ext}`.
-    pub fn load_plugin_by_name(&mut self, name: &str, config: &PluginsConfig) -> Result<(), String> {
+    pub fn load_plugin_by_name(
+        &mut self,
+        name: &str,
+        config: &PluginsConfig,
+    ) -> Result<(), String> {
         let ext = Self::library_extension();
         let search_dirs = Self::plugin_search_dirs();
 
@@ -234,10 +246,7 @@ impl PluginRegistry {
 
     /// Get plugin names
     pub fn plugin_names(&self) -> Vec<&str> {
-        self.plugins
-            .iter()
-            .map(|p| p.plugin.info().name)
-            .collect()
+        self.plugins.iter().map(|p| p.plugin.info().name).collect()
     }
 
     /// Run all lint plugins on a module
@@ -448,16 +457,10 @@ mod tests {
 
     #[test]
     fn test_has_errors() {
-        let no_errors = vec![
-            Diagnostic::warning("test"),
-            Diagnostic::info("test"),
-        ];
+        let no_errors = vec![Diagnostic::warning("test"), Diagnostic::info("test")];
         assert!(!PluginRegistry::has_errors(&no_errors));
 
-        let with_errors = vec![
-            Diagnostic::warning("test"),
-            Diagnostic::error("error"),
-        ];
+        let with_errors = vec![Diagnostic::warning("test"), Diagnostic::error("error")];
         assert!(PluginRegistry::has_errors(&with_errors));
     }
 
@@ -479,7 +482,9 @@ mod tests {
 
         // Should include user plugins directory if HOME is set
         if env::var_os("HOME").is_some() || env::var_os("USERPROFILE").is_some() {
-            assert!(dirs.iter().any(|d| d.to_string_lossy().contains(".vais/plugins")));
+            assert!(dirs
+                .iter()
+                .any(|d| d.to_string_lossy().contains(".vais/plugins")));
         }
     }
 

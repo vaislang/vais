@@ -44,7 +44,10 @@ fn compile_and_run(source: &str) -> Result<RunResult, String> {
 }
 
 /// Compile source with additional C source files linked in
-fn compile_and_run_with_extra_sources(source: &str, extra_c_sources: &[&str]) -> Result<RunResult, String> {
+fn compile_and_run_with_extra_sources(
+    source: &str,
+    extra_c_sources: &[&str],
+) -> Result<RunResult, String> {
     let ir = compile_to_ir(source)?;
 
     let tmp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
@@ -64,7 +67,8 @@ fn compile_and_run_with_extra_sources(source: &str, extra_c_sources: &[&str]) ->
         cmd.arg(c_source);
     }
 
-    let clang_output = cmd.output()
+    let clang_output = cmd
+        .output()
         .map_err(|e| format!("Failed to run clang: {}", e))?;
 
     if !clang_output.status.success() {
@@ -542,10 +546,12 @@ fn e2e_error_undefined_function() {
 #[test]
 fn e2e_error_type_mismatch() {
     // Passing bool where i64 expected (if the type system catches it)
-    assert_compile_error(r#"
+    assert_compile_error(
+        r#"
 F add(a: i64, b: i64) -> i64 = a + b
 F main() -> i64 = add(1, "hello")
-"#);
+"#,
+    );
 }
 
 // ==================== Edge Cases ====================
@@ -2066,7 +2072,10 @@ fn find_http_runtime_path() -> Option<String> {
 fn e2e_http_strlen() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __strlen(s: str) -> i64
@@ -2083,7 +2092,10 @@ F main() -> i64 {
 fn e2e_http_str_eq() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __str_eq(a: str, b: str) -> i64
@@ -2103,7 +2115,10 @@ F main() -> i64 {
 fn e2e_http_str_eq_ignore_case() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __str_eq_ignore_case(a: str, b: str) -> i64
@@ -2116,14 +2131,21 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "str_eq_ignore_case test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "str_eq_ignore_case test failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
 fn e2e_http_parse_url_port() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __parse_url_port(url: str) -> i64
@@ -2133,14 +2155,21 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "parse_url_port test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "parse_url_port test failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
 fn e2e_http_parse_url_host() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __parse_url_host(url: str) -> str
@@ -2151,14 +2180,21 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "parse_url_host test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "parse_url_host test failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
 fn e2e_http_parse_url_path() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __parse_url_path(url: str) -> str
@@ -2169,14 +2205,21 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "parse_url_path test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "parse_url_path test failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
 fn e2e_http_find_header_end() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __malloc(size: i64) -> i64
@@ -2196,14 +2239,21 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "find_header_end test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "find_header_end test failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
 fn e2e_http_i64_to_str() {
     let rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 X F __malloc(size: i64) -> i64
@@ -2217,7 +2267,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "i64_to_str test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "i64_to_str test failed: {}",
+        result.stderr
+    );
 }
 
 // ==================== Void Phi Node Bug Fix ====================
@@ -2259,7 +2313,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).unwrap();
-    assert_eq!(result.exit_code, 0, "void phi test failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "void phi test failed: {}",
+        result.stderr
+    );
     assert!(result.stdout.contains("done"), "Expected 'done' in output");
 }
 
@@ -2295,7 +2353,10 @@ fn find_thread_runtime_path() -> Option<String> {
 fn e2e_thread_sleep_yield() {
     let rt = match find_thread_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: thread_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: thread_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2315,9 +2376,19 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "thread sleep/yield test failed: {}", result.stderr);
-    assert!(result.stdout.contains("sleep 10ms"), "Expected 'sleep 10ms' in output");
-    assert!(result.stdout.contains("yield"), "Expected 'yield' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "thread sleep/yield test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("sleep 10ms"),
+        "Expected 'sleep 10ms' in output"
+    );
+    assert!(
+        result.stdout.contains("yield"),
+        "Expected 'yield' in output"
+    );
     assert!(result.stdout.contains("done"), "Expected 'done' in output");
 }
 
@@ -2353,7 +2424,10 @@ fn find_sync_runtime_path() -> Option<String> {
 fn e2e_sync_mutex_lock_unlock() {
     let rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2382,15 +2456,25 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "mutex lock/unlock test failed: {}", result.stderr);
-    assert!(result.stdout.contains("mutex created"), "Expected 'mutex created' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "mutex lock/unlock test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("mutex created"),
+        "Expected 'mutex created' in output"
+    );
 }
 
 #[test]
 fn e2e_sync_rwlock_read_write() {
     let rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2426,15 +2510,24 @@ F main() -> i64 {
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
     assert_eq!(result.exit_code, 0, "rwlock test failed: {}", result.stderr);
-    assert!(result.stdout.contains("read locked"), "Expected 'read locked' in output");
-    assert!(result.stdout.contains("write locked"), "Expected 'write locked' in output");
+    assert!(
+        result.stdout.contains("read locked"),
+        "Expected 'read locked' in output"
+    );
+    assert!(
+        result.stdout.contains("write locked"),
+        "Expected 'write locked' in output"
+    );
 }
 
 #[test]
 fn e2e_sync_barrier_single() {
     let rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2459,15 +2552,25 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "barrier test failed: {}", result.stderr);
-    assert!(result.stdout.contains("barrier created"), "Expected 'barrier created' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "barrier test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("barrier created"),
+        "Expected 'barrier created' in output"
+    );
 }
 
 #[test]
 fn e2e_sync_semaphore() {
     let rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2508,20 +2611,36 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "semaphore test failed: {}", result.stderr);
-    assert!(result.stdout.contains("acquired 1"), "Expected 'acquired 1' in output");
-    assert!(result.stdout.contains("acquired 2"), "Expected 'acquired 2' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "semaphore test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("acquired 1"),
+        "Expected 'acquired 1' in output"
+    );
+    assert!(
+        result.stdout.contains("acquired 2"),
+        "Expected 'acquired 2' in output"
+    );
 }
 
 #[test]
 fn e2e_sync_atomics() {
     let sync_rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let http_rt = match find_http_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: http_runtime.c not found (needed for malloc/free)"); return; }
+        None => {
+            eprintln!("Skipping: http_runtime.c not found (needed for malloc/free)");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2573,9 +2692,19 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&sync_rt, &http_rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "atomics test failed: {}", result.stderr);
-    assert!(result.stdout.contains("after store 10: 10"), "Expected store result");
-    assert!(result.stdout.contains("after fetch_add 5"), "Expected fetch_add result");
+    assert_eq!(
+        result.exit_code, 0,
+        "atomics test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("after store 10: 10"),
+        "Expected store result"
+    );
+    assert!(
+        result.stdout.contains("after fetch_add 5"),
+        "Expected fetch_add result"
+    );
 }
 
 // ==================== Condvar Runtime E2E Tests ====================
@@ -2584,7 +2713,10 @@ F main() -> i64 {
 fn e2e_sync_condvar_create_destroy() {
     let rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2605,16 +2737,29 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "condvar create/destroy test failed: {}", result.stderr);
-    assert!(result.stdout.contains("condvar created"), "Expected 'condvar created' in output");
-    assert!(result.stdout.contains("condvar destroyed"), "Expected 'condvar destroyed' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "condvar create/destroy test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("condvar created"),
+        "Expected 'condvar created' in output"
+    );
+    assert!(
+        result.stdout.contains("condvar destroyed"),
+        "Expected 'condvar destroyed' in output"
+    );
 }
 
 #[test]
 fn e2e_sync_condvar_signal() {
     let rt = match find_sync_runtime_path() {
         Some(p) => p,
-        None => { eprintln!("Skipping: sync_runtime.c not found"); return; }
+        None => {
+            eprintln!("Skipping: sync_runtime.c not found");
+            return;
+        }
     };
     let source = r#"
 N "C" {
@@ -2643,9 +2788,19 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run_with_extra_sources(source, &[&rt]).unwrap();
-    assert_eq!(result.exit_code, 0, "condvar signal/broadcast test failed: {}", result.stderr);
-    assert!(result.stdout.contains("signal: 0"), "Expected 'signal: 0' in output");
-    assert!(result.stdout.contains("broadcast: 0"), "Expected 'broadcast: 0' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "condvar signal/broadcast test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("signal: 0"),
+        "Expected 'signal: 0' in output"
+    );
+    assert!(
+        result.stdout.contains("broadcast: 0"),
+        "Expected 'broadcast: 0' in output"
+    );
 }
 
 // ==================== f64 Arithmetic E2E Tests ====================
@@ -2689,10 +2844,23 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).unwrap();
-    assert_eq!(result.exit_code, 0, "f64 arithmetic test failed: {}", result.stderr);
-    assert!(result.stdout.contains("f64 arithmetic test"), "Expected test label in output");
-    assert!(result.stdout.contains("sum_ok=1"), "Expected sum_ok=1 in output");
-    assert!(result.stdout.contains("diff_ok=1"), "Expected diff_ok=1 in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "f64 arithmetic test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("f64 arithmetic test"),
+        "Expected test label in output"
+    );
+    assert!(
+        result.stdout.contains("sum_ok=1"),
+        "Expected sum_ok=1 in output"
+    );
+    assert!(
+        result.stdout.contains("diff_ok=1"),
+        "Expected diff_ok=1 in output"
+    );
 }
 
 #[test]
@@ -2731,9 +2899,19 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).unwrap();
-    assert_eq!(result.exit_code, 0, "f64 comparison test failed: {}", result.stderr);
-    assert!(result.stdout.contains("a > b: 1"), "Expected 'a > b: 1' in output");
-    assert!(result.stdout.contains("a == c: 1"), "Expected 'a == c: 1' in output");
+    assert_eq!(
+        result.exit_code, 0,
+        "f64 comparison test failed: {}",
+        result.stderr
+    );
+    assert!(
+        result.stdout.contains("a > b: 1"),
+        "Expected 'a > b: 1' in output"
+    );
+    assert!(
+        result.stdout.contains("a == c: 1"),
+        "Expected 'a == c: 1' in output"
+    );
 }
 
 // ==================== Phase 22: 대형 프로젝트 도입 전략 - Stage 2 (Medium Scale) ====================
@@ -2767,10 +2945,16 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-               result.exit_code, result.stdout, result.stderr);
-    assert!(result.stdout.contains("Container: OK"),
-            "Expected stdout to contain 'Container: OK', got: {}", result.stdout);
+    assert_eq!(
+        result.exit_code, 0,
+        "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+        result.exit_code, result.stdout, result.stderr
+    );
+    assert!(
+        result.stdout.contains("Container: OK"),
+        "Expected stdout to contain 'Container: OK', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2791,10 +2975,16 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-               result.exit_code, result.stdout, result.stderr);
-    assert!(result.stdout.contains("Closure+Recursion: OK"),
-            "Expected stdout to contain 'Closure+Recursion: OK', got: {}", result.stdout);
+    assert_eq!(
+        result.exit_code, 0,
+        "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+        result.exit_code, result.stdout, result.stderr
+    );
+    assert!(
+        result.stdout.contains("Closure+Recursion: OK"),
+        "Expected stdout to contain 'Closure+Recursion: OK', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2816,10 +3006,16 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-               result.exit_code, result.stdout, result.stderr);
-    assert!(result.stdout.contains("MutableLoop: OK"),
-            "Expected stdout to contain 'MutableLoop: OK', got: {}", result.stdout);
+    assert_eq!(
+        result.exit_code, 0,
+        "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+        result.exit_code, result.stdout, result.stderr
+    );
+    assert!(
+        result.stdout.contains("MutableLoop: OK"),
+        "Expected stdout to contain 'MutableLoop: OK', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2837,10 +3033,16 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-               result.exit_code, result.stdout, result.stderr);
-    assert!(result.stdout.contains("F64 Arithmetic: OK"),
-            "Expected stdout to contain 'F64 Arithmetic: OK', got: {}", result.stdout);
+    assert_eq!(
+        result.exit_code, 0,
+        "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+        result.exit_code, result.stdout, result.stderr
+    );
+    assert!(
+        result.stdout.contains("F64 Arithmetic: OK"),
+        "Expected stdout to contain 'F64 Arithmetic: OK', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2870,10 +3072,16 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
-               result.exit_code, result.stdout, result.stderr);
-    assert!(result.stdout.contains("Complex Struct: OK"),
-            "Expected stdout to contain 'Complex Struct: OK', got: {}", result.stdout);
+    assert_eq!(
+        result.exit_code, 0,
+        "Expected exit code 0, got {}.\nstdout: {}\nstderr: {}",
+        result.exit_code, result.stdout, result.stderr
+    );
+    assert!(
+        result.stdout.contains("Complex Struct: OK"),
+        "Expected stdout to contain 'Complex Struct: OK', got: {}",
+        result.stdout
+    );
 }
 
 // ==================== Float Printf Tests ====================
@@ -2889,8 +3097,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("3.14"),
-            "Expected stdout to contain '3.14', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("3.14"),
+        "Expected stdout to contain '3.14', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2905,8 +3116,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("4.14"),
-            "Expected stdout to contain '4.14', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("4.14"),
+        "Expected stdout to contain '4.14', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2921,10 +3135,16 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("2.71"),
-            "Expected stdout to contain '2.71', got: {}", result.stdout);
-    assert!(result.stdout.contains("3.14"),
-            "Expected stdout to contain '3.14', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("2.71"),
+        "Expected stdout to contain '2.71', got: {}",
+        result.stdout
+    );
+    assert!(
+        result.stdout.contains("3.14"),
+        "Expected stdout to contain '3.14', got: {}",
+        result.stdout
+    );
 }
 
 // ==================== f64 Array / Pointer Arithmetic ====================
@@ -2941,8 +3161,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("42.0"),
-            "Expected stdout to contain '42.0', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("42.0"),
+        "Expected stdout to contain '42.0', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2957,8 +3180,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("3.14"),
-            "Expected stdout to contain '3.14', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("3.14"),
+        "Expected stdout to contain '3.14', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2973,8 +3199,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("6.0"),
-            "Expected stdout to contain '6.0', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("6.0"),
+        "Expected stdout to contain '6.0', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -2989,8 +3218,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("40.0"),
-            "Expected stdout to contain '40.0', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("40.0"),
+        "Expected stdout to contain '40.0', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -3004,8 +3236,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("2.0"),
-            "Expected stdout to contain '2.0', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("2.0"),
+        "Expected stdout to contain '2.0', got: {}",
+        result.stdout
+    );
 }
 
 // ===== String Interpolation Tests =====
@@ -3021,8 +3256,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("hello world"),
-            "Expected 'hello world', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("hello world"),
+        "Expected 'hello world', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -3036,8 +3274,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("x+1=6"),
-            "Expected 'x+1=6', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("x+1=6"),
+        "Expected 'x+1=6', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -3050,8 +3291,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("literal {braces}"),
-            "Expected 'literal {{braces}}', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("literal {braces}"),
+        "Expected 'literal {{braces}}', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -3064,8 +3308,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("x = 42"),
-            "Expected 'x = 42', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("x = 42"),
+        "Expected 'x = 42', got: {}",
+        result.stdout
+    );
 }
 
 #[test]
@@ -3080,8 +3327,11 @@ F main() -> i64 {
 "#;
     let result = compile_and_run(source).expect("should compile and run");
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("10 + 20 = 30"),
-            "Expected '10 + 20 = 30', got: {}", result.stdout);
+    assert!(
+        result.stdout.contains("10 + 20 = 30"),
+        "Expected '10 + 20 = 30', got: {}",
+        result.stdout
+    );
 }
 
 // ===== Parameter Type Inference Tests =====

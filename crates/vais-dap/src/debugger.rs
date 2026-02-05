@@ -92,7 +92,8 @@ impl Debugger {
             cmd.current_dir(cwd);
         }
 
-        let mut child = cmd.spawn()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| DapError::Debugger(format!("Failed to start LLDB: {}", e)))?;
 
         // Set up communication channels
@@ -179,7 +180,8 @@ impl Debugger {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| DapError::Debugger(format!("Failed to start LLDB: {}", e)))?;
 
         let stdin = child.stdin.take().expect("Failed to get stdin");
@@ -278,7 +280,8 @@ impl Debugger {
 
         // Parse breakpoint ID from output like "Breakpoint 1: where = ..."
         let bp_id = parse_breakpoint_id(&output)?;
-        self.source_breakpoints.insert((file.to_string(), line), bp_id);
+        self.source_breakpoints
+            .insert((file.to_string(), line), bp_id);
 
         Ok(line) // Return the actual line (LLDB might adjust)
     }
@@ -303,7 +306,9 @@ impl Debugger {
     }
 
     pub async fn clear_breakpoints_for_source(&mut self, file: &str) -> DapResult<()> {
-        let to_remove: Vec<_> = self.source_breakpoints.iter()
+        let to_remove: Vec<_> = self
+            .source_breakpoints
+            .iter()
             .filter(|((f, _), _)| f == file)
             .map(|((f, l), id)| (f.clone(), *l, *id))
             .collect();
@@ -318,7 +323,11 @@ impl Debugger {
     }
 
     pub async fn clear_function_breakpoints(&mut self) -> DapResult<()> {
-        let ids: Vec<u32> = self.function_breakpoints.drain().map(|(_, id)| id).collect();
+        let ids: Vec<u32> = self
+            .function_breakpoints
+            .drain()
+            .map(|(_, id)| id)
+            .collect();
         for id in ids {
             self.send_command(&format!("breakpoint delete {}", id))?;
             self.wait_for_prompt()?;
@@ -454,7 +463,11 @@ impl Debugger {
     // Variables
     // ========================================================================
 
-    pub async fn get_local_variables(&self, thread_id: i64, frame_idx: usize) -> DapResult<Vec<RawVariable>> {
+    pub async fn get_local_variables(
+        &self,
+        thread_id: i64,
+        frame_idx: usize,
+    ) -> DapResult<Vec<RawVariable>> {
         self.send_command(&format!("thread select {}", thread_id))?;
         self.wait_for_prompt()?;
         self.send_command(&format!("frame select {}", frame_idx))?;
@@ -467,7 +480,11 @@ impl Debugger {
         Ok(vars)
     }
 
-    pub async fn get_arguments(&self, thread_id: i64, frame_idx: usize) -> DapResult<Vec<RawVariable>> {
+    pub async fn get_arguments(
+        &self,
+        thread_id: i64,
+        frame_idx: usize,
+    ) -> DapResult<Vec<RawVariable>> {
         self.send_command(&format!("thread select {}", thread_id))?;
         self.wait_for_prompt()?;
         self.send_command(&format!("frame select {}", frame_idx))?;
@@ -575,9 +592,10 @@ impl Debugger {
     // ========================================================================
 
     pub async fn read_memory(&self, address: u64, count: usize) -> DapResult<Vec<u8>> {
-        let output = self.send_command_get_output(
-            &format!("memory read --size 1 --count {} 0x{:x}", count, address)
-        )?;
+        let output = self.send_command_get_output(&format!(
+            "memory read --size 1 --count {} 0x{:x}",
+            count, address
+        ))?;
 
         // Parse memory output
         let data = parse_memory_output(&output);
@@ -606,9 +624,10 @@ impl Debugger {
     ) -> DapResult<Vec<DisassembledInstruction>> {
         let start_addr = (address as i64 + instruction_offset) as u64;
 
-        let output = self.send_command_get_output(
-            &format!("disassemble --start-address 0x{:x} --count {}", start_addr, instruction_count)
-        )?;
+        let output = self.send_command_get_output(&format!(
+            "disassemble --start-address 0x{:x} --count {}",
+            start_addr, instruction_count
+        ))?;
 
         // Parse disassembly output
         let instructions = parse_disassembly(&output, resolve_symbols);
@@ -622,7 +641,8 @@ impl Debugger {
     fn send_command(&self, cmd: &str) -> DapResult<()> {
         trace!("LLDB command: {}", cmd);
         let lldb = self.lldb.as_ref().ok_or(DapError::ProcessNotRunning)?;
-        lldb.stdin_tx.send(cmd.to_string())
+        lldb.stdin_tx
+            .send(cmd.to_string())
             .map_err(|e| DapError::Debugger(format!("Failed to send command: {}", e)))
     }
 
@@ -639,7 +659,10 @@ impl Debugger {
         let start = std::time::Instant::now();
 
         loop {
-            match lldb.stdout_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+            match lldb
+                .stdout_rx
+                .recv_timeout(std::time::Duration::from_millis(100))
+            {
                 Ok(line) => {
                     trace!("LLDB output: {}", line);
                     output.push_str(&line);
@@ -673,7 +696,10 @@ impl Debugger {
         let start = std::time::Instant::now();
 
         loop {
-            match lldb.stdout_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+            match lldb
+                .stdout_rx
+                .recv_timeout(std::time::Duration::from_millis(100))
+            {
                 Ok(line) => {
                     trace!("LLDB output: {}", line);
                     output.push_str(&line);
@@ -736,7 +762,9 @@ fn parse_breakpoint_id(output: &str) -> DapResult<u32> {
             }
         }
     }
-    Err(DapError::Debugger("Failed to parse breakpoint ID".to_string()))
+    Err(DapError::Debugger(
+        "Failed to parse breakpoint ID".to_string(),
+    ))
 }
 
 fn parse_thread_line(line: &str) -> Option<Thread> {
@@ -1034,7 +1062,8 @@ fn parse_disassembly(output: &str, _resolve_symbols: bool) -> Vec<DisassembledIn
             // Extract address
             let address = if addr_part.contains("0x") {
                 let hex_start = addr_part.find("0x").unwrap_or(0);
-                let hex_end = addr_part[hex_start..].find(|c: char| !c.is_ascii_hexdigit() && c != 'x')
+                let hex_end = addr_part[hex_start..]
+                    .find(|c: char| !c.is_ascii_hexdigit() && c != 'x')
                     .map(|p| hex_start + p)
                     .unwrap_or(addr_part.len());
                 addr_part[hex_start..hex_end].to_string()
@@ -1045,7 +1074,9 @@ fn parse_disassembly(output: &str, _resolve_symbols: bool) -> Vec<DisassembledIn
             // Extract symbol if present
             let symbol = if addr_part.contains('`') {
                 let parts: Vec<&str> = addr_part.split('`').collect();
-                parts.get(1).map(|s| s.split_whitespace().next().unwrap_or("").to_string())
+                parts
+                    .get(1)
+                    .map(|s| s.split_whitespace().next().unwrap_or("").to_string())
             } else {
                 None
             };

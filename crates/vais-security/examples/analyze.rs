@@ -59,7 +59,7 @@ fn main() {
                 Severity::High => high.push(finding),
                 Severity::Medium => medium.push(finding),
                 Severity::Low => low.push(finding),
-                Severity::Info => {},
+                Severity::Info => {}
             }
         }
 
@@ -82,9 +82,33 @@ fn main() {
         println!("\nSummary:");
         println!("--------");
         println!("Total issues: {}", findings.len());
-        println!("Critical: {}", findings.iter().filter(|f| f.severity == Severity::Critical).count());
-        println!("High: {}", findings.iter().filter(|f| f.severity == Severity::High).count());
-        println!("Medium: {}", findings.iter().filter(|f| f.severity == Severity::Medium).count());
-        println!("Low: {}", findings.iter().filter(|f| f.severity == Severity::Low).count());
+        println!(
+            "Critical: {}",
+            findings
+                .iter()
+                .filter(|f| f.severity == Severity::Critical)
+                .count()
+        );
+        println!(
+            "High: {}",
+            findings
+                .iter()
+                .filter(|f| f.severity == Severity::High)
+                .count()
+        );
+        println!(
+            "Medium: {}",
+            findings
+                .iter()
+                .filter(|f| f.severity == Severity::Medium)
+                .count()
+        );
+        println!(
+            "Low: {}",
+            findings
+                .iter()
+                .filter(|f| f.severity == Severity::Low)
+                .count()
+        );
     }
 }

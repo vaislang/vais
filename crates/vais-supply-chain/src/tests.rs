@@ -168,7 +168,10 @@ fn test_package_signer_creation() {
     );
 
     assert_eq!(signer.signer_info.name, "test-signer");
-    assert_eq!(signer.signer_info.email, Some("test@example.com".to_string()));
+    assert_eq!(
+        signer.signer_info.email,
+        Some("test@example.com".to_string())
+    );
 }
 
 #[test]
@@ -400,8 +403,5 @@ fn test_audit_recommendations() {
 
     assert!(!result.recommendations.is_empty());
     // Should recommend upgrade
-    assert!(result
-        .recommendations
-        .iter()
-        .any(|r| r.contains("2.0.0")));
+    assert!(result.recommendations.iter().any(|r| r.contains("2.0.0")));
 }

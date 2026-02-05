@@ -44,12 +44,11 @@ pub async fn index(
                             let keywords: Vec<String> = pkg
                                 .keywords
                                 .iter()
-                                .map(|k| format!(r#"<span class="keyword">{}</span>"#, html_escape(k)))
+                                .map(|k| {
+                                    format!(r#"<span class="keyword">{}</span>"#, html_escape(k))
+                                })
                                 .collect();
-                            format!(
-                                r#"<div class="keywords">{}</div>"#,
-                                keywords.join("")
-                            )
+                            format!(r#"<div class="keywords">{}</div>"#, keywords.join(""))
                         } else {
                             String::new()
                         };
@@ -133,10 +132,7 @@ pub async fn package_detail(
         .as_deref()
         .unwrap_or("No description available.");
 
-    let license = package
-        .license
-        .as_deref()
-        .unwrap_or("Not specified");
+    let license = package.license.as_deref().unwrap_or("Not specified");
 
     let homepage_link = if let Some(homepage) = &package.homepage {
         format!(
@@ -171,10 +167,7 @@ pub async fn package_detail(
             .iter()
             .map(|k| format!(r#"<span class="keyword">{}</span>"#, html_escape(k)))
             .collect();
-        format!(
-            r#"<div class="keywords">{}</div>"#,
-            keywords_html.join("")
-        )
+        format!(r#"<div class="keywords">{}</div>"#, keywords_html.join(""))
     } else {
         String::new()
     };
@@ -182,7 +175,11 @@ pub async fn package_detail(
     // Build versions list
     let mut versions_html = String::new();
     for version in &versions {
-        let yanked_class = if version.yanked { " version-yanked" } else { "" };
+        let yanked_class = if version.yanked {
+            " version-yanked"
+        } else {
+            ""
+        };
         let yanked_text = if version.yanked { " (yanked)" } else { "" };
 
         versions_html.push_str(&format!(
@@ -217,7 +214,8 @@ pub async fn package_detail(
             let badges = if dep.optional {
                 r#"<div class="dependency-badges">
                     <span class="badge badge-optional">OPTIONAL</span>
-                </div>"#.to_string()
+                </div>"#
+                    .to_string()
             } else {
                 String::new()
             };

@@ -126,7 +126,11 @@ impl<'a> DependencyResolver<'a> {
     }
 
     /// Resolve from locked version
-    fn resolve_from_lock(&self, name: &str, locked: &LockedPackage) -> RegistryResult<ResolvedPackage> {
+    fn resolve_from_lock(
+        &self,
+        name: &str,
+        locked: &LockedPackage,
+    ) -> RegistryResult<ResolvedPackage> {
         let path = self.client.installed_path(name, &locked.version);
 
         Ok(ResolvedPackage {
@@ -140,7 +144,11 @@ impl<'a> DependencyResolver<'a> {
     }
 
     /// Resolve from registry
-    fn resolve_from_registry(&self, name: &str, req: &VersionReq) -> RegistryResult<ResolvedPackage> {
+    fn resolve_from_registry(
+        &self,
+        name: &str,
+        req: &VersionReq,
+    ) -> RegistryResult<ResolvedPackage> {
         let entry = self.client.find_version(name, req)?;
         let path = self.client.installed_path(name, &entry.version);
 

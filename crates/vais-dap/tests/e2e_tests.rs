@@ -3,9 +3,9 @@
 //! These tests verify the full protocol lifecycle and common debugging workflows.
 
 use serde_json::{json, Value};
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::{TcpListener, TcpStream};
-use std::time::Duration;
 
 use vais_dap::server::DapServer;
 
@@ -41,7 +41,11 @@ impl DapTestClient {
         self.seq += 1;
 
         let request_json = serde_json::to_string(&request).unwrap();
-        let message = format!("Content-Length: {}\r\n\r\n{}", request_json.len(), request_json);
+        let message = format!(
+            "Content-Length: {}\r\n\r\n{}",
+            request_json.len(),
+            request_json
+        );
 
         // Send request
         self.writer.write_all(message.as_bytes()).await.unwrap();
@@ -69,7 +73,9 @@ impl DapTestClient {
 
         // Read body
         let mut body = vec![0u8; content_length];
-        tokio::io::AsyncReadExt::read_exact(&mut self.reader, &mut body).await.unwrap();
+        tokio::io::AsyncReadExt::read_exact(&mut self.reader, &mut body)
+            .await
+            .unwrap();
 
         let response: Value = serde_json::from_slice(&body).unwrap();
         response
@@ -111,26 +117,41 @@ async fn test_initialize_round_trip() {
     let (port, _handle) = start_test_server().await;
     let mut client = DapTestClient::new(port).await;
 
-    let response = client.send_request("initialize", Some(json!({
-        "clientId": "vscode",
-        "clientName": "Visual Studio Code",
-        "adapterId": "vais",
-        "linesStartAt1": true,
-        "columnsStartAt1": true,
-    }))).await;
+    let response = client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "clientId": "vscode",
+                "clientName": "Visual Studio Code",
+                "adapterId": "vais",
+                "linesStartAt1": true,
+                "columnsStartAt1": true,
+            })),
+        )
+        .await;
 
-    println!("Response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "Response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "initialize");
-    assert_eq!(response["success"], true, "Initialize request failed: {:?}", response["message"]);
+    assert_eq!(
+        response["success"], true,
+        "Initialize request failed: {:?}",
+        response["message"]
+    );
 
     // Check capabilities (should be in body)
     if let Some(body) = response["body"].as_object() {
         // Just verify some capabilities exist - they may have different names than expected
-        assert!(body.contains_key("supportsConfigurationDoneRequest") ||
-                body.contains_key("supports_configuration_done_request"),
-                "Capabilities missing from body: {:?}", body);
+        assert!(
+            body.contains_key("supportsConfigurationDoneRequest")
+                || body.contains_key("supports_configuration_done_request"),
+            "Capabilities missing from body: {:?}",
+            body
+        );
     }
 }
 
@@ -140,11 +161,16 @@ async fn test_configuration_done_round_trip() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize first
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-        "linesStartAt1": true,
-        "columnsStartAt1": true,
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+                "linesStartAt1": true,
+                "columnsStartAt1": true,
+            })),
+        )
+        .await;
 
     // Send configurationDone
     let response = client.send_request("configurationDone", None).await;
@@ -160,14 +186,24 @@ async fn test_disconnect_round_trip() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize first
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Disconnect
-    let response = client.send_request("disconnect", Some(json!({
-        "terminateDebuggee": false,
-    }))).await;
+    let response = client
+        .send_request(
+            "disconnect",
+            Some(json!({
+                "terminateDebuggee": false,
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "disconnect");
@@ -184,31 +220,46 @@ async fn test_set_breakpoints() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Mock launch (this will fail without a real binary, but we're testing the protocol)
-    let _ = client.send_request("launch", Some(json!({
-        "program": "/tmp/test.vais",
-        "stopOnEntry": true,
-    }))).await;
+    let _ = client
+        .send_request(
+            "launch",
+            Some(json!({
+                "program": "/tmp/test.vais",
+                "stopOnEntry": true,
+            })),
+        )
+        .await;
 
     // Set breakpoints
-    let response = client.send_request("setBreakpoints", Some(json!({
-        "source": {
-            "path": "/tmp/test.vais"
-        },
-        "breakpoints": [
-            {
-                "line": 10
-            },
-            {
-                "line": 20,
-                "condition": "x > 5"
-            }
-        ]
-    }))).await;
+    let response = client
+        .send_request(
+            "setBreakpoints",
+            Some(json!({
+                "source": {
+                    "path": "/tmp/test.vais"
+                },
+                "breakpoints": [
+                    {
+                        "line": 10
+                    },
+                    {
+                        "line": 20,
+                        "condition": "x > 5"
+                    }
+                ]
+            })),
+        )
+        .await;
 
     // The request may fail (no active session), but we're testing protocol parsing
     assert_eq!(response["type"], "response");
@@ -231,22 +282,32 @@ async fn test_set_function_breakpoints() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Set function breakpoints
-    let response = client.send_request("setFunctionBreakpoints", Some(json!({
-        "breakpoints": [
-            {
-                "name": "main"
-            },
-            {
-                "name": "calculate",
-                "condition": "result > 100"
-            }
-        ]
-    }))).await;
+    let response = client
+        .send_request(
+            "setFunctionBreakpoints",
+            Some(json!({
+                "breakpoints": [
+                    {
+                        "name": "main"
+                    },
+                    {
+                        "name": "calculate",
+                        "condition": "result > 100"
+                    }
+                ]
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "setFunctionBreakpoints");
@@ -264,28 +325,43 @@ async fn test_clear_breakpoints() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Set breakpoints first
-    client.send_request("setBreakpoints", Some(json!({
-        "source": {
-            "path": "/tmp/test.vais"
-        },
-        "breakpoints": [
-            {"line": 10},
-            {"line": 20}
-        ]
-    }))).await;
+    client
+        .send_request(
+            "setBreakpoints",
+            Some(json!({
+                "source": {
+                    "path": "/tmp/test.vais"
+                },
+                "breakpoints": [
+                    {"line": 10},
+                    {"line": 20}
+                ]
+            })),
+        )
+        .await;
 
     // Clear breakpoints (set empty array)
-    let response = client.send_request("setBreakpoints", Some(json!({
-        "source": {
-            "path": "/tmp/test.vais"
-        },
-        "breakpoints": []
-    }))).await;
+    let response = client
+        .send_request(
+            "setBreakpoints",
+            Some(json!({
+                "source": {
+                    "path": "/tmp/test.vais"
+                },
+                "breakpoints": []
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "setBreakpoints");
@@ -306,16 +382,26 @@ async fn test_stack_trace_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Request stack trace (will fail without active session, but testing protocol)
-    let response = client.send_request("stackTrace", Some(json!({
-        "threadId": 1,
-        "startFrame": 0,
-        "levels": 10
-    }))).await;
+    let response = client
+        .send_request(
+            "stackTrace",
+            Some(json!({
+                "threadId": 1,
+                "startFrame": 0,
+                "levels": 10
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "stackTrace");
@@ -339,9 +425,14 @@ async fn test_threads_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Request threads
     let response = client.send_request("threads", None).await;
@@ -365,14 +456,24 @@ async fn test_scopes_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Request scopes (will fail without active session)
-    let response = client.send_request("scopes", Some(json!({
-        "frameId": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "scopes",
+            Some(json!({
+                "frameId": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "scopes");
@@ -395,14 +496,24 @@ async fn test_variables_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Request variables (will fail without active session)
-    let response = client.send_request("variables", Some(json!({
-        "variablesReference": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "variables",
+            Some(json!({
+                "variablesReference": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "variables");
@@ -425,16 +536,26 @@ async fn test_set_variable_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Set variable (will fail without active session)
-    let response = client.send_request("setVariable", Some(json!({
-        "variablesReference": 1,
-        "name": "x",
-        "value": "42"
-    }))).await;
+    let response = client
+        .send_request(
+            "setVariable",
+            Some(json!({
+                "variablesReference": 1,
+                "name": "x",
+                "value": "42"
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "setVariable");
@@ -455,14 +576,24 @@ async fn test_continue_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Continue (will fail without active session)
-    let response = client.send_request("continue", Some(json!({
-        "threadId": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "continue",
+            Some(json!({
+                "threadId": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "continue");
@@ -474,14 +605,24 @@ async fn test_step_over_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Step over (next)
-    let response = client.send_request("next", Some(json!({
-        "threadId": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "next",
+            Some(json!({
+                "threadId": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "next");
@@ -493,14 +634,24 @@ async fn test_step_in_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Step in
-    let response = client.send_request("stepIn", Some(json!({
-        "threadId": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "stepIn",
+            Some(json!({
+                "threadId": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "stepIn");
@@ -512,14 +663,24 @@ async fn test_step_out_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Step out
-    let response = client.send_request("stepOut", Some(json!({
-        "threadId": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "stepOut",
+            Some(json!({
+                "threadId": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "stepOut");
@@ -531,14 +692,24 @@ async fn test_pause_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Pause
-    let response = client.send_request("pause", Some(json!({
-        "threadId": 1
-    }))).await;
+    let response = client
+        .send_request(
+            "pause",
+            Some(json!({
+                "threadId": 1
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "pause");
@@ -554,15 +725,25 @@ async fn test_evaluate_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Evaluate expression
-    let response = client.send_request("evaluate", Some(json!({
-        "expression": "1 + 1",
-        "context": "repl"
-    }))).await;
+    let response = client
+        .send_request(
+            "evaluate",
+            Some(json!({
+                "expression": "1 + 1",
+                "context": "repl"
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "evaluate");
@@ -584,16 +765,26 @@ async fn test_read_memory_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Read memory
-    let response = client.send_request("readMemory", Some(json!({
-        "memoryReference": "0x1000",
-        "offset": 0,
-        "count": 64
-    }))).await;
+    let response = client
+        .send_request(
+            "readMemory",
+            Some(json!({
+                "memoryReference": "0x1000",
+                "offset": 0,
+                "count": 64
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "readMemory");
@@ -610,18 +801,28 @@ async fn test_disassemble_request() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Disassemble
-    let response = client.send_request("disassemble", Some(json!({
-        "memoryReference": "0x1000",
-        "offset": 0,
-        "instructionOffset": 0,
-        "instructionCount": 10,
-        "resolveSymbols": true
-    }))).await;
+    let response = client
+        .send_request(
+            "disassemble",
+            Some(json!({
+                "memoryReference": "0x1000",
+                "offset": 0,
+                "instructionOffset": 0,
+                "instructionCount": 10,
+                "resolveSymbols": true
+            })),
+        )
+        .await;
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["command"], "disassemble");
@@ -646,7 +847,10 @@ async fn test_invalid_request() {
 
     assert_eq!(response["type"], "response");
     assert_eq!(response["success"], false);
-    assert!(response["message"].as_str().unwrap().contains("not supported"));
+    assert!(response["message"]
+        .as_str()
+        .unwrap()
+        .contains("not supported"));
 }
 
 #[tokio::test]
@@ -655,9 +859,14 @@ async fn test_missing_arguments() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Send request with missing required arguments
     let response = client.send_request("setBreakpoints", None).await;
@@ -672,9 +881,14 @@ async fn test_operation_without_session() {
     let mut client = DapTestClient::new(port).await;
 
     // Initialize
-    client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-    }))).await;
+    client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+            })),
+        )
+        .await;
 
     // Try to get threads without launching/attaching
     let response = client.send_request("threads", None).await;
@@ -694,32 +908,52 @@ async fn test_full_session_lifecycle() {
     let mut client = DapTestClient::new(port).await;
 
     // 1. Initialize
-    let response = client.send_request("initialize", Some(json!({
-        "adapterId": "vais",
-        "linesStartAt1": true,
-        "columnsStartAt1": true,
-    }))).await;
+    let response = client
+        .send_request(
+            "initialize",
+            Some(json!({
+                "adapterId": "vais",
+                "linesStartAt1": true,
+                "columnsStartAt1": true,
+            })),
+        )
+        .await;
     assert_eq!(response["success"], true);
 
     // 2. Launch (will fail without real binary, but testing protocol)
-    let _ = client.send_request("launch", Some(json!({
-        "program": "/tmp/test.vais",
-        "stopOnEntry": true,
-    }))).await;
+    let _ = client
+        .send_request(
+            "launch",
+            Some(json!({
+                "program": "/tmp/test.vais",
+                "stopOnEntry": true,
+            })),
+        )
+        .await;
 
     // 3. Set breakpoints
-    let _ = client.send_request("setBreakpoints", Some(json!({
-        "source": { "path": "/tmp/test.vais" },
-        "breakpoints": [{"line": 10}]
-    }))).await;
+    let _ = client
+        .send_request(
+            "setBreakpoints",
+            Some(json!({
+                "source": { "path": "/tmp/test.vais" },
+                "breakpoints": [{"line": 10}]
+            })),
+        )
+        .await;
 
     // 4. Configuration done
     let response = client.send_request("configurationDone", None).await;
     assert_eq!(response["command"], "configurationDone");
 
     // 5. Disconnect
-    let response = client.send_request("disconnect", Some(json!({
-        "terminateDebuggee": true,
-    }))).await;
+    let response = client
+        .send_request(
+            "disconnect",
+            Some(json!({
+                "terminateDebuggee": true,
+            })),
+        )
+        .await;
     assert_eq!(response["command"], "disconnect");
 }

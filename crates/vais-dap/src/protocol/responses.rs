@@ -2,8 +2,8 @@
 //!
 //! Response body types for all DAP commands.
 
-use serde::{Deserialize, Serialize};
 use super::types::*;
+use serde::{Deserialize, Serialize};
 
 /// Response to 'initialize' request
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -137,11 +137,14 @@ impl SourceMap {
             }
 
             // Store mappings
-            self.addr_to_loc.insert(address, SourceLocation {
-                file: file.clone(),
-                line,
-                column,
-            });
+            self.addr_to_loc.insert(
+                address,
+                SourceLocation {
+                    file: file.clone(),
+                    line,
+                    column,
+                },
+            );
 
             self.loc_to_addrs
                 .entry((file, line))
@@ -159,7 +162,9 @@ impl SourceMap {
 
     /// Get line and column for an address
     pub fn get_line_column(&self, address: u64) -> Option<(u64, u64)> {
-        self.addr_to_loc.get(&address).map(|loc| (loc.line, loc.column))
+        self.addr_to_loc
+            .get(&address)
+            .map(|loc| (loc.line, loc.column))
     }
 
     /// Get full source location for an address
@@ -181,7 +186,10 @@ impl SourceMap {
 
         // Search nearby lines (up to 10 lines forward)
         for offset in 1..=10 {
-            if self.loc_to_addrs.contains_key(&(file.to_string(), line + offset)) {
+            if self
+                .loc_to_addrs
+                .contains_key(&(file.to_string(), line + offset))
+            {
                 return Some(line + offset);
             }
         }
@@ -260,15 +268,22 @@ mod tests {
         let mut map = SourceMap::new();
 
         // Manually add some mappings for testing
-        map.addr_to_loc.insert(0x1000, SourceLocation {
-            file: "/test/main.vais".to_string(),
-            line: 10,
-            column: 1,
-        });
+        map.addr_to_loc.insert(
+            0x1000,
+            SourceLocation {
+                file: "/test/main.vais".to_string(),
+                line: 10,
+                column: 1,
+            },
+        );
 
-        map.loc_to_addrs.insert(("/test/main.vais".to_string(), 10), vec![0x1000]);
+        map.loc_to_addrs
+            .insert(("/test/main.vais".to_string(), 10), vec![0x1000]);
 
-        assert_eq!(map.get_source_for_address(0x1000), Some("/test/main.vais".to_string()));
+        assert_eq!(
+            map.get_source_for_address(0x1000),
+            Some("/test/main.vais".to_string())
+        );
         assert_eq!(map.get_line_column(0x1000), Some((10, 1)));
         assert!(map.get_addresses("/test/main.vais", 10).is_some());
     }

@@ -4,11 +4,11 @@
 
 use std::collections::HashMap;
 use std::env;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::error::{DynloadError, Result};
-use crate::manifest::{PluginManifest, PluginFormat};
+use crate::manifest::{PluginFormat, PluginManifest};
 
 /// Source of a discovered plugin
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -278,7 +278,11 @@ impl PluginDiscovery {
 
         // Read directory entries
         let entries = fs::read_dir(dir).map_err(|e| {
-            DynloadError::DiscoveryError(format!("Failed to read directory '{}': {}", dir.display(), e))
+            DynloadError::DiscoveryError(format!(
+                "Failed to read directory '{}': {}",
+                dir.display(),
+                e
+            ))
         })?;
 
         for entry in entries.flatten() {
@@ -288,7 +292,9 @@ impl PluginDiscovery {
                 // Check for plugin.toml in subdirectory
                 let manifest_path = path.join("plugin.toml");
                 if manifest_path.exists() {
-                    if let Ok(plugin) = self.load_plugin_from_manifest(&manifest_path, source.clone()) {
+                    if let Ok(plugin) =
+                        self.load_plugin_from_manifest(&manifest_path, source.clone())
+                    {
                         plugins.push(plugin);
                     }
                 }
@@ -324,7 +330,9 @@ impl PluginDiscovery {
             // Try to find default entry point based on format
             match manifest.plugin.format {
                 PluginFormat::Wasm => self.find_entry_file(&plugin_dir, &["wasm"])?,
-                PluginFormat::Native => self.find_entry_file(&plugin_dir, &["so", "dylib", "dll"])?,
+                PluginFormat::Native => {
+                    self.find_entry_file(&plugin_dir, &["so", "dylib", "dll"])?
+                }
                 PluginFormat::Vais => self.find_entry_file(&plugin_dir, &["vais"])?,
             }
         };
@@ -444,7 +452,9 @@ impl PluginDiscovery {
             for ext in ["wasm", "so", "dylib", "dll", "vais"] {
                 let file_path = dir.join(format!("{}.{}", name, ext));
                 if file_path.exists() {
-                    if let Some(plugin) = self.detect_standalone_plugin(&file_path, source.clone())? {
+                    if let Some(plugin) =
+                        self.detect_standalone_plugin(&file_path, source.clone())?
+                    {
                         self.cache.insert(name.to_string(), plugin.clone());
                         return Ok(Some(plugin));
                     }
@@ -453,7 +463,9 @@ impl PluginDiscovery {
                 // Also check lib prefix
                 let file_path = dir.join(format!("lib{}.{}", name, ext));
                 if file_path.exists() {
-                    if let Some(plugin) = self.detect_standalone_plugin(&file_path, source.clone())? {
+                    if let Some(plugin) =
+                        self.detect_standalone_plugin(&file_path, source.clone())?
+                    {
                         self.cache.insert(name.to_string(), plugin.clone());
                         return Ok(Some(plugin));
                     }

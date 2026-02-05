@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use crate::protocol::types::{Scope, Variable, VariablePresentationHint, ScopePresentationHint};
+use crate::protocol::types::{Scope, ScopePresentationHint, Variable, VariablePresentationHint};
 
 /// Manages variable references for scopes and expandable variables
 #[derive(Debug, Default)]
@@ -101,13 +101,20 @@ impl VariableManager {
     pub fn create_scopes(&mut self, frame_id: i64) -> Vec<Scope> {
         let mut scopes = Vec::new();
 
-        for scope_kind in [ScopeKind::Locals, ScopeKind::Arguments, ScopeKind::Registers] {
+        for scope_kind in [
+            ScopeKind::Locals,
+            ScopeKind::Arguments,
+            ScopeKind::Registers,
+        ] {
             let ref_id = self.next_ref();
 
-            self.ref_map.insert(ref_id, VariableRefInfo::Scope {
-                frame_id,
-                scope_type: scope_kind,
-            });
+            self.ref_map.insert(
+                ref_id,
+                VariableRefInfo::Scope {
+                    frame_id,
+                    scope_type: scope_kind,
+                },
+            );
 
             scopes.push(Scope {
                 name: scope_kind.name().to_string(),
@@ -133,7 +140,12 @@ impl VariableManager {
     }
 
     /// Cache variables for a reference
-    pub fn cache_variables(&mut self, ref_id: i64, frame_id: i64, raw_vars: Vec<RawVariable>) -> Vec<Variable> {
+    pub fn cache_variables(
+        &mut self,
+        ref_id: i64,
+        frame_id: i64,
+        raw_vars: Vec<RawVariable>,
+    ) -> Vec<Variable> {
         let mut cached = Vec::with_capacity(raw_vars.len());
         let mut dap_vars = Vec::with_capacity(raw_vars.len());
 
@@ -143,20 +155,24 @@ impl VariableManager {
                 let new_ref = self.next_ref();
 
                 // Get the path for this variable
-                let path = if let Some(VariableRefInfo::Variable { path: parent_path, .. }) =
-                    self.ref_map.get(&ref_id)
+                let path = if let Some(VariableRefInfo::Variable {
+                    path: parent_path, ..
+                }) = self.ref_map.get(&ref_id)
                 {
                     format!("{}.{}", parent_path, raw.name)
                 } else {
                     raw.name.clone()
                 };
 
-                self.ref_map.insert(new_ref, VariableRefInfo::Variable {
-                    frame_id,
-                    parent_ref: ref_id,
-                    name: raw.name.clone(),
-                    path,
-                });
+                self.ref_map.insert(
+                    new_ref,
+                    VariableRefInfo::Variable {
+                        frame_id,
+                        parent_ref: ref_id,
+                        name: raw.name.clone(),
+                        path,
+                    },
+                );
 
                 new_ref
             } else {
@@ -172,13 +188,11 @@ impl VariableManager {
                 memory_reference: raw.memory_reference.clone(),
             });
 
-            let presentation_hint = raw.type_name.as_ref().map(|t| {
-                VariablePresentationHint {
-                    kind: Some(type_to_kind(t)),
-                    attributes: None,
-                    visibility: None,
-                    lazy: None,
-                }
+            let presentation_hint = raw.type_name.as_ref().map(|t| VariablePresentationHint {
+                kind: Some(type_to_kind(t)),
+                attributes: None,
+                visibility: None,
+                lazy: None,
             });
 
             dap_vars.push(Variable {
@@ -188,8 +202,16 @@ impl VariableManager {
                 presentation_hint,
                 evaluate_name: Some(raw.name),
                 variables_reference: child_ref,
-                named_variables: if raw.has_children { raw.named_children } else { None },
-                indexed_variables: if raw.has_children { raw.indexed_children } else { None },
+                named_variables: if raw.has_children {
+                    raw.named_children
+                } else {
+                    None
+                },
+                indexed_variables: if raw.has_children {
+                    raw.indexed_children
+                } else {
+                    None
+                },
                 memory_reference: raw.memory_reference,
             });
         }
@@ -227,15 +249,27 @@ pub struct RawVariable {
 fn type_to_kind(type_name: &str) -> String {
     let lower = type_name.to_lowercase();
 
-    if lower.contains("int") || lower.contains("i32") || lower.contains("i64") ||
-       lower.contains("u32") || lower.contains("u64") || lower.contains("isize") ||
-       lower.contains("usize") || lower.contains("float") || lower.contains("f32") ||
-       lower.contains("f64") || lower.contains("bool") || lower.contains("*") ||
-       lower.contains("ptr") || lower.contains("ref")
+    if lower.contains("int")
+        || lower.contains("i32")
+        || lower.contains("i64")
+        || lower.contains("u32")
+        || lower.contains("u64")
+        || lower.contains("isize")
+        || lower.contains("usize")
+        || lower.contains("float")
+        || lower.contains("f32")
+        || lower.contains("f64")
+        || lower.contains("bool")
+        || lower.contains("*")
+        || lower.contains("ptr")
+        || lower.contains("ref")
     {
         "property".to_string()
-    } else if lower.contains("str") || lower.contains("string") ||
-       lower.contains("vec") || lower.contains("array") || lower.contains("[")
+    } else if lower.contains("str")
+        || lower.contains("string")
+        || lower.contains("vec")
+        || lower.contains("array")
+        || lower.contains("[")
     {
         "data".to_string()
     } else if lower.contains("struct") || lower.contains("enum") {
@@ -261,7 +295,9 @@ mod tests {
         assert_eq!(scopes[2].name, "Registers");
 
         // Check that references are tracked
-        assert!(manager.get_ref_info(scopes[0].variables_reference).is_some());
+        assert!(manager
+            .get_ref_info(scopes[0].variables_reference)
+            .is_some());
     }
 
     #[test]

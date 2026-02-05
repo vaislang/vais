@@ -3,53 +3,67 @@
 //! Static type checking with inference for AI-optimized code generation.
 
 // Public modules
-pub mod error_report;
-pub mod exhaustiveness;
-pub mod types;
 pub mod comptime;
 pub mod effects;
+pub mod error_report;
+pub mod exhaustiveness;
 pub mod object_safety;
 pub mod specialization;
+pub mod types;
 
 // Private modules
-mod traits;
 mod inference;
 pub mod lifetime;
 pub mod ownership;
+mod traits;
 
 // Re-export bidirectional type checking support
 pub use inference::CheckMode;
 
-use std::collections::HashMap;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use vais_ast::*;
 
 // Re-export core types
-pub use types::{
-    TypeError, TypeResult, ResolvedType, FunctionSig,
-    StructDef, EnumDef, VariantFieldTypes, UnionDef,
-    // Monomorphization support
-    GenericInstantiation, InstantiationKind,
-    mangle_name, mangle_type, substitute_type,
-    // Const generics support
-    ResolvedConst, ConstBinOp,
-    // Did-you-mean support
-    levenshtein_distance, find_similar_name,
-    // Contract support (Design by Contract)
-    ContractSpec, ContractClause,
-    // Effect system support
-    Effect, EffectSet, EffectAnnotation,
-    // Linear types support
-    Linearity,
-};
-pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
-pub use ownership::OwnershipChecker;
-pub use traits::{TraitMethodSig, AssociatedTypeDef, TraitDef};
 pub use comptime::{ComptimeEvaluator, ComptimeValue};
 pub use effects::EffectInferrer;
-pub use object_safety::{ObjectSafetyViolation, check_object_safety};
+pub use exhaustiveness::{ExhaustivenessChecker, ExhaustivenessResult};
+pub use object_safety::{check_object_safety, ObjectSafetyViolation};
+pub use ownership::OwnershipChecker;
 use traits::TraitImpl;
+pub use traits::{AssociatedTypeDef, TraitDef, TraitMethodSig};
 use types::VarInfo;
+pub use types::{
+    find_similar_name,
+    // Did-you-mean support
+    levenshtein_distance,
+    mangle_name,
+    mangle_type,
+    substitute_type,
+    ConstBinOp,
+    ContractClause,
+    // Contract support (Design by Contract)
+    ContractSpec,
+    // Effect system support
+    Effect,
+    EffectAnnotation,
+    EffectSet,
+    EnumDef,
+    FunctionSig,
+    // Monomorphization support
+    GenericInstantiation,
+    InstantiationKind,
+    // Linear types support
+    Linearity,
+    // Const generics support
+    ResolvedConst,
+    ResolvedType,
+    StructDef,
+    TypeError,
+    TypeResult,
+    UnionDef,
+    VariantFieldTypes,
+};
 
 // Type definitions have been moved to the types module
 
@@ -1607,15 +1621,42 @@ impl TypeChecker {
     /// Register SIMD vector intrinsic functions
     fn register_simd_builtins(&mut self) {
         // Helper to create vector types
-        let vec2f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 2 };
-        let vec4f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 4 };
-        let vec8f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 8 };
-        let vec2f64 = ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 2 };
-        let vec4f64 = ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 4 };
-        let vec4i32 = ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 4 };
-        let vec8i32 = ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 8 };
-        let vec2i64 = ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 2 };
-        let vec4i64 = ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 4 };
+        let vec2f32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 2,
+        };
+        let vec4f32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 4,
+        };
+        let vec8f32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 8,
+        };
+        let vec2f64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F64),
+            lanes: 2,
+        };
+        let vec4f64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F64),
+            lanes: 4,
+        };
+        let vec4i32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I32),
+            lanes: 4,
+        };
+        let vec8i32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I32),
+            lanes: 8,
+        };
+        let vec2i64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I64),
+            lanes: 2,
+        };
+        let vec4i64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I64),
+            lanes: 4,
+        };
 
         // === Vector Constructors ===
         // vec2f32(x, y) -> Vec2f32
@@ -2119,14 +2160,33 @@ impl TypeChecker {
         // ===== GC functions used by gc examples =====
         let gc_fns = vec![
             ("gc_init", vec![], ResolvedType::I64),
-            ("gc_alloc", vec![("size".to_string(), ResolvedType::I64, false), ("type_id".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            (
+                "gc_alloc",
+                vec![
+                    ("size".to_string(), ResolvedType::I64, false),
+                    ("type_id".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
             ("gc_collect", vec![], ResolvedType::I64),
-            ("gc_add_root", vec![("ptr".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
-            ("gc_remove_root", vec![("ptr".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            (
+                "gc_add_root",
+                vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
+            (
+                "gc_remove_root",
+                vec![("ptr".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
             ("gc_bytes_allocated", vec![], ResolvedType::I64),
             ("gc_objects_count", vec![], ResolvedType::I64),
             ("gc_collections", vec![], ResolvedType::I64),
-            ("gc_set_threshold", vec![("threshold".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            (
+                "gc_set_threshold",
+                vec![("threshold".to_string(), ResolvedType::I64, false)],
+                ResolvedType::I64,
+            ),
             ("gc_print_stats", vec![], ResolvedType::I64),
         ];
         for (name, params, ret) in gc_fns {
@@ -2152,9 +2212,25 @@ impl TypeChecker {
         let io_fns = vec![
             ("read_i64", vec![], ResolvedType::I64),
             ("read_f64", vec![], ResolvedType::F64),
-            ("prompt_i64", vec![("prompt".to_string(), ResolvedType::Str, false)], ResolvedType::I64),
-            ("prompt_f64", vec![("prompt".to_string(), ResolvedType::Str, false)], ResolvedType::F64),
-            ("fgets", vec![("buf".to_string(), ResolvedType::I64, false), ("n".to_string(), ResolvedType::I64, false), ("stream".to_string(), ResolvedType::I64, false)], ResolvedType::I64),
+            (
+                "prompt_i64",
+                vec![("prompt".to_string(), ResolvedType::Str, false)],
+                ResolvedType::I64,
+            ),
+            (
+                "prompt_f64",
+                vec![("prompt".to_string(), ResolvedType::Str, false)],
+                ResolvedType::F64,
+            ),
+            (
+                "fgets",
+                vec![
+                    ("buf".to_string(), ResolvedType::I64, false),
+                    ("n".to_string(), ResolvedType::I64, false),
+                    ("stream".to_string(), ResolvedType::I64, false),
+                ],
+                ResolvedType::I64,
+            ),
             ("get_stdin", vec![], ResolvedType::I64),
             ("get_stdout", vec![], ResolvedType::I64),
             ("get_stderr", vec![], ResolvedType::I64),
@@ -2180,8 +2256,8 @@ impl TypeChecker {
 
         // ===== Math functions =====
         let math_f64_fns = vec![
-            "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log2", "log10",
-            "floor", "ceil", "round", "abs",
+            "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log2", "log10", "floor",
+            "ceil", "round", "abs",
         ];
         for name in math_f64_fns {
             self.functions.insert(
@@ -2388,7 +2464,8 @@ impl TypeChecker {
                 Item::Const(const_def) => {
                     // Register constant with its type
                     let const_type = self.resolve_type(&const_def.ty.node);
-                    self.constants.insert(const_def.name.node.clone(), const_type);
+                    self.constants
+                        .insert(const_def.name.node.clone(), const_type);
                 }
                 Item::Global(_global_def) => {
                     // Global variable definitions
@@ -2407,11 +2484,19 @@ impl TypeChecker {
                     let struct_generics = match &impl_block.target_type.node {
                         Type::Named { name, .. } => {
                             // Look up the struct definition to get its generics
-                            self.structs.get(name)
-                                .map(|s| s.generics.iter().map(|g| GenericParam::new_type(
-                                    Spanned::new(g.clone(), Span::default()),
-                                    vec![],
-                                )).collect::<Vec<_>>())
+                            self.structs
+                                .get(name)
+                                .map(|s| {
+                                    s.generics
+                                        .iter()
+                                        .map(|g| {
+                                            GenericParam::new_type(
+                                                Spanned::new(g.clone(), Span::default()),
+                                                vec![],
+                                            )
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
                                 .unwrap_or_default()
                         }
                         _ => vec![],
@@ -2421,7 +2506,11 @@ impl TypeChecker {
                     all_generics.extend(impl_block.generics.iter().cloned());
 
                     for method in &impl_block.methods {
-                        self.check_impl_method(&impl_block.target_type.node, &method.node, &all_generics)?;
+                        self.check_impl_method(
+                            &impl_block.target_type.node,
+                            &method.node,
+                            &all_generics,
+                        )?;
                     }
                 }
                 _ => {}
@@ -2432,13 +2521,14 @@ impl TypeChecker {
         if let Some(strict) = self.ownership_check_mode {
             let mut ownership_checker = ownership::OwnershipChecker::new_collecting();
             // Only check ownership for items from the current file, not imported modules
-            let local_module = if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
-                Module {
-                    items: module.items[self.imported_item_count..].to_vec(),
-                }
-            } else {
-                module.clone()
-            };
+            let local_module =
+                if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
+                    Module {
+                        items: module.items[self.imported_item_count..].to_vec(),
+                    }
+                } else {
+                    module.clone()
+                };
             // Run ownership check in collecting mode (never fails, collects all errors)
             let _ = ownership_checker.check_module(&local_module);
             let ownership_errors = ownership_checker.take_errors();
@@ -2461,7 +2551,14 @@ impl TypeChecker {
 
     /// Set current generics with their bounds for type resolution
     #[allow(clippy::type_complexity)]
-    fn set_generics(&mut self, generics: &[GenericParam]) -> (Vec<String>, HashMap<String, Vec<String>>, HashMap<String, ResolvedType>) {
+    fn set_generics(
+        &mut self,
+        generics: &[GenericParam],
+    ) -> (
+        Vec<String>,
+        HashMap<String, Vec<String>>,
+        HashMap<String, ResolvedType>,
+    ) {
         let prev_generics = std::mem::replace(
             &mut self.current_generics,
             generics.iter().map(|g| g.name.node.clone()).collect(),
@@ -2490,15 +2587,18 @@ impl TypeChecker {
                 }
             })
             .collect();
-        let prev_const_generics = std::mem::replace(
-            &mut self.current_const_generics,
-            new_const_generics,
-        );
+        let prev_const_generics =
+            std::mem::replace(&mut self.current_const_generics, new_const_generics);
         (prev_generics, prev_bounds, prev_const_generics)
     }
 
     /// Restore previous generics
-    fn restore_generics(&mut self, prev_generics: Vec<String>, prev_bounds: HashMap<String, Vec<String>>, prev_const_generics: HashMap<String, ResolvedType>) {
+    fn restore_generics(
+        &mut self,
+        prev_generics: Vec<String>,
+        prev_bounds: HashMap<String, Vec<String>>,
+        prev_const_generics: HashMap<String, ResolvedType>,
+    ) {
         self.current_generics = prev_generics;
         self.current_generic_bounds = prev_bounds;
         self.current_const_generics = prev_const_generics;
@@ -2509,7 +2609,7 @@ impl TypeChecker {
     /// Parses requires/ensures/invariant attributes and builds a ContractSpec.
     /// Contract expressions must evaluate to bool.
     fn extract_contracts(&mut self, f: &Function) -> TypeResult<Option<types::ContractSpec>> {
-        use types::{ContractSpec, ContractClause};
+        use types::{ContractClause, ContractSpec};
 
         let mut spec = ContractSpec::default();
 
@@ -2571,15 +2671,26 @@ impl TypeChecker {
         // Restore previous generics
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
-        let generic_bounds: HashMap<String, Vec<String>> = f.generics
+        let generic_bounds: HashMap<String, Vec<String>> = f
+            .generics
             .iter()
-            .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+            .map(|g| {
+                (
+                    g.name.node.clone(),
+                    g.bounds.iter().map(|b| b.node.clone()).collect(),
+                )
+            })
             .collect();
 
         // Count required parameters (those without default values)
         let has_defaults = f.params.iter().any(|p| p.default_value.is_some());
         let required_params = if has_defaults {
-            Some(f.params.iter().filter(|p| p.default_value.is_none()).count())
+            Some(
+                f.params
+                    .iter()
+                    .filter(|p| p.default_value.is_none())
+                    .count(),
+            )
         } else {
             None // All required (backward compatible)
         };
@@ -2657,7 +2768,10 @@ impl TypeChecker {
         // Common allocation/pointer-returning functions should return i64 (pointer)
         let pointer_returning_fns = ["malloc", "calloc", "realloc", "mmap", "fopen", "dlopen"];
         if pointer_returning_fns.contains(&name)
-            && !matches!(ret, ResolvedType::I64 | ResolvedType::Pointer(_) | ResolvedType::Unknown)
+            && !matches!(
+                ret,
+                ResolvedType::I64 | ResolvedType::Pointer(_) | ResolvedType::Unknown
+            )
         {
             self.warnings.push(format!(
                 "extern function `{}` should return `i64` (pointer), found `{}`",
@@ -2701,16 +2815,28 @@ impl TypeChecker {
                 .map(|t| self.resolve_type(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
-            let method_bounds: HashMap<String, Vec<String>> = method.node.generics
+            let method_bounds: HashMap<String, Vec<String>> = method
+                .node
+                .generics
                 .iter()
-                .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                .map(|g| {
+                    (
+                        g.name.node.clone(),
+                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                    )
+                })
                 .collect();
 
             methods.insert(
                 method.node.name.node.clone(),
                 FunctionSig {
                     name: method.node.name.node.clone(),
-                    generics: method.node.generics.iter().map(|g| g.name.node.clone()).collect(),
+                    generics: method
+                        .node
+                        .generics
+                        .iter()
+                        .map(|g| g.name.node.clone())
+                        .collect(),
                     generic_bounds: method_bounds,
                     params,
                     ret,
@@ -2734,7 +2860,10 @@ impl TypeChecker {
                 generics: s.generics.iter().map(|g| g.name.node.clone()).collect(),
                 fields,
                 methods,
-                repr_c: s.attributes.iter().any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
+                repr_c: s
+                    .attributes
+                    .iter()
+                    .any(|a| a.name == "repr" && a.args.iter().any(|arg| arg == "C")),
             },
         );
 
@@ -2756,9 +2885,8 @@ impl TypeChecker {
             let field_types = match &variant.fields {
                 VariantFields::Unit => VariantFieldTypes::Unit,
                 VariantFields::Tuple(ts) => {
-                    let types: Vec<ResolvedType> = ts.iter()
-                        .map(|t| self.resolve_type(&t.node))
-                        .collect();
+                    let types: Vec<ResolvedType> =
+                        ts.iter().map(|t| self.resolve_type(&t.node)).collect();
                     VariantFieldTypes::Tuple(types)
                 }
                 VariantFields::Struct(fields) => {
@@ -2778,10 +2906,9 @@ impl TypeChecker {
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
 
         // Register enum variants for exhaustiveness checking
-        let variant_names: Vec<String> = e.variants.iter()
-            .map(|v| v.name.node.clone())
-            .collect();
-        self.exhaustiveness_checker.register_enum(&name, variant_names);
+        let variant_names: Vec<String> = e.variants.iter().map(|v| v.name.node.clone()).collect();
+        self.exhaustiveness_checker
+            .register_enum(&name, variant_names);
 
         self.enums.insert(
             name.clone(),
@@ -2839,11 +2966,17 @@ impl TypeChecker {
         }
 
         // Get struct generics and set them as current for type resolution
-        let struct_generics: Vec<GenericParam> = self.structs.get(&type_name)
-            .map(|s| s.generics.iter().map(|g| GenericParam::new_type(
-                Spanned::new(g.clone(), Span::default()),
-                vec![],
-            )).collect())
+        let struct_generics: Vec<GenericParam> = self
+            .structs
+            .get(&type_name)
+            .map(|s| {
+                s.generics
+                    .iter()
+                    .map(|g| {
+                        GenericParam::new_type(Spanned::new(g.clone(), Span::default()), vec![])
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         // Combine struct generics with impl-level generics
@@ -2859,8 +2992,10 @@ impl TypeChecker {
 
             // Check trait exists
             if !self.traits.contains_key(&trait_name_str) {
-                let suggestion = types::find_similar_name(&trait_name_str,
-                    self.traits.keys().map(|s| s.as_str()));
+                let suggestion = types::find_similar_name(
+                    &trait_name_str,
+                    self.traits.keys().map(|s| s.as_str()),
+                );
                 return Err(TypeError::UndefinedType {
                     name: format!("trait {}", trait_name_str),
                     span: None,
@@ -2887,7 +3022,10 @@ impl TypeChecker {
                 for (assoc_name, assoc_def) in &trait_def.associated_types {
                     if assoc_def.default.is_none() && !assoc_type_impls.contains_key(assoc_name) {
                         return Err(TypeError::Mismatch {
-                            expected: format!("associated type '{}' from trait '{}'", assoc_name, trait_name_str),
+                            expected: format!(
+                                "associated type '{}' from trait '{}'",
+                                assoc_name, trait_name_str
+                            ),
                             found: "missing".to_string(),
                             span: None,
                         });
@@ -2906,7 +3044,10 @@ impl TypeChecker {
                 for (method_name, trait_method) in &trait_def.methods {
                     if !trait_method.has_default && !impl_method_names.contains(method_name) {
                         return Err(TypeError::Mismatch {
-                            expected: format!("implementation of method '{}' from trait '{}'", method_name, trait_name_str),
+                            expected: format!(
+                                "implementation of method '{}' from trait '{}'",
+                                method_name, trait_name_str
+                            ),
                             found: "missing".to_string(),
                             span: None,
                         });
@@ -2935,16 +3076,28 @@ impl TypeChecker {
                 .map(|t| self.resolve_type(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
-            let impl_method_bounds: HashMap<String, Vec<String>> = method.node.generics
+            let impl_method_bounds: HashMap<String, Vec<String>> = method
+                .node
+                .generics
                 .iter()
-                .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+                .map(|g| {
+                    (
+                        g.name.node.clone(),
+                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                    )
+                })
                 .collect();
 
             method_sigs.push((
                 method.node.name.node.clone(),
                 FunctionSig {
                     name: method.node.name.node.clone(),
-                    generics: method.node.generics.iter().map(|g| g.name.node.clone()).collect(),
+                    generics: method
+                        .node
+                        .generics
+                        .iter()
+                        .map(|g| g.name.node.clone())
+                        .collect(),
                     generic_bounds: impl_method_bounds,
                     params,
                     ret,
@@ -3002,11 +3155,17 @@ impl TypeChecker {
             let default = assoc.default.as_ref().map(|ty| self.resolve_type(&ty.node));
 
             // Extract GAT generic parameters and their bounds
-            let gat_generics: Vec<String> = assoc.generics.iter()
-                .map(|g| g.name.node.clone())
-                .collect();
-            let gat_bounds: HashMap<String, Vec<String>> = assoc.generics.iter()
-                .map(|g| (g.name.node.clone(), g.bounds.iter().map(|b| b.node.clone()).collect()))
+            let gat_generics: Vec<String> =
+                assoc.generics.iter().map(|g| g.name.node.clone()).collect();
+            let gat_bounds: HashMap<String, Vec<String>> = assoc
+                .generics
+                .iter()
+                .map(|g| {
+                    (
+                        g.name.node.clone(),
+                        g.bounds.iter().map(|b| b.node.clone()).collect(),
+                    )
+                })
                 .collect();
 
             associated_types.insert(
@@ -3086,7 +3245,10 @@ impl TypeChecker {
     /// Validate object safety for dyn Trait types
     fn validate_dyn_trait_object_safety(&mut self, ty: &ResolvedType) {
         match ty {
-            ResolvedType::DynTrait { trait_name, generics } => {
+            ResolvedType::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 if let Some(trait_def) = self.traits.get(trait_name) {
                     if let Err(violations) = object_safety::check_object_safety(trait_def) {
                         let mut error_msg = format!(
@@ -3105,14 +3267,14 @@ impl TypeChecker {
                 }
             }
             // Recursively check compound types
-            ResolvedType::Ref(inner) |
-            ResolvedType::RefMut(inner) |
-            ResolvedType::Pointer(inner) |
-            ResolvedType::Array(inner) |
-            ResolvedType::Optional(inner) |
-            ResolvedType::Result(inner) |
-            ResolvedType::Future(inner) |
-            ResolvedType::Range(inner) => {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner)
+            | ResolvedType::Array(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Result(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Range(inner) => {
                 self.validate_dyn_trait_object_safety(inner);
             }
             ResolvedType::ConstArray { element, .. } => {
@@ -3127,8 +3289,7 @@ impl TypeChecker {
                     self.validate_dyn_trait_object_safety(t);
                 }
             }
-            ResolvedType::Fn { params, ret, .. } |
-            ResolvedType::FnPtr { params, ret, .. } => {
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                 for p in params {
                     self.validate_dyn_trait_object_safety(p);
                 }
@@ -3153,7 +3314,8 @@ impl TypeChecker {
         // Add parameters to scope and validate object safety
         // Use types from the registered FunctionSig to share type variables
         // (important for Type::Infer parameters that become Var(id))
-        let registered_param_types: Vec<_> = self.functions
+        let registered_param_types: Vec<_> = self
+            .functions
             .get(&f.name.node)
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
             .unwrap_or_default();
@@ -3168,7 +3330,8 @@ impl TypeChecker {
         }
 
         // Set current function context
-        let ret_type = f.ret_type
+        let ret_type = f
+            .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
@@ -3200,8 +3363,9 @@ impl TypeChecker {
         };
 
         // Check return type (with auto-deref: &T unifies with T)
-        let expected_ret = self.current_fn_ret.clone()
-            .expect("Internal compiler error: current_fn_ret should be set during function checking");
+        let expected_ret = self.current_fn_ret.clone().expect(
+            "Internal compiler error: current_fn_ret should be set during function checking",
+        );
         let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
             if self.unify(&expected_ret, inner).is_ok() {
                 *inner.clone()
@@ -3221,16 +3385,19 @@ impl TypeChecker {
             let resolved_params: Vec<_> = {
                 let sig = self.functions.get(&f.name.node);
                 if let Some(sig) = sig {
-                    sig.params.iter().map(|(name, ty, is_mut)| {
-                        let resolved = self.apply_substitutions(ty);
-                        let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
-                            // Unresolved type variable: default to i64
-                            ResolvedType::I64
-                        } else {
-                            resolved
-                        };
-                        (name.clone(), final_ty, *is_mut)
-                    }).collect()
+                    sig.params
+                        .iter()
+                        .map(|(name, ty, is_mut)| {
+                            let resolved = self.apply_substitutions(ty);
+                            let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
+                                // Unresolved type variable: default to i64
+                                ResolvedType::I64
+                            } else {
+                                resolved
+                            };
+                            (name.clone(), final_ty, *is_mut)
+                        })
+                        .collect()
                 } else {
                     vec![]
                 }
@@ -3286,28 +3453,37 @@ impl TypeChecker {
         self.lifetime_inferencer.reset();
 
         // Build parameter list with resolved types
-        let params: Vec<(String, ResolvedType, bool)> = f.params.iter()
+        let params: Vec<(String, ResolvedType, bool)> = f
+            .params
+            .iter()
             .map(|p| {
                 let ty = self.resolve_type(&p.ty.node);
                 (p.name.node.clone(), ty, p.is_mut)
             })
             .collect();
 
-        let ret_type = f.ret_type
+        let ret_type = f
+            .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
             .unwrap_or(ResolvedType::Unit);
 
         // Check if the function has any reference types at all
         let has_ref_params = params.iter().any(|(_, ty, _)| {
-            matches!(ty,
-                ResolvedType::Ref(_) | ResolvedType::RefMut(_) |
-                ResolvedType::RefLifetime { .. } | ResolvedType::RefMutLifetime { .. }
+            matches!(
+                ty,
+                ResolvedType::Ref(_)
+                    | ResolvedType::RefMut(_)
+                    | ResolvedType::RefLifetime { .. }
+                    | ResolvedType::RefMutLifetime { .. }
             )
         });
-        let has_ref_return = matches!(ret_type,
-            ResolvedType::Ref(_) | ResolvedType::RefMut(_) |
-            ResolvedType::RefLifetime { .. } | ResolvedType::RefMutLifetime { .. }
+        let has_ref_return = matches!(
+            ret_type,
+            ResolvedType::Ref(_)
+                | ResolvedType::RefMut(_)
+                | ResolvedType::RefLifetime { .. }
+                | ResolvedType::RefMutLifetime { .. }
         );
 
         // Only run lifetime inference if there are references
@@ -3332,7 +3508,12 @@ impl TypeChecker {
     }
 
     /// Check an impl method body
-    fn check_impl_method(&mut self, target_type: &Type, method: &Function, struct_generics: &[GenericParam]) -> TypeResult<()> {
+    fn check_impl_method(
+        &mut self,
+        target_type: &Type,
+        method: &Function,
+        struct_generics: &[GenericParam],
+    ) -> TypeResult<()> {
         self.push_scope();
 
         // Get the type name for self
@@ -3349,13 +3530,15 @@ impl TypeChecker {
         let (prev_generics, prev_bounds, prev_const_generics) = self.set_generics(&all_generics);
 
         // Build the generics list for self type (struct-level generics as Generic types)
-        let self_generics: Vec<ResolvedType> = struct_generics.iter()
+        let self_generics: Vec<ResolvedType> = struct_generics
+            .iter()
             .map(|g| ResolvedType::Generic(g.name.node.clone()))
             .collect();
 
         // Add parameters to scope
         // Use registered method signature types when available (for Type::Infer support)
-        let registered_method_params: Vec<_> = self.structs
+        let registered_method_params: Vec<_> = self
+            .structs
             .get(&self_type_name)
             .and_then(|s| s.methods.get(&method.name.node))
             .map(|sig| sig.params.iter().map(|(_, ty, _)| ty.clone()).collect())
@@ -3396,8 +3579,9 @@ impl TypeChecker {
         };
 
         // Check return type (with auto-deref: &T unifies with T)
-        let expected_ret = self.current_fn_ret.clone()
-            .expect("Internal compiler error: current_fn_ret should be set during function checking");
+        let expected_ret = self.current_fn_ret.clone().expect(
+            "Internal compiler error: current_fn_ret should be set during function checking",
+        );
         let body_type_deref = if let ResolvedType::Ref(inner) = &body_type {
             if self.unify(&expected_ret, inner).is_ok() {
                 *inner.clone()
@@ -3410,20 +3594,29 @@ impl TypeChecker {
         self.unify(&expected_ret, &body_type_deref)?;
 
         // Resolve inferred parameter types for impl methods (same as check_function)
-        if method.params.iter().any(|p| matches!(p.ty.node, Type::Infer)) {
+        if method
+            .params
+            .iter()
+            .any(|p| matches!(p.ty.node, Type::Infer))
+        {
             let resolved_params: Vec<_> = {
-                let sig = self.structs.get(&self_type_name)
+                let sig = self
+                    .structs
+                    .get(&self_type_name)
                     .and_then(|s| s.methods.get(&method.name.node));
                 if let Some(sig) = sig {
-                    sig.params.iter().map(|(name, ty, is_mut)| {
-                        let resolved = self.apply_substitutions(ty);
-                        let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
-                            ResolvedType::I64
-                        } else {
-                            resolved
-                        };
-                        (name.clone(), final_ty, *is_mut)
-                    }).collect()
+                    sig.params
+                        .iter()
+                        .map(|(name, ty, is_mut)| {
+                            let resolved = self.apply_substitutions(ty);
+                            let final_ty = if matches!(resolved, ResolvedType::Var(_)) {
+                                ResolvedType::I64
+                            } else {
+                                resolved
+                            };
+                            (name.clone(), final_ty, *is_mut)
+                        })
+                        .collect()
                 } else {
                     vec![]
                 }
@@ -3704,7 +3897,9 @@ impl TypeChecker {
                     }
                     BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr => {
                         // Allow bool operands for BitAnd (&) and BitOr (|) as logical and/or
-                        if matches!(left_type, ResolvedType::Bool) && matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor) {
+                        if matches!(left_type, ResolvedType::Bool)
+                            && matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor)
+                        {
                             self.unify(&left_type, &right_type)?;
                             return Ok(ResolvedType::Bool);
                         }
@@ -3783,7 +3978,11 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Loop { pattern, iter, body } => {
+            Expr::Loop {
+                pattern,
+                iter,
+                body,
+            } => {
                 self.push_scope();
 
                 if let (Some(pattern), Some(iter)) = (pattern, iter) {
@@ -3852,14 +4051,13 @@ impl TypeChecker {
                 }
 
                 // Exhaustiveness check
-                let exhaustiveness_result = self.exhaustiveness_checker.check_match(&expr_type, arms);
+                let exhaustiveness_result =
+                    self.exhaustiveness_checker.check_match(&expr_type, arms);
 
                 // Report unreachable arms as warnings
                 for arm_idx in &exhaustiveness_result.unreachable_arms {
-                    self.warnings.push(format!(
-                        "Unreachable pattern in match arm {}",
-                        arm_idx + 1
-                    ));
+                    self.warnings
+                        .push(format!("Unreachable pattern in match arm {}", arm_idx + 1));
                 }
 
                 // Non-exhaustive match is a warning (not error) for now
@@ -3910,7 +4108,8 @@ impl TypeChecker {
                 let func_type = self.check_expr(func)?;
 
                 match func_type {
-                    ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                    ResolvedType::Fn { params, ret, .. }
+                    | ResolvedType::FnPtr { params, ret, .. } => {
                         if params.len() != args.len() {
                             return Err(TypeError::ArgCount {
                                 expected: params.len(),
@@ -3955,8 +4154,12 @@ impl TypeChecker {
                     if let Some(struct_def) = self.structs.get(&inner_type).cloned() {
                         if let Some(method_sig) = struct_def.methods.get(&method.node).cloned() {
                             // Skip self parameter
-                            let param_types: Vec<_> =
-                                method_sig.params.iter().skip(1).map(|(_, t, _)| t.clone()).collect();
+                            let param_types: Vec<_> = method_sig
+                                .params
+                                .iter()
+                                .skip(1)
+                                .map(|(_, t, _)| t.clone())
+                                .collect();
 
                             if param_types.len() != args.len() {
                                 return Err(TypeError::ArgCount {
@@ -3967,7 +4170,10 @@ impl TypeChecker {
                             }
 
                             // Build substitution map from struct's generic params to receiver's concrete types
-                            let generic_substitutions: std::collections::HashMap<String, ResolvedType> = struct_def
+                            let generic_substitutions: std::collections::HashMap<
+                                String,
+                                ResolvedType,
+                            > = struct_def
                                 .generics
                                 .iter()
                                 .zip(receiver_generics.iter())
@@ -4007,7 +4213,12 @@ impl TypeChecker {
                 // If not found on struct, try to find it in trait implementations
                 if let Some(trait_method) = self.find_trait_method(&receiver_type, &method.node) {
                     // Skip self parameter (first parameter)
-                    let param_types: Vec<_> = trait_method.params.iter().skip(1).map(|(_, t, _)| t.clone()).collect();
+                    let param_types: Vec<_> = trait_method
+                        .params
+                        .iter()
+                        .skip(1)
+                        .map(|(_, t, _)| t.clone())
+                        .collect();
 
                     if param_types.len() != args.len() {
                         return Err(TypeError::ArgCount {
@@ -4037,13 +4248,21 @@ impl TypeChecker {
                     match method.node.as_str() {
                         "len" => {
                             if !args.is_empty() {
-                                return Err(TypeError::ArgCount { expected: 0, got: args.len(), span: None });
+                                return Err(TypeError::ArgCount {
+                                    expected: 0,
+                                    got: args.len(),
+                                    span: None,
+                                });
                             }
                             return Ok(ResolvedType::I64);
                         }
                         "charAt" => {
                             if args.len() != 1 {
-                                return Err(TypeError::ArgCount { expected: 1, got: args.len(), span: None });
+                                return Err(TypeError::ArgCount {
+                                    expected: 1,
+                                    got: args.len(),
+                                    span: None,
+                                });
                             }
                             let arg_type = self.check_expr(&args[0])?;
                             self.unify(&ResolvedType::I64, &arg_type)?;
@@ -4051,7 +4270,11 @@ impl TypeChecker {
                         }
                         "contains" | "startsWith" | "endsWith" => {
                             if args.len() != 1 {
-                                return Err(TypeError::ArgCount { expected: 1, got: args.len(), span: None });
+                                return Err(TypeError::ArgCount {
+                                    expected: 1,
+                                    got: args.len(),
+                                    span: None,
+                                });
                             }
                             let arg_type = self.check_expr(&args[0])?;
                             self.unify(&ResolvedType::Str, &arg_type)?;
@@ -4059,7 +4282,11 @@ impl TypeChecker {
                         }
                         "indexOf" => {
                             if args.len() != 1 {
-                                return Err(TypeError::ArgCount { expected: 1, got: args.len(), span: None });
+                                return Err(TypeError::ArgCount {
+                                    expected: 1,
+                                    got: args.len(),
+                                    span: None,
+                                });
                             }
                             let arg_type = self.check_expr(&args[0])?;
                             self.unify(&ResolvedType::Str, &arg_type)?;
@@ -4067,7 +4294,11 @@ impl TypeChecker {
                         }
                         "substring" => {
                             if args.len() != 2 {
-                                return Err(TypeError::ArgCount { expected: 2, got: args.len(), span: None });
+                                return Err(TypeError::ArgCount {
+                                    expected: 2,
+                                    got: args.len(),
+                                    span: None,
+                                });
                             }
                             let start_type = self.check_expr(&args[0])?;
                             self.unify(&ResolvedType::I64, &start_type)?;
@@ -4077,7 +4308,11 @@ impl TypeChecker {
                         }
                         "isEmpty" => {
                             if !args.is_empty() {
-                                return Err(TypeError::ArgCount { expected: 0, got: args.len(), span: None });
+                                return Err(TypeError::ArgCount {
+                                    expected: 0,
+                                    got: args.len(),
+                                    span: None,
+                                });
                             }
                             return Ok(ResolvedType::Bool);
                         }
@@ -4086,8 +4321,10 @@ impl TypeChecker {
                 }
 
                 // Try to find similar method names for suggestion
-                let suggestion = types::find_similar_name(&method.node,
-                    self.functions.keys().map(|s| s.as_str()));
+                let suggestion = types::find_similar_name(
+                    &method.node,
+                    self.functions.keys().map(|s| s.as_str()),
+                );
                 Err(TypeError::UndefinedFunction {
                     name: method.node.clone(),
                     span: None,
@@ -4105,10 +4342,24 @@ impl TypeChecker {
                     if let Some(method_sig) = struct_def.methods.get(&method.node).cloned() {
                         // For static methods, don't skip first param (no self)
                         // But if the first param is self, skip it for backwards compat
-                        let param_types: Vec<_> = if method_sig.params.first().map(|(n, _, _)| n == "self").unwrap_or(false) {
-                            method_sig.params.iter().skip(1).map(|(_, t, _)| t.clone()).collect()
+                        let param_types: Vec<_> = if method_sig
+                            .params
+                            .first()
+                            .map(|(n, _, _)| n == "self")
+                            .unwrap_or(false)
+                        {
+                            method_sig
+                                .params
+                                .iter()
+                                .skip(1)
+                                .map(|(_, t, _)| t.clone())
+                                .collect()
                         } else {
-                            method_sig.params.iter().map(|(_, t, _)| t.clone()).collect()
+                            method_sig
+                                .params
+                                .iter()
+                                .map(|(_, t, _)| t.clone())
+                                .collect()
                         };
 
                         if param_types.len() != args.len() {
@@ -4122,7 +4373,10 @@ impl TypeChecker {
                         // Handle generic struct type inference
                         if !struct_def.generics.is_empty() {
                             // Create fresh type variables for each struct generic parameter
-                            let generic_substitutions: std::collections::HashMap<String, ResolvedType> = struct_def
+                            let generic_substitutions: std::collections::HashMap<
+                                String,
+                                ResolvedType,
+                            > = struct_def
                                 .generics
                                 .iter()
                                 .map(|param| (param.clone(), self.fresh_type_var()))
@@ -4131,12 +4385,14 @@ impl TypeChecker {
                             // Substitute generics in parameter types and check arguments
                             for (param_type, arg) in param_types.iter().zip(args) {
                                 let arg_type = self.check_expr(arg)?;
-                                let expected_type = self.substitute_generics(param_type, &generic_substitutions);
+                                let expected_type =
+                                    self.substitute_generics(param_type, &generic_substitutions);
                                 self.unify(&expected_type, &arg_type)?;
                             }
 
                             // Substitute generics in return type
-                            let return_type = self.substitute_generics(&method_sig.ret, &generic_substitutions);
+                            let return_type =
+                                self.substitute_generics(&method_sig.ret, &generic_substitutions);
                             let resolved_return = self.apply_substitutions(&return_type);
 
                             // Record the generic instantiation if all type arguments are concrete
@@ -4144,15 +4400,21 @@ impl TypeChecker {
                                 .generics
                                 .iter()
                                 .map(|param| {
-                                    let ty = generic_substitutions.get(param)
-                                        .expect("Generic parameter should exist in substitutions map");
+                                    let ty = generic_substitutions.get(param).expect(
+                                        "Generic parameter should exist in substitutions map",
+                                    );
                                     self.apply_substitutions(ty)
                                 })
                                 .collect();
 
-                            let all_concrete = inferred_type_args.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+                            let all_concrete = inferred_type_args
+                                .iter()
+                                .all(|t| !matches!(t, ResolvedType::Var(_)));
                             if all_concrete {
-                                let inst = GenericInstantiation::struct_type(&type_name.node, inferred_type_args);
+                                let inst = GenericInstantiation::struct_type(
+                                    &type_name.node,
+                                    inferred_type_args,
+                                );
                                 self.add_instantiation(inst);
                             }
 
@@ -4171,8 +4433,10 @@ impl TypeChecker {
 
                 // Get struct methods for suggestion if available
                 let suggestion = if let Some(struct_def) = self.structs.get(&type_name.node) {
-                    types::find_similar_name(&method.node,
-                        struct_def.methods.keys().map(|s| s.as_str()))
+                    types::find_similar_name(
+                        &method.node,
+                        struct_def.methods.keys().map(|s| s.as_str()),
+                    )
                 } else {
                     None
                 };
@@ -4217,11 +4481,15 @@ impl TypeChecker {
                 // Get field names for did-you-mean suggestion
                 let suggestion = if let Some(ref name) = type_name {
                     if let Some(struct_def) = self.structs.get(name) {
-                        types::find_similar_name(&field.node,
-                            struct_def.fields.keys().map(|s| s.as_str()))
+                        types::find_similar_name(
+                            &field.node,
+                            struct_def.fields.keys().map(|s| s.as_str()),
+                        )
                     } else if let Some(union_def) = self.unions.get(name) {
-                        types::find_similar_name(&field.node,
-                            union_def.fields.keys().map(|s| s.as_str()))
+                        types::find_similar_name(
+                            &field.node,
+                            union_def.fields.keys().map(|s| s.as_str()),
+                        )
                     } else {
                         None
                     }
@@ -4295,19 +4563,20 @@ impl TypeChecker {
                 }
 
                 // Helper: get element type from an array element (handles Spread)
-                let get_elem_type = |checker: &mut Self, e: &Spanned<Expr>| -> TypeResult<ResolvedType> {
-                    if let Expr::Spread(inner) = &e.node {
-                        let inner_type = checker.check_expr(inner)?;
-                        // Spread must be on a pointer/array type
-                        match inner_type {
-                            ResolvedType::Pointer(elem) => Ok(*elem),
-                            ResolvedType::Array(elem) => Ok(*elem),
-                            _ => Ok(inner_type),
+                let get_elem_type =
+                    |checker: &mut Self, e: &Spanned<Expr>| -> TypeResult<ResolvedType> {
+                        if let Expr::Spread(inner) = &e.node {
+                            let inner_type = checker.check_expr(inner)?;
+                            // Spread must be on a pointer/array type
+                            match inner_type {
+                                ResolvedType::Pointer(elem) => Ok(*elem),
+                                ResolvedType::Array(elem) => Ok(*elem),
+                                _ => Ok(inner_type),
+                            }
+                        } else {
+                            checker.check_expr(e)
                         }
-                    } else {
-                        checker.check_expr(e)
-                    }
-                };
+                    };
 
                 let first_type = get_elem_type(self, &exprs[0])?;
                 for expr in &exprs[1..] {
@@ -4338,7 +4607,10 @@ impl TypeChecker {
                     self.unify(&first_key_type, &kt)?;
                     self.unify(&first_val_type, &vt)?;
                 }
-                Ok(ResolvedType::Map(Box::new(first_key_type), Box::new(first_val_type)))
+                Ok(ResolvedType::Map(
+                    Box::new(first_key_type),
+                    Box::new(first_val_type),
+                ))
             }
 
             Expr::StructLit { name, fields } => {
@@ -4354,13 +4626,18 @@ impl TypeChecker {
                     // Check each field and unify with expected type
                     for (field_name, value) in fields {
                         let value_type = self.check_expr(value)?;
-                        if let Some(expected_type) = struct_def.fields.get(&field_name.node).cloned() {
+                        if let Some(expected_type) =
+                            struct_def.fields.get(&field_name.node).cloned()
+                        {
                             // Substitute generic parameters with type variables
-                            let expected_type = self.substitute_generics(&expected_type, &generic_substitutions);
+                            let expected_type =
+                                self.substitute_generics(&expected_type, &generic_substitutions);
                             self.unify(&expected_type, &value_type)?;
                         } else {
-                            let suggestion = types::find_similar_name(&field_name.node,
-                                struct_def.fields.keys().map(|s| s.as_str()));
+                            let suggestion = types::find_similar_name(
+                                &field_name.node,
+                                struct_def.fields.keys().map(|s| s.as_str()),
+                            );
                             return Err(TypeError::UndefinedVar {
                                 name: field_name.node.clone(),
                                 span: None,
@@ -4383,9 +4660,14 @@ impl TypeChecker {
                     // Record generic struct instantiation if the struct has generic parameters
                     if !struct_def.generics.is_empty() {
                         // Only record if all type arguments are concrete (not type variables)
-                        let all_concrete = inferred_generics.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+                        let all_concrete = inferred_generics
+                            .iter()
+                            .all(|t| !matches!(t, ResolvedType::Var(_)));
                         if all_concrete {
-                            let inst = GenericInstantiation::struct_type(&name.node, inferred_generics.clone());
+                            let inst = GenericInstantiation::struct_type(
+                                &name.node,
+                                inferred_generics.clone(),
+                            );
                             self.add_instantiation(inst);
                         }
                     }
@@ -4416,11 +4698,14 @@ impl TypeChecker {
                     let (field_name, value) = &fields[0];
                     let value_type = self.check_expr(value)?;
                     if let Some(expected_type) = union_def.fields.get(&field_name.node).cloned() {
-                        let expected_type = self.substitute_generics(&expected_type, &generic_substitutions);
+                        let expected_type =
+                            self.substitute_generics(&expected_type, &generic_substitutions);
                         self.unify(&expected_type, &value_type)?;
                     } else {
-                        let suggestion = types::find_similar_name(&field_name.node,
-                            union_def.fields.keys().map(|s| s.as_str()));
+                        let suggestion = types::find_similar_name(
+                            &field_name.node,
+                            union_def.fields.keys().map(|s| s.as_str()),
+                        );
                         return Err(TypeError::UndefinedVar {
                             name: field_name.node.clone(),
                             span: None,
@@ -4451,7 +4736,8 @@ impl TypeChecker {
                     type_candidates.extend(self.unions.keys().map(|s| s.as_str()));
                     type_candidates.extend(self.type_aliases.keys().map(|s| s.as_str()));
 
-                    let suggestion = types::find_similar_name(&name.node, type_candidates.into_iter());
+                    let suggestion =
+                        types::find_similar_name(&name.node, type_candidates.into_iter());
                     Err(TypeError::UndefinedType {
                         name: name.node.clone(),
                         span: None,
@@ -4460,7 +4746,11 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Range { start, end, inclusive: _ } => {
+            Expr::Range {
+                start,
+                end,
+                inclusive: _,
+            } => {
                 // Infer the element type from start or end expressions
                 let elem_type = if let Some(start_expr) = start {
                     let start_type = self.check_expr(start_expr)?;
@@ -4582,21 +4872,43 @@ impl TypeChecker {
             Expr::Unwrap(inner) => {
                 let inner_type = self.check_expr(inner)?;
                 match &inner_type {
-                    ResolvedType::Optional(inner) | ResolvedType::Result(inner) => Ok(*inner.clone()),
+                    ResolvedType::Optional(inner) | ResolvedType::Result(inner) => {
+                        Ok(*inner.clone())
+                    }
                     // Support user-defined Result/Option enums
                     ResolvedType::Named { name, .. } if name == "Result" => {
                         if let Some(enum_def) = self.enums.get("Result") {
-                            if let Some(VariantFieldTypes::Tuple(types)) = enum_def.variants.get("Ok") {
-                                if !types.is_empty() { Ok(types[0].clone()) } else { Ok(ResolvedType::I64) }
-                            } else { Ok(ResolvedType::I64) }
-                        } else { Ok(ResolvedType::I64) }
+                            if let Some(VariantFieldTypes::Tuple(types)) =
+                                enum_def.variants.get("Ok")
+                            {
+                                if !types.is_empty() {
+                                    Ok(types[0].clone())
+                                } else {
+                                    Ok(ResolvedType::I64)
+                                }
+                            } else {
+                                Ok(ResolvedType::I64)
+                            }
+                        } else {
+                            Ok(ResolvedType::I64)
+                        }
                     }
                     ResolvedType::Named { name, .. } if name == "Option" => {
                         if let Some(enum_def) = self.enums.get("Option") {
-                            if let Some(VariantFieldTypes::Tuple(types)) = enum_def.variants.get("Some") {
-                                if !types.is_empty() { Ok(types[0].clone()) } else { Ok(ResolvedType::I64) }
-                            } else { Ok(ResolvedType::I64) }
-                        } else { Ok(ResolvedType::I64) }
+                            if let Some(VariantFieldTypes::Tuple(types)) =
+                                enum_def.variants.get("Some")
+                            {
+                                if !types.is_empty() {
+                                    Ok(types[0].clone())
+                                } else {
+                                    Ok(ResolvedType::I64)
+                                }
+                            } else {
+                                Ok(ResolvedType::I64)
+                            }
+                        } else {
+                            Ok(ResolvedType::I64)
+                        }
                     }
                     _ => Err(TypeError::Mismatch {
                         expected: "Optional or Result".to_string(),
@@ -4647,19 +4959,25 @@ impl TypeChecker {
                 Ok(ResolvedType::Unit)
             }
 
-            Expr::AssignOp { op: _, target, value } => {
-
+            Expr::AssignOp {
+                op: _,
+                target,
+                value,
+            } => {
                 let target_type = self.check_expr(target)?;
                 let value_type = self.check_expr(value)?;
                 self.unify(&target_type, &value_type)?;
                 Ok(ResolvedType::Unit)
             }
 
-            Expr::Lambda { params, body, captures: _ } => {
+            Expr::Lambda {
+                params,
+                body,
+                captures: _,
+            } => {
                 // Find free variables (captures) before entering lambda scope
-                let param_names: std::collections::HashSet<_> = params.iter()
-                    .map(|p| p.name.node.clone())
-                    .collect();
+                let param_names: std::collections::HashSet<_> =
+                    params.iter().map(|p| p.name.node.clone()).collect();
                 let free_vars = self.find_free_vars_in_expr(body, &param_names);
 
                 // Verify all captured variables exist in current scope
@@ -4775,7 +5093,9 @@ impl TypeChecker {
                 Err(TypeError::UndefinedFunction {
                     name: format!("{}!", invoke.name.node),
                     span: Some(invoke.name.span),
-                    suggestion: Some("Macro invocations must be expanded before type checking".to_string()),
+                    suggestion: Some(
+                        "Macro invocations must be expanded before type checking".to_string(),
+                    ),
                 })
             }
 
@@ -4854,8 +5174,10 @@ impl TypeChecker {
     fn resolve_type(&self, ty: &Type) -> ResolvedType {
         match ty {
             Type::Named { name, generics } => {
-                let resolved_generics: Vec<_> =
-                    generics.iter().map(|g| self.resolve_type(&g.node)).collect();
+                let resolved_generics: Vec<_> = generics
+                    .iter()
+                    .map(|g| self.resolve_type(&g.node))
+                    .collect();
 
                 match name.as_str() {
                     "i8" => ResolvedType::I8,
@@ -4954,8 +5276,13 @@ impl TypeChecker {
             },
             Type::Unit => ResolvedType::Unit,
             Type::Infer => self.fresh_type_var(),
-            Type::FnPtr { params, ret, is_vararg } => {
-                let resolved_params: Vec<_> = params.iter().map(|p| self.resolve_type(&p.node)).collect();
+            Type::FnPtr {
+                params,
+                ret,
+                is_vararg,
+            } => {
+                let resolved_params: Vec<_> =
+                    params.iter().map(|p| self.resolve_type(&p.node)).collect();
                 let resolved_ret = Box::new(self.resolve_type(&ret.node));
                 ResolvedType::FnPtr {
                     params: resolved_params,
@@ -4964,15 +5291,25 @@ impl TypeChecker {
                     effects: None,
                 }
             }
-            Type::DynTrait { trait_name, generics } => {
-                let resolved_generics: Vec<_> =
-                    generics.iter().map(|g| self.resolve_type(&g.node)).collect();
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
+                let resolved_generics: Vec<_> = generics
+                    .iter()
+                    .map(|g| self.resolve_type(&g.node))
+                    .collect();
                 ResolvedType::DynTrait {
                     trait_name: trait_name.clone(),
                     generics: resolved_generics,
                 }
             }
-            Type::Associated { base, trait_name, assoc_name, generics } => {
+            Type::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => {
                 let resolved_base = self.resolve_type(&base.node);
                 // Resolve GAT generic arguments
                 let resolved_generics: Vec<ResolvedType> = generics
@@ -4980,15 +5317,20 @@ impl TypeChecker {
                     .map(|g| self.resolve_type(&g.node))
                     .collect();
                 // Try to resolve the associated type immediately if possible
-                self.resolve_associated_type(&resolved_base, trait_name.as_deref(), assoc_name, &resolved_generics)
+                self.resolve_associated_type(
+                    &resolved_base,
+                    trait_name.as_deref(),
+                    assoc_name,
+                    &resolved_generics,
+                )
             }
-            Type::Linear(inner) => {
-                ResolvedType::Linear(Box::new(self.resolve_type(&inner.node)))
-            }
-            Type::Affine(inner) => {
-                ResolvedType::Affine(Box::new(self.resolve_type(&inner.node)))
-            }
-            Type::Dependent { var_name, base, predicate } => {
+            Type::Linear(inner) => ResolvedType::Linear(Box::new(self.resolve_type(&inner.node))),
+            Type::Affine(inner) => ResolvedType::Affine(Box::new(self.resolve_type(&inner.node))),
+            Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => {
                 let resolved_base = self.resolve_type(&base.node);
                 // Convert predicate expression to string for storage
                 // The predicate is validated separately during type checking
@@ -4999,21 +5341,15 @@ impl TypeChecker {
                     predicate: predicate_str,
                 }
             }
-            Type::RefLifetime { lifetime, inner } => {
-                ResolvedType::RefLifetime {
-                    lifetime: lifetime.clone(),
-                    inner: Box::new(self.resolve_type(&inner.node)),
-                }
-            }
-            Type::RefMutLifetime { lifetime, inner } => {
-                ResolvedType::RefMutLifetime {
-                    lifetime: lifetime.clone(),
-                    inner: Box::new(self.resolve_type(&inner.node)),
-                }
-            }
-            Type::Lazy(inner) => {
-                ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node)))
-            }
+            Type::RefLifetime { lifetime, inner } => ResolvedType::RefLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.resolve_type(&inner.node)),
+            },
+            Type::RefMutLifetime { lifetime, inner } => ResolvedType::RefMutLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.resolve_type(&inner.node)),
+            },
+            Type::Lazy(inner) => ResolvedType::Lazy(Box::new(self.resolve_type(&inner.node))),
         }
     }
 
@@ -5142,7 +5478,9 @@ impl TypeChecker {
                 };
 
                 // Try to evaluate if both sides are concrete values
-                if let (Some(l), Some(r)) = (resolved_left.try_evaluate(), resolved_right.try_evaluate()) {
+                if let (Some(l), Some(r)) =
+                    (resolved_left.try_evaluate(), resolved_right.try_evaluate())
+                {
                     let result = match resolved_op {
                         types::ConstBinOp::Add => l.checked_add(r),
                         types::ConstBinOp::Sub => l.checked_sub(r),
@@ -5277,18 +5615,32 @@ impl TypeChecker {
     /// Get field types for a struct or enum struct variant.
     /// Used in pattern matching to properly type-check struct patterns.
     /// Returns a map of field names to their types.
-    fn get_struct_or_variant_fields(&self, pattern_name: &str, expr_type: &ResolvedType) -> HashMap<String, ResolvedType> {
+    fn get_struct_or_variant_fields(
+        &self,
+        pattern_name: &str,
+        expr_type: &ResolvedType,
+    ) -> HashMap<String, ResolvedType> {
         // First, check if pattern_name refers to a struct
         if let Some(struct_def) = self.structs.get(pattern_name) {
             // If we have concrete generics in expr_type, substitute them
-            if let ResolvedType::Named { generics: concrete_generics, .. } = expr_type {
+            if let ResolvedType::Named {
+                generics: concrete_generics,
+                ..
+            } = expr_type
+            {
                 if !concrete_generics.is_empty() && !struct_def.generics.is_empty() {
-                    let substitutions: HashMap<String, ResolvedType> = struct_def.generics.iter()
+                    let substitutions: HashMap<String, ResolvedType> = struct_def
+                        .generics
+                        .iter()
                         .zip(concrete_generics.iter())
                         .map(|(param, concrete)| (param.clone(), concrete.clone()))
                         .collect();
-                    return struct_def.fields.iter()
-                        .map(|(name, ty)| (name.clone(), self.substitute_generics(ty, &substitutions)))
+                    return struct_def
+                        .fields
+                        .iter()
+                        .map(|(name, ty)| {
+                            (name.clone(), self.substitute_generics(ty, &substitutions))
+                        })
                         .collect();
                 }
             }
@@ -5297,16 +5649,26 @@ impl TypeChecker {
 
         // Otherwise, try to find it as an enum variant
         // Extract enum name and generics from expr_type
-        if let ResolvedType::Named { name: enum_name, generics: concrete_generics } = expr_type {
+        if let ResolvedType::Named {
+            name: enum_name,
+            generics: concrete_generics,
+        } = expr_type
+        {
             if let Some(enum_def) = self.enums.get(enum_name) {
-                if let Some(VariantFieldTypes::Struct(fields)) = enum_def.variants.get(pattern_name) {
+                if let Some(VariantFieldTypes::Struct(fields)) = enum_def.variants.get(pattern_name)
+                {
                     // Build substitution map from generic params to concrete types
-                    let substitutions: HashMap<String, ResolvedType> = enum_def.generics.iter()
+                    let substitutions: HashMap<String, ResolvedType> = enum_def
+                        .generics
+                        .iter()
                         .zip(concrete_generics.iter())
                         .map(|(param, concrete)| (param.clone(), concrete.clone()))
                         .collect();
-                    return fields.iter()
-                        .map(|(name, ty)| (name.clone(), self.substitute_generics(ty, &substitutions)))
+                    return fields
+                        .iter()
+                        .map(|(name, ty)| {
+                            (name.clone(), self.substitute_generics(ty, &substitutions))
+                        })
                         .collect();
                 }
             }
@@ -5319,13 +5681,23 @@ impl TypeChecker {
     /// Get tuple field types for an enum tuple variant.
     /// Used in pattern matching to properly type-check variant tuple patterns.
     /// Returns a vector of field types in order.
-    fn get_tuple_variant_fields(&self, pattern_name: &str, expr_type: &ResolvedType) -> Vec<ResolvedType> {
+    fn get_tuple_variant_fields(
+        &self,
+        pattern_name: &str,
+        expr_type: &ResolvedType,
+    ) -> Vec<ResolvedType> {
         // Extract enum name and generics from expr_type
-        if let ResolvedType::Named { name: enum_name, generics: concrete_generics } = expr_type {
+        if let ResolvedType::Named {
+            name: enum_name,
+            generics: concrete_generics,
+        } = expr_type
+        {
             if let Some(enum_def) = self.enums.get(enum_name) {
                 if let Some(variant_fields) = enum_def.variants.get(pattern_name) {
                     // Build substitution map from generic params to concrete types
-                    let substitutions: HashMap<String, ResolvedType> = enum_def.generics.iter()
+                    let substitutions: HashMap<String, ResolvedType> = enum_def
+                        .generics
+                        .iter()
                         .zip(concrete_generics.iter())
                         .map(|(param, concrete)| (param.clone(), concrete.clone()))
                         .collect();
@@ -5333,7 +5705,8 @@ impl TypeChecker {
                     match variant_fields {
                         VariantFieldTypes::Tuple(types) => {
                             // Substitute generics with concrete types
-                            return types.iter()
+                            return types
+                                .iter()
                                 .map(|t| self.substitute_generics(t, &substitutions))
                                 .collect();
                         }
@@ -5380,7 +5753,8 @@ impl TypeChecker {
                 let field_types = self.get_struct_or_variant_fields(&name.node, expr_type);
 
                 for (field_name, sub_pattern) in fields {
-                    let field_type = field_types.get(&field_name.node)
+                    let field_type = field_types
+                        .get(&field_name.node)
                         .cloned()
                         .unwrap_or(ResolvedType::Unknown);
 
@@ -5478,12 +5852,16 @@ impl TypeChecker {
         for (enum_name, enum_def) in &self.enums {
             if let Some(variant_fields) = enum_def.variants.get(name) {
                 // Create type variables for generic enum parameters
-                let generics: Vec<ResolvedType> = enum_def.generics.iter()
+                let generics: Vec<ResolvedType> = enum_def
+                    .generics
+                    .iter()
                     .map(|_| self.fresh_type_var())
                     .collect();
 
                 // Build substitution map for generic parameters
-                let generic_substitutions: HashMap<String, ResolvedType> = enum_def.generics.iter()
+                let generic_substitutions: HashMap<String, ResolvedType> = enum_def
+                    .generics
+                    .iter()
                     .zip(generics.iter())
                     .map(|(param, ty)| (param.clone(), ty.clone()))
                     .collect();
@@ -5505,7 +5883,8 @@ impl TypeChecker {
                     }
                     VariantFieldTypes::Tuple(field_types) => {
                         // Tuple variant acts as a function from field types to enum type
-                        let params: Vec<ResolvedType> = field_types.iter()
+                        let params: Vec<ResolvedType> = field_types
+                            .iter()
                             .map(|t| self.substitute_generics(t, &generic_substitutions))
                             .collect();
 
@@ -5552,7 +5931,11 @@ impl TypeChecker {
                 ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => Some(inner.as_ref()),
                 _ => Some(&self_info.ty),
             };
-            if let Some(ResolvedType::Named { name: struct_name, generics: _ }) = inner_type {
+            if let Some(ResolvedType::Named {
+                name: struct_name,
+                generics: _,
+            }) = inner_type
+            {
                 if let Some(struct_def) = self.structs.get(struct_name).cloned() {
                     for (fname, ftype) in &struct_def.fields {
                         if fname == name {
@@ -5590,7 +5973,11 @@ impl TypeChecker {
     }
 
     /// Find a method from trait implementations for a given type
-    fn find_trait_method(&self, receiver_type: &ResolvedType, method_name: &str) -> Option<TraitMethodSig> {
+    fn find_trait_method(
+        &self,
+        receiver_type: &ResolvedType,
+        method_name: &str,
+    ) -> Option<TraitMethodSig> {
         // Handle dyn Trait types - look up method directly in trait definition
         let dyn_trait = match receiver_type {
             ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
@@ -5698,7 +6085,11 @@ impl TypeChecker {
     }
 
     /// Find free variables in an expression that are not in bound_vars
-    fn find_free_vars_in_expr(&self, expr: &Spanned<Expr>, bound_vars: &std::collections::HashSet<String>) -> Vec<String> {
+    fn find_free_vars_in_expr(
+        &self,
+        expr: &Spanned<Expr>,
+        bound_vars: &std::collections::HashSet<String>,
+    ) -> Vec<String> {
         let mut free_vars = Vec::new();
         self.collect_free_vars(&expr.node, bound_vars, &mut free_vars);
         // Remove duplicates while preserving order
@@ -5707,7 +6098,12 @@ impl TypeChecker {
         free_vars
     }
 
-    fn collect_free_vars(&self, expr: &Expr, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+    fn collect_free_vars(
+        &self,
+        expr: &Expr,
+        bound: &std::collections::HashSet<String>,
+        free: &mut Vec<String>,
+    ) {
         match expr {
             Expr::Ident(name) => {
                 if !bound.contains(name) && self.lookup_var(name).is_some() {
@@ -5738,7 +6134,9 @@ impl TypeChecker {
                             local_bound.insert(name.node.clone());
                         }
                         Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
-                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => {
+                            self.collect_free_vars(&e.node, &local_bound, free)
+                        }
                         Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
                         _ => {}
                     }
@@ -5756,7 +6154,9 @@ impl TypeChecker {
                             local_bound.insert(name.node.clone());
                         }
                         Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
-                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => {
+                            self.collect_free_vars(&e.node, &local_bound, free)
+                        }
                         Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
                         _ => {}
                     }
@@ -5811,9 +6211,12 @@ impl TypeChecker {
                 }
                 self.collect_free_vars(&body.node, &inner_bound, free);
             }
-            Expr::Ref(inner) | Expr::Deref(inner) |
-            Expr::Try(inner) | Expr::Unwrap(inner) | Expr::Await(inner) |
-            Expr::Spawn(inner) => {
+            Expr::Ref(inner)
+            | Expr::Deref(inner)
+            | Expr::Try(inner)
+            | Expr::Unwrap(inner)
+            | Expr::Await(inner)
+            | Expr::Spawn(inner) => {
                 self.collect_free_vars(&inner.node, bound, free);
             }
             Expr::Lazy(inner) => {
@@ -5825,7 +6228,11 @@ impl TypeChecker {
             Expr::Cast { expr, .. } => {
                 self.collect_free_vars(&expr.node, bound, free);
             }
-            Expr::Loop { body, pattern, iter } => {
+            Expr::Loop {
+                body,
+                pattern,
+                iter,
+            } => {
                 // iter expression runs in current scope
                 if let Some(it) = iter {
                     self.collect_free_vars(&it.node, bound, free);
@@ -5842,7 +6249,9 @@ impl TypeChecker {
                             local_bound.insert(name.node.clone());
                         }
                         Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
-                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => {
+                            self.collect_free_vars(&e.node, &local_bound, free)
+                        }
                         Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
                         _ => {}
                     }
@@ -5860,7 +6269,9 @@ impl TypeChecker {
                             local_bound.insert(name.node.clone());
                         }
                         Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
-                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => {
+                            self.collect_free_vars(&e.node, &local_bound, free)
+                        }
                         Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
                         _ => {}
                     }
@@ -5883,9 +6294,15 @@ impl TypeChecker {
         }
     }
 
-    fn collect_pattern_bindings(&self, pattern: &Pattern, bound: &mut std::collections::HashSet<String>) {
+    fn collect_pattern_bindings(
+        &self,
+        pattern: &Pattern,
+        bound: &mut std::collections::HashSet<String>,
+    ) {
         match pattern {
-            Pattern::Ident(name) => { bound.insert(name.clone()); }
+            Pattern::Ident(name) => {
+                bound.insert(name.clone());
+            }
             Pattern::Tuple(patterns) => {
                 for p in patterns {
                     self.collect_pattern_bindings(&p.node, bound);
@@ -5912,7 +6329,12 @@ impl TypeChecker {
         }
     }
 
-    fn collect_if_else_free_vars(&self, if_else: &IfElse, bound: &std::collections::HashSet<String>, free: &mut Vec<String>) {
+    fn collect_if_else_free_vars(
+        &self,
+        if_else: &IfElse,
+        bound: &std::collections::HashSet<String>,
+        free: &mut Vec<String>,
+    ) {
         match if_else {
             IfElse::ElseIf(cond, then_stmts, else_) => {
                 self.collect_free_vars(&cond.node, bound, free);
@@ -5924,7 +6346,9 @@ impl TypeChecker {
                             local_bound.insert(name.node.clone());
                         }
                         Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
-                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => {
+                            self.collect_free_vars(&e.node, &local_bound, free)
+                        }
                         Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
                         _ => {}
                     }
@@ -5942,7 +6366,9 @@ impl TypeChecker {
                             local_bound.insert(name.node.clone());
                         }
                         Stmt::Expr(e) => self.collect_free_vars(&e.node, &local_bound, free),
-                        Stmt::Return(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
+                        Stmt::Return(Some(e)) => {
+                            self.collect_free_vars(&e.node, &local_bound, free)
+                        }
                         Stmt::Break(Some(e)) => self.collect_free_vars(&e.node, &local_bound, free),
                         _ => {}
                     }
@@ -6061,7 +6487,10 @@ mod tests {
         let mut checker = TypeChecker::new();
         let result = checker.check_module(&module);
         assert!(result.is_err());
-        if let Err(TypeError::UndefinedVar { name, suggestion, .. }) = result {
+        if let Err(TypeError::UndefinedVar {
+            name, suggestion, ..
+        }) = result
+        {
             assert_eq!(name, "coutn");
             assert_eq!(suggestion, Some("count".to_string()));
         } else {
@@ -6077,7 +6506,10 @@ mod tests {
         let mut checker = TypeChecker::new();
         let result = checker.check_module(&module);
         assert!(result.is_err());
-        if let Err(TypeError::UndefinedVar { name, suggestion, .. }) = result {
+        if let Err(TypeError::UndefinedVar {
+            name, suggestion, ..
+        }) = result
+        {
             assert_eq!(name, "xyz");
             assert_eq!(suggestion, None);
         } else {
@@ -6467,10 +6899,14 @@ mod tests {
 
         // Check that an instantiation was recorded
         let instantiations = checker.get_generic_instantiations();
-        assert!(!instantiations.is_empty(), "Expected generic instantiation to be recorded");
+        assert!(
+            !instantiations.is_empty(),
+            "Expected generic instantiation to be recorded"
+        );
 
         // Find the identity instantiation
-        let identity_inst = instantiations.iter()
+        let identity_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "identity")
             .expect("Expected identity<i64> instantiation");
 
@@ -6496,15 +6932,20 @@ mod tests {
 
         // Check that both instantiations were recorded
         let instantiations = checker.get_generic_instantiations();
-        assert!(instantiations.len() >= 2, "Expected at least 2 instantiations");
+        assert!(
+            instantiations.len() >= 2,
+            "Expected at least 2 instantiations"
+        );
 
         // Check for i64 instantiation
-        let i64_inst = instantiations.iter()
+        let i64_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "identity" && i.type_args == vec![ResolvedType::I64]);
         assert!(i64_inst.is_some(), "Expected identity<i64> instantiation");
 
         // Check for f64 instantiation
-        let f64_inst = instantiations.iter()
+        let f64_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "identity" && i.type_args == vec![ResolvedType::F64]);
         assert!(f64_inst.is_some(), "Expected identity<f64> instantiation");
     }
@@ -6525,7 +6966,8 @@ mod tests {
 
         // Check that a struct instantiation was recorded
         let instantiations = checker.get_generic_instantiations();
-        let pair_inst = instantiations.iter()
+        let pair_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "Pair")
             .expect("Expected Pair<i64> instantiation");
 
@@ -6546,7 +6988,10 @@ mod tests {
 
         // No instantiations should be recorded
         let instantiations = checker.get_generic_instantiations();
-        assert!(instantiations.is_empty(), "Expected no instantiations for unused generic function");
+        assert!(
+            instantiations.is_empty(),
+            "Expected no instantiations for unused generic function"
+        );
     }
 
     #[test]
@@ -6586,13 +7031,19 @@ mod tests {
         let instantiations = checker.get_generic_instantiations();
 
         // Should have both function and struct instantiations
-        let fn_inst = instantiations.iter()
+        let fn_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "make_container");
-        assert!(fn_inst.is_some(), "Expected make_container<i64> instantiation");
+        assert!(
+            fn_inst.is_some(),
+            "Expected make_container<i64> instantiation"
+        );
 
-        let struct_inst = instantiations.iter()
-            .find(|i| i.base_name == "Container");
-        assert!(struct_inst.is_some(), "Expected Container<i64> instantiation");
+        let struct_inst = instantiations.iter().find(|i| i.base_name == "Container");
+        assert!(
+            struct_inst.is_some(),
+            "Expected Container<i64> instantiation"
+        );
     }
 
     #[test]
@@ -6617,13 +7068,15 @@ mod tests {
         let instantiations = checker.get_generic_instantiations();
 
         // Check that function instantiation has correct kind
-        let fn_inst = instantiations.iter()
+        let fn_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "hold")
             .expect("Expected hold instantiation");
         assert!(matches!(fn_inst.kind, InstantiationKind::Function));
 
         // Check that struct instantiation has correct kind
-        let struct_inst = instantiations.iter()
+        let struct_inst = instantiations
+            .iter()
             .find(|i| i.base_name == "Holder")
             .expect("Expected Holder instantiation");
         assert!(matches!(struct_inst.kind, InstantiationKind::Struct));

@@ -232,7 +232,9 @@ impl CodeGenerator {
         };
 
         // Cache the result using interior mutability
-        self.type_to_llvm_cache.borrow_mut().insert(cache_key, result.clone());
+        self.type_to_llvm_cache
+            .borrow_mut()
+            .insert(cache_key, result.clone());
         result
     }
 
@@ -306,14 +308,17 @@ impl CodeGenerator {
                 } else if !generics.is_empty() {
                     // In Vais, all values are i64-sized, so struct/enum/union layout is the same
                     // regardless of type arguments. Use base name for enums, structs, and unions.
-                    if self.enums.contains_key(name) || self.structs.contains_key(name) || self.unions.contains_key(name) {
+                    if self.enums.contains_key(name)
+                        || self.structs.contains_key(name)
+                        || self.unions.contains_key(name)
+                    {
                         format!("%{}", name)
                     } else {
                         // Generic struct with type arguments (not in our structs map - external?)
                         // Check if all generics are concrete (not Generic or Var types)
-                        let all_concrete = generics.iter().all(|g| {
-                            !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_))
-                        });
+                        let all_concrete = generics
+                            .iter()
+                            .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)));
 
                         if all_concrete {
                             // Use mangled name for concrete instantiations
@@ -358,9 +363,15 @@ impl CodeGenerator {
                 // vtable_ptr: i8* pointing to the vtable for this trait
                 crate::vtable::TRAIT_OBJECT_TYPE.to_string()
             }
-            ResolvedType::FnPtr { params, ret, is_vararg, .. } => {
+            ResolvedType::FnPtr {
+                params,
+                ret,
+                is_vararg,
+                ..
+            } => {
                 // Function pointer type
-                let param_types: Result<Vec<String>, _> = params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
+                let param_types: Result<Vec<String>, _> =
+                    params.iter().map(|p| self.type_to_llvm_impl(p)).collect();
                 let param_types = param_types?;
                 let ret_type = self.type_to_llvm_impl(ret)?;
                 let vararg_suffix = if *is_vararg { ", ..." } else { "" };
@@ -403,7 +414,8 @@ impl CodeGenerator {
                 format!("{{ i1, {}, i8* }}", self.type_to_llvm_impl(inner)?)
             }
             ResolvedType::Tuple(elems) => {
-                let elem_types: Vec<String> = elems.iter()
+                let elem_types: Vec<String> = elems
+                    .iter()
                     .map(|e| self.type_to_llvm_impl(e))
                     .collect::<Result<_, _>>()?;
                 format!("{{ {} }}", elem_types.join(", "))
@@ -471,15 +483,42 @@ impl CodeGenerator {
                 "bool" => ResolvedType::Bool,
                 "str" => ResolvedType::Str,
                 // SIMD Vector types
-                "Vec2f32" => ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 2 },
-                "Vec4f32" => ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 4 },
-                "Vec8f32" => ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 8 },
-                "Vec2f64" => ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 2 },
-                "Vec4f64" => ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 4 },
-                "Vec4i32" => ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 4 },
-                "Vec8i32" => ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 8 },
-                "Vec2i64" => ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 2 },
-                "Vec4i64" => ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 4 },
+                "Vec2f32" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::F32),
+                    lanes: 2,
+                },
+                "Vec4f32" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::F32),
+                    lanes: 4,
+                },
+                "Vec8f32" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::F32),
+                    lanes: 8,
+                },
+                "Vec2f64" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::F64),
+                    lanes: 2,
+                },
+                "Vec4f64" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::F64),
+                    lanes: 4,
+                },
+                "Vec4i32" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::I32),
+                    lanes: 4,
+                },
+                "Vec8i32" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::I32),
+                    lanes: 8,
+                },
+                "Vec2i64" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::I64),
+                    lanes: 2,
+                },
+                "Vec4i64" => ResolvedType::Vector {
+                    element: Box::new(ResolvedType::I64),
+                    lanes: 4,
+                },
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
@@ -501,7 +540,9 @@ impl CodeGenerator {
             Type::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
-            Type::Ref(inner) => ResolvedType::Ref(Box::new(self.ast_type_to_resolved_impl(&inner.node))),
+            Type::Ref(inner) => {
+                ResolvedType::Ref(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
             Type::RefMut(inner) => {
                 ResolvedType::RefMut(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
@@ -512,27 +553,27 @@ impl CodeGenerator {
                     inner: Box::new(self.ast_type_to_resolved_impl(&inner.node)),
                 }
             }
-            Type::RefMutLifetime { lifetime, inner } => {
-                ResolvedType::RefMutLifetime {
-                    lifetime: lifetime.clone(),
-                    inner: Box::new(self.ast_type_to_resolved_impl(&inner.node)),
-                }
-            }
-            Type::Tuple(elems) => {
-                ResolvedType::Tuple(
-                    elems.iter().map(|e| self.ast_type_to_resolved_impl(&e.node)).collect(),
-                )
-            }
+            Type::RefMutLifetime { lifetime, inner } => ResolvedType::RefMutLifetime {
+                lifetime: lifetime.clone(),
+                inner: Box::new(self.ast_type_to_resolved_impl(&inner.node)),
+            },
+            Type::Tuple(elems) => ResolvedType::Tuple(
+                elems
+                    .iter()
+                    .map(|e| self.ast_type_to_resolved_impl(&e.node))
+                    .collect(),
+            ),
             Type::Unit => ResolvedType::Unit,
-            Type::DynTrait { trait_name, generics } => {
-                ResolvedType::DynTrait {
-                    trait_name: trait_name.clone(),
-                    generics: generics
-                        .iter()
-                        .map(|g| self.ast_type_to_resolved_impl(&g.node))
-                        .collect(),
-                }
-            }
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => ResolvedType::DynTrait {
+                trait_name: trait_name.clone(),
+                generics: generics
+                    .iter()
+                    .map(|g| self.ast_type_to_resolved_impl(&g.node))
+                    .collect(),
+            },
             _ => ResolvedType::Unknown,
         }
     }
@@ -567,7 +608,10 @@ impl CodeGenerator {
             };
 
             // Estimate size based on actual field types
-            let size: usize = variant_types.iter().map(|t| self.estimate_type_size(t)).sum();
+            let size: usize = variant_types
+                .iter()
+                .map(|t| self.estimate_type_size(t))
+                .sum();
             if size > max_payload_size {
                 max_payload_size = size;
                 payload_types = variant_types;
@@ -626,7 +670,7 @@ impl CodeGenerator {
                 8 // fallback
             }
             s if s.starts_with('%') => 8, // Named types default to 8
-            _ => 8, // Default fallback
+            _ => 8,                       // Default fallback
         }
     }
 }

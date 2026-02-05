@@ -1,6 +1,6 @@
-use vais_hotreload::{FileWatcher, HotReloadConfig};
 use std::fs;
 use tempfile::TempDir;
+use vais_hotreload::{FileWatcher, HotReloadConfig};
 
 #[test]
 fn test_file_watcher_basic() {
@@ -59,10 +59,7 @@ fn test_dylib_path_determination() {
 #[test]
 fn test_multiple_compiler_args() {
     let config = HotReloadConfig::new("test.vais")
-        .with_compiler_args(vec![
-            "-O2".to_string(),
-            "--verbose".to_string(),
-        ]);
+        .with_compiler_args(vec!["-O2".to_string(), "--verbose".to_string()]);
 
     assert_eq!(config.compiler_args.len(), 2);
     assert_eq!(config.compiler_args[0], "-O2");

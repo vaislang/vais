@@ -37,19 +37,39 @@ pub fn get_semantic_tokens(source: &str) -> Vec<SemanticToken> {
 
         let token_type = match &spanned.token {
             // Keywords (single letter in Vais)
-            Token::Function | Token::Struct | Token::Enum | Token::If
-            | Token::Loop | Token::Match | Token::Return | Token::Break
-            | Token::Continue | Token::TypeKeyword | Token::Use | Token::Pub
-            | Token::Trait | Token::Impl | Token::Async | Token::Spawn | Token::Await => {
-                Some(TOKEN_KEYWORD)
-            }
+            Token::Function
+            | Token::Struct
+            | Token::Enum
+            | Token::If
+            | Token::Loop
+            | Token::Match
+            | Token::Return
+            | Token::Break
+            | Token::Continue
+            | Token::TypeKeyword
+            | Token::Use
+            | Token::Pub
+            | Token::Trait
+            | Token::Impl
+            | Token::Async
+            | Token::Spawn
+            | Token::Await => Some(TOKEN_KEYWORD),
 
             // Types
-            Token::I8 | Token::I16 | Token::I32 | Token::I64 | Token::I128
-            | Token::U8 | Token::U16 | Token::U32 | Token::U64 | Token::U128
-            | Token::F32 | Token::F64 | Token::Bool | Token::Str => {
-                Some(TOKEN_TYPE)
-            }
+            Token::I8
+            | Token::I16
+            | Token::I32
+            | Token::I64
+            | Token::I128
+            | Token::U8
+            | Token::U16
+            | Token::U32
+            | Token::U64
+            | Token::U128
+            | Token::F32
+            | Token::F64
+            | Token::Bool
+            | Token::Str => Some(TOKEN_TYPE),
 
             // Literals
             Token::Int(_) => Some(TOKEN_NUMBER),

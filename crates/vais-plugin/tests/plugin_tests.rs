@@ -10,9 +10,9 @@ use std::any::Any;
 use std::path::PathBuf;
 use vais_ast::{Module, Span};
 use vais_plugin::{
-    AnalysisPlugin, ComplexityReport, DependencyGraph, DependencyInfo, Diagnostic,
-    DiagnosticLevel, FormatConfig, FormatterPlugin, LintPlugin, OptLevel, Plugin, PluginConfig,
-    PluginInfo, PluginRegistry, PluginsConfig, PluginsSection, TransformPlugin,
+    AnalysisPlugin, ComplexityReport, DependencyGraph, DependencyInfo, Diagnostic, DiagnosticLevel,
+    FormatConfig, FormatterPlugin, LintPlugin, OptLevel, Plugin, PluginConfig, PluginInfo,
+    PluginRegistry, PluginsConfig, PluginsSection, TransformPlugin,
 };
 
 // ============================================================================
@@ -71,7 +71,7 @@ impl LintPlugin for MockLintPlugin {
                 if matches!(f.body, vais_ast::FunctionBody::Block(ref stmts) if stmts.is_empty()) {
                     diagnostics.push(
                         Diagnostic::warning(format!("Function '{}' has empty body", f.name.node))
-                            .with_span(item.span)
+                            .with_span(item.span),
                     );
                 }
             }
@@ -165,8 +165,10 @@ impl FormatterPlugin for MockFormatterPlugin {
     fn format_module(&self, module: &Module, config: &FormatConfig) -> Result<String, String> {
         // Simple mock formatter that just returns a formatted string
         let mut output = String::new();
-        output.push_str(&format!("// Formatted by {} with indent_size={}\n",
-            self.name, config.indent_size));
+        output.push_str(&format!(
+            "// Formatted by {} with indent_size={}\n",
+            self.name, config.indent_size
+        ));
         output.push_str(&format!("// Module with {} items\n", module.items.len()));
         Ok(output)
     }
@@ -234,13 +236,15 @@ impl AnalysisPlugin for MockAnalysisPlugin {
         for item in &module.items {
             if let vais_ast::Item::Use(use_stmt) = &item.node {
                 // Extract the string values from Spanned<String>
-                let path_parts: Vec<String> = use_stmt.path.iter()
-                    .map(|s| s.node.clone())
-                    .collect();
+                let path_parts: Vec<String> =
+                    use_stmt.path.iter().map(|s| s.node.clone()).collect();
 
                 let dep = DependencyInfo {
                     name: path_parts.join("::"),
-                    external: path_parts.first().map(|s| s.as_str() == "std").unwrap_or(false),
+                    external: path_parts
+                        .first()
+                        .map(|s| s.as_str() == "std")
+                        .unwrap_or(false),
                     span: Some(item.span),
                 };
                 graph.add_dependency(dep);
@@ -323,8 +327,14 @@ path = ["./plugins/lint.dylib", "./plugins/optimizer.so"]
     let config = PluginsConfig::parse(toml).unwrap();
     assert!(!config.is_empty());
     assert_eq!(config.plugins.path.len(), 2);
-    assert_eq!(config.plugins.path[0], PathBuf::from("./plugins/lint.dylib"));
-    assert_eq!(config.plugins.path[1], PathBuf::from("./plugins/optimizer.so"));
+    assert_eq!(
+        config.plugins.path[0],
+        PathBuf::from("./plugins/lint.dylib")
+    );
+    assert_eq!(
+        config.plugins.path[1],
+        PathBuf::from("./plugins/optimizer.so")
+    );
 }
 
 #[test]
@@ -358,7 +368,9 @@ formatter = { indent_size = 2, line_length = 80 }
     // Check lint config
     let lint_config = config.plugins.config.get("lint").unwrap();
     assert_eq!(
-        lint_config.get("max_complexity").and_then(|v| v.as_integer()),
+        lint_config
+            .get("max_complexity")
+            .and_then(|v| v.as_integer()),
         Some(15)
     );
     assert_eq!(
@@ -369,11 +381,15 @@ formatter = { indent_size = 2, line_length = 80 }
     // Check formatter config
     let formatter_config = config.plugins.config.get("formatter").unwrap();
     assert_eq!(
-        formatter_config.get("indent_size").and_then(|v| v.as_integer()),
+        formatter_config
+            .get("indent_size")
+            .and_then(|v| v.as_integer()),
         Some(2)
     );
     assert_eq!(
-        formatter_config.get("line_length").and_then(|v| v.as_integer()),
+        formatter_config
+            .get("line_length")
+            .and_then(|v| v.as_integer()),
         Some(80)
     );
 }
@@ -401,15 +417,24 @@ vais-bindgen = { output_dir = "./bindings", language = "python" }
 
     // Check enabled
     assert_eq!(config.plugins.enabled.len(), 2);
-    assert!(config.plugins.enabled.contains(&"vais-lint-complexity".to_string()));
+    assert!(config
+        .plugins
+        .enabled
+        .contains(&"vais-lint-complexity".to_string()));
     assert!(config.plugins.enabled.contains(&"vais-bindgen".to_string()));
 
     // Check plugin-specific configs
     assert_eq!(config.plugins.config.len(), 3);
 
     let lint_cfg = config.plugins.config.get("example-lint").unwrap();
-    assert_eq!(lint_cfg.get("max_warnings").and_then(|v| v.as_integer()), Some(10));
-    assert_eq!(lint_cfg.get("strict_mode").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        lint_cfg.get("max_warnings").and_then(|v| v.as_integer()),
+        Some(10)
+    );
+    assert_eq!(
+        lint_cfg.get("strict_mode").and_then(|v| v.as_bool()),
+        Some(false)
+    );
 
     let bindgen_cfg = config.plugins.config.get("vais-bindgen").unwrap();
     assert_eq!(
@@ -506,10 +531,7 @@ fn test_diagnostic_builder() {
 
 #[test]
 fn test_has_errors_detection() {
-    let no_errors = vec![
-        Diagnostic::warning("warn1"),
-        Diagnostic::info("info1"),
-    ];
+    let no_errors = vec![Diagnostic::warning("warn1"), Diagnostic::info("info1")];
     assert!(!PluginRegistry::has_errors(&no_errors));
 
     let with_errors = vec![
@@ -519,10 +541,7 @@ fn test_has_errors_detection() {
     ];
     assert!(PluginRegistry::has_errors(&with_errors));
 
-    let only_errors = vec![
-        Diagnostic::error("error1"),
-        Diagnostic::error("error2"),
-    ];
+    let only_errors = vec![Diagnostic::error("error1"), Diagnostic::error("error2")];
     assert!(PluginRegistry::has_errors(&only_errors));
 }
 
@@ -540,9 +559,16 @@ fn test_plugin_config_creation() {
 fn test_plugin_config_getters() {
     let mut config = PluginConfig::new();
 
-    config.values.insert("max_complexity".to_string(), toml::Value::Integer(10));
-    config.values.insert("enabled".to_string(), toml::Value::Boolean(true));
-    config.values.insert("output_format".to_string(), toml::Value::String("json".to_string()));
+    config
+        .values
+        .insert("max_complexity".to_string(), toml::Value::Integer(10));
+    config
+        .values
+        .insert("enabled".to_string(), toml::Value::Boolean(true));
+    config.values.insert(
+        "output_format".to_string(),
+        toml::Value::String("json".to_string()),
+    );
 
     assert_eq!(config.get_integer("max_complexity"), Some(10));
     assert_eq!(config.get_bool("enabled"), Some(true));
@@ -704,18 +730,15 @@ fn test_formatter_plugin_with_custom_config() {
 #[test]
 fn test_format_config_from_plugin_config() {
     let mut plugin_config = PluginConfig::new();
-    plugin_config.values.insert(
-        "indent_size".to_string(),
-        toml::Value::Integer(2),
-    );
-    plugin_config.values.insert(
-        "line_length".to_string(),
-        toml::Value::Integer(120),
-    );
-    plugin_config.values.insert(
-        "use_tabs".to_string(),
-        toml::Value::Boolean(true),
-    );
+    plugin_config
+        .values
+        .insert("indent_size".to_string(), toml::Value::Integer(2));
+    plugin_config
+        .values
+        .insert("line_length".to_string(), toml::Value::Integer(120));
+    plugin_config
+        .values
+        .insert("use_tabs".to_string(), toml::Value::Boolean(true));
 
     let format_config = FormatConfig::from_plugin_config(&plugin_config);
     assert_eq!(format_config.indent_size, 2);

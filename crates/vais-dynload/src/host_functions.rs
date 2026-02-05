@@ -3,9 +3,9 @@
 //! Defines the interface between host (Vais runtime) and guest (WASM plugin).
 //! Host functions are functions provided by the host that can be called by plugins.
 
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use wasmtime::{Caller, Linker};
 
 use crate::error::{DynloadError, Result};
@@ -13,7 +13,8 @@ use crate::manifest::PluginCapability;
 
 /// Type alias for host function implementation
 #[allow(dead_code)]
-pub type HostFunctionImpl = Box<dyn Fn(&[wasmtime::Val]) -> Result<Vec<wasmtime::Val>> + Send + Sync>;
+pub type HostFunctionImpl =
+    Box<dyn Fn(&[wasmtime::Val]) -> Result<Vec<wasmtime::Val>> + Send + Sync>;
 
 /// A registered host function
 pub struct HostFunction {
@@ -313,10 +314,7 @@ impl HostFunctions {
     }
 
     /// Link host functions to a WASM linker
-    pub fn link_to<T: Send + 'static>(
-        &self,
-        linker: &mut Linker<T>,
-    ) -> Result<()> {
+    pub fn link_to<T: Send + 'static>(&self, linker: &mut Linker<T>) -> Result<()> {
         // Link console functions
         self.link_console_functions(linker)?;
 
@@ -332,40 +330,45 @@ impl HostFunctions {
         Ok(())
     }
 
-    fn link_console_functions<T: Send + 'static>(
-        &self,
-        linker: &mut Linker<T>,
-    ) -> Result<()> {
+    fn link_console_functions<T: Send + 'static>(&self, linker: &mut Linker<T>) -> Result<()> {
         // print function
         linker
-            .func_wrap("vais", "print", |mut caller: Caller<'_, T>, ptr: i32, len: i32| {
-                if let Some(memory) = caller.get_export("memory") {
-                    if let Some(mem) = memory.into_memory() {
-                        let data = mem.data(&caller);
-                        if let Some(slice) = data.get(ptr as usize..(ptr + len) as usize) {
-                            if let Ok(s) = std::str::from_utf8(slice) {
-                                print!("{}", s);
+            .func_wrap(
+                "vais",
+                "print",
+                |mut caller: Caller<'_, T>, ptr: i32, len: i32| {
+                    if let Some(memory) = caller.get_export("memory") {
+                        if let Some(mem) = memory.into_memory() {
+                            let data = mem.data(&caller);
+                            if let Some(slice) = data.get(ptr as usize..(ptr + len) as usize) {
+                                if let Ok(s) = std::str::from_utf8(slice) {
+                                    print!("{}", s);
+                                }
                             }
                         }
                     }
-                }
-            })
+                },
+            )
             .map_err(|e| DynloadError::WasmInstantiationError(e.to_string()))?;
 
         // println function
         linker
-            .func_wrap("vais", "println", |mut caller: Caller<'_, T>, ptr: i32, len: i32| {
-                if let Some(memory) = caller.get_export("memory") {
-                    if let Some(mem) = memory.into_memory() {
-                        let data = mem.data(&caller);
-                        if let Some(slice) = data.get(ptr as usize..(ptr + len) as usize) {
-                            if let Ok(s) = std::str::from_utf8(slice) {
-                                println!("{}", s);
+            .func_wrap(
+                "vais",
+                "println",
+                |mut caller: Caller<'_, T>, ptr: i32, len: i32| {
+                    if let Some(memory) = caller.get_export("memory") {
+                        if let Some(mem) = memory.into_memory() {
+                            let data = mem.data(&caller);
+                            if let Some(slice) = data.get(ptr as usize..(ptr + len) as usize) {
+                                if let Ok(s) = std::str::from_utf8(slice) {
+                                    println!("{}", s);
+                                }
                             }
                         }
                     }
-                }
-            })
+                },
+            )
             .map_err(|e| DynloadError::WasmInstantiationError(e.to_string()))?;
 
         // log function
@@ -400,10 +403,7 @@ impl HostFunctions {
         Ok(())
     }
 
-    fn link_time_functions<T: Send + 'static>(
-        &self,
-        linker: &mut Linker<T>,
-    ) -> Result<()> {
+    fn link_time_functions<T: Send + 'static>(&self, linker: &mut Linker<T>) -> Result<()> {
         // now_ms function
         linker
             .func_wrap("vais", "now_ms", || -> i64 {
@@ -424,10 +424,7 @@ impl HostFunctions {
         Ok(())
     }
 
-    fn link_random_functions<T: Send + 'static>(
-        &self,
-        linker: &mut Linker<T>,
-    ) -> Result<()> {
+    fn link_random_functions<T: Send + 'static>(&self, linker: &mut Linker<T>) -> Result<()> {
         // random function
         linker
             .func_wrap("vais", "random", || -> i64 {
@@ -469,10 +466,7 @@ impl HostFunctions {
         Ok(())
     }
 
-    fn link_memory_functions<T: Send + 'static>(
-        &self,
-        linker: &mut Linker<T>,
-    ) -> Result<()> {
+    fn link_memory_functions<T: Send + 'static>(&self, linker: &mut Linker<T>) -> Result<()> {
         // Note: Memory allocation is typically handled by the WASM module itself
         // These are placeholder implementations
 
@@ -542,8 +536,7 @@ mod tests {
         let mut registry = HostFunctionRegistry::new();
 
         registry.register(
-            HostFunction::new("secure_fn", "test")
-                .with_capability(PluginCapability::FsWrite),
+            HostFunction::new("secure_fn", "test").with_capability(PluginCapability::FsWrite),
         );
 
         // Should fail without capability

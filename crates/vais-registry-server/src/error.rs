@@ -92,16 +92,18 @@ impl IntoResponse for ServerError {
             ServerError::UserNotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
             ServerError::UserExists(_) => (StatusCode::CONFLICT, self.to_string()),
             ServerError::InvalidCredentials => (StatusCode::UNAUTHORIZED, self.to_string()),
-            ServerError::Database(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
-            }
+            ServerError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Database error".to_string(),
+            ),
             ServerError::Io(_) => (StatusCode::INTERNAL_SERVER_ERROR, "IO error".to_string()),
             ServerError::Json(_) => (StatusCode::BAD_REQUEST, "Invalid JSON".to_string()),
             ServerError::Archive(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             ServerError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            ServerError::Internal(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal error".to_string())
-            }
+            ServerError::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal error".to_string(),
+            ),
         };
 
         let body = Json(json!({

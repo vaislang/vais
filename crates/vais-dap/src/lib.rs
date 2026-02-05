@@ -32,17 +32,17 @@
 //! vais-dap --port 4711
 //! ```
 
+pub mod breakpoint;
+pub mod debugger;
+pub mod error;
 pub mod protocol;
 pub mod server;
 pub mod session;
-pub mod debugger;
-pub mod breakpoint;
+pub mod source_map;
 pub mod stack;
 pub mod variables;
-pub mod source_map;
-pub mod error;
 
 pub use error::{DapError, DapResult};
+pub use protocol::types;
 pub use server::DapServer;
 pub use session::DebugSession;
-pub use protocol::types;

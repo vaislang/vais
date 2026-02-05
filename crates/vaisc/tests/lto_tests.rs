@@ -2,9 +2,9 @@
 //!
 //! These tests verify that ThinLTO is automatically enabled for release builds
 
-use std::process::Command;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Helper to create a temporary test file
 fn create_test_file(name: &str, content: &str) -> PathBuf {
@@ -39,13 +39,15 @@ F main() -> () { () }
         "build",
         test_file.to_str().unwrap(),
         "-O2",
-        "--emit-ir"
+        "--emit-ir",
     ]);
 
     // Check that compilation succeeded
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "Compilation failed: {}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Check that ThinLTO is mentioned in verbose output
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -53,8 +55,11 @@ F main() -> () { () }
     let combined = format!("{}{}", stderr, stdout);
 
     // Should mention Thin LTO in optimization info
-    assert!(combined.contains("Thin") || combined.contains("LTO"),
-        "ThinLTO should be mentioned in output: {}", combined);
+    assert!(
+        combined.contains("Thin") || combined.contains("LTO"),
+        "ThinLTO should be mentioned in output: {}",
+        combined
+    );
 
     // Cleanup
     let _ = fs::remove_file(&test_file);
@@ -77,13 +82,15 @@ F main() -> () { () }
         "build",
         test_file.to_str().unwrap(),
         "-O3",
-        "--emit-ir"
+        "--emit-ir",
     ]);
 
     // Check that compilation succeeded
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "Compilation failed: {}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Cleanup
     let _ = fs::remove_file(&test_file);
@@ -107,13 +114,15 @@ F main() -> () { () }
         test_file.to_str().unwrap(),
         "-O2",
         "--no-lto",
-        "--emit-ir"
+        "--emit-ir",
     ]);
 
     // Check that compilation succeeded
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "Compilation failed: {}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Cleanup
     let _ = fs::remove_file(&test_file);
@@ -137,21 +146,26 @@ F main() -> () { () }
         test_file.to_str().unwrap(),
         "-O2",
         "--lto=full",
-        "--emit-ir"
+        "--emit-ir",
     ]);
 
     // Check that compilation succeeded
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "Compilation failed: {}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Check that Full LTO is mentioned
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{}{}", stderr, stdout);
 
-    assert!(combined.contains("Full") || combined.contains("LTO"),
-        "Full LTO should be mentioned in output: {}", combined);
+    assert!(
+        combined.contains("Full") || combined.contains("LTO"),
+        "Full LTO should be mentioned in output: {}",
+        combined
+    );
 
     // Cleanup
     let _ = fs::remove_file(&test_file);
@@ -169,17 +183,14 @@ F main() -> () { () }
     let ir_file = test_file.with_extension("ll");
 
     // Build with O0 - should NOT enable ThinLTO automatically
-    let output = run_vaisc(&[
-        "build",
-        test_file.to_str().unwrap(),
-        "-O0",
-        "--emit-ir"
-    ]);
+    let output = run_vaisc(&["build", test_file.to_str().unwrap(), "-O0", "--emit-ir"]);
 
     // Check that compilation succeeded
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "Compilation failed: {}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Cleanup
     let _ = fs::remove_file(&test_file);
@@ -197,17 +208,14 @@ F main() -> () { () }
     let ir_file = test_file.with_extension("ll");
 
     // Build with O1 - should NOT enable ThinLTO automatically
-    let output = run_vaisc(&[
-        "build",
-        test_file.to_str().unwrap(),
-        "-O1",
-        "--emit-ir"
-    ]);
+    let output = run_vaisc(&["build", test_file.to_str().unwrap(), "-O1", "--emit-ir"]);
 
     // Check that compilation succeeded
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "Compilation failed: {}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Cleanup
     let _ = fs::remove_file(&test_file);

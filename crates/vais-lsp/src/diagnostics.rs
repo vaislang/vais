@@ -7,7 +7,11 @@ use vais_parser::ParseError;
 #[allow(dead_code)]
 pub fn parse_error_to_diagnostic(err: &ParseError, source: &str) -> Diagnostic {
     let (start, end, message) = match err {
-        ParseError::UnexpectedToken { found, span, expected } => {
+        ParseError::UnexpectedToken {
+            found,
+            span,
+            expected,
+        } => {
             let pos = offset_to_position(source, span.start);
             let end_pos = offset_to_position(source, span.end);
             (

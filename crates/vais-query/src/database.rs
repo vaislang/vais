@@ -180,9 +180,8 @@ impl QueryDatabase {
         if !path.exists() {
             return Err(QueryError::FileNotFound(path.to_path_buf()));
         }
-        let text = std::fs::read_to_string(path).map_err(|e| {
-            QueryError::FileReadError(path.to_path_buf(), e.to_string())
-        })?;
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| QueryError::FileReadError(path.to_path_buf(), e.to_string()))?;
         self.set_source_text(path, text);
         Ok(())
     }
@@ -226,9 +225,9 @@ impl QueryDatabase {
         }
 
         // Compute
-        let source = self.source_text(&path).ok_or_else(|| {
-            QueryError::FileNotFound(path.clone())
-        })?;
+        let source = self
+            .source_text(&path)
+            .ok_or_else(|| QueryError::FileNotFound(path.clone()))?;
 
         let result = vais_lexer::tokenize(&source)
             .map(Arc::new)
@@ -264,9 +263,9 @@ impl QueryDatabase {
 
         // Compute (parse doesn't depend on tokenize output directly,
         // the parser re-tokenizes internally)
-        let source = self.source_text(&path).ok_or_else(|| {
-            QueryError::FileNotFound(path.clone())
-        })?;
+        let source = self
+            .source_text(&path)
+            .ok_or_else(|| QueryError::FileNotFound(path.clone()))?;
 
         let result = vais_parser::parse(&source)
             .map(Arc::new)
@@ -336,10 +335,8 @@ impl QueryDatabase {
             let caches = self.caches.read();
             if let Some(file_cache) = caches.get(&path) {
                 if let Some(ref entry) = file_cache.ir {
-                    let target_matches = file_cache
-                        .ir_target
-                        .as_ref()
-                        .is_some_and(|t| *t == target);
+                    let target_matches =
+                        file_cache.ir_target.as_ref().is_some_and(|t| *t == target);
                     if entry.input_revision == input_rev && target_matches {
                         return entry.value.clone();
                     }
@@ -393,9 +390,7 @@ impl QueryDatabase {
     pub fn has_current_source(&self, path: impl AsRef<Path>, text: &str) -> bool {
         let hash = Self::hash_source(text);
         let sources = self.sources.read();
-        sources
-            .get(path.as_ref())
-            .is_some_and(|s| s.hash == hash)
+        sources.get(path.as_ref()).is_some_and(|s| s.hash == hash)
     }
 
     /// Get the SHA-256 hash of a registered source file (returns None if not set).
@@ -454,14 +449,11 @@ impl QueryDatabase {
             .ok_or_else(|| QueryError::FileNotFound(path.to_path_buf()))
     }
 
-    fn store_cache(
-        &self,
-        path: &Path,
-        _input_rev: Revision,
-        f: impl FnOnce(&mut FileCaches),
-    ) {
+    fn store_cache(&self, path: &Path, _input_rev: Revision, f: impl FnOnce(&mut FileCaches)) {
         let mut caches = self.caches.write();
-        let file_cache = caches.entry(path.to_path_buf()).or_insert_with(FileCaches::new);
+        let file_cache = caches
+            .entry(path.to_path_buf())
+            .or_insert_with(FileCaches::new);
         f(file_cache);
     }
 

@@ -1,9 +1,9 @@
 //! Integration tests for vais-dynload
 
 use vais_dynload::{
-    DynloadError, DiscoveryConfig, HostFunctionRegistry, MemoryLimit, ModuleLoaderConfig,
-    PluginCapability, PluginDiscovery, PluginManifest, ResourceLimits, SandboxConfig,
-    TimeLimit, WasmSandbox,
+    DiscoveryConfig, DynloadError, HostFunctionRegistry, MemoryLimit, ModuleLoaderConfig,
+    PluginCapability, PluginDiscovery, PluginManifest, ResourceLimits, SandboxConfig, TimeLimit,
+    WasmSandbox,
 };
 
 use std::fs;
@@ -88,7 +88,12 @@ fn test_wasm_sandbox_64bit_operations() {
     let mut instance = sandbox.load_plugin_wat(wat, "math64").unwrap();
 
     // Test add64
-    assert_eq!(instance.call_i64("add64", &[1_000_000_000, 2_000_000_000]).unwrap(), 3_000_000_000);
+    assert_eq!(
+        instance
+            .call_i64("add64", &[1_000_000_000, 2_000_000_000])
+            .unwrap(),
+        3_000_000_000
+    );
 
     // Test factorial
     assert_eq!(instance.call_i64("factorial", &[5]).unwrap(), 120);
@@ -126,7 +131,7 @@ fn test_wasm_sandbox_memory_access() {
     let mut instance = sandbox.load_plugin_wat(wat, "memory").unwrap();
 
     // Test byte operations
-    instance.call_void("store_byte").ok();  // Call to verify function exists
+    instance.call_void("store_byte").ok(); // Call to verify function exists
     instance.write_memory(0, &[0x42]).unwrap();
     let bytes = instance.read_memory(0, 1).unwrap();
     assert_eq!(bytes[0], 0x42);
@@ -372,19 +377,23 @@ min_vais_version = ">=0.0.1"
 #[test]
 fn test_plugin_manifest_validation_errors() {
     // Empty name
-    let result = PluginManifest::parse(r#"
+    let result = PluginManifest::parse(
+        r#"
 [plugin]
 name = ""
 version = "1.0.0"
-    "#);
+    "#,
+    );
     assert!(result.is_err());
 
     // Invalid version
-    let result = PluginManifest::parse(r#"
+    let result = PluginManifest::parse(
+        r#"
 [plugin]
 name = "test"
 version = "invalid"
-    "#);
+    "#,
+    );
     assert!(result.is_err());
 }
 
@@ -560,11 +569,15 @@ fn test_module_loader_config() {
 fn test_module_loader_not_found() {
     use vais_dynload::ModuleLoader;
 
-    let loader = ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
+    let loader =
+        ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
     let result = loader.load("/nonexistent/module.vais");
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DynloadError::ModuleNotFound(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        DynloadError::ModuleNotFound(_)
+    ));
 }
 
 // ============================================================================

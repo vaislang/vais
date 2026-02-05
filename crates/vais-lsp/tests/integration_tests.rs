@@ -87,7 +87,10 @@ async fn test_initialize() {
     assert!(matches!(caps.references_provider, Some(OneOf::Left(true))));
 
     // Document symbols
-    assert!(matches!(caps.document_symbol_provider, Some(OneOf::Left(true))));
+    assert!(matches!(
+        caps.document_symbol_provider,
+        Some(OneOf::Left(true))
+    ));
 
     // Semantic tokens
     assert!(caps.semantic_tokens_provider.is_some());
@@ -153,7 +156,8 @@ async fn test_completion_provides_keywords() {
     let service = create_test_service();
     let uri = test_uri("test");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -187,7 +191,9 @@ async fn test_completion_provides_keywords() {
         // Verify keyword items have correct kind
         // Note: "E" appears both as a keyword (Enum) and constant (Euler's number)
         for item in &items {
-            if (item.label == "F" || item.label == "S") && item.kind == Some(CompletionItemKind::KEYWORD) {
+            if (item.label == "F" || item.label == "S")
+                && item.kind == Some(CompletionItemKind::KEYWORD)
+            {
                 // These should definitely be keywords
                 assert_eq!(item.kind, Some(CompletionItemKind::KEYWORD));
             }
@@ -202,7 +208,8 @@ async fn test_completion_provides_types() {
     let service = create_test_service();
     let uri = test_uri("test");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -240,7 +247,8 @@ async fn test_completion_provides_builtin_functions() {
     let service = create_test_service();
     let uri = test_uri("test");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -258,8 +266,14 @@ async fn test_completion_provides_builtin_functions() {
 
         // Builtin functions
         assert!(labels.contains(&"puts"), "Should provide puts function");
-        assert!(labels.contains(&"print_i64"), "Should provide print_i64 function");
-        assert!(labels.contains(&"print_f64"), "Should provide print_f64 function");
+        assert!(
+            labels.contains(&"print_i64"),
+            "Should provide print_i64 function"
+        );
+        assert!(
+            labels.contains(&"print_f64"),
+            "Should provide print_f64 function"
+        );
         assert!(labels.contains(&"malloc"), "Should provide malloc function");
         assert!(labels.contains(&"free"), "Should provide free function");
 
@@ -279,7 +293,8 @@ async fn test_completion_provides_std_modules() {
     let service = create_test_service();
     let uri = test_uri("test");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -296,12 +311,24 @@ async fn test_completion_provides_std_modules() {
         let labels: Vec<_> = items.iter().map(|item| item.label.as_str()).collect();
 
         // Standard library modules
-        assert!(labels.contains(&"std/math"), "Should provide std/math module");
+        assert!(
+            labels.contains(&"std/math"),
+            "Should provide std/math module"
+        );
         assert!(labels.contains(&"std/io"), "Should provide std/io module");
-        assert!(labels.contains(&"std/option"), "Should provide std/option module");
-        assert!(labels.contains(&"std/result"), "Should provide std/result module");
+        assert!(
+            labels.contains(&"std/option"),
+            "Should provide std/option module"
+        );
+        assert!(
+            labels.contains(&"std/result"),
+            "Should provide std/result module"
+        );
         assert!(labels.contains(&"std/vec"), "Should provide std/vec module");
-        assert!(labels.contains(&"std/hashmap"), "Should provide std/hashmap module");
+        assert!(
+            labels.contains(&"std/hashmap"),
+            "Should provide std/hashmap module"
+        );
 
         // Verify module items have correct kind
         for item in &items {
@@ -317,7 +344,8 @@ async fn test_completion_provides_math_functions() {
     let service = create_test_service();
     let uri = test_uri("test");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -351,7 +379,8 @@ async fn test_completion_provides_option_result_constructors() {
     let service = create_test_service();
     let uri = test_uri("test");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -375,7 +404,11 @@ async fn test_completion_provides_option_result_constructors() {
 
         // Verify constructor items have correct kind
         for item in &items {
-            if item.label == "Some" || item.label == "None" || item.label == "Ok" || item.label == "Err" {
+            if item.label == "Some"
+                || item.label == "None"
+                || item.label == "Ok"
+                || item.label == "Err"
+            {
                 assert_eq!(item.kind, Some(CompletionItemKind::CONSTRUCTOR));
             }
         }
@@ -395,26 +428,62 @@ async fn test_server_capabilities_comprehensive() {
     let caps = result.capabilities;
 
     // Verify all expected capabilities are present
-    assert!(caps.text_document_sync.is_some(), "Missing text_document_sync");
+    assert!(
+        caps.text_document_sync.is_some(),
+        "Missing text_document_sync"
+    );
     assert!(caps.hover_provider.is_some(), "Missing hover_provider");
-    assert!(caps.completion_provider.is_some(), "Missing completion_provider");
-    assert!(caps.definition_provider.is_some(), "Missing definition_provider");
-    assert!(caps.references_provider.is_some(), "Missing references_provider");
-    assert!(caps.document_symbol_provider.is_some(), "Missing document_symbol_provider");
-    assert!(caps.semantic_tokens_provider.is_some(), "Missing semantic_tokens_provider");
+    assert!(
+        caps.completion_provider.is_some(),
+        "Missing completion_provider"
+    );
+    assert!(
+        caps.definition_provider.is_some(),
+        "Missing definition_provider"
+    );
+    assert!(
+        caps.references_provider.is_some(),
+        "Missing references_provider"
+    );
+    assert!(
+        caps.document_symbol_provider.is_some(),
+        "Missing document_symbol_provider"
+    );
+    assert!(
+        caps.semantic_tokens_provider.is_some(),
+        "Missing semantic_tokens_provider"
+    );
     assert!(caps.rename_provider.is_some(), "Missing rename_provider");
 
     // Verify newly implemented capabilities
-    assert!(caps.code_action_provider.is_some(), "Missing code_action_provider");
+    assert!(
+        caps.code_action_provider.is_some(),
+        "Missing code_action_provider"
+    );
 
     // Verify new advanced capabilities
-    assert!(caps.inlay_hint_provider.is_some(), "Missing inlay_hint_provider");
-    assert!(caps.folding_range_provider.is_some(), "Missing folding_range_provider");
-    assert!(caps.call_hierarchy_provider.is_some(), "Missing call_hierarchy_provider");
-    assert!(caps.document_link_provider.is_some(), "Missing document_link_provider");
+    assert!(
+        caps.inlay_hint_provider.is_some(),
+        "Missing inlay_hint_provider"
+    );
+    assert!(
+        caps.folding_range_provider.is_some(),
+        "Missing folding_range_provider"
+    );
+    assert!(
+        caps.call_hierarchy_provider.is_some(),
+        "Missing call_hierarchy_provider"
+    );
+    assert!(
+        caps.document_link_provider.is_some(),
+        "Missing document_link_provider"
+    );
 
     // Verify capabilities that should NOT be present (not yet implemented)
-    assert!(caps.document_formatting_provider.is_some(), "Missing document_formatting_provider");
+    assert!(
+        caps.document_formatting_provider.is_some(),
+        "Missing document_formatting_provider"
+    );
 }
 
 // ============================================================================
@@ -427,7 +496,8 @@ async fn test_completion_on_nonexistent_document() {
     let uri = test_uri("nonexistent");
 
     // Should not panic even when document doesn't exist
-    let result = service.inner()
+    let result = service
+        .inner()
         .completion(CompletionParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -440,7 +510,10 @@ async fn test_completion_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_some(), "Should provide basic completions even without document");
+    assert!(
+        result.unwrap().is_some(),
+        "Should provide basic completions even without document"
+    );
 }
 
 #[tokio::test]
@@ -448,7 +521,8 @@ async fn test_hover_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .hover(HoverParams {
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -459,7 +533,10 @@ async fn test_hover_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -467,7 +544,8 @@ async fn test_goto_definition_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .goto_definition(GotoDefinitionParams {
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -479,7 +557,10 @@ async fn test_goto_definition_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -487,7 +568,8 @@ async fn test_references_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .references(ReferenceParams {
             text_document_position: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -502,7 +584,10 @@ async fn test_references_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -510,7 +595,8 @@ async fn test_document_symbols_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .document_symbol(DocumentSymbolParams {
             text_document: TextDocumentIdentifier { uri },
             work_done_progress_params: WorkDoneProgressParams::default(),
@@ -519,7 +605,10 @@ async fn test_document_symbols_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 // ============================================================================
@@ -531,7 +620,8 @@ async fn test_inlay_hints_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .inlay_hint(InlayHintParams {
             text_document: TextDocumentIdentifier { uri },
             range: Range::new(pos(0, 0), pos(10, 0)),
@@ -540,7 +630,10 @@ async fn test_inlay_hints_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -548,7 +641,8 @@ async fn test_folding_ranges_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .folding_range(FoldingRangeParams {
             text_document: TextDocumentIdentifier { uri },
             work_done_progress_params: WorkDoneProgressParams::default(),
@@ -557,7 +651,10 @@ async fn test_folding_ranges_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -565,7 +662,8 @@ async fn test_call_hierarchy_prepare_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .prepare_call_hierarchy(CallHierarchyPrepareParams {
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -576,7 +674,10 @@ async fn test_call_hierarchy_prepare_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -584,7 +685,8 @@ async fn test_document_link_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .document_link(DocumentLinkParams {
             text_document: TextDocumentIdentifier { uri },
             work_done_progress_params: WorkDoneProgressParams::default(),
@@ -593,7 +695,10 @@ async fn test_document_link_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 // ============================================================================
@@ -604,7 +709,8 @@ async fn test_document_link_on_nonexistent_document() {
 async fn test_workspace_symbols_empty_query() {
     let service = create_test_service();
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .symbol(WorkspaceSymbolParams {
             query: "".to_string(),
             work_done_progress_params: WorkDoneProgressParams::default(),
@@ -622,7 +728,8 @@ async fn test_workspace_symbols_empty_query() {
 async fn test_workspace_symbols_with_query() {
     let service = create_test_service();
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .symbol(WorkspaceSymbolParams {
             query: "test".to_string(),
             work_done_progress_params: WorkDoneProgressParams::default(),
@@ -638,7 +745,8 @@ async fn test_type_hierarchy_prepare_on_nonexistent_document() {
     let service = create_test_service();
     let uri = test_uri("nonexistent");
 
-    let result = service.inner()
+    let result = service
+        .inner()
         .prepare_type_hierarchy(TypeHierarchyPrepareParams {
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri },
@@ -649,7 +757,10 @@ async fn test_type_hierarchy_prepare_on_nonexistent_document() {
         .await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Should return None for nonexistent document");
+    assert!(
+        result.unwrap().is_none(),
+        "Should return None for nonexistent document"
+    );
 }
 
 #[tokio::test]
@@ -661,5 +772,8 @@ async fn test_server_capabilities_include_workspace_symbols() {
     let caps = result.capabilities;
 
     // Verify workspace_symbol_provider is present
-    assert!(caps.workspace_symbol_provider.is_some(), "Missing workspace_symbol_provider");
+    assert!(
+        caps.workspace_symbol_provider.is_some(),
+        "Missing workspace_symbol_provider"
+    );
 }

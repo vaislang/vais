@@ -108,8 +108,8 @@ fn selfhost_runtime_c_valid() {
         .unwrap()
         .join("selfhost");
 
-    let source = std::fs::read_to_string(selfhost_dir.join("runtime.c"))
-        .expect("Failed to read runtime.c");
+    let source =
+        std::fs::read_to_string(selfhost_dir.join("runtime.c")).expect("Failed to read runtime.c");
 
     // Basic validity checks
     assert!(source.contains("#include <stdint.h>"));

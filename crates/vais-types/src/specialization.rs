@@ -5,7 +5,6 @@
 //! - Impl overlap detection: identifying when two impl blocks could apply to the same type
 //! - Specialization rules: selecting the most specific impl when overlap occurs
 
-
 /// Represents a negative trait implementation
 /// Example: `impl !Send for MyType` means MyType explicitly does NOT implement Send
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,14 +58,21 @@ pub enum OverlapError {
 impl std::fmt::Display for OverlapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OverlapError::ConflictingImpls { trait_name, type1, type2 } => {
+            OverlapError::ConflictingImpls {
+                trait_name,
+                type1,
+                type2,
+            } => {
                 write!(
                     f,
                     "Conflicting implementations of trait '{}' for types '{}' and '{}'",
                     trait_name, type1, type2
                 )
             }
-            OverlapError::NegativeImplConflict { trait_name, type_name } => {
+            OverlapError::NegativeImplConflict {
+                trait_name,
+                type_name,
+            } => {
                 write!(
                     f,
                     "Negative impl conflicts with positive impl: trait '{}' for type '{}'",
@@ -142,9 +148,7 @@ fn types_overlap(type1: &ImplTargetType, type2: &ImplTargetType) -> Option<Strin
         (Concrete(t), Blanket(_)) | (Blanket(_), Concrete(t)) => Some(t.clone()),
 
         // Generic and blanket always overlap (blanket includes everything)
-        (Generic(_, _), Blanket(_)) | (Blanket(_), Generic(_, _)) => {
-            Some("T".to_string())
-        }
+        (Generic(_, _), Blanket(_)) | (Blanket(_), Generic(_, _)) => Some("T".to_string()),
 
         // Two generics or two blankets overlap
         (Generic(_, _), Generic(_, _)) => Some("T".to_string()),
@@ -156,9 +160,7 @@ fn types_overlap(type1: &ImplTargetType, type2: &ImplTargetType) -> Option<Strin
 fn format_impl_type(impl_type: &ImplTargetType) -> String {
     match impl_type {
         ImplTargetType::Concrete(name) => name.clone(),
-        ImplTargetType::Generic(param, bounds) if bounds.is_empty() => {
-            param.to_string()
-        }
+        ImplTargetType::Generic(param, bounds) if bounds.is_empty() => param.to_string(),
         ImplTargetType::Generic(param, bounds) => {
             format!("{}: {}", param, bounds.join(" + "))
         }
@@ -180,7 +182,9 @@ pub fn resolve_specialization<'a>(
 ) -> Option<&'a TraitImplInfo> {
     let mut candidates: Vec<&TraitImplInfo> = impls
         .iter()
-        .filter(|impl_info| !impl_info.is_negative && type_matches(&impl_info.impl_type, target_type))
+        .filter(|impl_info| {
+            !impl_info.is_negative && type_matches(&impl_info.impl_type, target_type)
+        })
         .collect();
 
     if candidates.is_empty() {
@@ -202,7 +206,7 @@ fn type_matches(impl_type: &ImplTargetType, target_type: &str) -> bool {
     match impl_type {
         ImplTargetType::Concrete(t) => t == target_type,
         ImplTargetType::Generic(_, _) => true, // Generics match all types (bounds checked elsewhere)
-        ImplTargetType::Blanket(_) => true,     // Blanket impls match all types
+        ImplTargetType::Blanket(_) => true,    // Blanket impls match all types
     }
 }
 
@@ -210,10 +214,10 @@ fn type_matches(impl_type: &ImplTargetType, target_type: &str) -> bool {
 /// Higher values = more specific
 fn get_specificity(impl_type: &ImplTargetType) -> u32 {
     match impl_type {
-        ImplTargetType::Concrete(_) => 3,        // Most specific
+        ImplTargetType::Concrete(_) => 3, // Most specific
         ImplTargetType::Generic(_, bounds) if !bounds.is_empty() => 2, // Bounded generic
-        ImplTargetType::Generic(_, _) => 1,      // Unbounded generic
-        ImplTargetType::Blanket(_) => 0,          // Least specific
+        ImplTargetType::Generic(_, _) => 1, // Unbounded generic
+        ImplTargetType::Blanket(_) => 0,  // Least specific
     }
 }
 
@@ -270,12 +274,13 @@ impl ImplRegistry {
         }
 
         // Then check for positive impls
-        let matching_impls: Vec<_> = self.impls
+        let matching_impls: Vec<_> = self
+            .impls
             .iter()
             .filter(|impl_info| {
-                impl_info.trait_name == trait_name &&
-                !impl_info.is_negative &&
-                type_matches(&impl_info.impl_type, type_name)
+                impl_info.trait_name == trait_name
+                    && !impl_info.is_negative
+                    && type_matches(&impl_info.impl_type, type_name)
             })
             .collect();
 
@@ -286,7 +291,8 @@ impl ImplRegistry {
     ///
     /// Uses specialization rules to select the most specific impl
     pub fn resolve_impl(&self, type_name: &str, trait_name: &str) -> Option<&TraitImplInfo> {
-        let matching_impls: Vec<&TraitImplInfo> = self.impls
+        let matching_impls: Vec<&TraitImplInfo> = self
+            .impls
             .iter()
             .filter(|impl_info| impl_info.trait_name == trait_name)
             .collect();
@@ -298,7 +304,9 @@ impl ImplRegistry {
         // Find the most specific impl
         let mut candidates: Vec<&TraitImplInfo> = matching_impls
             .iter()
-            .filter(|impl_info| !impl_info.is_negative && type_matches(&impl_info.impl_type, type_name))
+            .filter(|impl_info| {
+                !impl_info.is_negative && type_matches(&impl_info.impl_type, type_name)
+            })
             .copied()
             .collect();
 
@@ -452,7 +460,10 @@ mod tests {
 
         let error = check_impl_overlap(&[impl1], &impl2);
         assert!(error.is_some());
-        assert!(matches!(error.unwrap(), OverlapError::NegativeImplConflict { .. }));
+        assert!(matches!(
+            error.unwrap(),
+            OverlapError::NegativeImplConflict { .. }
+        ));
     }
 
     #[test]

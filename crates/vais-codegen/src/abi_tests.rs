@@ -12,7 +12,11 @@ mod tests {
     fn test_abi_version_is_valid_semver() {
         // Verify ABI_VERSION follows semantic versioning format
         let parts: Vec<&str> = ABI_VERSION.split('.').collect();
-        assert_eq!(parts.len(), 3, "ABI version must have 3 parts (major.minor.patch)");
+        assert_eq!(
+            parts.len(),
+            3,
+            "ABI version must have 3 parts (major.minor.patch)"
+        );
 
         for part in parts {
             assert!(
@@ -35,9 +39,10 @@ mod tests {
     fn test_compatibility_same_major() {
         // Same major version should be compatible or minor difference
         let result = check_abi_compatibility("1.0.0");
-        assert!(
-            matches!(result, AbiCompatibility::Compatible | AbiCompatibility::MinorDifference)
-        );
+        assert!(matches!(
+            result,
+            AbiCompatibility::Compatible | AbiCompatibility::MinorDifference
+        ));
     }
 
     #[test]
@@ -87,10 +92,7 @@ mod tests {
             check_abi_compatibility("1.0"),
             AbiCompatibility::Incompatible
         );
-        assert_eq!(
-            check_abi_compatibility("1"),
-            AbiCompatibility::Incompatible
-        );
+        assert_eq!(check_abi_compatibility("1"), AbiCompatibility::Incompatible);
         assert_eq!(
             check_abi_compatibility("1.0.0.0"),
             AbiCompatibility::Incompatible
@@ -103,10 +105,7 @@ mod tests {
             check_abi_compatibility("v1.0.0"),
             AbiCompatibility::Incompatible
         );
-        assert_eq!(
-            check_abi_compatibility(""),
-            AbiCompatibility::Incompatible
-        );
+        assert_eq!(check_abi_compatibility(""), AbiCompatibility::Incompatible);
     }
 
     // ============================================================================
@@ -122,12 +121,30 @@ mod tests {
 
     #[test]
     fn test_calling_convention_from_str_valid() {
-        assert_eq!(CallingConvention::parse_abi("C"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::parse_abi("ccc"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::parse_abi("Vais"), Some(CallingConvention::Vais));
-        assert_eq!(CallingConvention::parse_abi("vais"), Some(CallingConvention::Vais));
-        assert_eq!(CallingConvention::parse_abi("Fast"), Some(CallingConvention::Fast));
-        assert_eq!(CallingConvention::parse_abi("fastcc"), Some(CallingConvention::Fast));
+        assert_eq!(
+            CallingConvention::parse_abi("C"),
+            Some(CallingConvention::C)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("ccc"),
+            Some(CallingConvention::C)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("Vais"),
+            Some(CallingConvention::Vais)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("vais"),
+            Some(CallingConvention::Vais)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("Fast"),
+            Some(CallingConvention::Fast)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("fastcc"),
+            Some(CallingConvention::Fast)
+        );
     }
 
     #[test]
@@ -142,15 +159,24 @@ mod tests {
     fn test_calling_convention_roundtrip() {
         // Note: C and Vais both map to "ccc", so they're not uniquely roundtrippable
         // This test checks that parsing llvm_str yields a valid convention
-        assert_eq!(CallingConvention::parse_abi("ccc"), Some(CallingConvention::C));
-        assert_eq!(CallingConvention::parse_abi("fastcc"), Some(CallingConvention::Fast));
+        assert_eq!(
+            CallingConvention::parse_abi("ccc"),
+            Some(CallingConvention::C)
+        );
+        assert_eq!(
+            CallingConvention::parse_abi("fastcc"),
+            Some(CallingConvention::Fast)
+        );
 
         // Test that to_llvm_str produces parseable strings
         let c_str = CallingConvention::C.to_llvm_str();
         assert!(CallingConvention::parse_abi(c_str).is_some());
 
         let fast_str = CallingConvention::Fast.to_llvm_str();
-        assert_eq!(CallingConvention::parse_abi(fast_str), Some(CallingConvention::Fast));
+        assert_eq!(
+            CallingConvention::parse_abi(fast_str),
+            Some(CallingConvention::Fast)
+        );
     }
 
     // ============================================================================
@@ -218,7 +244,12 @@ mod tests {
 
         for size in 0..100 {
             let align = alignment::for_size(size);
-            assert!(is_power_of_two(align), "Alignment for size {} is not power of two: {}", size, align);
+            assert!(
+                is_power_of_two(align),
+                "Alignment for size {} is not power of two: {}",
+                size,
+                align
+            );
         }
     }
 
@@ -256,11 +287,17 @@ mod tests {
 
         // Example: struct { i8, i8, i64 } - i64 needs 8-byte alignment
         let offset_after_two_i8 = 2;
-        assert_eq!(struct_layout::calculate_field_offset(offset_after_two_i8, 8), 8);
+        assert_eq!(
+            struct_layout::calculate_field_offset(offset_after_two_i8, 8),
+            8
+        );
 
         // Example: struct { i32, i64 } - i64 needs 8-byte alignment
         let offset_after_i32 = 4;
-        assert_eq!(struct_layout::calculate_field_offset(offset_after_i32, 8), 8);
+        assert_eq!(
+            struct_layout::calculate_field_offset(offset_after_i32, 8),
+            8
+        );
     }
 
     #[test]

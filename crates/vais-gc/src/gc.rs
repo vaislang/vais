@@ -206,9 +206,9 @@ impl GcHeap {
         for (ptr, obj) in &self.objects {
             if !obj.header.marked {
                 to_remove.push(*ptr);
-                self.bytes_allocated = self.bytes_allocated.saturating_sub(
-                    obj.header.size + std::mem::size_of::<GcObjectHeader>()
-                );
+                self.bytes_allocated = self
+                    .bytes_allocated
+                    .saturating_sub(obj.header.size + std::mem::size_of::<GcObjectHeader>());
                 self.objects_freed += 1;
             }
         }

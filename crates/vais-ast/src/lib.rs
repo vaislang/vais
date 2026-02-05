@@ -173,7 +173,7 @@ pub struct Param {
     pub name: Spanned<String>,
     pub ty: Spanned<Type>,
     pub is_mut: bool,
-    pub is_vararg: bool, // true for variadic parameters (...)
+    pub is_vararg: bool,      // true for variadic parameters (...)
     pub ownership: Ownership, // Linear type ownership mode
     pub default_value: Option<Box<Spanned<Expr>>>, // Default parameter value
 }
@@ -199,8 +199,7 @@ pub enum CallArgs {
 
 /// Variance annotation for generic type parameters
 /// Controls subtyping relationship between parameterized types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Variance {
     /// Invariant (default): T is neither covariant nor contravariant
     /// Container<A> has no subtyping relation with Container<B>
@@ -218,13 +217,9 @@ pub enum Variance {
 #[derive(Debug, Clone, PartialEq)]
 pub enum GenericParamKind {
     /// Type parameter with optional trait bounds (e.g., T, T: Display + Clone)
-    Type {
-        bounds: Vec<Spanned<String>>,
-    },
+    Type { bounds: Vec<Spanned<String>> },
     /// Const parameter with a type (e.g., const N: u64)
-    Const {
-        ty: Spanned<Type>,
-    },
+    Const { ty: Spanned<Type> },
     /// Lifetime parameter (e.g., 'a, 'static)
     Lifetime {
         /// Lifetime bounds (e.g., 'a: 'b means 'a outlives 'b)
@@ -253,7 +248,11 @@ impl GenericParam {
     }
 
     /// Create a type generic parameter with variance annotation
-    pub fn new_type_with_variance(name: Spanned<String>, bounds: Vec<Spanned<String>>, variance: Variance) -> Self {
+    pub fn new_type_with_variance(
+        name: Spanned<String>,
+        bounds: Vec<Spanned<String>>,
+        variance: Variance,
+    ) -> Self {
         Self {
             name,
             bounds: bounds.clone(),
@@ -357,7 +356,7 @@ pub struct TypeAlias {
 pub struct Union {
     pub name: Spanned<String>,
     pub generics: Vec<GenericParam>,
-    pub fields: Vec<Field>,  // Reuse existing Field struct
+    pub fields: Vec<Field>, // Reuse existing Field struct
     pub is_pub: bool,
 }
 
@@ -464,10 +463,7 @@ pub enum MacroPatternElement {
     /// Literal token: `+`, `let`, etc.
     Token(MacroToken),
     /// Metavariable: `$x:expr`
-    MetaVar {
-        name: String,
-        kind: MetaVarKind,
-    },
+    MetaVar { name: String, kind: MetaVarKind },
     /// Repetition: `$($x:expr),*` or `$($x:expr),+`
     Repetition {
         patterns: Vec<MacroPatternElement>,
@@ -742,7 +738,7 @@ pub enum Type {
     /// GAT support: `<T as Trait>::Item<'a, B>` with generic arguments
     Associated {
         base: Box<Spanned<Type>>,
-        trait_name: Option<String>,  // None for Self::Item
+        trait_name: Option<String>, // None for Self::Item
         assoc_name: String,
         /// GAT generic arguments (e.g., <'a, i64> in Self::Item<'a, i64>)
         generics: Vec<Spanned<Type>>,
@@ -952,9 +948,7 @@ pub enum Expr {
     /// Spawn: `spawn{expr}`
     Spawn(Box<Spanned<Expr>>),
     /// Comptime: `comptime { expr }` - Evaluated at compile time
-    Comptime {
-        body: Box<Spanned<Expr>>,
-    },
+    Comptime { body: Box<Spanned<Expr>> },
     /// Macro invocation: `name!(args)`
     MacroInvoke(MacroInvoke),
     /// Old: `old(expr)` - Reference to pre-state value in ensures clause
@@ -1134,7 +1128,11 @@ impl std::fmt::Display for Type {
                 }
                 Ok(())
             }
-            Type::FnPtr { params, ret, is_vararg } => {
+            Type::FnPtr {
+                params,
+                ret,
+                is_vararg,
+            } => {
                 write!(f, "fn(")?;
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 {
@@ -1180,7 +1178,10 @@ impl std::fmt::Display for Type {
             }
             Type::Unit => write!(f, "()"),
             Type::Infer => write!(f, "_"),
-            Type::DynTrait { trait_name, generics } => {
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 write!(f, "dyn {}", trait_name)?;
                 if !generics.is_empty() {
                     write!(f, "<")?;
@@ -1194,7 +1195,12 @@ impl std::fmt::Display for Type {
                 }
                 Ok(())
             }
-            Type::Associated { base, trait_name, assoc_name, generics } => {
+            Type::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => {
                 if let Some(trait_name) = trait_name {
                     write!(f, "<{} as {}>::{}", base.node, trait_name, assoc_name)?;
                 } else {
@@ -1215,11 +1221,17 @@ impl std::fmt::Display for Type {
             }
             Type::Linear(inner) => write!(f, "linear {}", inner.node),
             Type::Affine(inner) => write!(f, "affine {}", inner.node),
-            Type::Dependent { var_name, base, predicate } => {
+            Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => {
                 write!(f, "{{{}: {} | {:?}}}", var_name, base.node, predicate.node)
             }
             Type::RefLifetime { lifetime, inner } => write!(f, "&'{} {}", lifetime, inner.node),
-            Type::RefMutLifetime { lifetime, inner } => write!(f, "&'{} mut {}", lifetime, inner.node),
+            Type::RefMutLifetime { lifetime, inner } => {
+                write!(f, "&'{} mut {}", lifetime, inner.node)
+            }
             Type::Lazy(inner) => write!(f, "Lazy<{}>", inner.node),
         }
     }

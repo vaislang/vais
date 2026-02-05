@@ -2,9 +2,9 @@
 //!
 //! Contains definitions for external C functions and helper functions.
 
-use crate::{FunctionInfo, CodeGenerator};
-use vais_types::{ResolvedType, FunctionSig, EffectAnnotation};
+use crate::{CodeGenerator, FunctionInfo};
 use std::collections::HashMap;
+use vais_types::{EffectAnnotation, FunctionSig, ResolvedType};
 
 /// Convert simple params (name, type) to full params (name, type, is_mut=false)
 fn convert_params(params: Vec<(String, ResolvedType)>) -> Vec<(String, ResolvedType, bool)> {
@@ -122,13 +122,17 @@ impl CodeGenerator {
         );
 
         // putchar for single character output
-        register_extern!(self, "putchar",
+        register_extern!(
+            self,
+            "putchar",
             vec![("c".to_string(), ResolvedType::I32)],
             ResolvedType::I32
         );
 
         // puts for simple string output
-        register_extern!(self, "puts",
+        register_extern!(
+            self,
+            "puts",
             vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I32
         );
@@ -207,7 +211,9 @@ impl CodeGenerator {
         );
 
         // exit: (i32) -> void (noreturn)
-        register_extern!(self, "exit",
+        register_extern!(
+            self,
+            "exit",
             vec![("code".to_string(), ResolvedType::I32)],
             ResolvedType::Unit
         );
@@ -215,19 +221,25 @@ impl CodeGenerator {
 
     fn register_memory_functions(&mut self) {
         // malloc: (i64) -> i64 (pointer as integer)
-        register_extern!(self, "malloc",
+        register_extern!(
+            self,
+            "malloc",
             vec![("size".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // free: (i64) -> void
-        register_extern!(self, "free",
+        register_extern!(
+            self,
+            "free",
             vec![("ptr".to_string(), ResolvedType::I64)],
             ResolvedType::Unit
         );
 
         // memcpy: (dest, src, n) -> dest
-        register_extern!(self, "memcpy",
+        register_extern!(
+            self,
+            "memcpy",
             vec![
                 ("dest".to_string(), ResolvedType::I64),
                 ("src".to_string(), ResolvedType::I64),
@@ -284,7 +296,9 @@ impl CodeGenerator {
 
     fn register_file_functions(&mut self) {
         // fopen: (path, mode) -> FILE*
-        register_extern!(self, "fopen",
+        register_extern!(
+            self,
+            "fopen",
             vec![
                 ("path".to_string(), ResolvedType::Str),
                 ("mode".to_string(), ResolvedType::Str),
@@ -293,7 +307,9 @@ impl CodeGenerator {
         );
 
         // fopen_ptr: same as fopen but accepts i64 pointers (for selfhost)
-        register_extern!(self, "fopen_ptr",
+        register_extern!(
+            self,
+            "fopen_ptr",
             vec![
                 ("path".to_string(), ResolvedType::I64),
                 ("mode".to_string(), ResolvedType::Str),
@@ -302,13 +318,17 @@ impl CodeGenerator {
         );
 
         // fclose: (FILE*) -> int
-        register_extern!(self, "fclose",
+        register_extern!(
+            self,
+            "fclose",
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I32
         );
 
         // fread: (ptr, size, count, FILE*) -> size_t
-        register_extern!(self, "fread",
+        register_extern!(
+            self,
+            "fread",
             vec![
                 ("ptr".to_string(), ResolvedType::I64),
                 ("size".to_string(), ResolvedType::I64),
@@ -319,7 +339,9 @@ impl CodeGenerator {
         );
 
         // fwrite: (ptr, size, count, FILE*) -> size_t
-        register_extern!(self, "fwrite",
+        register_extern!(
+            self,
+            "fwrite",
             vec![
                 ("ptr".to_string(), ResolvedType::I64),
                 ("size".to_string(), ResolvedType::I64),
@@ -330,13 +352,17 @@ impl CodeGenerator {
         );
 
         // fgetc: (FILE*) -> int
-        register_extern!(self, "fgetc",
+        register_extern!(
+            self,
+            "fgetc",
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // fputc: (char, FILE*) -> int
-        register_extern!(self, "fputc",
+        register_extern!(
+            self,
+            "fputc",
             vec![
                 ("c".to_string(), ResolvedType::I64),
                 ("stream".to_string(), ResolvedType::I64),
@@ -355,7 +381,9 @@ impl CodeGenerator {
         );
 
         // fgets: (str, n, FILE*) -> char*
-        register_extern!(self, "fgets",
+        register_extern!(
+            self,
+            "fgets",
             vec![
                 ("str".to_string(), ResolvedType::I64),
                 ("n".to_string(), ResolvedType::I64),
@@ -365,7 +393,9 @@ impl CodeGenerator {
         );
 
         // fputs: (str, FILE*) -> int
-        register_extern!(self, "fputs",
+        register_extern!(
+            self,
+            "fputs",
             vec![
                 ("str".to_string(), ResolvedType::Str),
                 ("stream".to_string(), ResolvedType::I64),
@@ -374,7 +404,9 @@ impl CodeGenerator {
         );
 
         // fseek: (FILE*, offset, origin) -> int
-        register_extern!(self, "fseek",
+        register_extern!(
+            self,
+            "fseek",
             vec![
                 ("stream".to_string(), ResolvedType::I64),
                 ("offset".to_string(), ResolvedType::I64),
@@ -384,44 +416,58 @@ impl CodeGenerator {
         );
 
         // ftell: (FILE*) -> long
-        register_extern!(self, "ftell",
+        register_extern!(
+            self,
+            "ftell",
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // fflush: (FILE*) -> int
-        register_extern!(self, "fflush",
+        register_extern!(
+            self,
+            "fflush",
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // feof: (FILE*) -> int
-        register_extern!(self, "feof",
+        register_extern!(
+            self,
+            "feof",
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // fileno: (FILE*) -> int (get file descriptor from FILE*)
-        register_extern!(self, "fileno",
+        register_extern!(
+            self,
+            "fileno",
             vec![("stream".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // fsync: (fd) -> int (flush to disk)
-        register_extern!(self, "fsync",
+        register_extern!(
+            self,
+            "fsync",
             vec![("fd".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // fdatasync: (fd) -> int (flush data only, no metadata)
         // On macOS, mapped to fcntl F_FULLFSYNC or fsync fallback
-        register_extern!(self, "fdatasync",
+        register_extern!(
+            self,
+            "fdatasync",
             vec![("fd".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // mmap: (addr, len, prot, flags, fd, offset) -> void* (as i64)
-        register_extern!(self, "mmap",
+        register_extern!(
+            self,
+            "mmap",
             vec![
                 ("addr".to_string(), ResolvedType::I64),
                 ("len".to_string(), ResolvedType::I64),
@@ -434,7 +480,9 @@ impl CodeGenerator {
         );
 
         // munmap: (addr, len) -> int
-        register_extern!(self, "munmap",
+        register_extern!(
+            self,
+            "munmap",
             vec![
                 ("addr".to_string(), ResolvedType::I64),
                 ("len".to_string(), ResolvedType::I64),
@@ -443,7 +491,9 @@ impl CodeGenerator {
         );
 
         // msync: (addr, len, flags) -> int
-        register_extern!(self, "msync",
+        register_extern!(
+            self,
+            "msync",
             vec![
                 ("addr".to_string(), ResolvedType::I64),
                 ("len".to_string(), ResolvedType::I64),
@@ -453,7 +503,9 @@ impl CodeGenerator {
         );
 
         // madvise: (addr, len, advice) -> int
-        register_extern!(self, "madvise",
+        register_extern!(
+            self,
+            "madvise",
             vec![
                 ("addr".to_string(), ResolvedType::I64),
                 ("len".to_string(), ResolvedType::I64),
@@ -479,13 +531,17 @@ impl CodeGenerator {
         );
 
         // remove: (path) -> int (delete file)
-        register_extern!(self, "remove",
+        register_extern!(
+            self,
+            "remove",
             vec![("path".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // flock: (fd, operation) -> int (advisory file locking)
-        register_extern!(self, "flock",
+        register_extern!(
+            self,
+            "flock",
             vec![
                 ("fd".to_string(), ResolvedType::I64),
                 ("operation".to_string(), ResolvedType::I64),
@@ -494,7 +550,9 @@ impl CodeGenerator {
         );
 
         // mkdir: (path, mode) -> int (0 on success, -1 on error)
-        register_extern!(self, "mkdir",
+        register_extern!(
+            self,
+            "mkdir",
             vec![
                 ("path".to_string(), ResolvedType::Str),
                 ("mode".to_string(), ResolvedType::I64),
@@ -503,13 +561,17 @@ impl CodeGenerator {
         );
 
         // rmdir: (path) -> int (0 on success, -1 on error)
-        register_extern!(self, "rmdir",
+        register_extern!(
+            self,
+            "rmdir",
             vec![("path".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // opendir: (path) -> DIR* (as i64, 0 on error)
-        register_extern!(self, "opendir",
+        register_extern!(
+            self,
+            "opendir",
             vec![("path".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
@@ -521,7 +583,9 @@ impl CodeGenerator {
         );
 
         // closedir: (dirp) -> int (0 on success)
-        register_extern!(self, "closedir",
+        register_extern!(
+            self,
+            "closedir",
             vec![("dirp".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
@@ -536,7 +600,9 @@ impl CodeGenerator {
         );
 
         // unlink: (path) -> int (0 on success)
-        register_extern!(self, "unlink",
+        register_extern!(
+            self,
+            "unlink",
             vec![("path".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
@@ -554,7 +620,9 @@ impl CodeGenerator {
         );
 
         // getcwd: (buf, size) -> char* (pointer to buf on success, 0 on error)
-        register_extern!(self, "getcwd",
+        register_extern!(
+            self,
+            "getcwd",
             vec![
                 ("buf".to_string(), ResolvedType::I64),
                 ("size".to_string(), ResolvedType::I64),
@@ -563,7 +631,9 @@ impl CodeGenerator {
         );
 
         // chdir: (path) -> int (0 on success)
-        register_extern!(self, "chdir",
+        register_extern!(
+            self,
+            "chdir",
             vec![("path".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
@@ -571,13 +641,17 @@ impl CodeGenerator {
 
     fn register_string_functions(&mut self) {
         // strlen: (s) -> len (accepts str)
-        register_extern!(self, "strlen",
+        register_extern!(
+            self,
+            "strlen",
             vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
 
         // strcmp: (s1, s2) -> int
-        register_extern!(self, "strcmp",
+        register_extern!(
+            self,
+            "strcmp",
             vec![
                 ("s1".to_string(), ResolvedType::Str),
                 ("s2".to_string(), ResolvedType::Str),
@@ -586,7 +660,9 @@ impl CodeGenerator {
         );
 
         // strncmp: (s1, s2, n) -> int
-        register_extern!(self, "strncmp",
+        register_extern!(
+            self,
+            "strncmp",
             vec![
                 ("s1".to_string(), ResolvedType::Str),
                 ("s2".to_string(), ResolvedType::Str),
@@ -611,13 +687,17 @@ impl CodeGenerator {
         // --- Number conversion functions ---
 
         // atoi: (s: str) -> i32 - string to integer
-        register_extern!(self, "atoi",
+        register_extern!(
+            self,
+            "atoi",
             vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I32
         );
 
         // atol: (s: str) -> i64 - string to long integer
-        register_extern!(self, "atol",
+        register_extern!(
+            self,
+            "atol",
             vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::I64
         );
@@ -629,7 +709,9 @@ impl CodeGenerator {
         );
 
         // atof: (s: str) -> f64 - string to double
-        register_extern!(self, "atof",
+        register_extern!(
+            self,
+            "atof",
             vec![("s".to_string(), ResolvedType::Str)],
             ResolvedType::F64
         );
@@ -643,55 +725,68 @@ impl CodeGenerator {
         // --- Math functions ---
 
         // labs: (x: i64) -> i64 - absolute value (long integer)
-        register_extern!(self, "labs",
+        register_extern!(
+            self,
+            "labs",
             vec![("x".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
         // fabs: (x: f64) -> f64 - absolute value (double)
-        register_extern!(self, "fabs",
+        register_extern!(
+            self,
+            "fabs",
             vec![("x".to_string(), ResolvedType::F64)],
             ResolvedType::F64
         );
 
         // sqrt: (x: f64) -> f64 - square root
-        register_extern!(self, "sqrt",
+        register_extern!(
+            self,
+            "sqrt",
             vec![("x".to_string(), ResolvedType::F64)],
             ResolvedType::F64
         );
 
         // sin: (x: f64) -> f64 - sine
-        register_extern!(self, "sin",
+        register_extern!(
+            self,
+            "sin",
             vec![("x".to_string(), ResolvedType::F64)],
             ResolvedType::F64
         );
 
         // cos: (x: f64) -> f64 - cosine
-        register_extern!(self, "cos",
+        register_extern!(
+            self,
+            "cos",
             vec![("x".to_string(), ResolvedType::F64)],
             ResolvedType::F64
         );
 
         // exp: (x: f64) -> f64 - exponential
-        register_extern!(self, "exp",
+        register_extern!(
+            self,
+            "exp",
             vec![("x".to_string(), ResolvedType::F64)],
             ResolvedType::F64
         );
 
         // log: (x: f64) -> f64 - natural logarithm
-        register_extern!(self, "log",
+        register_extern!(
+            self,
+            "log",
             vec![("x".to_string(), ResolvedType::F64)],
             ResolvedType::F64
         );
 
         // rand: () -> i32 - pseudo-random number
-        register_extern!(self, "rand",
-            vec![],
-            ResolvedType::I32
-        );
+        register_extern!(self, "rand", vec![], ResolvedType::I32);
 
         // srand: (seed: i32) -> void - seed random number generator
-        register_extern!(self, "srand",
+        register_extern!(
+            self,
+            "srand",
             vec![("seed".to_string(), ResolvedType::I32)],
             ResolvedType::Unit
         );
@@ -699,25 +794,33 @@ impl CodeGenerator {
         // --- Character classification functions ---
 
         // isdigit: (c: i32) -> i32 - test if digit
-        register_extern!(self, "isdigit",
+        register_extern!(
+            self,
+            "isdigit",
             vec![("c".to_string(), ResolvedType::I32)],
             ResolvedType::I32
         );
 
         // isalpha: (c: i32) -> i32 - test if alphabetic
-        register_extern!(self, "isalpha",
+        register_extern!(
+            self,
+            "isalpha",
             vec![("c".to_string(), ResolvedType::I32)],
             ResolvedType::I32
         );
 
         // toupper: (c: i32) -> i32 - convert to uppercase
-        register_extern!(self, "toupper",
+        register_extern!(
+            self,
+            "toupper",
             vec![("c".to_string(), ResolvedType::I32)],
             ResolvedType::I32
         );
 
         // tolower: (c: i32) -> i32 - convert to lowercase
-        register_extern!(self, "tolower",
+        register_extern!(
+            self,
+            "tolower",
             vec![("c".to_string(), ResolvedType::I32)],
             ResolvedType::I32
         );
@@ -725,7 +828,9 @@ impl CodeGenerator {
         // --- String manipulation functions ---
 
         // strcpy: (dest: i64, src: str) -> i64 - copy string
-        register_extern!(self, "strcpy",
+        register_extern!(
+            self,
+            "strcpy",
             vec![
                 ("dest".to_string(), ResolvedType::I64),
                 ("src".to_string(), ResolvedType::Str),
@@ -734,7 +839,9 @@ impl CodeGenerator {
         );
 
         // strcat: (dest: i64, src: str) -> i64 - concatenate string
-        register_extern!(self, "strcat",
+        register_extern!(
+            self,
+            "strcat",
             vec![
                 ("dest".to_string(), ResolvedType::I64),
                 ("src".to_string(), ResolvedType::Str),
@@ -745,16 +852,15 @@ impl CodeGenerator {
 
     fn register_async_functions(&mut self) {
         // usleep: microsecond sleep for cooperative scheduling
-        register_extern!(self, "usleep",
+        register_extern!(
+            self,
+            "usleep",
             vec![("usec".to_string(), ResolvedType::I64)],
             ResolvedType::I32
         );
 
         // sched_yield: yield CPU to other processes
-        register_extern!(self, "sched_yield",
-            vec![],
-            ResolvedType::I32
-        );
+        register_extern!(self, "sched_yield", vec![], ResolvedType::I32);
 
         // call_poll: call an indirect poll function pointer with a future pointer
         // Returns an i64 encoding {status, value} as a packed struct
@@ -787,10 +893,7 @@ impl CodeGenerator {
         // === Platform I/O syscalls for async reactor ===
 
         // kqueue: create kqueue instance (macOS)
-        register_extern!(self, "kqueue",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "kqueue", vec![], ResolvedType::I64);
 
         // kevent_register: register event with kqueue
         register_helper!(self, "kevent_register" => "__kevent_register",
@@ -833,7 +936,9 @@ impl CodeGenerator {
         );
 
         // close: close file descriptor
-        register_extern!(self, "close",
+        register_extern!(
+            self,
+            "close",
             vec![("fd".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
@@ -890,15 +995,42 @@ impl CodeGenerator {
 
     fn register_simd_functions(&mut self) {
         // Helper to create vector types
-        let vec2f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 2 };
-        let vec4f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 4 };
-        let vec8f32 = ResolvedType::Vector { element: Box::new(ResolvedType::F32), lanes: 8 };
-        let vec2f64 = ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 2 };
-        let vec4f64 = ResolvedType::Vector { element: Box::new(ResolvedType::F64), lanes: 4 };
-        let vec4i32 = ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 4 };
-        let vec8i32 = ResolvedType::Vector { element: Box::new(ResolvedType::I32), lanes: 8 };
-        let vec2i64 = ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 2 };
-        let vec4i64 = ResolvedType::Vector { element: Box::new(ResolvedType::I64), lanes: 4 };
+        let vec2f32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 2,
+        };
+        let vec4f32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 4,
+        };
+        let vec8f32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F32),
+            lanes: 8,
+        };
+        let vec2f64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F64),
+            lanes: 2,
+        };
+        let vec4f64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::F64),
+            lanes: 4,
+        };
+        let vec4i32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I32),
+            lanes: 4,
+        };
+        let vec8i32 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I32),
+            lanes: 8,
+        };
+        let vec2i64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I64),
+            lanes: 2,
+        };
+        let vec4i64 = ResolvedType::Vector {
+            element: Box::new(ResolvedType::I64),
+            lanes: 4,
+        };
 
         // === Vector Constructors ===
         register_helper!(self, "vec2f32" => "vec2f32",
@@ -1031,12 +1163,11 @@ impl CodeGenerator {
 
     fn register_gc_functions(&mut self) {
         // GC runtime functions
-        register_extern!(self, "vais_gc_init",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "vais_gc_init", vec![], ResolvedType::I64);
 
-        register_extern!(self, "vais_gc_alloc",
+        register_extern!(
+            self,
+            "vais_gc_alloc",
             vec![
                 ("size".to_string(), ResolvedType::I64),
                 ("type_id".to_string(), ResolvedType::I32),
@@ -1044,44 +1175,35 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
-        register_extern!(self, "vais_gc_add_root",
+        register_extern!(
+            self,
+            "vais_gc_add_root",
             vec![("ptr".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
-        register_extern!(self, "vais_gc_remove_root",
+        register_extern!(
+            self,
+            "vais_gc_remove_root",
             vec![("ptr".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
-        register_extern!(self, "vais_gc_collect",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "vais_gc_collect", vec![], ResolvedType::I64);
 
-        register_extern!(self, "vais_gc_bytes_allocated",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "vais_gc_bytes_allocated", vec![], ResolvedType::I64);
 
-        register_extern!(self, "vais_gc_objects_count",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "vais_gc_objects_count", vec![], ResolvedType::I64);
 
-        register_extern!(self, "vais_gc_collections",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "vais_gc_collections", vec![], ResolvedType::I64);
 
-        register_extern!(self, "vais_gc_set_threshold",
+        register_extern!(
+            self,
+            "vais_gc_set_threshold",
             vec![("threshold".to_string(), ResolvedType::I64)],
             ResolvedType::I64
         );
 
-        register_extern!(self, "vais_gc_print_stats",
-            vec![],
-            ResolvedType::I64
-        );
+        register_extern!(self, "vais_gc_print_stats", vec![], ResolvedType::I64);
     }
 }

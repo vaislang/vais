@@ -1,6 +1,6 @@
-use vais_profiler::{Profiler, ProfilerConfig, ProfilerMode};
-use vais_profiler::reporter::{TextReport, ProfileStats, CompactReport};
 use std::time::Duration;
+use vais_profiler::reporter::{CompactReport, ProfileStats, TextReport};
+use vais_profiler::{Profiler, ProfilerConfig, ProfilerMode};
 
 fn fibonacci(n: u64) -> u64 {
     if n <= 1 {
@@ -81,7 +81,10 @@ fn main() {
     println!("SUMMARY");
     println!("{}", "=".repeat(70));
     println!("Total samples:          {}", profiler.get_sample_count());
-    println!("Total allocations:      {}", profiler.get_total_allocations());
+    println!(
+        "Total allocations:      {}",
+        profiler.get_total_allocations()
+    );
     println!(
         "Current memory:         {:.2} KB",
         profiler.get_current_allocated_bytes() as f64 / 1024.0

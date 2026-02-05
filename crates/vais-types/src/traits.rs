@@ -2,8 +2,8 @@
 //!
 //! This module contains trait-related definitions and implementation checking.
 
+use crate::{ResolvedType, TypeChecker, TypeError, TypeResult};
 use std::collections::HashMap;
-use crate::{TypeChecker, ResolvedType, TypeError, TypeResult};
 
 /// Trait method signature
 #[derive(Debug, Clone)]
@@ -85,23 +85,49 @@ impl TypeChecker {
             // All types can be cloned
             "Clone" | "Copy" => matches!(
                 ty,
-                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
-                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 | ResolvedType::U64 |
-                ResolvedType::F32 | ResolvedType::F64 | ResolvedType::Bool
+                ResolvedType::I8
+                    | ResolvedType::I16
+                    | ResolvedType::I32
+                    | ResolvedType::I64
+                    | ResolvedType::U8
+                    | ResolvedType::U16
+                    | ResolvedType::U32
+                    | ResolvedType::U64
+                    | ResolvedType::F32
+                    | ResolvedType::F64
+                    | ResolvedType::Bool
             ),
             // Default is only for some types
             "Default" => matches!(
                 ty,
-                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
-                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 | ResolvedType::U64 |
-                ResolvedType::F32 | ResolvedType::F64 | ResolvedType::Bool | ResolvedType::Str
+                ResolvedType::I8
+                    | ResolvedType::I16
+                    | ResolvedType::I32
+                    | ResolvedType::I64
+                    | ResolvedType::U8
+                    | ResolvedType::U16
+                    | ResolvedType::U32
+                    | ResolvedType::U64
+                    | ResolvedType::F32
+                    | ResolvedType::F64
+                    | ResolvedType::Bool
+                    | ResolvedType::Str
             ),
             // Display/Debug - primitives support these
             "Display" | "Debug" => matches!(
                 ty,
-                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
-                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 | ResolvedType::U64 |
-                ResolvedType::F32 | ResolvedType::F64 | ResolvedType::Bool | ResolvedType::Str
+                ResolvedType::I8
+                    | ResolvedType::I16
+                    | ResolvedType::I32
+                    | ResolvedType::I64
+                    | ResolvedType::U8
+                    | ResolvedType::U16
+                    | ResolvedType::U32
+                    | ResolvedType::U64
+                    | ResolvedType::F32
+                    | ResolvedType::F64
+                    | ResolvedType::Bool
+                    | ResolvedType::Str
             ),
             // Drop/AsyncDrop - not implemented by primitives
             "Drop" | "AsyncDrop" => false,
@@ -125,7 +151,10 @@ impl TypeChecker {
                     if !self.type_implements_trait(concrete_type, trait_name) {
                         return Err(TypeError::Mismatch {
                             expected: format!("type implementing trait '{}'", trait_name),
-                            found: format!("type '{}' which does not implement '{}'", concrete_type, trait_name),
+                            found: format!(
+                                "type '{}' which does not implement '{}'",
+                                concrete_type, trait_name
+                            ),
                             span: None,
                         });
                     }

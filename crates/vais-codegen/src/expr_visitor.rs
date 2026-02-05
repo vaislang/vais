@@ -5,7 +5,7 @@
 
 use crate::visitor::{ExprVisitor, GenResult};
 use crate::{CodeGenerator, CodegenError};
-use vais_ast::{Spanned, Expr, Stmt, BinOp, UnaryOp, MatchArm, Param, Span, Type};
+use vais_ast::{BinOp, Expr, MatchArm, Param, Span, Spanned, Stmt, Type, UnaryOp};
 use vais_types::ResolvedType;
 
 impl ExprVisitor for CodeGenerator {
@@ -25,28 +25,18 @@ impl ExprVisitor for CodeGenerator {
             Expr::Binary { op, left, right } => {
                 self.visit_binary(op, left, right, counter, expr.span)
             }
-            Expr::Unary { op, expr: inner } => {
-                self.visit_unary(op, inner, counter, expr.span)
-            }
-            Expr::Ternary { cond, then, else_ } => {
-                self.visit_ternary(cond, then, else_, counter)
-            }
-            Expr::Call { func, args } => {
-                self.visit_call(func, args, counter, expr.span)
-            }
-            Expr::If { cond, then, else_ } => {
-                self.visit_if(cond, then, else_.as_ref(), counter)
-            }
-            Expr::Loop { pattern: _, iter, body } => {
-                self.visit_loop(iter.as_ref().map(|e| e.as_ref()), body, counter)
-            }
-            Expr::While { condition, body } => {
-                self.visit_while(condition, body, counter)
-            }
+            Expr::Unary { op, expr: inner } => self.visit_unary(op, inner, counter, expr.span),
+            Expr::Ternary { cond, then, else_ } => self.visit_ternary(cond, then, else_, counter),
+            Expr::Call { func, args } => self.visit_call(func, args, counter, expr.span),
+            Expr::If { cond, then, else_ } => self.visit_if(cond, then, else_.as_ref(), counter),
+            Expr::Loop {
+                pattern: _,
+                iter,
+                body,
+            } => self.visit_loop(iter.as_ref().map(|e| e.as_ref()), body, counter),
+            Expr::While { condition, body } => self.visit_while(condition, body, counter),
             Expr::Block(stmts) => self.visit_block(stmts, counter),
-            Expr::Assign { target, value } => {
-                self.visit_assign(target, value, counter)
-            }
+            Expr::Assign { target, value } => self.visit_assign(target, value, counter),
             Expr::AssignOp { op, target, value } => {
                 self.visit_assign_op(op, target, value, counter)
             }
@@ -56,25 +46,36 @@ impl ExprVisitor for CodeGenerator {
                 self.generate_expr(expr, counter)
             }
             Expr::Tuple(elements) => self.visit_tuple(elements, counter),
-            Expr::StructLit { name, fields } => {
-                self.visit_struct_lit(name, fields, counter)
-            }
+            Expr::StructLit { name, fields } => self.visit_struct_lit(name, fields, counter),
             Expr::Index { expr: array, index } => {
                 // Check if this is a slice operation (index is a Range expression)
-                if let Expr::Range { start, end, inclusive } = &index.node {
-                    return self.generate_slice(array, start.as_deref(), end.as_deref(), *inclusive, counter);
+                if let Expr::Range {
+                    start,
+                    end,
+                    inclusive,
+                } = &index.node
+                {
+                    return self.generate_slice(
+                        array,
+                        start.as_deref(),
+                        end.as_deref(),
+                        *inclusive,
+                        counter,
+                    );
                 }
                 self.visit_index(array, index, counter)
             }
-            Expr::Field { expr: obj, field } => {
-                self.visit_field(obj, field, counter)
-            }
-            Expr::MethodCall { receiver, method, args } => {
-                self.visit_method_call(receiver, method, args, counter)
-            }
-            Expr::StaticMethodCall { type_name, method, args } => {
-                self.visit_static_method_call(type_name, method, args, counter)
-            }
+            Expr::Field { expr: obj, field } => self.visit_field(obj, field, counter),
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } => self.visit_method_call(receiver, method, args, counter),
+            Expr::StaticMethodCall {
+                type_name,
+                method,
+                args,
+            } => self.visit_static_method_call(type_name, method, args, counter),
             Expr::Spread(inner) => {
                 // Spread is handled within array generation; standalone spread generates inner
                 self.generate_expr(inner, counter)
@@ -82,17 +83,22 @@ impl ExprVisitor for CodeGenerator {
             Expr::Ref(inner) => self.visit_ref(inner, counter),
             Expr::Deref(inner) => self.visit_deref(inner, counter),
             Expr::Cast { expr, ty } => self.visit_cast(expr, ty, counter),
-            Expr::Match { expr: match_expr, arms } => {
-                self.visit_match(match_expr, arms, counter)
-            }
-            Expr::Range { start, end, inclusive } => {
-                self.visit_range(start.as_deref(), end.as_deref(), *inclusive, counter)
-            }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+            } => self.visit_match(match_expr, arms, counter),
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => self.visit_range(start.as_deref(), end.as_deref(), *inclusive, counter),
             Expr::Await(inner) => self.visit_await(inner, counter),
             Expr::Spawn(inner) => self.visit_spawn(inner, counter),
-            Expr::Lambda { params, body, captures: _ } => {
-                self.visit_lambda(params, body, counter)
-            }
+            Expr::Lambda {
+                params,
+                body,
+                captures: _,
+            } => self.visit_lambda(params, body, counter),
             Expr::Try(inner) => self.visit_try(inner, counter),
             Expr::Unwrap(inner) => self.visit_unwrap(inner, counter),
             Expr::Comptime { body } => self.visit_comptime(body, counter),
@@ -133,7 +139,10 @@ impl ExprVisitor for CodeGenerator {
 
         let len = s.len() + 1;
         Ok((
-            format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+            format!(
+                "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                len, len, name
+            ),
             String::new(),
         ))
     }
@@ -343,7 +352,10 @@ impl ExprVisitor for CodeGenerator {
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
                     ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
-                    ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_alloca));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        llvm_ty, val, llvm_ty, tmp_alloca
+                    ));
                     return Ok((tmp_alloca, ir));
                 }
             }
@@ -366,7 +378,10 @@ impl ExprVisitor for CodeGenerator {
         };
 
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load {}, {}* {}\n", result, llvm_ty, llvm_ty, ptr_val));
+        ir.push_str(&format!(
+            "  {} = load {}, {}* {}\n",
+            result, llvm_ty, llvm_ty, ptr_val
+        ));
 
         Ok((result, ir))
     }
@@ -434,15 +449,19 @@ impl ExprVisitor for CodeGenerator {
     fn visit_comptime(&mut self, body: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         // Evaluate the comptime expression at compile time
         let mut evaluator = vais_types::ComptimeEvaluator::new();
-        let value = evaluator.eval(body).map_err(|e| {
-            CodegenError::TypeError(format!("Comptime evaluation failed: {}", e))
-        })?;
+        let value = evaluator
+            .eval(body)
+            .map_err(|e| CodegenError::TypeError(format!("Comptime evaluation failed: {}", e)))?;
 
         // Return the evaluated constant as LLVM IR
         match value {
             vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
-            vais_types::ComptimeValue::Float(f) => Ok((crate::types::format_llvm_float(f), String::new())),
-            vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
+            vais_types::ComptimeValue::Float(f) => {
+                Ok((crate::types::format_llvm_float(f), String::new()))
+            }
+            vais_types::ComptimeValue::Bool(b) => {
+                Ok((if b { "1" } else { "0" }.to_string(), String::new()))
+            }
             vais_types::ComptimeValue::String(s) => {
                 // Create a global string constant
                 let name = format!(".str.{}", self.string_counter);
@@ -450,7 +469,10 @@ impl ExprVisitor for CodeGenerator {
                 self.string_constants.push((name.clone(), s.clone()));
                 let len = s.len() + 1;
                 Ok((
-                    format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+                    format!(
+                        "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                        len, len, name
+                    ),
                     String::new(),
                 ))
             }
@@ -462,11 +484,16 @@ impl ExprVisitor for CodeGenerator {
                 for elem in arr {
                     match elem {
                         vais_types::ComptimeValue::Int(n) => elements.push(n.to_string()),
-                        vais_types::ComptimeValue::Float(f) => elements.push(crate::types::format_llvm_float(f)),
-                        vais_types::ComptimeValue::Bool(b) => elements.push(if b { "1" } else { "0" }.to_string()),
+                        vais_types::ComptimeValue::Float(f) => {
+                            elements.push(crate::types::format_llvm_float(f))
+                        }
+                        vais_types::ComptimeValue::Bool(b) => {
+                            elements.push(if b { "1" } else { "0" }.to_string())
+                        }
                         _ => {
                             return Err(CodegenError::TypeError(
-                                "Comptime arrays can only contain simple values (int, float, bool)".to_string()
+                                "Comptime arrays can only contain simple values (int, float, bool)"
+                                    .to_string(),
                             ));
                         }
                     }
@@ -574,7 +601,10 @@ impl ExprVisitor for CodeGenerator {
             "  {} = getelementptr {}, {}* {}, i32 0, i32 1\n",
             value_ptr, lazy_ty, lazy_ty, lazy_ptr
         ));
-        ir.push_str(&format!("  store {} {}, {}* {}\n", inner_llvm_ty, inner_val, inner_llvm_ty, value_ptr));
+        ir.push_str(&format!(
+            "  store {} {}, {}* {}\n",
+            inner_llvm_ty, inner_val, inner_llvm_ty, value_ptr
+        ));
 
         // Store thunk pointer as null (not needed for eager evaluation)
         let thunk_ptr = self.next_temp(counter);
@@ -586,7 +616,10 @@ impl ExprVisitor for CodeGenerator {
 
         // Load and return the lazy struct
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load {}, {}* {}\n", result, lazy_ty, lazy_ty, lazy_ptr));
+        ir.push_str(&format!(
+            "  {} = load {}, {}* {}\n",
+            result, lazy_ty, lazy_ty, lazy_ptr
+        ));
 
         Ok((result, ir))
     }
@@ -637,7 +670,10 @@ impl ExprVisitor for CodeGenerator {
                     ));
 
                     let result = self.next_temp(counter);
-                    ir.push_str(&format!("  {} = load {}, {}* {}\n", result, inner_llvm_ty, inner_llvm_ty, value_ptr));
+                    ir.push_str(&format!(
+                        "  {} = load {}, {}* {}\n",
+                        result, inner_llvm_ty, inner_llvm_ty, value_ptr
+                    ));
 
                     return Ok((result, ir));
                 }
@@ -650,7 +686,10 @@ impl ExprVisitor for CodeGenerator {
 
         // Use extractvalue to get the value field (index 1) from the struct
         let result = self.next_temp(counter);
-        ir.push_str(&format!("  {} = extractvalue {{ i1, {}, i8* }} {}, 1\n", result, inner_llvm_ty, lazy_val));
+        ir.push_str(&format!(
+            "  {} = extractvalue {{ i1, {}, i8* }} {}, 1\n",
+            result, inner_llvm_ty, lazy_val
+        ));
 
         Ok((result, ir))
     }

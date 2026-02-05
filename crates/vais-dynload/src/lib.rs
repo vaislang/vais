@@ -29,24 +29,26 @@
 //! ```
 
 mod error;
-mod module_loader;
-mod wasm_sandbox;
-mod plugin_discovery;
-mod manifest;
 mod host_functions;
+mod manifest;
+mod module_loader;
+mod plugin_discovery;
 mod resource_limits;
+mod wasm_sandbox;
 
 pub use error::{DynloadError, Result};
-pub use module_loader::{ModuleLoader, ModuleLoaderConfig, LoadedModule, ModuleHandle, ReloadEvent};
-pub use wasm_sandbox::{WasmSandbox, WasmInstance, SandboxConfig, SandboxState};
-pub use plugin_discovery::{PluginDiscovery, DiscoveredPlugin, PluginSource, DiscoveryConfig};
-pub use manifest::{PluginManifest, PluginCapability, PluginDependency, PluginFormat};
-pub use host_functions::{HostFunctions, HostFunction, HostFunctionRegistry};
-pub use resource_limits::{ResourceLimits, MemoryLimit, TimeLimit, StackLimit, ResourceUsage};
+pub use host_functions::{HostFunction, HostFunctionRegistry, HostFunctions};
+pub use manifest::{PluginCapability, PluginDependency, PluginFormat, PluginManifest};
+pub use module_loader::{
+    LoadedModule, ModuleHandle, ModuleLoader, ModuleLoaderConfig, ReloadEvent,
+};
+pub use plugin_discovery::{DiscoveredPlugin, DiscoveryConfig, PluginDiscovery, PluginSource};
+pub use resource_limits::{MemoryLimit, ResourceLimits, ResourceUsage, StackLimit, TimeLimit};
+pub use wasm_sandbox::{SandboxConfig, SandboxState, WasmInstance, WasmSandbox};
 
+pub use vais_hotreload::{HotReloadConfig, HotReloader};
 /// Re-export commonly used types from dependent crates
 pub use vais_plugin::{PluginInfo, PluginType};
-pub use vais_hotreload::{HotReloader, HotReloadConfig};
 
 #[cfg(test)]
 mod tests {

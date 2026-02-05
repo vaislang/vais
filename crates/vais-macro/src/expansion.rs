@@ -4,10 +4,10 @@
 //! It implements a recursive descent through the AST, expanding macro invocations
 //! and supporting hygienic variable naming.
 
+use crate::{tokens_to_string, MacroError, MacroExpander, MacroRegistry};
 use std::collections::HashMap;
 use vais_ast::*;
 use vais_parser::parse;
-use crate::{MacroRegistry, MacroExpander, MacroError, tokens_to_string};
 
 /// Result type for AST expansion
 pub type ExpansionResult<T> = Result<T, ExpansionError>;
@@ -31,7 +31,11 @@ impl std::fmt::Display for ExpansionError {
             ExpansionError::MacroError(msg) => write!(f, "Macro expansion error: {}", msg),
             ExpansionError::ParseError(msg) => write!(f, "Parse error in expanded macro: {}", msg),
             ExpansionError::RecursionLimit { macro_name, depth } => {
-                write!(f, "Macro '{}' exceeded recursion limit (depth: {})", macro_name, depth)
+                write!(
+                    f,
+                    "Macro '{}' exceeded recursion limit (depth: {})",
+                    macro_name, depth
+                )
             }
             ExpansionError::HygienicError(msg) => write!(f, "Hygienic macro error: {}", msg),
         }
@@ -128,7 +132,9 @@ impl<'a> AstExpander<'a> {
                 }
             }
         }
-        Ok(Module { items: expanded_items })
+        Ok(Module {
+            items: expanded_items,
+        })
     }
 
     fn expand_item(&mut self, item: Spanned<Item>) -> ExpansionResult<Spanned<Item>> {
@@ -146,7 +152,13 @@ impl<'a> AstExpander<'a> {
             Item::ExternBlock(e) => Item::ExternBlock(e),
             Item::Const(c) => Item::Const(c),
             Item::Global(g) => Item::Global(g),
-            Item::Error { message, skipped_tokens } => Item::Error { message, skipped_tokens },
+            Item::Error {
+                message,
+                skipped_tokens,
+            } => Item::Error {
+                message,
+                skipped_tokens,
+            },
         };
         Ok(Spanned::new(expanded, span))
     }
@@ -203,7 +215,10 @@ impl<'a> AstExpander<'a> {
     fn expand_impl(&mut self, i: Impl) -> ExpansionResult<Impl> {
         let mut expanded_methods = Vec::new();
         for method in i.methods {
-            expanded_methods.push(Spanned::new(self.expand_function(method.node)?, method.span));
+            expanded_methods.push(Spanned::new(
+                self.expand_function(method.node)?,
+                method.span,
+            ));
         }
 
         Ok(Impl {
@@ -221,22 +236,16 @@ impl<'a> AstExpander<'a> {
             Expr::MacroInvoke(invoke) => {
                 return self.expand_macro_invoke(invoke, span);
             }
-            Expr::Block(stmts) => {
-                Expr::Block(self.expand_stmts(stmts)?)
-            }
-            Expr::Binary { op, left, right } => {
-                Expr::Binary {
-                    op,
-                    left: Box::new(self.expand_expr(*left)?),
-                    right: Box::new(self.expand_expr(*right)?),
-                }
-            }
-            Expr::Unary { op, expr: inner } => {
-                Expr::Unary {
-                    op,
-                    expr: Box::new(self.expand_expr(*inner)?),
-                }
-            }
+            Expr::Block(stmts) => Expr::Block(self.expand_stmts(stmts)?),
+            Expr::Binary { op, left, right } => Expr::Binary {
+                op,
+                left: Box::new(self.expand_expr(*left)?),
+                right: Box::new(self.expand_expr(*right)?),
+            },
+            Expr::Unary { op, expr: inner } => Expr::Unary {
+                op,
+                expr: Box::new(self.expand_expr(*inner)?),
+            },
             Expr::Call { func, args } => {
                 let expanded_args = args
                     .into_iter()
@@ -247,7 +256,11 @@ impl<'a> AstExpander<'a> {
                     args: expanded_args,
                 }
             }
-            Expr::MethodCall { receiver, method, args } => {
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
                 let expanded_args = args
                     .into_iter()
                     .map(|a| self.expand_expr(a))
@@ -258,7 +271,11 @@ impl<'a> AstExpander<'a> {
                     args: expanded_args,
                 }
             }
-            Expr::StaticMethodCall { type_name, method, args } => {
+            Expr::StaticMethodCall {
+                type_name,
+                method,
+                args,
+            } => {
                 let expanded_args = args
                     .into_iter()
                     .map(|a| self.expand_expr(a))
@@ -282,7 +299,11 @@ impl<'a> AstExpander<'a> {
                     else_: expanded_else,
                 }
             }
-            Expr::Loop { pattern, iter, body } => {
+            Expr::Loop {
+                pattern,
+                iter,
+                body,
+            } => {
                 let expanded_iter = if let Some(it) = iter {
                     Some(Box::new(self.expand_expr(*it)?))
                 } else {
@@ -294,19 +315,15 @@ impl<'a> AstExpander<'a> {
                     body: self.expand_stmts(body)?,
                 }
             }
-            Expr::While { condition, body } => {
-                Expr::While {
-                    condition: Box::new(self.expand_expr(*condition)?),
-                    body: self.expand_stmts(body)?,
-                }
-            }
-            Expr::Ternary { cond, then, else_ } => {
-                Expr::Ternary {
-                    cond: Box::new(self.expand_expr(*cond)?),
-                    then: Box::new(self.expand_expr(*then)?),
-                    else_: Box::new(self.expand_expr(*else_)?),
-                }
-            }
+            Expr::While { condition, body } => Expr::While {
+                condition: Box::new(self.expand_expr(*condition)?),
+                body: self.expand_stmts(body)?,
+            },
+            Expr::Ternary { cond, then, else_ } => Expr::Ternary {
+                cond: Box::new(self.expand_expr(*cond)?),
+                then: Box::new(self.expand_expr(*then)?),
+                else_: Box::new(self.expand_expr(*else_)?),
+            },
             Expr::Match { expr: inner, arms } => {
                 let expanded_arms = arms
                     .into_iter()
@@ -317,18 +334,14 @@ impl<'a> AstExpander<'a> {
                     arms: expanded_arms,
                 }
             }
-            Expr::Index { expr: inner, index } => {
-                Expr::Index {
-                    expr: Box::new(self.expand_expr(*inner)?),
-                    index: Box::new(self.expand_expr(*index)?),
-                }
-            }
-            Expr::Field { expr: inner, field } => {
-                Expr::Field {
-                    expr: Box::new(self.expand_expr(*inner)?),
-                    field,
-                }
-            }
+            Expr::Index { expr: inner, index } => Expr::Index {
+                expr: Box::new(self.expand_expr(*inner)?),
+                index: Box::new(self.expand_expr(*index)?),
+            },
+            Expr::Field { expr: inner, field } => Expr::Field {
+                expr: Box::new(self.expand_expr(*inner)?),
+                field,
+            },
             Expr::StructLit { name, fields } => {
                 let expanded_fields = fields
                     .into_iter()
@@ -360,7 +373,11 @@ impl<'a> AstExpander<'a> {
                     .collect::<ExpansionResult<Vec<_>>>()?;
                 Expr::MapLit(expanded)
             }
-            Expr::Range { start, end, inclusive } => {
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => {
                 let expanded_start = if let Some(s) = start {
                     Some(Box::new(self.expand_expr(*s)?))
                 } else {
@@ -377,13 +394,15 @@ impl<'a> AstExpander<'a> {
                     inclusive,
                 }
             }
-            Expr::Lambda { params, body, captures } => {
-                Expr::Lambda {
-                    params,
-                    body: Box::new(self.expand_expr(*body)?),
-                    captures,
-                }
-            }
+            Expr::Lambda {
+                params,
+                body,
+                captures,
+            } => Expr::Lambda {
+                params,
+                body: Box::new(self.expand_expr(*body)?),
+                captures,
+            },
             Expr::Await(inner) => Expr::Await(Box::new(self.expand_expr(*inner)?)),
             Expr::Try(inner) => Expr::Try(Box::new(self.expand_expr(*inner)?)),
             Expr::Unwrap(inner) => Expr::Unwrap(Box::new(self.expand_expr(*inner)?)),
@@ -391,37 +410,31 @@ impl<'a> AstExpander<'a> {
             Expr::Deref(inner) => Expr::Deref(Box::new(self.expand_expr(*inner)?)),
             Expr::Spread(inner) => Expr::Spread(Box::new(self.expand_expr(*inner)?)),
             Expr::Spawn(inner) => Expr::Spawn(Box::new(self.expand_expr(*inner)?)),
-            Expr::Comptime { body } => Expr::Comptime { body: Box::new(self.expand_expr(*body)?) },
-            Expr::Cast { expr, ty } => {
-                Expr::Cast {
-                    expr: Box::new(self.expand_expr(*expr)?),
-                    ty,
-                }
-            }
-            Expr::Assign { target, value } => {
-                Expr::Assign {
-                    target: Box::new(self.expand_expr(*target)?),
-                    value: Box::new(self.expand_expr(*value)?),
-                }
-            }
-            Expr::AssignOp { op, target, value } => {
-                Expr::AssignOp {
-                    op,
-                    target: Box::new(self.expand_expr(*target)?),
-                    value: Box::new(self.expand_expr(*value)?),
-                }
-            }
+            Expr::Comptime { body } => Expr::Comptime {
+                body: Box::new(self.expand_expr(*body)?),
+            },
+            Expr::Cast { expr, ty } => Expr::Cast {
+                expr: Box::new(self.expand_expr(*expr)?),
+                ty,
+            },
+            Expr::Assign { target, value } => Expr::Assign {
+                target: Box::new(self.expand_expr(*target)?),
+                value: Box::new(self.expand_expr(*value)?),
+            },
+            Expr::AssignOp { op, target, value } => Expr::AssignOp {
+                op,
+                target: Box::new(self.expand_expr(*target)?),
+                value: Box::new(self.expand_expr(*value)?),
+            },
             // Contract verification expressions
             Expr::Old(inner) => Expr::Old(Box::new(self.expand_expr(*inner)?)),
-            Expr::Assert { condition, message } => {
-                Expr::Assert {
-                    condition: Box::new(self.expand_expr(*condition)?),
-                    message: match message {
-                        Some(m) => Some(Box::new(self.expand_expr(*m)?)),
-                        None => None,
-                    },
-                }
-            }
+            Expr::Assert { condition, message } => Expr::Assert {
+                condition: Box::new(self.expand_expr(*condition)?),
+                message: match message {
+                    Some(m) => Some(Box::new(self.expand_expr(*m)?)),
+                    None => None,
+                },
+            },
             Expr::Assume(inner) => Expr::Assume(Box::new(self.expand_expr(*inner)?)),
             // Lazy evaluation expressions
             Expr::Lazy(inner) => Expr::Lazy(Box::new(self.expand_expr(*inner)?)),
@@ -439,9 +452,14 @@ impl<'a> AstExpander<'a> {
                 Expr::StringInterp(expanded_parts)
             }
             // Leaf expressions - no expansion needed
-            e @ (Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) |
-                 Expr::Ident(_) | Expr::Unit | Expr::SelfCall |
-                 Expr::Error { .. }) => e,
+            e @ (Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Bool(_)
+            | Expr::String(_)
+            | Expr::Ident(_)
+            | Expr::Unit
+            | Expr::SelfCall
+            | Expr::Error { .. }) => e,
         };
         Ok(Spanned::new(expanded, span))
     }
@@ -475,15 +493,19 @@ impl<'a> AstExpander<'a> {
     fn expand_stmt(&mut self, stmt: Spanned<Stmt>) -> ExpansionResult<Spanned<Stmt>> {
         let span = stmt.span;
         let expanded = match stmt.node {
-            Stmt::Let { name, ty, value, is_mut, ownership } => {
-                Stmt::Let {
-                    name,
-                    ty,
-                    value: Box::new(self.expand_expr(*value)?),
-                    is_mut,
-                    ownership,
-                }
-            }
+            Stmt::Let {
+                name,
+                ty,
+                value,
+                is_mut,
+                ownership,
+            } => Stmt::Let {
+                name,
+                ty,
+                value: Box::new(self.expand_expr(*value)?),
+                is_mut,
+                ownership,
+            },
             Stmt::Expr(expr) => Stmt::Expr(Box::new(self.expand_expr(*expr)?)),
             Stmt::Return(expr) => {
                 let expanded = if let Some(e) = expr {
@@ -503,14 +525,22 @@ impl<'a> AstExpander<'a> {
             }
             Stmt::Continue => Stmt::Continue,
             Stmt::Defer(expr) => Stmt::Defer(Box::new(self.expand_expr(*expr)?)),
-            Stmt::LetDestructure { pattern, value, is_mut } => {
-                Stmt::LetDestructure {
-                    pattern,
-                    value: Box::new(self.expand_expr(*value)?),
-                    is_mut,
-                }
-            }
-            Stmt::Error { message, skipped_tokens } => Stmt::Error { message, skipped_tokens },
+            Stmt::LetDestructure {
+                pattern,
+                value,
+                is_mut,
+            } => Stmt::LetDestructure {
+                pattern,
+                value: Box::new(self.expand_expr(*value)?),
+                is_mut,
+            },
+            Stmt::Error {
+                message,
+                skipped_tokens,
+            } => Stmt::Error {
+                message,
+                skipped_tokens,
+            },
         };
         Ok(Spanned::new(expanded, span))
     }
@@ -528,7 +558,11 @@ impl<'a> AstExpander<'a> {
         })
     }
 
-    fn expand_macro_invoke(&mut self, invoke: MacroInvoke, span: Span) -> ExpansionResult<Spanned<Expr>> {
+    fn expand_macro_invoke(
+        &mut self,
+        invoke: MacroInvoke,
+        span: Span,
+    ) -> ExpansionResult<Spanned<Expr>> {
         self.depth += 1;
         if self.depth > MAX_EXPANSION_DEPTH {
             return Err(ExpansionError::RecursionLimit {
@@ -545,7 +579,10 @@ impl<'a> AstExpander<'a> {
         // Parse the expanded tokens as an expression
         let wrapper = format!("F __macro_wrapper() = {}", token_string);
         let parsed = parse(&wrapper).map_err(|e| {
-            ExpansionError::ParseError(format!("Failed to parse macro expansion '{}': {:?}", token_string, e))
+            ExpansionError::ParseError(format!(
+                "Failed to parse macro expansion '{}': {:?}",
+                token_string, e
+            ))
         })?;
 
         let expr = if let Some(item) = parsed.items.first() {
@@ -553,20 +590,23 @@ impl<'a> AstExpander<'a> {
                 match &func.body {
                     FunctionBody::Expr(body) => (**body).clone(),
                     FunctionBody::Block(_) => {
-                        return Err(ExpansionError::ParseError(
-                            format!("Macro '{}' expanded to a block instead of expression", invoke.name.node)
-                        ));
+                        return Err(ExpansionError::ParseError(format!(
+                            "Macro '{}' expanded to a block instead of expression",
+                            invoke.name.node
+                        )));
                     }
                 }
             } else {
-                return Err(ExpansionError::ParseError(
-                    format!("Macro '{}' did not expand to a function", invoke.name.node)
-                ));
+                return Err(ExpansionError::ParseError(format!(
+                    "Macro '{}' did not expand to a function",
+                    invoke.name.node
+                )));
             }
         } else {
-            return Err(ExpansionError::ParseError(
-                format!("Macro '{}' expanded to empty module", invoke.name.node)
-            ));
+            return Err(ExpansionError::ParseError(format!(
+                "Macro '{}' expanded to empty module",
+                invoke.name.node
+            )));
         };
 
         let fully_expanded = self.expand_expr(expr)?;
@@ -596,7 +636,10 @@ pub fn collect_macros(module: &Module, registry: &mut MacroRegistry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vais_ast::{MacroDef, MacroRule, MacroPattern, MacroTemplate, MacroTemplateElement, MacroToken, MacroLiteral};
+    use vais_ast::{
+        MacroDef, MacroLiteral, MacroPattern, MacroRule, MacroTemplate, MacroTemplateElement,
+        MacroToken,
+    };
 
     #[test]
     fn test_expand_simple_macro() {
@@ -606,9 +649,9 @@ mod tests {
             name: Spanned::new("answer".to_string(), Span::new(0, 6)),
             rules: vec![MacroRule {
                 pattern: MacroPattern::Empty,
-                template: MacroTemplate::Sequence(vec![
-                    MacroTemplateElement::Token(MacroToken::Literal(MacroLiteral::Int(42))),
-                ]),
+                template: MacroTemplate::Sequence(vec![MacroTemplateElement::Token(
+                    MacroToken::Literal(MacroLiteral::Int(42)),
+                )]),
             }],
             is_pub: false,
         });

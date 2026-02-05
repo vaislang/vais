@@ -1,6 +1,6 @@
 //! Common utilities for GPU code generation
 
-use vais_ast::{Expr, BinOp, UnaryOp};
+use vais_ast::{BinOp, Expr, UnaryOp};
 
 /// Convert Vais binary operator to GPU operator string
 pub fn binary_op_str(op: &BinOp) -> &'static str {
@@ -50,7 +50,7 @@ pub fn is_gpu_compatible_expr(expr: &Expr) -> bool {
         Expr::Field { expr, .. } => is_gpu_compatible_expr(&expr.node),
         Expr::Call { .. } => true, // Will be validated separately
         Expr::If { .. } => true,   // Conditional is OK
-        _ => false, // Closures, async, etc. not supported
+        _ => false,                // Closures, async, etc. not supported
     }
 }
 
@@ -221,8 +221,14 @@ mod tests {
     #[test]
     fn test_cuda_builtins() {
         assert_eq!(GpuBuiltins::cuda_builtin("sqrt"), Some("sqrt"));
-        assert_eq!(GpuBuiltins::cuda_builtin("thread_idx_x"), Some("threadIdx.x"));
-        assert_eq!(GpuBuiltins::cuda_builtin("sync_threads"), Some("__syncthreads"));
+        assert_eq!(
+            GpuBuiltins::cuda_builtin("thread_idx_x"),
+            Some("threadIdx.x")
+        );
+        assert_eq!(
+            GpuBuiltins::cuda_builtin("sync_threads"),
+            Some("__syncthreads")
+        );
     }
 
     #[test]

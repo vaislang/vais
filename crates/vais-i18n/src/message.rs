@@ -125,7 +125,10 @@ mod tests {
     #[test]
     fn test_get_with_args() {
         let i18n = I18n::with_locale(Locale::En);
-        let msg = i18n.get("type.E001.message", &[("expected", "i64"), ("found", "Str")]);
+        let msg = i18n.get(
+            "type.E001.message",
+            &[("expected", "i64"), ("found", "Str")],
+        );
         assert_eq!(msg, "expected i64, found Str");
     }
 

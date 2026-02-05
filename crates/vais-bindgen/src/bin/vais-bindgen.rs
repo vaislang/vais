@@ -113,14 +113,12 @@ fn main() {
             }
             eprintln!("Generated bindings written to: {}", path.display());
         }
-        None => {
-            match bindgen.generate() {
-                Ok(output) => print!("{}", output),
-                Err(e) => {
-                    eprintln!("Error generating bindings: {}", e);
-                    process::exit(1);
-                }
+        None => match bindgen.generate() {
+            Ok(output) => print!("{}", output),
+            Err(e) => {
+                eprintln!("Error generating bindings: {}", e);
+                process::exit(1);
             }
-        }
+        },
     }
 }

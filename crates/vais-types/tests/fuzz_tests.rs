@@ -5,8 +5,8 @@
 //! either type check successfully or return an error, but never crash.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use vais_types::TypeChecker;
 use vais_parser::parse;
+use vais_types::TypeChecker;
 
 /// Simple Linear Congruential Generator for reproducible random numbers
 struct SimpleRng {
@@ -132,7 +132,10 @@ fn fuzz_functions_with_many_parameters() {
             eprintln!("\n{}: PANIC!", desc);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} many-parameter tests", failures.len());
+        panic!(
+            "Type checker panicked on {} many-parameter tests",
+            failures.len()
+        );
     }
 }
 
@@ -181,7 +184,10 @@ fn fuzz_deeply_nested_types() {
             eprintln!("\n{}: PANIC!", desc);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} deeply nested type tests", failures.len());
+        panic!(
+            "Type checker panicked on {} deeply nested type tests",
+            failures.len()
+        );
     }
 }
 
@@ -190,25 +196,18 @@ fn fuzz_circular_type_references() {
     let test_cases = vec![
         // Type alias referring to itself
         "Y A = A",
-
         // Mutual type alias references
         "Y A = B Y B = A",
-
         // Struct with field of its own type
         "S Node { value: i64, next: Node }",
-
         // Mutual struct references
         "S A { b: B } S B { a: A }",
-
         // Enum with recursive variant
         "E List { Cons(i64, List), Nil }",
-
         // Type alias chain
         "Y A = B Y B = C Y C = A",
-
         // Complex circular dependency
         "S Foo { bar: Bar } S Bar { baz: Baz } S Baz { foo: Foo }",
-
         // Self-referential generic
         "E Tree<T> { Node(T, Tree<Tree<T>>), Leaf }",
     ];
@@ -228,7 +227,10 @@ fn fuzz_circular_type_references() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} circular type tests", failures.len());
+        panic!(
+            "Type checker panicked on {} circular type tests",
+            failures.len()
+        );
     }
 }
 
@@ -237,25 +239,18 @@ fn fuzz_empty_trait_implementations() {
     let test_cases = vec![
         // Empty trait
         "T Empty {}",
-
         // Empty trait impl
         "T Show { F show(self)->str } I Show for i64 {}",
-
         // Trait with methods, empty impl
         "T Display { F fmt(self)->str F debug(self)->str } I Display for bool {}",
-
         // Multiple empty impls
         "T T1 {} T T2 {} I T1 for i64 {} I T2 for i64 {} I T1 for bool {} I T2 for bool {}",
-
         // Empty generic trait
         "T Convert<T> {} I Convert<i64> for bool {}",
-
         // Trait impl for non-existent type
         "T Show { F show(self)->str } I Show for NonExistent {}",
-
         // Duplicate trait impls
         "T Show { F show(self)->str } I Show for i64 {} I Show for i64 {}",
-
         // Impl for builtin type without trait definition
         "I SomeTrait for i64 {}",
     ];
@@ -275,7 +270,10 @@ fn fuzz_empty_trait_implementations() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} empty trait impl tests", failures.len());
+        panic!(
+            "Type checker panicked on {} empty trait impl tests",
+            failures.len()
+        );
     }
 }
 
@@ -286,13 +284,10 @@ fn fuzz_functions_with_no_body() {
         "F test()->i64",
         "F test(x:i64)->i64",
         "F test<T>(x:T)->T",
-
         // Function with just type signature
         "F add(x:i64, y:i64)->i64",
-
         // Generic function without body
         "F identity<T>(x:T)->T",
-
         // Multiple functions without bodies
         "F f1()->i64 F f2()->bool F f3()->str",
     ];
@@ -312,7 +307,10 @@ fn fuzz_functions_with_no_body() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} no-body function tests", failures.len());
+        panic!(
+            "Type checker panicked on {} no-body function tests",
+            failures.len()
+        );
     }
 }
 
@@ -354,7 +352,10 @@ fn fuzz_very_long_identifiers() {
             eprintln!("\n{}: PANIC!", desc);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} long identifier tests", failures.len());
+        panic!(
+            "Type checker panicked on {} long identifier tests",
+            failures.len()
+        );
     }
 }
 
@@ -365,22 +366,16 @@ fn fuzz_type_mismatches() {
         "F test()->i64=true",
         "F test()->bool=42",
         "F test()->str=123",
-
         // Wrong parameter type
         "F add(x:i64,y:i64)->i64=x+y F test()->i64=add(true, false)",
-
         // Type mismatch in assignment
         "F test()->i64{x:i64=true;R x}",
-
         // Multiple type errors
         "F test()->i64{x:bool=42;y:str=true;R false}",
-
         // Unresolved type variable
         "F test<T>(x:T)->i64=x",
-
         // Wrong number of type arguments
         "E Option<T>{Some(T),None} F test()->Option=None",
-
         // Conflicting type constraints
         "F test<T>(x:T, y:T)->T{R x} F main()->i64=test(42, true)",
     ];
@@ -400,7 +395,10 @@ fn fuzz_type_mismatches() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} type mismatch tests", failures.len());
+        panic!(
+            "Type checker panicked on {} type mismatch tests",
+            failures.len()
+        );
     }
 }
 
@@ -409,25 +407,18 @@ fn fuzz_undefined_references() {
     let test_cases = vec![
         // Undefined variable
         "F test()->i64=undefined_var",
-
         // Undefined function
         "F test()->i64=undefined_func()",
-
         // Undefined type
         "F test()->UndefinedType=42",
-
         // Undefined struct field
         "S Point{x:i64} F test()->i64{p:=Point{x:1};R p.undefined_field}",
-
         // Undefined enum variant
         "E Option<T>{Some(T),None} F test()->Option<i64>=Option::Undefined",
-
         // Undefined trait
         "I UndefinedTrait for i64 {}",
-
         // Undefined generic parameter
         "F test()->T=42",
-
         // Referencing non-existent module
         "F test()->i64=some_module::some_func()",
     ];
@@ -447,7 +438,10 @@ fn fuzz_undefined_references() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} undefined reference tests", failures.len());
+        panic!(
+            "Type checker panicked on {} undefined reference tests",
+            failures.len()
+        );
     }
 }
 
@@ -456,22 +450,16 @@ fn fuzz_malformed_generics() {
     let test_cases = vec![
         // Too many type arguments
         "E Option<T>{Some(T),None} F test()->Option<i64,bool>=None",
-
         // Too few type arguments
         "S Pair<A,B>{first:A,second:B} F test()->Pair<i64>=Pair{first:1,second:2}",
-
         // Generic without definition
         "F test()->Vec<i64>=42",
-
         // Nested unresolved generics
         "F test<T>()->Option<Option<Option<T>>>=None",
-
         // Conflicting generic bounds
         "T Trait1 {} T Trait2 {} F test<T: Trait1 + Trait2>(x:T)->T=x F main()->i64=test(42)",
-
         // Generic type in wrong position
         "F test()->i64{T:=42;R T}",
-
         // Multiple definitions with same generic name
         "F test<T,T>(x:T,y:T)->T=x",
     ];
@@ -491,7 +479,10 @@ fn fuzz_malformed_generics() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} malformed generic tests", failures.len());
+        panic!(
+            "Type checker panicked on {} malformed generic tests",
+            failures.len()
+        );
     }
 }
 
@@ -600,11 +591,16 @@ fn fuzz_generated_valid_programs() {
         eprintln!("\n=== TYPE CHECKER PANICS FOUND ===");
         for (idx, source, panic_msg) in &failures {
             eprintln!("\nTest {}: PANIC!", idx);
-            eprintln!("Source (first 200 chars): {}",
-                     source.chars().take(200).collect::<String>());
+            eprintln!(
+                "Source (first 200 chars): {}",
+                source.chars().take(200).collect::<String>()
+            );
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} generated programs", failures.len());
+        panic!(
+            "Type checker panicked on {} generated programs",
+            failures.len()
+        );
     }
 }
 
@@ -613,29 +609,21 @@ fn fuzz_edge_case_expressions() {
     let test_cases = vec![
         // Division by zero
         "F test()->i64=42/0",
-
         // Overflow in literals
         "F test()->i64=99999999999999999999999999999",
-
         // Deep expression nesting
         "F test()->i64=((((((((((1+2)+3)+4)+5)+6)+7)+8)+9)+10)+11)",
-
         // Many chained operations
         "F test()->i64=1+2+3+4+5+6+7+8+9+10+11+12+13+14+15+16+17+18+19+20",
-
         // Complex boolean expression
         "F test()->bool=true&&false||true&&false||true&&false||true",
-
         // Deeply nested field access (if struct exists)
         "S A{b:B} S B{c:C} S C{d:D} S D{val:i64} F test(a:A)->i64=a.b.c.d.val",
-
         // Empty string operations
         "F test()->str=\"\"",
-
         // Negative numbers
         "F test()->i64=-42",
         "F test()->i64=-(-(-42))",
-
         // Mixed operations
         "F test()->i64=(1+2)*3-4/2",
     ];
@@ -655,6 +643,9 @@ fn fuzz_edge_case_expressions() {
             eprintln!("Source: {}", source);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Type checker panicked on {} edge case expression tests", failures.len());
+        panic!(
+            "Type checker panicked on {} edge case expression tests",
+            failures.len()
+        );
     }
 }

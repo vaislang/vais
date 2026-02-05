@@ -54,15 +54,13 @@ pub struct Chapter {
     pub lessons: Vec<Lesson>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Progress {
     pub completed_lessons: HashMap<String, bool>,
     pub current_chapter: usize,
     pub current_lesson: usize,
     pub hints_used: HashMap<String, usize>,
 }
-
 
 pub struct Tutorial {
     pub chapters: Vec<Chapter>,
@@ -126,12 +124,18 @@ impl Tutorial {
     }
 
     pub fn mark_lesson_complete(&mut self, lesson_id: &str) {
-        self.progress.completed_lessons.insert(lesson_id.to_string(), true);
+        self.progress
+            .completed_lessons
+            .insert(lesson_id.to_string(), true);
         let _ = self.save_progress();
     }
 
     pub fn is_lesson_complete(&self, lesson_id: &str) -> bool {
-        self.progress.completed_lessons.get(lesson_id).copied().unwrap_or(false)
+        self.progress
+            .completed_lessons
+            .get(lesson_id)
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn use_hint(&mut self, lesson_id: &str) -> Option<String> {
@@ -139,19 +143,24 @@ impl Tutorial {
         let lesson_idx = self.progress.current_lesson;
 
         // Get lesson info first to avoid borrowing issues
-        let (hint_count, lesson_matches, hint_idx) = if let Some(lesson) = self.get_lesson(chapter_id, lesson_idx) {
-            let current_hints = *self.progress.hints_used.get(lesson_id).unwrap_or(&0);
-            (lesson.hints.len(), lesson.id == lesson_id, current_hints)
-        } else {
-            return None;
-        };
+        let (hint_count, lesson_matches, hint_idx) =
+            if let Some(lesson) = self.get_lesson(chapter_id, lesson_idx) {
+                let current_hints = *self.progress.hints_used.get(lesson_id).unwrap_or(&0);
+                (lesson.hints.len(), lesson.id == lesson_id, current_hints)
+            } else {
+                return None;
+            };
 
         if lesson_matches && hint_idx < hint_count {
             // Get the hint text
             let hint = self.get_lesson(chapter_id, lesson_idx)?.hints[hint_idx].clone();
 
             // Update hint count
-            *self.progress.hints_used.entry(lesson_id.to_string()).or_insert(0) += 1;
+            *self
+                .progress
+                .hints_used
+                .entry(lesson_id.to_string())
+                .or_insert(0) += 1;
             let _ = self.save_progress();
 
             return Some(hint);
@@ -162,7 +171,9 @@ impl Tutorial {
     pub fn list_chapters(&self) {
         println!("\n{}", "Available Chapters:".bold().cyan());
         for chapter in &self.chapters {
-            let completed = chapter.lessons.iter()
+            let completed = chapter
+                .lessons
+                .iter()
                 .filter(|l| self.is_lesson_complete(&l.id))
                 .count();
             let total = chapter.lessons.len();
@@ -180,7 +191,8 @@ impl Tutorial {
     }
 
     pub fn list_lessons(&self, chapter_id: usize) -> Result<()> {
-        let chapter = self.get_chapter(chapter_id)
+        let chapter = self
+            .get_chapter(chapter_id)
             .ok_or(TutorialError::ChapterNotFound(chapter_id))?;
 
         println!("\n{} {}", "Chapter:".bold().cyan(), chapter.title.bold());
@@ -234,8 +246,7 @@ impl Tutorial {
                 } else {
                     result.message = format!(
                         "Passed {}/{} tests",
-                        result.passed_tests,
-                        result.total_tests
+                        result.passed_tests, result.total_tests
                     );
                 }
             }

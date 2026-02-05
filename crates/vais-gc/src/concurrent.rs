@@ -171,7 +171,7 @@ pub struct ConcurrentGcConfig {
 impl Default for ConcurrentGcConfig {
     fn default() -> Self {
         Self {
-            gc_threshold: 1024 * 1024, // 1 MB
+            gc_threshold: 1024 * 1024,  // 1 MB
             target_pause_ns: 1_000_000, // 1 ms
             max_marking_steps: 1000,
             concurrent_sweep: true,
@@ -451,7 +451,8 @@ impl ConcurrentGc {
         for offset in (0..size).step_by(ptr_size) {
             if offset + ptr_size <= size {
                 unsafe {
-                    let potential_ptr = std::ptr::read(obj.data.as_ptr().add(offset) as *const usize);
+                    let potential_ptr =
+                        std::ptr::read(obj.data.as_ptr().add(offset) as *const usize);
                     if objects.contains_key(&potential_ptr) {
                         children.push(potential_ptr);
                     }

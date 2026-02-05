@@ -580,7 +580,10 @@ impl Parser {
             let expr = self.parse_unary()?;
             let end = expr.span.end;
             self.exit_depth();
-            return Ok(Spanned::new(Expr::Ref(Box::new(expr)), Span::new(start, end)));
+            return Ok(Spanned::new(
+                Expr::Ref(Box::new(expr)),
+                Span::new(start, end),
+            ));
         }
 
         if self.check(&Token::Star) {
@@ -647,10 +650,7 @@ impl Parser {
                 if self.check(&Token::Await) {
                     self.advance();
                     let end = self.prev_span().end;
-                    expr = Spanned::new(
-                        Expr::Await(Box::new(expr)),
-                        Span::new(start, end),
-                    );
+                    expr = Spanned::new(Expr::Await(Box::new(expr)), Span::new(start, end));
                 } else {
                     let field = self.parse_ident()?;
                     if self.check(&Token::LParen) {
@@ -662,7 +662,10 @@ impl Parser {
                         // Check if receiver is a type name (starts with uppercase)
                         // If so, this is a static method call
                         let is_static = if let Expr::Ident(name) = &expr.node {
-                            name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                            name.chars()
+                                .next()
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
                         } else {
                             false
                         };
@@ -798,19 +801,13 @@ impl Parser {
                         let name_spanned = Spanned::new(name, expr.span);
                         let invoke = self.parse_macro_invoke(name_spanned)?;
                         let end = self.prev_span().end;
-                        expr = Spanned::new(
-                            Expr::MacroInvoke(invoke),
-                            Span::new(start, end),
-                        );
+                        expr = Spanned::new(Expr::MacroInvoke(invoke), Span::new(start, end));
                     }
                 } else {
                     // Postfix unwrap: expr!
                     self.advance();
                     let end = self.prev_span().end;
-                    expr = Spanned::new(
-                        Expr::Unwrap(Box::new(expr)),
-                        Span::new(start, end),
-                    );
+                    expr = Spanned::new(Expr::Unwrap(Box::new(expr)), Span::new(start, end));
                 }
             } else if self.check(&Token::As) {
                 // Type cast: expr as Type
@@ -883,9 +880,8 @@ impl Parser {
                         }
                     }
                     // Sub-lex and sub-parse the expression
-                    let tokens = vais_lexer::tokenize(&expr_text).map_err(|_| {
-                        ParseError::InvalidExpression
-                    })?;
+                    let tokens = vais_lexer::tokenize(&expr_text)
+                        .map_err(|_| ParseError::InvalidExpression)?;
                     let mut sub_parser = crate::Parser::new(tokens);
                     let expr = sub_parser.parse_expr()?;
                     parts.push(StringInterpPart::Expr(Box::new(expr)));
@@ -954,7 +950,10 @@ impl Parser {
                     self.expect(&Token::RParen)?;
                     let end = self.prev_span().end;
                     return Ok(Spanned::new(
-                        Expr::Assert { condition: Box::new(condition), message },
+                        Expr::Assert {
+                            condition: Box::new(condition),
+                            message,
+                        },
                         Span::new(start, end),
                     ));
                 }
@@ -1483,7 +1482,9 @@ impl Parser {
             Ok(Spanned::new(pattern, Span::new(start, end)))
         } else {
             self.exit_depth();
-            Err(ParseError::UnexpectedEof { span: self.current_span() })
+            Err(ParseError::UnexpectedEof {
+                span: self.current_span(),
+            })
         }
     }
 

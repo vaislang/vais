@@ -1,6 +1,6 @@
+pub mod audit;
 pub mod sbom;
 pub mod signing;
-pub mod audit;
 
 #[cfg(test)]
 mod tests;
@@ -31,6 +31,6 @@ pub enum SupplyChainError {
 pub type Result<T> = std::result::Result<T, SupplyChainError>;
 
 // Re-exports for convenience
+pub use audit::{AuditResult, DependencyAuditor, VulnerabilitySeverity};
 pub use sbom::{SbomComponent, SbomDocument, SbomGenerator};
 pub use signing::{PackageSignature, PackageSigner};
-pub use audit::{AuditResult, DependencyAuditor, VulnerabilitySeverity};

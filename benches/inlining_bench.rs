@@ -34,7 +34,10 @@ fn generate_ir_with_small_functions(num_helpers: usize) -> String {
     for i in 0..num_helpers {
         ir.push_str(&format!(
             "\t%r{} = call i64 @helper_{}(i64 {}, i64 {})\n",
-            i, i, i, i + 1
+            i,
+            i,
+            i,
+            i + 1
         ));
     }
     // Sum results
@@ -82,7 +85,9 @@ fn generate_ir_with_hot_functions() -> String {
     for i in 0..50 {
         ir.push_str(&format!(
             "\t%hot_{} = call i64 @hot_add(i64 {}, i64 {})\n",
-            i, i, i + 1
+            i,
+            i,
+            i + 1
         ));
     }
     ir.push_str("\t%cold_0 = call i64 @cold_compute(i64 1, i64 2, i64 3)\n");
@@ -119,7 +124,9 @@ fn generate_ir_with_medium_functions() -> String {
     for i in 0..10 {
         ir.push_str(&format!(
             "\t%r{} = call i64 @compute(i64 {}, i64 {})\n",
-            i, i, i + 1
+            i,
+            i,
+            i + 1
         ));
     }
     ir.push_str("\tret i64 %r9\n}\n");
@@ -178,7 +185,12 @@ fn bench_optimization_levels(c: &mut Criterion) {
 
     let ir = generate_ir_with_small_functions(20);
 
-    for (name, level) in [("O0", OptLevel::O0), ("O1", OptLevel::O1), ("O2", OptLevel::O2), ("O3", OptLevel::O3)] {
+    for (name, level) in [
+        ("O0", OptLevel::O0),
+        ("O1", OptLevel::O1),
+        ("O2", OptLevel::O2),
+        ("O3", OptLevel::O3),
+    ] {
         group.bench_function(name, |b| {
             b.iter(|| optimize_ir_with_pgo(black_box(&ir), level, &PgoMode::None))
         });

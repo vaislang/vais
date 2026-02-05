@@ -79,7 +79,12 @@ impl PackageCache {
     }
 
     /// Store an archive in the cache
-    pub fn store_archive(&self, name: &str, version: &Version, data: &[u8]) -> RegistryResult<PathBuf> {
+    pub fn store_archive(
+        &self,
+        name: &str,
+        version: &Version,
+        data: &[u8],
+    ) -> RegistryResult<PathBuf> {
         let pkg_dir = self.package_dir(name);
         fs::create_dir_all(&pkg_dir).map_err(|e| RegistryError::CreateDirError {
             path: pkg_dir.clone(),

@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use crate::protocol::types::{StackFrame, Source};
+use crate::protocol::types::{Source, StackFrame};
 
 /// Manages stack frame IDs and their mapping to thread/frame indices
 #[derive(Debug, Default)]
@@ -54,11 +54,7 @@ impl StackManager {
     }
 
     /// Cache stack frames for a thread and return DAP stack frames
-    pub fn cache_frames(
-        &mut self,
-        thread_id: i64,
-        raw_frames: Vec<RawFrame>,
-    ) -> Vec<StackFrame> {
+    pub fn cache_frames(&mut self, thread_id: i64, raw_frames: Vec<RawFrame>) -> Vec<StackFrame> {
         // Clear existing cache for this thread
         self.cached_frames.remove(&thread_id);
 
@@ -70,10 +66,13 @@ impl StackManager {
             let id = self.next_id();
 
             // Store mapping
-            self.frame_map.insert(id, FrameInfo {
-                thread_id,
-                frame_index: index,
-            });
+            self.frame_map.insert(
+                id,
+                FrameInfo {
+                    thread_id,
+                    frame_index: index,
+                },
+            );
 
             // Create cached frame
             let cache_entry = CachedFrame {
@@ -189,16 +188,14 @@ mod tests {
     fn test_invalidate() {
         let mut manager = StackManager::new();
 
-        let raw_frames = vec![
-            RawFrame {
-                function_name: "main".to_string(),
-                source_path: None,
-                line: 1,
-                column: 1,
-                instruction_pointer: 0x1000,
-                module_name: None,
-            },
-        ];
+        let raw_frames = vec![RawFrame {
+            function_name: "main".to_string(),
+            source_path: None,
+            line: 1,
+            column: 1,
+            instruction_pointer: 0x1000,
+            module_name: None,
+        }];
 
         let dap_frames = manager.cache_frames(1, raw_frames);
         let id = dap_frames[0].id;

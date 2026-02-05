@@ -2,9 +2,9 @@
 //!
 //! This module handles generation of LLVM IR for Vais statements (Let, Return, Break, Continue, etc.)
 
-use crate::{CodeGenerator, CodegenError, CodegenResult};
 use crate::types::LocalVar;
-use vais_ast::{Pattern, Spanned, Stmt, Expr};
+use crate::{CodeGenerator, CodegenError, CodegenResult};
+use vais_ast::{Expr, Pattern, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
@@ -87,10 +87,21 @@ impl CodeGenerator {
                 // 5. Simple primitive types (i64, i32, bool, etc.)
                 let is_simple_type = matches!(
                     resolved_ty,
-                    ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
-                    ResolvedType::I128 | ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 |
-                    ResolvedType::U64 | ResolvedType::U128 | ResolvedType::F32 | ResolvedType::F64 |
-                    ResolvedType::Bool | ResolvedType::Str | ResolvedType::Pointer(_)
+                    ResolvedType::I8
+                        | ResolvedType::I16
+                        | ResolvedType::I32
+                        | ResolvedType::I64
+                        | ResolvedType::I128
+                        | ResolvedType::U8
+                        | ResolvedType::U16
+                        | ResolvedType::U32
+                        | ResolvedType::U64
+                        | ResolvedType::U128
+                        | ResolvedType::F32
+                        | ResolvedType::F64
+                        | ResolvedType::Bool
+                        | ResolvedType::Str
+                        | ResolvedType::Pointer(_)
                 );
 
                 let use_ssa = !*is_mut
@@ -120,10 +131,7 @@ impl CodeGenerator {
                     if is_struct_lit || is_enum_variant_call || is_unit_variant {
                         // The val is already a pointer to the struct/enum (%1, %2, etc)
                         // Allocate space for a pointer and store it
-                        ir.push_str(&format!(
-                            "  %{} = alloca {}*\n",
-                            llvm_name, llvm_ty
-                        ));
+                        ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
                         ir.push_str(&format!(
                             "  store {}* {}, {}** %{}\n",
                             llvm_ty, val, llvm_ty, llvm_name
@@ -133,28 +141,19 @@ impl CodeGenerator {
                         // alloca struct, store value, then store pointer to it
                         // This keeps all struct variables as pointers for consistency
                         let tmp_ptr = format!("%{}.struct", llvm_name);
-                        ir.push_str(&format!(
-                            "  {} = alloca {}\n",
-                            tmp_ptr, llvm_ty
-                        ));
+                        ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
                         ir.push_str(&format!(
                             "  store {} {}, {}* {}\n",
                             llvm_ty, val, llvm_ty, tmp_ptr
                         ));
-                        ir.push_str(&format!(
-                            "  %{} = alloca {}*\n",
-                            llvm_name, llvm_ty
-                        ));
+                        ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
                         ir.push_str(&format!(
                             "  store {}* {}, {}** %{}\n",
                             llvm_ty, tmp_ptr, llvm_ty, llvm_name
                         ));
                     } else {
                         // Allocate and store
-                        ir.push_str(&format!(
-                            "  %{} = alloca {}\n",
-                            llvm_name, llvm_ty
-                        ));
+                        ir.push_str(&format!("  %{} = alloca {}\n", llvm_name, llvm_ty));
                         ir.push_str(&format!(
                             "  store {} {}, {}* %{}\n",
                             llvm_ty, val, llvm_ty, llvm_name
@@ -174,9 +173,7 @@ impl CodeGenerator {
                 value,
                 is_mut,
                 ..
-            } => {
-                self.generate_let_destructure(pattern, value, *is_mut, counter)
-            }
+            } => self.generate_let_destructure(pattern, value, *is_mut, counter),
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
             Stmt::Return(expr) => {
                 if let Some(expr) = expr {
@@ -184,8 +181,14 @@ impl CodeGenerator {
 
                     // Get the return type of the current function
                     let (ret_type, ret_resolved) = if let Some(fn_name) = &self.current_function {
-                        self.functions.get(fn_name)
-                            .map(|info| (self.type_to_llvm(&info.signature.ret), info.signature.ret.clone()))
+                        self.functions
+                            .get(fn_name)
+                            .map(|info| {
+                                (
+                                    self.type_to_llvm(&info.signature.ret),
+                                    info.signature.ret.clone(),
+                                )
+                            })
                             .unwrap_or_else(|| ("i64".to_string(), ResolvedType::I64))
                     } else {
                         ("i64".to_string(), ResolvedType::I64)
@@ -195,7 +198,10 @@ impl CodeGenerator {
                     // but we need to return by value, so dereference the pointer
                     let final_val = if let Expr::Ident(name) = &expr.node {
                         if let Some(local) = self.locals.get(name) {
-                            if !local.is_param() && matches!(local.ty, ResolvedType::Named { .. }) && matches!(ret_resolved, ResolvedType::Named { .. }) {
+                            if !local.is_param()
+                                && matches!(local.ty, ResolvedType::Named { .. })
+                                && matches!(ret_resolved, ResolvedType::Named { .. })
+                            {
                                 // val is a pointer to the struct, load the actual value
                                 let loaded = format!("%ret.{}", counter);
                                 *counter += 1;
@@ -245,7 +251,9 @@ impl CodeGenerator {
                         Ok(("void".to_string(), ir))
                     }
                 } else {
-                    Err(CodegenError::Unsupported("break outside of loop".to_string()))
+                    Err(CodegenError::Unsupported(
+                        "break outside of loop".to_string(),
+                    ))
                 }
             }
             Stmt::Continue => {
@@ -254,7 +262,9 @@ impl CodeGenerator {
                     let ir = format!("  br label %{}\n", continue_label);
                     Ok(("void".to_string(), ir))
                 } else {
-                    Err(CodegenError::Unsupported("continue outside of loop".to_string()))
+                    Err(CodegenError::Unsupported(
+                        "continue outside of loop".to_string(),
+                    ))
                 }
             }
 

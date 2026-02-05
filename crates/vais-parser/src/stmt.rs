@@ -23,9 +23,17 @@ impl Parser {
             // missing a closing brace and have escaped the function body
             if let Some(tok) = self.peek() {
                 match &tok.token {
-                    Token::Function | Token::Struct | Token::Enum | Token::Union |
-                    Token::Use | Token::Trait | Token::Impl |
-                    Token::Macro | Token::Pub | Token::Async | Token::Extern => {
+                    Token::Function
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::Union
+                    | Token::Use
+                    | Token::Trait
+                    | Token::Impl
+                    | Token::Macro
+                    | Token::Pub
+                    | Token::Async
+                    | Token::Extern => {
                         // We've hit a top-level item keyword - stop parsing block contents
                         break;
                     }
@@ -168,7 +176,9 @@ impl Parser {
                     depth -= 1;
                     if depth == 0 {
                         // Check if next token is :=
-                        return self.tokens.get(i + 1)
+                        return self
+                            .tokens
+                            .get(i + 1)
                             .map(|t| matches!(t.token, Token::ColonEq))
                             .unwrap_or(false);
                     }
@@ -247,7 +257,10 @@ impl Parser {
             (Some(ty), is_mut, ownership)
         } else {
             return Err(ParseError::UnexpectedToken {
-                found: self.peek().map(|t| t.token.clone()).unwrap_or(Token::Ident("EOF".into())),
+                found: self
+                    .peek()
+                    .map(|t| t.token.clone())
+                    .unwrap_or(Token::Ident("EOF".into())),
                 span: self.current_span(),
                 expected: ":= or :".into(),
             });

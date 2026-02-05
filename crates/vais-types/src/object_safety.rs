@@ -4,7 +4,7 @@
 //! A trait is "object-safe" only if it meets specific criteria that allow vtable-based
 //! dynamic dispatch.
 
-use crate::{TraitDef, ResolvedType};
+use crate::{ResolvedType, TraitDef};
 
 /// Reasons a trait may not be object-safe
 #[derive(Debug, Clone, PartialEq)]
@@ -33,19 +33,31 @@ impl ObjectSafetyViolation {
     pub fn description(&self) -> String {
         match self {
             ObjectSafetyViolation::MethodHasTypeParams { method_name } => {
-                format!("method `{}` has type parameters (generic methods are not object-safe)", method_name)
+                format!(
+                    "method `{}` has type parameters (generic methods are not object-safe)",
+                    method_name
+                )
             }
             ObjectSafetyViolation::MethodReturnsSelf { method_name } => {
-                format!("method `{}` returns `Self` type (cannot be known at runtime)", method_name)
+                format!(
+                    "method `{}` returns `Self` type (cannot be known at runtime)",
+                    method_name
+                )
             }
             ObjectSafetyViolation::MethodMissingReceiver { method_name } => {
-                format!("method `{}` has no receiver (static methods are not object-safe)", method_name)
+                format!(
+                    "method `{}` has no receiver (static methods are not object-safe)",
+                    method_name
+                )
             }
             ObjectSafetyViolation::TraitHasSizedBound => {
                 "trait requires `Self: Sized` bound".to_string()
             }
             ObjectSafetyViolation::MethodUsesSelfInArgs { method_name } => {
-                format!("method `{}` uses `Self` in parameter position (only receiver can be Self)", method_name)
+                format!(
+                    "method `{}` uses `Self` in parameter position (only receiver can be Self)",
+                    method_name
+                )
             }
             ObjectSafetyViolation::MethodHasSizedBound { method_name } => {
                 format!("method `{}` has `Self: Sized` bound", method_name)
@@ -109,8 +121,7 @@ pub fn check_object_safety(trait_def: &TraitDef) -> Result<(), Vec<ObjectSafetyV
 
         // First parameter must be some form of self
         let (first_param_name, first_param_type, _) = &method_sig.params[0];
-        let has_receiver = first_param_name == "self" ||
-                          is_self_receiver_type(first_param_type);
+        let has_receiver = first_param_name == "self" || is_self_receiver_type(first_param_type);
 
         if !has_receiver {
             violations.push(ObjectSafetyViolation::MethodMissingReceiver {
@@ -170,14 +181,14 @@ fn contains_self_type(ty: &ResolvedType) -> bool {
         ResolvedType::Generic(name) if name == "Self" => true,
 
         // Recursive checks for compound types
-        ResolvedType::Ref(inner) |
-        ResolvedType::RefMut(inner) |
-        ResolvedType::Pointer(inner) |
-        ResolvedType::Array(inner) |
-        ResolvedType::Optional(inner) |
-        ResolvedType::Result(inner) |
-        ResolvedType::Future(inner) |
-        ResolvedType::Range(inner) => contains_self_type(inner),
+        ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Result(inner)
+        | ResolvedType::Future(inner)
+        | ResolvedType::Range(inner) => contains_self_type(inner),
 
         ResolvedType::ConstArray { element, .. } => contains_self_type(element),
 
@@ -185,18 +196,13 @@ fn contains_self_type(ty: &ResolvedType) -> bool {
 
         ResolvedType::Tuple(types) => types.iter().any(contains_self_type),
 
-        ResolvedType::Fn { params, ret, .. } |
-        ResolvedType::FnPtr { params, ret, .. } => {
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
             params.iter().any(contains_self_type) || contains_self_type(ret)
         }
 
-        ResolvedType::Named { generics, .. } => {
-            generics.iter().any(contains_self_type)
-        }
+        ResolvedType::Named { generics, .. } => generics.iter().any(contains_self_type),
 
-        ResolvedType::DynTrait { generics, .. } => {
-            generics.iter().any(contains_self_type)
-        }
+        ResolvedType::DynTrait { generics, .. } => generics.iter().any(contains_self_type),
 
         ResolvedType::Associated { base, generics, .. } => {
             contains_self_type(base) || generics.iter().any(contains_self_type)
@@ -295,7 +301,10 @@ mod tests {
         };
 
         let result = check_object_safety(&trait_def);
-        assert!(result.is_err(), "Trait returning Self should not be object-safe");
+        assert!(
+            result.is_err(),
+            "Trait returning Self should not be object-safe"
+        );
 
         let violations = result.unwrap_err();
         assert!(violations.iter().any(|v| matches!(
@@ -397,7 +406,10 @@ mod tests {
         };
 
         let result = check_object_safety(&trait_def);
-        assert!(result.is_err(), "Trait with Sized bound should not be object-safe");
+        assert!(
+            result.is_err(),
+            "Trait with Sized bound should not be object-safe"
+        );
 
         let violations = result.unwrap_err();
         assert!(violations
@@ -514,7 +526,9 @@ mod tests {
 
     #[test]
     fn test_contains_self_type() {
-        assert!(contains_self_type(&ResolvedType::Generic("Self".to_string())));
+        assert!(contains_self_type(&ResolvedType::Generic(
+            "Self".to_string()
+        )));
 
         assert!(contains_self_type(&ResolvedType::Ref(Box::new(
             ResolvedType::Generic("Self".to_string())

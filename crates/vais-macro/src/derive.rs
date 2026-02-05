@@ -25,7 +25,11 @@ pub enum DeriveError {
     /// Cannot derive for this type
     CannotDerive { derive: String, reason: String },
     /// Missing required trait bound
-    MissingBound { derive: String, field: String, bound: String },
+    MissingBound {
+        derive: String,
+        field: String,
+        bound: String,
+    },
 }
 
 impl std::fmt::Display for DeriveError {
@@ -37,8 +41,16 @@ impl std::fmt::Display for DeriveError {
             DeriveError::CannotDerive { derive, reason } => {
                 write!(f, "Cannot derive '{}': {}", derive, reason)
             }
-            DeriveError::MissingBound { derive, field, bound } => {
-                write!(f, "Cannot derive '{}': field '{}' requires '{}' bound", derive, field, bound)
+            DeriveError::MissingBound {
+                derive,
+                field,
+                bound,
+            } => {
+                write!(
+                    f,
+                    "Cannot derive '{}': field '{}' requires '{}' bound",
+                    derive, field, bound
+                )
             }
         }
     }

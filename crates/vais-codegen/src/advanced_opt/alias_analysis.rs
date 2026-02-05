@@ -28,7 +28,10 @@ pub enum AliasResult {
 impl AliasResult {
     /// Returns true if aliasing is possible
     pub fn may_alias(&self) -> bool {
-        matches!(self, AliasResult::MayAlias | AliasResult::MustAlias | AliasResult::PartialAlias)
+        matches!(
+            self,
+            AliasResult::MayAlias | AliasResult::MustAlias | AliasResult::PartialAlias
+        )
     }
 
     /// Merge two alias results (most conservative)
@@ -80,7 +83,10 @@ pub enum PointerBase {
     /// Function parameter
     Parameter(String, usize),
     /// Result of a GEP from another pointer
-    Derived { from: Box<PointerBase>, offset: String },
+    Derived {
+        from: Box<PointerBase>,
+        offset: String,
+    },
     /// Unknown origin
     Unknown,
 }
@@ -253,11 +259,14 @@ impl AliasAnalysis {
             // Alloca instruction -> new stack allocation
             if trimmed.contains(" = alloca ") {
                 if let Some(dest) = extract_def_var(trimmed) {
-                    self.pointers.insert(dest.clone(), PointerInfo {
-                        base: PointerBase::Stack(dest),
-                        escapes: false,
-                        ..Default::default()
-                    });
+                    self.pointers.insert(
+                        dest.clone(),
+                        PointerInfo {
+                            base: PointerBase::Stack(dest),
+                            escapes: false,
+                            ..Default::default()
+                        },
+                    );
                 }
             }
 
@@ -269,11 +278,14 @@ impl AliasAnalysis {
                             from: Box::new(base_info.base.clone()),
                             offset: dest.clone(),
                         };
-                        self.pointers.insert(dest, PointerInfo {
-                            base: new_base,
-                            escapes: base_info.escapes,
-                            ..Default::default()
-                        });
+                        self.pointers.insert(
+                            dest,
+                            PointerInfo {
+                                base: new_base,
+                                escapes: base_info.escapes,
+                                ..Default::default()
+                            },
+                        );
                     }
                 }
             }
@@ -440,10 +452,7 @@ impl AliasAnalysis {
                 let (ptr2, _) = &scopes[j];
 
                 if self.query(ptr1, ptr2) == AliasResult::NoAlias {
-                    metadata.push_str(&format!(
-                        "; {} and {} are noalias\n",
-                        ptr1, ptr2
-                    ));
+                    metadata.push_str(&format!("; {} and {} are noalias\n", ptr1, ptr2));
                 }
             }
         }
@@ -677,9 +686,18 @@ mod tests {
 
     #[test]
     fn test_alias_result_merge() {
-        assert_eq!(AliasResult::NoAlias.merge(AliasResult::NoAlias), AliasResult::NoAlias);
-        assert_eq!(AliasResult::MustAlias.merge(AliasResult::MustAlias), AliasResult::MustAlias);
-        assert_eq!(AliasResult::NoAlias.merge(AliasResult::MayAlias), AliasResult::MayAlias);
+        assert_eq!(
+            AliasResult::NoAlias.merge(AliasResult::NoAlias),
+            AliasResult::NoAlias
+        );
+        assert_eq!(
+            AliasResult::MustAlias.merge(AliasResult::MustAlias),
+            AliasResult::MustAlias
+        );
+        assert_eq!(
+            AliasResult::NoAlias.merge(AliasResult::MayAlias),
+            AliasResult::MayAlias
+        );
     }
 
     #[test]

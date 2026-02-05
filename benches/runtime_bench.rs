@@ -118,9 +118,11 @@ fn bench_gcd_comparison(c: &mut Criterion) {
     let test_cases = [(48, 18), (12345, 67890), (1000000007, 998244353)];
 
     for (a, b) in test_cases {
-        group.bench_with_input(BenchmarkId::new("rust", format!("{}_{}", a, b)), &(a, b), |bench, &(a, b)| {
-            bench.iter(|| rust_gcd(black_box(a), black_box(b)))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("rust", format!("{}_{}", a, b)),
+            &(a, b),
+            |bench, &(a, b)| bench.iter(|| rust_gcd(black_box(a), black_box(b))),
+        );
     }
 
     group.finish();
@@ -134,11 +136,9 @@ fn bench_algorithm_comparison(c: &mut Criterion) {
     let sizes = [10, 20, 30];
 
     for size in sizes {
-        group.bench_with_input(
-            BenchmarkId::new("fib_rust", size),
-            &size,
-            |b, &n| b.iter(|| rust_fibonacci(black_box(n))),
-        );
+        group.bench_with_input(BenchmarkId::new("fib_rust", size), &size, |b, &n| {
+            b.iter(|| rust_fibonacci(black_box(n)))
+        });
     }
 
     group.finish();

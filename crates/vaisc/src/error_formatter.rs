@@ -5,8 +5,8 @@
 
 use std::path::{Path, PathBuf};
 use vais_ast::Span;
-use vais_types::{TypeError, error_report::ErrorReporter};
 use vais_parser::ParseError;
+use vais_types::{error_report::ErrorReporter, TypeError};
 
 /// Error formatting context containing source information
 pub struct ErrorFormatContext {
@@ -22,15 +22,15 @@ impl ErrorFormatContext {
 
     /// Get the filename for display purposes
     pub fn filename(&self) -> &str {
-        self.path.file_name()
+        self.path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
     }
 
     /// Get the reporter for this context
     pub fn reporter(&self) -> ErrorReporter<'_> {
-        ErrorReporter::new(&self.source)
-            .with_filename(self.filename())
+        ErrorReporter::new(&self.source).with_filename(self.filename())
     }
 }
 
@@ -66,13 +66,7 @@ impl FormattableError for TypeError {
         let message = self.localized_message();
         let help = self.localized_help();
 
-        reporter.format_error(
-            self.error_code(),
-            &title,
-            span,
-            &message,
-            help.as_deref(),
-        )
+        reporter.format_error(self.error_code(), &title, span, &message, help.as_deref())
     }
 
     fn error_code(&self) -> &str {
@@ -103,13 +97,7 @@ impl FormattableError for ParseError {
         let title = self.localized_title();
         let message = self.localized_message();
 
-        reporter.format_error(
-            self.error_code(),
-            &title,
-            span,
-            &message,
-            None,
-        )
+        reporter.format_error(self.error_code(), &title, span, &message, None)
     }
 
     fn error_code(&self) -> &str {

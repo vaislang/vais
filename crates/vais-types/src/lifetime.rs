@@ -9,9 +9,9 @@
 //! - Constraint solving via fixed-point iteration
 //! - Scope-based lifetime validation
 
-use std::collections::{HashMap, HashSet, BTreeMap};
-use vais_ast::*;
 use crate::types::{ResolvedType, TypeError, TypeResult};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use vais_ast::*;
 
 /// Unique lifetime variable identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -64,7 +64,9 @@ pub enum LifetimeConstraint {
 impl std::fmt::Display for LifetimeConstraint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LifetimeConstraint::Outlives { longer, shorter, .. } => {
+            LifetimeConstraint::Outlives {
+                longer, shorter, ..
+            } => {
                 write!(f, "{}: {}", longer, shorter)
             }
             LifetimeConstraint::Equal { a, b, .. } => {
@@ -171,7 +173,9 @@ impl LifetimeInferencer {
 
     /// Push a new scope
     pub fn push_scope(&mut self) -> ScopeId {
-        let parent_depth = self.scopes.iter()
+        let parent_depth = self
+            .scopes
+            .iter()
             .find(|s| s.id == self.current_scope)
             .map(|s| s.depth)
             .unwrap_or(0);
@@ -226,11 +230,8 @@ impl LifetimeInferencer {
 
     /// Add an equality constraint
     pub fn add_equal(&mut self, a: Lifetime, b: Lifetime, reason: ConstraintReason) {
-        self.constraints.push(LifetimeConstraint::Equal {
-            a,
-            b,
-            reason,
-        });
+        self.constraints
+            .push(LifetimeConstraint::Equal { a, b, reason });
     }
 
     /// Resolve a lifetime string to a Lifetime enum
@@ -308,8 +309,8 @@ impl LifetimeInferencer {
     /// Extract the lifetime from a reference type, if explicitly annotated
     fn extract_reference_lifetime(&self, ty: &ResolvedType) -> Option<Lifetime> {
         match ty {
-            ResolvedType::RefLifetime { lifetime, .. } |
-            ResolvedType::RefMutLifetime { lifetime, .. } => {
+            ResolvedType::RefLifetime { lifetime, .. }
+            | ResolvedType::RefMutLifetime { lifetime, .. } => {
                 Some(self.resolve_lifetime_name(lifetime))
             }
             _ => None,
@@ -330,8 +331,10 @@ impl LifetimeInferencer {
     /// Check if a return type contains a reference
     fn has_reference_in_return(&self, ty: &ResolvedType) -> bool {
         match ty {
-            ResolvedType::Ref(_) | ResolvedType::RefMut(_) |
-            ResolvedType::RefLifetime { .. } | ResolvedType::RefMutLifetime { .. } => true,
+            ResolvedType::Ref(_)
+            | ResolvedType::RefMut(_)
+            | ResolvedType::RefLifetime { .. }
+            | ResolvedType::RefMutLifetime { .. } => true,
             ResolvedType::Tuple(types) => types.iter().any(|t| self.has_reference_in_return(t)),
             ResolvedType::Optional(inner) | ResolvedType::Result(inner) => {
                 self.has_reference_in_return(inner)
@@ -369,9 +372,12 @@ impl LifetimeInferencer {
 
         // Generate constraints from parameters
         for (name, ty, _) in params {
-            self.generate_type_constraints(ty, &ConstraintReason::FunctionParam {
-                param_name: name.clone(),
-            });
+            self.generate_type_constraints(
+                ty,
+                &ConstraintReason::FunctionParam {
+                    param_name: name.clone(),
+                },
+            );
         }
 
         // Generate constraints from return type
@@ -401,7 +407,9 @@ impl LifetimeInferencer {
         // Collect results
         let lifetime_params: Vec<String> = if explicit_lifetime_params.is_empty() {
             // Infer lifetime parameters from the elision result
-            elision.input_lifetimes.iter()
+            elision
+                .input_lifetimes
+                .iter()
                 .filter_map(|(_, lt)| match lt {
                     Lifetime::Named(name) => Some(name.clone()),
                     _ => None,
@@ -435,9 +443,11 @@ impl LifetimeInferencer {
             ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                 self.generate_type_constraints(inner, reason);
             }
-            ResolvedType::Array(inner) | ResolvedType::Optional(inner) |
-            ResolvedType::Result(inner) | ResolvedType::Future(inner) |
-            ResolvedType::Pointer(inner) => {
+            ResolvedType::Array(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Result(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Pointer(inner) => {
                 self.generate_type_constraints(inner, reason);
             }
             ResolvedType::Tuple(types) => {
@@ -461,7 +471,12 @@ impl LifetimeInferencer {
     }
 
     /// Generate outlives constraints: the outer lifetime must outlive inner lifetimes
-    fn generate_inner_outlives(&mut self, outer: &Lifetime, inner: &ResolvedType, reason: &ConstraintReason) {
+    fn generate_inner_outlives(
+        &mut self,
+        outer: &Lifetime,
+        inner: &ResolvedType,
+        reason: &ConstraintReason,
+    ) {
         match inner {
             ResolvedType::RefLifetime { lifetime, .. } => {
                 let inner_lt = self.resolve_lifetime_name(lifetime);
@@ -537,7 +552,12 @@ impl LifetimeInferencer {
         // Validate: 'static outlives everything (trivially true)
         // Check for impossible constraints like X: 'static where X is a short-lived scope
         for constraint in &self.constraints {
-            if let LifetimeConstraint::Outlives { longer, shorter, reason: _ } = constraint {
+            if let LifetimeConstraint::Outlives {
+                longer,
+                shorter,
+                reason: _,
+            } = constraint
+            {
                 // A non-static named lifetime cannot outlive 'static
                 // (unless it IS 'static)
                 if *shorter == Lifetime::Static && *longer != Lifetime::Static {
@@ -577,20 +597,16 @@ impl LifetimeInferencer {
 
         // If ref_lifetime outlives referent_lifetime, the reference is dangling
         match (ref_lifetime, referent_lifetime) {
-            (Lifetime::Static, Lifetime::Named(name)) => {
-                Err(TypeError::LifetimeTooShort {
-                    reference_lifetime: "'static".to_string(),
-                    referent_lifetime: format!("'{}", name),
-                    span: None,
-                })
-            }
-            (Lifetime::Static, Lifetime::Inferred(var)) => {
-                Err(TypeError::LifetimeTooShort {
-                    reference_lifetime: "'static".to_string(),
-                    referent_lifetime: format!("{}", var),
-                    span: None,
-                })
-            }
+            (Lifetime::Static, Lifetime::Named(name)) => Err(TypeError::LifetimeTooShort {
+                reference_lifetime: "'static".to_string(),
+                referent_lifetime: format!("'{}", name),
+                span: None,
+            }),
+            (Lifetime::Static, Lifetime::Inferred(var)) => Err(TypeError::LifetimeTooShort {
+                reference_lifetime: "'static".to_string(),
+                referent_lifetime: format!("{}", var),
+                span: None,
+            }),
             (Lifetime::Named(a), Lifetime::Named(b)) if a != b => {
                 // Check if a outlives b in the constraint graph
                 let a_lt = Lifetime::Named(a.clone());
@@ -692,7 +708,8 @@ impl LifetimeInferencer {
 
     /// Extract lifetime parameters from generic parameters
     pub fn extract_lifetime_params(generics: &[GenericParam]) -> Vec<String> {
-        generics.iter()
+        generics
+            .iter()
             .filter_map(|g| match &g.kind {
                 GenericParamKind::Lifetime { .. } => Some(g.name.node.clone()),
                 _ => None,
@@ -702,7 +719,8 @@ impl LifetimeInferencer {
 
     /// Extract lifetime bounds from generic parameters
     pub fn extract_lifetime_bounds(generics: &[GenericParam]) -> Vec<(String, Vec<String>)> {
-        generics.iter()
+        generics
+            .iter()
             .filter_map(|g| match &g.kind {
                 GenericParamKind::Lifetime { bounds } if !bounds.is_empty() => {
                     Some((g.name.node.clone(), bounds.clone()))
@@ -774,9 +792,11 @@ mod tests {
     fn test_elision_single_input_lifetime() {
         let mut inferencer = LifetimeInferencer::new();
         // F foo(x: &i64) -> &i64
-        let params = vec![
-            ("x".to_string(), ResolvedType::Ref(Box::new(ResolvedType::I64)), false),
-        ];
+        let params = vec![(
+            "x".to_string(),
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+        )];
         let ret = ResolvedType::Ref(Box::new(ResolvedType::I64));
         let result = inferencer.apply_elision_rules(&params, &ret);
         assert!(result.elision_successful);
@@ -788,8 +808,16 @@ mod tests {
         let mut inferencer = LifetimeInferencer::new();
         // F foo(x: &i64, y: &i64) -> &i64  (ambiguous - cannot elide)
         let params = vec![
-            ("x".to_string(), ResolvedType::Ref(Box::new(ResolvedType::I64)), false),
-            ("y".to_string(), ResolvedType::Ref(Box::new(ResolvedType::I64)), false),
+            (
+                "x".to_string(),
+                ResolvedType::Ref(Box::new(ResolvedType::I64)),
+                false,
+            ),
+            (
+                "y".to_string(),
+                ResolvedType::Ref(Box::new(ResolvedType::I64)),
+                false,
+            ),
         ];
         let ret = ResolvedType::Ref(Box::new(ResolvedType::I64));
         let result = inferencer.apply_elision_rules(&params, &ret);
@@ -802,11 +830,19 @@ mod tests {
         let mut inferencer = LifetimeInferencer::new();
         // F foo(self: &Self, x: &i64) -> &i64  (self's lifetime used for output)
         let params = vec![
-            ("self".to_string(), ResolvedType::Ref(Box::new(ResolvedType::Named {
-                name: "Self".into(),
-                generics: vec![],
-            })), false),
-            ("x".to_string(), ResolvedType::Ref(Box::new(ResolvedType::I64)), false),
+            (
+                "self".to_string(),
+                ResolvedType::Ref(Box::new(ResolvedType::Named {
+                    name: "Self".into(),
+                    generics: vec![],
+                })),
+                false,
+            ),
+            (
+                "x".to_string(),
+                ResolvedType::Ref(Box::new(ResolvedType::I64)),
+                false,
+            ),
         ];
         let ret = ResolvedType::Ref(Box::new(ResolvedType::I64));
         let result = inferencer.apply_elision_rules(&params, &ret);
@@ -818,9 +854,11 @@ mod tests {
     fn test_elision_no_reference_return() {
         let mut inferencer = LifetimeInferencer::new();
         // F foo(x: &i64) -> i64  (no reference in return, no elision needed)
-        let params = vec![
-            ("x".to_string(), ResolvedType::Ref(Box::new(ResolvedType::I64)), false),
-        ];
+        let params = vec![(
+            "x".to_string(),
+            ResolvedType::Ref(Box::new(ResolvedType::I64)),
+            false,
+        )];
         let ret = ResolvedType::I64;
         let result = inferencer.apply_elision_rules(&params, &ret);
         assert!(result.elision_successful);
@@ -892,23 +930,20 @@ mod tests {
     fn test_infer_function_lifetimes_simple() {
         let mut inferencer = LifetimeInferencer::new();
         // F first(x: &'a i64) -> &'a i64
-        let params = vec![
-            ("x".to_string(), ResolvedType::RefLifetime {
+        let params = vec![(
+            "x".to_string(),
+            ResolvedType::RefLifetime {
                 lifetime: "a".into(),
                 inner: Box::new(ResolvedType::I64),
-            }, false),
-        ];
+            },
+            false,
+        )];
         let ret = ResolvedType::RefLifetime {
             lifetime: "a".into(),
             inner: Box::new(ResolvedType::I64),
         };
-        let result = inferencer.infer_function_lifetimes(
-            "first",
-            &params,
-            &ret,
-            &["a".to_string()],
-            &[],
-        );
+        let result =
+            inferencer.infer_function_lifetimes("first", &params, &ret, &["a".to_string()], &[]);
         assert!(result.is_ok());
     }
 
@@ -930,20 +965,15 @@ mod tests {
     fn test_static_ref_to_named_lifetime_is_dangling() {
         let inferencer = LifetimeInferencer::new();
         // 'static reference to data with lifetime 'a -> dangling
-        let result = inferencer.check_reference_validity(
-            &Lifetime::Static,
-            &Lifetime::Named("a".into()),
-        );
+        let result =
+            inferencer.check_reference_validity(&Lifetime::Static, &Lifetime::Named("a".into()));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_static_ref_to_static_is_ok() {
         let inferencer = LifetimeInferencer::new();
-        let result = inferencer.check_reference_validity(
-            &Lifetime::Static,
-            &Lifetime::Static,
-        );
+        let result = inferencer.check_reference_validity(&Lifetime::Static, &Lifetime::Static);
         assert!(result.is_ok());
     }
 
@@ -951,20 +981,16 @@ mod tests {
     fn test_named_ref_to_static_is_ok() {
         let inferencer = LifetimeInferencer::new();
         // 'a reference to 'static data -> always valid
-        let result = inferencer.check_reference_validity(
-            &Lifetime::Named("a".into()),
-            &Lifetime::Static,
-        );
+        let result =
+            inferencer.check_reference_validity(&Lifetime::Named("a".into()), &Lifetime::Static);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_static_ref_to_inferred_is_dangling() {
         let inferencer = LifetimeInferencer::new();
-        let result = inferencer.check_reference_validity(
-            &Lifetime::Static,
-            &Lifetime::Inferred(LifetimeVar(0)),
-        );
+        let result = inferencer
+            .check_reference_validity(&Lifetime::Static, &Lifetime::Inferred(LifetimeVar(0)));
         assert!(result.is_err());
     }
 
@@ -972,7 +998,9 @@ mod tests {
     fn test_inferred_ref_resolves_to_check() {
         let mut inferencer = LifetimeInferencer::new();
         // Assign inferred var 0 -> 'static
-        inferencer.assignments.insert(LifetimeVar(0), Lifetime::Static);
+        inferencer
+            .assignments
+            .insert(LifetimeVar(0), Lifetime::Static);
 
         // Inferred(0) = 'static, referent = Named("a")
         // 'static ref to 'a data -> dangling
@@ -997,10 +1025,8 @@ mod tests {
         let _ = inferencer.solve_constraints();
 
         // 'a ref to 'b data -> valid because 'a outlives 'b (data lives at least as long)
-        let result = inferencer.check_reference_validity(
-            &Lifetime::Named("a".into()),
-            &Lifetime::Named("b".into()),
-        );
+        let result = inferencer
+            .check_reference_validity(&Lifetime::Named("a".into()), &Lifetime::Named("b".into()));
         assert!(result.is_ok());
     }
 
@@ -1010,20 +1036,15 @@ mod tests {
         inferencer.register_named_lifetime("a");
 
         let param_lifetimes = vec![("x".to_string(), Lifetime::Named("a".into()))];
-        let result = inferencer.validate_return_lifetime(
-            &Lifetime::Named("a".into()),
-            &param_lifetimes,
-        );
+        let result =
+            inferencer.validate_return_lifetime(&Lifetime::Named("a".into()), &param_lifetimes);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_return_static_is_always_ok() {
         let inferencer = LifetimeInferencer::new();
-        let result = inferencer.validate_return_lifetime(
-            &Lifetime::Static,
-            &[],
-        );
+        let result = inferencer.validate_return_lifetime(&Lifetime::Static, &[]);
         assert!(result.is_ok());
     }
 }

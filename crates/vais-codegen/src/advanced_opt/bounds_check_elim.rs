@@ -25,15 +25,27 @@ pub struct ValueRange {
 
 impl ValueRange {
     pub fn constant(v: i64) -> Self {
-        Self { lo: Some(v), hi: Some(v + 1), hi_sym: None }
+        Self {
+            lo: Some(v),
+            hi: Some(v + 1),
+            hi_sym: None,
+        }
     }
 
     pub fn bounded(lo: i64, hi_exclusive: i64) -> Self {
-        Self { lo: Some(lo), hi: Some(hi_exclusive), hi_sym: None }
+        Self {
+            lo: Some(lo),
+            hi: Some(hi_exclusive),
+            hi_sym: None,
+        }
     }
 
     pub fn bounded_sym(lo: i64, sym: String) -> Self {
-        Self { lo: Some(lo), hi: None, hi_sym: Some(sym) }
+        Self {
+            lo: Some(lo),
+            hi: None,
+            hi_sym: Some(sym),
+        }
     }
 
     /// True if this range is entirely within [0, length).
@@ -146,10 +158,9 @@ fn analyze_induction_variables(lines: &[&str], analysis: &mut RangeAnalysis) {
         if let Some(var) = parse_induction_phi(trimmed) {
             // Look for the loop guard: icmp slt i64 %var, %bound
             if let Some(bound) = find_loop_bound(lines, i, &var) {
-                analysis.ranges.insert(
-                    var.clone(),
-                    ValueRange::bounded_sym(0, bound),
-                );
+                analysis
+                    .ranges
+                    .insert(var.clone(), ValueRange::bounded_sym(0, bound));
             }
         }
     }
@@ -175,7 +186,10 @@ fn parse_induction_phi(line: &str) -> Option<String> {
     let next_pattern2 = format!("%{}next", var_base);
     let next_pattern3 = format!("%{}_next", var_base);
 
-    if line.contains(&next_pattern1) || line.contains(&next_pattern2) || line.contains(&next_pattern3) {
+    if line.contains(&next_pattern1)
+        || line.contains(&next_pattern2)
+        || line.contains(&next_pattern3)
+    {
         Some(var)
     } else {
         None
@@ -190,9 +204,7 @@ fn find_loop_bound(lines: &[&str], phi_line: usize, var: &str) -> Option<String>
         let trimmed = line.trim();
         // Pattern: %cmp = icmp slt i64 %var, %bound
         //          %cmp = icmp ult i64 %var, %bound
-        if (trimmed.contains("icmp slt") || trimmed.contains("icmp ult"))
-            && trimmed.contains(var)
-        {
+        if (trimmed.contains("icmp slt") || trimmed.contains("icmp ult")) && trimmed.contains(var) {
             // Extract the bound (second operand of icmp)
             let parts: Vec<&str> = trimmed.split(',').collect();
             if parts.len() >= 2 {
@@ -258,7 +270,11 @@ fn parse_comparison(line: &str) -> Option<(String, String, String)> {
     // After icmp: `i64 %a, %b` or `i32 %a, %b`
     let after_type = after_icmp.trim();
     // Skip the type (first word)
-    let rest = after_type.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
+    let rest = after_type
+        .split_whitespace()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .join(" ");
     let parts: Vec<&str> = rest.split(',').collect();
     if parts.len() >= 2 {
         let idx = parts[0].trim().to_string();
@@ -354,10 +370,9 @@ fn analyze_constant_accesses(lines: &[&str], analysis: &mut RangeAnalysis) {
                     if const_idx >= 0 && const_idx < arr_len {
                         // This access is provably safe
                         let idx_name = format!("__const_idx_{}_{}", i, const_idx);
-                        analysis.ranges.insert(
-                            idx_name,
-                            ValueRange::constant(const_idx),
-                        );
+                        analysis
+                            .ranges
+                            .insert(idx_name, ValueRange::constant(const_idx));
                     }
                 }
             }

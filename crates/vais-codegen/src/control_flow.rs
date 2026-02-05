@@ -56,10 +56,7 @@ impl CodeGenerator {
 
                 // Convert i64 to i1 for branch
                 let cond_bool = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp ne i64 {}, 0\n",
-                    cond_bool, cond_val
-                ));
+                ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
 
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n",
@@ -154,7 +151,11 @@ impl CodeGenerator {
                 } else if !then_from_label.is_empty() && !else_from_label.is_empty() {
                     ir.push_str(&format!(
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
-                        result, llvm_type, then_val_for_phi, then_from_label, else_val_for_phi,
+                        result,
+                        llvm_type,
+                        then_val_for_phi,
+                        then_from_label,
+                        else_val_for_phi,
                         else_from_label
                     ));
                 } else if !then_from_label.is_empty() {
@@ -400,11 +401,7 @@ impl CodeGenerator {
                 .iter()
                 .map(|(val, label)| format!("[ {}, %{} ]", val, label))
                 .collect();
-            ir.push_str(&format!(
-                "  {} = phi i64 {}\n",
-                result,
-                phi_args.join(", ")
-            ));
+            ir.push_str(&format!("  {} = phi i64 {}\n", result, phi_args.join(", ")));
             Ok((result, ir))
         }
     }
@@ -429,7 +426,8 @@ impl CodeGenerator {
                     let mut ir = String::new();
 
                     // Get the enum type name for proper LLVM type reference
-                    let enum_name = self.get_enum_name_for_variant(name)
+                    let enum_name = self
+                        .get_enum_name_for_variant(name)
                         .unwrap_or_else(|| "Unknown".to_string());
 
                     // Get the tag from the enum value (first field at index 0)
@@ -612,7 +610,8 @@ impl CodeGenerator {
                 let variant_name = &name.node;
 
                 // Get the enum type name for proper LLVM type reference
-                let enum_name = self.get_enum_name_for_variant(variant_name)
+                let enum_name = self
+                    .get_enum_name_for_variant(variant_name)
                     .unwrap_or_else(|| "Unknown".to_string());
 
                 // Get the tag from the enum value (first field at index 0)
@@ -734,10 +733,9 @@ impl CodeGenerator {
         use crate::types::EnumVariantFields;
         for enum_info in self.enums.values() {
             for (tag, variant) in enum_info.variants.iter().enumerate() {
-                if variant.name == name
-                    && matches!(variant.fields, EnumVariantFields::Tuple(_)) {
-                        return Some((enum_info.name.clone(), tag as i32));
-                    }
+                if variant.name == name && matches!(variant.fields, EnumVariantFields::Tuple(_)) {
+                    return Some((enum_info.name.clone(), tag as i32));
+                }
             }
         }
         None
@@ -766,8 +764,10 @@ impl CodeGenerator {
                 let _llvm_name = format!("{}.{}", name, counter);
                 *counter += 1;
 
-                self.locals
-                    .insert(name.clone(), LocalVar::ssa(ty.clone(), match_val.to_string()));
+                self.locals.insert(
+                    name.clone(),
+                    LocalVar::ssa(ty.clone(), match_val.to_string()),
+                );
 
                 // SSA style - no alloca needed, we just alias the match value
 
@@ -799,7 +799,8 @@ impl CodeGenerator {
                 let variant_name = &name.node;
 
                 // Get the enum type name for proper LLVM type reference
-                let enum_name = self.get_enum_name_for_variant(variant_name)
+                let enum_name = self
+                    .get_enum_name_for_variant(variant_name)
                     .unwrap_or_else(|| "Unknown".to_string());
 
                 for (i, field_pat) in fields.iter().enumerate() {
@@ -814,15 +815,15 @@ impl CodeGenerator {
                         let payload_ptr = self.next_temp(counter);
                         ir.push_str(&format!(
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 1, i32 {}\n",
-                            payload_ptr,
-                            enum_name,
-                            enum_name,
-                            match_val,
-                            i
+                            payload_ptr, enum_name, enum_name, match_val, i
                         ));
                         let field_val = self.next_temp(counter);
-                        ir.push_str(&format!("  {} = load i64, i64* {}\n", field_val, payload_ptr));
-                        let bind_ir = self.generate_pattern_bindings(field_pat, &field_val, counter)?;
+                        ir.push_str(&format!(
+                            "  {} = load i64, i64* {}\n",
+                            field_val, payload_ptr
+                        ));
+                        let bind_ir =
+                            self.generate_pattern_bindings(field_pat, &field_val, counter)?;
                         ir.push_str(&bind_ir);
                     } else {
                         // It's a value - use extractvalue
@@ -830,12 +831,10 @@ impl CodeGenerator {
                         let payload_val = self.next_temp(counter);
                         ir.push_str(&format!(
                             "  {} = extractvalue %{} {}, 1, {}\n",
-                            payload_val,
-                            enum_name,
-                            match_val,
-                            i
+                            payload_val, enum_name, match_val, i
                         ));
-                        let bind_ir = self.generate_pattern_bindings(field_pat, &payload_val, counter)?;
+                        let bind_ir =
+                            self.generate_pattern_bindings(field_pat, &payload_val, counter)?;
                         ir.push_str(&bind_ir);
                     }
                 }

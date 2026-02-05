@@ -20,7 +20,10 @@ fn test_no_overlap_between_concrete_impls_different_types() {
     };
 
     let result = check_impl_overlap(&[impl1], &impl2);
-    assert!(result.is_none(), "Concrete impls for different types should not overlap");
+    assert!(
+        result.is_none(),
+        "Concrete impls for different types should not overlap"
+    );
 }
 
 #[test]
@@ -41,7 +44,10 @@ fn test_overlap_detection_blanket_and_concrete() {
     };
 
     let result = check_impl_overlap(&[blanket], &concrete);
-    assert!(result.is_some(), "Blanket and concrete impls should overlap");
+    assert!(
+        result.is_some(),
+        "Blanket and concrete impls should overlap"
+    );
 
     if let Some(OverlapError::ConflictingImpls { trait_name, .. }) = result {
         assert_eq!(trait_name, "Clone");
@@ -68,7 +74,10 @@ fn test_overlap_detection_generic_and_concrete() {
     };
 
     let result = check_impl_overlap(&[generic], &concrete);
-    assert!(result.is_some(), "Generic and concrete impls should overlap");
+    assert!(
+        result.is_some(),
+        "Generic and concrete impls should overlap"
+    );
 }
 
 #[test]
@@ -149,7 +158,11 @@ fn test_negative_impl_conflict_with_positive() {
     let result = check_impl_overlap(&[negative], &positive);
     assert!(result.is_some());
 
-    if let Some(OverlapError::NegativeImplConflict { trait_name, type_name }) = result {
+    if let Some(OverlapError::NegativeImplConflict {
+        trait_name,
+        type_name,
+    }) = result
+    {
         assert_eq!(trait_name, "Send");
         assert_eq!(type_name, "RcCell");
     } else {
@@ -371,7 +384,10 @@ fn test_negative_impl_with_blanket() {
 
     let result = check_impl_overlap(&[negative], &blanket);
     assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OverlapError::NegativeImplConflict { .. }));
+    assert!(matches!(
+        result.unwrap(),
+        OverlapError::NegativeImplConflict { .. }
+    ));
 }
 
 #[test]

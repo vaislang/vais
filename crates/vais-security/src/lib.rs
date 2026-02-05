@@ -74,4 +74,4 @@ pub mod findings;
 mod tests;
 
 pub use analyzer::SecurityAnalyzer;
-pub use findings::{SecurityFinding, Severity, FindingCategory};
+pub use findings::{FindingCategory, SecurityFinding, Severity};

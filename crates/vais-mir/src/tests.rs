@@ -68,11 +68,7 @@ fn test_builder_simple_function() {
 #[test]
 fn test_builder_with_params() {
     // Build: fn add(a: i64, b: i64) -> i64 { a + b }
-    let mut b = MirBuilder::new(
-        "add",
-        vec![MirType::I64, MirType::I64],
-        MirType::I64,
-    );
+    let mut b = MirBuilder::new("add", vec![MirType::I64, MirType::I64], MirType::I64);
 
     // _0 = Add(_1, _2)
     b.assign_binop(
@@ -175,9 +171,10 @@ fn test_builder_function_call() {
 #[test]
 fn test_mir_module() {
     let mut module = MirModule::new("test");
-    module
-        .structs
-        .insert("Point".into(), vec![("x".into(), MirType::I64), ("y".into(), MirType::I64)]);
+    module.structs.insert(
+        "Point".into(),
+        vec![("x".into(), MirType::I64), ("y".into(), MirType::I64)],
+    );
 
     let mut b = MirBuilder::new("origin", vec![], MirType::Struct("Point".into()));
     let result = b.new_local(MirType::Struct("Point".into()), Some("point".into()));

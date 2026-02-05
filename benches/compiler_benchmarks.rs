@@ -45,9 +45,7 @@ fn bench_parse_medium_file(c: &mut Criterion) {
     let bytes = source.len() as u64;
 
     group.throughput(Throughput::Bytes(bytes));
-    group.bench_function("complex_file", |b| {
-        b.iter(|| tokenize(black_box(&source)))
-    });
+    group.bench_function("complex_file", |b| b.iter(|| tokenize(black_box(&source))));
 
     group.finish();
 }
@@ -111,13 +109,9 @@ fn bench_parse_file_sizes(c: &mut Criterion) {
         let bytes = source.len() as u64;
 
         group.throughput(Throughput::Bytes(bytes));
-        group.bench_with_input(
-            BenchmarkId::new("parse", size_label),
-            &source,
-            |b, src| {
-                b.iter(|| parse(black_box(src)))
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("parse", size_label), &source, |b, src| {
+            b.iter(|| parse(black_box(src)))
+        });
     }
 
     group.finish();
@@ -168,16 +162,12 @@ fn bench_codegen_patterns(c: &mut Criterion) {
         let mut checker = TypeChecker::new();
         checker.check_module(&ast).expect("Type check failed");
 
-        group.bench_with_input(
-            BenchmarkId::new("generate", label),
-            &ast,
-            |b, ast| {
-                b.iter(|| {
-                    let mut codegen = CodeGenerator::new(label);
-                    codegen.generate_module(black_box(ast))
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("generate", label), &ast, |b, ast| {
+            b.iter(|| {
+                let mut codegen = CodeGenerator::new(label);
+                codegen.generate_module(black_box(ast))
+            })
+        });
     }
 
     group.finish();

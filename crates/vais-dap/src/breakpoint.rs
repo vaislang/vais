@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use crate::protocol::types::{Breakpoint, Source, SourceBreakpoint, FunctionBreakpoint};
+use crate::protocol::types::{Breakpoint, FunctionBreakpoint, Source, SourceBreakpoint};
 
 /// Manages breakpoints for a debug session
 #[derive(Debug, Default)]
@@ -56,19 +56,22 @@ impl BreakpointManager {
     ) -> Vec<ManagedBreakpoint> {
         let path = source.path.clone().unwrap_or_default();
 
-        let managed: Vec<ManagedBreakpoint> = breakpoints.iter().map(|bp| {
-            ManagedBreakpoint {
-                id: self.next_id(),
-                verified: false, // Will be verified by debugger
-                line: bp.line,
-                column: bp.column,
-                condition: bp.condition.clone(),
-                hit_condition: bp.hit_condition.clone(),
-                log_message: bp.log_message.clone(),
-                address: None,
-                function_name: None,
-            }
-        }).collect();
+        let managed: Vec<ManagedBreakpoint> = breakpoints
+            .iter()
+            .map(|bp| {
+                ManagedBreakpoint {
+                    id: self.next_id(),
+                    verified: false, // Will be verified by debugger
+                    line: bp.line,
+                    column: bp.column,
+                    condition: bp.condition.clone(),
+                    hit_condition: bp.hit_condition.clone(),
+                    log_message: bp.log_message.clone(),
+                    address: None,
+                    function_name: None,
+                }
+            })
+            .collect();
 
         self.source_breakpoints.insert(path, managed.clone());
         managed
@@ -81,21 +84,25 @@ impl BreakpointManager {
     ) -> Vec<ManagedBreakpoint> {
         self.function_breakpoints.clear();
 
-        breakpoints.iter().map(|bp| {
-            let managed = ManagedBreakpoint {
-                id: self.next_id(),
-                verified: false,
-                line: 0,
-                column: None,
-                condition: bp.condition.clone(),
-                hit_condition: bp.hit_condition.clone(),
-                log_message: None,
-                address: None,
-                function_name: Some(bp.name.clone()),
-            };
-            self.function_breakpoints.insert(bp.name.clone(), managed.clone());
-            managed
-        }).collect()
+        breakpoints
+            .iter()
+            .map(|bp| {
+                let managed = ManagedBreakpoint {
+                    id: self.next_id(),
+                    verified: false,
+                    line: 0,
+                    column: None,
+                    condition: bp.condition.clone(),
+                    hit_condition: bp.hit_condition.clone(),
+                    log_message: None,
+                    address: None,
+                    function_name: Some(bp.name.clone()),
+                };
+                self.function_breakpoints
+                    .insert(bp.name.clone(), managed.clone());
+                managed
+            })
+            .collect()
     }
 
     /// Set exception filters
@@ -152,7 +159,10 @@ impl BreakpointManager {
             }
         }
 
-        self.function_breakpoints.values().find(|&bp| bp.address == Some(address)).map(|v| v as _)
+        self.function_breakpoints
+            .values()
+            .find(|&bp| bp.address == Some(address))
+            .map(|v| v as _)
     }
 
     /// Convert managed breakpoint to DAP breakpoint
@@ -160,7 +170,11 @@ impl BreakpointManager {
         Breakpoint {
             id: Some(bp.id),
             verified: bp.verified,
-            message: if bp.verified { None } else { Some("Pending".to_string()) },
+            message: if bp.verified {
+                None
+            } else {
+                Some("Pending".to_string())
+            },
             source,
             line: Some(bp.line),
             column: bp.column,
@@ -213,8 +227,20 @@ mod tests {
         };
 
         let bps = vec![
-            SourceBreakpoint { line: 10, column: None, condition: None, hit_condition: None, log_message: None },
-            SourceBreakpoint { line: 20, column: Some(5), condition: Some("x > 0".to_string()), hit_condition: None, log_message: None },
+            SourceBreakpoint {
+                line: 10,
+                column: None,
+                condition: None,
+                hit_condition: None,
+                log_message: None,
+            },
+            SourceBreakpoint {
+                line: 20,
+                column: Some(5),
+                condition: Some("x > 0".to_string()),
+                hit_condition: None,
+                log_message: None,
+            },
         ];
 
         let managed = manager.set_source_breakpoints(&source, &bps);
@@ -235,9 +261,13 @@ mod tests {
             ..Default::default()
         };
 
-        let bps = vec![
-            SourceBreakpoint { line: 10, column: None, condition: None, hit_condition: None, log_message: None },
-        ];
+        let bps = vec![SourceBreakpoint {
+            line: 10,
+            column: None,
+            condition: None,
+            hit_condition: None,
+            log_message: None,
+        }];
 
         let managed = manager.set_source_breakpoints(&source, &bps);
         let id = managed[0].id;

@@ -14,9 +14,9 @@
 //! let code = generate_simd_code(&module, SimdTarget::Avx512)?;
 //! ```
 
-use vais_ast::{Module, Item, Function, FunctionBody, Stmt, Expr, Type};
-use crate::GpuResult;
 use crate::common::binary_op_str;
+use crate::GpuResult;
+use vais_ast::{Expr, Function, FunctionBody, Item, Module, Stmt, Type};
 
 /// CPU SIMD target
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -329,7 +329,7 @@ impl SimdIntrinsics {
             (SimdTarget::Avx512, "f64") => "_mm512_fmadd_pd",
             (SimdTarget::Avx2, "f32") => "_mm256_fmadd_ps",
             (SimdTarget::Avx2, "f64") => "_mm256_fmadd_pd",
-            (SimdTarget::Sse4, "f32") => "_mm_fmadd_ps",  // Requires FMA
+            (SimdTarget::Sse4, "f32") => "_mm_fmadd_ps", // Requires FMA
             (SimdTarget::Sse4, "f64") => "_mm_fmadd_pd",
             (SimdTarget::Neon, "f32") => "vfmaq_f32",
             (SimdTarget::Neon, "f64") => "vfmaq_f64",
@@ -482,9 +482,10 @@ impl SimdGenerator {
         match item {
             Item::Function(func) => {
                 // Check for SIMD attributes
-                let is_simd = func.attributes.iter().any(|attr| {
-                    attr.name == "simd" || attr.name == "vectorize"
-                });
+                let is_simd = func
+                    .attributes
+                    .iter()
+                    .any(|attr| attr.name == "simd" || attr.name == "vectorize");
 
                 if is_simd {
                     self.generate_simd_function(func)?;
@@ -507,7 +508,8 @@ impl SimdGenerator {
         let elem_type = self.extract_elem_type(&func.attributes);
         let _lanes = self.target.f32_lanes(); // Default to f32 lanes
 
-        let ret_str = func.ret_type
+        let ret_str = func
+            .ret_type
             .as_ref()
             .map(|t| self.type_to_c(&t.node))
             .unwrap_or_else(|| "void".to_string());
@@ -518,7 +520,11 @@ impl SimdGenerator {
             if i > 0 {
                 self.emit(", ");
             }
-            self.emit(&format!("{} {}", self.type_to_c(&param.ty.node), param.name.node));
+            self.emit(&format!(
+                "{} {}",
+                self.type_to_c(&param.ty.node),
+                param.name.node
+            ));
         }
 
         self.emit_line(") {");
@@ -537,7 +543,8 @@ impl SimdGenerator {
     fn generate_scalar_function(&mut self, func: &Function) -> GpuResult<()> {
         let name = &func.name.node;
 
-        let ret_str = func.ret_type
+        let ret_str = func
+            .ret_type
             .as_ref()
             .map(|t| self.type_to_c(&t.node))
             .unwrap_or_else(|| "void".to_string());
@@ -548,7 +555,11 @@ impl SimdGenerator {
             if i > 0 {
                 self.emit(", ");
             }
-            self.emit(&format!("{} {}", self.type_to_c(&param.ty.node), param.name.node));
+            self.emit(&format!(
+                "{} {}",
+                self.type_to_c(&param.ty.node),
+                param.name.node
+            ));
         }
 
         self.emit_line(") {");
@@ -690,7 +701,9 @@ impl SimdGenerator {
 
     fn generate_simd_stmt(&mut self, stmt: &Stmt, elem_type: &str) -> GpuResult<()> {
         match stmt {
-            Stmt::Let { name, ty, value, .. } => {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
                 self.emit_indent();
                 if let Some(t) = ty {
                     self.emit(&format!("{} {} = ", self.type_to_c(&t.node), name.node));
@@ -714,7 +727,9 @@ impl SimdGenerator {
 
     fn generate_stmt(&mut self, stmt: &Stmt) -> GpuResult<()> {
         match stmt {
-            Stmt::Let { name, ty, value, .. } => {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
                 self.emit_indent();
                 if let Some(t) = ty {
                     self.emit(&format!("{} {} = ", self.type_to_c(&t.node), name.node));
@@ -796,7 +811,11 @@ impl SimdGenerator {
 
         for field in fields {
             self.emit_indent();
-            self.emit_line(&format!("{} {};", self.type_to_c(&field.ty.node), field.name.node));
+            self.emit_line(&format!(
+                "{} {};",
+                self.type_to_c(&field.ty.node),
+                field.name.node
+            ));
         }
 
         self.indent_level -= 1;
@@ -820,23 +839,21 @@ impl SimdGenerator {
 
     fn type_to_c(&self, ty: &Type) -> String {
         match ty {
-            Type::Named { name, .. } => {
-                match name.as_str() {
-                    "i64" => "int64_t".to_string(),
-                    "i32" => "int32_t".to_string(),
-                    "i16" => "int16_t".to_string(),
-                    "i8" => "int8_t".to_string(),
-                    "u64" => "uint64_t".to_string(),
-                    "u32" => "uint32_t".to_string(),
-                    "u16" => "uint16_t".to_string(),
-                    "u8" => "uint8_t".to_string(),
-                    "f64" => "double".to_string(),
-                    "f32" => "float".to_string(),
-                    "bool" => "_Bool".to_string(),
-                    "unit" | "()" => "void".to_string(),
-                    _ => name.clone(),
-                }
-            }
+            Type::Named { name, .. } => match name.as_str() {
+                "i64" => "int64_t".to_string(),
+                "i32" => "int32_t".to_string(),
+                "i16" => "int16_t".to_string(),
+                "i8" => "int8_t".to_string(),
+                "u64" => "uint64_t".to_string(),
+                "u32" => "uint32_t".to_string(),
+                "u16" => "uint16_t".to_string(),
+                "u8" => "uint8_t".to_string(),
+                "f64" => "double".to_string(),
+                "f32" => "float".to_string(),
+                "bool" => "_Bool".to_string(),
+                "unit" | "()" => "void".to_string(),
+                _ => name.clone(),
+            },
             Type::Pointer(inner) => format!("{}*", self.type_to_c(&inner.node)),
             Type::ConstArray { element, size } => {
                 format!("{}[{}]", self.type_to_c(&element.node), size)
@@ -893,21 +910,33 @@ mod tests {
 
     #[test]
     fn test_simd_intrinsics_load() {
-        assert_eq!(SimdIntrinsics::load(SimdTarget::Avx512, "f32"), "_mm512_loadu_ps");
-        assert_eq!(SimdIntrinsics::load(SimdTarget::Avx2, "f32"), "_mm256_loadu_ps");
+        assert_eq!(
+            SimdIntrinsics::load(SimdTarget::Avx512, "f32"),
+            "_mm512_loadu_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::load(SimdTarget::Avx2, "f32"),
+            "_mm256_loadu_ps"
+        );
         assert_eq!(SimdIntrinsics::load(SimdTarget::Neon, "f32"), "vld1q_f32");
         assert_eq!(SimdIntrinsics::load(SimdTarget::Sve, "f32"), "svld1_f32");
     }
 
     #[test]
     fn test_simd_intrinsics_add() {
-        assert_eq!(SimdIntrinsics::add(SimdTarget::Avx512, "f32"), "_mm512_add_ps");
+        assert_eq!(
+            SimdIntrinsics::add(SimdTarget::Avx512, "f32"),
+            "_mm512_add_ps"
+        );
         assert_eq!(SimdIntrinsics::add(SimdTarget::Neon, "f32"), "vaddq_f32");
     }
 
     #[test]
     fn test_simd_intrinsics_fma() {
-        assert_eq!(SimdIntrinsics::fma(SimdTarget::Avx512, "f32"), "_mm512_fmadd_ps");
+        assert_eq!(
+            SimdIntrinsics::fma(SimdTarget::Avx512, "f32"),
+            "_mm512_fmadd_ps"
+        );
         assert_eq!(SimdIntrinsics::fma(SimdTarget::Neon, "f32"), "vfmaq_f32");
     }
 

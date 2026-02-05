@@ -96,7 +96,8 @@ impl Formatter {
             Item::Global(g) => self.format_global(g),
             Item::Error { message, .. } => {
                 // Format error nodes as comments to preserve them in formatted output
-                self.output.push_str(&format!("{}# ERROR: {}\n", self.indent(), message));
+                self.output
+                    .push_str(&format!("{}# ERROR: {}\n", self.indent(), message));
             }
         }
     }
@@ -143,7 +144,9 @@ impl Formatter {
             self.output.push_str(&func.name.node);
             self.output.push('(');
 
-            let params: Vec<String> = func.params.iter()
+            let params: Vec<String> = func
+                .params
+                .iter()
                 .map(|p| format!("{}: {}", p.name.node, self.format_type(&p.ty.node)))
                 .collect();
             self.output.push_str(&params.join(", "));
@@ -235,7 +238,11 @@ impl Formatter {
                     MetaVarKind::Tt => "tt",
                 });
             }
-            MacroPatternElement::Repetition { patterns, separator, kind } => {
+            MacroPatternElement::Repetition {
+                patterns,
+                separator,
+                kind,
+            } => {
                 self.output.push_str("$(");
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
@@ -295,7 +302,11 @@ impl Formatter {
                 self.output.push('$');
                 self.output.push_str(name);
             }
-            MacroTemplateElement::Repetition { elements, separator, kind } => {
+            MacroTemplateElement::Repetition {
+                elements,
+                separator,
+                kind,
+            } => {
                 self.output.push_str("$(");
                 for e in elements {
                     self.format_macro_template_element(e);
@@ -416,16 +427,20 @@ impl Formatter {
 
         // Parameters
         self.output.push('(');
-        let params: Vec<String> = f.params.iter().map(|p| {
-            let mut s = String::new();
-            if p.is_mut {
-                s.push_str("mut ");
-            }
-            s.push_str(&p.name.node);
-            s.push_str(": ");
-            s.push_str(&self.format_type(&p.ty.node));
-            s
-        }).collect();
+        let params: Vec<String> = f
+            .params
+            .iter()
+            .map(|p| {
+                let mut s = String::new();
+                if p.is_mut {
+                    s.push_str("mut ");
+                }
+                s.push_str(&p.name.node);
+                s.push_str(": ");
+                s.push_str(&self.format_type(&p.ty.node));
+                s
+            })
+            .collect();
         self.output.push_str(&params.join(", "));
         self.output.push(')');
 
@@ -544,7 +559,8 @@ impl Formatter {
                 VariantFields::Unit => {}
                 VariantFields::Tuple(types) => {
                     self.output.push('(');
-                    let types: Vec<String> = types.iter().map(|t| self.format_type(&t.node)).collect();
+                    let types: Vec<String> =
+                        types.iter().map(|t| self.format_type(&t.node)).collect();
                     self.output.push_str(&types.join(", "));
                     self.output.push(')');
                 }
@@ -699,15 +715,20 @@ impl Formatter {
             // GAT: output generic parameters
             if !at.generics.is_empty() {
                 self.output.push('<');
-                let gparams: Vec<String> = at.generics.iter().map(|g| {
-                    let mut s = g.name.node.clone();
-                    if !g.bounds.is_empty() {
-                        s.push_str(": ");
-                        let bounds: Vec<&str> = g.bounds.iter().map(|b| b.node.as_str()).collect();
-                        s.push_str(&bounds.join(" + "));
-                    }
-                    s
-                }).collect();
+                let gparams: Vec<String> = at
+                    .generics
+                    .iter()
+                    .map(|g| {
+                        let mut s = g.name.node.clone();
+                        if !g.bounds.is_empty() {
+                            s.push_str(": ");
+                            let bounds: Vec<&str> =
+                                g.bounds.iter().map(|b| b.node.as_str()).collect();
+                            s.push_str(&bounds.join(" + "));
+                        }
+                        s
+                    })
+                    .collect();
                 self.output.push_str(&gparams.join(", "));
                 self.output.push('>');
             }
@@ -735,9 +756,11 @@ impl Formatter {
             self.output.push_str("F ");
             self.output.push_str(&method.name.node);
             self.output.push('(');
-            let params: Vec<String> = method.params.iter().map(|p| {
-                format!("{}: {}", p.name.node, self.format_type(&p.ty.node))
-            }).collect();
+            let params: Vec<String> = method
+                .params
+                .iter()
+                .map(|p| format!("{}: {}", p.name.node, self.format_type(&p.ty.node)))
+                .collect();
             self.output.push_str(&params.join(", "));
             self.output.push(')');
 
@@ -806,14 +829,21 @@ impl Formatter {
                 if generics.is_empty() {
                     name.to_string()
                 } else {
-                    let gens: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
+                    let gens: Vec<String> =
+                        generics.iter().map(|g| self.format_type(&g.node)).collect();
                     format!("{}<{}>", name, gens.join(", "))
                 }
             }
             Type::Array(inner) => format!("[{}]", self.format_type(&inner.node)),
-            Type::ConstArray { element, size } => format!("[{}; {}]", self.format_type(&element.node), size),
+            Type::ConstArray { element, size } => {
+                format!("[{}; {}]", self.format_type(&element.node), size)
+            }
             Type::Map(key, value) => {
-                format!("[{}:{}]", self.format_type(&key.node), self.format_type(&value.node))
+                format!(
+                    "[{}:{}]",
+                    self.format_type(&key.node),
+                    self.format_type(&value.node)
+                )
             }
             Type::Tuple(types) => {
                 let ts: Vec<String> = types.iter().map(|t| self.format_type(&t.node)).collect();
@@ -830,22 +860,45 @@ impl Formatter {
             }
             Type::Unit => "()".to_string(),
             Type::Infer => "_".to_string(),
-            Type::DynTrait { trait_name, generics } => {
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 if generics.is_empty() {
                     format!("dyn {}", trait_name)
                 } else {
-                    let gens: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
+                    let gens: Vec<String> =
+                        generics.iter().map(|g| self.format_type(&g.node)).collect();
                     format!("dyn {}<{}>", trait_name, gens.join(", "))
                 }
             }
-            Type::FnPtr { params, ret, is_vararg } => {
+            Type::FnPtr {
+                params,
+                ret,
+                is_vararg,
+            } => {
                 let ps: Vec<String> = params.iter().map(|p| self.format_type(&p.node)).collect();
                 let vararg_str = if *is_vararg { ", ..." } else { "" };
-                format!("fn({}{}) -> {}", ps.join(", "), vararg_str, self.format_type(&ret.node))
+                format!(
+                    "fn({}{}) -> {}",
+                    ps.join(", "),
+                    vararg_str,
+                    self.format_type(&ret.node)
+                )
             }
-            Type::Associated { base, trait_name, assoc_name, generics } => {
+            Type::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => {
                 let base_str = if let Some(tn) = trait_name {
-                    format!("<{} as {}>::{}", self.format_type(&base.node), tn, assoc_name)
+                    format!(
+                        "<{} as {}>::{}",
+                        self.format_type(&base.node),
+                        tn,
+                        assoc_name
+                    )
                 } else {
                     format!("{}::{}", self.format_type(&base.node), assoc_name)
                 };
@@ -853,14 +906,24 @@ impl Formatter {
                 if generics.is_empty() {
                     base_str
                 } else {
-                    let gen_strs: Vec<String> = generics.iter().map(|g| self.format_type(&g.node)).collect();
+                    let gen_strs: Vec<String> =
+                        generics.iter().map(|g| self.format_type(&g.node)).collect();
                     format!("{}<{}>", base_str, gen_strs.join(", "))
                 }
             }
             Type::Linear(inner) => format!("linear {}", self.format_type(&inner.node)),
             Type::Affine(inner) => format!("affine {}", self.format_type(&inner.node)),
-            Type::Dependent { var_name, base, predicate } => {
-                format!("{{{}: {} | {:?}}}", var_name, self.format_type(&base.node), predicate.node)
+            Type::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => {
+                format!(
+                    "{{{}: {} | {:?}}}",
+                    var_name,
+                    self.format_type(&base.node),
+                    predicate.node
+                )
             }
             Type::RefLifetime { lifetime, inner } => {
                 format!("&'{} {}", lifetime, self.format_type(&inner.node))
@@ -879,7 +942,13 @@ impl Formatter {
         let indent = self.indent();
 
         match stmt {
-            Stmt::Let { name, ty, value, is_mut, .. } => {
+            Stmt::Let {
+                name,
+                ty,
+                value,
+                is_mut,
+                ..
+            } => {
                 self.output.push_str(&indent);
                 if *is_mut {
                     self.output.push_str("mut ");
@@ -895,7 +964,11 @@ impl Formatter {
                 self.output.push_str(&self.format_expr(&value.node));
                 self.output.push('\n');
             }
-            Stmt::LetDestructure { pattern, value, is_mut } => {
+            Stmt::LetDestructure {
+                pattern,
+                value,
+                is_mut,
+            } => {
                 self.output.push_str(&indent);
                 if *is_mut {
                     self.output.push_str("mut ");
@@ -911,13 +984,20 @@ impl Formatter {
                     Expr::If { cond, then, else_ } => {
                         self.format_if_expr(&indent, cond, then, else_.as_ref());
                     }
-                    Expr::Loop { pattern, iter, body } => {
+                    Expr::Loop {
+                        pattern,
+                        iter,
+                        body,
+                    } => {
                         self.format_loop_expr(&indent, pattern, iter.as_ref().map(|e| &**e), body);
                     }
                     Expr::While { condition, body } => {
                         self.format_while_expr(&indent, condition, body);
                     }
-                    Expr::Match { expr: match_expr, arms } => {
+                    Expr::Match {
+                        expr: match_expr,
+                        arms,
+                    } => {
                         self.format_match_expr(&indent, match_expr, arms);
                     }
                     Expr::Block(stmts) => {
@@ -975,7 +1055,13 @@ impl Formatter {
     }
 
     /// Format an if expression with proper indentation
-    fn format_if_expr(&mut self, indent: &str, cond: &Spanned<Expr>, then: &[Spanned<Stmt>], else_: Option<&IfElse>) {
+    fn format_if_expr(
+        &mut self,
+        indent: &str,
+        cond: &Spanned<Expr>,
+        then: &[Spanned<Stmt>],
+        else_: Option<&IfElse>,
+    ) {
         self.output.push_str(indent);
         self.output.push_str("I ");
         self.output.push_str(&self.format_expr(&cond.node));
@@ -1026,7 +1112,13 @@ impl Formatter {
     }
 
     /// Format a loop expression with proper indentation
-    fn format_loop_expr(&mut self, indent: &str, pattern: &Option<Spanned<Pattern>>, iter: Option<&Spanned<Expr>>, body: &[Spanned<Stmt>]) {
+    fn format_loop_expr(
+        &mut self,
+        indent: &str,
+        pattern: &Option<Spanned<Pattern>>,
+        iter: Option<&Spanned<Expr>>,
+        body: &[Spanned<Stmt>],
+    ) {
         self.output.push_str(indent);
         self.output.push('L');
         if let Some(pat) = pattern {
@@ -1048,7 +1140,12 @@ impl Formatter {
     }
 
     /// Format a while loop expression with proper indentation
-    fn format_while_expr(&mut self, indent: &str, condition: &Spanned<Expr>, body: &[Spanned<Stmt>]) {
+    fn format_while_expr(
+        &mut self,
+        indent: &str,
+        condition: &Spanned<Expr>,
+        body: &[Spanned<Stmt>],
+    ) {
         self.output.push_str(indent);
         self.output.push_str("L ");
         self.output.push_str(&self.format_expr(&condition.node));
@@ -1071,7 +1168,8 @@ impl Formatter {
         self.push_indent();
         for arm in arms {
             self.output.push_str(&self.indent());
-            self.output.push_str(&self.format_pattern(&arm.pattern.node));
+            self.output
+                .push_str(&self.format_pattern(&arm.pattern.node));
             if let Some(guard) = &arm.guard {
                 self.output.push_str(" I ");
                 self.output.push_str(&self.format_expr(&guard.node));
@@ -1091,7 +1189,11 @@ impl Formatter {
             Expr::Int(n) => n.to_string(),
             Expr::Float(n) => {
                 let s = n.to_string();
-                if s.contains('.') { s } else { format!("{}.0", s) }
+                if s.contains('.') {
+                    s
+                } else {
+                    format!("{}.0", s)
+                }
             }
             Expr::Bool(b) => if *b { "true" } else { "false" }.to_string(),
             Expr::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
@@ -1137,7 +1239,12 @@ impl Formatter {
                     BinOp::Shl => "<<",
                     BinOp::Shr => ">>",
                 };
-                format!("{} {} {}", self.format_expr(&left.node), op_str, self.format_expr(&right.node))
+                format!(
+                    "{} {} {}",
+                    self.format_expr(&left.node),
+                    op_str,
+                    self.format_expr(&right.node)
+                )
             }
 
             Expr::Unary { op, expr } => {
@@ -1173,7 +1280,11 @@ impl Formatter {
                 s
             }
 
-            Expr::Loop { pattern, iter, body } => {
+            Expr::Loop {
+                pattern,
+                iter,
+                body,
+            } => {
                 let mut s = String::from("L");
                 if let Some(pat) = pattern {
                     s.push(' ');
@@ -1224,18 +1335,39 @@ impl Formatter {
             }
 
             Expr::Call { func, args } => {
-                let args_str: Vec<String> = args.iter().map(|a| self.format_expr(&a.node)).collect();
+                let args_str: Vec<String> =
+                    args.iter().map(|a| self.format_expr(&a.node)).collect();
                 format!("{}({})", self.format_expr(&func.node), args_str.join(", "))
             }
 
-            Expr::MethodCall { receiver, method, args } => {
-                let args_str: Vec<String> = args.iter().map(|a| self.format_expr(&a.node)).collect();
-                format!("{}.{}({})", self.format_expr(&receiver.node), method.node, args_str.join(", "))
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
+                let args_str: Vec<String> =
+                    args.iter().map(|a| self.format_expr(&a.node)).collect();
+                format!(
+                    "{}.{}({})",
+                    self.format_expr(&receiver.node),
+                    method.node,
+                    args_str.join(", ")
+                )
             }
 
-            Expr::StaticMethodCall { type_name, method, args } => {
-                let args_str: Vec<String> = args.iter().map(|a| self.format_expr(&a.node)).collect();
-                format!("{}.{}({})", type_name.node, method.node, args_str.join(", "))
+            Expr::StaticMethodCall {
+                type_name,
+                method,
+                args,
+            } => {
+                let args_str: Vec<String> =
+                    args.iter().map(|a| self.format_expr(&a.node)).collect();
+                format!(
+                    "{}.{}({})",
+                    type_name.node,
+                    method.node,
+                    args_str.join(", ")
+                )
             }
 
             Expr::Field { expr, field } => {
@@ -1243,34 +1375,52 @@ impl Formatter {
             }
 
             Expr::Index { expr, index } => {
-                format!("{}[{}]", self.format_expr(&expr.node), self.format_expr(&index.node))
+                format!(
+                    "{}[{}]",
+                    self.format_expr(&expr.node),
+                    self.format_expr(&index.node)
+                )
             }
 
             Expr::Array(items) => {
-                let items_str: Vec<String> = items.iter().map(|i| self.format_expr(&i.node)).collect();
+                let items_str: Vec<String> =
+                    items.iter().map(|i| self.format_expr(&i.node)).collect();
                 format!("[{}]", items_str.join(", "))
             }
 
             Expr::Tuple(items) => {
-                let items_str: Vec<String> = items.iter().map(|i| self.format_expr(&i.node)).collect();
+                let items_str: Vec<String> =
+                    items.iter().map(|i| self.format_expr(&i.node)).collect();
                 format!("({})", items_str.join(", "))
             }
 
             Expr::StructLit { name, fields } => {
-                let fields_str: Vec<String> = fields.iter().map(|(n, v)| {
-                    format!("{}: {}", n.node, self.format_expr(&v.node))
-                }).collect();
+                let fields_str: Vec<String> = fields
+                    .iter()
+                    .map(|(n, v)| format!("{}: {}", n.node, self.format_expr(&v.node)))
+                    .collect();
                 format!("{} {{ {} }}", name.node, fields_str.join(", "))
             }
 
             Expr::MapLit(pairs) => {
-                let pairs_str: Vec<String> = pairs.iter().map(|(k, v)| {
-                    format!("{}: {}", self.format_expr(&k.node), self.format_expr(&v.node))
-                }).collect();
+                let pairs_str: Vec<String> = pairs
+                    .iter()
+                    .map(|(k, v)| {
+                        format!(
+                            "{}: {}",
+                            self.format_expr(&k.node),
+                            self.format_expr(&v.node)
+                        )
+                    })
+                    .collect();
                 format!("{{{}}}", pairs_str.join(", "))
             }
 
-            Expr::Range { start, end, inclusive } => {
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => {
                 let mut s = String::new();
                 if let Some(st) = start {
                     s.push_str(&self.format_expr(&st.node));
@@ -1301,11 +1451,19 @@ impl Formatter {
             Expr::Deref(expr) => format!("*{}", self.format_expr(&expr.node)),
 
             Expr::Cast { expr, ty } => {
-                format!("{} as {}", self.format_expr(&expr.node), self.format_type(&ty.node))
+                format!(
+                    "{} as {}",
+                    self.format_expr(&expr.node),
+                    self.format_type(&ty.node)
+                )
             }
 
             Expr::Assign { target, value } => {
-                format!("{} = {}", self.format_expr(&target.node), self.format_expr(&value.node))
+                format!(
+                    "{} = {}",
+                    self.format_expr(&target.node),
+                    self.format_expr(&value.node)
+                )
             }
 
             Expr::AssignOp { op, target, value } => {
@@ -1316,14 +1474,24 @@ impl Formatter {
                     BinOp::Div => "/=",
                     _ => "?=",
                 };
-                format!("{} {} {}", self.format_expr(&target.node), op_str, self.format_expr(&value.node))
+                format!(
+                    "{} {} {}",
+                    self.format_expr(&target.node),
+                    op_str,
+                    self.format_expr(&value.node)
+                )
             }
 
             Expr::Lambda { params, body, .. } => {
-                let params_str: Vec<String> = params.iter().map(|p| {
-                    format!("{}: {}", p.name.node, self.format_type(&p.ty.node))
-                }).collect();
-                format!("|{}| {}", params_str.join(", "), self.format_expr(&body.node))
+                let params_str: Vec<String> = params
+                    .iter()
+                    .map(|p| format!("{}: {}", p.name.node, self.format_type(&p.ty.node)))
+                    .collect();
+                format!(
+                    "|{}| {}",
+                    params_str.join(", "),
+                    self.format_expr(&body.node)
+                )
             }
 
             Expr::Spawn(expr) => format!("spawn {{ {} }}", self.format_expr(&expr.node)),
@@ -1331,7 +1499,11 @@ impl Formatter {
             Expr::Old(inner) => format!("old({})", self.format_expr(&inner.node)),
             Expr::Assert { condition, message } => {
                 if let Some(msg) = message {
-                    format!("assert({}, {})", self.format_expr(&condition.node), self.format_expr(&msg.node))
+                    format!(
+                        "assert({}, {})",
+                        self.format_expr(&condition.node),
+                        self.format_expr(&msg.node)
+                    )
                 } else {
                     format!("assert({})", self.format_expr(&condition.node))
                 }
@@ -1393,7 +1565,13 @@ impl Formatter {
     /// Format statement inline (without leading indent)
     fn format_stmt_inline(&self, stmt: &Stmt) -> String {
         match stmt {
-            Stmt::Let { name, ty, value, is_mut, .. } => {
+            Stmt::Let {
+                name,
+                ty,
+                value,
+                is_mut,
+                ..
+            } => {
                 let mut s = String::new();
                 if *is_mut {
                     s.push_str("mut ");
@@ -1409,7 +1587,11 @@ impl Formatter {
                 s.push_str(&self.format_expr(&value.node));
                 s
             }
-            Stmt::LetDestructure { pattern, value, is_mut } => {
+            Stmt::LetDestructure {
+                pattern,
+                value,
+                is_mut,
+            } => {
                 let mut s = String::new();
                 if *is_mut {
                     s.push_str("mut ");
@@ -1487,28 +1669,41 @@ impl Formatter {
                 Literal::String(s) => format!("\"{}\"", s),
             },
             Pattern::Tuple(patterns) => {
-                let ps: Vec<String> = patterns.iter().map(|p| self.format_pattern(&p.node)).collect();
+                let ps: Vec<String> = patterns
+                    .iter()
+                    .map(|p| self.format_pattern(&p.node))
+                    .collect();
                 format!("({})", ps.join(", "))
             }
             Pattern::Struct { name, fields } => {
-                let fs: Vec<String> = fields.iter().map(|(n, p)| {
-                    if let Some(pat) = p {
-                        format!("{}: {}", n.node, self.format_pattern(&pat.node))
-                    } else {
-                        n.node.to_string()
-                    }
-                }).collect();
+                let fs: Vec<String> = fields
+                    .iter()
+                    .map(|(n, p)| {
+                        if let Some(pat) = p {
+                            format!("{}: {}", n.node, self.format_pattern(&pat.node))
+                        } else {
+                            n.node.to_string()
+                        }
+                    })
+                    .collect();
                 format!("{} {{ {} }}", name.node, fs.join(", "))
             }
             Pattern::Variant { name, fields } => {
                 if fields.is_empty() {
                     name.node.to_string()
                 } else {
-                    let fs: Vec<String> = fields.iter().map(|p| self.format_pattern(&p.node)).collect();
+                    let fs: Vec<String> = fields
+                        .iter()
+                        .map(|p| self.format_pattern(&p.node))
+                        .collect();
                     format!("{}({})", name.node, fs.join(", "))
                 }
             }
-            Pattern::Range { start, end, inclusive } => {
+            Pattern::Range {
+                start,
+                end,
+                inclusive,
+            } => {
                 let mut s = String::new();
                 if let Some(st) = start {
                     s.push_str(&self.format_pattern(&st.node));
@@ -1520,10 +1715,12 @@ impl Formatter {
                 s
             }
             Pattern::Or(patterns) => {
-                let ps: Vec<String> = patterns.iter().map(|p| self.format_pattern(&p.node)).collect();
+                let ps: Vec<String> = patterns
+                    .iter()
+                    .map(|p| self.format_pattern(&p.node))
+                    .collect();
                 ps.join(" | ")
             }
         }
     }
 }
-

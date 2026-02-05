@@ -231,9 +231,8 @@ impl<'a> Parser<'a> {
 
     fn parse_typedefs(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let typedef_re = Regex::new(
-            r"typedef\s+struct\s*\{([^}]*)\}\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*;"
-        ).unwrap();
+        let typedef_re =
+            Regex::new(r"typedef\s+struct\s*\{([^}]*)\}\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
         for cap in typedef_re.captures_iter(content) {
             let name = cap[2].to_string();
@@ -248,9 +247,9 @@ impl<'a> Parser<'a> {
         }
 
         // Simple typedefs
-        let simple_typedef_re = Regex::new(
-            r"typedef\s+([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;"
-        ).unwrap();
+        let simple_typedef_re =
+            Regex::new(r"typedef\s+([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;")
+                .unwrap();
 
         for cap in simple_typedef_re.captures_iter(content) {
             let type_str = cap[1].trim();
@@ -271,9 +270,7 @@ impl<'a> Parser<'a> {
 
     fn parse_structs(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let struct_re = Regex::new(
-            r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;"
-        ).unwrap();
+        let struct_re = Regex::new(r"struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap();
 
         for cap in struct_re.captures_iter(content) {
             let name = cap[1].to_string();
@@ -303,7 +300,8 @@ impl<'a> Parser<'a> {
 
     fn parse_struct_fields(&self, fields_str: &str) -> Result<Vec<CField>> {
         let mut fields = Vec::new();
-        let field_re = Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
+        let field_re =
+            Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
         for cap in field_re.captures_iter(fields_str) {
             let type_str = cap[1].trim();
@@ -322,9 +320,7 @@ impl<'a> Parser<'a> {
 
     fn parse_enums(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let enum_re = Regex::new(
-            r"enum\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;"
-        ).unwrap();
+        let enum_re = Regex::new(r"enum\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}\s*;").unwrap();
 
         for cap in enum_re.captures_iter(content) {
             let name = cap[1].to_string();
@@ -352,9 +348,9 @@ impl<'a> Parser<'a> {
 
     fn parse_functions(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let func_re = Regex::new(
-            r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*;"
-        ).unwrap();
+        let func_re =
+            Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*;")
+                .unwrap();
 
         for cap in func_re.captures_iter(content) {
             let return_type_str = cap[1].trim();
@@ -436,7 +432,7 @@ impl<'a> Parser<'a> {
 
         // Remove qualifiers and keywords
         let type_str = type_str.trim_start_matches("const").trim();
-        let type_str = type_str.trim_start_matches("static").trim();  // Add static handling
+        let type_str = type_str.trim_start_matches("static").trim(); // Add static handling
         let type_str = type_str.trim_start_matches("virtual").trim(); // Add virtual handling
 
         // Remove struct/enum keywords
@@ -483,9 +479,8 @@ impl<'a> Parser<'a> {
 
     fn parse_namespaces(&self, content: &str) -> Result<Vec<CDeclaration>> {
         let mut declarations = Vec::new();
-        let namespace_re = Regex::new(
-            r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}"
-        ).unwrap();
+        let namespace_re =
+            Regex::new(r"namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([^}]*)\}").unwrap();
 
         for cap in namespace_re.captures_iter(content) {
             let name = cap[1].to_string();
@@ -494,10 +489,7 @@ impl<'a> Parser<'a> {
             // Recursively parse namespace content
             let items = self.parse(namespace_content)?;
 
-            declarations.push(CDeclaration::CppNamespace(CppNamespace {
-                name,
-                items,
-            }));
+            declarations.push(CDeclaration::CppNamespace(CppNamespace { name, items }));
         }
 
         Ok(declarations)
@@ -570,21 +562,41 @@ impl<'a> Parser<'a> {
 
                 if private_parts.len() > 1 {
                     // Parse public part
-                    self.parse_class_section(private_parts[0], AccessSpecifier::Public, &mut methods, &mut fields)?;
+                    self.parse_class_section(
+                        private_parts[0],
+                        AccessSpecifier::Public,
+                        &mut methods,
+                        &mut fields,
+                    )?;
 
                     // Parse private parts
                     for private_part in private_parts.iter().skip(1) {
-                        self.parse_class_section(private_part, AccessSpecifier::Private, &mut methods, &mut fields)?;
+                        self.parse_class_section(
+                            private_part,
+                            AccessSpecifier::Private,
+                            &mut methods,
+                            &mut fields,
+                        )?;
                     }
                 } else {
-                    self.parse_class_section(section, AccessSpecifier::Public, &mut methods, &mut fields)?;
+                    self.parse_class_section(
+                        section,
+                        AccessSpecifier::Public,
+                        &mut methods,
+                        &mut fields,
+                    )?;
                 }
             }
         }
 
         // Parse first section (before any access specifier)
         if !sections.is_empty() {
-            self.parse_class_section(sections[0], AccessSpecifier::Private, &mut methods, &mut fields)?;
+            self.parse_class_section(
+                sections[0],
+                AccessSpecifier::Private,
+                &mut methods,
+                &mut fields,
+            )?;
         }
 
         Ok((methods, fields))
@@ -642,9 +654,8 @@ impl<'a> Parser<'a> {
         }
 
         // Parse fields - simpler pattern
-        let field_re = Regex::new(
-            r"([a-zA-Z_][a-zA-Z0-9_*]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;"
-        ).unwrap();
+        let field_re =
+            Regex::new(r"([a-zA-Z_][a-zA-Z0-9_*]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;").unwrap();
 
         for cap in field_re.captures_iter(&cleaned) {
             let type_str = cap[1].trim();

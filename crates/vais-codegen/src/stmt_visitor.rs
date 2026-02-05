@@ -3,10 +3,10 @@
 //! This module implements the StmtVisitor trait for CodeGenerator,
 //! providing a clean separation of statement code generation logic.
 
-use crate::visitor::{StmtVisitor, GenResult, BlockResult};
-use crate::{CodeGenerator, CodegenError};
 use crate::types::LocalVar;
-use vais_ast::{Spanned, Stmt, Expr};
+use crate::visitor::{BlockResult, GenResult, StmtVisitor};
+use crate::{CodeGenerator, CodegenError};
+use vais_ast::{Expr, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 impl StmtVisitor for CodeGenerator {
@@ -18,27 +18,17 @@ impl StmtVisitor for CodeGenerator {
                 value,
                 is_mut,
                 ..
-            } => {
-                self.generate_let_stmt(name, ty.as_ref(), value, *is_mut, counter)
-            }
+            } => self.generate_let_stmt(name, ty.as_ref(), value, *is_mut, counter),
             Stmt::LetDestructure {
                 pattern,
                 value,
                 is_mut,
                 ..
-            } => {
-                self.generate_let_destructure(pattern, value, *is_mut, counter)
-            }
+            } => self.generate_let_destructure(pattern, value, *is_mut, counter),
             Stmt::Expr(expr) => self.generate_expr(expr, counter),
-            Stmt::Return(expr) => {
-                self.generate_return_stmt(expr.as_ref().map(|e| &**e), counter)
-            }
-            Stmt::Break(value) => {
-                self.generate_break_stmt(value.as_ref().map(|v| &**v), counter)
-            }
-            Stmt::Continue => {
-                self.generate_continue_stmt()
-            }
+            Stmt::Return(expr) => self.generate_return_stmt(expr.as_ref().map(|e| &**e), counter),
+            Stmt::Break(value) => self.generate_break_stmt(value.as_ref().map(|v| &**v), counter),
+            Stmt::Continue => self.generate_continue_stmt(),
             Stmt::Defer(expr) => {
                 // Add the deferred expression to the stack
                 // It will be executed when the function exits (in LIFO order)
@@ -131,10 +121,21 @@ impl CodeGenerator {
         // 5. Simple primitive types (i64, i32, bool, etc.)
         let is_simple_type = matches!(
             resolved_ty,
-            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 | ResolvedType::I64 |
-            ResolvedType::I128 | ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 |
-            ResolvedType::U64 | ResolvedType::U128 | ResolvedType::F32 | ResolvedType::F64 |
-            ResolvedType::Bool | ResolvedType::Str | ResolvedType::Pointer(_)
+            ResolvedType::I8
+                | ResolvedType::I16
+                | ResolvedType::I32
+                | ResolvedType::I64
+                | ResolvedType::I128
+                | ResolvedType::U8
+                | ResolvedType::U16
+                | ResolvedType::U32
+                | ResolvedType::U64
+                | ResolvedType::U128
+                | ResolvedType::F32
+                | ResolvedType::F64
+                | ResolvedType::Bool
+                | ResolvedType::Str
+                | ResolvedType::Pointer(_)
         );
 
         let use_ssa = !is_mut
@@ -173,10 +174,7 @@ impl CodeGenerator {
 
             // For struct literals and enum variant constructors, the value is already an alloca'd pointer
             if is_struct_lit || is_enum_variant_call || is_unit_variant {
-                ir.push_str(&format!(
-                    "  %{} = alloca {}*\n",
-                    llvm_name, llvm_ty
-                ));
+                ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
                 ir.push_str(&format!(
                     "  store {}* {}, {}** %{}\n",
                     llvm_ty, val, llvm_ty, llvm_name
@@ -185,12 +183,21 @@ impl CodeGenerator {
                 // For struct values (e.g., from function returns)
                 let tmp_ptr = format!("%{}.struct", llvm_name);
                 ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
-                ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_ptr));
+                ir.push_str(&format!(
+                    "  store {} {}, {}* {}\n",
+                    llvm_ty, val, llvm_ty, tmp_ptr
+                ));
                 ir.push_str(&format!("  %{} = alloca {}*\n", llvm_name, llvm_ty));
-                ir.push_str(&format!("  store {}* {}, {}** %{}\n", llvm_ty, tmp_ptr, llvm_ty, llvm_name));
+                ir.push_str(&format!(
+                    "  store {}* {}, {}** %{}\n",
+                    llvm_ty, tmp_ptr, llvm_ty, llvm_name
+                ));
             } else {
                 ir.push_str(&format!("  %{} = alloca {}\n", llvm_name, llvm_ty));
-                ir.push_str(&format!("  store {} {}, {}* %{}\n", llvm_ty, val, llvm_ty, llvm_name));
+                ir.push_str(&format!(
+                    "  store {} {}, {}* %{}\n",
+                    llvm_ty, val, llvm_ty, llvm_name
+                ));
             }
 
             // If this was a lambda with captures, register the closure info
@@ -221,7 +228,9 @@ impl CodeGenerator {
                 Ok(("void".to_string(), ir))
             }
         } else {
-            Err(CodegenError::Unsupported("break outside of loop".to_string()))
+            Err(CodegenError::Unsupported(
+                "break outside of loop".to_string(),
+            ))
         }
     }
 
@@ -232,7 +241,9 @@ impl CodeGenerator {
             let ir = format!("  br label %{}\n", continue_label);
             Ok(("void".to_string(), ir))
         } else {
-            Err(CodegenError::Unsupported("continue outside of loop".to_string()))
+            Err(CodegenError::Unsupported(
+                "continue outside of loop".to_string(),
+            ))
         }
     }
 
@@ -253,14 +264,20 @@ impl CodeGenerator {
             ir.push_str(&expr_ir);
 
             // Get return type from current function context
-            let ret_type = self.current_return_type.clone().unwrap_or(ResolvedType::I64);
+            let ret_type = self
+                .current_return_type
+                .clone()
+                .unwrap_or(ResolvedType::I64);
             let llvm_ty = self.type_to_llvm(&ret_type);
 
             // For struct types, may need to load from pointer
             if matches!(ret_type, ResolvedType::Named { .. }) && !self.is_expr_value(expr) {
                 let loaded = format!("%ret.{}", counter);
                 *counter += 1;
-                ir.push_str(&format!("  {} = load {}, {}* {}\n", loaded, llvm_ty, llvm_ty, val));
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    loaded, llvm_ty, llvm_ty, val
+                ));
                 ir.push_str(&format!("  ret {} {}\n", llvm_ty, loaded));
             } else {
                 ir.push_str(&format!("  ret {} {}\n", llvm_ty, val));

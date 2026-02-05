@@ -59,7 +59,10 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::Array(elem_ty) => {
                 // Dynamic array is a pointer
                 let _elem_llvm = self.map_type(elem_ty);
-                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default())
+                    .into()
             }
             ResolvedType::ConstArray { element, size } => {
                 let elem_llvm = self.map_type(element);
@@ -69,7 +72,9 @@ impl<'ctx> TypeMapper<'ctx> {
                 };
                 elem_llvm.array_type(sz).into()
             }
-            ResolvedType::Pointer(inner) | ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner) => {
                 // In LLVM 17+, pointers are opaque
                 let _inner_llvm = self.map_type(inner);
                 self.context
@@ -87,12 +92,13 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
                 // Function type as pointer
-                let _param_types: Vec<BasicMetadataTypeEnum> = params
-                    .iter()
-                    .map(|p| self.map_type(p).into())
-                    .collect();
+                let _param_types: Vec<BasicMetadataTypeEnum> =
+                    params.iter().map(|p| self.map_type(p).into()).collect();
                 let _ret_type = self.map_type(ret);
-                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default())
+                    .into()
             }
             ResolvedType::Generic(_name) => {
                 // Generic types should ideally be substituted before codegen.
@@ -136,7 +142,10 @@ impl<'ctx> TypeMapper<'ctx> {
                 // Map is a pointer to runtime structure
                 let _key_llvm = self.map_type(key);
                 let _val_llvm = self.map_type(value);
-                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default())
+                    .into()
             }
             ResolvedType::Range(_) => {
                 // Range is { start: i64, end: i64 }
@@ -147,7 +156,10 @@ impl<'ctx> TypeMapper<'ctx> {
             }
             ResolvedType::Future(inner) => {
                 let _inner_llvm = self.map_type(inner);
-                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default())
+                    .into()
             }
             ResolvedType::DynTrait { .. } => {
                 // Fat pointer: { data_ptr, vtable_ptr }
@@ -164,19 +176,25 @@ impl<'ctx> TypeMapper<'ctx> {
                     _ => self.context.i64_type().vec_type(*lanes).into(),
                 }
             }
-            ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => {
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => {
                 let _inner_llvm = self.map_type(inner);
-                self.context.i8_type().ptr_type(AddressSpace::default()).into()
+                self.context
+                    .i8_type()
+                    .ptr_type(AddressSpace::default())
+                    .into()
             }
-            ResolvedType::Linear(inner) | ResolvedType::Affine(inner) | ResolvedType::Lazy(inner) => {
+            ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Lazy(inner) => {
                 // Transparent wrappers at runtime
                 self.map_type(inner)
             }
             // Fallback for remaining types
-            ResolvedType::ConstGeneric(_) | ResolvedType::Lifetime(_)
-            | ResolvedType::Associated { .. } | ResolvedType::Dependent { .. } => {
-                self.context.i64_type().into()
-            }
+            ResolvedType::ConstGeneric(_)
+            | ResolvedType::Lifetime(_)
+            | ResolvedType::Associated { .. }
+            | ResolvedType::Dependent { .. } => self.context.i64_type().into(),
         }
     }
 
@@ -188,7 +206,10 @@ impl<'ctx> TypeMapper<'ctx> {
             ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
             ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
             ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str | ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => 8,
+            ResolvedType::Str
+            | ResolvedType::Pointer(_)
+            | ResolvedType::Ref(_)
+            | ResolvedType::RefMut(_) => 8,
             ResolvedType::Unit => 0,
             ResolvedType::ConstArray { element, size } => {
                 let sz = match size {

@@ -45,7 +45,10 @@ fn main() {
     println!("Tool: {} v{}", sbom.tool.name, sbom.tool.version);
 
     if let Ok(json) = sbom.to_json() {
-        println!("\nSBOM JSON (first 200 chars):\n{}", &json[..200.min(json.len())]);
+        println!(
+            "\nSBOM JSON (first 200 chars):\n{}",
+            &json[..200.min(json.len())]
+        );
     }
 
     // 2. Package Signing
@@ -100,7 +103,10 @@ fn main() {
 
     println!("\nAudit Results:");
     for result in results {
-        println!("\n  Package: {} v{}", result.dependency_name, result.version);
+        println!(
+            "\n  Package: {} v{}",
+            result.dependency_name, result.version
+        );
         print!("  Status: ");
         match result.status {
             AuditStatus::Safe => println!("✓ SAFE"),

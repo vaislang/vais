@@ -249,7 +249,11 @@ fn no_crash_on_deeply_nested_expressions() {
     source.push_str("\n}\n");
 
     let result = compile_strict(&source);
-    assert!(result.is_ok(), "Moderate nesting should compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Moderate nesting should compile: {:?}",
+        result.err()
+    );
 }
 
 #[test]

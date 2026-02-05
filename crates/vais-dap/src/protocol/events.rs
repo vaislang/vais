@@ -2,8 +2,8 @@
 //!
 //! Event body types sent from debug adapter to client.
 
-use serde::{Deserialize, Serialize};
 use super::types::*;
+use serde::{Deserialize, Serialize};
 
 /// Body of 'initialized' event
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

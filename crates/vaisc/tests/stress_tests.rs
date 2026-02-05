@@ -40,8 +40,18 @@ impl StressTestResult {
         println!("  Lines:       {}", self.source_lines);
         println!("  Tokens:      {}", self.token_count);
         println!("  Items:       {}", self.item_count);
-        println!("  Parse:       {}", if self.parse_success { "✓" } else { "✗" });
-        println!("  Type Check:  {}", if self.type_check_success { "✓" } else { "✗" });
+        println!(
+            "  Parse:       {}",
+            if self.parse_success { "✓" } else { "✗" }
+        );
+        println!(
+            "  Type Check:  {}",
+            if self.type_check_success {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
         if let Some(ref err) = self.error_message {
             println!("  Error:       {}", err);
         }
@@ -54,11 +64,7 @@ impl StressTestResult {
 
 /// Parse and type-check a stress test file
 fn run_stress_test(file_path: &PathBuf) -> StressTestResult {
-    let file_name = file_path
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+    let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
 
     // Read source file
     let source = match fs::read_to_string(file_path) {
@@ -306,8 +312,16 @@ fn stress_test_all() {
     println!("  Total Lines:       {}", total_lines);
     println!("  Total Tokens:      {}", total_tokens);
     println!("  Total Items:       {}", total_items);
-    println!("  Parse Success:     {}/{}", results.iter().filter(|r| r.parse_success).count(), results.len());
-    println!("  Type Check Success: {}/{}", results.iter().filter(|r| r.type_check_success).count(), results.len());
+    println!(
+        "  Parse Success:     {}/{}",
+        results.iter().filter(|r| r.parse_success).count(),
+        results.len()
+    );
+    println!(
+        "  Type Check Success: {}/{}",
+        results.iter().filter(|r| r.type_check_success).count(),
+        results.len()
+    );
 
     // Assert that we have at least 1000 lines total
     assert!(
@@ -321,7 +335,10 @@ fn stress_test_all() {
     assert!(
         failed_parses.is_empty(),
         "Some files failed to parse: {:?}",
-        failed_parses.iter().map(|r| &r.file_name).collect::<Vec<_>>()
+        failed_parses
+            .iter()
+            .map(|r| &r.file_name)
+            .collect::<Vec<_>>()
     );
 
     println!("\n========================================");
@@ -388,7 +405,10 @@ fn stress_benchmark_all() {
         println!("  Lex time:    {} ms", lex_time);
         println!("  Parse time:  {} ms", parse_time);
         println!("  Type check:  {} ms", type_check_time);
-        println!("  Total:       {} ms", lex_time + parse_time + type_check_time);
+        println!(
+            "  Total:       {} ms",
+            lex_time + parse_time + type_check_time
+        );
     }
 
     let total_time = total_lex_time + total_parse_time + total_type_check_time;
@@ -401,5 +421,8 @@ fn stress_benchmark_all() {
     println!("  Total Parse Time:  {} ms", total_parse_time);
     println!("  Total Type Check:  {} ms", total_type_check_time);
     println!("  Total Time:        {} ms", total_time);
-    println!("  Throughput:        {:.0} lines/sec", (total_lines as f64 / total_time as f64) * 1000.0);
+    println!(
+        "  Throughput:        {:.0} lines/sec",
+        (total_lines as f64 / total_time as f64) * 1000.0
+    );
 }

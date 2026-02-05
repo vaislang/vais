@@ -17,10 +17,7 @@ impl TextReport {
         output.push_str("=== Vais Performance Profile ===\n\n");
 
         if let Some(duration) = self.snapshot.duration {
-            output.push_str(&format!(
-                "Duration: {:.3}s\n\n",
-                duration.as_secs_f64()
-            ));
+            output.push_str(&format!("Duration: {:.3}s\n\n", duration.as_secs_f64()));
         }
 
         self.write_cpu_profile(&mut output);
@@ -64,8 +61,14 @@ impl TextReport {
 
         let stats = &self.snapshot.memory_stats;
 
-        output.push_str(&format!("Total allocations:     {}\n", stats.total_allocations));
-        output.push_str(&format!("Total deallocations:   {}\n", stats.total_deallocations));
+        output.push_str(&format!(
+            "Total allocations:     {}\n",
+            stats.total_allocations
+        ));
+        output.push_str(&format!(
+            "Total deallocations:   {}\n",
+            stats.total_deallocations
+        ));
         output.push_str(&format!(
             "Total allocated:       {} bytes ({:.2} MB)\n",
             stats.total_allocated_bytes,
@@ -109,10 +112,7 @@ impl TextReport {
         edges.sort_by(|a, b| b.2.cmp(&a.2));
 
         for (caller, callee, count) in edges.iter().take(20) {
-            output.push_str(&format!(
-                "{:<30} -> {:<30} {:>10}\n",
-                caller, callee, count
-            ));
+            output.push_str(&format!("{:<30} -> {:<30} {:>10}\n", caller, callee, count));
         }
         output.push('\n');
     }
@@ -152,10 +152,7 @@ pub struct MemoryStatsReport {
 
 impl ProfileStats {
     pub fn from_snapshot(snapshot: &ProfileSnapshot) -> Self {
-        let duration_secs = snapshot
-            .duration
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0);
+        let duration_secs = snapshot.duration.map(|d| d.as_secs_f64()).unwrap_or(0.0);
 
         let total_samples: usize = snapshot.samples.iter().map(|(_, count)| count).sum();
 
@@ -178,8 +175,7 @@ impl ProfileStats {
             .collect();
 
         let average_allocation_size = if snapshot.memory_stats.total_allocations > 0 {
-            snapshot.memory_stats.total_allocated_bytes
-                / snapshot.memory_stats.total_allocations
+            snapshot.memory_stats.total_allocated_bytes / snapshot.memory_stats.total_allocations
         } else {
             0
         };

@@ -205,16 +205,14 @@ impl Capabilities {
             supports_restart_request: Some(true),
             supports_read_memory_request: Some(true),
             supports_disassemble_request: Some(true),
-            exception_breakpoint_filters: Some(vec![
-                ExceptionBreakpointsFilter {
-                    filter: "panic".to_string(),
-                    label: "Panic".to_string(),
-                    description: Some("Break on Vais panic".to_string()),
-                    default: Some(true),
-                    supports_condition: Some(false),
-                    condition_description: None,
-                },
-            ]),
+            exception_breakpoint_filters: Some(vec![ExceptionBreakpointsFilter {
+                filter: "panic".to_string(),
+                label: "Panic".to_string(),
+                description: Some("Break on Vais panic".to_string()),
+                default: Some(true),
+                supports_condition: Some(false),
+                condition_description: None,
+            }]),
             ..Default::default()
         }
     }

@@ -18,40 +18,40 @@
 //! - `inkwell-codegen`: Enable inkwell-based generation (requires LLVM 17+)
 
 pub mod abi;
+#[cfg(test)]
+mod abi_tests;
 pub mod advanced_opt;
-pub mod debug;
-pub mod formatter;
-pub mod optimize;
-pub mod parallel;
-pub mod visitor;
-pub mod wasm_component;
 mod builtins;
+#[cfg(test)]
+mod cache_tests;
 mod contracts;
 mod control_flow;
+pub mod cross_compile;
+pub mod debug;
 mod expr;
 mod expr_helpers;
 mod expr_visitor;
 mod ffi;
+pub mod formatter;
 mod function_gen;
 mod lambda_closure;
+#[cfg(test)]
+mod nested_field_tests;
+pub mod optimize;
+pub mod parallel;
 mod registration;
 mod stmt;
 mod stmt_visitor;
 mod string_ops;
-mod type_inference;
-mod types;
-pub mod vtable;
-pub mod cross_compile;
-#[cfg(test)]
-mod abi_tests;
-#[cfg(test)]
-mod cache_tests;
-#[cfg(test)]
-mod vtable_tests;
 #[cfg(test)]
 mod struct_param_tests;
+mod type_inference;
+mod types;
+pub mod visitor;
+pub mod vtable;
 #[cfg(test)]
-mod nested_field_tests;
+mod vtable_tests;
+pub mod wasm_component;
 
 // Inkwell-based code generator (optional)
 #[cfg(feature = "inkwell-codegen")]
@@ -60,7 +60,7 @@ pub mod inkwell;
 #[cfg(feature = "inkwell-codegen")]
 pub use inkwell::InkwellCodeGenerator;
 
-pub use visitor::{ExprVisitor, StmtVisitor, ItemVisitor};
+pub use visitor::{ExprVisitor, ItemVisitor, StmtVisitor};
 
 pub use debug::{DebugConfig, DebugInfoBuilder};
 
@@ -150,18 +150,24 @@ impl TargetTriple {
             "native" | "auto" => Some(Self::Native),
 
             // x86-64 Linux
-            "x86_64-linux" | "x86_64-unknown-linux-gnu" | "x86_64-pc-linux-gnu" => Some(Self::X86_64Linux),
+            "x86_64-linux" | "x86_64-unknown-linux-gnu" | "x86_64-pc-linux-gnu" => {
+                Some(Self::X86_64Linux)
+            }
             "x86_64-linux-musl" | "x86_64-unknown-linux-musl" => Some(Self::X86_64LinuxMusl),
 
             // x86-64 Windows
             "x86_64-windows-msvc" | "x86_64-pc-windows-msvc" => Some(Self::X86_64WindowsMsvc),
-            "x86_64-windows-gnu" | "x86_64-pc-windows-gnu" | "x86_64-w64-mingw32" => Some(Self::X86_64WindowsGnu),
+            "x86_64-windows-gnu" | "x86_64-pc-windows-gnu" | "x86_64-w64-mingw32" => {
+                Some(Self::X86_64WindowsGnu)
+            }
 
             // x86-64 macOS
             "x86_64-darwin" | "x86_64-apple-darwin" => Some(Self::X86_64Darwin),
 
             // ARM64 macOS
-            "aarch64" | "aarch64-darwin" | "aarch64-apple-darwin" | "arm64" | "arm64-darwin" => Some(Self::Aarch64Darwin),
+            "aarch64" | "aarch64-darwin" | "aarch64-apple-darwin" | "arm64" | "arm64-darwin" => {
+                Some(Self::Aarch64Darwin)
+            }
 
             // ARM64 Linux
             "aarch64-linux" | "aarch64-unknown-linux-gnu" => Some(Self::Aarch64Linux),
@@ -183,7 +189,9 @@ impl TargetTriple {
             "wasi-preview2" | "wasm32-wasip2" => Some(Self::WasiPreview2),
 
             // RISC-V
-            "riscv64" | "riscv64-linux" | "riscv64gc-unknown-linux-gnu" => Some(Self::Riscv64LinuxGnu),
+            "riscv64" | "riscv64-linux" | "riscv64gc-unknown-linux-gnu" => {
+                Some(Self::Riscv64LinuxGnu)
+            }
 
             // Windows ARM64
             "aarch64-windows-msvc" | "aarch64-pc-windows-msvc" => Some(Self::Aarch64WindowsMsvc),
@@ -199,7 +207,7 @@ impl TargetTriple {
     /// Get the LLVM target triple string
     pub fn triple_str(&self) -> &'static str {
         match self {
-            Self::Native => "",  // Let clang auto-detect
+            Self::Native => "", // Let clang auto-detect
             Self::X86_64Linux => "x86_64-unknown-linux-gnu",
             Self::X86_64LinuxMusl => "x86_64-unknown-linux-musl",
             Self::X86_64WindowsMsvc => "x86_64-pc-windows-msvc",
@@ -225,61 +233,70 @@ impl TargetTriple {
     /// Get the LLVM data layout for this target
     pub fn data_layout(&self) -> &'static str {
         match self {
-            Self::Native => "",  // Let clang auto-detect
+            Self::Native => "", // Let clang auto-detect
 
             // x86-64 (all platforms have same layout)
-            Self::X86_64Linux | Self::X86_64LinuxMusl | Self::X86_64WindowsMsvc |
-            Self::X86_64WindowsGnu | Self::X86_64Darwin =>
-                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+            Self::X86_64Linux
+            | Self::X86_64LinuxMusl
+            | Self::X86_64WindowsMsvc
+            | Self::X86_64WindowsGnu
+            | Self::X86_64Darwin => {
+                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+            }
 
             // ARM64 (macOS uses different mangling)
-            Self::Aarch64Darwin | Self::Aarch64Ios | Self::Aarch64IosSimulator =>
-                "e-m:o-i64:64-i128:128-n32:64-S128",
-            Self::Aarch64Linux | Self::Aarch64LinuxMusl | Self::Aarch64Android =>
-                "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
+            Self::Aarch64Darwin | Self::Aarch64Ios | Self::Aarch64IosSimulator => {
+                "e-m:o-i64:64-i128:128-n32:64-S128"
+            }
+            Self::Aarch64Linux | Self::Aarch64LinuxMusl | Self::Aarch64Android => {
+                "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+            }
 
             // ARM32 Android
-            Self::Armv7Android =>
-                "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64",
+            Self::Armv7Android => "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64",
 
             // WebAssembly (32-bit pointers)
-            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 =>
-                "e-m:e-p:32:32-i64:64-n32:64-S128",
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => {
+                "e-m:e-p:32:32-i64:64-n32:64-S128"
+            }
 
             // RISC-V 64
-            Self::Riscv64LinuxGnu =>
-                "e-m:e-p:64:64-i64:64-i128:128-n64-S128",
+            Self::Riscv64LinuxGnu => "e-m:e-p:64:64-i64:64-i128:128-n64-S128",
 
             // Windows ARM64 (uses MSVC-specific mangling)
-            Self::Aarch64WindowsMsvc =>
-                "e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128",
+            Self::Aarch64WindowsMsvc => "e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128",
 
             // FreeBSD x86-64 (same as Linux x86-64)
-            Self::X86_64FreeBsd =>
-                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+            Self::X86_64FreeBsd => {
+                "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+            }
 
             // FreeBSD ARM64 (same as Linux ARM64)
-            Self::Aarch64FreeBsd =>
-                "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
+            Self::Aarch64FreeBsd => "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
         }
     }
 
     /// Check if this is a WebAssembly target
     pub fn is_wasm(&self) -> bool {
-        matches!(self, Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2)
+        matches!(
+            self,
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2
+        )
     }
 
     /// Check if this is a Windows target
     pub fn is_windows(&self) -> bool {
-        matches!(self, Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu | Self::Aarch64WindowsMsvc)
+        matches!(
+            self,
+            Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu | Self::Aarch64WindowsMsvc
+        )
     }
 
     /// Check if this is an Apple platform (macOS, iOS)
     pub fn is_apple(&self) -> bool {
         matches!(
             self,
-            Self::X86_64Darwin | Self::Aarch64Darwin |
-            Self::Aarch64Ios | Self::Aarch64IosSimulator
+            Self::X86_64Darwin | Self::Aarch64Darwin | Self::Aarch64Ios | Self::Aarch64IosSimulator
         )
     }
 
@@ -306,7 +323,9 @@ impl TargetTriple {
     /// Get pointer size in bits for this target
     pub fn pointer_bits(&self) -> usize {
         match self {
-            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 | Self::Armv7Android => 32,
+            Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 | Self::Armv7Android => {
+                32
+            }
             _ => 64,
         }
     }
@@ -375,8 +394,8 @@ impl TargetTriple {
         match self {
             Self::X86_64WindowsMsvc | Self::X86_64WindowsGnu | Self::Aarch64WindowsMsvc => "exe",
             Self::Wasm32Unknown | Self::WasiPreview1 | Self::WasiPreview2 => "wasm",
-            Self::Aarch64Ios | Self::Aarch64IosSimulator => "",  // no extension for iOS
-            _ => "",  // no extension for Unix-like systems
+            Self::Aarch64Ios | Self::Aarch64IosSimulator => "", // no extension for iOS
+            _ => "", // no extension for Unix-like systems
         }
     }
 
@@ -384,16 +403,24 @@ impl TargetTriple {
     pub fn all_targets() -> &'static [&'static str] {
         &[
             "native",
-            "x86_64-linux", "x86_64-linux-musl",
-            "x86_64-windows-msvc", "x86_64-windows-gnu",
+            "x86_64-linux",
+            "x86_64-linux-musl",
+            "x86_64-windows-msvc",
+            "x86_64-windows-gnu",
             "x86_64-darwin",
             "x86_64-freebsd",
-            "aarch64-darwin", "aarch64-linux", "aarch64-linux-musl",
-            "aarch64-android", "aarch64-ios", "aarch64-ios-sim",
+            "aarch64-darwin",
+            "aarch64-linux",
+            "aarch64-linux-musl",
+            "aarch64-android",
+            "aarch64-ios",
+            "aarch64-ios-sim",
             "aarch64-windows-msvc",
             "aarch64-freebsd",
             "armv7-android",
-            "wasm32", "wasi", "wasi-preview2",
+            "wasm32",
+            "wasi",
+            "wasi-preview2",
             "riscv64-linux",
         ]
     }
@@ -466,9 +493,10 @@ impl CodegenError {
             CodegenError::TypeError(_) => {
                 Some("ensure all operands have compatible types".to_string())
             }
-            CodegenError::Unsupported(feature) => {
-                Some(format!("'{}' is not yet implemented in code generation", feature))
-            }
+            CodegenError::Unsupported(feature) => Some(format!(
+                "'{}' is not yet implemented in code generation",
+                feature
+            )),
             CodegenError::RecursionLimitExceeded(_) => {
                 Some("consider reducing nesting depth or refactoring recursive types".to_string())
             }
@@ -512,10 +540,10 @@ fn edit_distance(a: &str, b: &str) -> usize {
             let cost = if ca == cb { 0 } else { 1 };
             matrix[i + 1][j + 1] = std::cmp::min(
                 std::cmp::min(
-                    matrix[i][j + 1] + 1,     // deletion
-                    matrix[i + 1][j] + 1,     // insertion
+                    matrix[i][j + 1] + 1, // deletion
+                    matrix[i + 1][j] + 1, // insertion
                 ),
-                matrix[i][j] + cost,          // substitution
+                matrix[i][j] + cost, // substitution
             );
         }
     }
@@ -553,11 +581,9 @@ fn suggest_similar(name: &str, candidates: &[&str], max_suggestions: usize) -> V
         .collect();
 
     // Sort by distance, then alphabetically
-    suggestions.sort_by(|a, b| {
-        match a.1.cmp(&b.1) {
-            std::cmp::Ordering::Equal => a.0.cmp(&b.0),
-            other => other,
-        }
+    suggestions.sort_by(|a, b| match a.1.cmp(&b.1) {
+        std::cmp::Ordering::Equal => a.0.cmp(&b.0),
+        other => other,
     });
 
     // Take top suggestions
@@ -573,7 +599,10 @@ fn format_did_you_mean(suggestions: &[String]) -> String {
     match suggestions.len() {
         0 => String::new(),
         1 => format!(". Did you mean `{}`?", suggestions[0]),
-        2 => format!(". Did you mean `{}` or `{}`?", suggestions[0], suggestions[1]),
+        2 => format!(
+            ". Did you mean `{}` or `{}`?",
+            suggestions[0], suggestions[1]
+        ),
         _ => {
             let first_two = suggestions[0..2].join("`, `");
             format!(". Did you mean `{}`, or `{}`?", first_two, suggestions[2])
@@ -612,7 +641,10 @@ fn suggest_type_conversion(expected: &str, found: &str) -> String {
 
     // Bool to integer
     if expected.starts_with('i') && found == "bool" {
-        return format!(". Consider using `as {}` to convert boolean to integer", expected);
+        return format!(
+            ". Consider using `as {}` to convert boolean to integer",
+            expected
+        );
     }
 
     String::new()
@@ -983,9 +1015,10 @@ impl CodeGenerator {
     fn enter_type_recursion(&self, context: &str) -> CodegenResult<()> {
         let depth = self.type_recursion_depth.get();
         if depth >= MAX_TYPE_RECURSION_DEPTH {
-            return Err(CodegenError::RecursionLimitExceeded(
-                format!("Type recursion depth limit ({}) exceeded in {}", MAX_TYPE_RECURSION_DEPTH, context)
-            ));
+            return Err(CodegenError::RecursionLimitExceeded(format!(
+                "Type recursion depth limit ({}) exceeded in {}",
+                MAX_TYPE_RECURSION_DEPTH, context
+            )));
         }
         self.type_recursion_depth.set(depth + 1);
         Ok(())
@@ -1033,7 +1066,7 @@ impl CodeGenerator {
                 }
             }
             ResolvedType::DynTrait { .. } => 16, // Fat pointer: data + vtable
-            _ => 8, // Default
+            _ => 8,                              // Default
         };
 
         // Always exit recursion
@@ -1050,7 +1083,9 @@ impl CodeGenerator {
     fn register_trait_from_ast(&mut self, t: &vais_ast::Trait) {
         let mut methods = HashMap::new();
         for m in &t.methods {
-            let params: Vec<(String, ResolvedType, bool)> = m.params.iter()
+            let params: Vec<(String, ResolvedType, bool)> = m
+                .params
+                .iter()
                 .map(|p| {
                     let ty = if p.name.node == "self" {
                         // self parameter is a pointer to the implementing type
@@ -1062,18 +1097,23 @@ impl CodeGenerator {
                 })
                 .collect();
 
-            let ret = m.ret_type.as_ref()
+            let ret = m
+                .ret_type
+                .as_ref()
                 .map(|t| self.ast_type_to_resolved(&t.node))
                 .unwrap_or(ResolvedType::Unit);
 
-            methods.insert(m.name.node.clone(), vais_types::TraitMethodSig {
-                name: m.name.node.clone(),
-                params,
-                ret,
-                has_default: m.default_body.is_some(),
-                is_async: m.is_async,
-                is_const: m.is_const,
-            });
+            methods.insert(
+                m.name.node.clone(),
+                vais_types::TraitMethodSig {
+                    name: m.name.node.clone(),
+                    params,
+                    ret,
+                    has_default: m.default_body.is_some(),
+                    is_async: m.is_async,
+                    is_const: m.is_const,
+                },
+            );
         }
 
         let trait_def = vais_types::TraitDef {
@@ -1106,12 +1146,16 @@ impl CodeGenerator {
         trait_name: &str,
     ) -> Option<vtable::VtableInfo> {
         let trait_def = self.trait_defs.get(trait_name)?.clone();
-        let method_impls = self.trait_impl_methods
+        let method_impls = self
+            .trait_impl_methods
             .get(&(impl_type.to_string(), trait_name.to_string()))
             .cloned()
             .unwrap_or_default();
 
-        Some(self.vtable_generator.generate_vtable(impl_type, &trait_def, &method_impls))
+        Some(
+            self.vtable_generator
+                .generate_vtable(impl_type, &trait_def, &method_impls),
+        )
     }
 
     /// Generate all vtable globals for the module
@@ -1145,10 +1189,14 @@ impl CodeGenerator {
         trait_name: &str,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let vtable_info = self.get_or_generate_vtable(impl_type, trait_name)
-            .ok_or_else(|| CodegenError::Unsupported(
-                format!("No vtable for {} implementing {}", impl_type, trait_name)
-            ))?;
+        let vtable_info = self
+            .get_or_generate_vtable(impl_type, trait_name)
+            .ok_or_else(|| {
+                CodegenError::Unsupported(format!(
+                    "No vtable for {} implementing {}",
+                    impl_type, trait_name
+                ))
+            })?;
 
         Ok(self.vtable_generator.create_trait_object(
             concrete_value,
@@ -1167,24 +1215,30 @@ impl CodeGenerator {
         args: &[String],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let trait_def = self.trait_defs.get(trait_name)
-            .ok_or_else(|| CodegenError::Unsupported(
-                format!("Unknown trait: {}", trait_name)
-            ))?;
+        let trait_def = self
+            .trait_defs
+            .get(trait_name)
+            .ok_or_else(|| CodegenError::Unsupported(format!("Unknown trait: {}", trait_name)))?;
 
         // Find method index in trait
         let method_names: Vec<&String> = trait_def.methods.keys().collect();
-        let method_index = method_names.iter()
+        let method_index = method_names
+            .iter()
             .position(|&n| n == method_name)
-            .ok_or_else(|| CodegenError::Unsupported(
-                format!("Method {} not found in trait {}", method_name, trait_name)
-            ))?;
+            .ok_or_else(|| {
+                CodegenError::Unsupported(format!(
+                    "Method {} not found in trait {}",
+                    method_name, trait_name
+                ))
+            })?;
 
         // Get return type
-        let method_sig = trait_def.methods.get(method_name)
-            .ok_or_else(|| CodegenError::Unsupported(
-                format!("Method {} not found in trait {}", method_name, trait_name)
-            ))?;
+        let method_sig = trait_def.methods.get(method_name).ok_or_else(|| {
+            CodegenError::Unsupported(format!(
+                "Method {} not found in trait {}",
+                method_name, trait_name
+            ))
+        })?;
 
         let ret_type = if matches!(method_sig.ret, ResolvedType::Unit) {
             "void"
@@ -1217,7 +1271,12 @@ impl CodeGenerator {
     ///
     /// Returns: (result_register, IR code)
     #[allow(dead_code)]
-    fn generate_alloc(&self, size_arg: &str, counter: &mut usize, type_id: u32) -> (String, String) {
+    fn generate_alloc(
+        &self,
+        size_arg: &str,
+        counter: &mut usize,
+        type_id: u32,
+    ) -> (String, String) {
         let mut ir = String::new();
 
         if self.gc_enabled {
@@ -1228,10 +1287,7 @@ impl CodeGenerator {
                 ptr_tmp, size_arg, type_id
             ));
             let result = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = ptrtoint i8* {} to i64\n",
-                result, ptr_tmp
-            ));
+            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
             (result, ir)
         } else {
             // Use manual malloc
@@ -1241,10 +1297,7 @@ impl CodeGenerator {
                 ptr_tmp, size_arg
             ));
             let result = self.next_temp(counter);
-            ir.push_str(&format!(
-                "  {} = ptrtoint i8* {} to i64\n",
-                result, ptr_tmp
-            ));
+            ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
             (result, ir)
         }
     }
@@ -1286,8 +1339,14 @@ impl CodeGenerator {
 
         // Target triple and data layout (for non-native targets)
         if !matches!(self.target, TargetTriple::Native) {
-            ir.push_str(&format!("target datalayout = \"{}\"\n", self.target.data_layout()));
-            ir.push_str(&format!("target triple = \"{}\"\n", self.target.triple_str()));
+            ir.push_str(&format!(
+                "target datalayout = \"{}\"\n",
+                self.target.data_layout()
+            ));
+            ir.push_str(&format!(
+                "target triple = \"{}\"\n",
+                self.target.triple_str()
+            ));
         }
         // Note: for Native target, omit these to let clang auto-detect
         ir.push('\n');
@@ -1387,7 +1446,9 @@ impl CodeGenerator {
         // Prioritize non-aliased functions (key == name) over aliased ones (key != name)
         // to ensure correct C type signatures in declare statements
         let mut declared_fns = std::collections::HashSet::new();
-        let mut sorted_fns: Vec<_> = self.functions.iter()
+        let mut sorted_fns: Vec<_> = self
+            .functions
+            .iter()
             .filter(|(_, info)| info.is_extern)
             .collect();
         sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
@@ -1412,7 +1473,11 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     // Generate methods for this struct
                     for method in &s.methods {
-                        body_ir.push_str(&self.generate_method_with_span(&s.name.node, &method.node, method.span)?);
+                        body_ir.push_str(&self.generate_method_with_span(
+                            &s.name.node,
+                            &method.node,
+                            method.span,
+                        )?);
                         body_ir.push('\n');
                     }
                 }
@@ -1424,11 +1489,21 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
-                        body_ir.push_str(&self.generate_method_with_span(&type_name, &method.node, method.span)?);
+                        body_ir.push_str(&self.generate_method_with_span(
+                            &type_name,
+                            &method.node,
+                            method.span,
+                        )?);
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) => {
+                Item::Enum(_)
+                | Item::Union(_)
+                | Item::Use(_)
+                | Item::Trait(_)
+                | Item::TypeAlias(_)
+                | Item::Macro(_)
+                | Item::ExternBlock(_) => {
                     // Already handled in first pass or no code generation needed
                 }
                 Item::Const(_) | Item::Global(_) => {
@@ -1546,8 +1621,14 @@ impl CodeGenerator {
 
         // Target triple and data layout (for non-native targets)
         if !matches!(self.target, TargetTriple::Native) {
-            ir.push_str(&format!("target datalayout = \"{}\"\n", self.target.data_layout()));
-            ir.push_str(&format!("target triple = \"{}\"\n", self.target.triple_str()));
+            ir.push_str(&format!(
+                "target datalayout = \"{}\"\n",
+                self.target.data_layout()
+            ));
+            ir.push_str(&format!(
+                "target triple = \"{}\"\n",
+                self.target.triple_str()
+            ));
         }
         ir.push('\n');
 
@@ -1569,7 +1650,8 @@ impl CodeGenerator {
                     if !f.generics.is_empty() {
                         // Store generic function for later specialization
                         generic_functions.insert(f.name.node.clone(), f.clone());
-                        self.generic_function_templates.insert(f.name.node.clone(), f.clone());
+                        self.generic_function_templates
+                            .insert(f.name.node.clone(), f.clone());
                     } else {
                         self.register_function(f)?;
                     }
@@ -1579,7 +1661,8 @@ impl CodeGenerator {
                         // Store generic struct for later specialization
                         generic_structs.insert(s.name.node.clone(), s.clone());
                         // Also store in the generic_struct_defs for type inference
-                        self.generic_struct_defs.insert(s.name.node.clone(), s.clone());
+                        self.generic_struct_defs
+                            .insert(s.name.node.clone(), s.clone());
                     } else {
                         self.register_struct(s)?;
                         for method in &s.methods {
@@ -1720,7 +1803,9 @@ impl CodeGenerator {
         // Generate function declarations (extern functions)
         // Prioritize non-aliased functions (key == name) over aliased ones (key != name)
         let mut declared_fns = std::collections::HashSet::new();
-        let mut sorted_fns: Vec<_> = self.functions.iter()
+        let mut sorted_fns: Vec<_> = self
+            .functions
+            .iter()
             .filter(|(_, info)| info.is_extern)
             .collect();
         sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
@@ -1757,7 +1842,11 @@ impl CodeGenerator {
                 Item::Struct(s) => {
                     if s.generics.is_empty() {
                         for method in &s.methods {
-                            body_ir.push_str(&self.generate_method_with_span(&s.name.node, &method.node, method.span)?);
+                            body_ir.push_str(&self.generate_method_with_span(
+                                &s.name.node,
+                                &method.node,
+                                method.span,
+                            )?);
                             body_ir.push('\n');
                         }
                     }
@@ -1768,11 +1857,24 @@ impl CodeGenerator {
                         _ => continue,
                     };
                     for method in &impl_block.methods {
-                        body_ir.push_str(&self.generate_method_with_span(&type_name, &method.node, method.span)?);
+                        body_ir.push_str(&self.generate_method_with_span(
+                            &type_name,
+                            &method.node,
+                            method.span,
+                        )?);
                         body_ir.push('\n');
                     }
                 }
-                Item::Enum(_) | Item::Union(_) | Item::Use(_) | Item::Trait(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::ExternBlock(_) | Item::Const(_) | Item::Global(_) | Item::Error { .. } => {}
+                Item::Enum(_)
+                | Item::Union(_)
+                | Item::Use(_)
+                | Item::Trait(_)
+                | Item::TypeAlias(_)
+                | Item::Macro(_)
+                | Item::ExternBlock(_)
+                | Item::Const(_)
+                | Item::Global(_)
+                | Item::Error { .. } => {}
             }
         }
 
@@ -1864,7 +1966,11 @@ impl CodeGenerator {
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
         let (start_expr, end_expr, inclusive) = match &iter.node {
-            Expr::Range { start, end, inclusive } => (start.as_deref(), end.as_deref(), *inclusive),
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => (start.as_deref(), end.as_deref(), *inclusive),
             _ => unreachable!("generate_range_for_loop called with non-range iter"),
         };
 
@@ -1887,7 +1993,10 @@ impl CodeGenerator {
         let counter_var = format!("%loop_counter.{}", self.label_counter);
         self.label_counter += 1;
         ir.push_str(&format!("  {} = alloca i64\n", counter_var));
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", start_val, counter_var));
+        ir.push_str(&format!(
+            "  store i64 {}, i64* {}\n",
+            start_val, counter_var
+        ));
 
         let pattern_var = if let Pattern::Ident(name) = &pattern.node {
             let var_name = format!("{}.for", name);
@@ -1916,7 +2025,10 @@ impl CodeGenerator {
 
         ir.push_str(&format!("{}:\n", loop_cond));
         let current_val = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", current_val, counter_var));
+        ir.push_str(&format!(
+            "  {} = load i64, i64* {}\n",
+            current_val, counter_var
+        ));
 
         let cmp_pred = if inclusive { "sle" } else { "slt" };
         let cond_result = self.next_temp(counter);
@@ -1933,7 +2045,10 @@ impl CodeGenerator {
 
         if let Some((_, llvm_name)) = &pattern_var {
             let bind_val = self.next_temp(counter);
-            ir.push_str(&format!("  {} = load i64, i64* {}\n", bind_val, counter_var));
+            ir.push_str(&format!(
+                "  {} = load i64, i64* {}\n",
+                bind_val, counter_var
+            ));
             ir.push_str(&format!("  store i64 {}, i64* {}\n", bind_val, llvm_name));
         }
 
@@ -1946,10 +2061,16 @@ impl CodeGenerator {
 
         ir.push_str(&format!("{}:\n", loop_inc));
         let inc_load = self.next_temp(counter);
-        ir.push_str(&format!("  {} = load i64, i64* {}\n", inc_load, counter_var));
+        ir.push_str(&format!(
+            "  {} = load i64, i64* {}\n",
+            inc_load, counter_var
+        ));
         let inc_result = self.next_temp(counter);
         ir.push_str(&format!("  {} = add i64 {}, 1\n", inc_result, inc_load));
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", inc_result, counter_var));
+        ir.push_str(&format!(
+            "  store i64 {}, i64* {}\n",
+            inc_result, counter_var
+        ));
         ir.push_str(&format!("  br label %{}\n", loop_cond));
 
         ir.push_str(&format!("{}:\n", loop_end));
@@ -1965,9 +2086,7 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         match &expr.node {
             Expr::Int(n) => Ok((n.to_string(), String::new())),
-            Expr::Float(n) => {
-                Ok((crate::types::format_llvm_float(*n), String::new()))
-            }
+            Expr::Float(n) => Ok((crate::types::format_llvm_float(*n), String::new())),
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
                 // Create a global string constant
@@ -1978,7 +2097,10 @@ impl CodeGenerator {
                 // Return a getelementptr to the string constant
                 let len = s.len() + 1;
                 Ok((
-                    format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+                    format!(
+                        "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                        len, len, name
+                    ),
                     String::new(),
                 ))
             }
@@ -2056,10 +2178,7 @@ impl CodeGenerator {
                                     "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
                                     tag_ptr, enum_info.name, enum_info.name, enum_ptr
                                 ));
-                                ir.push_str(&format!(
-                                    "  store i32 {}, i32* {}\n",
-                                    tag, tag_ptr
-                                ));
+                                ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
                                 return Ok((enum_ptr, ir));
                             }
                         }
@@ -2075,13 +2194,20 @@ impl CodeGenerator {
                 } else if let Some(self_local) = self.locals.get("self").cloned() {
                     // Implicit self: check if name is a field of the self struct
                     let self_type = match &self_local.ty {
-                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                            inner.as_ref().clone()
+                        }
                         other => other.clone(),
                     };
-                    if let ResolvedType::Named { name: type_name, .. } = &self_type {
+                    if let ResolvedType::Named {
+                        name: type_name, ..
+                    } = &self_type
+                    {
                         let resolved_name = self.resolve_struct_name(type_name);
                         if let Some(struct_info) = self.structs.get(&resolved_name).cloned() {
-                            if let Some(field_idx) = struct_info.fields.iter().position(|(n, _)| n == name) {
+                            if let Some(field_idx) =
+                                struct_info.fields.iter().position(|(n, _)| n == name)
+                            {
                                 let field_ty = &struct_info.fields[field_idx].1;
                                 let llvm_ty = self.type_to_llvm(field_ty);
                                 let mut ir = String::new();
@@ -2113,7 +2239,10 @@ impl CodeGenerator {
                     }
                     let suggestions = suggest_similar(name, &candidates, 3);
                     let suggestion_text = format_did_you_mean(&suggestions);
-                    Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
+                    Err(CodegenError::UndefinedVar(format!(
+                        "{}{}",
+                        name, suggestion_text
+                    )))
                 } else {
                     // Undefined identifier - provide suggestions
                     let mut candidates: Vec<&str> = Vec::new();
@@ -2136,9 +2265,11 @@ impl CodeGenerator {
                     // Get suggestions
                     let suggestions = suggest_similar(name, &candidates, 3);
                     let suggestion_text = format_did_you_mean(&suggestions);
-                    Err(CodegenError::UndefinedVar(format!("{}{}", name, suggestion_text)))
+                    Err(CodegenError::UndefinedVar(format!(
+                        "{}{}",
+                        name, suggestion_text
+                    )))
                 }
-
             }
 
             Expr::SelfCall => {
@@ -2173,10 +2304,7 @@ impl CodeGenerator {
                 if is_logical {
                     // For logical And/Or, convert operands to i1 first, then perform operation
                     let left_bool = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = icmp ne i64 {}, 0\n",
-                        left_bool, left_val
-                    ));
+                    ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", left_bool, left_val));
                     let right_bool = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = icmp ne i64 {}, 0\n",
@@ -2198,10 +2326,7 @@ impl CodeGenerator {
 
                     // Extend back to i64 for consistency
                     let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = zext i1 {} to i64\n",
-                        result, result_bool
-                    ));
+                    ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, result_bool));
                     Ok((result, ir))
                 } else if is_comparison {
                     // Comparison returns i1, extend to i64
@@ -2244,10 +2369,7 @@ impl CodeGenerator {
 
                     // Extend i1 to i64
                     let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = zext i1 {} to i64\n",
-                        result, cmp_tmp
-                    ));
+                    ir.push_str(&format!("  {} = zext i1 {} to i64\n", result, cmp_tmp));
                     Ok((result, ir))
                 } else {
                     // Arithmetic and bitwise operations
@@ -2258,7 +2380,12 @@ impl CodeGenerator {
                     let is_float = matches!(left_type, ResolvedType::F64)
                         || matches!(right_type, ResolvedType::F64);
 
-                    if is_float && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod) {
+                    if is_float
+                        && matches!(
+                            op,
+                            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
+                        )
+                    {
                         let op_str = match op {
                             BinOp::Add => "fadd",
                             BinOp::Sub => "fsub",
@@ -2331,10 +2458,7 @@ impl CodeGenerator {
 
                 // Convert i64 to i1 for branch
                 let cond_bool = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp ne i64 {}, 0\n",
-                    cond_bool, cond_val
-                ));
+                ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
 
                 // Conditional branch
                 ir.push_str(&format!(
@@ -2381,15 +2505,14 @@ impl CodeGenerator {
                     // Handle str_to_ptr builtin: convert string pointer to i64
                     if name == "str_to_ptr" {
                         if args.len() != 1 {
-                            return Err(CodegenError::TypeError("str_to_ptr expects 1 argument".to_string()));
+                            return Err(CodegenError::TypeError(
+                                "str_to_ptr expects 1 argument".to_string(),
+                            ));
                         }
                         let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
                         let mut ir = str_ir;
                         let result = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = ptrtoint i8* {} to i64\n",
-                            result, str_val
-                        ));
+                        ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, str_val));
                         return Ok((result, ir));
                     }
 
@@ -2407,10 +2530,7 @@ impl CodeGenerator {
 
                         // Create enum value on stack: { i32 tag, i64 payload }
                         let enum_ptr = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = alloca %{}\n",
-                            enum_ptr, enum_name
-                        ));
+                        ir.push_str(&format!("  {} = alloca %{}\n", enum_ptr, enum_name));
 
                         // Store tag
                         let tag_ptr = self.next_temp(counter);
@@ -2418,10 +2538,7 @@ impl CodeGenerator {
                             "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0\n",
                             tag_ptr, enum_name, enum_name, enum_ptr
                         ));
-                        ir.push_str(&format!(
-                            "  store i32 {}, i32* {}\n",
-                            tag, tag_ptr
-                        ));
+                        ir.push_str(&format!("  store i32 {}, i32* {}\n", tag, tag_ptr));
 
                         // Store payload fields into the payload sub-struct
                         for (i, arg_val) in arg_vals.iter().enumerate() {
@@ -2452,7 +2569,8 @@ impl CodeGenerator {
                         let fmt_str = "%ld";
                         let fmt_name = format!(".str.{}", self.string_counter);
                         self.string_counter += 1;
-                        self.string_constants.push((fmt_name.clone(), fmt_str.to_string()));
+                        self.string_constants
+                            .push((fmt_name.clone(), fmt_str.to_string()));
                         let fmt_len = fmt_str.len() + 1;
                         let fmt_ptr = self.next_temp(counter);
                         ir.push_str(&format!(
@@ -2473,7 +2591,8 @@ impl CodeGenerator {
                         let fmt_str = "%f";
                         let fmt_name = format!(".str.{}", self.string_counter);
                         self.string_counter += 1;
-                        self.string_constants.push((fmt_name.clone(), fmt_str.to_string()));
+                        self.string_constants
+                            .push((fmt_name.clone(), fmt_str.to_string()));
                         let fmt_len = fmt_str.len() + 1;
                         let fmt_ptr = self.next_temp(counter);
                         ir.push_str(&format!(
@@ -2494,12 +2613,12 @@ impl CodeGenerator {
                     // Check if this is a generic function that needs monomorphization
                     if let Some(instantiations_list) = self.generic_fn_instantiations.get(name) {
                         // Infer argument types to select the right specialization
-                        let arg_types: Vec<ResolvedType> = args.iter()
-                            .map(|a| self.infer_expr_type(a))
-                            .collect();
+                        let arg_types: Vec<ResolvedType> =
+                            args.iter().map(|a| self.infer_expr_type(a)).collect();
 
                         // Find the matching instantiation based on argument types
-                        let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
+                        let mangled =
+                            self.resolve_generic_call(name, &arg_types, instantiations_list);
                         (mangled, false)
                     } else if self.functions.contains_key(name) {
                         (name.clone(), false)
@@ -2511,30 +2630,35 @@ impl CodeGenerator {
                     } else {
                         // Unknown function - provide suggestions
                         let mut candidates: Vec<&str> = Vec::new();
-                        
+
                         // Add declared function names (including generics)
                         for func_name in &self.declared_functions {
                             candidates.push(func_name.as_str());
                         }
-                        
+
                         // Add instantiated function names
                         for func_name in self.functions.keys() {
                             candidates.push(func_name.as_str());
                         }
-                        
+
                         // Add local variables (could be lambdas)
                         for var_name in self.locals.keys() {
                             candidates.push(var_name.as_str());
                         }
-                        
+
                         let suggestions = suggest_similar(name, &candidates, 3);
                         let suggestion_text = format_did_you_mean(&suggestions);
-                        return Err(CodegenError::UndefinedFunction(format!("{}{}", name, suggestion_text)));
+                        return Err(CodegenError::UndefinedFunction(format!(
+                            "{}{}",
+                            name, suggestion_text
+                        )));
                     }
                 } else if let Expr::SelfCall = &func.node {
                     (self.current_function.clone().unwrap_or_default(), false)
                 } else {
-                    return Err(CodegenError::Unsupported("complex indirect call".to_string()));
+                    return Err(CodegenError::Unsupported(
+                        "complex indirect call".to_string(),
+                    ));
                 };
 
                 // Look up function info for parameter types (only for direct calls)
@@ -2612,7 +2736,8 @@ impl CodeGenerator {
 
                             if let Some(concrete_name) = concrete_type_name {
                                 // Generate vtable for this concrete type + trait
-                                let vtable_info = self.get_or_generate_vtable(&concrete_name, &trait_name);
+                                let vtable_info =
+                                    self.get_or_generate_vtable(&concrete_name, &trait_name);
 
                                 if let Some(vtable) = vtable_info {
                                     // Load the actual struct pointer if we have a pointer-to-pointer
@@ -2717,14 +2842,18 @@ impl CodeGenerator {
                         let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                         ir.push_str(&format!(
                             "  {} = call i64 @{}({}){}\n",
-                            tmp, info.func_name, all_args.join(", "), dbg_info
+                            tmp,
+                            info.func_name,
+                            all_args.join(", "),
+                            dbg_info
                         ));
                         return Ok((tmp, ir));
                     }
 
                     // Get the local variable info
                     let local_info = self.locals.get(&fn_name).cloned();
-                    let is_ssa_or_param = local_info.as_ref()
+                    let is_ssa_or_param = local_info
+                        .as_ref()
                         .map(|l| l.is_ssa() || l.is_param())
                         .unwrap_or(false);
 
@@ -2732,7 +2861,12 @@ impl CodeGenerator {
                         // SSA or param: the value IS the function pointer (as i64), no load needed
                         let local = match local_info.as_ref() {
                             Some(l) => l,
-                            None => return Err(CodegenError::TypeError(format!("missing local info for '{}'", fn_name))),
+                            None => {
+                                return Err(CodegenError::TypeError(format!(
+                                    "missing local info for '{}'",
+                                    fn_name
+                                )))
+                            }
                         };
                         let val = &local.llvm_name;
                         if local.is_ssa() {
@@ -2744,14 +2878,12 @@ impl CodeGenerator {
                         }
                     } else {
                         // Alloca: load the function pointer from the stack slot
-                        let llvm_var_name = local_info.as_ref()
+                        let llvm_var_name = local_info
+                            .as_ref()
                             .map(|l| l.llvm_name.clone())
                             .unwrap_or_else(|| fn_name.clone());
                         let tmp = self.next_temp(counter);
-                        ir.push_str(&format!(
-                            "  {} = load i64, i64* %{}\n",
-                            tmp, llvm_var_name
-                        ));
+                        ir.push_str(&format!("  {} = load i64, i64* %{}\n", tmp, llvm_var_name));
                         tmp
                     };
 
@@ -2774,7 +2906,10 @@ impl CodeGenerator {
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
                     ir.push_str(&format!(
                         "  {} = call i64 {}({}){}\n",
-                        tmp, fn_ptr, all_args.join(", "), dbg_info
+                        tmp,
+                        fn_ptr,
+                        all_args.join(", "),
+                        dbg_info
                     ));
                     Ok((tmp, ir))
                 } else if fn_name == "malloc" {
@@ -2788,16 +2923,14 @@ impl CodeGenerator {
                         dbg_info
                     ));
                     let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = ptrtoint i8* {} to i64\n",
-                        result, ptr_tmp
-                    ));
+                    ir.push_str(&format!("  {} = ptrtoint i8* {} to i64\n", result, ptr_tmp));
                     Ok((result, ir))
                 } else if fn_name == "free" {
                     // Special handling for free: convert i64 to i8*
                     let ptr_tmp = self.next_temp(counter);
                     // Extract the i64 value from arg_vals
-                    let arg_val = arg_vals.first()
+                    let arg_val = arg_vals
+                        .first()
                         .map(|s| s.split_whitespace().last().unwrap_or("0"))
                         .unwrap_or("0");
                     ir.push_str(&format!(
@@ -2805,22 +2938,24 @@ impl CodeGenerator {
                         ptr_tmp, arg_val
                     ));
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
-                    ir.push_str(&format!(
-                        "  call void @free(i8* {}){}\n",
-                        ptr_tmp, dbg_info
-                    ));
+                    ir.push_str(&format!("  call void @free(i8* {}){}\n", ptr_tmp, dbg_info));
                     Ok(("void".to_string(), ir))
                 } else if fn_name == "memcpy" || fn_name == "memcpy_str" {
                     // Special handling for memcpy/memcpy_str: convert pointers as needed
                     let dest_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
                     let src_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
-                    let n_val = arg_vals.get(2)
+                    let n_val = arg_vals
+                        .get(2)
                         .map(|s| s.split_whitespace().last().unwrap_or("0"))
                         .unwrap_or("0");
 
                     // Handle dest pointer
                     let dest_ptr = if dest_full.starts_with("i8*") {
-                        dest_full.split_whitespace().last().unwrap_or("null").to_string()
+                        dest_full
+                            .split_whitespace()
+                            .last()
+                            .unwrap_or("null")
+                            .to_string()
                     } else {
                         let dest_val = dest_full.split_whitespace().last().unwrap_or("0");
                         let ptr = self.next_temp(counter);
@@ -2830,7 +2965,11 @@ impl CodeGenerator {
 
                     // Handle src pointer (can be i64 or i8* for memcpy_str)
                     let src_ptr = if src_full.starts_with("i8*") {
-                        src_full.split_whitespace().last().unwrap_or("null").to_string()
+                        src_full
+                            .split_whitespace()
+                            .last()
+                            .unwrap_or("null")
+                            .to_string()
                     } else {
                         let src_val = src_full.split_whitespace().last().unwrap_or("0");
                         let ptr = self.next_temp(counter);
@@ -2853,9 +2992,7 @@ impl CodeGenerator {
                     Ok((result_i64, ir))
                 } else if fn_name == "strlen" {
                     // Special handling for strlen: convert i64 to i8* if needed
-                    let arg_full = arg_vals.first()
-                        .map(|s| s.as_str())
-                        .unwrap_or("i64 0");
+                    let arg_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
                     let result = self.next_temp(counter);
                     let dbg_info = self.debug_info.dbg_ref_from_span(expr.span);
 
@@ -2883,7 +3020,8 @@ impl CodeGenerator {
                     Ok((result, ir))
                 } else if fn_name == "puts_ptr" {
                     // Special handling for puts_ptr: convert i64 to i8*
-                    let arg_val = arg_vals.first()
+                    let arg_val = arg_vals
+                        .first()
                         .map(|s| s.split_whitespace().last().unwrap_or("0"))
                         .unwrap_or("0");
                     let ptr_tmp = self.next_temp(counter);
@@ -2899,10 +3037,7 @@ impl CodeGenerator {
                     ));
                     // Convert i32 result to i64 for consistency
                     let result = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = sext i32 {} to i64\n",
-                        result, i32_result
-                    ));
+                    ir.push_str(&format!("  {} = sext i32 {} to i64\n", result, i32_result));
                     Ok((result, ir))
                 } else if ret_ty == "void" {
                     // Check for recursive call with decreases clause
@@ -2916,9 +3051,13 @@ impl CodeGenerator {
                     if is_vararg {
                         let param_types: Vec<String> = fn_info
                             .as_ref()
-                            .map(|f| f.signature.params.iter()
-                                .map(|(_, ty, _)| self.type_to_llvm(ty))
-                                .collect())
+                            .map(|f| {
+                                f.signature
+                                    .params
+                                    .iter()
+                                    .map(|(_, ty, _)| self.type_to_llvm(ty))
+                                    .collect()
+                            })
                             .unwrap_or_default();
                         let sig = format!("void ({}, ...)", param_types.join(", "));
                         ir.push_str(&format!(
@@ -2951,9 +3090,13 @@ impl CodeGenerator {
                         // Variadic functions need explicit signature in LLVM IR call
                         let param_types: Vec<String> = fn_info
                             .as_ref()
-                            .map(|f| f.signature.params.iter()
-                                .map(|(_, ty, _)| self.type_to_llvm(ty))
-                                .collect())
+                            .map(|f| {
+                                f.signature
+                                    .params
+                                    .iter()
+                                    .map(|(_, ty, _)| self.type_to_llvm(ty))
+                                    .collect()
+                            })
                             .unwrap_or_default();
                         let sig = format!("i32 ({}, ...)", param_types.join(", "));
                         ir.push_str(&format!(
@@ -2974,10 +3117,7 @@ impl CodeGenerator {
                         ));
                     }
                     let tmp = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = sext i32 {} to i64\n",
-                        tmp, i32_tmp
-                    ));
+                    ir.push_str(&format!("  {} = sext i32 {} to i64\n", tmp, i32_tmp));
                     Ok((tmp, ir))
                 } else {
                     // Check for recursive call with decreases clause
@@ -2992,9 +3132,13 @@ impl CodeGenerator {
                     if is_vararg {
                         let param_types: Vec<String> = fn_info
                             .as_ref()
-                            .map(|f| f.signature.params.iter()
-                                .map(|(_, ty, _)| self.type_to_llvm(ty))
-                                .collect())
+                            .map(|f| {
+                                f.signature
+                                    .params
+                                    .iter()
+                                    .map(|(_, ty, _)| self.type_to_llvm(ty))
+                                    .collect()
+                            })
                             .unwrap_or_default();
                         let sig = format!("{} ({}, ...)", ret_ty, param_types.join(", "));
                         ir.push_str(&format!(
@@ -3039,10 +3183,7 @@ impl CodeGenerator {
 
                 // Convert i64 to i1 for branch condition
                 let cond_bool = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp ne i64 {}, 0\n",
-                    cond_bool, cond_val
-                ));
+                ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
 
                 // Conditional branch
                 ir.push_str(&format!(
@@ -3053,7 +3194,8 @@ impl CodeGenerator {
                 // Then block
                 ir.push_str(&format!("{}:\n", then_label));
                 self.current_block = then_label.clone();
-                let (then_val, then_ir, then_terminated) = self.generate_block_stmts(then, counter)?;
+                let (then_val, then_ir, then_terminated) =
+                    self.generate_block_stmts(then, counter)?;
                 ir.push_str(&then_ir);
 
                 // For struct results, load the value before branch if it's a pointer
@@ -3080,18 +3222,24 @@ impl CodeGenerator {
                 // Else block
                 ir.push_str(&format!("{}:\n", else_label));
                 self.current_block = else_label.clone();
-                let (else_val, else_ir, else_terminated, nested_last_block, has_else) = if let Some(else_branch) = else_ {
-                    let (v, i, t, last) = self.generate_if_else_with_term(else_branch, counter, &merge_label)?;
-                    (v, i, t, last, true)
-                } else {
-                    ("0".to_string(), String::new(), false, String::new(), false)
-                };
+                let (else_val, else_ir, else_terminated, nested_last_block, has_else) =
+                    if let Some(else_branch) = else_ {
+                        let (v, i, t, last) =
+                            self.generate_if_else_with_term(else_branch, counter, &merge_label)?;
+                        (v, i, t, last, true)
+                    } else {
+                        ("0".to_string(), String::new(), false, String::new(), false)
+                    };
                 ir.push_str(&else_ir);
 
                 // For struct results, load the value before branch if it's a pointer
                 // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
                 // it's already a phi node value (not a pointer), so don't load it
-                let else_val_for_phi = if is_struct_result && !else_terminated && has_else && nested_last_block.is_empty() {
+                let else_val_for_phi = if is_struct_result
+                    && !else_terminated
+                    && has_else
+                    && nested_last_block.is_empty()
+                {
                     let loaded = self.next_temp(counter);
                     ir.push_str(&format!(
                         "  {} = load {}, {}* {}\n",
@@ -3133,7 +3281,12 @@ impl CodeGenerator {
                     // Both branches reach merge - use the inferred type
                     ir.push_str(&format!(
                         "  {} = phi {} [ {}, %{} ], [ {}, %{} ]\n",
-                        result, llvm_type, then_val_for_phi, then_from_label, else_val_for_phi, else_from_label
+                        result,
+                        llvm_type,
+                        then_val_for_phi,
+                        then_from_label,
+                        else_val_for_phi,
+                        else_from_label
                     ));
                 } else if !then_from_label.is_empty() {
                     // Only then branch reaches merge
@@ -3157,11 +3310,15 @@ impl CodeGenerator {
             }
 
             // Loop expression
-            Expr::Loop { pattern, iter, body } => {
+            Expr::Loop {
+                pattern,
+                iter,
+                body,
+            } => {
                 // Check if this is a range-based for loop
-                let is_range_loop = iter.as_ref().is_some_and(|it| {
-                    matches!(&it.node, Expr::Range { .. })
-                });
+                let is_range_loop = iter
+                    .as_ref()
+                    .is_some_and(|it| matches!(&it.node, Expr::Range { .. }));
 
                 if is_range_loop {
                     if let (Some(pat), Some(it)) = (pattern.as_ref(), iter.as_ref()) {
@@ -3195,10 +3352,7 @@ impl CodeGenerator {
 
                     // Convert i64 to i1 for branch
                     let cond_bool = self.next_temp(counter);
-                    ir.push_str(&format!(
-                        "  {} = icmp ne i64 {}, 0\n",
-                        cond_bool, cond_val
-                    ));
+                    ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
                     ir.push_str(&format!(
                         "  br i1 {}, label %{}, label %{}\n",
                         cond_bool, loop_body, loop_end
@@ -3206,7 +3360,8 @@ impl CodeGenerator {
 
                     // Loop body
                     ir.push_str(&format!("{}:\n", loop_body));
-                    let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
+                    let (_body_val, body_ir, body_terminated) =
+                        self.generate_block_stmts(body, counter)?;
                     ir.push_str(&body_ir);
                     // Only emit loop back if body doesn't terminate
                     if !body_terminated {
@@ -3216,7 +3371,8 @@ impl CodeGenerator {
                     // Infinite loop: L { body } - must use break to exit
                     ir.push_str(&format!("  br label %{}\n", loop_start));
                     ir.push_str(&format!("{}:\n", loop_start));
-                    let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
+                    let (_body_val, body_ir, body_terminated) =
+                        self.generate_block_stmts(body, counter)?;
                     ir.push_str(&body_ir);
                     // Only emit loop back if body doesn't terminate
                     if !body_terminated {
@@ -3257,10 +3413,7 @@ impl CodeGenerator {
 
                 // Convert to i1 for branch
                 let cond_bool = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = icmp ne i64 {}, 0\n",
-                    cond_bool, cond_val
-                ));
+                ir.push_str(&format!("  {} = icmp ne i64 {}, 0\n", cond_bool, cond_val));
                 ir.push_str(&format!(
                     "  br i1 {}, label %{}, label %{}\n",
                     cond_bool, loop_body, loop_end
@@ -3268,7 +3421,8 @@ impl CodeGenerator {
 
                 // Loop body
                 ir.push_str(&format!("{}:\n", loop_body));
-                let (_body_val, body_ir, body_terminated) = self.generate_block_stmts(body, counter)?;
+                let (_body_val, body_ir, body_terminated) =
+                    self.generate_block_stmts(body, counter)?;
                 ir.push_str(&body_ir);
 
                 // Jump back to condition if body doesn't terminate
@@ -3301,12 +3455,10 @@ impl CodeGenerator {
                             let llvm_ty = self.type_to_llvm(&local.ty);
                             // For struct types (Named), the local is a double pointer (%Type**).
                             // We need to alloca a new struct, store the value, then update the pointer.
-                            if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca() {
+                            if matches!(&local.ty, ResolvedType::Named { .. }) && local.is_alloca()
+                            {
                                 let tmp_ptr = self.next_temp(counter);
-                                ir.push_str(&format!(
-                                    "  {} = alloca {}\n",
-                                    tmp_ptr, llvm_ty
-                                ));
+                                ir.push_str(&format!("  {} = alloca {}\n", tmp_ptr, llvm_ty));
                                 ir.push_str(&format!(
                                     "  store {} {}, {}* {}\n",
                                     llvm_ty, val, llvm_ty, tmp_ptr
@@ -3328,11 +3480,12 @@ impl CodeGenerator {
                     let (ptr_val, ptr_ir) = self.generate_expr(inner, counter)?;
                     ir.push_str(&ptr_ir);
                     // Store value at the pointed-to location
-                    ir.push_str(&format!(
-                        "  store i64 {}, i64* {}\n",
-                        val, ptr_val
-                    ));
-                } else if let Expr::Index { expr: arr_expr, index } = &target.node {
+                    ir.push_str(&format!("  store i64 {}, i64* {}\n", val, ptr_val));
+                } else if let Expr::Index {
+                    expr: arr_expr,
+                    index,
+                } = &target.node
+                {
                     // Array index assignment: arr[i] = value
                     let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
                     ir.push_str(&arr_ir);
@@ -3357,7 +3510,11 @@ impl CodeGenerator {
                         "  store {} {}, {}* {}\n",
                         elem_llvm_type, val, elem_llvm_type, elem_ptr
                     ));
-                } else if let Expr::Field { expr: obj_expr, field } = &target.node {
+                } else if let Expr::Field {
+                    expr: obj_expr,
+                    field,
+                } = &target.node
+                {
                     // Field assignment: obj.field = value
                     let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
                     ir.push_str(&obj_ir);
@@ -3365,10 +3522,15 @@ impl CodeGenerator {
                     // Get struct or union info
                     if let Expr::Ident(var_name) = &obj_expr.node {
                         if let Some(local) = self.locals.get(var_name.as_str()).cloned() {
-                            if let ResolvedType::Named { name: type_name, .. } = &local.ty {
+                            if let ResolvedType::Named {
+                                name: type_name, ..
+                            } = &local.ty
+                            {
                                 // First check struct
                                 if let Some(struct_info) = self.structs.get(type_name).cloned() {
-                                    if let Some(field_idx) = struct_info.fields.iter()
+                                    if let Some(field_idx) = struct_info
+                                        .fields
+                                        .iter()
                                         .position(|(n, _)| n == &field.node)
                                     {
                                         let field_ty = &struct_info.fields[field_idx].1;
@@ -3386,9 +3548,10 @@ impl CodeGenerator {
                                     }
                                 }
                                 // Then check union
-                                else if let Some(union_info) = self.unions.get(type_name).cloned() {
-                                    if let Some((_, field_ty)) = union_info.fields.iter()
-                                        .find(|(n, _)| n == &field.node)
+                                else if let Some(union_info) = self.unions.get(type_name).cloned()
+                                {
+                                    if let Some((_, field_ty)) =
+                                        union_info.fields.iter().find(|(n, _)| n == &field.node)
                                     {
                                         let llvm_ty = self.type_to_llvm(field_ty);
 
@@ -3473,10 +3636,7 @@ impl CodeGenerator {
 
                 // Allocate array on stack
                 let arr_ptr = self.next_temp(counter);
-                ir.push_str(&format!(
-                    "  {} = alloca {}\n",
-                    arr_ptr, arr_ty
-                ));
+                ir.push_str(&format!("  {} = alloca {}\n", arr_ptr, arr_ty));
 
                 // Store each element
                 for (i, elem) in elements.iter().enumerate() {
@@ -3537,7 +3697,10 @@ impl CodeGenerator {
                         "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
                         k_elem_ptr, keys_arr_ty, keys_arr_ty, keys_ptr, i
                     ));
-                    ir.push_str(&format!("  store {} {}, {}* {}\n", key_ty, kval, key_ty, k_elem_ptr));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        key_ty, kval, key_ty, k_elem_ptr
+                    ));
 
                     let (vval, v_ir) = self.generate_expr(v, counter)?;
                     ir.push_str(&v_ir);
@@ -3546,7 +3709,10 @@ impl CodeGenerator {
                         "  {} = getelementptr {}, {}* {}, i64 0, i64 {}\n",
                         v_elem_ptr, vals_arr_ty, vals_arr_ty, vals_ptr, i
                     ));
-                    ir.push_str(&format!("  store {} {}, {}* {}\n", val_ty, vval, val_ty, v_elem_ptr));
+                    ir.push_str(&format!(
+                        "  store {} {}, {}* {}\n",
+                        val_ty, vval, val_ty, v_elem_ptr
+                    ));
                 }
 
                 // Return pointer to keys array (map is represented as parallel arrays)
@@ -3611,10 +3777,14 @@ impl CodeGenerator {
                     // Store each field
                     for (field_name, field_expr) in fields {
                         // Find field index
-                        let field_idx = struct_info.fields.iter()
+                        let field_idx = struct_info
+                            .fields
+                            .iter()
                             .position(|(n, _)| n == &field_name.node)
                             .ok_or_else(|| {
-                                let candidates: Vec<&str> = struct_info.fields.iter()
+                                let candidates: Vec<&str> = struct_info
+                                    .fields
+                                    .iter()
                                     .map(|(name, _)| name.as_str())
                                     .collect();
                                 let suggestions = suggest_similar(&field_name.node, &candidates, 3);
@@ -3638,7 +3808,9 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(field_ty);
 
                         // For struct-typed fields, val might be a pointer that needs to be loaded
-                        let val_to_store = if matches!(field_ty, ResolvedType::Named { .. }) && !self.is_expr_value(field_expr) {
+                        let val_to_store = if matches!(field_ty, ResolvedType::Named { .. })
+                            && !self.is_expr_value(field_expr)
+                        {
                             // Field value is a pointer to struct, need to load the value
                             let loaded = self.next_temp(counter);
                             ir.push_str(&format!(
@@ -3669,19 +3841,25 @@ impl CodeGenerator {
                     // Union should have exactly one field in the literal
                     if fields.len() != 1 {
                         return Err(CodegenError::TypeError(format!(
-                            "Union literal should have exactly one field, got {}", fields.len()
+                            "Union literal should have exactly one field, got {}",
+                            fields.len()
                         )));
                     }
 
                     let (field_name, field_expr) = &fields[0];
 
                     // Find field type
-                    let field_ty = union_info.fields.iter()
+                    let field_ty = union_info
+                        .fields
+                        .iter()
                         .find(|(n, _)| n == &field_name.node)
                         .map(|(_, ty)| ty.clone())
-                        .ok_or_else(|| CodegenError::TypeError(format!(
-                            "Unknown field '{}' in union '{}'", field_name.node, type_name
-                        )))?;
+                        .ok_or_else(|| {
+                            CodegenError::TypeError(format!(
+                                "Unknown field '{}' in union '{}'",
+                                field_name.node, type_name
+                            ))
+                        })?;
 
                     let (val, field_ir) = self.generate_expr(field_expr, counter)?;
                     ir.push_str(&field_ir);
@@ -3703,15 +3881,32 @@ impl CodeGenerator {
                     // Return pointer to union
                     Ok((union_ptr, ir))
                 } else {
-                    Err(CodegenError::TypeError(format!("Unknown struct or union: {}", type_name)))
+                    Err(CodegenError::TypeError(format!(
+                        "Unknown struct or union: {}",
+                        type_name
+                    )))
                 }
             }
 
             // Index: arr[idx] or slice: arr[start..end]
-            Expr::Index { expr: array_expr, index } => {
+            Expr::Index {
+                expr: array_expr,
+                index,
+            } => {
                 // Check if this is a slice operation (index is a Range expression)
-                if let Expr::Range { start, end, inclusive } = &index.node {
-                    return self.generate_slice(array_expr, start.as_deref(), end.as_deref(), *inclusive, counter);
+                if let Expr::Range {
+                    start,
+                    end,
+                    inclusive,
+                } = &index.node
+                {
+                    return self.generate_slice(
+                        array_expr,
+                        start.as_deref(),
+                        end.as_deref(),
+                        *inclusive,
+                        counter,
+                    );
                 }
 
                 let (arr_val, arr_ir) = self.generate_expr(array_expr, counter)?;
@@ -3719,7 +3914,9 @@ impl CodeGenerator {
                 // Check if the type is actually indexable
                 let arr_type = self.infer_expr_type(array_expr);
                 match arr_type {
-                    ResolvedType::Array(_) | ResolvedType::ConstArray { .. } | ResolvedType::Pointer(_) => {
+                    ResolvedType::Array(_)
+                    | ResolvedType::ConstArray { .. }
+                    | ResolvedType::Pointer(_) => {
                         // OK - indexable type
                     }
                     _ => {
@@ -3761,7 +3958,10 @@ impl CodeGenerator {
             }
 
             // Field access: obj.field
-            Expr::Field { expr: obj_expr, field } => {
+            Expr::Field {
+                expr: obj_expr,
+                field,
+            } => {
                 let (obj_val, obj_ir) = self.generate_expr(obj_expr, counter)?;
                 let mut ir = obj_ir;
 
@@ -3769,14 +3969,22 @@ impl CodeGenerator {
                 // This handles both simple identifiers and nested field accesses
                 let obj_type = self.infer_expr_type(obj_expr);
 
-                if let ResolvedType::Named { name: orig_type_name, .. } = &obj_type {
+                if let ResolvedType::Named {
+                    name: orig_type_name,
+                    ..
+                } = &obj_type
+                {
                     let type_name = &self.resolve_struct_name(orig_type_name);
                     // First check if it's a struct
                     if let Some(struct_info) = self.structs.get(type_name).cloned() {
-                        let field_idx = struct_info.fields.iter()
+                        let field_idx = struct_info
+                            .fields
+                            .iter()
                             .position(|(n, _)| n == &field.node)
                             .ok_or_else(|| {
-                                let candidates: Vec<&str> = struct_info.fields.iter()
+                                let candidates: Vec<&str> = struct_info
+                                    .fields
+                                    .iter()
                                     .map(|(name, _)| name.as_str())
                                     .collect();
                                 let suggestions = suggest_similar(&field.node, &candidates, 3);
@@ -3815,11 +4023,15 @@ impl CodeGenerator {
                     }
                     // Then check if it's a union
                     else if let Some(union_info) = self.unions.get(type_name).cloned() {
-                        let field_ty = union_info.fields.iter()
+                        let field_ty = union_info
+                            .fields
+                            .iter()
                             .find(|(n, _)| n == &field.node)
                             .map(|(_, ty)| ty.clone())
                             .ok_or_else(|| {
-                                let candidates: Vec<&str> = union_info.fields.iter()
+                                let candidates: Vec<&str> = union_info
+                                    .fields
+                                    .iter()
                                     .map(|(name, _)| name.as_str())
                                     .collect();
                                 let suggestions = suggest_similar(&field.node, &candidates, 3);
@@ -3850,11 +4062,17 @@ impl CodeGenerator {
                     }
                 }
 
-                Err(CodegenError::Unsupported("field access requires known struct or union type".to_string()))
+                Err(CodegenError::Unsupported(
+                    "field access requires known struct or union type".to_string(),
+                ))
             }
 
             // Method call: obj.method(args)
-            Expr::MethodCall { receiver, method, args } => {
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } => {
                 // Special case: @.method() means self.method() (call another method on self)
                 let (recv_val, recv_ir, recv_type) = if matches!(&receiver.node, Expr::SelfCall) {
                     // When receiver is @, use %self instead of the function pointer
@@ -3878,7 +4096,11 @@ impl CodeGenerator {
                 // String method calls: str.len(), str.charAt(), str.contains(), etc.
                 if matches!(recv_type, ResolvedType::Str) {
                     return self.generate_string_method_call(
-                        &recv_val, &ir, method_name, args, counter,
+                        &recv_val,
+                        &ir,
+                        method_name,
+                        args,
+                        counter,
                     );
                 }
 
@@ -3906,7 +4128,11 @@ impl CodeGenerator {
                     }
 
                     let (dyn_ir, result) = self.generate_dyn_method_call(
-                        &recv_val, &trait_name, method_name, &extra_arg_vals, counter
+                        &recv_val,
+                        &trait_name,
+                        method_name,
+                        &extra_arg_vals,
+                        counter,
                     )?;
                     ir.push_str(&dyn_ir);
                     return Ok((result, ir));
@@ -3941,7 +4167,9 @@ impl CodeGenerator {
                 }
 
                 // Determine return type from function registry
-                let ret_type = self.functions.get(&full_method_name)
+                let ret_type = self
+                    .functions
+                    .get(&full_method_name)
                     .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
 
@@ -3958,7 +4186,11 @@ impl CodeGenerator {
             }
 
             // Static method call: Type.method(args)
-            Expr::StaticMethodCall { type_name, method, args } => {
+            Expr::StaticMethodCall {
+                type_name,
+                method,
+                args,
+            } => {
                 let mut ir = String::new();
 
                 // Build full method name: TypeName_methodName
@@ -3976,7 +4208,9 @@ impl CodeGenerator {
                 }
 
                 // Get return type from method signature
-                let ret_type = self.functions.get(&full_method_name)
+                let ret_type = self
+                    .functions
+                    .get(&full_method_name)
                     .map(|info| self.type_to_llvm(&info.signature.ret))
                     .unwrap_or_else(|| "i64".to_string());
 
@@ -3993,9 +4227,7 @@ impl CodeGenerator {
             }
 
             // Spread: ..expr (handled within array generation; standalone generates inner)
-            Expr::Spread(inner) => {
-                self.generate_expr(inner, counter)
-            }
+            Expr::Spread(inner) => self.generate_expr(inner, counter),
 
             // Reference: &expr
             Expr::Ref(inner) => {
@@ -4013,7 +4245,10 @@ impl CodeGenerator {
                             ir.push_str(&val_ir);
                             let tmp_alloca = self.next_temp(counter);
                             ir.push_str(&format!("  {} = alloca {}\n", tmp_alloca, llvm_ty));
-                            ir.push_str(&format!("  store {} {}, {}* {}\n", llvm_ty, val, llvm_ty, tmp_alloca));
+                            ir.push_str(&format!(
+                                "  store {} {}, {}* {}\n",
+                                llvm_ty, val, llvm_ty, tmp_alloca
+                            ));
                             return Ok((tmp_alloca, ir));
                         }
                     }
@@ -4045,8 +4280,13 @@ impl CodeGenerator {
                 let result = self.next_temp(counter);
                 match (&target_type, llvm_type.as_str()) {
                     // Integer to pointer cast
-                    (ResolvedType::Pointer(_), _) | (ResolvedType::Ref(_), _) | (ResolvedType::RefMut(_), _) => {
-                        ir.push_str(&format!("  {} = inttoptr i64 {} to {}\n", result, val, llvm_type));
+                    (ResolvedType::Pointer(_), _)
+                    | (ResolvedType::Ref(_), _)
+                    | (ResolvedType::RefMut(_), _) => {
+                        ir.push_str(&format!(
+                            "  {} = inttoptr i64 {} to {}\n",
+                            result, val, llvm_type
+                        ));
                     }
                     // Pointer to integer cast
                     _ if val.starts_with('%') || val.parse::<i64>().is_err() => {
@@ -4063,9 +4303,10 @@ impl CodeGenerator {
             }
 
             // Match expression: M expr { pattern => body, ... }
-            Expr::Match { expr: match_expr, arms } => {
-                self.generate_match(match_expr, arms, counter)
-            }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+            } => self.generate_match(match_expr, arms, counter),
 
             // Range expression (for now just return start value)
             Expr::Range { start, .. } => {
@@ -4172,8 +4413,12 @@ impl CodeGenerator {
                 // Return the evaluated constant
                 match value {
                     vais_types::ComptimeValue::Int(n) => Ok((n.to_string(), String::new())),
-                    vais_types::ComptimeValue::Float(f) => Ok((crate::types::format_llvm_float(f), String::new())),
-                    vais_types::ComptimeValue::Bool(b) => Ok((if b { "1" } else { "0" }.to_string(), String::new())),
+                    vais_types::ComptimeValue::Float(f) => {
+                        Ok((crate::types::format_llvm_float(f), String::new()))
+                    }
+                    vais_types::ComptimeValue::Bool(b) => {
+                        Ok((if b { "1" } else { "0" }.to_string(), String::new()))
+                    }
                     vais_types::ComptimeValue::String(s) => {
                         // Create a global string constant
                         let name = format!(".str.{}", self.string_counter);
@@ -4181,7 +4426,10 @@ impl CodeGenerator {
                         self.string_constants.push((name.clone(), s.clone()));
                         let len = s.len() + 1;
                         Ok((
-                            format!("getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)", len, len, name),
+                            format!(
+                                "getelementptr ([{} x i8], [{} x i8]* @{}, i64 0, i64 0)",
+                                len, len, name
+                            ),
                             String::new(),
                         ))
                     }
@@ -4193,8 +4441,12 @@ impl CodeGenerator {
                         for elem in arr {
                             match elem {
                                 vais_types::ComptimeValue::Int(n) => elements.push(n.to_string()),
-                                vais_types::ComptimeValue::Float(f) => elements.push(crate::types::format_llvm_float(f)),
-                                vais_types::ComptimeValue::Bool(b) => elements.push(if b { "1" } else { "0" }.to_string()),
+                                vais_types::ComptimeValue::Float(f) => {
+                                    elements.push(crate::types::format_llvm_float(f))
+                                }
+                                vais_types::ComptimeValue::Bool(b) => {
+                                    elements.push(if b { "1" } else { "0" }.to_string())
+                                }
                                 _ => {
                                     return Err(CodegenError::TypeError(
                                         "Comptime arrays can only contain simple values (int, float, bool)".to_string()
@@ -4227,12 +4479,10 @@ impl CodeGenerator {
             }
 
             // Macro invocation (should be expanded before codegen)
-            Expr::MacroInvoke(invoke) => {
-                Err(CodegenError::TypeError(format!(
-                    "Unexpanded macro invocation: {}! - macros must be expanded before code generation",
-                    invoke.name.node
-                )))
-            }
+            Expr::MacroInvoke(invoke) => Err(CodegenError::TypeError(format!(
+                "Unexpanded macro invocation: {}! - macros must be expanded before code generation",
+                invoke.name.node
+            ))),
 
             // Old expression for contract ensures clauses
             Expr::Old(inner) => {
@@ -4274,7 +4524,11 @@ impl CodeGenerator {
             }
 
             // Lambda expression with captures
-            Expr::Lambda { params, body, captures: _ } => {
+            Expr::Lambda {
+                params,
+                body,
+                captures: _,
+            } => {
                 // Generate a unique function name for this lambda
                 let lambda_name = format!("__lambda_{}", self.label_counter);
                 self.label_counter += 1;
@@ -4292,7 +4546,11 @@ impl CodeGenerator {
                         // Load captured value if it's a local variable
                         if local.is_param() {
                             // Parameters are already values, use directly
-                            captured_vars.push((cap_name.clone(), ty, format!("%{}", local.llvm_name)));
+                            captured_vars.push((
+                                cap_name.clone(),
+                                ty,
+                                format!("%{}", local.llvm_name),
+                            ));
                         } else if local.is_ssa() {
                             // SSA values are already the value itself, use directly
                             // llvm_name for SSA includes % prefix (e.g., "%5") or is a literal (e.g., "10")
@@ -4379,7 +4637,9 @@ impl CodeGenerator {
                 let fn_ptr_tmp = self.next_temp(counter);
                 capture_ir.push_str(&format!(
                     "  {} = ptrtoint i64 ({})* @{} to i64\n",
-                    fn_ptr_tmp, param_types.join(", "), lambda_name
+                    fn_ptr_tmp,
+                    param_types.join(", "),
+                    lambda_name
                 ));
 
                 // Store lambda info for Let statement to pick up
@@ -4390,7 +4650,8 @@ impl CodeGenerator {
                     // Store closure info with captured variable values
                     self.last_lambda_info = Some(ClosureInfo {
                         func_name: lambda_name.clone(),
-                        captures: captured_vars.iter()
+                        captures: captured_vars
+                            .iter()
                             .map(|(name, _, val)| (name.clone(), val.clone()))
                             .collect(),
                     });
@@ -4412,7 +4673,10 @@ impl CodeGenerator {
 
                 // Extract tag (field 0, i32)
                 let tag = self.next_temp(counter);
-                ir.push_str(&format!("  {} = extractvalue {} {}, 0\n", tag, llvm_type, inner_val));
+                ir.push_str(&format!(
+                    "  {} = extractvalue {} {}, 0\n",
+                    tag, llvm_type, inner_val
+                ));
 
                 // Check if Err (tag != 0, i.e., not Ok)
                 let is_err = self.next_temp(counter);
@@ -4421,16 +4685,25 @@ impl CodeGenerator {
                 let merge_label = self.next_label("try_merge");
 
                 ir.push_str(&format!("  {} = icmp ne i32 {}, 0\n", is_err, tag));
-                ir.push_str(&format!("  br i1 {}, label %{}, label %{}\n\n", is_err, err_label, ok_label));
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n\n",
+                    is_err, err_label, ok_label
+                ));
 
                 // Err branch: return the whole enum value as-is (early return)
                 ir.push_str(&format!("{}:\n", err_label));
-                ir.push_str(&format!("  ret {} {}  ; early return on Err\n\n", llvm_type, inner_val));
+                ir.push_str(&format!(
+                    "  ret {} {}  ; early return on Err\n\n",
+                    llvm_type, inner_val
+                ));
 
                 // Ok branch: extract payload value (field 1, then field 0 of the payload struct)
                 ir.push_str(&format!("{}:\n", ok_label));
                 let value = self.next_temp(counter);
-                ir.push_str(&format!("  {} = extractvalue {} {}, 1, 0\n", value, llvm_type, inner_val));
+                ir.push_str(&format!(
+                    "  {} = extractvalue {} {}, 1, 0\n",
+                    value, llvm_type, inner_val
+                ));
                 ir.push_str(&format!("  br label %{}\n\n", merge_label));
 
                 // Merge block
@@ -4453,7 +4726,10 @@ impl CodeGenerator {
 
                 // Extract tag (field 0, i32)
                 let tag = self.next_temp(counter);
-                ir.push_str(&format!("  {} = extractvalue {} {}, 0\n", tag, llvm_type, inner_val));
+                ir.push_str(&format!(
+                    "  {} = extractvalue {} {}, 0\n",
+                    tag, llvm_type, inner_val
+                ));
 
                 // Check if Err/None (tag != 0)
                 let is_err = self.next_temp(counter);
@@ -4461,7 +4737,10 @@ impl CodeGenerator {
                 let ok_label = self.next_label("unwrap_ok");
 
                 ir.push_str(&format!("  {} = icmp ne i32 {}, 0\n", is_err, tag));
-                ir.push_str(&format!("  br i1 {}, label %{}, label %{}\n\n", is_err, err_label, ok_label));
+                ir.push_str(&format!(
+                    "  br i1 {}, label %{}, label %{}\n\n",
+                    is_err, err_label, ok_label
+                ));
 
                 // Err branch: panic/abort
                 ir.push_str(&format!("{}:\n", err_label));
@@ -4472,7 +4751,10 @@ impl CodeGenerator {
                 // Ok branch: extract value (field 1, field 0 of payload struct)
                 ir.push_str(&format!("{}:\n", ok_label));
                 let value = self.next_temp(counter);
-                ir.push_str(&format!("  {} = extractvalue {} {}, 1, 0\n", value, llvm_type, inner_val));
+                ir.push_str(&format!(
+                    "  {} = extractvalue {} {}, 1, 0\n",
+                    value, llvm_type, inner_val
+                ));
 
                 // Track that we need the panic message and abort declaration
                 self.needs_unwrap_panic = true;
@@ -4481,12 +4763,10 @@ impl CodeGenerator {
             }
 
             // Error nodes should not reach codegen
-            Expr::Error { message, .. } => {
-                Err(CodegenError::Unsupported(format!(
-                    "Parse error in expression: {}",
-                    message
-                )))
-            }
+            Expr::Error { message, .. } => Err(CodegenError::Unsupported(format!(
+                "Parse error in expression: {}",
+                message
+            ))),
 
             // Lazy and Force expressions - delegate to visitor
             Expr::Lazy(inner) => {
@@ -4533,7 +4813,12 @@ impl CodeGenerator {
             let mut inferred: HashMap<String, ResolvedType> = HashMap::new();
             for (i, param) in template.params.iter().enumerate() {
                 if i < arg_types.len() {
-                    self.infer_type_args(&self.ast_type_to_resolved(&param.ty.node), &arg_types[i], &type_params, &mut inferred);
+                    self.infer_type_args(
+                        &self.ast_type_to_resolved(&param.ty.node),
+                        &arg_types[i],
+                        &type_params,
+                        &mut inferred,
+                    );
                 }
             }
 
@@ -4558,7 +4843,8 @@ impl CodeGenerator {
         }
 
         // Last resort: use first instantiation
-        instantiations_list.first()
+        instantiations_list
+            .first()
             .map(|(_, name)| name.clone())
             .unwrap_or_else(|| base_name.to_string())
     }
@@ -4575,14 +4861,22 @@ impl CodeGenerator {
             ResolvedType::Generic(name) => {
                 // Direct generic type parameter (e.g., T)
                 if type_params.contains(&name) {
-                    inferred.entry(name.clone()).or_insert_with(|| arg_type.clone());
+                    inferred
+                        .entry(name.clone())
+                        .or_insert_with(|| arg_type.clone());
                 }
             }
             ResolvedType::Named { name, generics } => {
                 // Check if this is a type parameter name
                 if type_params.contains(&name) {
-                    inferred.entry(name.clone()).or_insert_with(|| arg_type.clone());
-                } else if let ResolvedType::Named { generics: arg_generics, .. } = arg_type {
+                    inferred
+                        .entry(name.clone())
+                        .or_insert_with(|| arg_type.clone());
+                } else if let ResolvedType::Named {
+                    generics: arg_generics,
+                    ..
+                } = arg_type
+                {
                     // Recurse into generic arguments
                     for (g, ag) in generics.iter().zip(arg_generics.iter()) {
                         self.infer_type_args(g, ag, type_params, inferred);
@@ -4770,7 +5064,10 @@ impl CodeGenerator {
         // Increment loop index
         let next_idx = self.next_temp(counter);
         ir.push_str(&format!("  {} = add i64 {}, 1\n", next_idx, loop_idx));
-        ir.push_str(&format!("  store i64 {}, i64* {}\n", next_idx, loop_idx_ptr));
+        ir.push_str(&format!(
+            "  store i64 {}, i64* {}\n",
+            next_idx, loop_idx_ptr
+        ));
         ir.push_str(&format!("  br label %{}\n", loop_start));
 
         ir.push_str(&format!("{}:\n", loop_end));
@@ -5328,10 +5625,16 @@ mod tests {
 
         // Generate code with instantiations
         let mut gen = CodeGenerator::new("test");
-        let ir = gen.generate_module_with_instantiations(&module, instantiations).unwrap();
+        let ir = gen
+            .generate_module_with_instantiations(&module, instantiations)
+            .unwrap();
 
         // Should contain specialized function identity$i64
-        assert!(ir.contains("define i64 @identity$i64"), "Expected identity$i64 in IR: {}", ir);
+        assert!(
+            ir.contains("define i64 @identity$i64"),
+            "Expected identity$i64 in IR: {}",
+            ir
+        );
         assert!(ir.contains("ret i64 %x"), "Expected return in identity$i64");
     }
 
@@ -5357,13 +5660,19 @@ mod tests {
         let instantiations = checker.get_generic_instantiations();
 
         // Verify instantiation was recorded
-        let pair_inst = instantiations.iter()
-            .find(|i| i.base_name == "Pair");
-        assert!(pair_inst.is_some(), "Expected Pair instantiation to be recorded");
+        let pair_inst = instantiations.iter().find(|i| i.base_name == "Pair");
+        assert!(
+            pair_inst.is_some(),
+            "Expected Pair instantiation to be recorded"
+        );
 
         // Verify mangled name
         let inst = pair_inst.unwrap();
-        assert_eq!(inst.mangled_name, "Pair$i64", "Expected mangled name Pair$i64, got {}", inst.mangled_name);
+        assert_eq!(
+            inst.mangled_name, "Pair$i64",
+            "Expected mangled name Pair$i64, got {}",
+            inst.mangled_name
+        );
     }
 
     #[test]
@@ -5386,11 +5695,17 @@ mod tests {
         let instantiations = checker.get_generic_instantiations();
 
         // Should have at least 2 instantiations
-        assert!(instantiations.len() >= 2, "Expected at least 2 instantiations, got {}", instantiations.len());
+        assert!(
+            instantiations.len() >= 2,
+            "Expected at least 2 instantiations, got {}",
+            instantiations.len()
+        );
 
         // Generate code with instantiations
         let mut gen = CodeGenerator::new("test");
-        let ir = gen.generate_module_with_instantiations(&module, instantiations).unwrap();
+        let ir = gen
+            .generate_module_with_instantiations(&module, instantiations)
+            .unwrap();
 
         // Should contain both specialized functions
         assert!(ir.contains("@identity$i64"), "Expected identity$i64 in IR");
@@ -5416,11 +5731,19 @@ mod tests {
 
         // Generate code with empty instantiations
         let mut gen = CodeGenerator::new("test");
-        let ir = gen.generate_module_with_instantiations(&module, instantiations).unwrap();
+        let ir = gen
+            .generate_module_with_instantiations(&module, instantiations)
+            .unwrap();
 
         // Should NOT contain any identity function definition
-        assert!(!ir.contains("define i64 @identity"), "Generic template should not generate code");
-        assert!(!ir.contains("define double @identity"), "Generic template should not generate code");
+        assert!(
+            !ir.contains("define i64 @identity"),
+            "Generic template should not generate code"
+        );
+        assert!(
+            !ir.contains("define double @identity"),
+            "Generic template should not generate code"
+        );
     }
 
     // ==================== Advanced Edge Case Tests ====================
@@ -5876,13 +6199,25 @@ mod tests {
         let ir = gen.generate_module(&module).unwrap();
 
         // Should have initial decreases storage
-        assert!(ir.contains("__decreases_factorial"), "Expected decreases storage variable");
+        assert!(
+            ir.contains("__decreases_factorial"),
+            "Expected decreases storage variable"
+        );
         // Should have non-negative check
-        assert!(ir.contains("decreases_nonneg"), "Expected non-negative check");
+        assert!(
+            ir.contains("decreases_nonneg"),
+            "Expected non-negative check"
+        );
         // Should have strict decrease check before recursive call
-        assert!(ir.contains("decreases_check"), "Expected decrease check before recursive call");
+        assert!(
+            ir.contains("decreases_check"),
+            "Expected decrease check before recursive call"
+        );
         // Should have panic call for failed check
-        assert!(ir.contains("@__panic"), "Expected panic call for failed check");
+        assert!(
+            ir.contains("@__panic"),
+            "Expected panic call for failed check"
+        );
     }
 
     #[test]
@@ -5897,10 +6232,16 @@ mod tests {
         let ir = gen.generate_module(&module).unwrap();
 
         // Should have icmp slt (strictly less than) check
-        assert!(ir.contains("icmp slt i64"), "Expected strict less-than comparison for decreases");
+        assert!(
+            ir.contains("icmp slt i64"),
+            "Expected strict less-than comparison for decreases"
+        );
         // Should have both decreases labels
         assert!(ir.contains("decreases_check_ok"), "Expected success label");
-        assert!(ir.contains("decreases_check_fail"), "Expected failure label");
+        assert!(
+            ir.contains("decreases_check_fail"),
+            "Expected failure label"
+        );
     }
 
     #[test]
@@ -5915,9 +6256,18 @@ mod tests {
         let ir = gen.generate_module(&module).unwrap();
 
         // Should have icmp sge (signed greater-or-equal) for non-negative check
-        assert!(ir.contains("icmp sge i64"), "Expected non-negative check (sge 0)");
-        assert!(ir.contains("decreases_nonneg_ok"), "Expected success label for non-negative");
-        assert!(ir.contains("decreases_nonneg_fail"), "Expected failure label for non-negative");
+        assert!(
+            ir.contains("icmp sge i64"),
+            "Expected non-negative check (sge 0)"
+        );
+        assert!(
+            ir.contains("decreases_nonneg_ok"),
+            "Expected success label for non-negative"
+        );
+        assert!(
+            ir.contains("decreases_nonneg_fail"),
+            "Expected failure label for non-negative"
+        );
     }
 
     #[test]
@@ -5933,9 +6283,18 @@ mod tests {
         let ir = gen.generate_module(&module).unwrap();
 
         // Should NOT have decreases checks in release mode
-        assert!(!ir.contains("__decreases_fib"), "Should skip decreases in release mode");
-        assert!(!ir.contains("decreases_nonneg"), "Should skip non-negative check in release mode");
-        assert!(!ir.contains("decreases_check"), "Should skip decrease check in release mode");
+        assert!(
+            !ir.contains("__decreases_fib"),
+            "Should skip decreases in release mode"
+        );
+        assert!(
+            !ir.contains("decreases_nonneg"),
+            "Should skip non-negative check in release mode"
+        );
+        assert!(
+            !ir.contains("decreases_check"),
+            "Should skip decrease check in release mode"
+        );
     }
 
     #[test]
@@ -5950,8 +6309,14 @@ mod tests {
         let ir = gen.generate_module(&module).unwrap();
 
         // Should have decreases check before the self-call
-        assert!(ir.contains("__decreases_sum_to"), "Expected decreases storage");
-        assert!(ir.contains("decreases_check"), "Expected decrease check before self-call");
+        assert!(
+            ir.contains("__decreases_sum_to"),
+            "Expected decreases storage"
+        );
+        assert!(
+            ir.contains("decreases_check"),
+            "Expected decrease check before self-call"
+        );
     }
 
     #[test]
@@ -5981,7 +6346,10 @@ mod tests {
         // (The error is logged but doesn't fail - returns fallback type)
         let llvm_type_over_limit = gen.type_to_llvm(&extremely_nested);
         // Should still return a valid type (either i64 fallback or truncated)
-        assert!(!llvm_type_over_limit.is_empty(), "Should return a fallback type on recursion limit");
+        assert!(
+            !llvm_type_over_limit.is_empty(),
+            "Should return a fallback type on recursion limit"
+        );
     }
 
     #[test]
@@ -6004,20 +6372,23 @@ mod tests {
             nested2 = ResolvedType::Pointer(Box::new(nested2));
         }
         let llvm_type = gen.type_to_llvm(&nested2);
-        assert!(llvm_type.ends_with('*'), "Second call should work independently");
+        assert!(
+            llvm_type.ends_with('*'),
+            "Second call should work independently"
+        );
     }
 
     #[test]
     fn test_ast_type_recursion_limit() {
         // Test that ast_type_to_resolved also respects recursion limits
-        use vais_ast::{Type, Span};
+        use vais_ast::{Span, Type};
 
         let gen = CodeGenerator::new("test");
 
         // Create deeply nested AST type
         let mut nested = Type::Named {
             name: "i32".to_string(),
-            generics: vec![]
+            generics: vec![],
         };
         for _ in 0..50 {
             nested = Type::Pointer(Box::new(Spanned::new(nested, Span { start: 0, end: 0 })));
@@ -6025,22 +6396,31 @@ mod tests {
 
         // Should work within limit
         let resolved = gen.ast_type_to_resolved(&nested);
-        assert!(matches!(resolved, ResolvedType::Pointer(_)), "Should resolve nested pointers");
+        assert!(
+            matches!(resolved, ResolvedType::Pointer(_)),
+            "Should resolve nested pointers"
+        );
 
         // Create extremely nested type (exceeds limit)
         let mut extremely_nested = Type::Named {
             name: "i32".to_string(),
-            generics: vec![]
+            generics: vec![],
         };
         for _ in 0..150 {
-            extremely_nested = Type::Pointer(Box::new(Spanned::new(extremely_nested, Span { start: 0, end: 0 })));
+            extremely_nested = Type::Pointer(Box::new(Spanned::new(
+                extremely_nested,
+                Span { start: 0, end: 0 },
+            )));
         }
 
         // Should hit limit and return fallback
         let resolved_over = gen.ast_type_to_resolved(&extremely_nested);
         // Should still return a valid type (Unknown as fallback)
         assert!(
-            matches!(resolved_over, ResolvedType::Unknown | ResolvedType::Pointer(_)),
+            matches!(
+                resolved_over,
+                ResolvedType::Unknown | ResolvedType::Pointer(_)
+            ),
             "Should return a fallback or truncated type on recursion limit"
         );
     }

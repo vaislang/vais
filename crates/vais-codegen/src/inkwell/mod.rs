@@ -15,9 +15,9 @@
 //! - LLVM 17+ must be installed
 //! - Enable the `inkwell-codegen` feature
 
+mod builtins;
 mod generator;
 mod types;
-mod builtins;
 
 pub use generator::InkwellCodeGenerator;
 pub use types::TypeMapper;

@@ -47,14 +47,11 @@ impl RegistryClient {
     pub fn update_index(&mut self) -> RegistryResult<()> {
         // Clone values to avoid borrow issues
         let (url, token, path_opt) = match &self.source {
-            RegistrySource::Http { url, token } => {
-                (Some(url.clone()), token.clone(), None)
-            }
-            RegistrySource::Local { path } => {
-                (None, None, Some(path.clone()))
-            }
+            RegistrySource::Http { url, token } => (Some(url.clone()), token.clone(), None),
+            RegistrySource::Local { path } => (None, None, Some(path.clone())),
             RegistrySource::Git { url, branch } => {
-                let index_url = format!("{}/raw/{}/index.json", url.trim_end_matches(".git"), branch);
+                let index_url =
+                    format!("{}/raw/{}/index.json", url.trim_end_matches(".git"), branch);
                 (Some(index_url), None, None)
             }
         };
@@ -127,22 +124,30 @@ impl RegistryClient {
 
     /// Search for packages
     pub fn search(&self, query: &str) -> RegistryResult<Vec<&PackageMetadata>> {
-        let index = self.index.as_ref().ok_or_else(|| RegistryError::ResolutionError {
-            message: "index not loaded, run update first".to_string(),
-        })?;
+        let index = self
+            .index
+            .as_ref()
+            .ok_or_else(|| RegistryError::ResolutionError {
+                message: "index not loaded, run update first".to_string(),
+            })?;
 
         Ok(index.search(query))
     }
 
     /// Get package metadata
     pub fn get_package(&self, name: &str) -> RegistryResult<&PackageMetadata> {
-        let index = self.index.as_ref().ok_or_else(|| RegistryError::ResolutionError {
-            message: "index not loaded, run update first".to_string(),
-        })?;
+        let index = self
+            .index
+            .as_ref()
+            .ok_or_else(|| RegistryError::ResolutionError {
+                message: "index not loaded, run update first".to_string(),
+            })?;
 
         index
             .get(name)
-            .ok_or_else(|| RegistryError::PackageNotFound { name: name.to_string() })
+            .ok_or_else(|| RegistryError::PackageNotFound {
+                name: name.to_string(),
+            })
     }
 
     /// Find best matching version
@@ -154,15 +159,18 @@ impl RegistryClient {
             .map(|v| v.version.clone())
             .collect();
 
-        let best = req.best_match(&versions).ok_or_else(|| RegistryError::NoMatchingVersion {
-            name: name.to_string(),
-            req: req.to_string(),
-        })?;
+        let best = req
+            .best_match(&versions)
+            .ok_or_else(|| RegistryError::NoMatchingVersion {
+                name: name.to_string(),
+                req: req.to_string(),
+            })?;
 
-        pkg.get_version(best).ok_or_else(|| RegistryError::VersionNotFound {
-            name: name.to_string(),
-            version: best.to_string(),
-        })
+        pkg.get_version(best)
+            .ok_or_else(|| RegistryError::VersionNotFound {
+                name: name.to_string(),
+                version: best.to_string(),
+            })
     }
 
     /// Download a package version
@@ -173,10 +181,12 @@ impl RegistryClient {
         }
 
         let pkg = self.get_package(name)?;
-        let entry = pkg.get_version(version).ok_or_else(|| RegistryError::VersionNotFound {
-            name: name.to_string(),
-            version: version.to_string(),
-        })?;
+        let entry = pkg
+            .get_version(version)
+            .ok_or_else(|| RegistryError::VersionNotFound {
+                name: name.to_string(),
+                version: version.to_string(),
+            })?;
 
         // Download archive
         let data = self.fetch_archive(name, version, entry)?;
@@ -200,7 +210,12 @@ impl RegistryClient {
     }
 
     /// Fetch archive data
-    fn fetch_archive(&self, name: &str, version: &Version, entry: &VersionEntry) -> RegistryResult<Vec<u8>> {
+    fn fetch_archive(
+        &self,
+        name: &str,
+        version: &Version,
+        entry: &VersionEntry,
+    ) -> RegistryResult<Vec<u8>> {
         match &self.source {
             RegistrySource::Http { url, token } => {
                 let archive_url = entry
@@ -218,21 +233,25 @@ impl RegistryClient {
                         status: code,
                         message: format!("failed to download {}", archive_url),
                     },
-                    _ => RegistryError::RegistryUnreachable { url: archive_url.clone() },
+                    _ => RegistryError::RegistryUnreachable {
+                        url: archive_url.clone(),
+                    },
                 })?;
 
                 let mut data = Vec::new();
-                response
-                    .into_reader()
-                    .read_to_end(&mut data)
-                    .map_err(|_| RegistryError::ArchiveError {
+                response.into_reader().read_to_end(&mut data).map_err(|_| {
+                    RegistryError::ArchiveError {
                         message: "failed to read response body".to_string(),
-                    })?;
+                    }
+                })?;
 
                 Ok(data)
             }
             RegistrySource::Local { path } => {
-                let archive_path = path.join("packages").join(name).join(format!("{}.tar.gz", version));
+                let archive_path = path
+                    .join("packages")
+                    .join(name)
+                    .join(format!("{}.tar.gz", version));
                 fs::read(&archive_path).map_err(|e| RegistryError::ReadError {
                     path: archive_path,
                     source: e,
@@ -253,16 +272,17 @@ impl RegistryClient {
                         status: code,
                         message: format!("failed to download {}", archive_url),
                     },
-                    _ => RegistryError::RegistryUnreachable { url: archive_url.clone() },
+                    _ => RegistryError::RegistryUnreachable {
+                        url: archive_url.clone(),
+                    },
                 })?;
 
                 let mut data = Vec::new();
-                response
-                    .into_reader()
-                    .read_to_end(&mut data)
-                    .map_err(|_| RegistryError::ArchiveError {
+                response.into_reader().read_to_end(&mut data).map_err(|_| {
+                    RegistryError::ArchiveError {
                         message: "failed to read response body".to_string(),
-                    })?;
+                    }
+                })?;
 
                 Ok(data)
             }

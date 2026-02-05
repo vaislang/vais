@@ -206,10 +206,7 @@ impl DirtySet {
 
     /// Mark a type as dirty
     pub fn mark_type_dirty(&mut self, file: PathBuf, type_name: String) {
-        self.dirty_types
-            .entry(file)
-            .or_default()
-            .insert(type_name);
+        self.dirty_types.entry(file).or_default().insert(type_name);
     }
 
     /// Get count of dirty functions across all files
@@ -242,7 +239,8 @@ impl IncrementalCache {
             match serde_json::from_str::<CacheState>(&content) {
                 Ok(state) => {
                     // Validate cache version and compiler version
-                    if state.version != CACHE_VERSION || state.compiler_version != COMPILER_VERSION {
+                    if state.version != CACHE_VERSION || state.compiler_version != COMPILER_VERSION
+                    {
                         CacheState::default()
                     } else {
                         state
@@ -271,7 +269,9 @@ impl IncrementalCache {
         let mut dirty_set = DirtySet::default();
 
         // Check if compilation options changed
-        if let (Some(current), Some(cached)) = (&self.current_options, &self.state.compilation_options) {
+        if let (Some(current), Some(cached)) =
+            (&self.current_options, &self.state.compilation_options)
+        {
             if current != cached {
                 // Options changed - mark all files as dirty
                 for file in self.state.dep_graph.file_metadata.keys() {
@@ -282,14 +282,19 @@ impl IncrementalCache {
         }
 
         // Check which files were modified
-        let entry_canonical = entry_file.canonicalize()
+        let entry_canonical = entry_file
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
 
         // Collect all known files from cache
-        let known_files: Vec<PathBuf> = self.state.dep_graph.file_metadata.keys().cloned().collect();
+        let known_files: Vec<PathBuf> =
+            self.state.dep_graph.file_metadata.keys().cloned().collect();
 
         // Parallel file hash computation using rayon
-        let cached_hashes: HashMap<PathBuf, String> = self.state.dep_graph.file_metadata
+        let cached_hashes: HashMap<PathBuf, String> = self
+            .state
+            .dep_graph
+            .file_metadata
             .iter()
             .map(|(k, v)| (k.clone(), v.hash.clone()))
             .collect();
@@ -322,7 +327,12 @@ impl IncrementalCache {
         dirty_set.modified_files.extend(modified_files);
 
         // Check if entry file is new
-        if !self.state.dep_graph.file_metadata.contains_key(&entry_canonical) {
+        if !self
+            .state
+            .dep_graph
+            .file_metadata
+            .contains_key(&entry_canonical)
+        {
             dirty_set.modified_files.insert(entry_canonical);
         }
 
@@ -342,16 +352,18 @@ impl IncrementalCache {
 
     /// Update cache with a compiled file (basic - no function-level metadata)
     pub fn update_file(&mut self, path: &Path) -> Result<(), String> {
-        let canonical = path.canonicalize()
+        let canonical = path
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
 
         let hash = compute_file_hash(&canonical)?;
-        let metadata = fs::metadata(&canonical)
-            .map_err(|e| format!("Cannot get file metadata: {}", e))?;
+        let metadata =
+            fs::metadata(&canonical).map_err(|e| format!("Cannot get file metadata: {}", e))?;
 
         let file_meta = FileMetadata {
             hash,
-            timestamp: metadata.modified()
+            timestamp: metadata
+                .modified()
                 .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
                 .unwrap_or(0),
             size: metadata.len(),
@@ -359,24 +371,31 @@ impl IncrementalCache {
             types: HashMap::new(),
         };
 
-        self.state.dep_graph.update_file_metadata(canonical, file_meta);
+        self.state
+            .dep_graph
+            .update_file_metadata(canonical, file_meta);
         Ok(())
     }
 
     /// Add a dependency between files
     pub fn add_dependency(&mut self, from: &Path, to: &Path) -> Result<(), String> {
-        let from_canonical = from.canonicalize()
+        let from_canonical = from
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize 'from' path: {}", e))?;
-        let to_canonical = to.canonicalize()
+        let to_canonical = to
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize 'to' path: {}", e))?;
 
-        self.state.dep_graph.add_dependency(from_canonical, to_canonical);
+        self.state
+            .dep_graph
+            .add_dependency(from_canonical, to_canonical);
         Ok(())
     }
 
     /// Clear dependencies for a file (before re-adding after recompilation)
     pub fn clear_file_deps(&mut self, path: &Path) -> Result<(), String> {
-        let canonical = path.canonicalize()
+        let canonical = path
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
         self.state.dep_graph.clear_file_deps(&canonical);
         Ok(())
@@ -397,8 +416,7 @@ impl IncrementalCache {
         let content = serde_json::to_string_pretty(&self.state)
             .map_err(|e| format!("Cannot serialize cache state: {}", e))?;
 
-        fs::write(&state_file, content)
-            .map_err(|e| format!("Cannot write cache state: {}", e))?;
+        fs::write(&state_file, content).map_err(|e| format!("Cannot write cache state: {}", e))?;
 
         Ok(())
     }
@@ -421,7 +439,11 @@ impl IncrementalCache {
     pub fn stats(&self) -> CacheStats {
         CacheStats {
             total_files: self.state.dep_graph.file_metadata.len(),
-            total_dependencies: self.state.dep_graph.forward_deps.values()
+            total_dependencies: self
+                .state
+                .dep_graph
+                .forward_deps
+                .values()
                 .map(|v| v.len())
                 .sum(),
             last_build: self.state.last_build,
@@ -429,8 +451,12 @@ impl IncrementalCache {
     }
 
     /// Detect function-level changes in a file
-    pub fn detect_function_changes(&self, path: &Path) -> Result<Option<FunctionChangeSet>, String> {
-        let canonical = path.canonicalize()
+    pub fn detect_function_changes(
+        &self,
+        path: &Path,
+    ) -> Result<Option<FunctionChangeSet>, String> {
+        let canonical = path
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
 
         // Get cached metadata
@@ -440,8 +466,8 @@ impl IncrementalCache {
         };
 
         // Read current file content
-        let content = fs::read_to_string(&canonical)
-            .map_err(|e| format!("Cannot read file: {}", e))?;
+        let content =
+            fs::read_to_string(&canonical).map_err(|e| format!("Cannot read file: {}", e))?;
 
         // Extract current definitions
         let mut extractor = DefinitionExtractor::new();
@@ -455,17 +481,18 @@ impl IncrementalCache {
 
     /// Update file with function-level metadata
     pub fn update_file_with_functions(&mut self, path: &Path) -> Result<(), String> {
-        let canonical = path.canonicalize()
+        let canonical = path
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
 
         // Read file content
-        let content = fs::read_to_string(&canonical)
-            .map_err(|e| format!("Cannot read file: {}", e))?;
+        let content =
+            fs::read_to_string(&canonical).map_err(|e| format!("Cannot read file: {}", e))?;
 
         // Compute file hash
         let hash = compute_file_hash(&canonical)?;
-        let metadata = fs::metadata(&canonical)
-            .map_err(|e| format!("Cannot get file metadata: {}", e))?;
+        let metadata =
+            fs::metadata(&canonical).map_err(|e| format!("Cannot get file metadata: {}", e))?;
 
         // Extract function and type definitions
         let mut extractor = DefinitionExtractor::new();
@@ -473,7 +500,8 @@ impl IncrementalCache {
 
         let file_meta = FileMetadata {
             hash,
-            timestamp: metadata.modified()
+            timestamp: metadata
+                .modified()
                 .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
                 .unwrap_or(0),
             size: metadata.len(),
@@ -481,7 +509,9 @@ impl IncrementalCache {
             types: extractor.types,
         };
 
-        self.state.dep_graph.update_file_metadata(canonical, file_meta);
+        self.state
+            .dep_graph
+            .update_file_metadata(canonical, file_meta);
         Ok(())
     }
 
@@ -490,7 +520,9 @@ impl IncrementalCache {
         let dirty_set = Mutex::new(DirtySet::default());
 
         // Check if compilation options changed
-        if let (Some(current), Some(cached)) = (&self.current_options, &self.state.compilation_options) {
+        if let (Some(current), Some(cached)) =
+            (&self.current_options, &self.state.compilation_options)
+        {
             if current != cached {
                 // Options changed - mark all files as dirty
                 let mut ds = dirty_set.lock().unwrap();
@@ -501,14 +533,17 @@ impl IncrementalCache {
             }
         }
 
-        let entry_canonical = entry_file.canonicalize()
+        let entry_canonical = entry_file
+            .canonicalize()
             .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
 
         // Collect all known files from cache
-        let known_files: Vec<PathBuf> = self.state.dep_graph.file_metadata.keys().cloned().collect();
+        let known_files: Vec<PathBuf> =
+            self.state.dep_graph.file_metadata.keys().cloned().collect();
 
         // Clone cached metadata for parallel access
-        let cached_meta_map: HashMap<PathBuf, FileMetadata> = self.state.dep_graph.file_metadata.clone();
+        let cached_meta_map: HashMap<PathBuf, FileMetadata> =
+            self.state.dep_graph.file_metadata.clone();
         let cached_hashes: HashMap<PathBuf, String> = cached_meta_map
             .iter()
             .map(|(k, v)| (k.clone(), v.hash.clone()))
@@ -518,14 +553,22 @@ impl IncrementalCache {
         known_files.par_iter().for_each(|file_path| {
             if !file_path.exists() {
                 // File was deleted
-                dirty_set.lock().unwrap().modified_files.insert(file_path.clone());
+                dirty_set
+                    .lock()
+                    .unwrap()
+                    .modified_files
+                    .insert(file_path.clone());
                 return;
             }
 
             let current_hash = match compute_file_hash(file_path) {
                 Ok(h) => h,
                 Err(_) => {
-                    dirty_set.lock().unwrap().modified_files.insert(file_path.clone());
+                    dirty_set
+                        .lock()
+                        .unwrap()
+                        .modified_files
+                        .insert(file_path.clone());
                     return;
                 }
             };
@@ -539,27 +582,48 @@ impl IncrementalCache {
 
                         // If no function metadata, mark whole file dirty
                         if total_functions == 0 {
-                            dirty_set.lock().unwrap().modified_files.insert(file_path.clone());
+                            dirty_set
+                                .lock()
+                                .unwrap()
+                                .modified_files
+                                .insert(file_path.clone());
                             return;
                         }
 
                         // For now, mark whole file dirty in parallel mode
                         // Fine-grained function detection requires sequential processing
-                        dirty_set.lock().unwrap().modified_files.insert(file_path.clone());
+                        dirty_set
+                            .lock()
+                            .unwrap()
+                            .modified_files
+                            .insert(file_path.clone());
                     } else {
-                        dirty_set.lock().unwrap().modified_files.insert(file_path.clone());
+                        dirty_set
+                            .lock()
+                            .unwrap()
+                            .modified_files
+                            .insert(file_path.clone());
                     }
                 }
             } else {
                 // New file not in cache
-                dirty_set.lock().unwrap().modified_files.insert(file_path.clone());
+                dirty_set
+                    .lock()
+                    .unwrap()
+                    .modified_files
+                    .insert(file_path.clone());
             }
         });
 
         let mut dirty_set = dirty_set.into_inner().unwrap();
 
         // Check if entry file is new
-        if !self.state.dep_graph.file_metadata.contains_key(&entry_canonical) {
+        if !self
+            .state
+            .dep_graph
+            .file_metadata
+            .contains_key(&entry_canonical)
+        {
             dirty_set.modified_files.insert(entry_canonical);
         }
 
@@ -575,7 +639,8 @@ impl IncrementalCache {
         dirty_set.affected_files = affected;
 
         // Propagate function-level changes to affected functions in other files
-        let dirty_funcs: Vec<(PathBuf, HashSet<String>)> = dirty_set.dirty_functions
+        let dirty_funcs: Vec<(PathBuf, HashSet<String>)> = dirty_set
+            .dirty_functions
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
@@ -591,7 +656,10 @@ impl IncrementalCache {
                     for (dep_func_name, dep_func) in &dep_meta.functions {
                         for dep_item in &dep_func.dependencies {
                             if func_names.contains(dep_item) {
-                                new_dirty_funcs.lock().unwrap().push((dependent.clone(), dep_func_name.clone()));
+                                new_dirty_funcs
+                                    .lock()
+                                    .unwrap()
+                                    .push((dependent.clone(), dep_func_name.clone()));
                                 break;
                             }
                         }
@@ -610,7 +678,8 @@ impl IncrementalCache {
     /// Get cached object file path for a function
     pub fn get_cached_object_path(&self, file: &Path, func_name: &str) -> PathBuf {
         let file_hash = file.to_string_lossy().replace(['/', '\\', ':'], "_");
-        self.cache_dir.join(format!("{}_{}.o", file_hash, func_name))
+        self.cache_dir
+            .join(format!("{}_{}.o", file_hash, func_name))
     }
 
     /// Check if a function's object file is cached
@@ -628,7 +697,8 @@ impl IncrementalCache {
         };
 
         if let Some(meta) = self.state.dep_graph.file_metadata.get(&canonical) {
-            let dirty_funcs = dirty_set.dirty_functions
+            let dirty_funcs = dirty_set
+                .dirty_functions
                 .get(&canonical)
                 .cloned()
                 .unwrap_or_default();
@@ -657,8 +727,8 @@ pub struct CacheStats {
 
 /// Compute SHA256 hash of a file
 pub fn compute_file_hash(path: &Path) -> Result<String, String> {
-    let content = fs::read(path)
-        .map_err(|e| format!("Cannot read file '{}': {}", path.display(), e))?;
+    let content =
+        fs::read(path).map_err(|e| format!("Cannot read file '{}': {}", path.display(), e))?;
 
     let mut hasher = Sha256::new();
     hasher.update(&content);
@@ -706,12 +776,15 @@ impl DefinitionExtractor {
                 let hash = compute_content_hash(&body);
                 let deps = self.extract_dependencies(&body);
 
-                self.functions.insert(name.clone(), FunctionMetadata {
-                    hash,
-                    line_range: (start as u32, end as u32),
-                    dependencies: deps,
-                    is_dirty: false,
-                });
+                self.functions.insert(
+                    name.clone(),
+                    FunctionMetadata {
+                        hash,
+                        line_range: (start as u32, end as u32),
+                        dependencies: deps,
+                        is_dirty: false,
+                    },
+                );
 
                 current_line = end + 1;
                 continue;
@@ -723,11 +796,14 @@ impl DefinitionExtractor {
                 let hash = compute_content_hash(&body);
                 let deps = self.extract_type_dependencies(&body);
 
-                self.types.insert(name.clone(), TypeMetadata {
-                    hash,
-                    line_range: (start as u32, end as u32),
-                    dependencies: deps,
-                });
+                self.types.insert(
+                    name.clone(),
+                    TypeMetadata {
+                        hash,
+                        line_range: (start as u32, end as u32),
+                        dependencies: deps,
+                    },
+                );
 
                 current_line = end + 1;
                 continue;
@@ -739,11 +815,14 @@ impl DefinitionExtractor {
                 let hash = compute_content_hash(&body);
                 let deps = self.extract_type_dependencies(&body);
 
-                self.types.insert(name.clone(), TypeMetadata {
-                    hash,
-                    line_range: (start as u32, end as u32),
-                    dependencies: deps,
-                });
+                self.types.insert(
+                    name.clone(),
+                    TypeMetadata {
+                        hash,
+                        line_range: (start as u32, end as u32),
+                        dependencies: deps,
+                    },
+                );
 
                 current_line = end + 1;
                 continue;
@@ -756,7 +835,12 @@ impl DefinitionExtractor {
     }
 
     /// Try to parse a function definition, returns (name, start_line, end_line, body)
-    fn try_parse_function(&self, line: &str, lines: &[&str], start: usize) -> Option<(String, usize, usize, String)> {
+    fn try_parse_function(
+        &self,
+        line: &str,
+        lines: &[&str],
+        start: usize,
+    ) -> Option<(String, usize, usize, String)> {
         // Match patterns: "F name(", "F name<", "pub F name("
         let line_trimmed = line.trim_start_matches("pub ").trim();
         if !line_trimmed.starts_with("F ") {
@@ -779,7 +863,12 @@ impl DefinitionExtractor {
     }
 
     /// Try to parse a struct definition
-    fn try_parse_struct(&self, line: &str, lines: &[&str], start: usize) -> Option<(String, usize, usize, String)> {
+    fn try_parse_struct(
+        &self,
+        line: &str,
+        lines: &[&str],
+        start: usize,
+    ) -> Option<(String, usize, usize, String)> {
         let line_trimmed = line.trim_start_matches("pub ").trim();
         if !line_trimmed.starts_with("S ") {
             return None;
@@ -798,7 +887,12 @@ impl DefinitionExtractor {
     }
 
     /// Try to parse an enum definition
-    fn try_parse_enum(&self, line: &str, lines: &[&str], start: usize) -> Option<(String, usize, usize, String)> {
+    fn try_parse_enum(
+        &self,
+        line: &str,
+        lines: &[&str],
+        start: usize,
+    ) -> Option<(String, usize, usize, String)> {
         let line_trimmed = line.trim_start_matches("pub ").trim();
         if !line_trimmed.starts_with("E ") {
             return None;
@@ -849,19 +943,27 @@ impl DefinitionExtractor {
 
         // Simple pattern matching for function calls: name(
         // This is a simplified approach - a real implementation would use the AST
-        let words: Vec<&str> = body.split(|c: char| !c.is_alphanumeric() && c != '_')
+        let words: Vec<&str> = body
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
             .filter(|s| !s.is_empty())
             .collect();
 
         for window in words.windows(1) {
             let word = window[0];
             // Skip Vais keywords
-            if !is_vais_keyword(word) && word.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
+            if !is_vais_keyword(word)
+                && word
+                    .chars()
+                    .next()
+                    .map(|c| c.is_alphabetic())
+                    .unwrap_or(false)
+            {
                 // Check if followed by ( in original body
                 if (body.contains(&format!("{}(", word)) || body.contains(&format!("{}<", word)))
-                    && !deps.contains(&word.to_string()) {
-                        deps.push(word.to_string());
-                    }
+                    && !deps.contains(&word.to_string())
+                {
+                    deps.push(word.to_string());
+                }
             }
         }
 
@@ -873,18 +975,24 @@ impl DefinitionExtractor {
         let mut deps = Vec::new();
 
         // Look for type references: field: Type, Vec<Type>, etc.
-        let words: Vec<&str> = body.split(|c: char| !c.is_alphanumeric() && c != '_')
+        let words: Vec<&str> = body
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
             .filter(|s| !s.is_empty())
             .collect();
 
         for word in words {
             // Type names start with uppercase (convention)
-            if word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
-               && !is_vais_keyword(word)
-               && !is_builtin_type(word)
-                && !deps.contains(&word.to_string()) {
-                    deps.push(word.to_string());
-                }
+            if word
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+                && !is_vais_keyword(word)
+                && !is_builtin_type(word)
+                && !deps.contains(&word.to_string())
+            {
+                deps.push(word.to_string());
+            }
         }
 
         deps
@@ -899,23 +1007,73 @@ impl Default for DefinitionExtractor {
 
 /// Check if a word is a Vais keyword
 fn is_vais_keyword(word: &str) -> bool {
-    matches!(word,
-        "F" | "S" | "E" | "T" | "I" | "M" | "N" | "C" |
-        "V" | "L" | "W" | "R" | "B" | "P" |
-        "if" | "else" | "for" | "while" | "return" | "break" | "continue" |
-        "true" | "false" | "self" | "Self" | "pub" | "mut" | "async" | "await" |
-        "import" | "from" | "as" | "match" | "spawn" | "defer"
+    matches!(
+        word,
+        "F" | "S"
+            | "E"
+            | "T"
+            | "I"
+            | "M"
+            | "N"
+            | "C"
+            | "V"
+            | "L"
+            | "W"
+            | "R"
+            | "B"
+            | "P"
+            | "if"
+            | "else"
+            | "for"
+            | "while"
+            | "return"
+            | "break"
+            | "continue"
+            | "true"
+            | "false"
+            | "self"
+            | "Self"
+            | "pub"
+            | "mut"
+            | "async"
+            | "await"
+            | "import"
+            | "from"
+            | "as"
+            | "match"
+            | "spawn"
+            | "defer"
     )
 }
 
 /// Check if a type is a builtin type
 fn is_builtin_type(word: &str) -> bool {
-    matches!(word,
-        "i8" | "i16" | "i32" | "i64" | "i128" |
-        "u8" | "u16" | "u32" | "u64" | "u128" |
-        "f32" | "f64" | "bool" | "str" | "String" |
-        "Vec" | "HashMap" | "HashSet" | "Option" | "Result" |
-        "Box" | "Rc" | "Arc" | "RefCell" | "Mutex"
+    matches!(
+        word,
+        "i8" | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "f32"
+            | "f64"
+            | "bool"
+            | "str"
+            | "String"
+            | "Vec"
+            | "HashMap"
+            | "HashSet"
+            | "Option"
+            | "Result"
+            | "Box"
+            | "Rc"
+            | "Arc"
+            | "RefCell"
+            | "Mutex"
     )
 }
 
@@ -945,7 +1103,9 @@ pub fn detect_function_changes(
     }
 
     // Find affected functions (functions that depend on changed functions)
-    let all_changed: HashSet<_> = change_set.modified.iter()
+    let all_changed: HashSet<_> = change_set
+        .modified
+        .iter()
         .chain(change_set.added.iter())
         .chain(change_set.removed.iter())
         .cloned()
@@ -982,8 +1142,10 @@ pub struct FunctionChangeSet {
 impl FunctionChangeSet {
     /// Check if there are any changes
     pub fn is_empty(&self) -> bool {
-        self.added.is_empty() && self.modified.is_empty()
-            && self.removed.is_empty() && self.affected.is_empty()
+        self.added.is_empty()
+            && self.modified.is_empty()
+            && self.removed.is_empty()
+            && self.affected.is_empty()
     }
 
     /// Get all functions that need recompilation
@@ -1046,7 +1208,7 @@ pub fn get_cache_dir(source_file: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use tempfile::TempDir;
 
     #[test]
@@ -1118,7 +1280,9 @@ mod tests {
 
         // First build - file is new, so it should be dirty
         let dirty = cache.detect_changes(&source_file).unwrap();
-        assert!(dirty.modified_files.contains(&source_file.canonicalize().unwrap()));
+        assert!(dirty
+            .modified_files
+            .contains(&source_file.canonicalize().unwrap()));
 
         // Update cache
         cache.update_file(&source_file).unwrap();
@@ -1389,7 +1553,10 @@ F main() {
         fs::write(&source_file, source2).unwrap();
 
         // Detect function-level changes
-        let changes = cache.detect_function_changes(&source_file).unwrap().unwrap();
+        let changes = cache
+            .detect_function_changes(&source_file)
+            .unwrap()
+            .unwrap();
 
         assert!(changes.modified.contains("add"));
         assert!(changes.affected.contains("main")); // main depends on add

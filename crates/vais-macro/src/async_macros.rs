@@ -20,8 +20,8 @@
 //! (a, b, c) := join!(future1(), future2(), future3());
 //! ```
 
+use crate::{MacroError, MacroRegistry, MacroResult};
 use vais_ast::*;
-use crate::{MacroRegistry, MacroError, MacroResult};
 
 /// Built-in async macro names
 pub const SELECT_MACRO: &str = "select";
@@ -60,46 +60,44 @@ fn create_select_macro_def() -> MacroDef {
         rules: vec![
             // Rule 1: Two arms
             MacroRule {
-                pattern: MacroPattern::Sequence(vec![
-                    MacroPatternElement::Group {
-                        delimiter: Delimiter::Brace,
-                        content: vec![
-                            MacroPatternElement::MetaVar {
-                                name: "pat1".to_string(),
-                                kind: MetaVarKind::Pat,
-                            },
-                            MacroPatternElement::Token(MacroToken::Punct('<')),
-                            MacroPatternElement::Token(MacroToken::Punct('-')),
-                            MacroPatternElement::MetaVar {
-                                name: "future1".to_string(),
-                                kind: MetaVarKind::Expr,
-                            },
-                            MacroPatternElement::Token(MacroToken::Punct('=')),
-                            MacroPatternElement::Token(MacroToken::Punct('>')),
-                            MacroPatternElement::MetaVar {
-                                name: "body1".to_string(),
-                                kind: MetaVarKind::Expr,
-                            },
-                            MacroPatternElement::Token(MacroToken::Punct(',')),
-                            MacroPatternElement::MetaVar {
-                                name: "pat2".to_string(),
-                                kind: MetaVarKind::Pat,
-                            },
-                            MacroPatternElement::Token(MacroToken::Punct('<')),
-                            MacroPatternElement::Token(MacroToken::Punct('-')),
-                            MacroPatternElement::MetaVar {
-                                name: "future2".to_string(),
-                                kind: MetaVarKind::Expr,
-                            },
-                            MacroPatternElement::Token(MacroToken::Punct('=')),
-                            MacroPatternElement::Token(MacroToken::Punct('>')),
-                            MacroPatternElement::MetaVar {
-                                name: "body2".to_string(),
-                                kind: MetaVarKind::Expr,
-                            },
-                        ],
-                    },
-                ]),
+                pattern: MacroPattern::Sequence(vec![MacroPatternElement::Group {
+                    delimiter: Delimiter::Brace,
+                    content: vec![
+                        MacroPatternElement::MetaVar {
+                            name: "pat1".to_string(),
+                            kind: MetaVarKind::Pat,
+                        },
+                        MacroPatternElement::Token(MacroToken::Punct('<')),
+                        MacroPatternElement::Token(MacroToken::Punct('-')),
+                        MacroPatternElement::MetaVar {
+                            name: "future1".to_string(),
+                            kind: MetaVarKind::Expr,
+                        },
+                        MacroPatternElement::Token(MacroToken::Punct('=')),
+                        MacroPatternElement::Token(MacroToken::Punct('>')),
+                        MacroPatternElement::MetaVar {
+                            name: "body1".to_string(),
+                            kind: MetaVarKind::Expr,
+                        },
+                        MacroPatternElement::Token(MacroToken::Punct(',')),
+                        MacroPatternElement::MetaVar {
+                            name: "pat2".to_string(),
+                            kind: MetaVarKind::Pat,
+                        },
+                        MacroPatternElement::Token(MacroToken::Punct('<')),
+                        MacroPatternElement::Token(MacroToken::Punct('-')),
+                        MacroPatternElement::MetaVar {
+                            name: "future2".to_string(),
+                            kind: MetaVarKind::Expr,
+                        },
+                        MacroPatternElement::Token(MacroToken::Punct('=')),
+                        MacroPatternElement::Token(MacroToken::Punct('>')),
+                        MacroPatternElement::MetaVar {
+                            name: "body2".to_string(),
+                            kind: MetaVarKind::Expr,
+                        },
+                    ],
+                }]),
                 template: MacroTemplate::Sequence(vec![
                     // Generate: select_race($future1, $future2).await |> match { ... }
                     MacroTemplateElement::Token(MacroToken::Ident("select".to_string())),
@@ -212,40 +210,36 @@ fn create_join_macro_def() -> MacroDef {
 fn create_timeout_macro_def() -> MacroDef {
     MacroDef {
         name: Spanned::new(TIMEOUT_MACRO.to_string(), Span::new(0, 7)),
-        rules: vec![
-            MacroRule {
-                pattern: MacroPattern::Sequence(vec![
-                    MacroPatternElement::MetaVar {
-                        name: "ms".to_string(),
-                        kind: MetaVarKind::Expr,
-                    },
-                    MacroPatternElement::Token(MacroToken::Punct(',')),
-                    MacroPatternElement::MetaVar {
-                        name: "future".to_string(),
-                        kind: MetaVarKind::Expr,
-                    },
-                ]),
-                template: MacroTemplate::Sequence(vec![
-                    MacroTemplateElement::Token(MacroToken::Ident("select".to_string())),
-                    MacroTemplateElement::Group {
-                        delimiter: Delimiter::Paren,
-                        content: vec![
-                            MacroTemplateElement::MetaVar("future".to_string()),
-                            MacroTemplateElement::Token(MacroToken::Punct(',')),
-                            MacroTemplateElement::Token(MacroToken::Ident("delay".to_string())),
-                            MacroTemplateElement::Group {
-                                delimiter: Delimiter::Paren,
-                                content: vec![
-                                    MacroTemplateElement::MetaVar("ms".to_string()),
-                                ],
-                            },
-                        ],
-                    },
-                    MacroTemplateElement::Token(MacroToken::Punct('.')),
-                    MacroTemplateElement::Token(MacroToken::Ident("await".to_string())),
-                ]),
-            },
-        ],
+        rules: vec![MacroRule {
+            pattern: MacroPattern::Sequence(vec![
+                MacroPatternElement::MetaVar {
+                    name: "ms".to_string(),
+                    kind: MetaVarKind::Expr,
+                },
+                MacroPatternElement::Token(MacroToken::Punct(',')),
+                MacroPatternElement::MetaVar {
+                    name: "future".to_string(),
+                    kind: MetaVarKind::Expr,
+                },
+            ]),
+            template: MacroTemplate::Sequence(vec![
+                MacroTemplateElement::Token(MacroToken::Ident("select".to_string())),
+                MacroTemplateElement::Group {
+                    delimiter: Delimiter::Paren,
+                    content: vec![
+                        MacroTemplateElement::MetaVar("future".to_string()),
+                        MacroTemplateElement::Token(MacroToken::Punct(',')),
+                        MacroTemplateElement::Token(MacroToken::Ident("delay".to_string())),
+                        MacroTemplateElement::Group {
+                            delimiter: Delimiter::Paren,
+                            content: vec![MacroTemplateElement::MetaVar("ms".to_string())],
+                        },
+                    ],
+                },
+                MacroTemplateElement::Token(MacroToken::Punct('.')),
+                MacroTemplateElement::Token(MacroToken::Ident("await".to_string())),
+            ]),
+        }],
         is_pub: true,
     }
 }
@@ -472,8 +466,16 @@ mod tests {
         let mut expander = AsyncMacroExpander::new();
 
         let futures = vec![
-            vec![MacroToken::Ident("f1".to_string()), MacroToken::Punct('('), MacroToken::Punct(')')],
-            vec![MacroToken::Ident("f2".to_string()), MacroToken::Punct('('), MacroToken::Punct(')')],
+            vec![
+                MacroToken::Ident("f1".to_string()),
+                MacroToken::Punct('('),
+                MacroToken::Punct(')'),
+            ],
+            vec![
+                MacroToken::Ident("f2".to_string()),
+                MacroToken::Punct('('),
+                MacroToken::Punct(')'),
+            ],
         ];
 
         let result = expander.expand_join(&futures).unwrap();
@@ -545,9 +547,7 @@ mod tests {
     fn test_join_single_future() {
         let mut expander = AsyncMacroExpander::new();
 
-        let futures = vec![
-            vec![MacroToken::Ident("single".to_string())],
-        ];
+        let futures = vec![vec![MacroToken::Ident("single".to_string())]];
 
         let result = expander.expand_join(&futures).unwrap();
         let s = tokens_to_string(&result);
@@ -569,13 +569,11 @@ mod tests {
     fn test_select_too_few_arms() {
         let mut expander = AsyncMacroExpander::new();
 
-        let arms = vec![
-            (
-                "a".to_string(),
-                vec![MacroToken::Ident("f1".to_string())],
-                vec![MacroToken::Ident("a".to_string())],
-            ),
-        ];
+        let arms = vec![(
+            "a".to_string(),
+            vec![MacroToken::Ident("f1".to_string())],
+            vec![MacroToken::Ident("a".to_string())],
+        )];
 
         let result = expander.expand_select(&arms);
         assert!(result.is_err());

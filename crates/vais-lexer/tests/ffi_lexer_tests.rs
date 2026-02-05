@@ -24,7 +24,9 @@ fn test_extern_block_tokens() {
     let tokens = tokenize(source).unwrap();
 
     assert!(tokens.iter().any(|t| t.token == Token::Extern));
-    assert!(tokens.iter().any(|t| matches!(&t.token, Token::String(s) if s == "C")));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(&t.token, Token::String(s) if s == "C")));
     assert!(tokens.iter().any(|t| t.token == Token::Ellipsis));
 }
 

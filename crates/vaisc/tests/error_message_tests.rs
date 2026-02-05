@@ -69,10 +69,7 @@ fn error_type_mismatch_bool_vs_i64() {
 fn error_type_mismatch_help_suggests_cast() {
     // When numeric type is expected, help should suggest type cast
     let help = type_check_help("F main() -> i64 = true");
-    assert!(
-        help.is_some(),
-        "Should provide help for type mismatch"
-    );
+    assert!(help.is_some(), "Should provide help for type mismatch");
 }
 
 #[test]
@@ -91,7 +88,9 @@ fn error_type_mismatch_str_to_i64() {
     );
     let help_text = help.unwrap();
     assert!(
-        help_text.contains("converting") || help_text.contains("cast") || help_text.contains("did you mean"),
+        help_text.contains("converting")
+            || help_text.contains("cast")
+            || help_text.contains("did you mean"),
         "Help should suggest conversion: got '{}'",
         help_text
     );
@@ -101,12 +100,10 @@ fn error_type_mismatch_str_to_i64() {
 
 #[test]
 fn warning_unused_variable_suggests_underscore() {
-    let warnings = type_check_warnings(
-        "F main() -> i64 { x := 5\n R 0 }"
-    );
-    let has_unused_warning = warnings.iter().any(|w|
-        w.contains("unused variable") && w.contains("_x")
-    );
+    let warnings = type_check_warnings("F main() -> i64 { x := 5\n R 0 }");
+    let has_unused_warning = warnings
+        .iter()
+        .any(|w| w.contains("unused variable") && w.contains("_x"));
     assert!(
         has_unused_warning,
         "Should warn about unused variable `x` and suggest `_x`, got warnings: {:?}",
@@ -116,12 +113,10 @@ fn warning_unused_variable_suggests_underscore() {
 
 #[test]
 fn warning_unused_variable_no_warning_for_underscore_prefix() {
-    let warnings = type_check_warnings(
-        "F main() -> i64 { _x := 5\n R 0 }"
-    );
-    let has_unused_warning = warnings.iter().any(|w|
-        w.contains("unused variable") && w.contains("_x")
-    );
+    let warnings = type_check_warnings("F main() -> i64 { _x := 5\n R 0 }");
+    let has_unused_warning = warnings
+        .iter()
+        .any(|w| w.contains("unused variable") && w.contains("_x"));
     assert!(
         !has_unused_warning,
         "Should NOT warn about `_x` (underscore prefix), got warnings: {:?}",
@@ -131,12 +126,10 @@ fn warning_unused_variable_no_warning_for_underscore_prefix() {
 
 #[test]
 fn warning_unused_variable_used_variable_no_warning() {
-    let warnings = type_check_warnings(
-        "F main() -> i64 { x := 5\n R x }"
-    );
-    let has_unused_warning = warnings.iter().any(|w|
-        w.contains("unused variable") && w.contains("`x`")
-    );
+    let warnings = type_check_warnings("F main() -> i64 { x := 5\n R x }");
+    let has_unused_warning = warnings
+        .iter()
+        .any(|w| w.contains("unused variable") && w.contains("`x`"));
     assert!(
         !has_unused_warning,
         "Should NOT warn about used variable `x`, got warnings: {:?}",
@@ -174,10 +167,7 @@ fn error_no_such_field_suggests_similar() {
             );
             // Check help message for suggestion
             let help = e.help();
-            assert!(
-                help.is_some(),
-                "Should provide help for field access error"
-            );
+            assert!(help.is_some(), "Should provide help for field access error");
             let help_text = help.unwrap();
             assert!(
                 help_text.contains("name") || help_text.contains("did you mean"),
@@ -195,12 +185,11 @@ fn error_no_such_field_suggests_similar() {
 fn warning_extern_pointer_fn_wrong_return_type() {
     // X F is the single extern function syntax
     // dlopen is a known pointer-returning function that is NOT a builtin
-    let warnings = type_check_warnings(
-        "X F dlopen(path: i64, mode: i64) -> bool\nF main() -> i64 = 0"
-    );
-    let has_extern_warning = warnings.iter().any(|w|
-        w.contains("dlopen") && w.contains("should return")
-    );
+    let warnings =
+        type_check_warnings("X F dlopen(path: i64, mode: i64) -> bool\nF main() -> i64 = 0");
+    let has_extern_warning = warnings
+        .iter()
+        .any(|w| w.contains("dlopen") && w.contains("should return"));
     assert!(
         has_extern_warning,
         "Should warn about dlopen returning bool instead of i64 (pointer), got warnings: {:?}",
@@ -211,12 +200,11 @@ fn warning_extern_pointer_fn_wrong_return_type() {
 #[test]
 fn warning_extern_pointer_fn_correct_return_type_no_warning() {
     // X F is the single extern function syntax
-    let warnings = type_check_warnings(
-        "X F dlopen(path: i64, mode: i64) -> i64\nF main() -> i64 = 0"
-    );
-    let has_extern_warning = warnings.iter().any(|w|
-        w.contains("dlopen") && w.contains("should return")
-    );
+    let warnings =
+        type_check_warnings("X F dlopen(path: i64, mode: i64) -> i64\nF main() -> i64 = 0");
+    let has_extern_warning = warnings
+        .iter()
+        .any(|w| w.contains("dlopen") && w.contains("should return"));
     assert!(
         !has_extern_warning,
         "Should NOT warn when dlopen returns i64, got warnings: {:?}",
@@ -263,10 +251,7 @@ fn error_undefined_variable_suggests_similar() {
                 error
             );
             let help = e.help();
-            assert!(
-                help.is_some(),
-                "Should provide help with suggestion"
-            );
+            assert!(help.is_some(), "Should provide help with suggestion");
             let help_text = help.unwrap();
             assert!(
                 help_text.contains("myvar") || help_text.contains("did you mean"),
@@ -296,10 +281,7 @@ fn error_undefined_function_suggests_similar() {
                 error
             );
             let help = e.help();
-            assert!(
-                help.is_some(),
-                "Should provide help with suggestion"
-            );
+            assert!(help.is_some(), "Should provide help with suggestion");
             let help_text = help.unwrap();
             assert!(
                 help_text.contains("greet") || help_text.contains("did you mean"),

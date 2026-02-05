@@ -158,12 +158,17 @@ impl DebugInfoBuilder {
         ));
 
         // Create llvm.dbg.cu named metadata
-        self.named_metadata.push(format!("!llvm.dbg.cu = !{{!{}}}", cu_id));
+        self.named_metadata
+            .push(format!("!llvm.dbg.cu = !{{!{}}}", cu_id));
 
         // Add debug info version
         let version_id = self.next_metadata_id();
-        self.metadata_nodes.push(format!("!{} = !{{i32 2, !\"Debug Info Version\", i32 3}}", version_id));
-        self.named_metadata.push(format!("!llvm.module.flags = !{{!{}}}", version_id));
+        self.metadata_nodes.push(format!(
+            "!{} = !{{i32 2, !\"Debug Info Version\", i32 3}}",
+            version_id
+        ));
+        self.named_metadata
+            .push(format!("!llvm.module.flags = !{{!{}}}", version_id));
     }
 
     /// Create DISubprogram for a function
@@ -182,14 +187,16 @@ impl DebugInfoBuilder {
 
         // Create subroutine type (void for now, simplified)
         let type_id = self.next_metadata_id();
-        self.metadata_nodes.push(format!(
-            "!{} = !DISubroutineType(types: !{{}})",
-            type_id
-        ));
+        self.metadata_nodes
+            .push(format!("!{} = !DISubroutineType(types: !{{}})", type_id));
 
         // Create DISubprogram
         let sp_id = self.next_metadata_id();
-        let sp_flags = if is_definition { "DISPFlagDefinition" } else { "DISPFlagLocalToUnit" };
+        let sp_flags = if is_definition {
+            "DISPFlagDefinition"
+        } else {
+            "DISPFlagLocalToUnit"
+        };
         self.metadata_nodes.push(format!(
             "!{} = distinct !DISubprogram(name: \"{}\", scope: !{}, file: !{}, line: {}, type: !{}, scopeLine: {}, spFlags: {}, unit: !{}, retainedNodes: !{{}})",
             sp_id, func_name, file_id, file_id, line, type_id, line, sp_flags, cu_id
@@ -353,9 +360,9 @@ mod tests {
         let mut builder = DebugInfoBuilder::new(config);
         builder.set_source_code(source);
 
-        assert_eq!(builder.offset_to_line(0), 1);  // 'l' of line1
-        assert_eq!(builder.offset_to_line(5), 1);  // '\n' after line1
-        assert_eq!(builder.offset_to_line(6), 2);  // 'l' of line2
+        assert_eq!(builder.offset_to_line(0), 1); // 'l' of line1
+        assert_eq!(builder.offset_to_line(5), 1); // '\n' after line1
+        assert_eq!(builder.offset_to_line(6), 2); // 'l' of line2
         assert_eq!(builder.offset_to_line(12), 3); // 'l' of line3
     }
 
@@ -366,9 +373,9 @@ mod tests {
         let mut builder = DebugInfoBuilder::new(config);
         builder.set_source_code(source);
 
-        assert_eq!(builder.offset_to_column(0), 1);  // 'h'
-        assert_eq!(builder.offset_to_column(4), 5);  // 'o' in hello
-        assert_eq!(builder.offset_to_column(6), 1);  // 'w' in world
+        assert_eq!(builder.offset_to_column(0), 1); // 'h'
+        assert_eq!(builder.offset_to_column(4), 5); // 'o' in hello
+        assert_eq!(builder.offset_to_column(6), 1); // 'w' in world
         assert_eq!(builder.offset_to_column(10), 5); // 'd' in world
     }
 

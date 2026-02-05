@@ -1,8 +1,8 @@
 //! GPU code generation tests
 
-use vais_gpu::{GpuCodeGenerator, GpuTarget, GpuType, GpuError};
-use vais_gpu::simd::{SimdTarget, SimdIntrinsics, SimdVectorType};
 use vais_gpu::metal::MetalBuiltins;
+use vais_gpu::simd::{SimdIntrinsics, SimdTarget, SimdVectorType};
+use vais_gpu::{GpuCodeGenerator, GpuError, GpuTarget, GpuType};
 
 #[test]
 fn test_gpu_target_from_str() {
@@ -136,11 +136,14 @@ fn test_gpu_type_void() {
 }
 
 mod cuda_codegen_tests {
-    use vais_gpu::{GpuCodeGenerator, GpuTarget, GpuType};
     use vais_ast::*;
+    use vais_gpu::{GpuCodeGenerator, GpuTarget, GpuType};
 
     fn spanned<T>(node: T) -> Spanned<T> {
-        Spanned { node, span: Span { start: 0, end: 0 } }
+        Spanned {
+            node,
+            span: Span { start: 0, end: 0 },
+        }
     }
 
     fn make_kernel(name: &str, params: Vec<Param>, body: Vec<Spanned<Stmt>>) -> Module {
@@ -153,8 +156,12 @@ mod cuda_codegen_tests {
                 body: FunctionBody::Block(body),
                 is_pub: false,
                 is_async: false,
-                attributes: vec![Attribute { name: "gpu".to_string(), args: vec![], expr: None }],
-            }))]
+                attributes: vec![Attribute {
+                    name: "gpu".to_string(),
+                    args: vec![],
+                    expr: None,
+                }],
+            }))],
         }
     }
 
@@ -171,15 +178,39 @@ mod cuda_codegen_tests {
 
     #[test]
     fn test_cuda_kernel_i32_ptr_param() {
-        let module = make_kernel("add_i32", vec![
-            make_param("a", Type::Pointer(Box::new(spanned(Type::Named { name: "i32".to_string(), generics: vec![] })))),
-            make_param("b", Type::Pointer(Box::new(spanned(Type::Named { name: "i32".to_string(), generics: vec![] })))),
-        ], vec![]);
+        let module = make_kernel(
+            "add_i32",
+            vec![
+                make_param(
+                    "a",
+                    Type::Pointer(Box::new(spanned(Type::Named {
+                        name: "i32".to_string(),
+                        generics: vec![],
+                    }))),
+                ),
+                make_param(
+                    "b",
+                    Type::Pointer(Box::new(spanned(Type::Named {
+                        name: "i32".to_string(),
+                        generics: vec![],
+                    }))),
+                ),
+            ],
+            vec![],
+        );
 
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let code = gen.generate(&module).expect("should generate CUDA code");
-        assert!(code.contains("int* a"), "Expected 'int* a' in CUDA output, got:\n{}", code);
-        assert!(code.contains("int* b"), "Expected 'int* b' in CUDA output, got:\n{}", code);
+        assert!(
+            code.contains("int* a"),
+            "Expected 'int* a' in CUDA output, got:\n{}",
+            code
+        );
+        assert!(
+            code.contains("int* b"),
+            "Expected 'int* b' in CUDA output, got:\n{}",
+            code
+        );
 
         // Verify kernel metadata has correct types
         let kernels = gen.kernels();
@@ -190,13 +221,25 @@ mod cuda_codegen_tests {
 
     #[test]
     fn test_cuda_kernel_f64_ptr_param() {
-        let module = make_kernel("add_f64", vec![
-            make_param("data", Type::Pointer(Box::new(spanned(Type::Named { name: "f64".to_string(), generics: vec![] })))),
-        ], vec![]);
+        let module = make_kernel(
+            "add_f64",
+            vec![make_param(
+                "data",
+                Type::Pointer(Box::new(spanned(Type::Named {
+                    name: "f64".to_string(),
+                    generics: vec![],
+                }))),
+            )],
+            vec![],
+        );
 
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let code = gen.generate(&module).expect("should generate CUDA code");
-        assert!(code.contains("double* data"), "Expected 'double* data' in CUDA output, got:\n{}", code);
+        assert!(
+            code.contains("double* data"),
+            "Expected 'double* data' in CUDA output, got:\n{}",
+            code
+        );
 
         let kernels = gen.kernels();
         assert_eq!(kernels[0].params[0].1, GpuType::Ptr(Box::new(GpuType::F64)));
@@ -204,11 +247,33 @@ mod cuda_codegen_tests {
 
     #[test]
     fn test_cuda_kernel_mixed_param_types() {
-        let module = make_kernel("mixed", vec![
-            make_param("floats", Type::Pointer(Box::new(spanned(Type::Named { name: "f32".to_string(), generics: vec![] })))),
-            make_param("ints", Type::Pointer(Box::new(spanned(Type::Named { name: "i64".to_string(), generics: vec![] })))),
-            make_param("n", Type::Named { name: "i32".to_string(), generics: vec![] }),
-        ], vec![]);
+        let module = make_kernel(
+            "mixed",
+            vec![
+                make_param(
+                    "floats",
+                    Type::Pointer(Box::new(spanned(Type::Named {
+                        name: "f32".to_string(),
+                        generics: vec![],
+                    }))),
+                ),
+                make_param(
+                    "ints",
+                    Type::Pointer(Box::new(spanned(Type::Named {
+                        name: "i64".to_string(),
+                        generics: vec![],
+                    }))),
+                ),
+                make_param(
+                    "n",
+                    Type::Named {
+                        name: "i32".to_string(),
+                        generics: vec![],
+                    },
+                ),
+            ],
+            vec![],
+        );
 
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("should generate CUDA code");
@@ -223,9 +288,9 @@ mod cuda_codegen_tests {
 
 mod common_tests {
     use vais_gpu::cuda;
+    use vais_gpu::metal;
     use vais_gpu::opencl;
     use vais_gpu::webgpu;
-    use vais_gpu::metal;
 
     #[test]
     fn test_cuda_module_exists() {
@@ -280,16 +345,31 @@ mod metal_tests {
 
     #[test]
     fn test_metal_builtins_thread_indexing() {
-        assert_eq!(MetalBuiltins::builtin("thread_idx_x"), Some("thread_position_in_threadgroup.x"));
-        assert_eq!(MetalBuiltins::builtin("block_idx_x"), Some("threadgroup_position_in_grid.x"));
-        assert_eq!(MetalBuiltins::builtin("global_idx"), Some("thread_position_in_grid.x"));
+        assert_eq!(
+            MetalBuiltins::builtin("thread_idx_x"),
+            Some("thread_position_in_threadgroup.x")
+        );
+        assert_eq!(
+            MetalBuiltins::builtin("block_idx_x"),
+            Some("threadgroup_position_in_grid.x")
+        );
+        assert_eq!(
+            MetalBuiltins::builtin("global_idx"),
+            Some("thread_position_in_grid.x")
+        );
         assert_eq!(MetalBuiltins::builtin("lane_id"), Some("simd_lane_id"));
     }
 
     #[test]
     fn test_metal_builtins_atomic() {
-        assert_eq!(MetalBuiltins::builtin("atomic_add"), Some("atomic_fetch_add_explicit"));
-        assert_eq!(MetalBuiltins::builtin("atomic_cas"), Some("atomic_compare_exchange_weak_explicit"));
+        assert_eq!(
+            MetalBuiltins::builtin("atomic_add"),
+            Some("atomic_fetch_add_explicit")
+        );
+        assert_eq!(
+            MetalBuiltins::builtin("atomic_cas"),
+            Some("atomic_compare_exchange_weak_explicit")
+        );
     }
 
     #[test]
@@ -337,9 +417,15 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let code = gen.generate(&module).expect("CUDA codegen failed");
-        assert!(code.contains("__global__"), "CUDA kernel should have __global__ qualifier");
+        assert!(
+            code.contains("__global__"),
+            "CUDA kernel should have __global__ qualifier"
+        );
         assert!(code.contains("vector_add"), "Should contain kernel name");
-        assert!(!gen.kernels().is_empty(), "Should discover at least one kernel");
+        assert!(
+            !gen.kernels().is_empty(),
+            "Should discover at least one kernel"
+        );
     }
 
     #[test]
@@ -347,7 +433,10 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
         let code = gen.generate(&module).expect("OpenCL codegen failed");
-        assert!(code.contains("__kernel"), "OpenCL kernel should have __kernel qualifier");
+        assert!(
+            code.contains("__kernel"),
+            "OpenCL kernel should have __kernel qualifier"
+        );
         assert!(code.contains("vector_add"), "Should contain kernel name");
     }
 
@@ -356,8 +445,11 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
         let code = gen.generate(&module).expect("WebGPU codegen failed");
-        assert!(code.contains("fn vector_add") || code.contains("@compute"),
-            "WGSL should contain compute shader syntax, got:\n{}", code);
+        assert!(
+            code.contains("fn vector_add") || code.contains("@compute"),
+            "WGSL should contain compute shader syntax, got:\n{}",
+            code
+        );
     }
 
     #[test]
@@ -365,8 +457,11 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let module = parse(KERNEL_SOURCE).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let code = gen.generate(&module).expect("Metal codegen failed");
-        assert!(code.contains("kernel") || code.contains("vector_add"),
-            "Metal should contain kernel function, got:\n{}", code);
+        assert!(
+            code.contains("kernel") || code.contains("vector_add"),
+            "Metal should contain kernel function, got:\n{}",
+            code
+        );
     }
 
     #[test]
@@ -375,8 +470,10 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
         let host = gen.generate_host_code();
-        assert!(host.contains("cudaMalloc") || host.contains("cuda") || host.len() > 0,
-            "Host code should contain CUDA runtime calls");
+        assert!(
+            host.contains("cudaMalloc") || host.contains("cuda") || host.len() > 0,
+            "Host code should contain CUDA runtime calls"
+        );
     }
 
     #[test]
@@ -385,20 +482,35 @@ F scalar_mul(data: *f64, scale: f64, n: i32) {
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let _code = gen.generate(&module).expect("Metal codegen failed");
         let host = gen.generate_host_code();
-        assert!(host.contains("MTL") || host.contains("Metal") || host.len() > 0,
-            "Host code should contain Metal runtime calls");
+        assert!(
+            host.contains("MTL") || host.contains("Metal") || host.len() > 0,
+            "Host code should contain Metal runtime calls"
+        );
     }
 
     #[test]
     fn test_e2e_scalar_kernel_all_backends() {
         let module = parse(SCALAR_KERNEL).expect("parse failed");
-        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::WebGPU, GpuTarget::Metal] {
+        for target in &[
+            GpuTarget::Cuda,
+            GpuTarget::OpenCL,
+            GpuTarget::WebGPU,
+            GpuTarget::Metal,
+        ] {
             let mut gen = GpuCodeGenerator::new(*target);
-            let code = gen.generate(&module).expect(&format!("{:?} codegen failed", target));
-            assert!(code.contains("scalar_mul"),
-                "{:?} should contain kernel name 'scalar_mul'", target);
-            assert!(!gen.kernels().is_empty(),
-                "{:?} should discover kernel", target);
+            let code = gen
+                .generate(&module)
+                .expect(&format!("{:?} codegen failed", target));
+            assert!(
+                code.contains("scalar_mul"),
+                "{:?} should contain kernel name 'scalar_mul'",
+                target
+            );
+            assert!(
+                !gen.kernels().is_empty(),
+                "{:?} should discover kernel",
+                target
+            );
         }
     }
 
@@ -452,7 +564,9 @@ mod simd_tests {
         assert!(SimdTarget::Avx2.compiler_flags().contains("-mavx2"));
         assert!(SimdTarget::Sse4.compiler_flags().contains("-msse4.2"));
         assert!(SimdTarget::Neon.compiler_flags().contains("-mfpu=neon"));
-        assert!(SimdTarget::Sve.compiler_flags().contains("-march=armv8-a+sve"));
+        assert!(SimdTarget::Sve
+            .compiler_flags()
+            .contains("-march=armv8-a+sve"));
     }
 
     #[test]
@@ -465,53 +579,110 @@ mod simd_tests {
 
     #[test]
     fn test_simd_intrinsics_load() {
-        assert_eq!(SimdIntrinsics::load(SimdTarget::Avx512, "f32"), "_mm512_loadu_ps");
-        assert_eq!(SimdIntrinsics::load(SimdTarget::Avx512, "f64"), "_mm512_loadu_pd");
-        assert_eq!(SimdIntrinsics::load(SimdTarget::Avx2, "f32"), "_mm256_loadu_ps");
-        assert_eq!(SimdIntrinsics::load(SimdTarget::Sse4, "f32"), "_mm_loadu_ps");
+        assert_eq!(
+            SimdIntrinsics::load(SimdTarget::Avx512, "f32"),
+            "_mm512_loadu_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::load(SimdTarget::Avx512, "f64"),
+            "_mm512_loadu_pd"
+        );
+        assert_eq!(
+            SimdIntrinsics::load(SimdTarget::Avx2, "f32"),
+            "_mm256_loadu_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::load(SimdTarget::Sse4, "f32"),
+            "_mm_loadu_ps"
+        );
         assert_eq!(SimdIntrinsics::load(SimdTarget::Neon, "f32"), "vld1q_f32");
         assert_eq!(SimdIntrinsics::load(SimdTarget::Sve, "f32"), "svld1_f32");
     }
 
     #[test]
     fn test_simd_intrinsics_store() {
-        assert_eq!(SimdIntrinsics::store(SimdTarget::Avx512, "f32"), "_mm512_storeu_ps");
+        assert_eq!(
+            SimdIntrinsics::store(SimdTarget::Avx512, "f32"),
+            "_mm512_storeu_ps"
+        );
         assert_eq!(SimdIntrinsics::store(SimdTarget::Neon, "f32"), "vst1q_f32");
     }
 
     #[test]
     fn test_simd_intrinsics_arithmetic() {
-        assert_eq!(SimdIntrinsics::add(SimdTarget::Avx512, "f32"), "_mm512_add_ps");
-        assert_eq!(SimdIntrinsics::sub(SimdTarget::Avx512, "f32"), "_mm512_sub_ps");
-        assert_eq!(SimdIntrinsics::mul(SimdTarget::Avx512, "f32"), "_mm512_mul_ps");
-        assert_eq!(SimdIntrinsics::div(SimdTarget::Avx512, "f32"), "_mm512_div_ps");
+        assert_eq!(
+            SimdIntrinsics::add(SimdTarget::Avx512, "f32"),
+            "_mm512_add_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::sub(SimdTarget::Avx512, "f32"),
+            "_mm512_sub_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::mul(SimdTarget::Avx512, "f32"),
+            "_mm512_mul_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::div(SimdTarget::Avx512, "f32"),
+            "_mm512_div_ps"
+        );
     }
 
     #[test]
     fn test_simd_intrinsics_fma() {
-        assert_eq!(SimdIntrinsics::fma(SimdTarget::Avx512, "f32"), "_mm512_fmadd_ps");
-        assert_eq!(SimdIntrinsics::fma(SimdTarget::Avx2, "f32"), "_mm256_fmadd_ps");
+        assert_eq!(
+            SimdIntrinsics::fma(SimdTarget::Avx512, "f32"),
+            "_mm512_fmadd_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::fma(SimdTarget::Avx2, "f32"),
+            "_mm256_fmadd_ps"
+        );
         assert_eq!(SimdIntrinsics::fma(SimdTarget::Neon, "f32"), "vfmaq_f32");
     }
 
     #[test]
     fn test_simd_intrinsics_broadcast() {
-        assert_eq!(SimdIntrinsics::broadcast(SimdTarget::Avx512, "f32"), "_mm512_set1_ps");
-        assert_eq!(SimdIntrinsics::broadcast(SimdTarget::Neon, "f32"), "vdupq_n_f32");
-        assert_eq!(SimdIntrinsics::broadcast(SimdTarget::Sve, "f32"), "svdup_f32");
+        assert_eq!(
+            SimdIntrinsics::broadcast(SimdTarget::Avx512, "f32"),
+            "_mm512_set1_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::broadcast(SimdTarget::Neon, "f32"),
+            "vdupq_n_f32"
+        );
+        assert_eq!(
+            SimdIntrinsics::broadcast(SimdTarget::Sve, "f32"),
+            "svdup_f32"
+        );
     }
 
     #[test]
     fn test_simd_intrinsics_reduce() {
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Avx512, "f32"), "_mm512_reduce_add_ps");
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Neon, "f32"), "vaddvq_f32");
-        assert_eq!(SimdIntrinsics::reduce_add(SimdTarget::Sve, "f32"), "svaddv_f32");
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Avx512, "f32"),
+            "_mm512_reduce_add_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Neon, "f32"),
+            "vaddvq_f32"
+        );
+        assert_eq!(
+            SimdIntrinsics::reduce_add(SimdTarget::Sve, "f32"),
+            "svaddv_f32"
+        );
     }
 
     #[test]
     fn test_simd_intrinsics_min_max() {
-        assert_eq!(SimdIntrinsics::min(SimdTarget::Avx512, "f32"), "_mm512_min_ps");
-        assert_eq!(SimdIntrinsics::max(SimdTarget::Avx512, "f32"), "_mm512_max_ps");
+        assert_eq!(
+            SimdIntrinsics::min(SimdTarget::Avx512, "f32"),
+            "_mm512_min_ps"
+        );
+        assert_eq!(
+            SimdIntrinsics::max(SimdTarget::Avx512, "f32"),
+            "_mm512_max_ps"
+        );
         assert_eq!(SimdIntrinsics::min(SimdTarget::Neon, "f32"), "vminq_f32");
         assert_eq!(SimdIntrinsics::max(SimdTarget::Neon, "f32"), "vmaxq_f32");
     }
@@ -582,17 +753,29 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let code = gen.generate(&module).expect("CUDA codegen failed");
 
         // Verify kernel structure
-        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+        assert!(
+            code.contains("__global__"),
+            "Should have __global__ qualifier"
+        );
         assert!(code.contains("vector_add"), "Should contain kernel name");
-        assert!(code.contains("double*"), "Should have double* parameters for f64");
+        assert!(
+            code.contains("double*"),
+            "Should have double* parameters for f64"
+        );
 
         // Verify thread indexing is emitted
-        assert!(code.contains("threadIdx.x") || code.contains("threadIdx"),
-            "Should contain CUDA thread indexing");
-        assert!(code.contains("blockIdx.x") || code.contains("blockIdx"),
-            "Should contain CUDA block indexing");
-        assert!(code.contains("blockDim.x") || code.contains("blockDim"),
-            "Should contain CUDA block dimension");
+        assert!(
+            code.contains("threadIdx.x") || code.contains("threadIdx"),
+            "Should contain CUDA thread indexing"
+        );
+        assert!(
+            code.contains("blockIdx.x") || code.contains("blockIdx"),
+            "Should contain CUDA block indexing"
+        );
+        assert!(
+            code.contains("blockDim.x") || code.contains("blockDim"),
+            "Should contain CUDA block dimension"
+        );
     }
 
     #[test]
@@ -603,8 +786,11 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let host = gen.generate_host_code();
 
         // Host code should reference CUDA runtime API functions
-        assert!(host.contains("cudaDeviceSynchronize") || host.contains("launch_"),
-            "Host code should contain CUDA runtime calls, got:\n{}", host);
+        assert!(
+            host.contains("cudaDeviceSynchronize") || host.contains("launch_"),
+            "Host code should contain CUDA runtime calls, got:\n{}",
+            host
+        );
     }
 
     #[test]
@@ -616,7 +802,11 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let kernels = gen.kernels();
         assert_eq!(kernels.len(), 1);
         assert_eq!(kernels[0].name, "vector_add");
-        assert_eq!(kernels[0].params.len(), 4, "vector_add should have 4 params (a, b, c, n)");
+        assert_eq!(
+            kernels[0].params.len(),
+            4,
+            "vector_add should have 4 params (a, b, c, n)"
+        );
 
         // Verify param types
         let param_names: Vec<&str> = kernels[0].params.iter().map(|(n, _)| n.as_str()).collect();
@@ -632,12 +822,21 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         ];
         for (target, expected_keyword) in targets {
             let mut gen = GpuCodeGenerator::new(target);
-            let code = gen.generate(&module)
+            let code = gen
+                .generate(&module)
                 .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
-            assert!(code.contains(expected_keyword),
-                "{:?} should contain '{}', got:\n{}", target, expected_keyword, code);
-            assert!(code.contains("vector_add"),
-                "{:?} should contain kernel name", target);
+            assert!(
+                code.contains(expected_keyword),
+                "{:?} should contain '{}', got:\n{}",
+                target,
+                expected_keyword,
+                code
+            );
+            assert!(
+                code.contains("vector_add"),
+                "{:?} should contain kernel name",
+                target
+            );
         }
     }
 
@@ -646,8 +845,10 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let code = gen.generate(&module).expect("Metal codegen failed");
-        assert!(code.contains("kernel") || code.contains("vector_add"),
-            "Metal should generate kernel function");
+        assert!(
+            code.contains("kernel") || code.contains("vector_add"),
+            "Metal should generate kernel function"
+        );
     }
 
     #[test]
@@ -655,8 +856,10 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let module = parse(VECTOR_ADD_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::WebGPU);
         let code = gen.generate(&module).expect("WebGPU codegen failed");
-        assert!(code.contains("vector_add") || code.contains("@compute"),
-            "WebGPU should generate compute shader");
+        assert!(
+            code.contains("vector_add") || code.contains("@compute"),
+            "WebGPU should generate compute shader"
+        );
     }
 
     const MATRIX_MUL_KERNEL: &str = r#"
@@ -680,8 +883,10 @@ F matrix_mul(a: *f64, b: *f64, c: *f64, n: i64) {
         let code = gen.generate(&module).expect("CUDA codegen failed");
         assert!(code.contains("matrix_mul"), "Should contain kernel name");
         // 2D indexing should reference y-dimension
-        assert!(code.contains("threadIdx.y") || code.contains("blockIdx.y") || code.contains("thread"),
-            "Should contain 2D thread indexing");
+        assert!(
+            code.contains("threadIdx.y") || code.contains("blockIdx.y") || code.contains("thread"),
+            "Should contain 2D thread indexing"
+        );
     }
 
     const REDUCTION_KERNEL: &str = r#"
@@ -728,7 +933,11 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let code = gen.generate(&module).expect("OpenCL codegen failed");
 
         // OpenCL kernel should use __kernel qualifier
-        assert!(code.contains("__kernel"), "OpenCL should have __kernel qualifier, got:\n{}", code);
+        assert!(
+            code.contains("__kernel"),
+            "OpenCL should have __kernel qualifier, got:\n{}",
+            code
+        );
         assert!(code.contains("vector_add"), "Should contain kernel name");
 
         // Verify kernel metadata
@@ -746,8 +955,11 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let host = gen.generate_host_code();
 
         // Host code should reference OpenCL API
-        assert!(host.contains("cl") || host.contains("OpenCL") || host.contains("CL"),
-            "Host code should contain OpenCL references, got:\n{}", host);
+        assert!(
+            host.contains("cl") || host.contains("OpenCL") || host.contains("CL"),
+            "Host code should contain OpenCL references, got:\n{}",
+            host
+        );
     }
 
     const OPENCL_SAXPY: &str = r#"
@@ -805,7 +1017,11 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
         let code = gen.generate(&module).expect("OpenCL codegen failed");
         // OpenCL requires __global qualifier for pointer parameters
-        assert!(code.contains("__global"), "OpenCL should use __global for pointer params, got:\n{}", code);
+        assert!(
+            code.contains("__global"),
+            "OpenCL should use __global for pointer params, got:\n{}",
+            code
+        );
     }
 
     #[test]
@@ -814,7 +1030,11 @@ F kernel_b(input: *f64, output: *f64, n: i64) {
         let mut gen = GpuCodeGenerator::new(GpuTarget::OpenCL);
         let code = gen.generate(&module).expect("OpenCL codegen failed");
         // OpenCL should enable fp64 extension for double precision
-        assert!(code.contains("cl_khr_fp64"), "OpenCL should enable fp64 extension, got:\n{}", code);
+        assert!(
+            code.contains("cl_khr_fp64"),
+            "OpenCL should enable fp64 extension, got:\n{}",
+            code
+        );
     }
 }
 
@@ -842,20 +1062,35 @@ F unified_add(data: *f64, n: i64) {
         let module = parse(UNIFIED_MEMORY_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let code = gen.generate(&module).expect("CUDA codegen failed");
-        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+        assert!(
+            code.contains("__global__"),
+            "Should have __global__ qualifier"
+        );
         assert!(code.contains("unified_add"), "Should contain kernel name");
-        assert!(code.contains("double*"), "Should have double* for f64 pointer");
+        assert!(
+            code.contains("double*"),
+            "Should have double* for f64 pointer"
+        );
     }
 
     #[test]
     fn test_unified_memory_kernel_codegen_all_backends() {
         let module = parse(UNIFIED_MEMORY_KERNEL).expect("parse failed");
-        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+        for target in &[
+            GpuTarget::Cuda,
+            GpuTarget::OpenCL,
+            GpuTarget::Metal,
+            GpuTarget::WebGPU,
+        ] {
             let mut gen = GpuCodeGenerator::new(*target);
-            let code = gen.generate(&module)
+            let code = gen
+                .generate(&module)
                 .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
-            assert!(code.contains("unified_add"),
-                "{:?} should contain kernel name 'unified_add'", target);
+            assert!(
+                code.contains("unified_add"),
+                "{:?} should contain kernel name 'unified_add'",
+                target
+            );
         }
     }
 
@@ -867,7 +1102,11 @@ F unified_add(data: *f64, n: i64) {
         let kernels = gen.kernels();
         assert_eq!(kernels.len(), 1);
         assert_eq!(kernels[0].name, "unified_add");
-        assert_eq!(kernels[0].params.len(), 2, "unified_add should have 2 params (data, n)");
+        assert_eq!(
+            kernels[0].params.len(),
+            2,
+            "unified_add should have 2 params (data, n)"
+        );
     }
 }
 
@@ -890,8 +1129,14 @@ F stream_process(input: *f64, output: *f64, n: i64) {
         let module = parse(STREAM_KERNEL).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let code = gen.generate(&module).expect("CUDA codegen failed");
-        assert!(code.contains("__global__"), "Should have __global__ qualifier");
-        assert!(code.contains("stream_process"), "Should contain kernel name");
+        assert!(
+            code.contains("__global__"),
+            "Should have __global__ qualifier"
+        );
+        assert!(
+            code.contains("stream_process"),
+            "Should contain kernel name"
+        );
     }
 
     #[test]
@@ -918,12 +1163,21 @@ F stream_process(input: *f64, output: *f64, n: i64) {
     #[test]
     fn test_stream_kernel_all_backends() {
         let module = parse(STREAM_KERNEL).expect("parse failed");
-        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+        for target in &[
+            GpuTarget::Cuda,
+            GpuTarget::OpenCL,
+            GpuTarget::Metal,
+            GpuTarget::WebGPU,
+        ] {
             let mut gen = GpuCodeGenerator::new(*target);
-            let code = gen.generate(&module)
+            let code = gen
+                .generate(&module)
                 .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
-            assert!(code.contains("stream_process"),
-                "{:?} should contain kernel name", target);
+            assert!(
+                code.contains("stream_process"),
+                "{:?} should contain kernel name",
+                target
+            );
         }
     }
 }
@@ -977,12 +1231,21 @@ F gpu_work_b(data: *f64, n: i64) {
     #[test]
     fn test_multi_gpu_kernels_all_backends() {
         let module = parse(MULTI_GPU_KERNEL).expect("parse failed");
-        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+        for target in &[
+            GpuTarget::Cuda,
+            GpuTarget::OpenCL,
+            GpuTarget::Metal,
+            GpuTarget::WebGPU,
+        ] {
             let mut gen = GpuCodeGenerator::new(*target);
-            let code = gen.generate(&module)
+            let code = gen
+                .generate(&module)
                 .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
-            assert!(code.contains("gpu_work_a") && code.contains("gpu_work_b"),
-                "{:?} should contain both kernel names", target);
+            assert!(
+                code.contains("gpu_work_a") && code.contains("gpu_work_b"),
+                "{:?} should contain both kernel names",
+                target
+            );
         }
     }
 }
@@ -1007,7 +1270,10 @@ F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let code = gen.generate(&module).expect("CUDA codegen failed");
         assert!(code.contains("timed_saxpy"), "Should contain kernel name");
-        assert!(code.contains("__global__"), "Should have __global__ qualifier");
+        assert!(
+            code.contains("__global__"),
+            "Should have __global__ qualifier"
+        );
     }
 
     #[test]
@@ -1016,7 +1282,10 @@ F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
         let mut gen = GpuCodeGenerator::new(GpuTarget::Cuda);
         let _code = gen.generate(&module).expect("CUDA codegen failed");
         let host = gen.generate_host_code();
-        assert!(host.len() > 0, "Host code should be generated for profiling");
+        assert!(
+            host.len() > 0,
+            "Host code should be generated for profiling"
+        );
     }
 
     #[test]
@@ -1033,20 +1302,29 @@ F timed_saxpy(a: f64, x: *f64, y: *f64, n: i64) {
     #[test]
     fn test_profiling_kernel_all_backends() {
         let module = parse(PROFILED_KERNEL).expect("parse failed");
-        for target in &[GpuTarget::Cuda, GpuTarget::OpenCL, GpuTarget::Metal, GpuTarget::WebGPU] {
+        for target in &[
+            GpuTarget::Cuda,
+            GpuTarget::OpenCL,
+            GpuTarget::Metal,
+            GpuTarget::WebGPU,
+        ] {
             let mut gen = GpuCodeGenerator::new(*target);
-            let code = gen.generate(&module)
+            let code = gen
+                .generate(&module)
                 .unwrap_or_else(|e| panic!("{:?} codegen failed: {}", target, e));
-            assert!(code.contains("timed_saxpy"),
-                "{:?} should contain kernel name 'timed_saxpy'", target);
+            assert!(
+                code.contains("timed_saxpy"),
+                "{:?} should contain kernel name 'timed_saxpy'",
+                target
+            );
         }
     }
 }
 
 // E2E Metal runtime integration tests
 mod e2e_metal_runtime {
-    use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_gpu::metal::MetalBuiltins;
+    use vais_gpu::{GpuCodeGenerator, GpuTarget};
     use vais_parser::parse;
 
     const METAL_VECTOR_ADD: &str = r#"
@@ -1066,8 +1344,11 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let code = gen.generate(&module).expect("Metal codegen failed");
 
         // Metal kernel should use Metal Shading Language syntax
-        assert!(code.contains("kernel") || code.contains("vector_add"),
-            "Metal should contain kernel function, got:\n{}", code);
+        assert!(
+            code.contains("kernel") || code.contains("vector_add"),
+            "Metal should contain kernel function, got:\n{}",
+            code
+        );
 
         // Verify kernel metadata
         let kernels = gen.kernels();
@@ -1084,8 +1365,11 @@ F vector_add(a: *f64, b: *f64, c: *f64, n: i64) {
         let host = gen.generate_host_code();
 
         // Host code should reference Metal API
-        assert!(host.contains("MTL") || host.contains("Metal") || host.contains("metal"),
-            "Host code should contain Metal references, got:\n{}", host);
+        assert!(
+            host.contains("MTL") || host.contains("Metal") || host.contains("metal"),
+            "Host code should contain Metal references, got:\n{}",
+            host
+        );
     }
 
     #[test]
@@ -1126,7 +1410,10 @@ F saxpy(a: f64, x: *f64, y: *f64, n: i64) {
         let module = parse(METAL_SAXPY).expect("parse failed");
         let mut gen = GpuCodeGenerator::new(GpuTarget::Metal);
         let code = gen.generate(&module).expect("Metal codegen failed");
-        assert!(code.contains("saxpy"), "Metal should contain kernel name 'saxpy'");
+        assert!(
+            code.contains("saxpy"),
+            "Metal should contain kernel name 'saxpy'"
+        );
         let kernels = gen.kernels();
         assert_eq!(kernels.len(), 1);
         assert_eq!(kernels[0].params.len(), 4);

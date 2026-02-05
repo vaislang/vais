@@ -1,7 +1,7 @@
 use crate::config::BindgenConfig;
 use crate::parser::{
-    AccessSpecifier, CDeclaration, CEnum, CFunction, CStruct, CType, CTypedef,
-    CppClass, CppMethod, CppNamespace,
+    AccessSpecifier, CDeclaration, CEnum, CFunction, CStruct, CType, CTypedef, CppClass, CppMethod,
+    CppNamespace,
 };
 use crate::Result;
 
@@ -222,13 +222,13 @@ impl<'a> Generator<'a> {
         // Generate C wrapper functions for C++ methods
         if self.mode == GeneratorMode::Cpp {
             output.push_str(&format!("    // C++ class: {}\n", cls.name));
-            output.push_str(&format!("    // Wrapper functions for {} methods\n\n", cls.name));
-
-            // Generate opaque pointer type for class instance
             output.push_str(&format!(
-                "    type {}Handle = *mut ();\n\n",
+                "    // Wrapper functions for {} methods\n\n",
                 cls.name
             ));
+
+            // Generate opaque pointer type for class instance
+            output.push_str(&format!("    type {}Handle = *mut ();\n\n", cls.name));
 
             // Generate constructor wrapper
             if !cls.is_template {
@@ -384,7 +384,10 @@ impl<'a> Generator<'a> {
 
                 if !cls.is_template {
                     output.push_str(&format!("{}Handle {}_new();\n", cls.name, cls.name));
-                    output.push_str(&format!("void {}_delete({}Handle ptr);\n\n", cls.name, cls.name));
+                    output.push_str(&format!(
+                        "void {}_delete({}Handle ptr);\n\n",
+                        cls.name, cls.name
+                    ));
                 }
 
                 for method in &cls.methods {
@@ -502,10 +505,7 @@ mod tests {
         let func = CFunction {
             name: "add".to_string(),
             return_type: CType::Int,
-            parameters: vec![
-                ("a".to_string(), CType::Int),
-                ("b".to_string(), CType::Int),
-            ],
+            parameters: vec![("a".to_string(), CType::Int), ("b".to_string(), CType::Int)],
             is_variadic: false,
         };
 
@@ -538,7 +538,10 @@ mod tests {
         let func = CFunction {
             name: "printf".to_string(),
             return_type: CType::Int,
-            parameters: vec![("fmt".to_string(), CType::ConstPointer(Box::new(CType::Char)))],
+            parameters: vec![(
+                "fmt".to_string(),
+                CType::ConstPointer(Box::new(CType::Char)),
+            )],
             is_variadic: true,
         };
 
@@ -594,10 +597,7 @@ mod tests {
 
         let e = CEnum {
             name: "Status".to_string(),
-            variants: vec![
-                ("OK".to_string(), Some(0)),
-                ("ERROR".to_string(), Some(1)),
-            ],
+            variants: vec![("OK".to_string(), Some(0)), ("ERROR".to_string(), Some(1))],
         };
 
         let result = gen.generate_enum(&e);
@@ -622,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_generate_cpp_class() {
-        use crate::parser::{CppClassField, CppMethod, CppClass};
+        use crate::parser::{CppClass, CppClassField, CppMethod};
 
         let config = BindgenConfig::default();
         let gen = Generator::new_cpp(&config);
@@ -630,26 +630,22 @@ mod tests {
         let cls = CppClass {
             name: "MyClass".to_string(),
             base_classes: Vec::new(),
-            methods: vec![
-                CppMethod {
-                    name: "getValue".to_string(),
-                    return_type: CType::Int,
-                    parameters: Vec::new(),
-                    is_virtual: false,
-                    is_const: true,
-                    is_static: false,
-                    is_constructor: false,
-                    is_destructor: false,
-                    access: AccessSpecifier::Public,
-                },
-            ],
-            fields: vec![
-                CppClassField {
-                    name: "value".to_string(),
-                    field_type: CType::Int,
-                    access: AccessSpecifier::Private,
-                },
-            ],
+            methods: vec![CppMethod {
+                name: "getValue".to_string(),
+                return_type: CType::Int,
+                parameters: Vec::new(),
+                is_virtual: false,
+                is_const: true,
+                is_static: false,
+                is_constructor: false,
+                is_destructor: false,
+                access: AccessSpecifier::Public,
+            }],
+            fields: vec![CppClassField {
+                name: "value".to_string(),
+                field_type: CType::Int,
+                access: AccessSpecifier::Private,
+            }],
             is_template: false,
             template_params: Vec::new(),
         };

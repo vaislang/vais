@@ -30,8 +30,8 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
 
 /// Compile a .vais file from disk to LLVM IR.
 fn compile_file_to_ir(path: &str) -> Result<String, String> {
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+    let source =
+        std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path, e))?;
     compile_to_ir(&source)
 }
 
@@ -50,7 +50,8 @@ fn assert_ir_contains(source: &str, expected: &str) {
             assert!(
                 ir.contains(expected),
                 "Expected IR to contain {:?}, but it was not found.\nIR:\n{}",
-                expected, ir
+                expected,
+                ir
             );
         }
         Err(e) => panic!("Compilation failed: {}", e),
@@ -176,9 +177,18 @@ F main() -> i64 = TOK_KW_F()
 "#;
     let ir = compile_to_ir(source).expect("Token ID keyword source should compile");
     // The IR should define all these functions with correct return values
-    assert!(ir.contains("TOK_KW_F"), "IR should contain TOK_KW_F definition");
-    assert!(ir.contains("TOK_KW_S"), "IR should contain TOK_KW_S definition");
-    assert!(ir.contains("TOK_KW_ELSE"), "IR should contain TOK_KW_ELSE definition");
+    assert!(
+        ir.contains("TOK_KW_F"),
+        "IR should contain TOK_KW_F definition"
+    );
+    assert!(
+        ir.contains("TOK_KW_S"),
+        "IR should contain TOK_KW_S definition"
+    );
+    assert!(
+        ir.contains("TOK_KW_ELSE"),
+        "IR should contain TOK_KW_ELSE definition"
+    );
 }
 
 #[test]
@@ -202,8 +212,14 @@ F TOK_TY_STR() -> i64 = 44
 F main() -> i64 = TOK_TY_I64()
 "#;
     let ir = compile_to_ir(source).expect("Token ID type source should compile");
-    assert!(ir.contains("TOK_TY_I8"), "IR should contain TOK_TY_I8 definition");
-    assert!(ir.contains("TOK_TY_STR"), "IR should contain TOK_TY_STR definition");
+    assert!(
+        ir.contains("TOK_TY_I8"),
+        "IR should contain TOK_TY_I8 definition"
+    );
+    assert!(
+        ir.contains("TOK_TY_STR"),
+        "IR should contain TOK_TY_STR definition"
+    );
 }
 
 #[test]
@@ -217,10 +233,22 @@ F TOK_IDENT() -> i64 = 54
 F main() -> i64 = TOK_INT()
 "#;
     let ir = compile_to_ir(source).expect("Token ID literal source should compile");
-    assert!(ir.contains("TOK_INT"), "IR should contain TOK_INT definition");
-    assert!(ir.contains("TOK_FLOAT"), "IR should contain TOK_FLOAT definition");
-    assert!(ir.contains("TOK_STRING"), "IR should contain TOK_STRING definition");
-    assert!(ir.contains("TOK_IDENT"), "IR should contain TOK_IDENT definition");
+    assert!(
+        ir.contains("TOK_INT"),
+        "IR should contain TOK_INT definition"
+    );
+    assert!(
+        ir.contains("TOK_FLOAT"),
+        "IR should contain TOK_FLOAT definition"
+    );
+    assert!(
+        ir.contains("TOK_STRING"),
+        "IR should contain TOK_STRING definition"
+    );
+    assert!(
+        ir.contains("TOK_IDENT"),
+        "IR should contain TOK_IDENT definition"
+    );
 }
 
 #[test]
@@ -250,7 +278,10 @@ F TOK_OR() -> i64 = 80
 F main() -> i64 = TOK_PLUS()
 "#;
     let ir = compile_to_ir(source).expect("Token ID operator source should compile");
-    assert!(ir.contains("TOK_PLUS"), "IR should contain TOK_PLUS definition");
+    assert!(
+        ir.contains("TOK_PLUS"),
+        "IR should contain TOK_PLUS definition"
+    );
     assert!(ir.contains("TOK_OR"), "IR should contain TOK_OR definition");
 }
 
@@ -268,7 +299,10 @@ F main() -> i64 = TOK_EQ()
 "#;
     let ir = compile_to_ir(source).expect("Token ID assignment source should compile");
     assert!(ir.contains("TOK_EQ"), "IR should contain TOK_EQ definition");
-    assert!(ir.contains("TOK_SLASH_EQ"), "IR should contain TOK_SLASH_EQ definition");
+    assert!(
+        ir.contains("TOK_SLASH_EQ"),
+        "IR should contain TOK_SLASH_EQ definition"
+    );
 }
 
 #[test]
@@ -284,8 +318,14 @@ F TOK_RBRACKET() -> i64 = 96
 F main() -> i64 = TOK_LPAREN()
 "#;
     let ir = compile_to_ir(source).expect("Token ID delimiter source should compile");
-    assert!(ir.contains("TOK_LPAREN"), "IR should contain TOK_LPAREN definition");
-    assert!(ir.contains("TOK_RBRACKET"), "IR should contain TOK_RBRACKET definition");
+    assert!(
+        ir.contains("TOK_LPAREN"),
+        "IR should contain TOK_LPAREN definition"
+    );
+    assert!(
+        ir.contains("TOK_RBRACKET"),
+        "IR should contain TOK_RBRACKET definition"
+    );
 }
 
 #[test]
@@ -307,8 +347,14 @@ F TOK_HASH() -> i64 = 112
 F main() -> i64 = TOK_COMMA()
 "#;
     let ir = compile_to_ir(source).expect("Token ID punctuation source should compile");
-    assert!(ir.contains("TOK_COMMA"), "IR should contain TOK_COMMA definition");
-    assert!(ir.contains("TOK_HASH"), "IR should contain TOK_HASH definition");
+    assert!(
+        ir.contains("TOK_COMMA"),
+        "IR should contain TOK_COMMA definition"
+    );
+    assert!(
+        ir.contains("TOK_HASH"),
+        "IR should contain TOK_HASH definition"
+    );
 }
 
 #[test]
@@ -320,8 +366,14 @@ F TOK_ERROR() -> i64 = 201
 F main() -> i64 = TOK_EOF()
 "#;
     let ir = compile_to_ir(source).expect("Token ID special source should compile");
-    assert!(ir.contains("TOK_EOF"), "IR should contain TOK_EOF definition");
-    assert!(ir.contains("TOK_ERROR"), "IR should contain TOK_ERROR definition");
+    assert!(
+        ir.contains("TOK_EOF"),
+        "IR should contain TOK_EOF definition"
+    );
+    assert!(
+        ir.contains("TOK_ERROR"),
+        "IR should contain TOK_ERROR definition"
+    );
 }
 
 // ============================================================================
@@ -1289,7 +1341,11 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     assert_eq!(tokens[0].token, Token::If, "I should lex as If");
 
     let tokens = tokenize("E").unwrap();
-    assert_eq!(tokens[0].token, Token::Enum, "E should lex as Enum (also used as Else context)");
+    assert_eq!(
+        tokens[0].token,
+        Token::Enum,
+        "E should lex as Enum (also used as Else context)"
+    );
 
     let tokens = tokenize("L").unwrap();
     assert_eq!(tokens[0].token, Token::Loop, "L should lex as Loop");
@@ -1313,7 +1369,11 @@ fn selfhost_rust_lexer_cross_check_keywords() {
     assert_eq!(tokens[0].token, Token::Impl, "X should lex as Impl");
 
     let tokens = tokenize("T").unwrap();
-    assert_eq!(tokens[0].token, Token::TypeKeyword, "T should lex as TypeKeyword");
+    assert_eq!(
+        tokens[0].token,
+        Token::TypeKeyword,
+        "T should lex as TypeKeyword"
+    );
 
     let tokens = tokenize("U").unwrap();
     assert_eq!(tokens[0].token, Token::Use, "U should lex as Use");

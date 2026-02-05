@@ -7,7 +7,7 @@
 //! 4. Combined Application - 300+ line full application
 //! 5. Scaling Test - Measures how compilation scales with source size
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;
@@ -1110,7 +1110,7 @@ fn generate_scaling_source(lines: usize) -> String {
     source.push_str("X F puts(text: str) -> i64\n\n");
 
     // Generate struct definitions
-    for i in 0..lines/10 {
+    for i in 0..lines / 10 {
         source.push_str(&format!(
             "S Struct{} {{\n    field1: i64,\n    field2: i64,\n}}\n\n",
             i
@@ -1118,7 +1118,7 @@ fn generate_scaling_source(lines: usize) -> String {
     }
 
     // Generate function definitions
-    for i in 0..lines/10 {
+    for i in 0..lines / 10 {
         source.push_str(&format!(
             "F func{}(x: i64) -> i64 {{\n    y := x + {}\n    R y\n}}\n\n",
             i, i
@@ -1129,8 +1129,12 @@ fn generate_scaling_source(lines: usize) -> String {
     source.push_str("F main() -> i64 {\n");
     source.push_str("    total := 0\n");
 
-    for i in 0..lines/20 {
-        source.push_str(&format!("    total = total + func{}({})\n", i % (lines/10), i));
+    for i in 0..lines / 20 {
+        source.push_str(&format!(
+            "    total = total + func{}({})\n",
+            i % (lines / 10),
+            i
+        ));
     }
 
     source.push_str("    printf(\"Total: %d\\n\", total)\n");

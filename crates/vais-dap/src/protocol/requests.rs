@@ -2,8 +2,8 @@
 //!
 //! Request argument types for all DAP commands.
 
-use serde::{Deserialize, Serialize};
 use super::types::*;
+use serde::{Deserialize, Serialize};
 
 /// Arguments for 'initialize' request
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -3,10 +3,10 @@
 //! These tests verify the complete compilation pipeline:
 //! Source -> Lexer -> Parser -> Type Checker -> Code Generator -> LLVM IR
 
+use vais_codegen::CodeGenerator;
 use vais_lexer::tokenize;
 use vais_parser::parse;
 use vais_types::TypeChecker;
-use vais_codegen::CodeGenerator;
 
 /// Helper function to compile source code to LLVM IR
 fn compile_to_ir(source: &str) -> Result<String, String> {
@@ -18,13 +18,16 @@ fn compile_to_ir(source: &str) -> Result<String, String> {
 
     // Step 3: Type check
     let mut checker = TypeChecker::new();
-    checker.check_module(&module).map_err(|e| format!("Type error: {:?}", e))?;
+    checker
+        .check_module(&module)
+        .map_err(|e| format!("Type error: {:?}", e))?;
 
     // Step 4: Generate LLVM IR (with generic instantiations if any)
     let mut gen = CodeGenerator::new("test");
     let instantiations = checker.get_generic_instantiations();
     let ir = if instantiations.is_empty() {
-        gen.generate_module(&module).map_err(|e| format!("Codegen error: {:?}", e))?
+        gen.generate_module(&module)
+            .map_err(|e| format!("Codegen error: {:?}", e))?
     } else {
         gen.generate_module_with_instantiations(&module, instantiations)
             .map_err(|e| format!("Codegen error: {:?}", e))?
@@ -2070,9 +2073,18 @@ F main() -> i64 {
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
-    assert!(ir.contains("extractvalue { i8*, i8* }"), "Should extract from fat pointer");
-    assert!(ir.contains("vtable_Circle_Drawable"), "Should have vtable global");
-    assert!(ir.contains("insertvalue { i8*, i8* }"), "Should create trait object");
+    assert!(
+        ir.contains("extractvalue { i8*, i8* }"),
+        "Should extract from fat pointer"
+    );
+    assert!(
+        ir.contains("vtable_Circle_Drawable"),
+        "Should have vtable global"
+    );
+    assert!(
+        ir.contains("insertvalue { i8*, i8* }"),
+        "Should create trait object"
+    );
 }
 
 #[test]

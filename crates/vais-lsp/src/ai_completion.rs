@@ -50,11 +50,7 @@ pub struct CompletionContext {
 
 impl CompletionContext {
     /// Extract completion context from a document and position.
-    pub fn from_document(
-        content: &str,
-        position: Position,
-        ast: Option<&Module>,
-    ) -> Self {
+    pub fn from_document(content: &str, position: Position, ast: Option<&Module>) -> Self {
         let lines: Vec<&str> = content.lines().collect();
         let line_idx = position.line as usize;
         let col = position.character as usize;
@@ -259,7 +255,9 @@ fn suggest_struct_fields(ctx: &CompletionContext) -> Vec<CompletionItem> {
 
     // Detect struct literal pattern "Name {"
     for struct_name in &ctx.available_structs {
-        if line.ends_with(&format!("{} {{", struct_name)) || line.ends_with(&format!("{}{{", struct_name)) {
+        if line.ends_with(&format!("{} {{", struct_name))
+            || line.ends_with(&format!("{}{{", struct_name))
+        {
             items.push(ai_completion(
                 &format!("{} fields", struct_name),
                 "${1:field}: ${2:value}",
@@ -407,10 +405,7 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_i64() {
-        let ctx = make_context(
-            &["F add(a: i64, b: i64) -> i64 {"],
-            "",
-        );
+        let ctx = make_context(&["F add(a: i64, b: i64) -> i64 {"], "");
         let items = suggest_function_body(&ctx);
         assert!(!items.is_empty());
         assert!(items[0].label.contains("return 0"));
@@ -418,10 +413,7 @@ mod tests {
 
     #[test]
     fn test_function_body_suggestion_bool() {
-        let ctx = make_context(
-            &["F is_valid(x: i64) -> bool {"],
-            "",
-        );
+        let ctx = make_context(&["F is_valid(x: i64) -> bool {"], "");
         let items = suggest_function_body(&ctx);
         assert!(items.len() >= 2); // true and false
     }

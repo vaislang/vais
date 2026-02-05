@@ -84,7 +84,8 @@ impl TypeMapper {
             // Dependent types: use the base type
             ResolvedType::Dependent { base, .. } => self.map_type(base),
             // Lifetime references: treat like regular references
-            ResolvedType::RefLifetime { inner, .. } | ResolvedType::RefMutLifetime { inner, .. } => self.map_type(inner),
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => self.map_type(inner),
             // Lifetime marker: pointer
             ResolvedType::Lifetime(_) => self.pointer_type,
             // Lazy type: struct with computed flag, value, and thunk pointer
@@ -105,7 +106,10 @@ impl TypeMapper {
             ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
             ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
             ResolvedType::I128 | ResolvedType::U128 => 16,
-            ResolvedType::Str | ResolvedType::Pointer(_) | ResolvedType::Ref(_) | ResolvedType::RefMut(_) => {
+            ResolvedType::Str
+            | ResolvedType::Pointer(_)
+            | ResolvedType::Ref(_)
+            | ResolvedType::RefMut(_) => {
                 if self.pointer_type == types::I64 {
                     8
                 } else {

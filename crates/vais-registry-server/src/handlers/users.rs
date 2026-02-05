@@ -45,7 +45,10 @@ pub struct UserPackage {
     pub downloads: i64,
 }
 
-async fn get_user_packages(pool: &crate::db::DbPool, user_id: uuid::Uuid) -> ServerResult<Vec<UserPackage>> {
+async fn get_user_packages(
+    pool: &crate::db::DbPool,
+    user_id: uuid::Uuid,
+) -> ServerResult<Vec<UserPackage>> {
     let rows = sqlx::query(
         r#"
         SELECT p.name, p.description, p.downloads
@@ -151,13 +154,11 @@ pub async fn remove_owner(
     }
 
     // Remove owner
-    let result = sqlx::query(
-        "DELETE FROM package_owners WHERE package_id = ? AND user_id = ?",
-    )
-    .bind(package.id.to_string())
-    .bind(user_to_remove.id.to_string())
-    .execute(&state.pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM package_owners WHERE package_id = ? AND user_id = ?")
+        .bind(package.id.to_string())
+        .bind(user_to_remove.id.to_string())
+        .execute(&state.pool)
+        .await?;
 
     if result.rows_affected() > 0 {
         Ok(StatusCode::NO_CONTENT)

@@ -169,31 +169,54 @@ impl LayoutSuggestion {
     /// Generate LLVM IR comment for this suggestion
     pub fn to_comment(&self) -> String {
         match self {
-            LayoutSuggestion::ReorderFields { struct_name, new_order, size_before, size_after, padding_saved } => {
+            LayoutSuggestion::ReorderFields {
+                struct_name,
+                new_order,
+                size_before,
+                size_after,
+                padding_saved,
+            } => {
                 format!(
                     "; LAYOUT SUGGESTION: Reorder {} fields to {:?}\n; Size: {} -> {} bytes (saves {} bytes padding)",
                     struct_name, new_order, size_before, size_after, padding_saved
                 )
             }
-            LayoutSuggestion::CacheLineAlign { struct_name, current_align, suggested_align } => {
+            LayoutSuggestion::CacheLineAlign {
+                struct_name,
+                current_align,
+                suggested_align,
+            } => {
                 format!(
                     "; LAYOUT SUGGESTION: Align {} to {} bytes (currently {} bytes)",
                     struct_name, suggested_align, current_align
                 )
             }
-            LayoutSuggestion::SplitHotCold { struct_name, hot_fields, cold_fields } => {
+            LayoutSuggestion::SplitHotCold {
+                struct_name,
+                hot_fields,
+                cold_fields,
+            } => {
                 format!(
                     "; LAYOUT SUGGESTION: Split {} into hot ({:?}) and cold ({:?}) structs",
                     struct_name, hot_fields, cold_fields
                 )
             }
-            LayoutSuggestion::AosToSoa { struct_name, array_name, soa_struct_name, soa_fields } => {
+            LayoutSuggestion::AosToSoa {
+                struct_name,
+                array_name,
+                soa_struct_name,
+                soa_fields,
+            } => {
                 format!(
                     "; LAYOUT SUGGESTION: Convert {}[] ({}) to SoA {}: {:?}",
                     struct_name, array_name, soa_struct_name, soa_fields
                 )
             }
-            LayoutSuggestion::AddPadding { struct_name, field_after, padding_bytes } => {
+            LayoutSuggestion::AddPadding {
+                struct_name,
+                field_after,
+                padding_bytes,
+            } => {
                 format!(
                     "; LAYOUT SUGGESTION: Add {} bytes padding after {}.{}",
                     padding_bytes, struct_name, field_after
@@ -292,7 +315,9 @@ impl DataLayoutOptimizer {
 
                 if let Some(layout) = self.structs.get_mut(struct_name) {
                     // Find total accesses for this struct
-                    let total: usize = self.access_patterns.iter()
+                    let total: usize = self
+                        .access_patterns
+                        .iter()
                         .filter(|(k, _)| k.starts_with(&format!("{}.", struct_name)))
                         .map(|(_, c)| c)
                         .sum();
@@ -319,7 +344,9 @@ impl DataLayoutOptimizer {
             }
 
             // Check if cache alignment would help
-            if layout.total_size >= self.cache_line_size / 2 && layout.alignment < self.cache_line_size {
+            if layout.total_size >= self.cache_line_size / 2
+                && layout.alignment < self.cache_line_size
+            {
                 self.suggestions.push(LayoutSuggestion::CacheLineAlign {
                     struct_name: name.clone(),
                     current_align: layout.alignment,
@@ -342,7 +369,9 @@ impl DataLayoutOptimizer {
 
         // Create optimized field order: sort by alignment descending
         let mut optimized = layout.clone();
-        optimized.fields.sort_by(|a, b| b.alignment.cmp(&a.alignment));
+        optimized
+            .fields
+            .sort_by(|a, b| b.alignment.cmp(&a.alignment));
         optimized.calculate_layout();
 
         if optimized.padding < layout.padding {
@@ -360,13 +389,21 @@ impl DataLayoutOptimizer {
     }
 
     /// Suggest hot/cold field separation
-    fn suggest_hot_cold_split(&self, name: &str, layout: &StructLayout) -> Option<LayoutSuggestion> {
-        let hot_fields: Vec<String> = layout.fields.iter()
+    fn suggest_hot_cold_split(
+        &self,
+        name: &str,
+        layout: &StructLayout,
+    ) -> Option<LayoutSuggestion> {
+        let hot_fields: Vec<String> = layout
+            .fields
+            .iter()
             .filter(|f| f.is_hot)
             .map(|f| f.name.clone())
             .collect();
 
-        let cold_fields: Vec<String> = layout.fields.iter()
+        let cold_fields: Vec<String> = layout
+            .fields
+            .iter()
             .filter(|f| !f.is_hot)
             .map(|f| f.name.clone())
             .collect();
@@ -414,7 +451,8 @@ pub fn suggest_aos_to_soa(
     array_name: &str,
     fields: &[(String, String)],
 ) -> LayoutSuggestion {
-    let soa_fields: Vec<(String, String)> = fields.iter()
+    let soa_fields: Vec<(String, String)> = fields
+        .iter()
         .map(|(name, ty)| {
             (name.clone(), format!("{}*", ty)) // Array of each field
         })
@@ -433,7 +471,8 @@ pub fn suggest_aos_to_soa(
 /// Sorts fields by alignment (descending), so larger fields come first,
 /// naturally reducing internal padding.
 pub fn suggest_field_reorder(fields: &[(String, String)]) -> Vec<(String, String)> {
-    let mut fields_with_align: Vec<(String, String, usize)> = fields.iter()
+    let mut fields_with_align: Vec<(String, String, usize)> = fields
+        .iter()
         .map(|(name, ty)| {
             let (_, align) = type_size_align(ty);
             (name.clone(), ty.clone(), align)
@@ -443,7 +482,8 @@ pub fn suggest_field_reorder(fields: &[(String, String)]) -> Vec<(String, String
     // Sort by alignment descending (stable sort to preserve order among same-alignment fields)
     fields_with_align.sort_by(|a, b| b.2.cmp(&a.2));
 
-    fields_with_align.into_iter()
+    fields_with_align
+        .into_iter()
         .map(|(name, ty, _)| (name, ty))
         .collect()
 }
@@ -473,7 +513,8 @@ fn calculate_padding(fields: &[(String, String)]) -> usize {
     }
 
     // Final alignment to largest field
-    let max_align = fields.iter()
+    let max_align = fields
+        .iter()
         .map(|(_, ty)| type_size_align(ty).1)
         .max()
         .unwrap_or(1);
@@ -555,7 +596,8 @@ fn parse_struct_type(line: &str) -> Option<(String, Vec<String>)> {
     let fields_end = line.rfind('}')?;
     let fields_str = &line[fields_start..fields_end];
 
-    let fields: Vec<String> = fields_str.split(',')
+    let fields: Vec<String> = fields_str
+        .split(',')
         .map(|f| f.trim().to_string())
         .filter(|f| !f.is_empty())
         .collect();
@@ -571,7 +613,8 @@ fn parse_gep_struct_access(line: &str) -> Option<(String, usize)> {
 
     // Extract struct type
     let type_start = line.find('%')?;
-    let type_end = line[type_start..].find([',', '*'])
+    let type_end = line[type_start..]
+        .find([',', '*'])
         .map(|i| type_start + i)?;
     let struct_name = line[type_start + 1..type_end].to_string();
 
@@ -579,7 +622,9 @@ fn parse_gep_struct_access(line: &str) -> Option<(String, usize)> {
     let parts: Vec<&str> = line.split("i32 ").collect();
     if parts.len() >= 3 {
         let last_idx_str = parts.last()?;
-        let idx_end = last_idx_str.find(|c: char| !c.is_ascii_digit()).unwrap_or(last_idx_str.len());
+        let idx_end = last_idx_str
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(last_idx_str.len());
         let field_idx: usize = last_idx_str[..idx_end].parse().ok()?;
         return Some((struct_name, field_idx));
     }
@@ -613,9 +658,9 @@ mod tests {
     #[test]
     fn test_struct_layout_with_padding() {
         let mut layout = StructLayout::new("Mixed");
-        layout.add_field(FieldInfo::new("a", "i8"));  // 1 byte
+        layout.add_field(FieldInfo::new("a", "i8")); // 1 byte
         layout.add_field(FieldInfo::new("b", "i64")); // 8 bytes
-        layout.add_field(FieldInfo::new("c", "i8"));  // 1 byte
+        layout.add_field(FieldInfo::new("c", "i8")); // 1 byte
         layout.calculate_layout();
 
         // a: offset 0, size 1
@@ -632,8 +677,8 @@ mod tests {
     fn test_optimized_layout() {
         let mut layout = StructLayout::new("Mixed");
         layout.add_field(FieldInfo::new("b", "i64")); // 8 bytes first
-        layout.add_field(FieldInfo::new("a", "i8"));  // 1 byte
-        layout.add_field(FieldInfo::new("c", "i8"));  // 1 byte
+        layout.add_field(FieldInfo::new("a", "i8")); // 1 byte
+        layout.add_field(FieldInfo::new("c", "i8")); // 1 byte
         layout.calculate_layout();
 
         // b: offset 0, size 8
@@ -685,7 +730,12 @@ mod tests {
             ],
         );
 
-        if let LayoutSuggestion::AosToSoa { soa_struct_name, soa_fields, .. } = suggestion {
+        if let LayoutSuggestion::AosToSoa {
+            soa_struct_name,
+            soa_fields,
+            ..
+        } = suggestion
+        {
             assert_eq!(soa_struct_name, "Particle_SoA");
             assert_eq!(soa_fields.len(), 3);
         } else {
@@ -743,6 +793,11 @@ entry:
             ("c".to_string(), "i8".to_string()),
         ];
         let (original, optimized) = padding_savings(&fields);
-        assert!(original > optimized, "Reordering should reduce padding: {} > {}", original, optimized);
+        assert!(
+            original > optimized,
+            "Reordering should reduce padding: {} > {}",
+            original,
+            optimized
+        );
     }
 }

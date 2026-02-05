@@ -75,11 +75,7 @@ fn test_random_values_within_range() {
         if case.category == TestCategory::Random {
             for input in &case.inputs {
                 if let TestValue::Int(v) = input {
-                    assert!(
-                        *v >= -128 && *v <= 127,
-                        "i8 value {} out of range",
-                        v
-                    );
+                    assert!(*v >= -128 && *v <= 127, "i8 value {} out of range", v);
                 }
             }
         }
@@ -142,7 +138,11 @@ fn test_shrink_string() {
 
 #[test]
 fn test_shrink_array() {
-    let arr = TestValue::Array(vec![TestValue::Int(1), TestValue::Int(2), TestValue::Int(3)]);
+    let arr = TestValue::Array(vec![
+        TestValue::Int(1),
+        TestValue::Int(2),
+        TestValue::Int(3),
+    ]);
     let shrunk = Shrinker::shrink(&arr);
     assert!(shrunk.contains(&TestValue::Array(vec![])));
     // Should contain arrays with one element removed
@@ -166,7 +166,10 @@ fn test_test_value_display() {
     assert_eq!(format!("{}", TestValue::Bool(true)), "true");
     assert_eq!(format!("{}", TestValue::Str("hi".into())), "\"hi\"");
     assert_eq!(
-        format!("{}", TestValue::Array(vec![TestValue::Int(1), TestValue::Int(2)])),
+        format!(
+            "{}",
+            TestValue::Array(vec![TestValue::Int(1), TestValue::Int(2)])
+        ),
         "[1, 2]"
     );
 }

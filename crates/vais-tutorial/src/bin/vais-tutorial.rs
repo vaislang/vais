@@ -1,5 +1,5 @@
-use vais_tutorial::runner::TutorialRunner;
 use std::process;
+use vais_tutorial::runner::TutorialRunner;
 
 fn main() {
     match TutorialRunner::new() {

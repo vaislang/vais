@@ -350,7 +350,9 @@ impl CodeGenerator {
         ir.push_str("  %0 = call i32 @gettimeofday(i8* %tvptr, i8* null)\n");
         ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
         ir.push_str("  %sec = load i64, i64* %secptr\n");
-        ir.push_str("  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n");
+        ir.push_str(
+            "  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n",
+        );
         ir.push_str("  %usecptr64 = bitcast i8* %usecptr to i64*\n");
         ir.push_str("  %usec = load i64, i64* %usecptr64\n");
         ir.push_str("  %ms_sec = mul i64 %sec, 1000\n");
@@ -371,18 +373,24 @@ impl CodeGenerator {
         ir.push_str("  %identptr = bitcast [64 x i8]* %ev to i64*\n");
         ir.push_str("  store i64 %fd, i64* %identptr\n");
         // Set filter at offset 8 (i16)
-        ir.push_str("  %filterptr = getelementptr inbounds [64 x i8], [64 x i8]* %ev, i64 0, i64 8\n");
+        ir.push_str(
+            "  %filterptr = getelementptr inbounds [64 x i8], [64 x i8]* %ev, i64 0, i64 8\n",
+        );
         ir.push_str("  %filterptr16 = bitcast i8* %filterptr to i16*\n");
         ir.push_str("  %filter16 = trunc i64 %filter to i16\n");
         ir.push_str("  store i16 %filter16, i16* %filterptr16\n");
         // Set flags at offset 10 (u16)
-        ir.push_str("  %flagsptr = getelementptr inbounds [64 x i8], [64 x i8]* %ev, i64 0, i64 10\n");
+        ir.push_str(
+            "  %flagsptr = getelementptr inbounds [64 x i8], [64 x i8]* %ev, i64 0, i64 10\n",
+        );
         ir.push_str("  %flagsptr16 = bitcast i8* %flagsptr to i16*\n");
         ir.push_str("  %flags16 = trunc i64 %flags to i16\n");
         ir.push_str("  store i16 %flags16, i16* %flagsptr16\n");
         // Call kevent
         ir.push_str("  %kq32 = trunc i64 %kq to i32\n");
-        ir.push_str("  %ret = call i32 @kevent(i32 %kq32, i8* %evptr, i32 1, i8* null, i32 0, i8* null)\n");
+        ir.push_str(
+            "  %ret = call i32 @kevent(i32 %kq32, i8* %evptr, i32 1, i8* null, i32 0, i8* null)\n",
+        );
         ir.push_str("  %retval = sext i32 %ret to i64\n");
         ir.push_str("  ret i64 %retval\n");
         ir.push_str("}\n");
@@ -501,7 +509,9 @@ impl CodeGenerator {
         ir.push_str("success:\n");
         // st_size is at offset 96 on macOS (after dev:4, mode:2, nlink:2, ino:8, uid:4, gid:4, rdev:4, atim:16, mtim:16, ctim:16, birthtim:16, size:8)
         // Actually on macOS x86_64, st_size is at offset 96
-        ir.push_str("  %3 = getelementptr inbounds [144 x i8], [144 x i8]* %statbuf, i64 0, i64 96\n");
+        ir.push_str(
+            "  %3 = getelementptr inbounds [144 x i8], [144 x i8]* %statbuf, i64 0, i64 96\n",
+        );
         ir.push_str("  %4 = bitcast i8* %3 to i64*\n");
         ir.push_str("  %5 = load i64, i64* %4\n");
         ir.push_str("  ret i64 %5\n");
@@ -521,7 +531,9 @@ impl CodeGenerator {
         ir.push_str("success:\n");
         // st_mtimespec is at offset 48 on macOS (after dev:4, mode:2, nlink:2, ino:8, uid:4, gid:4, rdev:4, atim:16, mtim starts here)
         // The tv_sec field is the first 8 bytes of the timespec
-        ir.push_str("  %3 = getelementptr inbounds [144 x i8], [144 x i8]* %statbuf, i64 0, i64 48\n");
+        ir.push_str(
+            "  %3 = getelementptr inbounds [144 x i8], [144 x i8]* %statbuf, i64 0, i64 48\n",
+        );
         ir.push_str("  %4 = bitcast i8* %3 to i64*\n");
         ir.push_str("  %5 = load i64, i64* %4\n");
         ir.push_str("  ret i64 %5\n");
@@ -564,7 +576,12 @@ impl CodeGenerator {
             }
             format!("declare {} @{}({})", ret, info.signature.name, all_params)
         } else {
-            format!("declare {} @{}({})", ret, info.signature.name, params.join(", "))
+            format!(
+                "declare {} @{}({})",
+                ret,
+                info.signature.name,
+                params.join(", ")
+            )
         }
     }
 
@@ -596,9 +613,16 @@ impl CodeGenerator {
                 .create_function_debug_info(&f.name.node, func_line, true);
 
         // Get registered function signature for resolved param types (supports Type::Infer)
-        let registered_param_types: Vec<_> = self.functions
+        let registered_param_types: Vec<_> = self
+            .functions
             .get(&f.name.node)
-            .map(|info| info.signature.params.iter().map(|(_, ty, _)| ty.clone()).collect())
+            .map(|info| {
+                info.signature
+                    .params
+                    .iter()
+                    .map(|(_, ty, _)| ty.clone())
+                    .collect()
+            })
             .unwrap_or_default();
 
         let params: Vec<_> = f
@@ -665,8 +689,10 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
-                ir.push_str(&format!("  store {} %{}, {}* {}\n",
-                    llvm_ty, p.name.node, llvm_ty, param_ptr));
+                ir.push_str(&format!(
+                    "  store {} %{}, {}* {}\n",
+                    llvm_ty, p.name.node, llvm_ty, param_ptr
+                ));
                 // Update locals to use SSA with the pointer as the value (including %)
                 // This makes the ident handler treat it as a direct pointer value, not a double pointer
                 self.locals.insert(
@@ -701,7 +727,8 @@ impl CodeGenerator {
                 ir.push_str(&defer_ir);
 
                 // Generate ensures (postcondition) checks before return
-                let ensures_ir = self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
+                let ensures_ir =
+                    self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
                 ir.push_str(&ensures_ir);
 
                 let ret_dbg = self.debug_info.dbg_ref_from_offset(expr.span.start);
@@ -720,7 +747,8 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir, terminated) = self.generate_block_stmts(stmts, &mut counter)?;
+                let (value, block_ir, terminated) =
+                    self.generate_block_stmts(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
 
                 // If block is already terminated (has return/break), don't emit ret
@@ -734,7 +762,8 @@ impl CodeGenerator {
                     ir.push_str(&defer_ir);
 
                     // Generate ensures (postcondition) checks before return
-                    let ensures_ir = self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
+                    let ensures_ir =
+                        self.generate_ensures_checks(f, &value, &ret_type, &mut counter)?;
                     ir.push_str(&ensures_ir);
 
                     // Get debug location from last statement or function end
@@ -1002,9 +1031,9 @@ impl CodeGenerator {
 
         // Create debug info for this method
         let func_line = self.debug_info.offset_to_line(span.start);
-        let di_subprogram = self
-            .debug_info
-            .create_function_debug_info(&method_name, func_line, true);
+        let di_subprogram =
+            self.debug_info
+                .create_function_debug_info(&method_name, func_line, true);
 
         // Check if this is a static method (no &self or self parameter)
         let has_self = f
@@ -1090,8 +1119,10 @@ impl CodeGenerator {
                 let llvm_ty = self.type_to_llvm(&ty);
                 let param_ptr = format!("%__{}_ptr", p.name.node);
                 ir.push_str(&format!("  {} = alloca {}\n", param_ptr, llvm_ty));
-                ir.push_str(&format!("  store {} %{}, {}* {}\n",
-                    llvm_ty, p.name.node, llvm_ty, param_ptr));
+                ir.push_str(&format!(
+                    "  store {} %{}, {}* {}\n",
+                    llvm_ty, p.name.node, llvm_ty, param_ptr
+                ));
                 // Update locals to use the pointer instead of the value
                 self.locals.insert(
                     p.name.node.to_string(),
@@ -1122,7 +1153,8 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (value, block_ir, terminated) = self.generate_block_stmts(stmts, &mut counter)?;
+                let (value, block_ir, terminated) =
+                    self.generate_block_stmts(stmts, &mut counter)?;
                 ir.push_str(&block_ir);
 
                 // If block is already terminated (has return/break), don't emit ret

@@ -51,21 +51,36 @@ fn test_lesson_structure_consistency() {
 
     for chapter in &tutorial.chapters {
         // Each chapter should have at least one lesson
-        assert!(!chapter.lessons.is_empty(), "Chapter {} has no lessons", chapter.id);
+        assert!(
+            !chapter.lessons.is_empty(),
+            "Chapter {} has no lessons",
+            chapter.id
+        );
 
         for lesson in &chapter.lessons {
             // Lesson should have non-empty fields
             assert!(!lesson.id.is_empty(), "Lesson has empty ID");
             assert!(!lesson.title.is_empty(), "Lesson has empty title");
-            assert!(!lesson.description.is_empty(), "Lesson has empty description");
+            assert!(
+                !lesson.description.is_empty(),
+                "Lesson has empty description"
+            );
             assert!(!lesson.content.is_empty(), "Lesson has empty content");
             assert!(!lesson.solution.is_empty(), "Lesson has empty solution");
 
             // At least one test case
-            assert!(!lesson.test_cases.is_empty(), "Lesson {} has no test cases", lesson.id);
+            assert!(
+                !lesson.test_cases.is_empty(),
+                "Lesson {} has no test cases",
+                lesson.id
+            );
 
             // At least one hint
-            assert!(!lesson.hints.is_empty(), "Lesson {} has no hints", lesson.id);
+            assert!(
+                !lesson.hints.is_empty(),
+                "Lesson {} has no hints",
+                lesson.id
+            );
         }
     }
 }

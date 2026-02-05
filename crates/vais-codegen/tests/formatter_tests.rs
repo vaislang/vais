@@ -68,14 +68,18 @@ fn test_format_simple_function() {
             Param {
                 name: ident("a"),
                 ty: spanned(named_type("i64")),
-                is_mut: false, ownership: Ownership::Regular,
-                is_vararg: false, default_value: None,
+                is_mut: false,
+                ownership: Ownership::Regular,
+                is_vararg: false,
+                default_value: None,
             },
             Param {
                 name: ident("b"),
                 ty: spanned(named_type("i64")),
-                is_mut: false, ownership: Ownership::Regular,
-                is_vararg: false, default_value: None,
+                is_mut: false,
+                ownership: Ownership::Regular,
+                is_vararg: false,
+                default_value: None,
             },
         ],
         ret_type: Some(spanned(named_type("i64"))),
@@ -131,8 +135,10 @@ fn test_format_function_with_generics() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("T")),
-            is_mut: false, ownership: Ownership::Regular,
-            is_vararg: false, default_value: None,
+            is_mut: false,
+            ownership: Ownership::Regular,
+            is_vararg: false,
+            default_value: None,
         }],
         ret_type: Some(spanned(named_type("T"))),
         body: FunctionBody::Expr(Box::new(spanned(ident_expr("x")))),
@@ -155,12 +161,17 @@ fn test_format_function_with_generics() {
 fn test_format_function_with_bounded_generics() {
     let func = Function {
         name: ident("display"),
-        generics: vec![GenericParam::new_type(ident("T"), vec![ident("Display"), ident("Clone")])],
+        generics: vec![GenericParam::new_type(
+            ident("T"),
+            vec![ident("Display"), ident("Clone")],
+        )],
         params: vec![Param {
             name: ident("value"),
             ty: spanned(named_type("T")),
-            is_mut: false, ownership: Ownership::Regular,
-            is_vararg: false, default_value: None,
+            is_mut: false,
+            ownership: Ownership::Regular,
+            is_vararg: false,
+            default_value: None,
         }],
         ret_type: Some(spanned(Type::Unit)),
         body: FunctionBody::Expr(Box::new(spanned(Expr::Unit))),
@@ -209,8 +220,10 @@ fn test_format_function_with_block_body() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("i64")),
-            is_mut: false, ownership: Ownership::Regular,
-            is_vararg: false, default_value: None,
+            is_mut: false,
+            ownership: Ownership::Regular,
+            is_vararg: false,
+            default_value: None,
         }],
         ret_type: Some(spanned(named_type("i64"))),
         body: FunctionBody::Block(vec![
@@ -218,7 +231,8 @@ fn test_format_function_with_block_body() {
                 name: ident("y"),
                 ty: None,
                 value: Box::new(spanned(int_expr(10))),
-                is_mut: false, ownership: Ownership::Regular,
+                is_mut: false,
+                ownership: Ownership::Regular,
             }),
             spanned(Stmt::Return(Some(Box::new(spanned(Expr::Binary {
                 op: BinOp::Add,
@@ -287,7 +301,9 @@ fn test_format_function_with_mut_params() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("i64")),
-            is_mut: true, ownership: Ownership::Regular, default_value: None,
+            is_mut: true,
+            ownership: Ownership::Regular,
+            default_value: None,
             is_vararg: false,
         }],
         ret_type: Some(spanned(Type::Unit)),
@@ -380,8 +396,10 @@ fn test_format_struct_with_methods() {
         params: vec![Param {
             name: ident("x"),
             ty: spanned(named_type("i64")),
-            is_mut: false, ownership: Ownership::Regular,
-            is_vararg: false, default_value: None,
+            is_mut: false,
+            ownership: Ownership::Regular,
+            is_vararg: false,
+            default_value: None,
         }],
         ret_type: Some(spanned(named_type("Point"))),
         body: FunctionBody::Expr(Box::new(spanned(Expr::StructLit {
@@ -550,9 +568,9 @@ fn test_format_if_else() {
     let if_expr = Expr::If {
         cond: Box::new(spanned(ident_expr("x"))),
         then: vec![spanned(Stmt::Return(Some(Box::new(spanned(int_expr(1))))))],
-        else_: Some(IfElse::Else(vec![spanned(Stmt::Return(
-            Some(Box::new(spanned(int_expr(0)))),
-        ))])),
+        else_: Some(IfElse::Else(vec![spanned(Stmt::Return(Some(Box::new(
+            spanned(int_expr(0)),
+        ))))])),
     };
 
     let func = Function {
@@ -593,9 +611,9 @@ fn test_format_else_if_chain() {
                 right: Box::new(spanned(int_expr(0))),
             })),
             vec![spanned(Stmt::Return(Some(Box::new(spanned(int_expr(1))))))],
-            Some(Box::new(IfElse::Else(vec![spanned(Stmt::Return(
-                Some(Box::new(spanned(int_expr(0)))),
-            ))]))),
+            Some(Box::new(IfElse::Else(vec![spanned(Stmt::Return(Some(
+                Box::new(spanned(int_expr(0))),
+            )))]))),
         )),
     };
 
@@ -685,7 +703,9 @@ fn test_format_match_expression() {
         name: ident("test"),
         params: vec![],
         ret_type: Some(spanned(named_type("String"))),
-        body: FunctionBody::Block(vec![spanned(Stmt::Return(Some(Box::new(spanned(match_expr)))))]),
+        body: FunctionBody::Block(vec![spanned(Stmt::Return(Some(Box::new(spanned(
+            match_expr,
+        )))))]),
         is_pub: false,
         is_async: false,
         generics: vec![],
@@ -1028,7 +1048,8 @@ fn test_custom_indent_size() {
             name: ident("x"),
             ty: None,
             value: Box::new(spanned(int_expr(42))),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false,
+            ownership: Ownership::Regular,
         })]),
         is_pub: false,
         is_async: false,
@@ -1063,7 +1084,8 @@ fn test_use_tabs_indentation() {
             name: ident("x"),
             ty: None,
             value: Box::new(spanned(int_expr(42))),
-            is_mut: false, ownership: Ownership::Regular,
+            is_mut: false,
+            ownership: Ownership::Regular,
         })]),
         is_pub: false,
         is_async: false,
@@ -1108,14 +1130,18 @@ fn test_format_multiple_items() {
                     Param {
                         name: ident("a"),
                         ty: spanned(named_type("Int")),
-                        is_mut: false, ownership: Ownership::Regular,
-                        is_vararg: false, default_value: None,
+                        is_mut: false,
+                        ownership: Ownership::Regular,
+                        is_vararg: false,
+                        default_value: None,
                     },
                     Param {
                         name: ident("b"),
                         ty: spanned(named_type("Int")),
-                        is_mut: false, ownership: Ownership::Regular,
-                        is_vararg: false, default_value: None,
+                        is_mut: false,
+                        ownership: Ownership::Regular,
+                        is_vararg: false,
+                        default_value: None,
                     },
                 ],
                 ret_type: Some(spanned(named_type("Int"))),

@@ -4,10 +4,10 @@
 //! side effects a function may have. Effects are propagated through
 //! the call graph and checked against declared effect annotations.
 
-use std::collections::{HashMap, HashSet};
-use vais_ast::*;
 use crate::types::{Effect, EffectSet, FunctionSig};
 use crate::TypeError;
+use std::collections::{HashMap, HashSet};
+use vais_ast::*;
 
 /// Effect inference context
 pub struct EffectInferrer {
@@ -31,7 +31,9 @@ impl EffectInferrer {
         let mut builtins = HashMap::new();
 
         // IO functions
-        for name in ["print", "println", "eprint", "eprintln", "puts", "putchar", "printf"] {
+        for name in [
+            "print", "println", "eprint", "eprintln", "puts", "putchar", "printf",
+        ] {
             builtins.insert(name.to_string(), EffectSet::io());
         }
 
@@ -41,9 +43,10 @@ impl EffectInferrer {
         }
 
         // Pure math functions
-        for name in ["abs", "min", "max", "clamp", "sqrt", "sin", "cos", "tan",
-                     "asin", "acos", "atan", "atan2", "exp", "log", "log2", "log10",
-                     "pow", "floor", "ceil", "round", "fabs"] {
+        for name in [
+            "abs", "min", "max", "clamp", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
+            "atan2", "exp", "log", "log2", "log10", "pow", "floor", "ceil", "round", "fabs",
+        ] {
             builtins.insert(name.to_string(), EffectSet::pure());
         }
 
@@ -53,20 +56,24 @@ impl EffectInferrer {
         }
 
         // File IO
-        for name in ["fopen", "fclose", "fread", "fwrite", "fseek", "ftell",
-                     "open", "close", "read", "write", "lseek"] {
+        for name in [
+            "fopen", "fclose", "fread", "fwrite", "fseek", "ftell", "open", "close", "read",
+            "write", "lseek",
+        ] {
             builtins.insert(name.to_string(), EffectSet::io());
         }
 
         // Network IO
-        for name in ["socket", "bind", "listen", "accept", "connect", "send", "recv",
-                     "sendto", "recvfrom"] {
+        for name in [
+            "socket", "bind", "listen", "accept", "connect", "send", "recv", "sendto", "recvfrom",
+        ] {
             builtins.insert(name.to_string(), EffectSet::io());
         }
 
         // Unsafe operations
-        for name in ["memcpy", "memmove", "memset", "memcmp", "strlen", "strcpy",
-                     "strcat", "strcmp"] {
+        for name in [
+            "memcpy", "memmove", "memset", "memcmp", "strlen", "strcpy", "strcat", "strcmp",
+        ] {
             builtins.insert(name.to_string(), EffectSet::single(Effect::Unsafe));
         }
 
@@ -120,12 +127,12 @@ impl EffectInferrer {
             }
 
             // Unary operations are pure
-            Expr::Unary { expr, .. } => {
-                self.infer_expr_effects(&expr.node, functions)
-            }
+            Expr::Unary { expr, .. } => self.infer_expr_effects(&expr.node, functions),
 
             // Ternary expression
-            Expr::Ternary { cond, then, else_, .. } => {
+            Expr::Ternary {
+                cond, then, else_, ..
+            } => {
                 let cond_effects = self.infer_expr_effects(&cond.node, functions);
                 let then_effects = self.infer_expr_effects(&then.node, functions);
                 let else_effects = self.infer_expr_effects(&else_.node, functions);
@@ -191,9 +198,7 @@ impl EffectInferrer {
             }
 
             // Field access is pure (reading)
-            Expr::Field { expr, .. } => {
-                self.infer_expr_effects(&expr.node, functions)
-            }
+            Expr::Field { expr, .. } => self.infer_expr_effects(&expr.node, functions),
 
             // Index access is pure (reading)
             Expr::Index { expr, index, .. } => {
@@ -221,7 +226,9 @@ impl EffectInferrer {
             }
 
             // If expression
-            Expr::If { cond, then, else_, .. } => {
+            Expr::If {
+                cond, then, else_, ..
+            } => {
                 let mut effects = self.infer_expr_effects(&cond.node, functions);
                 for stmt in then {
                     let stmt_effects = self.infer_stmt_effects(&stmt.node, functions);
@@ -248,7 +255,9 @@ impl EffectInferrer {
             }
 
             // While loop - may diverge
-            Expr::While { condition, body, .. } => {
+            Expr::While {
+                condition, body, ..
+            } => {
                 let mut effects = self.infer_expr_effects(&condition.node, functions);
                 effects.add(Effect::Diverge);
                 for stmt in body {
@@ -273,9 +282,7 @@ impl EffectInferrer {
             }
 
             // Lambda - capture the body's effects
-            Expr::Lambda { body, .. } => {
-                self.infer_expr_effects(&body.node, functions)
-            }
+            Expr::Lambda { body, .. } => self.infer_expr_effects(&body.node, functions),
 
             // Struct literal is pure
             Expr::StructLit { fields, .. } => {
@@ -350,9 +357,7 @@ impl EffectInferrer {
             }
 
             // Cast is pure
-            Expr::Cast { expr, .. } => {
-                self.infer_expr_effects(&expr.node, functions)
-            }
+            Expr::Cast { expr, .. } => self.infer_expr_effects(&expr.node, functions),
 
             // Reference is pure
             Expr::Ref(inner) | Expr::Spread(inner) => {
@@ -491,7 +496,9 @@ impl EffectInferrer {
         // Check for recursion
         if self.pending.contains(name) {
             // Recursive call - return what we have so far (bottom-up)
-            return self.function_effects.get(name)
+            return self
+                .function_effects
+                .get(name)
                 .cloned()
                 .unwrap_or_else(EffectSet::pure);
         }
@@ -505,9 +512,7 @@ impl EffectInferrer {
             None => {
                 // Infer from body
                 match &func.body {
-                    FunctionBody::Expr(expr) => {
-                        self.infer_expr_effects(&expr.node, functions)
-                    }
+                    FunctionBody::Expr(expr) => self.infer_expr_effects(&expr.node, functions),
                     FunctionBody::Block(stmts) => {
                         let mut effects = EffectSet::pure();
                         for stmt in stmts {
@@ -564,11 +569,7 @@ impl EffectInferrer {
     }
 
     /// Check that a function's effects are consistent with its declaration
-    pub fn check_effects(
-        &self,
-        func: &Function,
-        inferred: &EffectSet,
-    ) -> Result<(), TypeError> {
+    pub fn check_effects(&self, func: &Function, inferred: &EffectSet) -> Result<(), TypeError> {
         if let Some(declared) = self.get_declared_effects(func) {
             if !inferred.is_subset_of(&declared) {
                 return Err(TypeError::EffectMismatch {
@@ -659,6 +660,9 @@ mod tests {
         assert!(inferrer.get_builtin_effects("sqrt").unwrap().is_pure());
 
         // Allocation
-        assert!(inferrer.get_builtin_effects("malloc").unwrap().contains(Effect::Alloc));
+        assert!(inferrer
+            .get_builtin_effects("malloc")
+            .unwrap()
+            .contains(Effect::Alloc));
     }
 }

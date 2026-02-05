@@ -5,9 +5,9 @@
 //! - Symlink attacks
 //! - Access to files outside allowed directories
 
+use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::env;
 
 #[cfg(unix)]
 use std::os::unix::fs as unix_fs;
@@ -38,24 +38,26 @@ fn setup_test_env(test_name: &str) -> PathBuf {
     // Create safe module
     fs::write(
         test_dir.join("safe").join("module.vais"),
-        "F safe_func() -> i64 = 42"
-    ).expect("Failed to write safe module");
+        "F safe_func() -> i64 = 42",
+    )
+    .expect("Failed to write safe module");
 
     // Create std module
     fs::write(
         test_dir.join("std").join("vec.vais"),
-        "F vec_new() -> () = ()"
-    ).expect("Failed to write std module");
+        "F vec_new() -> () = ()",
+    )
+    .expect("Failed to write std module");
 
     // Create unsafe module (outside safe directory)
     fs::write(
         test_dir.join("unsafe").join("secrets.vais"),
-        "F secret() -> str = \"password123\""
-    ).expect("Failed to write unsafe module");
+        "F secret() -> str = \"password123\"",
+    )
+    .expect("Failed to write unsafe module");
 
     test_dir
 }
-
 
 #[test]
 fn test_valid_local_import() {
@@ -82,7 +84,8 @@ fn test_valid_local_import() {
     // but it should not fail with "outside allowed directories"
     assert!(
         !stderr.contains("outside allowed directories"),
-        "Local import should be allowed. Stderr: {}", stderr
+        "Local import should be allowed. Stderr: {}",
+        stderr
     );
 }
 
@@ -110,7 +113,8 @@ fn test_valid_std_import() {
     // Should not have security error
     assert!(
         !stderr.contains("outside allowed directories"),
-        "Std import should be allowed. Stderr: {}", stderr
+        "Std import should be allowed. Stderr: {}",
+        stderr
     );
 }
 
@@ -131,10 +135,7 @@ fn test_path_traversal_attack_absolute() {
         .expect("Failed to execute vaisc");
 
     // Should fail - either parse error or security error
-    assert!(
-        !output.status.success(),
-        "Absolute path import should fail"
-    );
+    assert!(!output.status.success(), "Absolute path import should fail");
 }
 
 #[test]
@@ -163,7 +164,8 @@ fn test_path_traversal_attack_relative() {
     // In any case, it should NOT successfully import the file
     assert!(
         !output.status.success() || stderr.contains("Cannot find module"),
-        "Path traversal should be prevented. Stderr: {}", stderr
+        "Path traversal should be prevented. Stderr: {}",
+        stderr
     );
 }
 
@@ -247,10 +249,11 @@ fn test_symlink_attack_to_system_file() {
     // 2. /etc/hosts is outside the project root
     // 3. Our validation should reject it
     assert!(
-        stderr.contains("outside allowed directories") ||
-        stderr.contains("only .vais files allowed") ||
-        !output.status.success(),
-        "Symlink to system file should be rejected. Stderr: {}", stderr
+        stderr.contains("outside allowed directories")
+            || stderr.contains("only .vais files allowed")
+            || !output.status.success(),
+        "Symlink to system file should be rejected. Stderr: {}",
+        stderr
     );
 
     // Clean up
@@ -262,10 +265,7 @@ fn test_valid_relative_import_in_project() {
     let test_dir = setup_test_env("valid_relative_import_in_project");
 
     // Create a module in the test directory
-    fs::write(
-        test_dir.join("local.vais"),
-        "F local_func() -> i64 = 42"
-    ).unwrap();
+    fs::write(test_dir.join("local.vais"), "F local_func() -> i64 = 42").unwrap();
 
     // Import it from a file in the same directory
     let source = "U local\nF main() -> () = ()";
@@ -284,7 +284,8 @@ fn test_valid_relative_import_in_project() {
     // Should succeed - importing from same directory within project
     assert!(
         !stderr.contains("outside allowed directories"),
-        "Local import in project should be allowed. Stderr: {}", stderr
+        "Local import in project should be allowed. Stderr: {}",
+        stderr
     );
 }
 
@@ -293,10 +294,7 @@ fn test_non_vais_file_rejection() {
     let test_dir = setup_test_env("non_vais_file_rejection");
 
     // Create a non-.vais file
-    fs::write(
-        test_dir.join("malicious.txt"),
-        "malicious content"
-    ).unwrap();
+    fs::write(test_dir.join("malicious.txt"), "malicious content").unwrap();
 
     // Rename it to look like vais but keep wrong extension
     let source = "U malicious.txt\nF main() -> () = ()";
@@ -335,10 +333,7 @@ fn test_empty_import_path() {
         .expect("Failed to execute vaisc");
 
     // Should fail at parse time or with "Empty import path" error
-    assert!(
-        !output.status.success(),
-        "Empty import should fail"
-    );
+    assert!(!output.status.success(), "Empty import should fail");
 }
 
 #[test]
@@ -363,7 +358,8 @@ fn test_module_not_found_error_message() {
     // Should get helpful error message
     assert!(
         stderr.contains("Cannot find module") || !output.status.success(),
-        "Should report module not found. Stderr: {}", stderr
+        "Should report module not found. Stderr: {}",
+        stderr
     );
 }
 
@@ -375,8 +371,9 @@ fn test_nested_module_path() {
     fs::create_dir_all(test_dir.join("a/b/c")).unwrap();
     fs::write(
         test_dir.join("a/b/c/deep.vais"),
-        "F deep_func() -> i64 = 42"
-    ).unwrap();
+        "F deep_func() -> i64 = 42",
+    )
+    .unwrap();
 
     // Import using path segments
     let source = "U a::b::c::deep\nF main() -> () = ()";
@@ -397,7 +394,8 @@ fn test_nested_module_path() {
     // The key is no security error
     assert!(
         !stderr.contains("outside allowed directories"),
-        "Nested module import should not trigger security error. Stderr: {}", stderr
+        "Nested module import should not trigger security error. Stderr: {}",
+        stderr
     );
 }
 
@@ -445,10 +443,7 @@ fn test_unc_path_rejection() {
         .expect("Failed to execute vaisc");
 
     // Should fail - UNC paths should not be accepted
-    assert!(
-        !output.status.success(),
-        "UNC path should be rejected"
-    );
+    assert!(!output.status.success(), "UNC path should be rejected");
 }
 
 #[test]

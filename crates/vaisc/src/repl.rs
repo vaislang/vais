@@ -38,8 +38,8 @@ impl ReplHelper {
             // Common keywords
             "mut", "self", "Self", "true", "false", "spawn", "await", "weak", "clone",
             // Primitive types
-            "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128",
-            "f32", "f64", "bool", "str", "char",
+            "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
+            "bool", "str", "char",
         ]
         .into_iter()
         .map(|s| s.to_string())
@@ -47,16 +47,39 @@ impl ReplHelper {
 
         let builtins = vec![
             // I/O functions
-            "printf", "putchar", "puts", "puts_ptr", "exit",
+            "printf",
+            "putchar",
+            "puts",
+            "puts_ptr",
+            "exit",
             // Memory functions
-            "malloc", "free", "memcpy", "load_byte", "store_byte", "load_i64", "store_i64",
+            "malloc",
+            "free",
+            "memcpy",
+            "load_byte",
+            "store_byte",
+            "load_i64",
+            "store_i64",
             // File functions
-            "fopen", "fclose", "fread", "fwrite", "fgetc", "fputc", "fgets", "fputs",
-            "fseek", "ftell", "fflush", "feof",
+            "fopen",
+            "fclose",
+            "fread",
+            "fwrite",
+            "fgetc",
+            "fputc",
+            "fgets",
+            "fputs",
+            "fseek",
+            "ftell",
+            "fflush",
+            "feof",
             // String functions
-            "strlen", "strcmp", "strncmp",
+            "strlen",
+            "strcmp",
+            "strncmp",
             // Async functions
-            "usleep", "sched_yield",
+            "usleep",
+            "sched_yield",
         ]
         .into_iter()
         .map(|s| s.to_string())
@@ -450,10 +473,20 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
             let param_strs: Vec<_> = params.iter().map(format_type).collect();
             format!("fn({}) -> {}", param_strs.join(", "), format_type(ret))
         }
-        FnPtr { params, ret, is_vararg, .. } => {
+        FnPtr {
+            params,
+            ret,
+            is_vararg,
+            ..
+        } => {
             let param_strs: Vec<_> = params.iter().map(format_type).collect();
             let vararg = if *is_vararg { ", ..." } else { "" };
-            format!("fn({}{}) -> {}", param_strs.join(", "), vararg, format_type(ret))
+            format!(
+                "fn({}{}) -> {}",
+                param_strs.join(", "),
+                vararg,
+                format_type(ret)
+            )
         }
         Generic(name) => name.clone(),
         ConstGeneric(name) => format!("const {}", name),
@@ -462,14 +495,25 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
             format!("({})", elem_strs.join(", "))
         }
         Vector { element, lanes } => format!("<{} x {}>", lanes, format_type(element)),
-        DynTrait { trait_name, generics } if generics.is_empty() => format!("dyn {}", trait_name),
-        DynTrait { trait_name, generics } => {
+        DynTrait {
+            trait_name,
+            generics,
+        } if generics.is_empty() => format!("dyn {}", trait_name),
+        DynTrait {
+            trait_name,
+            generics,
+        } => {
             let args: Vec<_> = generics.iter().map(format_type).collect();
             format!("dyn {}<{}>", trait_name, args.join(", "))
         }
         Var(id) => format!("?{}", id),
         Unknown => "unknown".to_string(),
-        Associated { base, trait_name, assoc_name, generics } => {
+        Associated {
+            base,
+            trait_name,
+            assoc_name,
+            generics,
+        } => {
             let base_str = if let Some(tn) = trait_name {
                 format!("<{} as {}>::{}", format_type(base), tn, assoc_name)
             } else {
@@ -485,7 +529,11 @@ fn format_type(ty: &vais_types::ResolvedType) -> String {
         }
         Linear(inner) => format!("linear {}", format_type(inner)),
         Affine(inner) => format!("affine {}", format_type(inner)),
-        Dependent { var_name, base, predicate } => {
+        Dependent {
+            var_name,
+            base,
+            predicate,
+        } => {
             format!("{{{}: {} | {}}}", var_name, format_type(base), predicate)
         }
         RefLifetime { lifetime, inner } => format!("&'{} {}", lifetime, format_type(inner)),
@@ -541,10 +589,8 @@ fn evaluate_expr(source: &str) -> Result<String, String> {
     fs::write(&ir_path, &ir).map_err(|e| format!("Cannot write temp file: {}", e))?;
 
     // Compile with clang
-    let bin_path_str = bin_path.to_str()
-        .ok_or("Invalid UTF-8 in binary path")?;
-    let ir_path_str = ir_path.to_str()
-        .ok_or("Invalid UTF-8 in IR path")?;
+    let bin_path_str = bin_path.to_str().ok_or("Invalid UTF-8 in binary path")?;
+    let ir_path_str = ir_path.to_str().ok_or("Invalid UTF-8 in IR path")?;
 
     let status = Command::new("clang")
         .args([

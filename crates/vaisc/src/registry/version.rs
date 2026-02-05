@@ -75,17 +75,17 @@ impl Version {
             .map_err(|_| RegistryError::InvalidVersion(format!("invalid major: {}", parts[0])))?;
 
         let minor = if parts.len() > 1 {
-            parts[1]
-                .parse::<u64>()
-                .map_err(|_| RegistryError::InvalidVersion(format!("invalid minor: {}", parts[1])))?
+            parts[1].parse::<u64>().map_err(|_| {
+                RegistryError::InvalidVersion(format!("invalid minor: {}", parts[1]))
+            })?
         } else {
             0
         };
 
         let patch = if parts.len() > 2 {
-            parts[2]
-                .parse::<u64>()
-                .map_err(|_| RegistryError::InvalidVersion(format!("invalid patch: {}", parts[2])))?
+            parts[2].parse::<u64>().map_err(|_| {
+                RegistryError::InvalidVersion(format!("invalid patch: {}", parts[2]))
+            })?
         } else {
             0
         };
@@ -217,14 +217,14 @@ struct Predicate {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Op {
-    Exact,      // =1.0.0
-    Greater,    // >1.0.0
-    GreaterEq,  // >=1.0.0
-    Less,       // <1.0.0
-    LessEq,     // <=1.0.0
-    Caret,      // ^1.0.0
-    Tilde,      // ~1.0.0
-    Wildcard,   // * or 1.* or 1.2.*
+    Exact,     // =1.0.0
+    Greater,   // >1.0.0
+    GreaterEq, // >=1.0.0
+    Less,      // <1.0.0
+    LessEq,    // <=1.0.0
+    Caret,     // ^1.0.0
+    Tilde,     // ~1.0.0
+    Wildcard,  // * or 1.* or 1.2.*
 }
 
 impl VersionReq {
@@ -335,23 +335,23 @@ fn parse_predicate(s: &str) -> RegistryResult<Predicate> {
         let major = if parts.is_empty() || parts[0] == "*" {
             0
         } else {
-            parts[0].parse::<u64>().map_err(|_| {
-                RegistryError::InvalidVersionReq(format!("invalid version: {}", s))
-            })?
+            parts[0]
+                .parse::<u64>()
+                .map_err(|_| RegistryError::InvalidVersionReq(format!("invalid version: {}", s)))?
         };
         let minor = if parts.len() < 2 || parts[1] == "*" {
             0
         } else {
-            parts[1].parse::<u64>().map_err(|_| {
-                RegistryError::InvalidVersionReq(format!("invalid version: {}", s))
-            })?
+            parts[1]
+                .parse::<u64>()
+                .map_err(|_| RegistryError::InvalidVersionReq(format!("invalid version: {}", s)))?
         };
         let patch = if parts.len() < 3 || parts[2] == "*" {
             0
         } else {
-            parts[2].parse::<u64>().map_err(|_| {
-                RegistryError::InvalidVersionReq(format!("invalid version: {}", s))
-            })?
+            parts[2]
+                .parse::<u64>()
+                .map_err(|_| RegistryError::InvalidVersionReq(format!("invalid version: {}", s)))?
         };
 
         return Ok(Predicate {
@@ -448,10 +448,7 @@ mod tests {
 
     #[test]
     fn test_version_parse() {
-        assert_eq!(
-            Version::parse("1.2.3").unwrap(),
-            Version::new(1, 2, 3)
-        );
+        assert_eq!(Version::parse("1.2.3").unwrap(), Version::new(1, 2, 3));
         assert_eq!(
             Version::parse("1.2.3-alpha").unwrap(),
             Version::new(1, 2, 3).with_pre("alpha")
@@ -462,7 +459,9 @@ mod tests {
         );
         assert_eq!(
             Version::parse("1.2.3-beta.1+sha.abc").unwrap(),
-            Version::new(1, 2, 3).with_pre("beta.1").with_build("sha.abc")
+            Version::new(1, 2, 3)
+                .with_pre("beta.1")
+                .with_build("sha.abc")
         );
     }
 

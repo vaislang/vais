@@ -132,7 +132,10 @@ impl PackageIndex {
                         .as_ref()
                         .map(|d| d.to_lowercase().contains(&query))
                         .unwrap_or(false)
-                    || pkg.keywords.iter().any(|k| k.to_lowercase().contains(&query))
+                    || pkg
+                        .keywords
+                        .iter()
+                        .any(|k| k.to_lowercase().contains(&query))
             })
             .collect()
     }

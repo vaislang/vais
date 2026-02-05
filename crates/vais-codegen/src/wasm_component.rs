@@ -75,10 +75,22 @@ impl fmt::Display for WitType {
             WitType::String => write!(f, "string"),
             WitType::List(inner) => write!(f, "list<{}>", inner),
             WitType::Option_(inner) => write!(f, "option<{}>", inner),
-            WitType::Result_ { ok: None, err: None } => write!(f, "result"),
-            WitType::Result_ { ok: Some(ok), err: None } => write!(f, "result<{}>", ok),
-            WitType::Result_ { ok: None, err: Some(err) } => write!(f, "result<_, {}>", err),
-            WitType::Result_ { ok: Some(ok), err: Some(err) } => write!(f, "result<{}, {}>", ok, err),
+            WitType::Result_ {
+                ok: None,
+                err: None,
+            } => write!(f, "result"),
+            WitType::Result_ {
+                ok: Some(ok),
+                err: None,
+            } => write!(f, "result<{}>", ok),
+            WitType::Result_ {
+                ok: None,
+                err: Some(err),
+            } => write!(f, "result<_, {}>", err),
+            WitType::Result_ {
+                ok: Some(ok),
+                err: Some(err),
+            } => write!(f, "result<{}, {}>", ok, err),
             WitType::Tuple(types) => {
                 write!(f, "tuple<")?;
                 for (i, t) in types.iter().enumerate() {
@@ -311,10 +323,7 @@ impl WitPackage {
                 self.namespace, self.name, version
             ));
         } else {
-            output.push_str(&format!(
-                "package {}:{};\n\n",
-                self.namespace, self.name
-            ));
+            output.push_str(&format!("package {}:{};\n\n", self.namespace, self.name));
         }
 
         // Package docs
@@ -579,7 +588,10 @@ impl WitPackage {
                     output.push_str(&format!("  import {};\n", name));
                 }
                 WitImportItem::Function(func) => {
-                    output.push_str(&format!("  import {};\n", self.format_function(func, 1).trim()));
+                    output.push_str(&format!(
+                        "  import {};\n",
+                        self.format_function(func, 1).trim()
+                    ));
                 }
             }
         }
@@ -591,7 +603,10 @@ impl WitPackage {
                     output.push_str(&format!("  export {};\n", name));
                 }
                 WitExportItem::Function(func) => {
-                    output.push_str(&format!("  export {};\n", self.format_function(func, 1).trim()));
+                    output.push_str(&format!(
+                        "  export {};\n",
+                        self.format_function(func, 1).trim()
+                    ));
                 }
             }
         }
@@ -635,7 +650,7 @@ pub fn vais_type_to_wit(ty: &ResolvedType) -> Option<WitType> {
             let ok_wit = vais_type_to_wit(inner)?;
             Some(WitType::Result_ {
                 ok: Some(Box::new(ok_wit)),
-                err: None
+                err: None,
             })
         }
         ResolvedType::Tuple(types) => {
@@ -741,8 +756,14 @@ mod tests {
     fn test_wit_type_display() {
         assert_eq!(WitType::Bool.to_string(), "bool");
         assert_eq!(WitType::String.to_string(), "string");
-        assert_eq!(WitType::List(Box::new(WitType::U32)).to_string(), "list<u32>");
-        assert_eq!(WitType::Option_(Box::new(WitType::String)).to_string(), "option<string>");
+        assert_eq!(
+            WitType::List(Box::new(WitType::U32)).to_string(),
+            "list<u32>"
+        );
+        assert_eq!(
+            WitType::Option_(Box::new(WitType::String)).to_string(),
+            "option<string>"
+        );
     }
 
     #[test]
@@ -885,7 +906,10 @@ mod tests {
 
         assert!(config.reactor_mode);
         assert!(!config.command_mode);
-        assert_eq!(config.adapter_module, Some("wasi_snapshot_preview1.wasm".to_string()));
+        assert_eq!(
+            config.adapter_module,
+            Some("wasi_snapshot_preview1.wasm".to_string())
+        );
 
         let args = config.to_link_args();
         assert!(args.contains(&"--adapt".to_string()));

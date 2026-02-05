@@ -15,7 +15,7 @@
 //! - WIT file generation from module interfaces
 //! - wasm-tools integration
 
-use crate::{TargetTriple, wasm_component::ComponentLinkConfig};
+use crate::{wasm_component::ComponentLinkConfig, TargetTriple};
 use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -86,8 +86,10 @@ impl CrossCompileConfig {
         if let Ok(ndk_home) = env::var("ANDROID_NDK_HOME") {
             let ndk_path = PathBuf::from(&ndk_home);
             if ndk_path.exists() {
-                self.sysroot = Some(ndk_path.join("toolchains/llvm/prebuilt/darwin-x86_64/sysroot"));
-                self.env_vars.insert("ANDROID_NDK_HOME".to_string(), ndk_home);
+                self.sysroot =
+                    Some(ndk_path.join("toolchains/llvm/prebuilt/darwin-x86_64/sysroot"));
+                self.env_vars
+                    .insert("ANDROID_NDK_HOME".to_string(), ndk_home);
                 return Ok(());
             }
         }
@@ -105,8 +107,12 @@ impl CrossCompileConfig {
                         .max();
 
                     if let Some(ndk_ver) = latest {
-                        self.sysroot = Some(ndk_ver.join("toolchains/llvm/prebuilt/darwin-x86_64/sysroot"));
-                        self.env_vars.insert("ANDROID_NDK_HOME".to_string(), ndk_ver.to_string_lossy().to_string());
+                        self.sysroot =
+                            Some(ndk_ver.join("toolchains/llvm/prebuilt/darwin-x86_64/sysroot"));
+                        self.env_vars.insert(
+                            "ANDROID_NDK_HOME".to_string(),
+                            ndk_ver.to_string_lossy().to_string(),
+                        );
                         return Ok(());
                     }
                 }
@@ -139,12 +145,10 @@ impl CrossCompileConfig {
                 self.sysroot = Some(PathBuf::from(&path));
                 Ok(())
             }
-            _ => {
-                Err(CrossCompileError::SdkNotFound {
-                    target: format!("{:?}", self.target),
-                    hint: "Install Xcode and iOS SDK".to_string(),
-                })
-            }
+            _ => Err(CrossCompileError::SdkNotFound {
+                target: format!("{:?}", self.target),
+                hint: "Install Xcode and iOS SDK".to_string(),
+            }),
         }
     }
 
@@ -165,24 +169,23 @@ impl CrossCompileConfig {
             .join("wasi-sdk")
             .to_string_lossy()
             .to_string();
-        let common_paths: [&str; 3] = [
-            "/opt/wasi-sdk",
-            "/usr/local/wasi-sdk",
-            &home_wasi,
-        ];
+        let common_paths: [&str; 3] = ["/opt/wasi-sdk", "/usr/local/wasi-sdk", &home_wasi];
 
         for path in common_paths {
             let wasi_path = PathBuf::from(path);
             if wasi_path.exists() {
                 self.sysroot = Some(wasi_path.join("share/wasi-sysroot"));
-                self.env_vars.insert("WASI_SDK_PATH".to_string(), path.to_string());
+                self.env_vars
+                    .insert("WASI_SDK_PATH".to_string(), path.to_string());
                 return Ok(());
             }
         }
 
         Err(CrossCompileError::SdkNotFound {
             target: format!("{:?}", self.target),
-            hint: "Set WASI_SDK_PATH or install WASI SDK from https://github.com/WebAssembly/wasi-sdk".to_string(),
+            hint:
+                "Set WASI_SDK_PATH or install WASI SDK from https://github.com/WebAssembly/wasi-sdk"
+                    .to_string(),
         })
     }
 
@@ -217,7 +220,8 @@ impl CrossCompileConfig {
 
         Err(CrossCompileError::SdkNotFound {
             target: format!("{:?}", self.target),
-            hint: "Install Visual Studio with C++ workload or run from Developer Command Prompt".to_string(),
+            hint: "Install Visual Studio with C++ workload or run from Developer Command Prompt"
+                .to_string(),
         })
     }
 
@@ -262,7 +266,9 @@ impl CrossCompileConfig {
             TargetTriple::X86_64WindowsMsvc => {
                 vec!["lld-link".to_string()]
             }
-            TargetTriple::Wasm32Unknown | TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => {
+            TargetTriple::Wasm32Unknown
+            | TargetTriple::WasiPreview1
+            | TargetTriple::WasiPreview2 => {
                 vec!["wasm-ld".to_string()]
             }
             _ => {
@@ -273,21 +279,23 @@ impl CrossCompileConfig {
     }
 
     /// Create a WebAssembly component from a core module (wasi-preview2 only)
-    pub fn create_component(&self, core_wasm_path: &Path, output_path: &Path) -> Result<(), CrossCompileError> {
+    pub fn create_component(
+        &self,
+        core_wasm_path: &Path,
+        output_path: &Path,
+    ) -> Result<(), CrossCompileError> {
         if !matches!(self.target, TargetTriple::WasiPreview2) {
             return Err(CrossCompileError::UnsupportedTarget(
-                "Component model is only supported for wasi-preview2 target".to_string()
+                "Component model is only supported for wasi-preview2 target".to_string(),
             ));
         }
 
         // Check if wasm-tools is available
-        let wasm_tools_check = Command::new("wasm-tools")
-            .arg("--version")
-            .output();
+        let wasm_tools_check = Command::new("wasm-tools").arg("--version").output();
 
         if wasm_tools_check.is_err() {
             return Err(CrossCompileError::ConfigError(
-                "wasm-tools not found. Install it with: cargo install wasm-tools".to_string()
+                "wasm-tools not found. Install it with: cargo install wasm-tools".to_string(),
             ));
         }
 
@@ -306,14 +314,16 @@ impl CrossCompileConfig {
             }
         }
 
-        let output = cmd.output()
-            .map_err(|e| CrossCompileError::ConfigError(format!("Failed to run wasm-tools: {}", e)))?;
+        let output = cmd.output().map_err(|e| {
+            CrossCompileError::ConfigError(format!("Failed to run wasm-tools: {}", e))
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(CrossCompileError::ConfigError(
-                format!("wasm-tools component new failed: {}", stderr)
-            ));
+            return Err(CrossCompileError::ConfigError(format!(
+                "wasm-tools component new failed: {}",
+                stderr
+            )));
         }
 
         Ok(())
@@ -327,13 +337,16 @@ impl CrossCompileConfig {
             .arg("--features")
             .arg("component-model")
             .output()
-            .map_err(|e| CrossCompileError::ConfigError(format!("Failed to run wasm-tools: {}", e)))?;
+            .map_err(|e| {
+                CrossCompileError::ConfigError(format!("Failed to run wasm-tools: {}", e))
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(CrossCompileError::ConfigError(
-                format!("Component validation failed: {}", stderr)
-            ));
+            return Err(CrossCompileError::ConfigError(format!(
+                "Component validation failed: {}",
+                stderr
+            )));
         }
 
         Ok(())
@@ -393,66 +406,52 @@ impl RuntimeLibs {
     /// Get runtime library requirements for a target
     pub fn for_target(target: &TargetTriple) -> Self {
         match target {
-            TargetTriple::X86_64Linux | TargetTriple::Aarch64Linux | TargetTriple::Riscv64LinuxGnu => {
-                Self {
-                    libs: vec![],
-                    system_libs: vec!["c".to_string(), "m".to_string(), "pthread".to_string()],
-                }
-            }
+            TargetTriple::X86_64Linux
+            | TargetTriple::Aarch64Linux
+            | TargetTriple::Riscv64LinuxGnu => Self {
+                libs: vec![],
+                system_libs: vec!["c".to_string(), "m".to_string(), "pthread".to_string()],
+            },
             TargetTriple::X86_64LinuxMusl | TargetTriple::Aarch64LinuxMusl => {
                 Self {
                     libs: vec![],
-                    system_libs: vec!["c".to_string()],  // musl has most things in libc
+                    system_libs: vec!["c".to_string()], // musl has most things in libc
                 }
             }
-            TargetTriple::X86_64WindowsMsvc | TargetTriple::Aarch64WindowsMsvc => {
-                Self {
-                    libs: vec!["msvcrt".to_string()],
-                    system_libs: vec!["kernel32".to_string(), "user32".to_string()],
-                }
-            }
-            TargetTriple::X86_64WindowsGnu => {
-                Self {
-                    libs: vec!["mingw32".to_string()],
-                    system_libs: vec!["kernel32".to_string()],
-                }
-            }
-            TargetTriple::X86_64FreeBsd | TargetTriple::Aarch64FreeBsd => {
-                Self {
-                    libs: vec![],
-                    system_libs: vec!["c".to_string(), "m".to_string(), "pthread".to_string()],
-                }
-            }
-            TargetTriple::X86_64Darwin | TargetTriple::Aarch64Darwin => {
-                Self {
-                    libs: vec![],
-                    system_libs: vec!["System".to_string()],
-                }
-            }
-            TargetTriple::Aarch64Android | TargetTriple::Armv7Android => {
-                Self {
-                    libs: vec![],
-                    system_libs: vec!["c".to_string(), "m".to_string(), "log".to_string()],
-                }
-            }
-            TargetTriple::Aarch64Ios | TargetTriple::Aarch64IosSimulator => {
-                Self {
-                    libs: vec![],
-                    system_libs: vec!["System".to_string()],
-                }
-            }
+            TargetTriple::X86_64WindowsMsvc | TargetTriple::Aarch64WindowsMsvc => Self {
+                libs: vec!["msvcrt".to_string()],
+                system_libs: vec!["kernel32".to_string(), "user32".to_string()],
+            },
+            TargetTriple::X86_64WindowsGnu => Self {
+                libs: vec!["mingw32".to_string()],
+                system_libs: vec!["kernel32".to_string()],
+            },
+            TargetTriple::X86_64FreeBsd | TargetTriple::Aarch64FreeBsd => Self {
+                libs: vec![],
+                system_libs: vec!["c".to_string(), "m".to_string(), "pthread".to_string()],
+            },
+            TargetTriple::X86_64Darwin | TargetTriple::Aarch64Darwin => Self {
+                libs: vec![],
+                system_libs: vec!["System".to_string()],
+            },
+            TargetTriple::Aarch64Android | TargetTriple::Armv7Android => Self {
+                libs: vec![],
+                system_libs: vec!["c".to_string(), "m".to_string(), "log".to_string()],
+            },
+            TargetTriple::Aarch64Ios | TargetTriple::Aarch64IosSimulator => Self {
+                libs: vec![],
+                system_libs: vec!["System".to_string()],
+            },
             TargetTriple::Wasm32Unknown => {
                 Self {
                     libs: vec![],
-                    system_libs: vec![],  // No system libs for bare wasm
+                    system_libs: vec![], // No system libs for bare wasm
                 }
             }
-            TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => {
-                Self {
-                    libs: vec!["wasi-emulated-mman".to_string()],
-                    system_libs: vec!["c".to_string()],
-                }
-            }
+            TargetTriple::WasiPreview1 | TargetTriple::WasiPreview2 => Self {
+                libs: vec!["wasi-emulated-mman".to_string()],
+                system_libs: vec!["c".to_string()],
+            },
             TargetTriple::Native => {
                 // Detect at runtime
                 Self {

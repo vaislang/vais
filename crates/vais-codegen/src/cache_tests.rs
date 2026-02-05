@@ -19,7 +19,10 @@ mod tests {
 
         // Check cache was populated
         let cache_size = codegen.type_to_llvm_cache.borrow().len();
-        assert!(cache_size > 0, "Cache should contain entries after type_to_llvm calls");
+        assert!(
+            cache_size > 0,
+            "Cache should contain entries after type_to_llvm calls"
+        );
     }
 
     #[test]
@@ -35,7 +38,10 @@ mod tests {
 
         // Cache should have entries - verify caching is working
         let cache_size = codegen.type_to_llvm_cache.borrow().len();
-        assert!(cache_size >= 1, "Cache should have at least 1 entry for pointer type");
+        assert!(
+            cache_size >= 1,
+            "Cache should have at least 1 entry for pointer type"
+        );
     }
 
     #[test]
@@ -62,13 +68,23 @@ mod tests {
 
         for (ty, expected) in test_types {
             let result = codegen.type_to_llvm(&ty);
-            assert_eq!(result, expected, "Type {:?} should convert to {}", ty, expected);
+            assert_eq!(
+                result, expected,
+                "Type {:?} should convert to {}",
+                ty, expected
+            );
         }
 
         // Verify cache has entries
         let cache = codegen.type_to_llvm_cache.borrow();
-        assert!(!cache.is_empty(), "Cache should be populated after type conversions");
-        assert!(cache.len() >= 15, "Cache should have at least 15 entries for all tested types");
+        assert!(
+            !cache.is_empty(),
+            "Cache should be populated after type conversions"
+        );
+        assert!(
+            cache.len() >= 15,
+            "Cache should have at least 15 entries for all tested types"
+        );
     }
 
     #[test]
@@ -98,22 +114,29 @@ mod tests {
         let codegen = CodeGenerator::new("test");
 
         // Create a deeply nested type
-        let nested_type = ResolvedType::Array(Box::new(
-            ResolvedType::Pointer(Box::new(
-                ResolvedType::Array(Box::new(ResolvedType::I32))
-            ))
-        ));
+        let nested_type = ResolvedType::Array(Box::new(ResolvedType::Pointer(Box::new(
+            ResolvedType::Array(Box::new(ResolvedType::I32)),
+        ))));
 
         let result1 = codegen.type_to_llvm(&nested_type);
         let result2 = codegen.type_to_llvm(&nested_type);
 
-        assert_eq!(result1, result2, "Same nested types should produce same LLVM representation");
+        assert_eq!(
+            result1, result2,
+            "Same nested types should produce same LLVM representation"
+        );
         // Array wraps a pointer to Array wraps i32 -> i32***
-        assert_eq!(result1, "i32***", "Nested array-pointer-array-i32 should produce i32***");
+        assert_eq!(
+            result1, "i32***",
+            "Nested array-pointer-array-i32 should produce i32***"
+        );
 
         // Multiple calls should use cache
         let cache = codegen.type_to_llvm_cache.borrow();
-        assert!(!cache.is_empty(), "Cache should have entries for nested types");
+        assert!(
+            !cache.is_empty(),
+            "Cache should have entries for nested types"
+        );
     }
 
     #[test]
@@ -161,7 +184,10 @@ mod tests {
 
         assert_eq!(result1, result2);
         // Result should start with % for struct type
-        assert!(result1.starts_with("%"), "Generic struct type should produce a struct reference");
+        assert!(
+            result1.starts_with("%"),
+            "Generic struct type should produce a struct reference"
+        );
     }
 
     #[test]

@@ -282,10 +282,7 @@ pub enum Terminator {
         target: BasicBlockId,
     },
     /// Tail call: a call in tail position that can be optimized to a jump.
-    TailCall {
-        func: String,
-        args: Vec<Operand>,
-    },
+    TailCall { func: String, args: Vec<Operand> },
     /// Unreachable code.
     Unreachable,
     /// Assert a condition, panic if false.

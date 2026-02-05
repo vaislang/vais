@@ -10,13 +10,17 @@ mod tests {
         Struct {
             name: Spanned::new("Inner".to_string(), Span::default()),
             generics: vec![],
-            fields: vec![
-                Field {
-                    name: Spanned::new("val".to_string(), Span::default()),
-                    ty: Spanned::new(Type::Named { name: "i64".to_string(), generics: vec![] }, Span::default()),
-                    is_pub: true,
-                },
-            ],
+            fields: vec![Field {
+                name: Spanned::new("val".to_string(), Span::default()),
+                ty: Spanned::new(
+                    Type::Named {
+                        name: "i64".to_string(),
+                        generics: vec![],
+                    },
+                    Span::default(),
+                ),
+                is_pub: true,
+            }],
             methods: vec![],
             is_pub: true,
             attributes: vec![],
@@ -28,13 +32,17 @@ mod tests {
         Struct {
             name: Spanned::new("Outer".to_string(), Span::default()),
             generics: vec![],
-            fields: vec![
-                Field {
-                    name: Spanned::new("a".to_string(), Span::default()),
-                    ty: Spanned::new(Type::Named { name: "Inner".to_string(), generics: vec![] }, Span::default()),
-                    is_pub: true,
-                },
-            ],
+            fields: vec![Field {
+                name: Spanned::new("a".to_string(), Span::default()),
+                ty: Spanned::new(
+                    Type::Named {
+                        name: "Inner".to_string(),
+                        generics: vec![],
+                    },
+                    Span::default(),
+                ),
+                is_pub: true,
+            }],
             methods: vec![],
             is_pub: true,
             attributes: vec![],
@@ -57,20 +65,28 @@ mod tests {
         Function {
             name: Spanned::new("test_nested".to_string(), Span::default()),
             generics: vec![],
-            params: vec![
-                Param {
-                    name: Spanned::new("o".to_string(), Span::default()),
-                    ty: Spanned::new(Type::Named { name: "Outer".to_string(), generics: vec![] }, Span::default()),
-                    is_mut: false,
-                    is_vararg: false,
-                    ownership: Ownership::Regular,
-                    default_value: None,
-                }
-            ],
-            ret_type: Some(Spanned::new(Type::Named { name: "i64".to_string(), generics: vec![] }, Span::default())),
-            body: FunctionBody::Expr(
-                Box::new(Spanned::new(nested_field_access, Span::default()))
-            ),
+            params: vec![Param {
+                name: Spanned::new("o".to_string(), Span::default()),
+                ty: Spanned::new(
+                    Type::Named {
+                        name: "Outer".to_string(),
+                        generics: vec![],
+                    },
+                    Span::default(),
+                ),
+                is_mut: false,
+                is_vararg: false,
+                ownership: Ownership::Regular,
+                default_value: None,
+            }],
+            ret_type: Some(Spanned::new(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                Span::default(),
+            )),
+            body: FunctionBody::Expr(Box::new(Spanned::new(nested_field_access, Span::default()))),
             is_pub: true,
             is_async: false,
             attributes: vec![],
@@ -101,16 +117,25 @@ mod tests {
         // 2. Access field 'val' from Inner (field index 0) via GEP
         // 3. Load only the final i64 value (not intermediate structs for efficiency)
         // Should contain getelementptr instructions for both field accesses
-        assert!(fn_ir.contains("getelementptr %Outer"),
-            "Should contain getelementptr for Outer struct access, got:\n{}", fn_ir);
-        assert!(fn_ir.contains("getelementptr %Inner"),
-            "Should contain getelementptr for Inner struct access, got:\n{}", fn_ir);
+        assert!(
+            fn_ir.contains("getelementptr %Outer"),
+            "Should contain getelementptr for Outer struct access, got:\n{}",
+            fn_ir
+        );
+        assert!(
+            fn_ir.contains("getelementptr %Inner"),
+            "Should contain getelementptr for Inner struct access, got:\n{}",
+            fn_ir
+        );
 
         // Should load only the final value (optimized to avoid loading intermediate structs)
         let load_count = fn_ir.matches("load i64").count();
-        assert!(load_count >= 1,
+        assert!(
+            load_count >= 1,
             "Should have at least 1 load for the final i64 value, got {} loads in:\n{}",
-            load_count, fn_ir);
+            load_count,
+            fn_ir
+        );
     }
 
     #[test]
@@ -130,20 +155,28 @@ mod tests {
         let simple_fn = Function {
             name: Spanned::new("test_simple".to_string(), Span::default()),
             generics: vec![],
-            params: vec![
-                Param {
-                    name: Spanned::new("i".to_string(), Span::default()),
-                    ty: Spanned::new(Type::Named { name: "Inner".to_string(), generics: vec![] }, Span::default()),
-                    is_mut: false,
-                    is_vararg: false,
-                    ownership: Ownership::Regular,
-                    default_value: None,
-                }
-            ],
-            ret_type: Some(Spanned::new(Type::Named { name: "i64".to_string(), generics: vec![] }, Span::default())),
-            body: FunctionBody::Expr(
-                Box::new(Spanned::new(simple_field_access, Span::default()))
-            ),
+            params: vec![Param {
+                name: Spanned::new("i".to_string(), Span::default()),
+                ty: Spanned::new(
+                    Type::Named {
+                        name: "Inner".to_string(),
+                        generics: vec![],
+                    },
+                    Span::default(),
+                ),
+                is_mut: false,
+                is_vararg: false,
+                ownership: Ownership::Regular,
+                default_value: None,
+            }],
+            ret_type: Some(Spanned::new(
+                Type::Named {
+                    name: "i64".to_string(),
+                    generics: vec![],
+                },
+                Span::default(),
+            )),
+            body: FunctionBody::Expr(Box::new(Spanned::new(simple_field_access, Span::default()))),
             is_pub: true,
             is_async: false,
             attributes: vec![],
@@ -153,9 +186,15 @@ mod tests {
         let fn_ir = codegen.generate_function(&simple_fn).unwrap();
 
         // Should generate valid IR with getelementptr and load
-        assert!(fn_ir.contains("getelementptr %Inner"),
-            "Should contain getelementptr for Inner struct, got:\n{}", fn_ir);
-        assert!(fn_ir.contains("load i64"),
-            "Should load i64 value from field, got:\n{}", fn_ir);
+        assert!(
+            fn_ir.contains("getelementptr %Inner"),
+            "Should contain getelementptr for Inner struct, got:\n{}",
+            fn_ir
+        );
+        assert!(
+            fn_ir.contains("load i64"),
+            "Should load i64 value from field, got:\n{}",
+            fn_ir
+        );
     }
 }

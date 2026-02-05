@@ -55,7 +55,7 @@ impl CodeGenerator {
                 }
                 true // regular function call produces a value
             }
-            Expr::MethodCall { .. } => true,       // method call produces a value
+            Expr::MethodCall { .. } => true, // method call produces a value
             Expr::StaticMethodCall { .. } => true, // static method call produces a value
             // Struct-typed local variables are stored as pointers (double-pointer)
             // so generate_expr returns a pointer, not a value
@@ -67,7 +67,10 @@ impl CodeGenerator {
                 if let Some(local) = self.locals.get(name) {
                     // The `self` parameter in methods is passed as a pointer (%Struct* %self),
                     // not by value, so it should not be treated as a value expression.
-                    if name == "self" && local.is_param() && matches!(local.ty, ResolvedType::Named { .. }) {
+                    if name == "self"
+                        && local.is_param()
+                        && matches!(local.ty, ResolvedType::Named { .. })
+                    {
                         return false;
                     }
                     // Other parameters are passed by value (even struct types)
@@ -193,8 +196,11 @@ impl CodeGenerator {
                             let mut inferred = None;
                             for (field_name, field_expr) in fields {
                                 // Find the field info
-                                if let Some((_, ResolvedType::Generic(p))) = struct_info.fields.iter()
-                                    .find(|(name, _)| name == &field_name.node) {
+                                if let Some((_, ResolvedType::Generic(p))) = struct_info
+                                    .fields
+                                    .iter()
+                                    .find(|(name, _)| name == &field_name.node)
+                                {
                                     if p == param {
                                         inferred = Some(self.infer_expr_type(field_expr));
                                         break;
@@ -220,7 +226,10 @@ impl CodeGenerator {
                         // For each generic parameter, find a field that uses it and infer from the value
                         for generic_param in &generic_struct.generics {
                             // Skip lifetime parameters
-                            if matches!(generic_param.kind, vais_ast::GenericParamKind::Lifetime { .. }) {
+                            if matches!(
+                                generic_param.kind,
+                                vais_ast::GenericParamKind::Lifetime { .. }
+                            ) {
                                 continue;
                             }
 
@@ -229,10 +238,18 @@ impl CodeGenerator {
 
                             // Look through the struct fields to find one that uses this generic parameter
                             for struct_field in &generic_struct.fields {
-                                if let vais_ast::Type::Named { name: field_type_name, .. } = &struct_field.ty.node {
+                                if let vais_ast::Type::Named {
+                                    name: field_type_name,
+                                    ..
+                                } = &struct_field.ty.node
+                                {
                                     if field_type_name == param_name {
                                         // This field uses the generic parameter - find the corresponding field value
-                                        if let Some((_, field_expr)) = fields.iter().find(|(field_name, _)| field_name.node == struct_field.name.node) {
+                                        if let Some((_, field_expr)) =
+                                            fields.iter().find(|(field_name, _)| {
+                                                field_name.node == struct_field.name.node
+                                            })
+                                        {
                                             inferred = Some(self.infer_expr_type(field_expr));
                                             break;
                                         }
@@ -290,7 +307,8 @@ impl CodeGenerator {
                 // Note: bool methods return i64 (0/1) at runtime, matching comparison ops
                 if matches!(recv_type, ResolvedType::Str) {
                     return match method.node.as_str() {
-                        "len" | "charAt" | "indexOf" | "contains" | "startsWith" | "endsWith" | "isEmpty" => ResolvedType::I64,
+                        "len" | "charAt" | "indexOf" | "contains" | "startsWith" | "endsWith"
+                        | "isEmpty" => ResolvedType::I64,
                         "substring" => ResolvedType::Str,
                         _ => ResolvedType::I64,
                     };
@@ -344,11 +362,17 @@ impl CodeGenerator {
                     other => other,
                 }
             }
-            Expr::Field { expr: obj_expr, field } => {
+            Expr::Field {
+                expr: obj_expr,
+                field,
+            } => {
                 // Get the type of the object being accessed
                 let obj_type = self.infer_expr_type(obj_expr);
                 // If it's a named type (struct), look up the field type
-                if let ResolvedType::Named { name: struct_name, .. } = &obj_type {
+                if let ResolvedType::Named {
+                    name: struct_name, ..
+                } = &obj_type
+                {
                     if let Some(struct_info) = self.structs.get(struct_name) {
                         for (field_name, field_type) in &struct_info.fields {
                             if field_name == &field.node {
@@ -362,8 +386,17 @@ impl CodeGenerator {
             }
             Expr::Binary { left, right, op } => {
                 // For comparison/logical ops, result is always integer (i64)
-                if matches!(op, BinOp::Lt | BinOp::Lte | BinOp::Gt | BinOp::Gte
-                    | BinOp::Eq | BinOp::Neq | BinOp::And | BinOp::Or) {
+                if matches!(
+                    op,
+                    BinOp::Lt
+                        | BinOp::Lte
+                        | BinOp::Gt
+                        | BinOp::Gte
+                        | BinOp::Eq
+                        | BinOp::Neq
+                        | BinOp::And
+                        | BinOp::Or
+                ) {
                     return ResolvedType::I64;
                 }
                 // For arithmetic, propagate float type from either operand
@@ -371,15 +404,15 @@ impl CodeGenerator {
                 let right_ty = self.infer_expr_type(right);
                 if matches!(left_ty, ResolvedType::F64) || matches!(right_ty, ResolvedType::F64) {
                     ResolvedType::F64
-                } else if matches!(left_ty, ResolvedType::F32) || matches!(right_ty, ResolvedType::F32) {
+                } else if matches!(left_ty, ResolvedType::F32)
+                    || matches!(right_ty, ResolvedType::F32)
+                {
                     ResolvedType::F32
                 } else {
                     left_ty
                 }
             }
-            Expr::Unary { expr: inner, .. } => {
-                self.infer_expr_type(inner)
-            }
+            Expr::Unary { expr: inner, .. } => self.infer_expr_type(inner),
             Expr::Ternary { then, .. } => {
                 // Ternary returns the type of its then branch
                 self.infer_expr_type(then)

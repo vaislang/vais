@@ -23,20 +23,27 @@ fn check_warn(source: &str) -> Vec<String> {
 #[test]
 fn ownership_valid_copy_type_reuse() {
     // Copy types (i64) can be used after assignment
-    let result = check_strict(r#"
+    let result = check_strict(
+        r#"
         F main() -> i64 {
             x := 42
             y := x
             x + y
         }
-    "#);
-    assert!(result.is_ok(), "Copy type reuse should be allowed: {:?}", result);
+    "#,
+    );
+    assert!(
+        result.is_ok(),
+        "Copy type reuse should be allowed: {:?}",
+        result
+    );
 }
 
 #[test]
 fn ownership_valid_immutable_borrows() {
     // Multiple immutable borrows should be fine
-    let result = check_strict(r#"
+    let result = check_strict(
+        r#"
         F foo(a: i64, b: i64) -> i64 {
             a + b
         }
@@ -44,20 +51,31 @@ fn ownership_valid_immutable_borrows() {
             x := 10
             foo(x, x)
         }
-    "#);
-    assert!(result.is_ok(), "Multiple immutable uses should be allowed: {:?}", result);
+    "#,
+    );
+    assert!(
+        result.is_ok(),
+        "Multiple immutable uses should be allowed: {:?}",
+        result
+    );
 }
 
 #[test]
 fn ownership_valid_mutable_reassign() {
-    let result = check_strict(r#"
+    let result = check_strict(
+        r#"
         F main() -> i64 {
             x := mut 0
             x = 42
             x
         }
-    "#);
-    assert!(result.is_ok(), "Mutable reassignment should be allowed: {:?}", result);
+    "#,
+    );
+    assert!(
+        result.is_ok(),
+        "Mutable reassignment should be allowed: {:?}",
+        result
+    );
 }
 
 // === Warn-only mode tests ===
@@ -65,12 +83,14 @@ fn ownership_valid_mutable_reassign() {
 #[test]
 fn ownership_warn_mode_does_not_fail() {
     // Even invalid ownership code should not fail in warn-only mode
-    let warnings = check_warn(r#"
+    let warnings = check_warn(
+        r#"
         F main() -> i64 {
             x := 10
             x
         }
-    "#);
+    "#,
+    );
     // Should succeed (may or may not have warnings depending on implementation)
     // The key is that it doesn't fail
     let _ = warnings;
@@ -94,7 +114,10 @@ fn ownership_can_be_disabled() {
     checker.disable_ownership_check();
     let result = checker.check_module(&module);
     assert!(result.is_ok());
-    assert!(checker.get_warnings().is_empty(), "No ownership warnings when disabled");
+    assert!(
+        checker.get_warnings().is_empty(),
+        "No ownership warnings when disabled"
+    );
 }
 
 // === Integration with full compilation pipeline ===
@@ -102,16 +125,22 @@ fn ownership_can_be_disabled() {
 #[test]
 fn ownership_check_runs_during_type_check() {
     // Verify that ownership checking is part of the type check pipeline
-    let module = parse(r#"
+    let module = parse(
+        r#"
         F add(a: i64, b: i64) -> i64 { a + b }
         F main() -> i64 {
             result := add(1, 2)
             result
         }
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     let mut checker = TypeChecker::new();
     // Default mode: warn-only ownership checking
     let result = checker.check_module(&module);
-    assert!(result.is_ok(), "Full pipeline should succeed for valid code");
+    assert!(
+        result.is_ok(),
+        "Full pipeline should succeed for valid code"
+    );
 }

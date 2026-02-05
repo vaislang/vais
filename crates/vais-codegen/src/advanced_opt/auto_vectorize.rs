@@ -11,12 +11,11 @@
 //! - **LLVM metadata generation**: Generate llvm.loop.vectorize.* hints
 //! - **Vector width selection**: Choose optimal vector width for target architecture
 
-use std::collections::{HashMap, HashSet};
 use super::alias_analysis::AliasAnalysis;
+use std::collections::{HashMap, HashSet};
 
 /// Target vector width
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VectorWidth {
     /// SSE: 128 bits (4 x i32, 2 x i64, 4 x f32, 2 x f64)
     SSE,
@@ -59,7 +58,6 @@ impl VectorWidth {
     }
 }
 
-
 /// Loop dependence type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoopDependence {
@@ -80,13 +78,13 @@ impl LoopDependence {
     pub fn prevents_vectorization(&self, vector_width: usize) -> bool {
         match self {
             LoopDependence::None => false,
-            LoopDependence::Flow { distance } |
-            LoopDependence::Anti { distance } |
-            LoopDependence::Output { distance } => {
+            LoopDependence::Flow { distance }
+            | LoopDependence::Anti { distance }
+            | LoopDependence::Output { distance } => {
                 match distance {
                     Some(d) if d.unsigned_abs() as usize >= vector_width => false,
                     Some(_) => true, // Distance too small
-                    None => true, // Unknown distance
+                    None => true,    // Unknown distance
                 }
             }
             LoopDependence::Unknown => true,
@@ -230,7 +228,8 @@ impl AutoVectorizer {
                 // Look for back edges (branches to earlier labels = loops)
                 // Use label ordering to detect back edges: a branch from a later
                 // label to an earlier label indicates a loop
-                let label_order: HashMap<&str, usize> = labels.iter()
+                let label_order: HashMap<&str, usize> = labels
+                    .iter()
                     .enumerate()
                     .map(|(i, l)| (l.as_str(), i))
                     .collect();
@@ -316,8 +315,10 @@ impl AutoVectorizer {
                 }
 
                 // Check for function calls with side effects
-                if (trimmed.starts_with("call ") || trimmed.contains(" = call ")) && in_loop
-                    && has_side_effects(trimmed) {
+                if (trimmed.starts_with("call ") || trimmed.contains(" = call "))
+                    && in_loop
+                    && has_side_effects(trimmed)
+                {
                     // Mark as having side effects - will be checked during vectorizability
                     memory_accesses.push(MemoryAccess {
                         instruction: trimmed.to_string(),
@@ -342,7 +343,8 @@ impl AutoVectorizer {
                 if trimmed.starts_with("br i1 ") {
                     // Conditional branch - check if one target exits the loop
                     let targets = extract_branch_targets(trimmed);
-                    let exits_loop = targets.iter()
+                    let exits_loop = targets
+                        .iter()
                         .any(|t| t != &candidate.header && t != &candidate.latch);
                     if exits_loop {
                         // This is the loop exit branch - we remain in the loop body
@@ -391,7 +393,9 @@ impl AutoVectorizer {
     fn determine_vectorizability(&mut self) {
         for candidate in &mut self.candidates {
             // Determine dominant element size from memory accesses
-            let element_bits = candidate.memory_accesses.iter()
+            let element_bits = candidate
+                .memory_accesses
+                .iter()
                 .filter(|a| a.element_size > 0 && a.base != "__side_effect_call__")
                 .map(|a| a.element_size * 8)
                 .max()
@@ -400,36 +404,41 @@ impl AutoVectorizer {
             let vector_lanes = self.target_width.lanes(element_bits);
 
             // Check for side-effect function calls
-            let has_side_effects = candidate.memory_accesses.iter()
+            let has_side_effects = candidate
+                .memory_accesses
+                .iter()
                 .any(|a| a.base == "__side_effect_call__");
 
             if has_side_effects {
                 candidate.is_vectorizable = false;
-                candidate.non_vectorizable_reason = Some(
-                    "Loop contains function calls with potential side effects".to_string()
-                );
+                candidate.non_vectorizable_reason =
+                    Some("Loop contains function calls with potential side effects".to_string());
                 continue;
             }
 
             // Check dependencies
-            let has_blocking_dep = candidate.dependencies.iter()
+            let has_blocking_dep = candidate
+                .dependencies
+                .iter()
                 .any(|d| d.prevents_vectorization(vector_lanes));
 
             if has_blocking_dep {
                 candidate.is_vectorizable = false;
-                candidate.non_vectorizable_reason = Some(
-                    "Loop-carried dependence prevents vectorization".to_string()
-                );
+                candidate.non_vectorizable_reason =
+                    Some("Loop-carried dependence prevents vectorization".to_string());
                 continue;
             }
 
             // Filter out side-effect markers for stride analysis
-            let real_accesses: Vec<&MemoryAccess> = candidate.memory_accesses.iter()
+            let real_accesses: Vec<&MemoryAccess> = candidate
+                .memory_accesses
+                .iter()
                 .filter(|a| a.base != "__side_effect_call__")
                 .collect();
 
             // Check if all memory accesses have unit stride
-            let all_unit_stride = real_accesses.iter()
+            let all_unit_stride = real_accesses
+                .iter()
                 .all(|a| a.stride.is_some_and(|s| s == 1 || s == -1 || s == 0));
 
             if !all_unit_stride && !real_accesses.is_empty() {
@@ -487,7 +496,10 @@ impl AutoVectorizer {
                 } else {
                     result.push_str(&format!(
                         "  ; VECTORIZATION BLOCKED: {}\n",
-                        candidate.non_vectorizable_reason.as_deref().unwrap_or("unknown")
+                        candidate
+                            .non_vectorizable_reason
+                            .as_deref()
+                            .unwrap_or("unknown")
                     ));
                 }
 
@@ -508,8 +520,7 @@ impl AutoVectorizer {
                     // Add loop metadata to the branch
                     result.push_str(&format!(
                         "{}  ; Loop back edge, !llvm.loop !{}\n",
-                        line,
-                        self.loop_id_counter
+                        line, self.loop_id_counter
                     ));
                     continue;
                 }
@@ -556,23 +567,54 @@ pub fn generate_vectorization_hints(
 fn has_side_effects(line: &str) -> bool {
     // List of known pure/safe functions that don't prevent vectorization
     let pure_functions = [
-        "@llvm.sqrt", "@llvm.fabs", "@llvm.sin", "@llvm.cos",
-        "@llvm.exp", "@llvm.exp2", "@llvm.log", "@llvm.log2", "@llvm.log10",
-        "@llvm.pow", "@llvm.fma", "@llvm.floor", "@llvm.ceil", "@llvm.round",
-        "@llvm.trunc", "@llvm.copysign", "@llvm.minnum", "@llvm.maxnum",
-        "@llvm.minimum", "@llvm.maximum",
-        "@llvm.abs", "@llvm.smin", "@llvm.smax", "@llvm.umin", "@llvm.umax",
-        "@llvm.ctpop", "@llvm.ctlz", "@llvm.cttz",
-        "@llvm.sadd.with.overflow", "@llvm.uadd.with.overflow",
-        "@llvm.ssub.with.overflow", "@llvm.usub.with.overflow",
-        "@llvm.smul.with.overflow", "@llvm.umul.with.overflow",
-        "@llvm.sadd.sat", "@llvm.uadd.sat",
-        "@llvm.ssub.sat", "@llvm.usub.sat",
-        "@llvm.bswap", "@llvm.bitreverse",
+        "@llvm.sqrt",
+        "@llvm.fabs",
+        "@llvm.sin",
+        "@llvm.cos",
+        "@llvm.exp",
+        "@llvm.exp2",
+        "@llvm.log",
+        "@llvm.log2",
+        "@llvm.log10",
+        "@llvm.pow",
+        "@llvm.fma",
+        "@llvm.floor",
+        "@llvm.ceil",
+        "@llvm.round",
+        "@llvm.trunc",
+        "@llvm.copysign",
+        "@llvm.minnum",
+        "@llvm.maxnum",
+        "@llvm.minimum",
+        "@llvm.maximum",
+        "@llvm.abs",
+        "@llvm.smin",
+        "@llvm.smax",
+        "@llvm.umin",
+        "@llvm.umax",
+        "@llvm.ctpop",
+        "@llvm.ctlz",
+        "@llvm.cttz",
+        "@llvm.sadd.with.overflow",
+        "@llvm.uadd.with.overflow",
+        "@llvm.ssub.with.overflow",
+        "@llvm.usub.with.overflow",
+        "@llvm.smul.with.overflow",
+        "@llvm.umul.with.overflow",
+        "@llvm.sadd.sat",
+        "@llvm.uadd.sat",
+        "@llvm.ssub.sat",
+        "@llvm.usub.sat",
+        "@llvm.bswap",
+        "@llvm.bitreverse",
         // Debug intrinsics are also safe
-        "@llvm.dbg.declare", "@llvm.dbg.value", "@llvm.dbg.label",
-        "@llvm.lifetime.start", "@llvm.lifetime.end",
-        "@llvm.assume", "@llvm.expect",
+        "@llvm.dbg.declare",
+        "@llvm.dbg.value",
+        "@llvm.dbg.label",
+        "@llvm.lifetime.start",
+        "@llvm.lifetime.end",
+        "@llvm.assume",
+        "@llvm.expect",
     ];
 
     // Extract the function name from the call
@@ -628,7 +670,15 @@ fn detect_trip_count(ir: &str, header_label: &str) -> Option<u64> {
         // Look for comparison that controls the loop exit
         // Pattern: %cond = icmp slt i64 %i.next, 100
         // Pattern: %cond = icmp ult i64 %i.next, %n
-        if trimmed.contains(" = icmp ") && (trimmed.contains("slt") || trimmed.contains("ult") || trimmed.contains("sle") || trimmed.contains("ule") || trimmed.contains("ne") || trimmed.contains("sgt") || trimmed.contains("ugt")) {
+        if trimmed.contains(" = icmp ")
+            && (trimmed.contains("slt")
+                || trimmed.contains("ult")
+                || trimmed.contains("sle")
+                || trimmed.contains("ule")
+                || trimmed.contains("ne")
+                || trimmed.contains("sgt")
+                || trimmed.contains("ugt"))
+        {
             let parts: Vec<&str> = trimmed.split_whitespace().collect();
             // The bound is typically the last operand
             if let Some(last) = parts.last() {
@@ -650,9 +700,7 @@ fn detect_trip_count(ir: &str, header_label: &str) -> Option<u64> {
 
     // Calculate trip count from init and bound
     match (init_value, bound_value) {
-        (Some(init), Some(bound)) if bound > init => {
-            Some((bound - init) as u64)
-        }
+        (Some(init), Some(bound)) if bound > init => Some((bound - init) as u64),
         (None, Some(bound)) if bound > 0 => {
             // Assume init is 0 if not found
             Some(bound as u64)
@@ -673,7 +721,8 @@ fn extract_branch_targets(line: &str) -> Vec<String> {
         if part.contains("br ") || part.is_empty() {
             continue;
         }
-        let target = part.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+        let target = part
+            .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
             .next()
             .unwrap_or("");
         if !target.is_empty() {
@@ -856,8 +905,14 @@ fn compute_dependence_distance(a1: &MemoryAccess, a2: &MemoryAccess) -> Option<i
     None
 }
 
-fn generate_loop_metadata(loop_id: u32, candidate: &VectorizationCandidate, target_width: &VectorWidth) -> String {
-    let width = candidate.recommended_width.unwrap_or(target_width.lanes(64));
+fn generate_loop_metadata(
+    loop_id: u32,
+    candidate: &VectorizationCandidate,
+    target_width: &VectorWidth,
+) -> String {
+    let width = candidate
+        .recommended_width
+        .unwrap_or(target_width.lanes(64));
 
     let mut md = format!(
         "!{} = distinct !{{!\"llvm.loop.vectorize.enable\", i1 true}}\n",
@@ -953,7 +1008,9 @@ pub fn detect_reductions(ir: &str, loop_header: &str) -> Vec<(String, ReductionK
             continue;
         }
         // End of loop block (next label or function end)
-        if (trimmed.ends_with(':') && trimmed != format!("{}:", loop_header)) && !phi_accumulators.is_empty() {
+        if (trimmed.ends_with(':') && trimmed != format!("{}:", loop_header))
+            && !phi_accumulators.is_empty()
+        {
             break;
         }
         // Match: %acc = phi i64 [ 0, %entry ], [ %acc.next, %loop ]
@@ -978,7 +1035,9 @@ pub fn detect_reductions(ir: &str, loop_header: &str) -> Vec<(String, ReductionK
 
         for (acc_var, next_var) in &phi_accumulators {
             // Match: %acc.next = add i64 %acc, %val
-            if trimmed.starts_with(&format!("{} =", next_var)) || trimmed.starts_with(&format!("{} =", next_var.trim())) {
+            if trimmed.starts_with(&format!("{} =", next_var))
+                || trimmed.starts_with(&format!("{} =", next_var.trim()))
+            {
                 if let Some(kind) = detect_reduction_op(trimmed, acc_var) {
                     reductions.push((acc_var.clone(), kind));
                 }
@@ -1050,9 +1109,15 @@ fn detect_reduction_op(line: &str, acc_var: &str) -> Option<ReductionKind> {
         Some(ReductionKind::And)
     } else if line.contains(" xor ") {
         Some(ReductionKind::Xor)
-    } else if line.contains("@llvm.smin") || line.contains("@llvm.umin") || line.contains("@llvm.minnum") {
+    } else if line.contains("@llvm.smin")
+        || line.contains("@llvm.umin")
+        || line.contains("@llvm.minnum")
+    {
         Some(ReductionKind::Min)
-    } else if line.contains("@llvm.smax") || line.contains("@llvm.umax") || line.contains("@llvm.maxnum") {
+    } else if line.contains("@llvm.smax")
+        || line.contains("@llvm.umax")
+        || line.contains("@llvm.maxnum")
+    {
         Some(ReductionKind::Max)
     } else {
         None

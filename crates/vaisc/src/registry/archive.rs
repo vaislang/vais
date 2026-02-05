@@ -24,9 +24,11 @@ pub fn pack_package(source_dir: &Path, output_path: &Path) -> RegistryResult<()>
     // Add all files from source directory
     add_directory_to_archive(&mut builder, source_dir, Path::new(""))?;
 
-    let encoder = builder.into_inner().map_err(|e| RegistryError::ArchiveError {
-        message: format!("failed to finish tar archive: {}", e),
-    })?;
+    let encoder = builder
+        .into_inner()
+        .map_err(|e| RegistryError::ArchiveError {
+            message: format!("failed to finish tar archive: {}", e),
+        })?;
 
     encoder.finish().map_err(|e| RegistryError::ArchiveError {
         message: format!("failed to finish gzip compression: {}", e),
@@ -69,11 +71,11 @@ fn add_directory_to_archive<W: Write>(
                 source: e,
             })?;
 
-            builder
-                .append_file(&archive_path, &mut file)
-                .map_err(|e| RegistryError::ArchiveError {
+            builder.append_file(&archive_path, &mut file).map_err(|e| {
+                RegistryError::ArchiveError {
                     message: format!("failed to add file {}: {}", path.display(), e),
-                })?;
+                }
+            })?;
         }
     }
 
@@ -105,12 +107,18 @@ pub fn unpack_package(archive_path: &Path, output_dir: &Path) -> RegistryResult<
             message: format!("failed to read entry: {}", e),
         })?;
 
-        let path = entry.path().map_err(|e| RegistryError::ArchiveError {
-            message: format!("invalid entry path: {}", e),
-        })?.to_path_buf();
+        let path = entry
+            .path()
+            .map_err(|e| RegistryError::ArchiveError {
+                message: format!("invalid entry path: {}", e),
+            })?
+            .to_path_buf();
 
         // Security: check for path traversal
-        if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        if path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             return Err(RegistryError::InvalidArchive {
                 message: format!("path traversal detected: {}", path.display()),
             });
@@ -119,7 +127,9 @@ pub fn unpack_package(archive_path: &Path, output_dir: &Path) -> RegistryResult<
         let target = output_dir.join(&path);
 
         // Security: ensure target is within output directory
-        let canonical_output = output_dir.canonicalize().unwrap_or_else(|_| output_dir.to_path_buf());
+        let canonical_output = output_dir
+            .canonicalize()
+            .unwrap_or_else(|_| output_dir.to_path_buf());
         if let Ok(canonical_target) = target.canonicalize() {
             if !canonical_target.starts_with(&canonical_output) {
                 return Err(RegistryError::InvalidArchive {
@@ -137,9 +147,11 @@ pub fn unpack_package(archive_path: &Path, output_dir: &Path) -> RegistryResult<
         }
 
         // Extract entry
-        entry.unpack(&target).map_err(|e| RegistryError::ArchiveError {
-            message: format!("failed to extract {}: {}", path.display(), e),
-        })?;
+        entry
+            .unpack(&target)
+            .map_err(|e| RegistryError::ArchiveError {
+                message: format!("failed to extract {}: {}", path.display(), e),
+            })?;
     }
 
     Ok(())
@@ -165,12 +177,18 @@ pub fn unpack_from_bytes(data: &[u8], output_dir: &Path) -> RegistryResult<()> {
             message: format!("failed to read entry: {}", e),
         })?;
 
-        let path = entry.path().map_err(|e| RegistryError::ArchiveError {
-            message: format!("invalid entry path: {}", e),
-        })?.to_path_buf();
+        let path = entry
+            .path()
+            .map_err(|e| RegistryError::ArchiveError {
+                message: format!("invalid entry path: {}", e),
+            })?
+            .to_path_buf();
 
         // Security: check for path traversal
-        if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        if path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             return Err(RegistryError::InvalidArchive {
                 message: format!("path traversal detected: {}", path.display()),
             });
@@ -187,9 +205,11 @@ pub fn unpack_from_bytes(data: &[u8], output_dir: &Path) -> RegistryResult<()> {
         }
 
         // Extract entry
-        entry.unpack(&target).map_err(|e| RegistryError::ArchiveError {
-            message: format!("failed to extract {}: {}", path.display(), e),
-        })?;
+        entry
+            .unpack(&target)
+            .map_err(|e| RegistryError::ArchiveError {
+                message: format!("failed to extract {}: {}", path.display(), e),
+            })?;
     }
 
     Ok(())

@@ -87,27 +87,16 @@ pub enum PackageError {
     },
 
     #[error("failed to parse `{path}`: {message}")]
-    ParseError {
-        path: PathBuf,
-        message: String,
-    },
+    ParseError { path: PathBuf, message: String },
 
     #[error("dependency `{name}` not found: path `{path}` does not exist")]
-    DependencyNotFound {
-        name: String,
-        path: PathBuf,
-    },
+    DependencyNotFound { name: String, path: PathBuf },
 
     #[error("registry dependency `{name}` (version {version}) is not installed; run `vais pkg install` first")]
-    RegistryDepNotInstalled {
-        name: String,
-        version: String,
-    },
+    RegistryDepNotInstalled { name: String, version: String },
 
     #[error("cyclic dependency detected: {cycle}")]
-    CyclicDependency {
-        cycle: String,
-    },
+    CyclicDependency { cycle: String },
 
     #[error("failed to write file `{path}`: {source}")]
     WriteError {
@@ -126,14 +115,13 @@ pub fn load_manifest(dir: &Path) -> PackageResult<PackageManifest> {
         return Err(PackageError::ManifestNotFound(dir.to_path_buf()));
     }
 
-    let content = fs::read_to_string(&manifest_path)
-        .map_err(|e| PackageError::ReadError {
-            path: manifest_path.clone(),
-            source: e,
-        })?;
+    let content = fs::read_to_string(&manifest_path).map_err(|e| PackageError::ReadError {
+        path: manifest_path.clone(),
+        source: e,
+    })?;
 
-    let manifest: PackageManifest = toml::from_str(&content)
-        .map_err(|e| PackageError::ParseError {
+    let manifest: PackageManifest =
+        toml::from_str(&content).map_err(|e| PackageError::ParseError {
             path: manifest_path,
             message: e.to_string(),
         })?;
@@ -187,26 +175,23 @@ pub fn init_package(dir: &Path, name: Option<&str>) -> PackageResult<()> {
         build: BuildConfig::default(),
     };
 
-    let content = toml::to_string_pretty(&manifest)
-        .map_err(|e| PackageError::ParseError {
-            path: manifest_path.clone(),
-            message: e.to_string(),
-        })?;
+    let content = toml::to_string_pretty(&manifest).map_err(|e| PackageError::ParseError {
+        path: manifest_path.clone(),
+        message: e.to_string(),
+    })?;
 
-    fs::write(&manifest_path, content)
-        .map_err(|e| PackageError::WriteError {
-            path: manifest_path,
-            source: e,
-        })?;
+    fs::write(&manifest_path, content).map_err(|e| PackageError::WriteError {
+        path: manifest_path,
+        source: e,
+    })?;
 
     // Create src directory
     let src_dir = dir.join("src");
     if !src_dir.exists() {
-        fs::create_dir_all(&src_dir)
-            .map_err(|e| PackageError::WriteError {
-                path: src_dir.clone(),
-                source: e,
-            })?;
+        fs::create_dir_all(&src_dir).map_err(|e| PackageError::WriteError {
+            path: src_dir.clone(),
+            source: e,
+        })?;
     }
 
     // Create main.vais if it doesn't exist
@@ -219,11 +204,10 @@ F main() -> i64 {
     0
 }
 "#;
-        fs::write(&main_path, main_content)
-            .map_err(|e| PackageError::WriteError {
-                path: main_path,
-                source: e,
-            })?;
+        fs::write(&main_path, main_content).map_err(|e| PackageError::WriteError {
+            path: main_path,
+            source: e,
+        })?;
     }
 
     Ok(())
@@ -352,10 +336,12 @@ fn resolve_deps_recursive(
                 if let Some(cache) = cache_root {
                     match find_cached_registry_dep(cache, name, v) {
                         Some(path) => path,
-                        None => return Err(PackageError::RegistryDepNotInstalled {
-                            name: name.clone(),
-                            version: v.clone(),
-                        }),
+                        None => {
+                            return Err(PackageError::RegistryDepNotInstalled {
+                                name: name.clone(),
+                                version: v.clone(),
+                            })
+                        }
                     }
                 } else {
                     continue; // No cache root provided, skip registry deps
@@ -367,10 +353,12 @@ fn resolve_deps_recursive(
                 if let Some(cache) = cache_root {
                     match find_cached_registry_dep(cache, name, version) {
                         Some(path) => path,
-                        None => return Err(PackageError::RegistryDepNotInstalled {
-                            name: name.clone(),
-                            version: version.to_string(),
-                        }),
+                        None => {
+                            return Err(PackageError::RegistryDepNotInstalled {
+                                name: name.clone(),
+                                version: version.to_string(),
+                            })
+                        }
                     }
                 } else {
                     continue; // No cache root provided, skip registry deps
@@ -378,7 +366,8 @@ fn resolve_deps_recursive(
             }
         };
 
-        let canonical = dep_path.canonicalize()
+        let canonical = dep_path
+            .canonicalize()
             .map_err(|_| PackageError::DependencyNotFound {
                 name: name.clone(),
                 path: dep_path.clone(),
@@ -449,14 +438,13 @@ pub fn add_dependency(
     path: Option<&str>,
     version: Option<&str>,
 ) -> PackageResult<()> {
-    let content = fs::read_to_string(manifest_path)
-        .map_err(|e| PackageError::ReadError {
-            path: manifest_path.to_path_buf(),
-            source: e,
-        })?;
+    let content = fs::read_to_string(manifest_path).map_err(|e| PackageError::ReadError {
+        path: manifest_path.to_path_buf(),
+        source: e,
+    })?;
 
-    let mut manifest: PackageManifest = toml::from_str(&content)
-        .map_err(|e| PackageError::ParseError {
+    let mut manifest: PackageManifest =
+        toml::from_str(&content).map_err(|e| PackageError::ParseError {
             path: manifest_path.to_path_buf(),
             message: e.to_string(),
         })?;
@@ -480,31 +468,28 @@ pub fn add_dependency(
 
     manifest.dependencies.insert(name.to_string(), dep);
 
-    let new_content = toml::to_string_pretty(&manifest)
-        .map_err(|e| PackageError::ParseError {
-            path: manifest_path.to_path_buf(),
-            message: e.to_string(),
-        })?;
+    let new_content = toml::to_string_pretty(&manifest).map_err(|e| PackageError::ParseError {
+        path: manifest_path.to_path_buf(),
+        message: e.to_string(),
+    })?;
 
-    fs::write(manifest_path, new_content)
-        .map_err(|e| PackageError::WriteError {
-            path: manifest_path.to_path_buf(),
-            source: e,
-        })?;
+    fs::write(manifest_path, new_content).map_err(|e| PackageError::WriteError {
+        path: manifest_path.to_path_buf(),
+        source: e,
+    })?;
 
     Ok(())
 }
 
 /// Remove a dependency from the manifest
 pub fn remove_dependency(manifest_path: &Path, name: &str) -> PackageResult<()> {
-    let content = fs::read_to_string(manifest_path)
-        .map_err(|e| PackageError::ReadError {
-            path: manifest_path.to_path_buf(),
-            source: e,
-        })?;
+    let content = fs::read_to_string(manifest_path).map_err(|e| PackageError::ReadError {
+        path: manifest_path.to_path_buf(),
+        source: e,
+    })?;
 
-    let mut manifest: PackageManifest = toml::from_str(&content)
-        .map_err(|e| PackageError::ParseError {
+    let mut manifest: PackageManifest =
+        toml::from_str(&content).map_err(|e| PackageError::ParseError {
             path: manifest_path.to_path_buf(),
             message: e.to_string(),
         })?;
@@ -516,17 +501,15 @@ pub fn remove_dependency(manifest_path: &Path, name: &str) -> PackageResult<()> 
         });
     }
 
-    let new_content = toml::to_string_pretty(&manifest)
-        .map_err(|e| PackageError::ParseError {
-            path: manifest_path.to_path_buf(),
-            message: e.to_string(),
-        })?;
+    let new_content = toml::to_string_pretty(&manifest).map_err(|e| PackageError::ParseError {
+        path: manifest_path.to_path_buf(),
+        message: e.to_string(),
+    })?;
 
-    fs::write(manifest_path, new_content)
-        .map_err(|e| PackageError::WriteError {
-            path: manifest_path.to_path_buf(),
-            source: e,
-        })?;
+    fs::write(manifest_path, new_content).map_err(|e| PackageError::WriteError {
+        path: manifest_path.to_path_buf(),
+        source: e,
+    })?;
 
     Ok(())
 }
@@ -637,7 +620,11 @@ opt_level = 2
 
         // Create a fake registry cache with an extracted package
         let cache_root = root.path().join("registry");
-        let extracted = cache_root.join("cache").join("json-parser").join("1.0.0").join("extracted");
+        let extracted = cache_root
+            .join("cache")
+            .join("json-parser")
+            .join("1.0.0")
+            .join("extracted");
         fs::create_dir_all(&extracted).unwrap();
 
         // Create a minimal vais.toml in the extracted package
@@ -716,7 +703,11 @@ nonexistent-pkg = "2.0.0"
 
         // Create registry cache with another package
         let cache_root = root.path().join("registry");
-        let extracted = cache_root.join("cache").join("remote-lib").join("0.5.0").join("extracted");
+        let extracted = cache_root
+            .join("cache")
+            .join("remote-lib")
+            .join("0.5.0")
+            .join("extracted");
         fs::create_dir_all(&extracted).unwrap();
         let dep_manifest = r#"
 [package]
@@ -759,7 +750,11 @@ remote-lib = "0.5.0"
 
         // Create cache with version 1.2.3
         let cache_root = root.path().join("registry");
-        let extracted = cache_root.join("cache").join("my-pkg").join("1.2.3").join("extracted");
+        let extracted = cache_root
+            .join("cache")
+            .join("my-pkg")
+            .join("1.2.3")
+            .join("extracted");
         fs::create_dir_all(&extracted).unwrap();
 
         // Should find with exact version

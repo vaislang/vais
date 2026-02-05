@@ -33,7 +33,9 @@ async fn test_code_action_extract_variable() {
 #[test]
 fn test_import_suggestions() {
     // Test that we have the correct mapping of functions to modules
-    let math_functions = ["sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil"];
+    let math_functions = [
+        "sqrt", "sin", "cos", "tan", "pow", "log", "exp", "floor", "ceil",
+    ];
     let io_functions = ["read_i64", "read_f64", "read_line", "read_char"];
 
     // Verify we know about these functions

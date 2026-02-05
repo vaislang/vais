@@ -2,14 +2,14 @@
 //!
 //! Provides runtime loading, unloading, and hot-reloading of Vais modules.
 
+use notify::{Event, EventKind, RecommendedWatcher, Watcher};
+use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::SystemTime;
-use parking_lot::{Mutex, RwLock};
-use notify::{RecommendedWatcher, Watcher, Event, EventKind};
-use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::error::{DynloadError, Result};
 
@@ -20,19 +20,11 @@ type ReloadCallback = Box<dyn Fn(ReloadEvent) + Send + Sync>;
 #[derive(Debug, Clone)]
 pub enum ReloadEvent {
     /// Module was reloaded successfully
-    Reloaded {
-        module_id: String,
-        version: u64,
-    },
+    Reloaded { module_id: String, version: u64 },
     /// Module reload failed
-    ReloadFailed {
-        module_id: String,
-        error: String,
-    },
+    ReloadFailed { module_id: String, error: String },
     /// Module was unloaded
-    Unloaded {
-        module_id: String,
-    },
+    Unloaded { module_id: String },
 }
 
 /// Handle to a loaded module
@@ -442,12 +434,11 @@ impl ModuleLoader {
     }
 
     fn compile_module(&self, source_path: &Path) -> Result<PathBuf> {
-        let output_dir = self.config.output_dir.clone().unwrap_or_else(|| {
-            source_path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .to_path_buf()
-        });
+        let output_dir = self
+            .config
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| source_path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
         let stem = source_path
             .file_stem()
@@ -481,9 +472,9 @@ impl ModuleLoader {
             cmd.arg(arg);
         }
 
-        let output = cmd
-            .output()
-            .map_err(|e| DynloadError::CompilationError(format!("Failed to run compiler: {}", e)))?;
+        let output = cmd.output().map_err(|e| {
+            DynloadError::CompilationError(format!("Failed to run compiler: {}", e))
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -526,8 +517,6 @@ impl Default for ModuleLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     #[test]
     fn test_module_loader_creation() {
@@ -549,19 +538,20 @@ mod tests {
 
     #[test]
     fn test_path_to_id() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
-        assert_eq!(loader.path_to_id(Path::new("/path/to/module.vais")), "module");
+        assert_eq!(
+            loader.path_to_id(Path::new("/path/to/module.vais")),
+            "module"
+        );
         assert_eq!(loader.path_to_id(Path::new("simple.vais")), "simple");
     }
 
     #[test]
     fn test_version_increment() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
         assert_eq!(loader.next_version(), 1);
         assert_eq!(loader.next_version(), 2);
@@ -570,49 +560,50 @@ mod tests {
 
     #[test]
     fn test_module_not_found() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
         let result = loader.load("/nonexistent/module.vais");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DynloadError::ModuleNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::ModuleNotFound(_)
+        ));
     }
 
     #[test]
     fn test_is_loaded() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
         assert!(!loader.is_loaded("test_module"));
     }
 
     #[test]
     fn test_list_modules_empty() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
         assert!(loader.list_modules().is_empty());
     }
 
     #[test]
     fn test_unload_not_loaded() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
         let result = loader.unload("nonexistent");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), DynloadError::ModuleNotLoaded(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            DynloadError::ModuleNotLoaded(_)
+        ));
     }
 
     #[test]
     fn test_reload_callbacks() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(false)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(false)).unwrap();
 
         let called = Arc::new(Mutex::new(false));
         let called_clone = called.clone();
@@ -631,9 +622,8 @@ mod tests {
 
     #[test]
     fn test_check_for_changes_no_events() {
-        let loader = ModuleLoader::with_config(
-            ModuleLoaderConfig::new().with_hot_reload(true)
-        ).unwrap();
+        let loader =
+            ModuleLoader::with_config(ModuleLoaderConfig::new().with_hot_reload(true)).unwrap();
 
         let events = loader.check_for_changes().unwrap();
         assert!(events.is_empty());

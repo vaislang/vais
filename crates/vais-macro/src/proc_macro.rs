@@ -237,7 +237,8 @@ impl ProcMacroRegistry {
 
     /// Register a procedural macro
     pub fn register(&mut self, proc_macro: Box<dyn ProcMacro>) {
-        self.macros.insert(proc_macro.name().to_string(), proc_macro);
+        self.macros
+            .insert(proc_macro.name().to_string(), proc_macro);
     }
 
     /// Look up a proc macro by name
@@ -288,14 +289,18 @@ impl Default for ProcMacroRegistry {
 struct StringifyMacro;
 
 impl ProcMacro for StringifyMacro {
-    fn name(&self) -> &str { "stringify" }
-    fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+    fn name(&self) -> &str {
+        "stringify"
+    }
+    fn kind(&self) -> ProcMacroKind {
+        ProcMacroKind::FunctionLike
+    }
 
     fn expand(&self, input: TokenStream) -> ProcMacroResult<TokenStream> {
         let source = input.to_source();
-        Ok(TokenStream::from_tokens(vec![
-            TokenTree::Literal(LiteralToken::String(source)),
-        ]))
+        Ok(TokenStream::from_tokens(vec![TokenTree::Literal(
+            LiteralToken::String(source),
+        )]))
     }
 }
 
@@ -303,8 +308,12 @@ impl ProcMacro for StringifyMacro {
 struct ConcatMacro;
 
 impl ProcMacro for ConcatMacro {
-    fn name(&self) -> &str { "concat" }
-    fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+    fn name(&self) -> &str {
+        "concat"
+    }
+    fn kind(&self) -> ProcMacroKind {
+        ProcMacroKind::FunctionLike
+    }
 
     fn expand(&self, input: TokenStream) -> ProcMacroResult<TokenStream> {
         let mut result = String::new();
@@ -316,9 +325,9 @@ impl ProcMacro for ConcatMacro {
                 _ => result.push_str(&token.to_source()),
             }
         }
-        Ok(TokenStream::from_tokens(vec![
-            TokenTree::Literal(LiteralToken::String(result)),
-        ]))
+        Ok(TokenStream::from_tokens(vec![TokenTree::Literal(
+            LiteralToken::String(result),
+        )]))
     }
 }
 
@@ -326,8 +335,12 @@ impl ProcMacro for ConcatMacro {
 struct EnvMacro;
 
 impl ProcMacro for EnvMacro {
-    fn name(&self) -> &str { "env" }
-    fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+    fn name(&self) -> &str {
+        "env"
+    }
+    fn kind(&self) -> ProcMacroKind {
+        ProcMacroKind::FunctionLike
+    }
 
     fn expand(&self, input: TokenStream) -> ProcMacroResult<TokenStream> {
         let var_name = match input.iter().next() {
@@ -335,9 +348,9 @@ impl ProcMacro for EnvMacro {
             _ => return Err(ProcMacroError::new("env! expects a string literal")),
         };
         let value = std::env::var(&var_name).unwrap_or_default();
-        Ok(TokenStream::from_tokens(vec![
-            TokenTree::Literal(LiteralToken::String(value)),
-        ]))
+        Ok(TokenStream::from_tokens(vec![TokenTree::Literal(
+            LiteralToken::String(value),
+        )]))
     }
 }
 
@@ -345,14 +358,18 @@ impl ProcMacro for EnvMacro {
 struct LineMacro;
 
 impl ProcMacro for LineMacro {
-    fn name(&self) -> &str { "line" }
-    fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+    fn name(&self) -> &str {
+        "line"
+    }
+    fn kind(&self) -> ProcMacroKind {
+        ProcMacroKind::FunctionLike
+    }
 
     fn expand(&self, _input: TokenStream) -> ProcMacroResult<TokenStream> {
         // Line number would be provided by the compiler in a real impl
-        Ok(TokenStream::from_tokens(vec![
-            TokenTree::Literal(LiteralToken::Integer(0)),
-        ]))
+        Ok(TokenStream::from_tokens(vec![TokenTree::Literal(
+            LiteralToken::Integer(0),
+        )]))
     }
 }
 
@@ -360,14 +377,18 @@ impl ProcMacro for LineMacro {
 struct FileMacro;
 
 impl ProcMacro for FileMacro {
-    fn name(&self) -> &str { "file" }
-    fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+    fn name(&self) -> &str {
+        "file"
+    }
+    fn kind(&self) -> ProcMacroKind {
+        ProcMacroKind::FunctionLike
+    }
 
     fn expand(&self, _input: TokenStream) -> ProcMacroResult<TokenStream> {
         // File name would be provided by the compiler in a real impl
-        Ok(TokenStream::from_tokens(vec![
-            TokenTree::Literal(LiteralToken::String("unknown".to_string())),
-        ]))
+        Ok(TokenStream::from_tokens(vec![TokenTree::Literal(
+            LiteralToken::String("unknown".to_string()),
+        )]))
     }
 }
 
@@ -375,13 +396,17 @@ impl ProcMacro for FileMacro {
 struct ColumnMacro;
 
 impl ProcMacro for ColumnMacro {
-    fn name(&self) -> &str { "column" }
-    fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+    fn name(&self) -> &str {
+        "column"
+    }
+    fn kind(&self) -> ProcMacroKind {
+        ProcMacroKind::FunctionLike
+    }
 
     fn expand(&self, _input: TokenStream) -> ProcMacroResult<TokenStream> {
-        Ok(TokenStream::from_tokens(vec![
-            TokenTree::Literal(LiteralToken::Integer(0)),
-        ]))
+        Ok(TokenStream::from_tokens(vec![TokenTree::Literal(
+            LiteralToken::Integer(0),
+        )]))
     }
 }
 
@@ -425,12 +450,8 @@ mod tests {
 
     #[test]
     fn test_token_stream_from_tokens() {
-        let stream = TokenStream::from_tokens(vec![
-            ident("hello"),
-            punct('('),
-            int_lit(42),
-            punct(')'),
-        ]);
+        let stream =
+            TokenStream::from_tokens(vec![ident("hello"), punct('('), int_lit(42), punct(')')]);
         assert_eq!(stream.len(), 4);
         assert_eq!(stream.to_source(), "hello ( 42 )");
     }
@@ -438,11 +459,7 @@ mod tests {
     #[test]
     fn test_stringify_macro() {
         let mac = StringifyMacro;
-        let input = TokenStream::from_tokens(vec![
-            ident("x"),
-            punct('+'),
-            int_lit(1),
-        ]);
+        let input = TokenStream::from_tokens(vec![ident("x"), punct('+'), int_lit(1)]);
         let output = mac.expand(input).unwrap();
         assert_eq!(output.len(), 1);
         match &output.tokens[0] {
@@ -493,8 +510,12 @@ mod tests {
     fn test_custom_proc_macro() {
         struct MyMacro;
         impl ProcMacro for MyMacro {
-            fn name(&self) -> &str { "my_macro" }
-            fn kind(&self) -> ProcMacroKind { ProcMacroKind::FunctionLike }
+            fn name(&self) -> &str {
+                "my_macro"
+            }
+            fn kind(&self) -> ProcMacroKind {
+                ProcMacroKind::FunctionLike
+            }
             fn expand(&self, _input: TokenStream) -> ProcMacroResult<TokenStream> {
                 Ok(TokenStream::from_tokens(vec![int_lit(42)]))
             }
@@ -511,11 +532,7 @@ mod tests {
 
     #[test]
     fn test_group_token() {
-        let inner = TokenStream::from_tokens(vec![
-            ident("x"),
-            punct(','),
-            ident("y"),
-        ]);
+        let inner = TokenStream::from_tokens(vec![ident("x"), punct(','), ident("y")]);
         let grouped = group(Delimiter::Parenthesis, inner);
         assert_eq!(grouped.to_source(), "(x , y)");
     }

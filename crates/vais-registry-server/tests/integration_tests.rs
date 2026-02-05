@@ -34,8 +34,8 @@ async fn setup_test_app() -> (axum::Router, TempDir, TempDir) {
     let pool = vais_registry_server::db::init_db(&config.database_path)
         .await
         .unwrap();
-    let storage = vais_registry_server::storage::PackageStorage::new(config.storage_path.clone())
-        .unwrap();
+    let storage =
+        vais_registry_server::storage::PackageStorage::new(config.storage_path.clone()).unwrap();
 
     let router = create_router(pool, storage, config);
 
@@ -74,7 +74,10 @@ license = "MIT"
         archive.append(&header, manifest_bytes).unwrap();
 
         // Create a dummy source file
-        let source = format!("# Test source for {} v{}\nF main() {{ R 0 }}\n", name, version);
+        let source = format!(
+            "# Test source for {} v{}\nF main() {{ R 0 }}\n",
+            name, version
+        );
         let source_bytes = source.as_bytes();
         let mut header = tar::Header::new_gnu();
         header.set_path("src/main.vais").unwrap();
@@ -91,10 +94,7 @@ license = "MIT"
 }
 
 /// Helper to create a multipart body for package publish
-fn create_publish_multipart(
-    metadata: serde_json::Value,
-    archive: Vec<u8>,
-) -> (String, Vec<u8>) {
+fn create_publish_multipart(metadata: serde_json::Value, archive: Vec<u8>) -> (String, Vec<u8>) {
     let boundary = "----WebKitFormBoundaryTest123456789";
     let mut body = Vec::new();
 
@@ -107,7 +107,9 @@ fn create_publish_multipart(
 
     // Archive part
     body.extend_from_slice(b"------WebKitFormBoundaryTest123456789\r\n");
-    body.extend_from_slice(b"Content-Disposition: form-data; name=\"archive\"; filename=\"package.tar.gz\"\r\n");
+    body.extend_from_slice(
+        b"Content-Disposition: form-data; name=\"archive\"; filename=\"package.tar.gz\"\r\n",
+    );
     body.extend_from_slice(b"Content-Type: application/gzip\r\n\r\n");
     body.extend_from_slice(&archive);
     body.extend_from_slice(b"\r\n");
@@ -217,7 +219,9 @@ async fn test_user_login() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -264,7 +268,9 @@ async fn test_user_login_invalid_credentials() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -301,7 +307,9 @@ async fn test_auth_me() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -373,7 +381,9 @@ async fn test_package_publish() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -452,7 +462,9 @@ async fn test_package_publish_duplicate_version() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -549,7 +561,9 @@ async fn test_package_get_info() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -640,7 +654,9 @@ async fn test_package_download() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -707,7 +723,10 @@ async fn test_package_download() {
     assert_eq!(content_type, "application/gzip");
 
     let content_disposition = response.headers().get(header::CONTENT_DISPOSITION).unwrap();
-    assert!(content_disposition.to_str().unwrap().contains("download-test-2.0.0.tar.gz"));
+    assert!(content_disposition
+        .to_str()
+        .unwrap()
+        .contains("download-test-2.0.0.tar.gz"));
 
     // Verify we got data
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -730,7 +749,9 @@ async fn test_package_search() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -832,7 +853,9 @@ async fn test_package_yank() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();
@@ -927,7 +950,9 @@ async fn test_full_publish_install_roundtrip() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     let response = app.clone().oneshot(request).await.unwrap();
@@ -1023,7 +1048,10 @@ async fn test_full_publish_install_roundtrip() {
     assert_eq!(json["name"], "roundtrip-pkg");
     assert_eq!(json["description"], "Full roundtrip test package");
     assert_eq!(json["homepage"], "https://example.com");
-    assert_eq!(json["repository"], "https://github.com/example/roundtrip-pkg");
+    assert_eq!(
+        json["repository"],
+        "https://github.com/example/roundtrip-pkg"
+    );
     assert_eq!(json["license"], "MIT");
     assert_eq!(json["keywords"], json!(["test", "roundtrip"]));
     assert_eq!(json["categories"], json!(["testing", "example"]));
@@ -1092,7 +1120,9 @@ async fn test_version_not_found() {
         .method("POST")
         .uri("/api/v1/auth/register")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&register_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&register_payload).unwrap(),
+        ))
         .unwrap();
 
     app.clone().oneshot(request).await.unwrap();

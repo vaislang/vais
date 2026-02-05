@@ -30,15 +30,15 @@
 //! }
 //! ```
 
-mod file_watcher;
 mod dylib_loader;
-mod reloader;
 mod error;
+mod file_watcher;
+mod reloader;
 
-pub use file_watcher::{FileWatcher, WatchEvent};
 pub use dylib_loader::{DylibLoader, FunctionSymbol};
-pub use reloader::{HotReloader, HotReloadConfig, ReloadCallback};
 pub use error::{HotReloadError, Result};
+pub use file_watcher::{FileWatcher, WatchEvent};
+pub use reloader::{HotReloadConfig, HotReloader, ReloadCallback};
 
 #[cfg(test)]
 mod tests {

@@ -32,13 +32,17 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 
     for i in 1..=a_len {
         for j in 1..=b_len {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
             matrix[i][j] = std::cmp::min(
                 std::cmp::min(
-                    matrix[i - 1][j] + 1,      // deletion
-                    matrix[i][j - 1] + 1,      // insertion
+                    matrix[i - 1][j] + 1, // deletion
+                    matrix[i][j - 1] + 1, // insertion
                 ),
-                matrix[i - 1][j - 1] + cost,   // substitution
+                matrix[i - 1][j - 1] + cost, // substitution
             );
         }
     }
@@ -48,7 +52,10 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 
 /// Find the most similar name from a list of candidates
 /// Returns None if no name is similar enough (distance > threshold)
-pub fn find_similar_name<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<String> {
+pub fn find_similar_name<'a>(
+    name: &str,
+    candidates: impl Iterator<Item = &'a str>,
+) -> Option<String> {
     let name_lower = name.to_lowercase();
     let max_distance = std::cmp::max(2, name.len() / 3); // Allow ~1/3 of chars to be different
 
@@ -165,10 +172,7 @@ pub enum TypeError {
     },
 
     #[error("Dependent type predicate must be a boolean expression, found {found}")]
-    DependentPredicateNotBool {
-        found: String,
-        span: Option<Span>,
-    },
+    DependentPredicateNotBool { found: String, span: Option<Span> },
 
     #[error("Dependent type refinement violation: predicate '{predicate}' may not hold")]
     RefinementViolation {
@@ -189,7 +193,9 @@ pub enum TypeError {
         span: Option<Span>,
     },
 
-    #[error("Reference lifetime {reference_lifetime} outlives referent lifetime {referent_lifetime}")]
+    #[error(
+        "Reference lifetime {reference_lifetime} outlives referent lifetime {referent_lifetime}"
+    )]
     LifetimeTooShort {
         reference_lifetime: String,
         referent_lifetime: String,
@@ -203,7 +209,9 @@ pub enum TypeError {
         use_at: Option<Span>,
     },
 
-    #[error("Use of partially moved value: variable '{var_name}' has moved fields: {moved_fields:?}")]
+    #[error(
+        "Use of partially moved value: variable '{var_name}' has moved fields: {moved_fields:?}"
+    )]
     UseAfterPartialMove {
         var_name: String,
         moved_fields: Vec<String>,
@@ -240,7 +248,9 @@ pub enum TypeError {
         borrow_at: Option<Span>,
     },
 
-    #[error("Dangling reference: '{ref_var}' references '{source_var}' which does not live long enough")]
+    #[error(
+        "Dangling reference: '{ref_var}' references '{source_var}' which does not live long enough"
+    )]
     DanglingReference {
         ref_var: String,
         source_var: String,
@@ -500,61 +510,59 @@ impl TypeError {
     pub fn localized_message(&self) -> String {
         let key = format!("type.{}.message", self.error_code());
         match self {
-            TypeError::Mismatch { expected, found, .. } => {
-                vais_i18n::get(&key, &[("expected", expected), ("found", found)])
-            }
-            TypeError::UndefinedVar { name, .. } => {
-                vais_i18n::get(&key, &[("name", name)])
-            }
-            TypeError::UndefinedType { name, .. } => {
-                vais_i18n::get(&key, &[("name", name)])
-            }
-            TypeError::UndefinedFunction { name, .. } => {
-                vais_i18n::get(&key, &[("name", name)])
-            }
-            TypeError::NotCallable(type_name, _) => {
-                vais_i18n::get(&key, &[("type", type_name)])
-            }
-            TypeError::ArgCount { expected, got, .. } => {
-                vais_i18n::get(&key, &[
+            TypeError::Mismatch {
+                expected, found, ..
+            } => vais_i18n::get(&key, &[("expected", expected), ("found", found)]),
+            TypeError::UndefinedVar { name, .. } => vais_i18n::get(&key, &[("name", name)]),
+            TypeError::UndefinedType { name, .. } => vais_i18n::get(&key, &[("name", name)]),
+            TypeError::UndefinedFunction { name, .. } => vais_i18n::get(&key, &[("name", name)]),
+            TypeError::NotCallable(type_name, _) => vais_i18n::get(&key, &[("type", type_name)]),
+            TypeError::ArgCount { expected, got, .. } => vais_i18n::get(
+                &key,
+                &[
                     ("expected", &expected.to_string()),
                     ("got", &got.to_string()),
-                ])
-            }
-            TypeError::CannotInfer => {
-                vais_i18n::get_simple(&key)
-            }
-            TypeError::Duplicate(name, _) => {
-                vais_i18n::get(&key, &[("name", name)])
-            }
-            TypeError::ImmutableAssign(name, _) => {
-                vais_i18n::get(&key, &[("name", name)])
-            }
+                ],
+            ),
+            TypeError::CannotInfer => vais_i18n::get_simple(&key),
+            TypeError::Duplicate(name, _) => vais_i18n::get(&key, &[("name", name)]),
+            TypeError::ImmutableAssign(name, _) => vais_i18n::get(&key, &[("name", name)]),
             TypeError::NonExhaustiveMatch(patterns, _) => {
                 vais_i18n::get(&key, &[("patterns", patterns)])
             }
             TypeError::UnreachablePattern(arm, _) => {
                 vais_i18n::get(&key, &[("arm", &arm.to_string())])
             }
-            TypeError::EffectMismatch { declared, actual, .. } => {
-                vais_i18n::get(&key, &[("declared", declared), ("actual", actual)])
-            }
-            TypeError::PurityViolation { callee, effects, .. } => {
-                vais_i18n::get(&key, &[("callee", callee), ("effects", effects)])
-            }
-            TypeError::LinearTypeViolation { var_name, expected_uses, actual_uses, .. } => {
-                vais_i18n::get(&key, &[
+            TypeError::EffectMismatch {
+                declared, actual, ..
+            } => vais_i18n::get(&key, &[("declared", declared), ("actual", actual)]),
+            TypeError::PurityViolation {
+                callee, effects, ..
+            } => vais_i18n::get(&key, &[("callee", callee), ("effects", effects)]),
+            TypeError::LinearTypeViolation {
+                var_name,
+                expected_uses,
+                actual_uses,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[
                     ("var_name", var_name),
                     ("expected_uses", &expected_uses.to_string()),
                     ("actual_uses", &actual_uses.to_string()),
-                ])
-            }
-            TypeError::AffineTypeViolation { var_name, actual_uses, .. } => {
-                vais_i18n::get(&key, &[
+                ],
+            ),
+            TypeError::AffineTypeViolation {
+                var_name,
+                actual_uses,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[
                     ("var_name", var_name),
                     ("actual_uses", &actual_uses.to_string()),
-                ])
-            }
+                ],
+            ),
             TypeError::MoveAfterUse { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
             }
@@ -564,21 +572,31 @@ impl TypeError {
             TypeError::RefinementViolation { predicate, .. } => {
                 vais_i18n::get(&key, &[("predicate", predicate)])
             }
-            TypeError::LifetimeElisionFailed { function_name, input_count, .. } => {
-                vais_i18n::get(&key, &[
+            TypeError::LifetimeElisionFailed {
+                function_name,
+                input_count,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[
                     ("function_name", function_name),
                     ("input_count", &input_count.to_string()),
-                ])
-            }
+                ],
+            ),
             TypeError::LifetimeOutlivesStatic { lifetime_name, .. } => {
                 vais_i18n::get(&key, &[("lifetime_name", lifetime_name)])
             }
-            TypeError::LifetimeTooShort { reference_lifetime, referent_lifetime, .. } => {
-                vais_i18n::get(&key, &[
+            TypeError::LifetimeTooShort {
+                reference_lifetime,
+                referent_lifetime,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[
                     ("reference_lifetime", reference_lifetime),
                     ("referent_lifetime", referent_lifetime),
-                ])
-            }
+                ],
+            ),
             TypeError::UseAfterMove { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
             }
@@ -597,18 +615,26 @@ impl TypeError {
             TypeError::MutBorrowOfImmutable { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
             }
-            TypeError::DanglingReference { ref_var, source_var, .. } => {
-                vais_i18n::get(&key, &[("ref_var", ref_var), ("source_var", source_var)])
-            }
+            TypeError::DanglingReference {
+                ref_var,
+                source_var,
+                ..
+            } => vais_i18n::get(&key, &[("ref_var", ref_var), ("source_var", source_var)]),
             TypeError::ReturnLocalRef { var_name, .. } => {
                 vais_i18n::get(&key, &[("var_name", var_name)])
             }
-            TypeError::NoSuchField { field, type_name, .. } => {
-                vais_i18n::get(&key, &[("field", field), ("type_name", type_name)])
-            }
-            TypeError::ExternSignatureMismatch { name, expected, found, .. } => {
-                vais_i18n::get(&key, &[("name", name), ("expected", expected), ("found", found)])
-            }
+            TypeError::NoSuchField {
+                field, type_name, ..
+            } => vais_i18n::get(&key, &[("field", field), ("type_name", type_name)]),
+            TypeError::ExternSignatureMismatch {
+                name,
+                expected,
+                found,
+                ..
+            } => vais_i18n::get(
+                &key,
+                &[("name", name), ("expected", expected), ("found", found)],
+            ),
         }
     }
 
@@ -617,15 +643,11 @@ impl TypeError {
         let key = format!("type.{}.help", self.error_code());
         if vais_i18n::has_key(&key) {
             Some(match self {
-                TypeError::UndefinedVar { name, .. } => {
-                    vais_i18n::get(&key, &[("name", name)])
-                }
+                TypeError::UndefinedVar { name, .. } => vais_i18n::get(&key, &[("name", name)]),
                 TypeError::UndefinedFunction { name, .. } => {
                     vais_i18n::get(&key, &[("name", name)])
                 }
-                TypeError::ImmutableAssign(name, _) => {
-                    vais_i18n::get(&key, &[("name", name)])
-                }
+                TypeError::ImmutableAssign(name, _) => vais_i18n::get(&key, &[("name", name)]),
                 _ => vais_i18n::get_simple(&key),
             })
         } else {
@@ -950,7 +972,11 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::RefMut(t) => write!(f, "&mut {}", t),
             ResolvedType::Range(t) => write!(f, "Range<{}>", t),
             ResolvedType::Future(t) => write!(f, "Future<{}>", t),
-            ResolvedType::Fn { params, ret, effects } => {
+            ResolvedType::Fn {
+                params,
+                ret,
+                effects,
+            } => {
                 if let Some(effects) = effects {
                     if !effects.is_pure() {
                         write!(f, "{} ", effects)?;
@@ -965,7 +991,12 @@ impl std::fmt::Display for ResolvedType {
                 }
                 write!(f, ")->{}", ret)
             }
-            ResolvedType::FnPtr { params, ret, is_vararg, effects } => {
+            ResolvedType::FnPtr {
+                params,
+                ret,
+                is_vararg,
+                effects,
+            } => {
                 if let Some(effects) = effects {
                     if !effects.is_pure() {
                         write!(f, "{} ", effects)?;
@@ -1006,7 +1037,10 @@ impl std::fmt::Display for ResolvedType {
             ResolvedType::Unknown => write!(f, "?"),
             ResolvedType::Never => write!(f, "!"),
             ResolvedType::Vector { element, lanes } => write!(f, "Vec{}x{}", lanes, element),
-            ResolvedType::DynTrait { trait_name, generics } => {
+            ResolvedType::DynTrait {
+                trait_name,
+                generics,
+            } => {
                 write!(f, "dyn {}", trait_name)?;
                 if !generics.is_empty() {
                     write!(f, "<")?;
@@ -1020,7 +1054,12 @@ impl std::fmt::Display for ResolvedType {
                 }
                 Ok(())
             }
-            ResolvedType::Associated { base, trait_name, assoc_name, generics } => {
+            ResolvedType::Associated {
+                base,
+                trait_name,
+                assoc_name,
+                generics,
+            } => {
                 if let Some(trait_name) = trait_name {
                     write!(f, "<{} as {}>::{}", base, trait_name, assoc_name)?;
                 } else {
@@ -1041,7 +1080,11 @@ impl std::fmt::Display for ResolvedType {
             }
             ResolvedType::Linear(inner) => write!(f, "linear {}", inner),
             ResolvedType::Affine(inner) => write!(f, "affine {}", inner),
-            ResolvedType::Dependent { var_name, base, predicate } => {
+            ResolvedType::Dependent {
+                var_name,
+                base,
+                predicate,
+            } => {
                 write!(f, "{{{}: {} | {}}}", var_name, base, predicate)
             }
             ResolvedType::RefLifetime { lifetime, inner } => {
@@ -1195,9 +1238,9 @@ impl EffectSet {
 
     /// Check if this effect set is read-only (no writes, IO, etc.)
     pub fn is_readonly(&self) -> bool {
-        !self.effects.contains(&Effect::Write) &&
-        !self.effects.contains(&Effect::IO) &&
-        !self.effects.contains(&Effect::Alloc)
+        !self.effects.contains(&Effect::Write)
+            && !self.effects.contains(&Effect::IO)
+            && !self.effects.contains(&Effect::Alloc)
     }
 
     /// Check if this effect set contains a specific effect
@@ -1254,9 +1297,15 @@ impl EffectSet {
 
     pub fn total() -> Self {
         Self::from_effects([
-            Effect::Read, Effect::Write, Effect::Alloc,
-            Effect::IO, Effect::Async, Effect::Panic,
-            Effect::NonDet, Effect::Unsafe, Effect::Diverge,
+            Effect::Read,
+            Effect::Write,
+            Effect::Alloc,
+            Effect::IO,
+            Effect::Async,
+            Effect::Panic,
+            Effect::NonDet,
+            Effect::Unsafe,
+            Effect::Diverge,
         ])
     }
 }
@@ -1284,8 +1333,7 @@ impl std::hash::Hash for EffectSet {
 }
 
 /// Function effect annotation - how effects are declared/inferred
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum EffectAnnotation {
     /// No annotation - infer from body
     #[default]
@@ -1296,14 +1344,13 @@ pub enum EffectAnnotation {
     Declared(EffectSet),
 }
 
-
 /// Function signature
 #[derive(Debug, Clone)]
 pub struct FunctionSig {
     pub name: String,
     pub generics: Vec<String>,
     pub generic_bounds: HashMap<String, Vec<String>>, // generic name -> trait bounds
-    pub params: Vec<(String, ResolvedType, bool)>, // (name, type, is_mut)
+    pub params: Vec<(String, ResolvedType, bool)>,    // (name, type, is_mut)
     pub ret: ResolvedType,
     pub is_async: bool,
     pub is_vararg: bool, // true for variadic C functions (printf, etc.)
@@ -1320,7 +1367,11 @@ pub struct FunctionSig {
 
 impl FunctionSig {
     /// Create a simple function signature with minimal fields
-    pub fn simple(name: &str, params: Vec<(String, ResolvedType, bool)>, ret: ResolvedType) -> Self {
+    pub fn simple(
+        name: &str,
+        params: Vec<(String, ResolvedType, bool)>,
+        ret: ResolvedType,
+    ) -> Self {
         Self {
             name: name.to_string(),
             generics: vec![],
@@ -1337,7 +1388,11 @@ impl FunctionSig {
     }
 
     /// Create a builtin function signature (with IO effects for output functions)
-    pub fn builtin(name: &str, params: Vec<(String, ResolvedType, bool)>, ret: ResolvedType) -> Self {
+    pub fn builtin(
+        name: &str,
+        params: Vec<(String, ResolvedType, bool)>,
+        ret: ResolvedType,
+    ) -> Self {
         Self {
             name: name.to_string(),
             generics: vec![],
@@ -1480,7 +1535,11 @@ impl GenericInstantiation {
     }
 
     /// Create a new function instantiation with const generic arguments
-    pub fn function_with_consts(base_name: &str, type_args: Vec<ResolvedType>, const_args: Vec<(String, i64)>) -> Self {
+    pub fn function_with_consts(
+        base_name: &str,
+        type_args: Vec<ResolvedType>,
+        const_args: Vec<(String, i64)>,
+    ) -> Self {
         let mangled = mangle_name_with_consts(base_name, &type_args, &const_args);
         Self {
             base_name: base_name.to_string(),
@@ -1504,7 +1563,11 @@ impl GenericInstantiation {
     }
 
     /// Create a new struct instantiation with const generic arguments
-    pub fn struct_type_with_consts(base_name: &str, type_args: Vec<ResolvedType>, const_args: Vec<(String, i64)>) -> Self {
+    pub fn struct_type_with_consts(
+        base_name: &str,
+        type_args: Vec<ResolvedType>,
+        const_args: Vec<(String, i64)>,
+    ) -> Self {
         let mangled = mangle_name_with_consts(base_name, &type_args, &const_args);
         Self {
             base_name: base_name.to_string(),
@@ -1546,7 +1609,11 @@ pub fn mangle_name(base: &str, type_args: &[ResolvedType]) -> String {
 }
 
 /// Mangle a generic name with both type and const arguments
-pub fn mangle_name_with_consts(base: &str, type_args: &[ResolvedType], const_args: &[(String, i64)]) -> String {
+pub fn mangle_name_with_consts(
+    base: &str,
+    type_args: &[ResolvedType],
+    const_args: &[(String, i64)],
+) -> String {
     let mut parts = Vec::new();
     for ty in type_args {
         parts.push(mangle_type(ty));
@@ -1599,19 +1666,11 @@ pub fn mangle_type(ty: &ResolvedType) -> String {
         ResolvedType::Result(inner) => format!("res_{}", mangle_type(inner)),
         ResolvedType::Future(inner) => format!("fut_{}", mangle_type(inner)),
         ResolvedType::Tuple(types) => {
-            let args = types
-                .iter()
-                .map(mangle_type)
-                .collect::<Vec<_>>()
-                .join("_");
+            let args = types.iter().map(mangle_type).collect::<Vec<_>>().join("_");
             format!("tup_{}", args)
         }
         ResolvedType::Fn { params, ret, .. } => {
-            let params_str = params
-                .iter()
-                .map(mangle_type)
-                .collect::<Vec<_>>()
-                .join("_");
+            let params_str = params.iter().map(mangle_type).collect::<Vec<_>>().join("_");
             format!("fn_{}_{}", params_str, mangle_type(ret))
         }
         ResolvedType::Generic(name) => name.clone(),
@@ -1635,9 +1694,10 @@ pub fn substitute_type(
     substitutions: &HashMap<String, ResolvedType>,
 ) -> ResolvedType {
     match ty {
-        ResolvedType::Generic(name) => {
-            substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
-        }
+        ResolvedType::Generic(name) => substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
         ResolvedType::Named { name, generics } => {
             let new_generics = generics
                 .iter()
@@ -1676,7 +1736,11 @@ pub fn substitute_type(
                 .collect();
             ResolvedType::Tuple(new_types)
         }
-        ResolvedType::Fn { params, ret, effects } => {
+        ResolvedType::Fn {
+            params,
+            ret,
+            effects,
+        } => {
             let new_params = params
                 .iter()
                 .map(|p| substitute_type(p, substitutions))
@@ -1688,15 +1752,16 @@ pub fn substitute_type(
                 effects: effects.clone(),
             }
         }
-        ResolvedType::Vector { element, lanes } => {
-            ResolvedType::Vector {
-                element: Box::new(substitute_type(element, substitutions)),
-                lanes: *lanes,
-            }
-        }
+        ResolvedType::Vector { element, lanes } => ResolvedType::Vector {
+            element: Box::new(substitute_type(element, substitutions)),
+            lanes: *lanes,
+        },
         ResolvedType::ConstGeneric(name) => {
             // Const generics can be substituted if a mapping exists
-            substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
+            substitutions
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| ty.clone())
         }
         ResolvedType::ConstArray { element, size } => {
             let new_element = Box::new(substitute_type(element, substitutions));
@@ -1745,7 +1810,11 @@ pub fn substitute_const_values(
                     ConstBinOp::Sub => l.checked_sub(r),
                     ConstBinOp::Mul => l.checked_mul(r),
                     ConstBinOp::Div => {
-                        if r == 0 { None } else { l.checked_div(r) }
+                        if r == 0 {
+                            None
+                        } else {
+                            l.checked_div(r)
+                        }
                     }
                 };
                 if let Some(val) = result {

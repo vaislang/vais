@@ -5,9 +5,7 @@
 
 use std::any::Any;
 use vais_ast::{Item, Module};
-use vais_plugin::{
-    Diagnostic, LintPlugin, Plugin, PluginConfig, PluginInfo, PluginType,
-};
+use vais_plugin::{Diagnostic, LintPlugin, Plugin, PluginConfig, PluginInfo, PluginType};
 
 /// Example lint plugin that checks for function naming conventions
 pub struct NamingConventionLint {
@@ -142,7 +140,10 @@ fn is_snake_case(name: &str) -> bool {
 
 /// Common single-letter parameter names that are acceptable
 fn is_common_short_param(name: &str) -> bool {
-    matches!(name, "n" | "i" | "j" | "k" | "x" | "y" | "z" | "a" | "b" | "c" | "s" | "t")
+    matches!(
+        name,
+        "n" | "i" | "j" | "k" | "x" | "y" | "z" | "a" | "b" | "c" | "s" | "t"
+    )
 }
 
 // Plugin export functions

@@ -100,7 +100,7 @@ impl Default for PlaygroundConfig {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(10),
-            max_source_bytes: 64 * 1024, // 64KB max source
+            max_source_bytes: 64 * 1024,   // 64KB max source
             max_output_bytes: 1024 * 1024, // 1MB max output
         }
     }
@@ -203,17 +203,21 @@ async fn main() {
 
     tracing::info!("Vais Playground server starting on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
         .unwrap_or_else(|e| {
             tracing::error!("Failed to bind to {}: {}", addr, e);
             std::process::exit(1);
         });
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap_or_else(|e| {
-            tracing::error!("Server error: {}", e);
-            std::process::exit(1);
-        });
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!("Server error: {}", e);
+        std::process::exit(1);
+    });
 }
 
 async fn health() -> Json<HealthResponse> {
@@ -270,7 +274,14 @@ async fn compile(
     let max_output_bytes = state.config.max_output_bytes;
 
     let result = tokio::task::spawn_blocking(move || {
-        compile_and_run(&source, optimize, emit_ir, execute, timeout_secs, max_output_bytes)
+        compile_and_run(
+            &source,
+            optimize,
+            emit_ir,
+            execute,
+            timeout_secs,
+            max_output_bytes,
+        )
     })
     .await
     .unwrap_or_else(|e| make_error_response(format!("Internal error: {}", e)));
@@ -317,7 +328,11 @@ fn compile_and_run(
     let compile_stdout = String::from_utf8_lossy(&compile_output.stdout).to_string();
 
     if !compile_output.status.success() {
-        let msg = if !compile_stderr.is_empty() { &compile_stderr } else { &compile_stdout };
+        let msg = if !compile_stderr.is_empty() {
+            &compile_stderr
+        } else {
+            &compile_stdout
+        };
         let errors = parse_compiler_errors(msg);
         return CompileResponse {
             success: false,
@@ -383,7 +398,11 @@ fn compile_and_run(
 
                 let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
                 let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
-                let combined = if stderr.is_empty() { stdout } else { format!("{}{}", stdout, stderr) };
+                let combined = if stderr.is_empty() {
+                    stdout
+                } else {
+                    format!("{}{}", stdout, stderr)
+                };
                 let combined = truncate_output(&combined, max_output_bytes);
                 let exit_code = status.code().unwrap_or(-1);
 
@@ -401,7 +420,10 @@ fn compile_and_run(
                 if exec_start.elapsed() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return make_error_response(format!("Execution timed out after {} seconds", timeout_secs));
+                    return make_error_response(format!(
+                        "Execution timed out after {} seconds",
+                        timeout_secs
+                    ));
                 }
                 std::thread::sleep(poll_interval);
             }
@@ -442,10 +464,12 @@ fn truncate_output(s: &str, max_bytes: usize) -> String {
         s.to_string()
     } else {
         let truncated = &s[..max_bytes];
-        format!("{}\n... (output truncated at {} bytes)", truncated, max_bytes)
+        format!(
+            "{}\n... (output truncated at {} bytes)",
+            truncated, max_bytes
+        )
     }
 }
-
 
 fn extract_line(err: &str) -> usize {
     if let Some(pos) = err.find("line ") {

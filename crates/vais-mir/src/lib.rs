@@ -16,14 +16,14 @@
 //! - Inlining decisions
 //! - Drop elaboration
 
-mod types;
 mod builder;
-pub mod optimize;
 pub mod emit_llvm;
 pub mod lower;
+pub mod optimize;
+mod types;
 
-pub use types::*;
 pub use builder::MirBuilder;
+pub use types::*;
 
 #[cfg(test)]
 mod tests;

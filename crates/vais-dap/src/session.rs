@@ -3,10 +3,10 @@
 //! Manages the state of a debugging session, including process control,
 //! breakpoints, stack frames, and variables.
 
+use base64::Engine;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use base64::Engine;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -34,8 +34,7 @@ fn is_compound_type(type_name: Option<&str>) -> bool {
 
     // Known primitive types
     let primitives = [
-        "i8", "i16", "i32", "i64", "i128", "isize",
-        "u8", "u16", "u32", "u64", "u128", "usize",
+        "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
         "f32", "f64", "bool", "char", "()", "register",
     ];
     if primitives.contains(&t) {
@@ -104,7 +103,10 @@ pub struct DebugSession {
 
 #[derive(Debug, Clone)]
 enum VariableRef {
-    Scope { frame_id: i64, scope_type: ScopeType },
+    Scope {
+        frame_id: i64,
+        scope_type: ScopeType,
+    },
     Variable {
         frame_id: i64,
         _parent_ref: i64,
@@ -153,15 +155,21 @@ impl DebugSession {
     // ========================================================================
 
     pub async fn launch(&self, args: LaunchRequestArguments) -> DapResult<()> {
-        info!("Launching: program={:?}, binary={:?}", args.program, args.binary);
+        info!(
+            "Launching: program={:?}, binary={:?}",
+            args.program, args.binary
+        );
 
-        let program = args.program.clone()
+        let program = args
+            .program
+            .clone()
             .or_else(|| args.binary.clone())
             .ok_or_else(|| DapError::InvalidRequest("No program specified".to_string()))?;
 
         // If auto_compile is enabled and we have a .vais file, compile it
         let binary = if args.auto_compile.unwrap_or(true) && program.ends_with(".vais") {
-            self.compile_vais(&program, args.opt_level.unwrap_or(0)).await?
+            self.compile_vais(&program, args.opt_level.unwrap_or(0))
+                .await?
         } else {
             args.binary.clone().unwrap_or(program.clone())
         };
@@ -175,13 +183,15 @@ impl DebugSession {
         // Launch the process
         {
             let mut debugger = self.debugger.write().await;
-            debugger.launch(
-                &binary,
-                args.args.as_deref().unwrap_or(&[]),
-                args.cwd.as_deref(),
-                args.env.as_ref(),
-                args.stop_on_entry.unwrap_or(false),
-            ).await?;
+            debugger
+                .launch(
+                    &binary,
+                    args.args.as_deref().unwrap_or(&[]),
+                    args.cwd.as_deref(),
+                    args.env.as_ref(),
+                    args.stop_on_entry.unwrap_or(false),
+                )
+                .await?;
         }
 
         // Store config for restart
@@ -195,13 +205,17 @@ impl DebugSession {
 
         let output_file = source_file.replace(".vais", "");
 
-        info!("Compiling {} -> {} (opt_level={})", source_file, output_file, opt_level);
+        info!(
+            "Compiling {} -> {} (opt_level={})",
+            source_file, output_file, opt_level
+        );
 
         let status = Command::new("vaisc")
             .args([
                 source_file,
-                "-o", &output_file,
-                "-g",  // Enable debug info
+                "-o",
+                &output_file,
+                "-g", // Enable debug info
                 &format!("-O{}", opt_level),
             ])
             .status()
@@ -218,9 +232,9 @@ impl DebugSession {
     }
 
     pub async fn attach(&self, args: AttachRequestArguments) -> DapResult<()> {
-        let pid = args.pid.ok_or_else(|| {
-            DapError::InvalidRequest("No PID specified for attach".to_string())
-        })?;
+        let pid = args
+            .pid
+            .ok_or_else(|| DapError::InvalidRequest("No PID specified for attach".to_string()))?;
 
         info!("Attaching to PID: {}", pid);
 
@@ -233,7 +247,9 @@ impl DebugSession {
         // Attach to process
         {
             let mut debugger = self.debugger.write().await;
-            debugger.attach(pid as u32, args.stop_on_attach.unwrap_or(true)).await?;
+            debugger
+                .attach(pid as u32, args.stop_on_attach.unwrap_or(true))
+                .await?;
         }
 
         // Store config for restart
@@ -300,9 +316,13 @@ impl DebugSession {
     // Breakpoints
     // ========================================================================
 
-    pub async fn set_breakpoints(&self, args: SetBreakpointsRequestArguments) -> DapResult<Vec<Breakpoint>> {
-        let source_path = args.source.path.as_ref()
-            .ok_or_else(|| DapError::InvalidRequest("No source path in setBreakpoints".to_string()))?;
+    pub async fn set_breakpoints(
+        &self,
+        args: SetBreakpointsRequestArguments,
+    ) -> DapResult<Vec<Breakpoint>> {
+        let source_path = args.source.path.as_ref().ok_or_else(|| {
+            DapError::InvalidRequest("No source path in setBreakpoints".to_string())
+        })?;
 
         info!("Setting breakpoints in {}", source_path);
 
@@ -318,7 +338,10 @@ impl DebugSession {
                 let id = self.next_breakpoint_id();
                 let line = bp.line;
 
-                match debugger.set_breakpoint(source_path, line, bp.condition.as_deref()).await {
+                match debugger
+                    .set_breakpoint(source_path, line, bp.condition.as_deref())
+                    .await
+                {
                     Ok(verified_line) => {
                         results.push(Breakpoint {
                             id: Some(id),
@@ -355,7 +378,10 @@ impl DebugSession {
         Ok(results)
     }
 
-    pub async fn set_function_breakpoints(&self, args: SetFunctionBreakpointsRequestArguments) -> DapResult<Vec<Breakpoint>> {
+    pub async fn set_function_breakpoints(
+        &self,
+        args: SetFunctionBreakpointsRequestArguments,
+    ) -> DapResult<Vec<Breakpoint>> {
         info!("Setting function breakpoints");
 
         let mut results = Vec::new();
@@ -367,7 +393,10 @@ impl DebugSession {
         for bp in args.breakpoints {
             let id = self.next_breakpoint_id();
 
-            match debugger.set_function_breakpoint(&bp.name, bp.condition.as_deref()).await {
+            match debugger
+                .set_function_breakpoint(&bp.name, bp.condition.as_deref())
+                .await
+            {
                 Ok(()) => {
                     results.push(Breakpoint {
                         id: Some(id),
@@ -403,7 +432,10 @@ impl DebugSession {
         Ok(results)
     }
 
-    pub async fn set_exception_breakpoints(&self, args: SetExceptionBreakpointsRequestArguments) -> DapResult<()> {
+    pub async fn set_exception_breakpoints(
+        &self,
+        args: SetExceptionBreakpointsRequestArguments,
+    ) -> DapResult<()> {
         info!("Setting exception breakpoints: {:?}", args.filters);
 
         let mut debugger = self.debugger.write().await;
@@ -415,7 +447,10 @@ impl DebugSession {
     // ========================================================================
 
     pub async fn continue_execution(&self, thread_id: i64, single_thread: bool) -> DapResult<()> {
-        debug!("Continue: thread_id={}, single_thread={}", thread_id, single_thread);
+        debug!(
+            "Continue: thread_id={}, single_thread={}",
+            thread_id, single_thread
+        );
 
         let mut debugger = self.debugger.write().await;
         if single_thread {
@@ -425,8 +460,15 @@ impl DebugSession {
         }
     }
 
-    pub async fn step_over(&self, thread_id: i64, granularity: Option<SteppingGranularity>) -> DapResult<()> {
-        debug!("Step over: thread_id={}, granularity={:?}", thread_id, granularity);
+    pub async fn step_over(
+        &self,
+        thread_id: i64,
+        granularity: Option<SteppingGranularity>,
+    ) -> DapResult<()> {
+        debug!(
+            "Step over: thread_id={}, granularity={:?}",
+            thread_id, granularity
+        );
 
         let mut debugger = self.debugger.write().await;
         match granularity {
@@ -435,8 +477,15 @@ impl DebugSession {
         }
     }
 
-    pub async fn step_in(&self, thread_id: i64, granularity: Option<SteppingGranularity>) -> DapResult<()> {
-        debug!("Step in: thread_id={}, granularity={:?}", thread_id, granularity);
+    pub async fn step_in(
+        &self,
+        thread_id: i64,
+        granularity: Option<SteppingGranularity>,
+    ) -> DapResult<()> {
+        debug!(
+            "Step in: thread_id={}, granularity={:?}",
+            thread_id, granularity
+        );
 
         let mut debugger = self.debugger.write().await;
         match granularity {
@@ -482,7 +531,9 @@ impl DebugSession {
         let raw_frames = debugger.get_stack_frames(thread_id).await?;
         let total = raw_frames.len();
 
-        let end_frame = levels.map(|l| (start_frame + l).min(total)).unwrap_or(total);
+        let end_frame = levels
+            .map(|l| (start_frame + l).min(total))
+            .unwrap_or(total);
         let frames_slice = &raw_frames[start_frame..end_frame];
 
         let source_map = self.source_map.read().await;
@@ -495,7 +546,8 @@ impl DebugSession {
 
             frame_mapping.insert(frame_id, (thread_id, frame_idx));
 
-            let source = source_map.get_source_for_address(raw.instruction_pointer)
+            let source = source_map
+                .get_source_for_address(raw.instruction_pointer)
                 .map(Source::from_path);
 
             let (line, column) = source_map
@@ -526,7 +578,8 @@ impl DebugSession {
 
     pub async fn get_scopes(&self, frame_id: i64) -> DapResult<Vec<Scope>> {
         let frame_mapping = self.frame_mapping.read().await;
-        let (_thread_id, _frame_idx) = frame_mapping.get(&frame_id)
+        let (_thread_id, _frame_idx) = frame_mapping
+            .get(&frame_id)
             .copied()
             .ok_or(DapError::FrameNotFound(frame_id))?;
 
@@ -534,22 +587,31 @@ impl DebugSession {
 
         // Create scopes
         let locals_ref = self.next_var_ref();
-        var_ref_mapping.insert(locals_ref, VariableRef::Scope {
-            frame_id,
-            scope_type: ScopeType::Locals,
-        });
+        var_ref_mapping.insert(
+            locals_ref,
+            VariableRef::Scope {
+                frame_id,
+                scope_type: ScopeType::Locals,
+            },
+        );
 
         let args_ref = self.next_var_ref();
-        var_ref_mapping.insert(args_ref, VariableRef::Scope {
-            frame_id,
-            scope_type: ScopeType::Arguments,
-        });
+        var_ref_mapping.insert(
+            args_ref,
+            VariableRef::Scope {
+                frame_id,
+                scope_type: ScopeType::Arguments,
+            },
+        );
 
         let registers_ref = self.next_var_ref();
-        var_ref_mapping.insert(registers_ref, VariableRef::Scope {
-            frame_id,
-            scope_type: ScopeType::Registers,
-        });
+        var_ref_mapping.insert(
+            registers_ref,
+            VariableRef::Scope {
+                frame_id,
+                scope_type: ScopeType::Registers,
+            },
+        );
 
         Ok(vec![
             Scope {
@@ -601,15 +663,20 @@ impl DebugSession {
         count: Option<usize>,
     ) -> DapResult<Vec<Variable>> {
         let var_ref_mapping = self.var_ref_mapping.read().await;
-        let var_ref = var_ref_mapping.get(&variables_reference)
+        let var_ref = var_ref_mapping
+            .get(&variables_reference)
             .cloned()
             .ok_or(DapError::VariableNotFound(variables_reference))?;
 
         let frame_mapping = self.frame_mapping.read().await;
 
         match var_ref {
-            VariableRef::Scope { frame_id, scope_type } => {
-                let (thread_id, frame_idx) = frame_mapping.get(&frame_id)
+            VariableRef::Scope {
+                frame_id,
+                scope_type,
+            } => {
+                let (thread_id, frame_idx) = frame_mapping
+                    .get(&frame_id)
                     .copied()
                     .ok_or(DapError::FrameNotFound(frame_id))?;
 
@@ -623,7 +690,8 @@ impl DebugSession {
 
                 let mut var_ref_mapping = self.var_ref_mapping.write().await;
 
-                let result = raw_vars.into_iter()
+                let result = raw_vars
+                    .into_iter()
                     .skip(start.unwrap_or(0))
                     .take(count.unwrap_or(usize::MAX))
                     .map(|v| {
@@ -631,13 +699,17 @@ impl DebugSession {
                         let has_children = is_compound_type(v.type_name.as_deref());
                         let variables_reference = if has_children {
                             let new_ref = self.next_var_ref();
-                            let eval_path = v.evaluate_name.clone().unwrap_or_else(|| v.name.clone());
-                            var_ref_mapping.insert(new_ref, VariableRef::Variable {
-                                frame_id,
-                                _parent_ref: variables_reference,
-                                _name: v.name.clone(),
-                                eval_path,
-                            });
+                            let eval_path =
+                                v.evaluate_name.clone().unwrap_or_else(|| v.name.clone());
+                            var_ref_mapping.insert(
+                                new_ref,
+                                VariableRef::Variable {
+                                    frame_id,
+                                    _parent_ref: variables_reference,
+                                    _name: v.name.clone(),
+                                    eval_path,
+                                },
+                            );
                             new_ref
                         } else {
                             0
@@ -659,33 +731,47 @@ impl DebugSession {
 
                 Ok(result)
             }
-            VariableRef::Variable { frame_id, _parent_ref: _, _name: _, eval_path } => {
+            VariableRef::Variable {
+                frame_id,
+                _parent_ref: _,
+                _name: _,
+                eval_path,
+            } => {
                 // Get child variables using the evaluation path
-                let (thread_id, frame_idx) = frame_mapping.get(&frame_id)
+                let (thread_id, frame_idx) = frame_mapping
+                    .get(&frame_id)
                     .copied()
                     .ok_or(DapError::FrameNotFound(frame_id))?;
 
                 let debugger = self.debugger.read().await;
-                let raw_vars = debugger.get_children(thread_id, frame_idx, &eval_path).await?;
+                let raw_vars = debugger
+                    .get_children(thread_id, frame_idx, &eval_path)
+                    .await?;
                 drop(debugger);
 
                 let mut var_ref_mapping = self.var_ref_mapping.write().await;
 
-                let result = raw_vars.into_iter()
+                let result = raw_vars
+                    .into_iter()
                     .skip(start.unwrap_or(0))
                     .take(count.unwrap_or(usize::MAX))
                     .map(|v| {
                         let has_children = is_compound_type(v.type_name.as_deref());
                         let child_ref = if has_children {
                             let new_ref = self.next_var_ref();
-                            let child_eval_path = v.evaluate_name.clone()
+                            let child_eval_path = v
+                                .evaluate_name
+                                .clone()
                                 .unwrap_or_else(|| format!("{}.{}", eval_path, v.name));
-                            var_ref_mapping.insert(new_ref, VariableRef::Variable {
-                                frame_id,
-                                _parent_ref: variables_reference,
-                                _name: v.name.clone(),
-                                eval_path: child_eval_path,
-                            });
+                            var_ref_mapping.insert(
+                                new_ref,
+                                VariableRef::Variable {
+                                    frame_id,
+                                    _parent_ref: variables_reference,
+                                    _name: v.name.clone(),
+                                    eval_path: child_eval_path,
+                                },
+                            );
                             new_ref
                         } else {
                             0
@@ -717,7 +803,8 @@ impl DebugSession {
         value: &str,
     ) -> DapResult<(String, Option<String>, Option<i64>)> {
         let var_ref_mapping = self.var_ref_mapping.read().await;
-        let var_ref = var_ref_mapping.get(&variables_reference)
+        let var_ref = var_ref_mapping
+            .get(&variables_reference)
             .cloned()
             .ok_or(DapError::VariableNotFound(variables_reference))?;
 
@@ -725,16 +812,19 @@ impl DebugSession {
 
         match var_ref {
             VariableRef::Scope { frame_id, .. } => {
-                let (thread_id, frame_idx) = frame_mapping.get(&frame_id)
+                let (thread_id, frame_idx) = frame_mapping
+                    .get(&frame_id)
                     .copied()
                     .ok_or(DapError::FrameNotFound(frame_id))?;
 
                 let mut debugger = self.debugger.write().await;
-                debugger.set_variable(thread_id, frame_idx, name, value).await
+                debugger
+                    .set_variable(thread_id, frame_idx, name, value)
+                    .await
             }
-            VariableRef::Variable { .. } => {
-                Err(DapError::Unsupported("Setting nested variables not yet supported".to_string()))
-            }
+            VariableRef::Variable { .. } => Err(DapError::Unsupported(
+                "Setting nested variables not yet supported".to_string(),
+            )),
         }
     }
 
@@ -744,8 +834,11 @@ impl DebugSession {
 
     pub async fn get_source(&self, source_reference: i64) -> DapResult<String> {
         let source_map = self.source_map.read().await;
-        source_map.get_source_content(source_reference)
-            .ok_or_else(|| DapError::SourceMapping(format!("Source reference {} not found", source_reference)))
+        source_map
+            .get_source_content(source_reference)
+            .ok_or_else(|| {
+                DapError::SourceMapping(format!("Source reference {} not found", source_reference))
+            })
     }
 
     // ========================================================================
@@ -760,7 +853,8 @@ impl DebugSession {
     ) -> DapResult<(String, Option<String>, i64)> {
         let (thread_id, frame_idx) = if let Some(fid) = frame_id {
             let frame_mapping = self.frame_mapping.read().await;
-            frame_mapping.get(&fid)
+            frame_mapping
+                .get(&fid)
                 .copied()
                 .ok_or(DapError::FrameNotFound(fid))?
         } else {
@@ -803,7 +897,8 @@ impl DebugSession {
         let adjusted_addr = (address as i64 + offset) as u64;
 
         // Decode base64
-        let bytes = base64::engine::general_purpose::STANDARD.decode(data)
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
             .map_err(|e| DapError::InvalidRequest(format!("Invalid base64 data: {}", e)))?;
 
         let mut debugger = self.debugger.write().await;
@@ -828,7 +923,14 @@ impl DebugSession {
         let adjusted_addr = (address as i64 + offset) as u64;
 
         let debugger = self.debugger.read().await;
-        debugger.disassemble(adjusted_addr, instruction_offset, instruction_count, resolve_symbols).await
+        debugger
+            .disassemble(
+                adjusted_addr,
+                instruction_offset,
+                instruction_count,
+                resolve_symbols,
+            )
+            .await
     }
 }
 
@@ -838,7 +940,8 @@ fn parse_memory_reference(reference: &str) -> DapResult<u64> {
         u64::from_str_radix(&reference[2..], 16)
             .map_err(|e| DapError::InvalidRequest(format!("Invalid memory reference: {}", e)))
     } else {
-        reference.parse()
+        reference
+            .parse()
             .map_err(|e| DapError::InvalidRequest(format!("Invalid memory reference: {}", e)))
     }
 }

@@ -130,7 +130,13 @@ impl Value {
     pub fn as_i64(&self) -> i64 {
         match self {
             Value::I64(n) => *n,
-            Value::Bool(b) => if *b { 1 } else { 0 },
+            Value::Bool(b) => {
+                if *b {
+                    1
+                } else {
+                    0
+                }
+            }
             _ => panic!("Cannot convert {:?} to i64", self),
         }
     }
@@ -259,9 +265,7 @@ impl Interpreter {
         // Execute function body
         match &func.body {
             FunctionBody::Expr(expr) => self.eval_expr(&expr.node, &mut locals, profile.as_ref()),
-            FunctionBody::Block(stmts) => {
-                self.eval_block(stmts, &mut locals, profile.as_ref())
-            }
+            FunctionBody::Block(stmts) => self.eval_block(stmts, &mut locals, profile.as_ref()),
         }
     }
 
@@ -306,7 +310,9 @@ impl Interpreter {
                     return Err(JitError::Runtime(message.clone()));
                 }
                 Stmt::LetDestructure { .. } => {
-                    return Err(JitError::Runtime("tuple destructuring not yet supported in interpreter".to_string()));
+                    return Err(JitError::Runtime(
+                        "tuple destructuring not yet supported in interpreter".to_string(),
+                    ));
                 }
             }
 
@@ -422,7 +428,11 @@ impl Interpreter {
 
             Expr::Block(stmts) => self.eval_block(stmts, locals, profile),
 
-            Expr::Range { start, end, inclusive } => {
+            Expr::Range {
+                start,
+                end,
+                inclusive,
+            } => {
                 // Return a tuple representing the range
                 let start_val = if let Some(ref s) = start {
                     self.eval_expr(&s.node, locals, profile)?

@@ -78,19 +78,17 @@ impl RegistrySource {
                     .unwrap_or("http")
                     .to_string()
             }
-            Self::Local { path } => {
-                path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("local")
-                    .to_string()
-            }
-            Self::Git { url, .. } => {
-                url.rsplit('/')
-                    .next()
-                    .unwrap_or("git")
-                    .trim_end_matches(".git")
-                    .to_string()
-            }
+            Self::Local { path } => path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("local")
+                .to_string(),
+            Self::Git { url, .. } => url
+                .rsplit('/')
+                .next()
+                .unwrap_or("git")
+                .trim_end_matches(".git")
+                .to_string(),
         }
     }
 
@@ -111,8 +109,7 @@ impl Default for RegistrySource {
 }
 
 /// Registry configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RegistryConfig {
     /// Default registry for package lookups
     #[serde(default)]
@@ -130,7 +127,6 @@ pub struct NamedRegistry {
     /// Registry source
     pub source: RegistrySource,
 }
-
 
 impl RegistryConfig {
     /// Create config with only a default registry

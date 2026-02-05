@@ -323,9 +323,7 @@ impl ComplexityReport {
 
     /// Get the highest complexity function
     pub fn max_complexity_function(&self) -> Option<(&String, &usize)> {
-        self.function_complexity
-            .iter()
-            .max_by_key(|(_, &v)| v)
+        self.function_complexity.iter().max_by_key(|(_, &v)| v)
     }
 }
 
@@ -477,9 +475,16 @@ mod tests {
     #[test]
     fn test_plugin_config() {
         let mut config = PluginConfig::new();
-        config.values.insert("max_complexity".to_string(), toml::Value::Integer(10));
-        config.values.insert("enabled".to_string(), toml::Value::Boolean(true));
-        config.values.insert("output".to_string(), toml::Value::String("test".to_string()));
+        config
+            .values
+            .insert("max_complexity".to_string(), toml::Value::Integer(10));
+        config
+            .values
+            .insert("enabled".to_string(), toml::Value::Boolean(true));
+        config.values.insert(
+            "output".to_string(),
+            toml::Value::String("test".to_string()),
+        );
 
         assert_eq!(config.get_integer("max_complexity"), Some(10));
         assert_eq!(config.get_bool("enabled"), Some(true));
@@ -505,9 +510,15 @@ mod tests {
     #[test]
     fn test_format_config_from_plugin_config() {
         let mut plugin_config = PluginConfig::new();
-        plugin_config.values.insert("indent_size".to_string(), toml::Value::Integer(2));
-        plugin_config.values.insert("line_length".to_string(), toml::Value::Integer(80));
-        plugin_config.values.insert("use_tabs".to_string(), toml::Value::Boolean(true));
+        plugin_config
+            .values
+            .insert("indent_size".to_string(), toml::Value::Integer(2));
+        plugin_config
+            .values
+            .insert("line_length".to_string(), toml::Value::Integer(80));
+        plugin_config
+            .values
+            .insert("use_tabs".to_string(), toml::Value::Boolean(true));
 
         let fmt_config = FormatConfig::from_plugin_config(&plugin_config);
         assert_eq!(fmt_config.indent_size, 2);

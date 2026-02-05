@@ -1,6 +1,6 @@
 //! Type checking tests for FFI features
 
-use vais_types::{TypeChecker, ResolvedType};
+use vais_types::{ResolvedType, TypeChecker};
 
 #[test]
 fn test_function_pointer_type() {
@@ -59,9 +59,11 @@ fn test_vararg_function_signature() {
         name: "printf".to_string(),
         generics: vec![],
         generic_bounds: HashMap::new(),
-        params: vec![
-            ("fmt".to_string(), ResolvedType::Pointer(Box::new(ResolvedType::I8)), false),
-        ],
+        params: vec![(
+            "fmt".to_string(),
+            ResolvedType::Pointer(Box::new(ResolvedType::I8)),
+            false,
+        )],
         ret: ResolvedType::I32,
         is_async: false,
         is_vararg: true,

@@ -126,7 +126,8 @@ pub fn token_to_string(token: &Token) -> String {
         Token::Force => "Force",
         // Lifetime tokens
         Token::Lifetime(lt) => return format!("Lifetime({})", lt),
-    }.to_string()
+    }
+    .to_string()
 }
 
 /// Extract text from token if it contains data

@@ -48,16 +48,14 @@ impl SimpleRng {
             6 => char::from_u32(0x4E00 + (self.next() % 0x9FFF) as u32).unwrap_or('中'), // CJK
             7 => char::from_u32(0x0400 + (self.next() % 256) as u32).unwrap_or('А'), // Cyrillic
             8 => char::from_u32(0x0600 + (self.next() % 256) as u32).unwrap_or('ا'), // Arabic
-            _ => '�', // Replacement character
+            _ => '�',                                // Replacement character
         }
     }
 }
 
 /// Helper function to run parser with panic catching
 fn parse_no_panic(input: &str) -> Result<bool, String> {
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        parse(input)
-    }));
+    let result = catch_unwind(AssertUnwindSafe(|| parse(input)));
 
     match result {
         Ok(_) => Ok(true), // Parser either succeeded or returned an error - both are fine
@@ -100,11 +98,16 @@ fn fuzz_completely_random_bytes() {
         eprintln!("\n=== PARSER PANICS FOUND ===");
         for (idx, input, panic_msg) in &failures {
             eprintln!("\nTest iteration {}: PANIC!", idx);
-            eprintln!("Input (first 200 chars): {:?}",
-                     input.chars().take(200).collect::<String>());
+            eprintln!(
+                "Input (first 200 chars): {:?}",
+                input.chars().take(200).collect::<String>()
+            );
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Parser panicked on {} random byte inputs (see above)", failures.len());
+        panic!(
+            "Parser panicked on {} random byte inputs (see above)",
+            failures.len()
+        );
     }
 }
 
@@ -129,8 +132,10 @@ fn fuzz_random_ascii_strings() {
         eprintln!("\n=== PARSER PANICS FOUND ===");
         for (idx, input, panic_msg) in &failures {
             eprintln!("\nTest iteration {}: PANIC!", idx);
-            eprintln!("Input (first 200 chars): {:?}",
-                     input.chars().take(200).collect::<String>());
+            eprintln!(
+                "Input (first 200 chars): {:?}",
+                input.chars().take(200).collect::<String>()
+            );
             eprintln!("Panic message: {}", panic_msg);
         }
         panic!("Parser panicked on {} ASCII string inputs", failures.len());
@@ -369,7 +374,10 @@ fn fuzz_many_sequential_statements() {
             eprintln!("\nTest {}: PANIC!", desc);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Parser panicked on {} sequential statement inputs", failures.len());
+        panic!(
+            "Parser panicked on {} sequential statement inputs",
+            failures.len()
+        );
     }
 }
 
@@ -418,47 +426,24 @@ fn fuzz_unicode_and_special_chars() {
         eprintln!("\n=== PARSER PANICS FOUND ===");
         for (idx, input, panic_msg) in &failures {
             eprintln!("\nTest {}: PANIC!", idx);
-            eprintln!("Input (first 100 chars): {:?}",
-                     input.chars().take(100).collect::<String>());
+            eprintln!(
+                "Input (first 100 chars): {:?}",
+                input.chars().take(100).collect::<String>()
+            );
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Parser panicked on {} unicode/special char inputs", failures.len());
+        panic!(
+            "Parser panicked on {} unicode/special char inputs",
+            failures.len()
+        );
     }
 }
 
 #[test]
 fn fuzz_empty_and_minimal_inputs() {
     let test_cases = vec![
-        "",
-        " ",
-        "\n",
-        "\t",
-        "\r\n",
-        "F",
-        "S",
-        "E",
-        "T",
-        "I",
-        "(",
-        ")",
-        "{",
-        "}",
-        "[",
-        "]",
-        ":",
-        ";",
-        ",",
-        "=",
-        "->",
-        "<>",
-        "F()",
-        "F f",
-        "F f(",
-        "F f)",
-        "F f()=",
-        "F f()->",
-        "S{",
-        "E{",
+        "", " ", "\n", "\t", "\r\n", "F", "S", "E", "T", "I", "(", ")", "{", "}", "[", "]", ":",
+        ";", ",", "=", "->", "<>", "F()", "F f", "F f(", "F f)", "F f()=", "F f()->", "S{", "E{",
     ];
 
     let mut failures = Vec::new();
@@ -493,7 +478,6 @@ fn fuzz_pathological_patterns() {
         ("====================", "repeated equals"),
         ("<<<<<<<<<<<<<<<<<<<<", "repeated less-than"),
         (">>>>>>>>>>>>>>>>>>>>", "repeated greater-than"),
-
         // Mismatched delimiters
         ("((((((((", "unmatched open parens"),
         ("))))))))", "unmatched close parens"),
@@ -501,27 +485,26 @@ fn fuzz_pathological_patterns() {
         ("}}}}}}}}", "unmatched close braces"),
         ("[[[[[[[[", "unmatched open brackets"),
         ("]]]]]]]]", "unmatched close brackets"),
-
         // Mixed delimiters
         ("({[<>]})", "mixed delimiters"),
         ("(((((]]]]]]", "crossed delimiters"),
         ("{{{{{)))))", "crossed braces/parens"),
-
         // Keyword spam
         ("F F F F F F F F F F", "repeated F"),
         ("S S S S S S S S S S", "repeated S"),
         ("R R R R R R R R R R", "repeated R"),
         ("if if if if if if", "repeated if"),
-
         // Type syntax abuse
         ("<><><><><><><>", "repeated angle brackets"),
         ("->->->->->->->", "repeated arrows"),
         ("::::::::::::", "repeated colons"),
         (",,,,,,,,,,,,", "repeated commas"),
-
         // Number/identifier edge cases
         ("123456789012345678901234567890", "very long number"),
-        ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "very long identifier"),
+        (
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "very long identifier",
+        ),
         ("___________________________________", "all underscores"),
     ];
 
@@ -538,6 +521,9 @@ fn fuzz_pathological_patterns() {
             eprintln!("Input: {:?}", input);
             eprintln!("Panic message: {}", panic_msg);
         }
-        panic!("Parser panicked on {} pathological patterns", failures.len());
+        panic!(
+            "Parser panicked on {} pathological patterns",
+            failures.len()
+        );
     }
 }

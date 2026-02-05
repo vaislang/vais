@@ -3,7 +3,9 @@
 //! Main server that handles DAP protocol communication and request dispatching.
 
 use std::sync::atomic::{AtomicI64, Ordering};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncBufReadExt, AsyncWriteExt, AsyncReadExt, BufReader, BufWriter};
+use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter,
+};
 use tracing::{debug, error, info};
 
 use crate::error::{DapError, DapResult};
@@ -100,7 +102,10 @@ impl DapServer {
                 }
             };
 
-            debug!("Received request: {} (seq={})", request.command, request.base.seq);
+            debug!(
+                "Received request: {} (seq={})",
+                request.command, request.base.seq
+            );
 
             // Handle request
             let response = self.handle_request(&request).await;
@@ -113,7 +118,10 @@ impl DapServer {
             writer.write_all(response_json.as_bytes()).await?;
             writer.flush().await?;
 
-            debug!("Sent response for {} (success={})", request.command, response.success);
+            debug!(
+                "Sent response for {} (success={})",
+                request.command, response.success
+            );
 
             // Check for disconnect
             if request.command == "disconnect" {
@@ -192,24 +200,28 @@ impl DapServer {
             .arguments
             .as_ref()
             .ok_or_else(|| DapError::InvalidRequest("Missing arguments".to_string()))?;
-        serde_json::from_value(args.clone()).map_err(|e| {
-            DapError::InvalidRequest(format!("Invalid arguments: {}", e))
-        })
+        serde_json::from_value(args.clone())
+            .map_err(|e| DapError::InvalidRequest(format!("Invalid arguments: {}", e)))
     }
 
     // ========================================================================
     // Request Handlers
     // ========================================================================
 
-    async fn handle_initialize(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_initialize(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: InitializeRequestArguments = self.parse_args(request)?;
 
         self.lines_start_at1 = args.lines_start_at1.unwrap_or(true);
         self.columns_start_at1 = args.columns_start_at1.unwrap_or(true);
         self.client_caps = Some(args);
 
-        info!("DAP initialized (lines_start_at1={}, columns_start_at1={})",
-              self.lines_start_at1, self.columns_start_at1);
+        info!(
+            "DAP initialized (lines_start_at1={}, columns_start_at1={})",
+            self.lines_start_at1, self.columns_start_at1
+        );
 
         let body = InitializeResponseBody {
             capabilities: self.capabilities.clone(),
@@ -243,19 +255,30 @@ impl DapServer {
         Ok(None)
     }
 
-    async fn handle_disconnect(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_disconnect(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: DisconnectRequestArguments = self.parse_args(request).unwrap_or_default();
 
-        info!("Disconnecting (terminate_debuggee={:?})", args.terminate_debuggee);
+        info!(
+            "Disconnecting (terminate_debuggee={:?})",
+            args.terminate_debuggee
+        );
 
         if let Some(session) = self.session.take() {
-            session.disconnect(args.terminate_debuggee.unwrap_or(false)).await?;
+            session
+                .disconnect(args.terminate_debuggee.unwrap_or(false))
+                .await?;
         }
 
         Ok(None)
     }
 
-    async fn handle_terminate(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_terminate(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: TerminateRequestArguments = self.parse_args(request).unwrap_or_default();
 
         info!("Terminating debug session (restart={:?})", args.restart);
@@ -279,7 +302,10 @@ impl DapServer {
         Ok(None)
     }
 
-    async fn handle_configuration_done(&mut self, _request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_configuration_done(
+        &mut self,
+        _request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         info!("Configuration done");
         self.configured = true;
 
@@ -290,7 +316,10 @@ impl DapServer {
         Ok(None)
     }
 
-    async fn handle_set_breakpoints(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_set_breakpoints(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: SetBreakpointsRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
@@ -300,7 +329,10 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_set_function_breakpoints(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_set_function_breakpoints(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: SetFunctionBreakpointsRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
@@ -310,7 +342,10 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_set_exception_breakpoints(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_set_exception_breakpoints(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: SetExceptionBreakpointsRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
@@ -324,7 +359,9 @@ impl DapServer {
         let args: ContinueRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        session.continue_execution(args.thread_id, args.single_thread.unwrap_or(false)).await?;
+        session
+            .continue_execution(args.thread_id, args.single_thread.unwrap_or(false))
+            .await?;
 
         let body = ContinueResponseBody {
             all_threads_continued: Some(true),
@@ -376,15 +413,20 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_stack_trace(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_stack_trace(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: StackTraceRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let (stack_frames, total_frames) = session.get_stack_trace(
-            args.thread_id,
-            args.start_frame.unwrap_or(0) as usize,
-            args.levels.map(|l| l as usize),
-        ).await?;
+        let (stack_frames, total_frames) = session
+            .get_stack_trace(
+                args.thread_id,
+                args.start_frame.unwrap_or(0) as usize,
+                args.levels.map(|l| l as usize),
+            )
+            .await?;
 
         let body = StackTraceResponseBody {
             stack_frames,
@@ -403,29 +445,35 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_variables(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_variables(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: VariablesRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let variables = session.get_variables(
-            args.variables_reference,
-            args.start.map(|s| s as usize),
-            args.count.map(|c| c as usize),
-        ).await?;
+        let variables = session
+            .get_variables(
+                args.variables_reference,
+                args.start.map(|s| s as usize),
+                args.count.map(|c| c as usize),
+            )
+            .await?;
 
         let body = VariablesResponseBody { variables };
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_set_variable(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_set_variable(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: SetVariableRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let (value, var_type, variables_reference) = session.set_variable(
-            args.variables_reference,
-            &args.name,
-            &args.value,
-        ).await?;
+        let (value, var_type, variables_reference) = session
+            .set_variable(args.variables_reference, &args.name, &args.value)
+            .await?;
 
         let body = SetVariableResponseBody {
             value,
@@ -454,11 +502,9 @@ impl DapServer {
         let args: EvaluateRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let (result, result_type, variables_reference) = session.evaluate(
-            &args.expression,
-            args.frame_id,
-            args.context,
-        ).await?;
+        let (result, result_type, variables_reference) = session
+            .evaluate(&args.expression, args.frame_id, args.context)
+            .await?;
 
         let body = EvaluateResponseBody {
             result,
@@ -472,15 +518,20 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_read_memory(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_read_memory(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: ReadMemoryRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let (address, data) = session.read_memory(
-            &args.memory_reference,
-            args.offset.unwrap_or(0),
-            args.count as usize,
-        ).await?;
+        let (address, data) = session
+            .read_memory(
+                &args.memory_reference,
+                args.offset.unwrap_or(0),
+                args.count as usize,
+            )
+            .await?;
 
         let body = ReadMemoryResponseBody {
             address,
@@ -490,15 +541,16 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_write_memory(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_write_memory(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: WriteMemoryRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let bytes_written = session.write_memory(
-            &args.memory_reference,
-            args.offset.unwrap_or(0),
-            &args.data,
-        ).await?;
+        let bytes_written = session
+            .write_memory(&args.memory_reference, args.offset.unwrap_or(0), &args.data)
+            .await?;
 
         let body = WriteMemoryResponseBody {
             offset: None,
@@ -507,17 +559,22 @@ impl DapServer {
         Ok(Some(serde_json::to_value(body)?))
     }
 
-    async fn handle_disassemble(&mut self, request: &Request) -> DapResult<Option<serde_json::Value>> {
+    async fn handle_disassemble(
+        &mut self,
+        request: &Request,
+    ) -> DapResult<Option<serde_json::Value>> {
         let args: DisassembleRequestArguments = self.parse_args(request)?;
 
         let session = self.session.as_ref().ok_or(DapError::NoActiveSession)?;
-        let instructions = session.disassemble(
-            &args.memory_reference,
-            args.offset.unwrap_or(0),
-            args.instruction_offset.unwrap_or(0),
-            args.instruction_count as usize,
-            args.resolve_symbols.unwrap_or(true),
-        ).await?;
+        let instructions = session
+            .disassemble(
+                &args.memory_reference,
+                args.offset.unwrap_or(0),
+                args.instruction_offset.unwrap_or(0),
+                args.instruction_count as usize,
+                args.resolve_symbols.unwrap_or(true),
+            )
+            .await?;
 
         let body = DisassembleResponseBody { instructions };
         Ok(Some(serde_json::to_value(body)?))

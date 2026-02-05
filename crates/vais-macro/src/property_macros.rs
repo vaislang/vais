@@ -78,7 +78,9 @@ pub fn register_property_macros(registry: &mut crate::MacroRegistry) {
                             MacroTemplateElement::Token(MacroToken::Punct(',')),
                             MacroTemplateElement::MetaVar("test".to_string()),
                             MacroTemplateElement::Token(MacroToken::Punct(',')),
-                            MacroTemplateElement::Token(MacroToken::Literal(MacroLiteral::Int(100))),
+                            MacroTemplateElement::Token(MacroToken::Literal(MacroLiteral::Int(
+                                100,
+                            ))),
                         ],
                     },
                 ]),

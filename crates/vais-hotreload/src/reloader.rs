@@ -1,11 +1,11 @@
 //! High-level hot reload orchestration
 
+use crate::dylib_loader::DylibLoader;
+use crate::error::{HotReloadError, Result};
+use crate::file_watcher::{FileWatcher, WatchEvent};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use crate::file_watcher::{FileWatcher, WatchEvent};
-use crate::dylib_loader::DylibLoader;
-use crate::error::{HotReloadError, Result};
 
 /// Callback function type for reload notifications
 pub type ReloadCallback = Arc<dyn Fn(&Path, usize) + Send + Sync>;
@@ -127,7 +127,10 @@ impl HotReloader {
         self.dylib_loader = Some(loader);
 
         if self.config.verbose {
-            println!("[HotReload] Started watching {}", self.config.source_path.display());
+            println!(
+                "[HotReload] Started watching {}",
+                self.config.source_path.display()
+            );
         }
 
         Ok(())
@@ -193,17 +196,16 @@ impl HotReloader {
 
     /// Get the current version number
     pub fn version(&self) -> usize {
-        self.dylib_loader
-            .as_ref()
-            .map(|l| l.version())
-            .unwrap_or(0)
+        self.dylib_loader.as_ref().map(|l| l.version()).unwrap_or(0)
     }
 
     /// Manually trigger a reload
     pub fn reload(&mut self) -> Result<bool> {
         // Check if already reloading
         {
-            let mut is_reloading = self.is_reloading.lock()
+            let mut is_reloading = self
+                .is_reloading
+                .lock()
                 .map_err(|_| HotReloadError::ReloadInProgress)?;
             if *is_reloading {
                 return Err(HotReloadError::ReloadInProgress);
@@ -215,7 +217,9 @@ impl HotReloader {
 
         // Clear reloading flag
         {
-            let mut is_reloading = self.is_reloading.lock()
+            let mut is_reloading = self
+                .is_reloading
+                .lock()
                 .map_err(|_| HotReloadError::ReloadInProgress)?;
             *is_reloading = false;
         }
@@ -225,7 +229,10 @@ impl HotReloader {
 
     fn perform_reload(&mut self) -> Result<bool> {
         if self.config.verbose {
-            println!("[HotReload] Detected change in {}", self.config.source_path.display());
+            println!(
+                "[HotReload] Detected change in {}",
+                self.config.source_path.display()
+            );
         }
 
         // Compile the source
@@ -273,9 +280,9 @@ impl HotReloader {
         }
 
         // Execute compilation
-        let output = cmd
-            .output()
-            .map_err(|e| HotReloadError::CompilationError(format!("Failed to run compiler: {}", e)))?;
+        let output = cmd.output().map_err(|e| {
+            HotReloadError::CompilationError(format!("Failed to run compiler: {}", e))
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -292,12 +299,16 @@ impl HotReloader {
         let output_dir = if let Some(ref dir) = config.output_dir {
             dir.clone()
         } else {
-            config.source_path.parent()
+            config
+                .source_path
+                .parent()
                 .ok_or_else(|| HotReloadError::InvalidPath("No parent directory".to_string()))?
                 .to_path_buf()
         };
 
-        let stem = config.source_path.file_stem()
+        let stem = config
+            .source_path
+            .file_stem()
             .and_then(|s| s.to_str())
             .ok_or_else(|| HotReloadError::InvalidPath("Invalid source file name".to_string()))?;
 

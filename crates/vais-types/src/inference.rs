@@ -14,12 +14,12 @@
 //! - Generic instantiation: Type arguments can be inferred from expected return type
 //! - Better error messages with more precise location information
 
-use std::collections::HashMap;
+use crate::types::{FunctionSig, GenericInstantiation, ResolvedType, TypeError, TypeResult};
+use crate::TypeChecker;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use vais_ast::{Expr, Spanned};
-use crate::types::{ResolvedType, TypeError, TypeResult, FunctionSig, GenericInstantiation};
-use crate::TypeChecker;
 
 /// Mode for bidirectional type checking
 #[derive(Debug, Clone)]
@@ -52,7 +52,11 @@ impl CheckMode {
 
 impl TypeChecker {
     /// Unify two types
-    pub(crate) fn unify(&mut self, expected: &ResolvedType, found: &ResolvedType) -> TypeResult<()> {
+    pub(crate) fn unify(
+        &mut self,
+        expected: &ResolvedType,
+        found: &ResolvedType,
+    ) -> TypeResult<()> {
         let expected = self.apply_substitutions(expected);
         let found = self.apply_substitutions(found);
 
@@ -115,7 +119,8 @@ impl TypeChecker {
                     ret: rb,
                     ..
                 },
-            ) | (
+            )
+            | (
                 ResolvedType::FnPtr {
                     params: pa,
                     ret: ra,
@@ -152,8 +157,14 @@ impl TypeChecker {
             }
             // Named types with generics
             (
-                ResolvedType::Named { name: na, generics: ga },
-                ResolvedType::Named { name: nb, generics: gb },
+                ResolvedType::Named {
+                    name: na,
+                    generics: ga,
+                },
+                ResolvedType::Named {
+                    name: nb,
+                    generics: gb,
+                },
             ) if na == nb && ga.len() == gb.len() => {
                 for (ta, tb) in ga.iter().zip(gb.iter()) {
                     self.unify(ta, tb)?;
@@ -163,19 +174,34 @@ impl TypeChecker {
             // Allow implicit integer type conversions (widening and narrowing)
             (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
             // Linear type: unwrap and unify with inner type
-            (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => self.unify(inner, other),
+            (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
+                self.unify(inner, other)
+            }
             // Affine type: unwrap and unify with inner type
-            (ResolvedType::Affine(inner), other) | (other, ResolvedType::Affine(inner)) => self.unify(inner, other),
+            (ResolvedType::Affine(inner), other) | (other, ResolvedType::Affine(inner)) => {
+                self.unify(inner, other)
+            }
             // Dependent type: unify the base type only (predicate is checked separately)
-            (ResolvedType::Dependent { base, .. }, other) | (other, ResolvedType::Dependent { base, .. }) => self.unify(base, other),
+            (ResolvedType::Dependent { base, .. }, other)
+            | (other, ResolvedType::Dependent { base, .. }) => self.unify(base, other),
             // Lifetime references: unify inner types (lifetime is tracked separately)
-            (ResolvedType::RefLifetime { inner: a, .. }, ResolvedType::RefLifetime { inner: b, .. }) => self.unify(a, b),
-            (ResolvedType::RefMutLifetime { inner: a, .. }, ResolvedType::RefMutLifetime { inner: b, .. }) => self.unify(a, b),
+            (
+                ResolvedType::RefLifetime { inner: a, .. },
+                ResolvedType::RefLifetime { inner: b, .. },
+            ) => self.unify(a, b),
+            (
+                ResolvedType::RefMutLifetime { inner: a, .. },
+                ResolvedType::RefMutLifetime { inner: b, .. },
+            ) => self.unify(a, b),
             // Allow ref with lifetime to unify with plain ref
-            (ResolvedType::RefLifetime { inner, .. }, ResolvedType::Ref(other)) |
-            (ResolvedType::Ref(other), ResolvedType::RefLifetime { inner, .. }) => self.unify(inner, other),
-            (ResolvedType::RefMutLifetime { inner, .. }, ResolvedType::RefMut(other)) |
-            (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => self.unify(inner, other),
+            (ResolvedType::RefLifetime { inner, .. }, ResolvedType::Ref(other))
+            | (ResolvedType::Ref(other), ResolvedType::RefLifetime { inner, .. }) => {
+                self.unify(inner, other)
+            }
+            (ResolvedType::RefMutLifetime { inner, .. }, ResolvedType::RefMut(other))
+            | (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => {
+                self.unify(inner, other)
+            }
             // Lazy type unification
             (ResolvedType::Lazy(a), ResolvedType::Lazy(b)) => self.unify(a, b),
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
@@ -237,7 +263,11 @@ impl TypeChecker {
             ResolvedType::Tuple(types) => {
                 ResolvedType::Tuple(types.iter().map(|t| self.apply_substitutions(t)).collect())
             }
-            ResolvedType::Fn { params, ret, effects } => ResolvedType::Fn {
+            ResolvedType::Fn {
+                params,
+                ret,
+                effects,
+            } => ResolvedType::Fn {
                 params: params.iter().map(|p| self.apply_substitutions(p)).collect(),
                 ret: Box::new(self.apply_substitutions(ret)),
                 effects: effects.clone(),
@@ -275,7 +305,11 @@ impl TypeChecker {
     }
 
     /// Substitute generic type parameters with concrete types (with memoization)
-    pub(crate) fn substitute_generics(&self, ty: &ResolvedType, substitutions: &HashMap<String, ResolvedType>) -> ResolvedType {
+    pub(crate) fn substitute_generics(
+        &self,
+        ty: &ResolvedType,
+        substitutions: &HashMap<String, ResolvedType>,
+    ) -> ResolvedType {
         // Check cache first
         let type_hash = Self::hash_type(ty);
         let subst_hash = Self::hash_substitutions(substitutions);
@@ -287,9 +321,10 @@ impl TypeChecker {
 
         // Compute the substitution
         let result = match ty {
-            ResolvedType::Generic(name) => {
-                substitutions.get(name).cloned().unwrap_or_else(|| ty.clone())
-            }
+            ResolvedType::Generic(name) => substitutions
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| ty.clone()),
             ResolvedType::Array(inner) => {
                 ResolvedType::Array(Box::new(self.substitute_generics(inner, substitutions)))
             }
@@ -315,23 +350,38 @@ impl TypeChecker {
             ResolvedType::Range(inner) => {
                 ResolvedType::Range(Box::new(self.substitute_generics(inner, substitutions)))
             }
-            ResolvedType::Tuple(types) => {
-                ResolvedType::Tuple(types.iter().map(|t| self.substitute_generics(t, substitutions)).collect())
-            }
-            ResolvedType::Fn { params, ret, effects } => ResolvedType::Fn {
-                params: params.iter().map(|p| self.substitute_generics(p, substitutions)).collect(),
+            ResolvedType::Tuple(types) => ResolvedType::Tuple(
+                types
+                    .iter()
+                    .map(|t| self.substitute_generics(t, substitutions))
+                    .collect(),
+            ),
+            ResolvedType::Fn {
+                params,
+                ret,
+                effects,
+            } => ResolvedType::Fn {
+                params: params
+                    .iter()
+                    .map(|p| self.substitute_generics(p, substitutions))
+                    .collect(),
                 ret: Box::new(self.substitute_generics(ret, substitutions)),
                 effects: effects.clone(),
             },
             ResolvedType::Named { name, generics } => ResolvedType::Named {
                 name: name.clone(),
-                generics: generics.iter().map(|g| self.substitute_generics(g, substitutions)).collect(),
+                generics: generics
+                    .iter()
+                    .map(|g| self.substitute_generics(g, substitutions))
+                    .collect(),
             },
             _ => ty.clone(),
         };
 
         // Store in cache
-        self.substitute_cache.borrow_mut().insert(cache_key, result.clone());
+        self.substitute_cache
+            .borrow_mut()
+            .insert(cache_key, result.clone());
         result
     }
 
@@ -370,14 +420,17 @@ impl TypeChecker {
             .generics
             .iter()
             .map(|param| {
-                let ty = generic_substitutions.get(param)
-                    .expect("Internal compiler error: generic parameter should exist in substitutions map");
+                let ty = generic_substitutions.get(param).expect(
+                    "Internal compiler error: generic parameter should exist in substitutions map",
+                );
                 self.apply_substitutions(ty)
             })
             .collect();
 
         // Record the generic instantiation if all type arguments are concrete
-        let all_concrete = inferred_type_args.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+        let all_concrete = inferred_type_args
+            .iter()
+            .all(|t| !matches!(t, ResolvedType::Var(_)));
         if all_concrete {
             let inst = GenericInstantiation::function(&sig.name, inferred_type_args.clone());
             self.add_instantiation(inst);
@@ -442,8 +495,14 @@ impl TypeChecker {
                 self.infer_type_arg(inner_param, inner_arg, type_args)
             }
             (
-                ResolvedType::Named { name: name_p, generics: generics_p },
-                ResolvedType::Named { name: name_a, generics: generics_a },
+                ResolvedType::Named {
+                    name: name_p,
+                    generics: generics_p,
+                },
+                ResolvedType::Named {
+                    name: name_a,
+                    generics: generics_a,
+                },
             ) if name_p == name_a && generics_p.len() == generics_a.len() => {
                 for (gp, ga) in generics_p.iter().zip(generics_a.iter()) {
                     self.infer_type_arg(gp, ga, type_args)?;
@@ -459,8 +518,16 @@ impl TypeChecker {
                 Ok(())
             }
             (
-                ResolvedType::Fn { params: params_p, ret: ret_p, .. },
-                ResolvedType::Fn { params: params_a, ret: ret_a, .. },
+                ResolvedType::Fn {
+                    params: params_p,
+                    ret: ret_p,
+                    ..
+                },
+                ResolvedType::Fn {
+                    params: params_a,
+                    ret: ret_a,
+                    ..
+                },
             ) if params_p.len() == params_a.len() => {
                 for (pp, pa) in params_p.iter().zip(params_a.iter()) {
                     self.infer_type_arg(pp, pa, type_args)?;
@@ -492,9 +559,11 @@ impl TypeChecker {
                 // But some expressions can benefit from the expected type
                 match &expr.node {
                     // Lambda expressions can use expected type to infer parameter types
-                    Expr::Lambda { params, body, captures: _ } => {
-                        self.check_lambda_with_expected(params, body, expected, &expr.span)
-                    }
+                    Expr::Lambda {
+                        params,
+                        body,
+                        captures: _,
+                    } => self.check_lambda_with_expected(params, body, expected, &expr.span),
                     // Array literals can propagate element type
                     Expr::Array(elements) => {
                         self.check_array_with_expected(elements, expected, &expr.span)
@@ -505,13 +574,15 @@ impl TypeChecker {
                         self.unify(expected, &inferred).map_err(|e| {
                             // Enhance error with span information
                             match e {
-                                TypeError::Mismatch { expected: exp, found, span: _ } => {
-                                    TypeError::Mismatch {
-                                        expected: exp,
-                                        found,
-                                        span: Some(expr.span),
-                                    }
-                                }
+                                TypeError::Mismatch {
+                                    expected: exp,
+                                    found,
+                                    span: _,
+                                } => TypeError::Mismatch {
+                                    expected: exp,
+                                    found,
+                                    span: Some(expr.span),
+                                },
                                 _ => e,
                             }
                         })?;
@@ -533,7 +604,9 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         // Extract expected parameter and return types
         let (expected_params, expected_ret) = match expected {
-            ResolvedType::Fn { params, ret, .. } => (Some(params.clone()), Some(ret.as_ref().clone())),
+            ResolvedType::Fn { params, ret, .. } => {
+                (Some(params.clone()), Some(ret.as_ref().clone()))
+            }
             _ => (None, None),
         };
 
@@ -588,7 +661,7 @@ impl TypeChecker {
         Ok(ResolvedType::Fn {
             params: final_params,
             ret: Box::new(final_ret),
-            effects: None,  // Effects are inferred separately
+            effects: None, // Effects are inferred separately
         })
     }
 
@@ -625,16 +698,17 @@ impl TypeChecker {
         // Unify all element types
         let first_type = elem_types[0].clone();
         for (i, ty) in elem_types.iter().enumerate().skip(1) {
-            self.unify(&first_type, ty).map_err(|_| {
-                TypeError::Mismatch {
+            self.unify(&first_type, ty)
+                .map_err(|_| TypeError::Mismatch {
                     expected: first_type.to_string(),
                     found: ty.to_string(),
                     span: Some(elements[i].span),
-                }
-            })?;
+                })?;
         }
 
-        Ok(ResolvedType::Array(Box::new(self.apply_substitutions(&first_type))))
+        Ok(ResolvedType::Array(Box::new(
+            self.apply_substitutions(&first_type),
+        )))
     }
 
     /// Check a generic function call with bidirectional type checking.
@@ -690,14 +764,17 @@ impl TypeChecker {
             .generics
             .iter()
             .map(|param| {
-                let ty = generic_substitutions.get(param)
+                let ty = generic_substitutions
+                    .get(param)
                     .expect("Internal compiler error: generic parameter should exist");
                 self.apply_substitutions(ty)
             })
             .collect();
 
         // Record the generic instantiation if all type arguments are concrete
-        let all_concrete = inferred_type_args.iter().all(|t| !matches!(t, ResolvedType::Var(_)));
+        let all_concrete = inferred_type_args
+            .iter()
+            .all(|t| !matches!(t, ResolvedType::Var(_)));
         if all_concrete {
             let inst = GenericInstantiation::function(&sig.name, inferred_type_args);
             self.add_instantiation(inst);

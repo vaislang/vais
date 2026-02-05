@@ -101,13 +101,7 @@ impl MirBuilder {
     }
 
     /// Assign a binary operation result to a local.
-    pub fn assign_binop(
-        &mut self,
-        dest: Local,
-        op: BinOp,
-        lhs: Operand,
-        rhs: Operand,
-    ) {
+    pub fn assign_binop(&mut self, dest: Local, op: BinOp, lhs: Operand, rhs: Operand) {
         self.assign(Place::local(dest), Rvalue::BinaryOp(op, lhs, rhs));
     }
 

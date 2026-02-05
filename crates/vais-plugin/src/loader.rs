@@ -164,7 +164,8 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
     // native code from the library's initialization routines. We validate
     // the file exists and has the correct extension above.
     let library = unsafe {
-        Library::new(path).map_err(|e| format!("Failed to load plugin '{}': {}", path.display(), e))?
+        Library::new(path)
+            .map_err(|e| format!("Failed to load plugin '{}': {}", path.display(), e))?
     };
 
     // Get the plugin type
@@ -209,9 +210,13 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             PluginImpl::Lint(Box::from_raw(raw))
         },
         PluginType::Transform => unsafe {
-            let create: Symbol<CreateTransformPluginFn> = library
-                .get(b"create_transform_plugin")
-                .map_err(|e| format!("Transform plugin missing create_transform_plugin function: {}", e))?;
+            let create: Symbol<CreateTransformPluginFn> =
+                library.get(b"create_transform_plugin").map_err(|e| {
+                    format!(
+                        "Transform plugin missing create_transform_plugin function: {}",
+                        e
+                    )
+                })?;
             let raw = create();
             if raw.is_null() {
                 return Err("Plugin create_transform_plugin returned null".to_string());
@@ -219,9 +224,13 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             PluginImpl::Transform(Box::from_raw(raw))
         },
         PluginType::Optimize => unsafe {
-            let create: Symbol<CreateOptimizePluginFn> = library
-                .get(b"create_optimize_plugin")
-                .map_err(|e| format!("Optimize plugin missing create_optimize_plugin function: {}", e))?;
+            let create: Symbol<CreateOptimizePluginFn> =
+                library.get(b"create_optimize_plugin").map_err(|e| {
+                    format!(
+                        "Optimize plugin missing create_optimize_plugin function: {}",
+                        e
+                    )
+                })?;
             let raw = create();
             if raw.is_null() {
                 return Err("Plugin create_optimize_plugin returned null".to_string());
@@ -229,9 +238,13 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             PluginImpl::Optimize(Box::from_raw(raw))
         },
         PluginType::Codegen => unsafe {
-            let create: Symbol<CreateCodegenPluginFn> = library
-                .get(b"create_codegen_plugin")
-                .map_err(|e| format!("Codegen plugin missing create_codegen_plugin function: {}", e))?;
+            let create: Symbol<CreateCodegenPluginFn> =
+                library.get(b"create_codegen_plugin").map_err(|e| {
+                    format!(
+                        "Codegen plugin missing create_codegen_plugin function: {}",
+                        e
+                    )
+                })?;
             let raw = create();
             if raw.is_null() {
                 return Err("Plugin create_codegen_plugin returned null".to_string());
@@ -239,9 +252,13 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             PluginImpl::Codegen(Box::from_raw(raw))
         },
         PluginType::Formatter => unsafe {
-            let create: Symbol<CreateFormatterPluginFn> = library
-                .get(b"create_formatter_plugin")
-                .map_err(|e| format!("Formatter plugin missing create_formatter_plugin function: {}", e))?;
+            let create: Symbol<CreateFormatterPluginFn> =
+                library.get(b"create_formatter_plugin").map_err(|e| {
+                    format!(
+                        "Formatter plugin missing create_formatter_plugin function: {}",
+                        e
+                    )
+                })?;
             let raw = create();
             if raw.is_null() {
                 return Err("Plugin create_formatter_plugin returned null".to_string());
@@ -249,9 +266,13 @@ pub fn load_plugin(path: &Path, allow_plugins: bool) -> Result<LoadedPlugin, Str
             PluginImpl::Formatter(Box::from_raw(raw))
         },
         PluginType::Analysis => unsafe {
-            let create: Symbol<CreateAnalysisPluginFn> = library
-                .get(b"create_analysis_plugin")
-                .map_err(|e| format!("Analysis plugin missing create_analysis_plugin function: {}", e))?;
+            let create: Symbol<CreateAnalysisPluginFn> =
+                library.get(b"create_analysis_plugin").map_err(|e| {
+                    format!(
+                        "Analysis plugin missing create_analysis_plugin function: {}",
+                        e
+                    )
+                })?;
             let raw = create();
             if raw.is_null() {
                 return Err("Plugin create_analysis_plugin returned null".to_string());
