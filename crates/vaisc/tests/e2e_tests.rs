@@ -2350,7 +2350,10 @@ fn find_thread_runtime_path() -> Option<String> {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "pthread_tryjoin_np is macOS-specific")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "pthread_tryjoin_np is macOS-specific"
+)]
 fn e2e_thread_sleep_yield() {
     let rt = match find_thread_runtime_path() {
         Some(p) => p,
@@ -3227,7 +3230,10 @@ F main() -> i64 {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "libm linking differs on Linux (-lm required)")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "libm linking differs on Linux (-lm required)"
+)]
 fn test_float_printf_math_functions() {
     let source = r#"
 F main() -> i64 {
@@ -3738,7 +3744,10 @@ F main() -> i64 {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "msync flags differ on Linux (MS_SYNC=16 on macOS, 4 on Linux)")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "msync flags differ on Linux (MS_SYNC=16 on macOS, 4 on Linux)"
+)]
 fn e2e_mmap_write_and_msync() {
     // Test: mmap a file for read-write, modify, msync, read back
     let source = r#"
@@ -4911,7 +4920,10 @@ F main() -> i64 {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "stat struct layout differs between platforms")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "stat struct layout differs between platforms"
+)]
 fn e2e_stat_file_size() {
     let source = r#"
 F main() -> i64 {

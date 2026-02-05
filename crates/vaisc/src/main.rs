@@ -648,8 +648,7 @@ fn main() {
                 };
 
                 // Configure parallel compilation
-                let parallel_config =
-                    parallel.map(vais_codegen::parallel::ParallelConfig::new);
+                let parallel_config = parallel.map(vais_codegen::parallel::ParallelConfig::new);
 
                 // Default to inkwell when feature is available
                 #[cfg(feature = "inkwell")]

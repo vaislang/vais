@@ -117,6 +117,8 @@ mod tests {
     #[test]
     fn test_init_and_get() {
         init(Some(Locale::En));
+        // Explicitly set locale to ensure English, as init may have been called already
+        set_locale(Locale::En);
 
         let title = get_simple("type.E001.title");
         assert_eq!(title, "Type mismatch");
