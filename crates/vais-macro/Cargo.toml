@@ -2,6 +2,7 @@
 name = "vais-macro"
 version.workspace = true
 edition = "2021"
+license.workspace = true
 description = "Declarative macro system for Vais language"
 
 [dependencies]

@@ -2,6 +2,7 @@
 name = "vais-example-lint"
 version.workspace = true
 edition = "2021"
+license.workspace = true
 description = "Example Vais lint plugin"
 
 [lib]

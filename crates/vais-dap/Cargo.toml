@@ -3,6 +3,7 @@ name = "vais-dap"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+license.workspace = true
 description = "Debug Adapter Protocol server for Vais"
 
 [dependencies]

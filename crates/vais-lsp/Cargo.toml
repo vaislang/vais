@@ -3,6 +3,7 @@ name = "vais-lsp"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+license.workspace = true
 description = "Language Server Protocol implementation for Vais"
 
 [dependencies]

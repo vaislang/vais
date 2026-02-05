@@ -2,6 +2,7 @@
 name = "vais-benches"
 version.workspace = true
 edition = "2021"
+license.workspace = true
 publish = false
 
 [lib]

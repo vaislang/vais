@@ -53,7 +53,7 @@ docs-site/book/
 
 # Build artifacts in selfhost/
 selfhost/*.o
-selfhost/runtime.c
+# selfhost/runtime.c is needed for tests - keep tracked
 
 # Build artifacts in std/
 std/*.o
@@ -133,6 +133,7 @@ vaisc-stage1
 vaisc-stage2
 stage2.ll
 temp.ll
-runtime.c
+# runtime.c in root - keep selfhost/runtime.c tracked for tests
+/runtime.c
 output.txt
 main_output.ll
