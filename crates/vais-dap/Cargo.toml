@@ -23,8 +23,8 @@ vais-ast = { path = "../vais-ast" }
 vais-codegen = { path = "../vais-codegen" }
 
 # DWARF parsing
-gimli = "0.28"
-object = { version = "0.32", features = ["read"] }
+gimli = "0.33"
+object = { version = "0.38", features = ["read"] }
 
 # Utilities
 thiserror.workspace = true

@@ -1206,16 +1206,19 @@ Low:       Stage 7 (벤치마크), Stage 8 (async 검증)
 - **의존성**: Stage 1 완료 ✅
 - **검증**: `cargo test --package vaisc` 전체 통과, 스마트 링킹 동작 확인
 
-### Stage 3: 의존성 보안 해소 (High)
+### Stage 3: 의존성 보안 해소 (High) ✅ 완료
 
 **목표**: 알려진 취약점 0개
 
 - [x] `cargo audit` 통과: wasmtime 41.0 업그레이드 + sqlx/rsa ignore 설정
-- [x] wasmtime 17.0 → 41.0.2 업그레이드 완료
-- [ ] 나머지 outdated 의존성 업데이트 (inkwell, cranelift, sqlx 등)
-- [ ] `Cargo.lock` 갱신 후 전체 테스트 통과 확인
+- [x] wasmtime 17.0 → 41.0.3 업그레이드 완료
+- [x] 나머지 outdated 의존성 업데이트 완료:
+  - Minor/Patch: clap 4.5, regex 1.12, inferno 0.12
+  - Major (호환): dashmap 6.1, libloading 0.9, notify 8.2, toml 0.9, gimli 0.33, object 0.38, pyo3 0.28, napi 3.x, thiserror 2.0, rustyline 17.0, colored 3.0, dirs 6.0, criterion 0.8, config 0.15
+  - 미업데이트 (breaking changes): cranelift (API 변경), axum/tower (미들웨어 시그니처), ureq (전면 재작성), rand (argon2 호환성)
+- [x] `Cargo.lock` 갱신 후 전체 테스트 통과 확인
 - **의존성**: Stage 1과 병렬 가능
-- **검증**: `cargo audit` 성공 + `cargo test` 통과
+- **검증**: `cargo audit` 성공 + `cargo test` 2000+ 테스트 통과
 
 ### Stage 4: 패키지 레지스트리 실배포 (High)
 

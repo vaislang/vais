@@ -55,7 +55,7 @@ vais-ast = { path = "../crates/vais-ast" }
 vais-types = { path = "../crates/vais-types" }
 vais-codegen = { path = "../crates/vais-codegen" }
 vais-gc = { path = "../crates/vais-gc" }
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = "0.4"

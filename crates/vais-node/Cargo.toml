@@ -10,8 +10,8 @@ description = "Node.js bindings for the Vais programming language"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "2.16", default-features = false, features = ["napi8", "error_anyhow"] }
-napi-derive = "2.16"
+napi = { version = "3", default-features = false, features = ["napi8", "error_anyhow"] }
+napi-derive = "3"
 
 # Vais crates
 vais-lexer = { path = "../vais-lexer" }
@@ -21,4 +21,4 @@ vais-types = { path = "../vais-types" }
 vais-codegen = { path = "../vais-codegen" }
 
 [build-dependencies]
-napi-build = "2.1"
+napi-build = "2.3"

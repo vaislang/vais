@@ -9,6 +9,6 @@ description = "Declarative macro system for Vais language"
 vais-ast = { path = "../vais-ast" }
 vais-lexer = { path = "../vais-lexer" }
 vais-parser = { path = "../vais-parser" }
-thiserror = "1.0"
+thiserror = "2.0"
 
 [dev-dependencies]
