@@ -26,6 +26,8 @@ F TOK_KW_TRUE() -> i64 = 16
 F TOK_KW_FALSE() -> i64 = 17
 F TOK_KW_MUT() -> i64 = 18
 F TOK_KW_ELSE() -> i64 = 19
+F TOK_KW_MOVE() -> i64 = 20
+F TOK_KW_AWAIT() -> i64 = 21
 
 # Literal tokens (51-60)
 F TOK_INT() -> i64 = 51
@@ -84,6 +86,7 @@ F TOK_COLON_COLON() -> i64 = 109
 F TOK_QUESTION() -> i64 = 110
 F TOK_AT() -> i64 = 111
 F TOK_HASH() -> i64 = 112
+F TOK_HASH_BRACKET() -> i64 = 113
 
 # Special tokens
 F TOK_EOF() -> i64 = 200
@@ -129,8 +132,10 @@ F EXPR_INDEX() -> i64 = 37
 F EXPR_ARRAY() -> i64 = 38
 F EXPR_STRUCT_LIT() -> i64 = 40
 F EXPR_BLOCK() -> i64 = 42
+F EXPR_AWAIT() -> i64 = 43
 F EXPR_ASSIGN() -> i64 = 48
 F EXPR_ASSIGN_OP() -> i64 = 49
+F EXPR_LAMBDA() -> i64 = 50
 
 # Type node types
 F TYPE_NAMED() -> i64 = 60
@@ -633,6 +638,27 @@ X Param {
 }
 
 # ============================================================================
+# Attribute
+# ============================================================================
+
+S Attribute {
+    name_idx: i64,
+    args_ptr: i64,
+    args_len: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X Attribute {
+    F new(name_idx: i64, start: i64, end: i64) -> Attribute = Attribute {
+        name_idx: name_idx, args_ptr: 0, args_len: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 40
+}
+
+# ============================================================================
 # Field (struct field)
 # ============================================================================
 
@@ -958,9 +984,72 @@ X Parser {
         I self.has_error == 0 { 1 } E { 0 }
     }
 
+    # =========== Parse Attributes ===========
+
+    F parse_attributes(&self) -> i64 {
+        attrs_ptr := malloc(8 * Attribute.size())
+        attrs_len: mut i64 = 0
+
+        L {
+            I @.check(TOK_HASH_BRACKET()) == 0 { B }
+            @.advance()
+
+            # Expect attribute name
+            I @.check(TOK_IDENT()) == 0 {
+                @.set_error_expected(TOK_IDENT())
+                B
+            }
+            tok := @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+            # Parse optional args: (arg1, arg2, ...)
+            args_ptr: mut i64 = 0
+            args_len: mut i64 = 0
+            I @.check(TOK_LPAREN()) == 1 {
+                @.advance()
+                args_ptr = malloc(8 * 8)  # Max 8 args
+
+                L {
+                    I @.check(TOK_RPAREN()) == 1 { B }
+                    I @.is_at_end() == 1 { B }
+
+                    I @.check(TOK_IDENT()) == 1 {
+                        arg_tok := @.advance()
+                        arg_idx := @.intern_string(arg_tok.str_ptr, arg_tok.str_len)
+                        store_i64(args_ptr + args_len * 8, arg_idx)
+                        args_len = args_len + 1
+                        0
+                    } E { 0 }
+
+                    I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+                }
+
+                I @.expect(TOK_RPAREN()) == 0 { B }
+                0
+            } E { 0 }
+
+            I @.expect(TOK_RBRACKET()) == 0 { B }
+
+            # Store attribute
+            attr_ptr := attrs_ptr + attrs_len * Attribute.size()
+            store_i64(attr_ptr + 0, name_idx)
+            store_i64(attr_ptr + 8, args_ptr)
+            store_i64(attr_ptr + 16, args_len)
+            store_i64(attr_ptr + 24, tok.span_start)
+            store_i64(attr_ptr + 32, @.current_span_start())
+            attrs_len = attrs_len + 1
+            0
+        }
+
+        attrs_ptr
+    }
+
     # =========== Parse Item ===========
 
     F parse_item(&self) -> i64 {
+        # Parse attributes (if any) - for now we parse but don't store them
+        attrs := @.parse_attributes()
+
         is_pub: mut i64 = 0
         I @.check(TOK_KW_P()) == 1 {
             @.advance()
@@ -969,6 +1058,19 @@ X Parser {
         } E { 0 }
 
         start := @.current_span_start()
+
+        # Check for async function: A F name()
+        is_async: mut i64 = 0
+        I @.check(TOK_KW_A()) == 1 {
+            @.advance()
+            is_async = 1
+            I @.check(TOK_KW_F()) == 0 {
+                @.set_error_expected(TOK_KW_F())
+                R 0
+            }
+            @.advance()
+            R @.parse_function(is_pub, is_async, start)
+        }
 
         I @.check(TOK_KW_F()) == 1 {
             @.advance()
@@ -2238,6 +2340,25 @@ X Parser {
             # Method call or field access: expr.name or expr.name()
             I @.check(TOK_DOT()) == 1 {
                 @.advance()
+
+                # Check for .await syntax
+                I @.check(TOK_KW_AWAIT()) == 1 {
+                    @.advance()
+                    expr_ptr := malloc(ExprNode.size())
+                    left_span_start := load_i64(left + 8)
+                    store_i64(expr_ptr + 0, EXPR_AWAIT())
+                    store_i64(expr_ptr + 8, left_span_start)
+                    store_i64(expr_ptr + 16, @.current_span_start())
+                    store_i64(expr_ptr + 24, left)
+                    store_i64(expr_ptr + 32, 0)
+                    store_i64(expr_ptr + 40, 0)
+                    store_i64(expr_ptr + 48, 0)
+                    store_i64(expr_ptr + 56, 0)
+                    store_i64(expr_ptr + 64, 0)
+                    left = expr_ptr
+                    C
+                }
+
                 I @.check(TOK_IDENT()) == 0 {
                     @.set_error_expected(TOK_IDENT())
                     R 0
@@ -2550,6 +2671,99 @@ X Parser {
             store_i64(expr_ptr + 32, 0)  # iter
             store_i64(expr_ptr + 40, body_stmts)
             store_i64(expr_ptr + 48, body_len)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        # Closure/Lambda: |x| expr or |x: i64| -> i64 { expr }
+        # Also supports: move |x| expr
+        has_move: mut i64 = 0
+        I @.check(TOK_KW_MOVE()) == 1 {
+            @.advance()
+            has_move = 1
+            0
+        } E { 0 }
+
+        I @.check(TOK_PIPE()) == 1 {
+            @.advance()
+
+            # Parse parameters
+            params_ptr := malloc(16 * Param.size())
+            params_len: mut i64 = 0
+
+            L {
+                I @.check(TOK_PIPE()) == 1 { B }
+                I @.is_at_end() == 1 { B }
+
+                I @.check(TOK_IDENT()) == 0 { B }
+                param_tok := @.advance()
+                param_name_idx := @.intern_string(param_tok.str_ptr, param_tok.str_len)
+
+                # Optional type annotation: name: type
+                type_ptr: mut i64 = 0
+                I @.check(TOK_COLON()) == 1 {
+                    @.advance()
+                    type_ptr = @.parse_type()
+                    0
+                } E { 0 }
+
+                # Store param
+                param_ptr := params_ptr + params_len * Param.size()
+                store_i64(param_ptr + 0, param_name_idx)
+                store_i64(param_ptr + 8, type_ptr)
+                store_i64(param_ptr + 16, 0)  # is_mut
+                store_i64(param_ptr + 24, param_tok.span_start)
+                store_i64(param_ptr + 32, @.current_span_start())
+                params_len = params_len + 1
+
+                I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            }
+
+            I @.expect(TOK_PIPE()) == 0 { R 0 }
+
+            # Optional return type: -> Type
+            I @.check(TOK_ARROW()) == 1 {
+                @.advance()
+                ret_type := @.parse_type()
+                0  # For now, we'll ignore the return type in the AST
+            } E { 0 }
+
+            # Parse body - either block { ... } or expression
+            body_ptr: mut i64 = 0
+            I @.check(TOK_LBRACE()) == 1 {
+                @.advance()
+                stmts := @.parse_block_contents()
+                stmts_len := load_i64(stmts - 8)
+                I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+                # Create block expr for body
+                body_ptr = malloc(ExprNode.size())
+                store_i64(body_ptr + 0, EXPR_BLOCK())
+                store_i64(body_ptr + 8, start)
+                store_i64(body_ptr + 16, @.current_span_start())
+                store_i64(body_ptr + 24, stmts)
+                store_i64(body_ptr + 32, stmts_len)
+                store_i64(body_ptr + 40, 0)
+                store_i64(body_ptr + 48, 0)
+                store_i64(body_ptr + 56, 0)
+                store_i64(body_ptr + 64, 0)
+                0
+            } E {
+                # Single expression body
+                body_ptr = @.parse_expr()
+                0
+            }
+
+            # Create lambda expr
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_LAMBDA())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, @.current_span_start())
+            store_i64(expr_ptr + 24, params_ptr)
+            store_i64(expr_ptr + 32, params_len)
+            store_i64(expr_ptr + 40, body_ptr)
+            store_i64(expr_ptr + 48, has_move)  # Store move flag in field3
             store_i64(expr_ptr + 56, 0)
             store_i64(expr_ptr + 64, 0)
             R expr_ptr

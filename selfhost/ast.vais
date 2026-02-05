@@ -861,6 +861,27 @@ X TypeAliasDef {
 }
 
 # ============================================================================
+# Attribute
+# ============================================================================
+
+S Attribute {
+    name_idx: i64,
+    args_ptr: i64,     # Pointer to array of arg string indices
+    args_len: i64,
+    span_start: i64,
+    span_end: i64
+}
+
+X Attribute {
+    F new(name_idx: i64, start: i64, end: i64) -> Attribute = Attribute {
+        name_idx: name_idx, args_ptr: 0, args_len: 0,
+        span_start: start, span_end: end
+    }
+
+    F size() -> i64 = 40
+}
+
+# ============================================================================
 # Top-level Item
 # ============================================================================
 

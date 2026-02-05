@@ -1,0 +1,45 @@
+# Test file for new selfhost parser features
+# Tests: closures, attributes, and async/await
+
+# Test 1: Attribute parsing
+#[inline]
+F test_attributes() -> i64 {
+    puts("Attributes parsed!")
+    0
+}
+
+# Test 2: Async function parsing
+A F async_compute(x: i64) -> i64 {
+    x * 2
+}
+
+# Test 3: Closure parsing
+F test_closures() -> i64 {
+    # Simple closure
+    add_one := |x: i64| x + 1
+    result := add_one(5)
+
+    # Closure with multiple params
+    multiply := |a: i64, b: i64| a * b
+    result2 := multiply(3, 4)
+
+    # Move closure
+    captured := 10
+    move_closure := move |x: i64| x + captured
+    result3 := move_closure(5)
+
+    0
+}
+
+# Test 4: Await expression
+F test_await() -> i64 {
+    result := async_compute(21).await
+    puts("Await parsed!")
+    result
+}
+
+F main() -> i64 {
+    test_attributes()
+    test_closures()
+    test_await()
+}
