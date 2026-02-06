@@ -1147,6 +1147,88 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             result = 0
             0
         }
+    } E I kind == EXPR_INDEX() {
+        # Index expression: arr[idx]
+        base := expr_get_field0(expr)
+        index := expr_get_field1(expr)
+
+        base_reg := cg_gen_expr(cg, base, param_name_ptr, param_name_len)
+        index_reg := cg_gen_expr(cg, index, param_name_ptr, param_name_len)
+
+        # GEP to calculate element pointer
+        gep_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, gep_reg)
+        cg_emit(cg, " = getelementptr i64, i64* ")
+        cg_emit_operand(cg, base_reg, param_name_ptr, param_name_len)
+        cg_emit(cg, ", i64 ")
+        cg_emit_operand(cg, index_reg, param_name_ptr, param_name_len)
+        cg_emit_newline(cg)
+
+        # Load value at index
+        load_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, load_reg)
+        cg_emit(cg, " = load i64, i64* %")
+        cg_emit_i64(cg, gep_reg)
+        cg_emit_newline(cg)
+
+        result = load_reg
+        0
+    } E I kind == EXPR_ARRAY() {
+        # Array literal: [expr1, expr2, ...]
+        elements := expr_get_field0(expr)
+        elem_len := expr_get_field1(expr)
+
+        I elem_len == 0 {
+            # Empty array - return null pointer
+            null_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, null_reg)
+            cg_emit(cg, " = inttoptr i64 0 to i64*")
+            cg_emit_newline(cg)
+            result = null_reg
+            0
+        } E {
+            # Alloca for array
+            alloca_reg := cg_fresh_reg(cg)
+            cg_emit(cg, "  %")
+            cg_emit_i64(cg, alloca_reg)
+            cg_emit(cg, " = alloca i64, i64 ")
+            cg_emit_i64(cg, elem_len)
+            cg_emit_newline(cg)
+
+            # Store each element
+            i: mut i64 = 0
+            L {
+                I i >= elem_len { B } E { 0 }
+
+                elem_expr := load_i64(elements + i * 8)
+                elem_reg := cg_gen_expr(cg, elem_expr, param_name_ptr, param_name_len)
+
+                # GEP for element i
+                gep_reg := cg_fresh_reg(cg)
+                cg_emit(cg, "  %")
+                cg_emit_i64(cg, gep_reg)
+                cg_emit(cg, " = getelementptr i64, i64* %")
+                cg_emit_i64(cg, alloca_reg)
+                cg_emit(cg, ", i64 ")
+                cg_emit_i64(cg, i)
+                cg_emit_newline(cg)
+
+                # Store element
+                cg_emit(cg, "  store i64 ")
+                cg_emit_operand(cg, elem_reg, param_name_ptr, param_name_len)
+                cg_emit(cg, ", i64* %")
+                cg_emit_i64(cg, gep_reg)
+                cg_emit_newline(cg)
+
+                i = i + 1
+            }
+
+            result = alloca_reg
+            0
+        }
     } E { 0 }
 
     result

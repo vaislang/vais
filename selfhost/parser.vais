@@ -2903,6 +2903,43 @@ X Parser {
             R expr_ptr
         }
 
+        # Array literal: [expr1, expr2, ...]
+        I @.check(TOK_LBRACKET()) == 1 {
+            @.advance()
+
+            elements_ptr := malloc(64 * 8)  # up to 64 elements
+            elements_len: mut i64 = 0
+
+            L {
+                I @.check(TOK_RBRACKET()) == 1 { B }
+                I @.is_at_end() == 1 { B }
+                I elements_len >= 64 { B }
+
+                elem := @.parse_expr()
+                I elem != 0 {
+                    store_i64(elements_ptr + elements_len * 8, elem)
+                    elements_len = elements_len + 1
+                    0
+                } E { B }
+
+                I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
+            }
+
+            I @.expect(TOK_RBRACKET()) == 0 { R 0 }
+
+            expr_ptr := malloc(ExprNode.size())
+            store_i64(expr_ptr + 0, EXPR_ARRAY())
+            store_i64(expr_ptr + 8, start)
+            store_i64(expr_ptr + 16, @.current_span_start())
+            store_i64(expr_ptr + 24, elements_ptr)
+            store_i64(expr_ptr + 32, elements_len)
+            store_i64(expr_ptr + 40, 0)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
         # Parenthesized expression
         I @.check(TOK_LPAREN()) == 1 {
             @.advance()

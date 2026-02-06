@@ -1231,6 +1231,10 @@ X CodeGenerator {
         E I kind == 37 {
             @.generate_index(expr_ptr)
         }
+        # EXPR_ARRAY = 38
+        E I kind == 38 {
+            @.generate_array(expr_ptr)
+        }
         # EXPR_BLOCK = 42
         E I kind == 42 {
             @.generate_block_expr(expr_ptr)
@@ -1623,6 +1627,60 @@ X CodeGenerator {
         } E {
             result
         }
+    }
+
+    F generate_array(&self, expr_ptr: i64) -> i64 {
+        # Get elements array and length
+        elements_ptr := load_i64(expr_ptr + 24)
+        elements_len := load_i64(expr_ptr + 32)
+
+        # For empty array, just return a null pointer
+        I elements_len == 0 {
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = inttoptr i64 0 to i64*\n")
+            R result
+        }
+
+        # Allocate array on the stack (elements_len * 8 bytes for i64)
+        alloca_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(alloca_reg)
+        @.emit_cstr(" = alloca i64, i64 ")
+        @.emit_i64(elements_len)
+        @.emit_cstr("\n")
+
+        # Generate each element and store
+        i: mut i64 = 0
+        L {
+            I i >= elements_len { B }
+
+            elem_expr := load_i64(elements_ptr + i * 8)
+            elem_reg := @.generate_expr(elem_expr)
+
+            # Calculate GEP for element i
+            gep_reg := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(gep_reg)
+            @.emit_cstr(" = getelementptr i64, i64* ")
+            @.emit_reg(alloca_reg)
+            @.emit_cstr(", i64 ")
+            @.emit_i64(i)
+            @.emit_cstr("\n")
+
+            # Store element
+            @.emit_cstr("  store i64 ")
+            @.emit_reg(elem_reg)
+            @.emit_cstr(", i64* ")
+            @.emit_reg(gep_reg)
+            @.emit_cstr("\n")
+
+            i = i + 1
+        }
+
+        # Return pointer to first element
+        alloca_reg
     }
 
     F generate_index(&self, expr_ptr: i64) -> i64 {

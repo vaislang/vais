@@ -531,6 +531,36 @@ F parser_parse_primary(p: i64) -> i64 {
         e := expr_new(EXPR_LOOP())
         expr_set_field0(e, body)
         e
+    } E I kind == TOK_LBRACKET() {
+        # Array literal: [expr1, expr2, ...]
+        parser_advance(p)  # consume [
+
+        elements := malloc(64 * 8)  # up to 64 elements
+        elem_count: mut i64 = 0
+
+        L {
+            I parser_current_kind(p) == TOK_RBRACKET() { B } E { 0 }
+            I elem_count >= 64 { B } E { 0 }
+
+            elem := parser_parse_expr(p)
+            I elem != 0 {
+                store_i64(elements + elem_count * 8, elem)
+                elem_count = elem_count + 1
+                0
+            } E { B }
+
+            I parser_current_kind(p) == TOK_COMMA() {
+                parser_advance(p)
+                0
+            } E { 0 }
+        }
+
+        parser_expect(p, TOK_RBRACKET())
+
+        e := expr_new(EXPR_ARRAY())
+        expr_set_field0(e, elements)
+        expr_set_field1(e, elem_count)
+        e
     } E { 0 }
 }
 

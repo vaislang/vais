@@ -1,11 +1,11 @@
 # Vais Self-Hosting Compiler (Stage 1) Roadmap
 
-## Current Status: v0.5.1
+## Current Status: v0.5.2
 
 Stage 1 컴파일러가 다중 파라미터 함수를 포함한 Vais 프로그램을 안정적으로 컴파일할 수 있음.
 Import 시스템 지원 완료.
 제네릭 타입 해석 (type_checker.vais) 완료.
-Bitwise 연산자 및 Index expression 지원 완료.
+Bitwise 연산자, Index expression, Array 리터럴 지원 완료.
 
 ---
 
@@ -108,9 +108,9 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 - [x] Bitwise operators (&, |, ^, <<, >>) ✅
 - [x] Unary not (!) ✅ (이미 구현됨)
 - [x] Continue statement (C) ✅ (이미 구현됨)
+- [x] Array literal [e1, e2, ...] ✅ (parser_s1.vais, parser.vais, codegen_s1.vais, codegen.vais)
 
 ### In Progress
-- [ ] Array/slice support (타입만 파싱, 리터럴 미구현)
 
 ### Todo
 - [ ] While loop sugar
@@ -207,6 +207,9 @@ clang -O0 /tmp/main_stage1.ll -o selfhost/vaisc-stage1 -lm
 
 ## Version History
 
+- **v0.5.2** - Array 리터럴 지원
+  - Array literal [e1, e2, ...] 파싱 (parser_s1.vais, parser.vais)
+  - Array literal 코드젠 (codegen_s1.vais, codegen.vais)
 - **v0.5.1** - Bitwise 연산자 및 Index expression 지원
   - Bitwise operators (&, |, ^, <<, >>) 파싱 완성
   - Index expression [i] 파싱 및 코드젠 구현
