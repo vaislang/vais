@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770320440548,
+  "lastUpdate": 1770336983246,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -2519,6 +2519,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1804758,
             "range": "± 19388",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "09d698dc497b0b3ac308887da6dcbf2fff6b241b",
+          "message": "feat(selfhost): add bidirectional type inference to type checker\n\n- Add CheckMode constants (MODE_INFER, MODE_CHECK) for bidirectional checking\n- Implement substitution map for type variable binding\n- Add unify() function for recursive type unification\n- Add apply_substitutions() to resolve type variables\n- Add check_expr_bidirectional() as main entry point\n- Add check_lambda_with_expected() for lambda parameter inference\n- Add check_array_with_expected() for array element type inference\n- Extend test suite with unification and substitution tests\n- Update ROADMAP with Stage 3-1 completion and inkwell backend bug\n\nType checker now supports:\n- Type variable creation and binding\n- Unification of primitive, array, function, and named types\n- Lambda parameter type inference from expected function type\n- Array element type propagation from expected array type\n\nKnown issue: inkwell backend fails to compile selfhost files due to\nstruct field lookup bug (documented in ROADMAP)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>",
+          "timestamp": "2026-02-06T09:09:33+09:00",
+          "tree_id": "8e142706b6b7d85e497799bbfb43e9fa4b25c399",
+          "url": "https://github.com/vaislang/vais/commit/09d698dc497b0b3ac308887da6dcbf2fff6b241b"
+        },
+        "date": 1770336982464,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 1991,
+            "range": "± 12",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 4987,
+            "range": "± 26",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5747,
+            "range": "± 21",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10699,
+            "range": "± 44",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 16507,
+            "range": "± 291",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 31960,
+            "range": "± 136",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29003,
+            "range": "± 136",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 62379,
+            "range": "± 423",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 250046,
+            "range": "± 3195",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 373972,
+            "range": "± 9521",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 105598,
+            "range": "± 1242",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 635178,
+            "range": "± 13103",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 153812,
+            "range": "± 472",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 182046,
+            "range": "± 740",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 191491,
+            "range": "± 630",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 232023,
+            "range": "± 2725",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 467690,
+            "range": "± 2582",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 651558,
+            "range": "± 9994",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 386373,
+            "range": "± 1328",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1027557,
+            "range": "± 6643",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 37025,
+            "range": "± 241",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 181470,
+            "range": "± 2298",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 357041,
+            "range": "± 2188",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1755132,
+            "range": "± 17742",
             "unit": "ns/iter"
           }
         ]
