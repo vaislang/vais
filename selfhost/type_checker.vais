@@ -37,6 +37,13 @@ F TY_UNKNOWN() -> i64 = 28
 F TY_NEVER() -> i64 = 29
 
 # ============================================================================
+# CheckMode Constants for Bidirectional Type Checking
+# ============================================================================
+
+F MODE_INFER() -> i64 = 0
+F MODE_CHECK() -> i64 = 1
+
+# ============================================================================
 # Error Kind Constants
 # ============================================================================
 
@@ -429,6 +436,12 @@ S TypeChecker {
     # Type variable counter
     next_type_var: i64,
 
+    # Substitution map for type variables (var_id -> type_ptr pairs)
+    subst_keys_ptr: i64,     # Array of var_id
+    subst_values_ptr: i64,   # Array of type_ptr
+    subst_len: i64,
+    subst_cap: i64,
+
     # Errors
     errors_ptr: i64,
     errors_len: i64,
@@ -449,6 +462,10 @@ X TypeChecker {
         scopes := malloc(32 * 8)  # Pointers to Scope
         errors := malloc(64 * TypeError.size())
 
+        # Allocate substitution map storage
+        subst_keys := malloc(64 * 8)
+        subst_values := malloc(64 * 8)
+
         # Create initial global scope
         global_scope_ptr := malloc(Scope.size())
         global_scope := Scope.new(64)
@@ -465,6 +482,8 @@ X TypeChecker {
             current_fn_ret_ptr: 0, current_fn_name_idx: 0,
             current_generics_ptr: 0, current_generics_len: 0,
             next_type_var: 0,
+            subst_keys_ptr: subst_keys, subst_values_ptr: subst_values,
+            subst_len: 0, subst_cap: 64,
             errors_ptr: errors, errors_len: 0, errors_cap: 64,
             sp_data: 0, sp_offsets: 0, sp_count: 0
         }
@@ -924,6 +943,489 @@ X TypeChecker {
         store_i64(type_ptr + 16, ty.field1)
         store_i64(type_ptr + 24, ty.field2)
         type_ptr
+    }
+
+    # ========== Substitution Map Management ==========
+
+    F add_substitution(&self, var_id: i64, type_ptr: i64) -> i64 {
+        # Check if already exists, update if so
+        i: mut i64 = 0
+        L { I i >= self.subst_len { B }
+            key := load_i64(self.subst_keys_ptr + i * 8)
+            I key == var_id {
+                store_i64(self.subst_values_ptr + i * 8, type_ptr)
+                R 1
+            }
+            i = i + 1
+        }
+
+        # Expand capacity if needed
+        I self.subst_len >= self.subst_cap {
+            new_cap := self.subst_cap * 2
+            new_keys := malloc(new_cap * 8)
+            new_values := malloc(new_cap * 8)
+            memcpy(new_keys, self.subst_keys_ptr, self.subst_len * 8)
+            memcpy(new_values, self.subst_values_ptr, self.subst_len * 8)
+            free(self.subst_keys_ptr)
+            free(self.subst_values_ptr)
+            self.subst_keys_ptr = new_keys
+            self.subst_values_ptr = new_values
+            self.subst_cap = new_cap
+            0
+        } E { 0 }
+
+        # Add new substitution
+        store_i64(self.subst_keys_ptr + self.subst_len * 8, var_id)
+        store_i64(self.subst_values_ptr + self.subst_len * 8, type_ptr)
+        self.subst_len = self.subst_len + 1
+        1
+    }
+
+    F get_substitution(&self, var_id: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.subst_len { B }
+            key := load_i64(self.subst_keys_ptr + i * 8)
+            I key == var_id {
+                R load_i64(self.subst_values_ptr + i * 8)
+            }
+            i = i + 1
+        }
+        0  # Not found
+    }
+
+    F clear_substitutions(&self) -> i64 {
+        self.subst_len = 0
+        1
+    }
+
+    # ========== Type Application and Unification ==========
+
+    F apply_substitutions(&self, type_ptr: i64) -> i64 {
+        I type_ptr == 0 { R 0 }
+
+        kind := load_i64(type_ptr)
+
+        # Type variable - check for substitution
+        I kind == TY_VAR() {
+            var_id := load_i64(type_ptr + 8)
+            subst := @.get_substitution(var_id)
+            I subst != 0 {
+                # Recursively apply substitutions
+                R @.apply_substitutions(subst)
+            } E {
+                R type_ptr
+            }
+        }
+        # Array type - apply to inner
+        E I kind == TY_ARRAY() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.apply_substitutions(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_ARRAY())
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Optional type - apply to inner
+        E I kind == TY_OPTIONAL() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.apply_substitutions(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_OPTIONAL())
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Result type - apply to inner
+        E I kind == TY_RESULT() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.apply_substitutions(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_RESULT())
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Ref/RefMut/Pointer - apply to inner
+        E I kind == TY_REF() || kind == TY_REF_MUT() || kind == TY_POINTER() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.apply_substitutions(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, kind)
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Function type - apply to params and return
+        E I kind == TY_FN() {
+            params_ptr := load_i64(type_ptr + 8)
+            params_len := load_i64(type_ptr + 16)
+            ret_ptr := load_i64(type_ptr + 24)
+
+            new_ret := @.apply_substitutions(ret_ptr)
+
+            # Apply to each parameter
+            changed: mut i64 = 0
+            I new_ret != ret_ptr { changed = 1 } E { 0 }
+
+            # Check if any params changed
+            j: mut i64 = 0
+            L { I j >= params_len { B }
+                param_ty := load_i64(params_ptr + j * 8)
+                new_param := @.apply_substitutions(param_ty)
+                I new_param != param_ty { changed = 1 } E { 0 }
+                j = j + 1
+            }
+
+            I changed == 1 {
+                new_params := malloc(params_len * 8)
+                k: mut i64 = 0
+                L { I k >= params_len { B }
+                    param_ty := load_i64(params_ptr + k * 8)
+                    store_i64(new_params + k * 8, @.apply_substitutions(param_ty))
+                    k = k + 1
+                }
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_FN())
+                store_i64(result + 8, new_params)
+                store_i64(result + 16, params_len)
+                store_i64(result + 24, new_ret)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        E {
+            type_ptr
+        }
+    }
+
+    # Unify two types - returns 1 on success, 0 on failure
+    F unify(&self, expected_ptr: i64, found_ptr: i64) -> i64 {
+        # Apply existing substitutions first
+        expected := @.apply_substitutions(expected_ptr)
+        found := @.apply_substitutions(found_ptr)
+
+        exp_kind := load_i64(expected)
+        found_kind := load_i64(found)
+
+        # Same pointer means same type
+        I expected == found { R 1 }
+
+        # Unknown type unifies with anything
+        I exp_kind == TY_UNKNOWN() || found_kind == TY_UNKNOWN() { R 1 }
+
+        # Never type unifies with anything (non-returning expressions)
+        I exp_kind == TY_NEVER() || found_kind == TY_NEVER() { R 1 }
+
+        # Generic type parameters match with any type (type erasure)
+        I exp_kind == TY_GENERIC() || found_kind == TY_GENERIC() { R 1 }
+
+        # Type variable - bind to the other type
+        I exp_kind == TY_VAR() {
+            var_id := load_i64(expected + 8)
+            @.add_substitution(var_id, found)
+            R 1
+        }
+        I found_kind == TY_VAR() {
+            var_id := load_i64(found + 8)
+            @.add_substitution(var_id, expected)
+            R 1
+        }
+
+        # Different kinds
+        I exp_kind != found_kind { R 0 }
+
+        # Primitive types - kinds already match
+        I exp_kind <= TY_UNIT() { R 1 }
+
+        # Array/Optional/Result/Pointer/Ref - unify inner types
+        I exp_kind == TY_ARRAY() || exp_kind == TY_OPTIONAL() ||
+           exp_kind == TY_RESULT() || exp_kind == TY_POINTER() ||
+           exp_kind == TY_REF() || exp_kind == TY_REF_MUT() {
+            exp_inner := load_i64(expected + 8)
+            found_inner := load_i64(found + 8)
+            R @.unify(exp_inner, found_inner)
+        }
+
+        # Map type
+        I exp_kind == TY_MAP() {
+            exp_key := load_i64(expected + 8)
+            exp_val := load_i64(expected + 16)
+            found_key := load_i64(found + 8)
+            found_val := load_i64(found + 16)
+            I @.unify(exp_key, found_key) == 0 { R 0 }
+            R @.unify(exp_val, found_val)
+        }
+
+        # Tuple type
+        I exp_kind == TY_TUPLE() {
+            exp_types := load_i64(expected + 8)
+            exp_len := load_i64(expected + 16)
+            found_types := load_i64(found + 8)
+            found_len := load_i64(found + 16)
+
+            I exp_len != found_len { R 0 }
+
+            i: mut i64 = 0
+            L { I i >= exp_len { B }
+                et := load_i64(exp_types + i * 8)
+                ft := load_i64(found_types + i * 8)
+                I @.unify(et, ft) == 0 { R 0 }
+                i = i + 1
+            }
+            1
+        }
+
+        # Function type
+        I exp_kind == TY_FN() {
+            exp_params := load_i64(expected + 8)
+            exp_params_len := load_i64(expected + 16)
+            exp_ret := load_i64(expected + 24)
+            found_params := load_i64(found + 8)
+            found_params_len := load_i64(found + 16)
+            found_ret := load_i64(found + 24)
+
+            I exp_params_len != found_params_len { R 0 }
+
+            i: mut i64 = 0
+            L { I i >= exp_params_len { B }
+                ep := load_i64(exp_params + i * 8)
+                fp := load_i64(found_params + i * 8)
+                I @.unify(ep, fp) == 0 { R 0 }
+                i = i + 1
+            }
+            R @.unify(exp_ret, found_ret)
+        }
+
+        # Named type
+        I exp_kind == TY_NAMED() {
+            exp_name := load_i64(expected + 8)
+            found_name := load_i64(found + 8)
+            I exp_name != found_name { R 0 }
+
+            exp_generics := load_i64(expected + 16)
+            exp_gen_len := load_i64(expected + 24)
+            found_generics := load_i64(found + 16)
+            found_gen_len := load_i64(found + 24)
+
+            I exp_gen_len != found_gen_len { R 0 }
+
+            i: mut i64 = 0
+            L { I i >= exp_gen_len { B }
+                eg := load_i64(exp_generics + i * 8)
+                fg := load_i64(found_generics + i * 8)
+                I @.unify(eg, fg) == 0 { R 0 }
+                i = i + 1
+            }
+            1
+        }
+
+        # Default: fail
+        0
+    }
+
+    # ========== Bidirectional Type Checking ==========
+
+    # Check an expression with bidirectional type checking
+    # mode = 0 (MODE_INFER): bottom-up inference
+    # mode = 1 (MODE_CHECK): top-down checking with expected_type_ptr
+    F check_expr_bidirectional(&self, expr_ptr: i64, mode: i64, expected_type_ptr: i64) -> i64 {
+        I mode == MODE_INFER() {
+            R @.check_expr(expr_ptr)
+        }
+
+        # MODE_CHECK - we have an expected type
+        I expr_ptr == 0 {
+            R expected_type_ptr
+        }
+
+        kind := load_i64(expr_ptr)
+
+        # Lambda expression - use expected type to infer parameter types
+        # EXPR_LAMBDA = 29
+        I kind == 29 {
+            R @.check_lambda_with_expected(expr_ptr, expected_type_ptr)
+        }
+        # Array literal - propagate element type
+        # EXPR_ARRAY = 39
+        E I kind == 39 {
+            R @.check_array_with_expected(expr_ptr, expected_type_ptr)
+        }
+        # For other expressions: infer then unify
+        E {
+            inferred := @.check_expr(expr_ptr)
+            I @.unify(expected_type_ptr, inferred) == 1 {
+                inferred
+            } E {
+                # Type mismatch - report error
+                span_start := load_i64(expr_ptr + 8)
+                span_end := load_i64(expr_ptr + 16)
+                err := TypeError.mismatch(0, 0, span_start, span_end)
+                err_ptr := malloc(TypeError.size())
+                store_i64(err_ptr, err.kind)
+                store_i64(err_ptr + 8, err.span_start)
+                store_i64(err_ptr + 16, err.span_end)
+                store_i64(err_ptr + 24, err.expected_idx)
+                store_i64(err_ptr + 32, err.found_idx)
+                store_i64(err_ptr + 40, err.name_idx)
+                @.add_error(err_ptr)
+                inferred
+            }
+        }
+    }
+
+    # Check lambda with expected function type
+    F check_lambda_with_expected(&self, expr_ptr: i64, expected_ptr: i64) -> i64 {
+        params_ptr := load_i64(expr_ptr + 24)   # field0: params array
+        params_len := load_i64(expr_ptr + 32)   # field1: params length
+        body_ptr := load_i64(expr_ptr + 40)     # field2: body expression
+
+        # Extract expected parameter types if available
+        exp_kind := load_i64(expected_ptr)
+        exp_params_ptr: mut i64 = 0
+        exp_params_len: mut i64 = 0
+        exp_ret_ptr: mut i64 = 0
+
+        I exp_kind == TY_FN() {
+            exp_params_ptr = load_i64(expected_ptr + 8)
+            exp_params_len = load_i64(expected_ptr + 16)
+            exp_ret_ptr = load_i64(expected_ptr + 24)
+            0
+        } E { 0 }
+
+        # Push scope for lambda parameters
+        @.push_scope()
+
+        # Allocate space for parameter types
+        param_types := malloc(params_len * 8)
+
+        # Process each parameter
+        i: mut i64 = 0
+        L { I i >= params_len { B }
+            param_ptr := params_ptr + i * 40  # Param.size() = 40
+            param_name := load_i64(param_ptr)
+            param_type_ptr := load_i64(param_ptr + 8)
+            param_is_mut := load_i64(param_ptr + 16)
+
+            # Determine parameter type: use expected if available, else infer
+            param_ty := I exp_params_ptr != 0 && i < exp_params_len {
+                load_i64(exp_params_ptr + i * 8)
+            } E I param_type_ptr != 0 {
+                @.resolve_type_node(param_type_ptr)
+            } E {
+                @.fresh_type_var()
+            }
+
+            store_i64(param_types + i * 8, param_ty)
+            @.add_var(param_name, param_ty, param_is_mut)
+            i = i + 1
+        }
+
+        # Check body with expected return type if available
+        body_ty := I exp_ret_ptr != 0 {
+            @.check_expr_bidirectional(body_ptr, MODE_CHECK(), exp_ret_ptr)
+        } E {
+            @.check_expr(body_ptr)
+        }
+
+        @.pop_scope()
+
+        # Apply substitutions to finalize types
+        j: mut i64 = 0
+        L { I j >= params_len { B }
+            old_ty := load_i64(param_types + j * 8)
+            new_ty := @.apply_substitutions(old_ty)
+            store_i64(param_types + j * 8, new_ty)
+            j = j + 1
+        }
+        final_ret := @.apply_substitutions(body_ty)
+
+        # Build function type
+        result := malloc(ResolvedType.size())
+        store_i64(result, TY_FN())
+        store_i64(result + 8, param_types)
+        store_i64(result + 16, params_len)
+        store_i64(result + 24, final_ret)
+        result
+    }
+
+    # Check array literal with expected element type
+    F check_array_with_expected(&self, expr_ptr: i64, expected_ptr: i64) -> i64 {
+        elements_ptr := load_i64(expr_ptr + 24)  # field0
+        elements_len := load_i64(expr_ptr + 32)  # field1
+
+        # Extract expected element type if available
+        exp_kind := load_i64(expected_ptr)
+        exp_elem_ptr: mut i64 = 0
+        I exp_kind == TY_ARRAY() {
+            exp_elem_ptr = load_i64(expected_ptr + 8)
+            0
+        } E { 0 }
+
+        # Empty array
+        I elements_len == 0 {
+            elem_type := I exp_elem_ptr != 0 {
+                exp_elem_ptr
+            } E {
+                @.fresh_type_var()
+            }
+            result := malloc(ResolvedType.size())
+            store_i64(result, TY_ARRAY())
+            store_i64(result + 8, elem_type)
+            store_i64(result + 16, 0)
+            store_i64(result + 24, 0)
+            R result
+        }
+
+        # Check each element
+        first_type: mut i64 = 0
+        i: mut i64 = 0
+        L { I i >= elements_len { B }
+            elem_ptr := load_i64(elements_ptr + i * 8)
+            elem_ty := I exp_elem_ptr != 0 {
+                @.check_expr_bidirectional(elem_ptr, MODE_CHECK(), exp_elem_ptr)
+            } E {
+                @.check_expr(elem_ptr)
+            }
+
+            I i == 0 {
+                first_type = elem_ty
+            } E {
+                # Unify with first element type
+                @.unify(first_type, elem_ty)
+                0
+            }
+            i = i + 1
+        }
+
+        final_elem := @.apply_substitutions(first_type)
+        result := malloc(ResolvedType.size())
+        store_i64(result, TY_ARRAY())
+        store_i64(result + 8, final_elem)
+        store_i64(result + 16, 0)
+        store_i64(result + 24, 0)
+        result
     }
 
     # ========== Type Checking ==========
@@ -1640,6 +2142,8 @@ X TypeChecker {
         free(self.enums_ptr)
         free(self.functions_ptr)
         free(self.errors_ptr)
+        free(self.subst_keys_ptr)
+        free(self.subst_values_ptr)
         1
     }
 }
@@ -1752,11 +2256,151 @@ F test_type_checker_main() -> i64 {
         puts("No errors initially: FAIL")
     }
 
+    # Test bidirectional type checking - unification
+    puts("\n--- Bidirectional Type Inference Tests ---")
+
+    # Test fresh type variable
+    var1 := tc.fresh_type_var()
+    var_kind := load_i64(var1)
+    I var_kind == TY_VAR() {
+        puts("fresh_type_var: OK")
+    } E {
+        puts("fresh_type_var: FAIL")
+    }
+
+    # Test substitution
+    i64_type := malloc(ResolvedType.size())
+    i64_ty := ResolvedType.i64_type()
+    store_i64(i64_type, i64_ty.kind)
+    store_i64(i64_type + 8, i64_ty.field0)
+    store_i64(i64_type + 16, i64_ty.field1)
+    store_i64(i64_type + 24, i64_ty.field2)
+
+    var_id := load_i64(var1 + 8)
+    tc.add_substitution(var_id, i64_type)
+    subst_result := tc.get_substitution(var_id)
+    I subst_result == i64_type {
+        puts("add_substitution/get_substitution: OK")
+    } E {
+        puts("add_substitution/get_substitution: FAIL")
+    }
+
+    # Test apply_substitutions
+    applied := tc.apply_substitutions(var1)
+    applied_kind := load_i64(applied)
+    I applied_kind == TY_I64() {
+        puts("apply_substitutions: OK")
+    } E {
+        puts("apply_substitutions: FAIL")
+    }
+
+    # Test unification of same types
+    bool_type := malloc(ResolvedType.size())
+    bt := ResolvedType.bool_type()
+    store_i64(bool_type, bt.kind)
+    store_i64(bool_type + 8, bt.field0)
+    store_i64(bool_type + 16, bt.field1)
+    store_i64(bool_type + 24, bt.field2)
+
+    bool_type2 := malloc(ResolvedType.size())
+    store_i64(bool_type2, bt.kind)
+    store_i64(bool_type2 + 8, bt.field0)
+    store_i64(bool_type2 + 16, bt.field1)
+    store_i64(bool_type2 + 24, bt.field2)
+
+    I tc.unify(bool_type, bool_type2) == 1 {
+        puts("unify same types: OK")
+    } E {
+        puts("unify same types: FAIL")
+    }
+
+    # Test unification of different types (should fail)
+    I tc.unify(i64_type, bool_type) == 0 {
+        puts("unify different types (should fail): OK")
+    } E {
+        puts("unify different types (should fail): FAIL")
+    }
+
+    # Test unification with type variable
+    tc.clear_substitutions()
+    var2 := tc.fresh_type_var()
+    I tc.unify(var2, i64_type) == 1 {
+        puts("unify type var with concrete: OK")
+    } E {
+        puts("unify type var with concrete: FAIL")
+    }
+
+    # Verify substitution was created
+    var2_id := load_i64(var2 + 8)
+    bound_type := tc.get_substitution(var2_id)
+    I bound_type == i64_type {
+        puts("type var binding: OK")
+    } E {
+        puts("type var binding: FAIL")
+    }
+
+    # Test array type unification
+    tc.clear_substitutions()
+    arr_i64 := malloc(ResolvedType.size())
+    arr := ResolvedType.array_type(i64_type)
+    store_i64(arr_i64, arr.kind)
+    store_i64(arr_i64 + 8, arr.field0)
+    store_i64(arr_i64 + 16, arr.field1)
+    store_i64(arr_i64 + 24, arr.field2)
+
+    arr_i64_2 := malloc(ResolvedType.size())
+    store_i64(arr_i64_2, arr.kind)
+    store_i64(arr_i64_2 + 8, arr.field0)
+    store_i64(arr_i64_2 + 16, arr.field1)
+    store_i64(arr_i64_2 + 24, arr.field2)
+
+    I tc.unify(arr_i64, arr_i64_2) == 1 {
+        puts("unify array types: OK")
+    } E {
+        puts("unify array types: FAIL")
+    }
+
+    # Test array type with type variable element
+    tc.clear_substitutions()
+    var3 := tc.fresh_type_var()
+    arr_var := malloc(ResolvedType.size())
+    arr_var_ty := ResolvedType.array_type(var3)
+    store_i64(arr_var, arr_var_ty.kind)
+    store_i64(arr_var + 8, arr_var_ty.field0)
+    store_i64(arr_var + 16, arr_var_ty.field1)
+    store_i64(arr_var + 24, arr_var_ty.field2)
+
+    I tc.unify(arr_var, arr_i64) == 1 {
+        puts("unify array with type var element: OK")
+    } E {
+        puts("unify array with type var element: FAIL")
+    }
+
+    # Verify the type variable was bound
+    var3_id := load_i64(var3 + 8)
+    bound_elem := tc.get_substitution(var3_id)
+    I bound_elem != 0 {
+        bound_elem_kind := load_i64(bound_elem)
+        I bound_elem_kind == TY_I64() {
+            puts("array element type var binding: OK")
+        } E {
+            puts("array element type var binding: FAIL (wrong kind)")
+        }
+    } E {
+        puts("array element type var binding: FAIL (no binding)")
+    }
+
     # Cleanup
     free(type_ptr)
     free(sig_ptr)
+    free(i64_type)
+    free(bool_type)
+    free(bool_type2)
+    free(arr_i64)
+    free(arr_i64_2)
+    free(arr_var)
     tc.drop()
 
-    puts("All type checker tests passed!")
+    puts("\nAll type checker tests passed!")
     0
 }

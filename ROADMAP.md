@@ -1319,7 +1319,7 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 
 > **상태**: 🚧 진행 중
 > **목표**: Vais 컴파일러를 100% Vais로 작성하여 자기 자신을 컴파일
-> **현재 진도**: 77% (Lexer 100%, Parser 70%, Type Checker 40%, Codegen 70%)
+> **현재 진도**: 80% (Lexer 100%, Parser 100%, AST 100%, Type Checker 55%, Codegen 70%)
 > **예상 규모**: 17,871 LOC → ~42,000 LOC (2.3배 증가)
 
 ### 현재 상태 요약
@@ -1328,9 +1328,9 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 |----------|-----------|----------|--------|------|
 | **Lexer** | vais-lexer | lexer.vais + lexer_s1.vais | **100%** | ✅ 완료 |
 | **Token** | vais-lexer | token.vais + constants.vais | **100%** | ✅ 완료 |
-| **AST** | vais-ast | ast.vais | 85% | ⚠️ 진행 중 |
-| **Parser** | vais-parser | parser.vais + parser_s1.vais | 70% | ⚠️ 진행 중 |
-| **Type Checker** | vais-types | type_checker.vais | 40% | ❌ 미완성 |
+| **AST** | vais-ast | ast.vais | **100%** | ✅ 완료 |
+| **Parser** | vais-parser | parser.vais + parser_s1.vais | **100%** | ✅ 완료 |
+| **Type Checker** | vais-types | type_checker.vais | 55% | ⚠️ 진행 중 |
 | **Codegen** | vais-codegen | codegen.vais + codegen_s1.vais | 70% | ⚠️ 진행 중 |
 | **MIR** | vais-mir | - | 0% | ❌ 미구현 |
 | **Module System** | vaisc | module.vais + main_entry.vais | 80% | ⚠️ 진행 중 |
@@ -1398,12 +1398,18 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 
 **목표**: 완전한 타입 검사 및 추론
 
-- [ ] **양방향 타입 추론 (Bidirectional Type Inference)**
-  - [ ] 타입 신디시스 (Synthesis) - 타입 도출
-  - [ ] 타입 체킹 (Checking) - 타입 검증
-  - [ ] 서브타이핑 관계 해석
+- [x] **양방향 타입 추론 (Bidirectional Type Inference)** ✅
+  - [x] 타입 신디시스 (Synthesis) - check_expr로 타입 도출
+  - [x] 타입 체킹 (Checking) - check_expr_bidirectional로 타입 검증
+  - [x] CheckMode 열거형 (MODE_INFER, MODE_CHECK)
+  - [x] 람다 파라미터 타입 추론 (check_lambda_with_expected)
+  - [x] 배열 요소 타입 추론 (check_array_with_expected)
+- [x] **타입 변수 및 유니피케이션** ✅
+  - [x] 대체 맵 (substitution map) 구현
+  - [x] apply_substitutions - 타입 변수 대체 적용
+  - [x] unify - 두 타입 통일화 (재귀적 구조체 지원)
+  - [x] fresh_type_var - 새로운 타입 변수 생성
 - [ ] **제네릭 타입 해석**
-  - [ ] 타입 변수 생성 및 유니피케이션
   - [ ] 제네릭 인스턴스화 (Monomorphization 준비)
   - [ ] 타입 파라미터 바운드 검사
 - [ ] **Trait 해석**
@@ -1423,6 +1429,33 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 - **파일**: `selfhost/type_checker.vais`
 
 **검증**: `examples/` 파일 중 타입 에러 테스트 10개 정확히 감지
+
+### 🐛 Known Issue: Inkwell 백엔드 Selfhost 컴파일 버그
+
+**발견일**: 2026-02-06
+**증상**: `selfhost/type_checker.vais` 컴파일 시 inkwell 에러
+```
+error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in struct 'VarInfo'
+```
+
+**원인 분석**:
+- inkwell 백엔드에서 구조체 필드 탐색 시 잘못된 구조체를 참조
+- `vars_ptr`는 `Scope` 구조체의 필드인데 `VarInfo`에서 찾으려고 함
+- 타입 체커는 통과 (`vaisc check selfhost/type_checker.vais` → OK)
+- 문제는 inkwell 코드젠의 구조체 필드 해석 로직에 있음
+
+**영향 범위**:
+- selfhost/*.vais 파일의 inkwell 백엔드 컴파일
+- 일반 examples/ 파일은 정상 동작 (E2E 테스트 210개 통과)
+
+**해결 방안**:
+- [ ] inkwell 백엔드의 `generate_field_access()` 함수 디버깅
+- [ ] 구조체 타입 컨텍스트 추적 로직 점검
+- [ ] selfhost 파일 전용 E2E 테스트 추가
+
+**임시 해결책**: 텍스트 기반 백엔드 사용 (`--no-inkwell` 옵션 필요시 추가)
+
+---
 
 ### Stage 4: Codegen 완성 (70% → 100%)
 
