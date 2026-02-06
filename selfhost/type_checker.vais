@@ -451,6 +451,81 @@ X Scope {
 }
 
 # ============================================================================
+# StringBuffer helpers for type formatting (standalone to avoid str move issues)
+# Layout: data(8) + len(8) + cap(8) = 24 bytes
+# ============================================================================
+
+F tc_sb_new() -> i64 {
+    sb := malloc(24)
+    data := malloc(256)
+    store_i64(sb, data)
+    store_i64(sb + 8, 0)
+    store_i64(sb + 16, 256)
+    sb
+}
+
+F tc_sb_byte(sb: i64, byte: i64) -> i64 {
+    len := load_i64(sb + 8)
+    cap := load_i64(sb + 16)
+    I len >= cap {
+        new_cap := cap * 2
+        old_data := load_i64(sb)
+        new_data := malloc(new_cap)
+        memcpy(new_data, old_data, len)
+        free(old_data)
+        store_i64(sb, new_data)
+        store_i64(sb + 16, new_cap)
+        0
+    } E { 0 }
+    data := load_i64(sb)
+    store_byte(data + len, byte)
+    store_i64(sb + 8, len + 1)
+    1
+}
+
+F tc_sb_cstr(sb: i64, s: str) -> i64 {
+    ptr := str_to_ptr(s)
+    # Count length by scanning for null terminator
+    slen: mut i64 = 0
+    L { I load_byte(ptr + slen) == 0 { B } E { slen = slen + 1 } }
+    tc_sb_bytes(sb, ptr, slen)
+}
+
+F tc_sb_bytes(sb: i64, src: i64, slen: i64) -> i64 {
+    len := load_i64(sb + 8)
+    cap := load_i64(sb + 16)
+    I len + slen > cap {
+        new_cap := len + slen + 256
+        old_data := load_i64(sb)
+        new_data := malloc(new_cap)
+        memcpy(new_data, old_data, len)
+        free(old_data)
+        store_i64(sb, new_data)
+        store_i64(sb + 16, new_cap)
+        0
+    } E { 0 }
+    data := load_i64(sb)
+    memcpy(data + len, src, slen)
+    store_i64(sb + 8, len + slen)
+    1
+}
+
+F tc_sb_i64(sb: i64, value: i64) -> i64 {
+    I value == 0 {
+        tc_sb_byte(sb, 48)
+    } E I value < 0 {
+        tc_sb_byte(sb, 45)
+        tc_sb_i64(sb, 0 - value)
+    } E {
+        I value >= 10 {
+            tc_sb_i64(sb, value / 10)
+            0
+        } E { 0 }
+        tc_sb_byte(sb, (value % 10) + 48)
+    }
+}
+
+# ============================================================================
 # Type Checker
 # ============================================================================
 
@@ -1455,8 +1530,21 @@ X TypeChecker {
                 # Check if concrete type implements this trait
                 I type_name_idx >= 0 {
                     I @.type_implements_trait(type_name_idx, trait_name_idx) == 0 {
-                        # Bound not satisfied - report error
-                        err := TypeError.mismatch(trait_name_idx, type_name_idx, span_start, span_end)
+                        # Bound not satisfied - report error with type names
+                        exp_sb := tc_sb_new()
+                        tc_sb_cstr(exp_sb, "impl ")
+                        I self.sp_data != 0 && trait_name_idx >= 0 && trait_name_idx < self.sp_count {
+                            tn_ptr := @.get_string_ptr(trait_name_idx)
+                            tn_len := @.get_string_len(trait_name_idx)
+                            tc_sb_bytes(exp_sb, tn_ptr, tn_len)
+                        } E { tc_sb_cstr(exp_sb, "Trait") }
+                        found_sb := tc_sb_new()
+                        I self.sp_data != 0 && type_name_idx >= 0 && type_name_idx < self.sp_count {
+                            typ_ptr := @.get_string_ptr(type_name_idx)
+                            typ_len := @.get_string_len(type_name_idx)
+                            tc_sb_bytes(found_sb, typ_ptr, typ_len)
+                        } E { tc_sb_cstr(found_sb, "?") }
+                        err := TypeError.mismatch(exp_sb, found_sb, span_start, span_end)
                         err_ptr := malloc(TypeError.size())
                         store_i64(err_ptr, err.kind)
                         store_i64(err_ptr + 8, err.span_start)
@@ -1937,8 +2025,17 @@ X TypeChecker {
                 free(covered)
 
                 I all_covered == 0 {
-                    # Non-exhaustive match - add error
-                    err := TypeError.mismatch(0, 0, span_start, span_end)
+                    # Non-exhaustive match - add error with enum type info
+                    exp_sb := tc_sb_new()
+                    tc_sb_cstr(exp_sb, "exhaustive match on ")
+                    I self.sp_data != 0 && type_name_idx >= 0 && type_name_idx < self.sp_count {
+                        en_ptr := @.get_string_ptr(type_name_idx)
+                        en_len := @.get_string_len(type_name_idx)
+                        tc_sb_bytes(exp_sb, en_ptr, en_len)
+                    } E { tc_sb_cstr(exp_sb, "enum") }
+                    found_sb := tc_sb_new()
+                    tc_sb_cstr(found_sb, "non-exhaustive")
+                    err := TypeError.mismatch(exp_sb, found_sb, span_start, span_end)
                     err_ptr := malloc(TypeError.size())
                     store_i64(err_ptr, err.kind)
                     store_i64(err_ptr + 8, err.span_start)
@@ -2039,6 +2136,326 @@ X TypeChecker {
     F get_error(&self, idx: i64) -> i64 {
         I idx >= self.errors_len { 0 }
         E { self.errors_ptr + idx * TypeError.size() }
+    }
+
+    # ========== Type Formatting ==========
+
+    # Format a ResolvedType pointer into a StringBuffer
+    # Returns the sb pointer (caller must free)
+    F format_type(&self, type_ptr: i64) -> i64 {
+        sb := tc_sb_new()
+        @.format_type_to_sb(type_ptr, sb)
+        sb
+    }
+
+    # Append type string representation to an existing StringBuffer
+    F format_type_to_sb(&self, type_ptr: i64, sb: i64) -> i64 {
+        I type_ptr == 0 {
+            tc_sb_cstr(sb, "?")
+            R 1
+        } E { 0 }
+
+        kind := load_i64(type_ptr)
+
+        I kind == TY_I8() { tc_sb_cstr(sb, "i8") }
+        E I kind == TY_I16() { tc_sb_cstr(sb, "i16") }
+        E I kind == TY_I32() { tc_sb_cstr(sb, "i32") }
+        E I kind == TY_I64() { tc_sb_cstr(sb, "i64") }
+        E I kind == TY_I128() { tc_sb_cstr(sb, "i128") }
+        E I kind == TY_U8() { tc_sb_cstr(sb, "u8") }
+        E I kind == TY_U16() { tc_sb_cstr(sb, "u16") }
+        E I kind == TY_U32() { tc_sb_cstr(sb, "u32") }
+        E I kind == TY_U64() { tc_sb_cstr(sb, "u64") }
+        E I kind == TY_U128() { tc_sb_cstr(sb, "u128") }
+        E I kind == TY_F32() { tc_sb_cstr(sb, "f32") }
+        E I kind == TY_F64() { tc_sb_cstr(sb, "f64") }
+        E I kind == TY_BOOL() { tc_sb_cstr(sb, "bool") }
+        E I kind == TY_STR() { tc_sb_cstr(sb, "str") }
+        E I kind == TY_UNIT() { tc_sb_cstr(sb, "()") }
+        E I kind == TY_UNKNOWN() { tc_sb_cstr(sb, "?") }
+        E I kind == TY_NEVER() { tc_sb_cstr(sb, "!") }
+        E I kind == TY_ARRAY() {
+            inner_ptr := load_i64(type_ptr + 8)
+            tc_sb_byte(sb, 91)  # '['
+            @.format_type_to_sb(inner_ptr, sb)
+            tc_sb_byte(sb, 93)  # ']'
+        }
+        E I kind == TY_OPTIONAL() {
+            inner_ptr := load_i64(type_ptr + 8)
+            @.format_type_to_sb(inner_ptr, sb)
+            tc_sb_byte(sb, 63)  # '?'
+        }
+        E I kind == TY_RESULT() {
+            inner_ptr := load_i64(type_ptr + 8)
+            @.format_type_to_sb(inner_ptr, sb)
+            tc_sb_byte(sb, 33)  # '!'
+        }
+        E I kind == TY_POINTER() {
+            inner_ptr := load_i64(type_ptr + 8)
+            tc_sb_byte(sb, 42)  # '*'
+            @.format_type_to_sb(inner_ptr, sb)
+        }
+        E I kind == TY_REF() {
+            inner_ptr := load_i64(type_ptr + 8)
+            tc_sb_byte(sb, 38)  # '&'
+            @.format_type_to_sb(inner_ptr, sb)
+        }
+        E I kind == TY_REF_MUT() {
+            inner_ptr := load_i64(type_ptr + 8)
+            tc_sb_cstr(sb, "&mut ")
+            @.format_type_to_sb(inner_ptr, sb)
+        }
+        E I kind == TY_NAMED() {
+            name_idx := load_i64(type_ptr + 8)
+            I self.sp_data != 0 && name_idx >= 0 && name_idx < self.sp_count {
+                name_ptr := @.get_string_ptr(name_idx)
+                name_len := @.get_string_len(name_idx)
+                tc_sb_bytes(sb, name_ptr, name_len)
+            } E {
+                tc_sb_cstr(sb, "<named>")
+            }
+            # Append generics if present
+            generics_ptr := load_i64(type_ptr + 16)
+            generics_len := load_i64(type_ptr + 24)
+            I generics_len > 0 {
+                tc_sb_byte(sb, 60)  # '<'
+                gi: mut i64 = 0
+                L { I gi >= generics_len { B }
+                    I gi > 0 { tc_sb_cstr(sb, ", ") 0 } E { 0 }
+                    g_type_ptr := load_i64(generics_ptr + gi * 8)
+                    @.format_type_to_sb(g_type_ptr, sb)
+                    gi = gi + 1
+                }
+                tc_sb_byte(sb, 62)  # '>'
+            } E { 0 }
+        }
+        E I kind == TY_GENERIC() {
+            name_idx := load_i64(type_ptr + 8)
+            I self.sp_data != 0 && name_idx >= 0 && name_idx < self.sp_count {
+                name_ptr := @.get_string_ptr(name_idx)
+                name_len := @.get_string_len(name_idx)
+                tc_sb_bytes(sb, name_ptr, name_len)
+            } E {
+                tc_sb_cstr(sb, "T")
+            }
+        }
+        E I kind == TY_VAR() {
+            var_id := load_i64(type_ptr + 8)
+            tc_sb_byte(sb, 63)  # '?'
+            tc_sb_i64(sb, var_id)
+        }
+        E I kind == TY_FN() {
+            params_ptr := load_i64(type_ptr + 8)
+            params_len := load_i64(type_ptr + 16)
+            ret_ptr := load_i64(type_ptr + 24)
+            tc_sb_byte(sb, 40)  # '('
+            pi: mut i64 = 0
+            L { I pi >= params_len { B }
+                I pi > 0 { tc_sb_cstr(sb, ", ") 0 } E { 0 }
+                p_type_ptr := load_i64(params_ptr + pi * 8)
+                @.format_type_to_sb(p_type_ptr, sb)
+                pi = pi + 1
+            }
+            tc_sb_cstr(sb, ") -> ")
+            @.format_type_to_sb(ret_ptr, sb)
+        }
+        E I kind == TY_TUPLE() {
+            types_ptr := load_i64(type_ptr + 8)
+            types_len := load_i64(type_ptr + 16)
+            tc_sb_byte(sb, 40)  # '('
+            ti: mut i64 = 0
+            L { I ti >= types_len { B }
+                I ti > 0 { tc_sb_cstr(sb, ", ") 0 } E { 0 }
+                t_type_ptr := load_i64(types_ptr + ti * 8)
+                @.format_type_to_sb(t_type_ptr, sb)
+                ti = ti + 1
+            }
+            tc_sb_byte(sb, 41)  # ')'
+        }
+        E I kind == TY_DYN_TRAIT() {
+            trait_name_idx := load_i64(type_ptr + 8)
+            tc_sb_cstr(sb, "dyn ")
+            I self.sp_data != 0 && trait_name_idx >= 0 && trait_name_idx < self.sp_count {
+                name_ptr := @.get_string_ptr(trait_name_idx)
+                name_len := @.get_string_len(trait_name_idx)
+                tc_sb_bytes(sb, name_ptr, name_len)
+            } E {
+                tc_sb_cstr(sb, "Trait")
+            }
+        }
+        E I kind == TY_MAP() {
+            key_ptr := load_i64(type_ptr + 8)
+            val_ptr := load_i64(type_ptr + 16)
+            tc_sb_byte(sb, 91)  # '['
+            @.format_type_to_sb(key_ptr, sb)
+            tc_sb_byte(sb, 58)  # ':'
+            @.format_type_to_sb(val_ptr, sb)
+            tc_sb_byte(sb, 93)  # ']'
+        }
+        E I kind == TY_ASSOC() {
+            trait_idx := load_i64(type_ptr + 8)
+            assoc_idx := load_i64(type_ptr + 16)
+            I self.sp_data != 0 && trait_idx >= 0 && trait_idx < self.sp_count {
+                name_ptr := @.get_string_ptr(trait_idx)
+                name_len := @.get_string_len(trait_idx)
+                tc_sb_bytes(sb, name_ptr, name_len)
+            } E {
+                tc_sb_cstr(sb, "Trait")
+            }
+            tc_sb_cstr(sb, "::")
+            I self.sp_data != 0 && assoc_idx >= 0 && assoc_idx < self.sp_count {
+                name_ptr := @.get_string_ptr(assoc_idx)
+                name_len := @.get_string_len(assoc_idx)
+                tc_sb_bytes(sb, name_ptr, name_len)
+            } E {
+                tc_sb_cstr(sb, "Type")
+            }
+        }
+        E {
+            tc_sb_cstr(sb, "<unknown-kind-")
+            tc_sb_i64(sb, kind)
+            tc_sb_cstr(sb, ">")
+        }
+
+        1
+    }
+
+    # Get the data pointer and length from a format_type sb result
+    F type_sb_data(&self, sb: i64) -> i64 = load_i64(sb)
+    F type_sb_len(&self, sb: i64) -> i64 = load_i64(sb + 8)
+
+    # Free a sb allocated by format_type
+    F type_sb_free(&self, sb: i64) -> i64 {
+        free(load_i64(sb))
+        free(sb)
+        1
+    }
+
+    # ========== Error Printing ==========
+
+    # Print all type errors to stdout
+    F print_errors(&self) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.errors_len { B }
+            err_ptr := self.errors_ptr + i * TypeError.size()
+            err_kind := load_i64(err_ptr)
+            err_span_start := load_i64(err_ptr + 8)
+            err_span_end := load_i64(err_ptr + 16)
+            err_expected := load_i64(err_ptr + 24)
+            err_found := load_i64(err_ptr + 32)
+            err_name := load_i64(err_ptr + 40)
+
+            sb := tc_sb_new()
+
+            I err_kind == ERR_MISMATCH() {
+                tc_sb_cstr(sb, "error: Type mismatch: expected ")
+                I err_expected != 0 {
+                    # err_expected is an sb pointer from format_type
+                    exp_data := load_i64(err_expected)
+                    exp_len := load_i64(err_expected + 8)
+                    tc_sb_bytes(sb, exp_data, exp_len)
+                } E {
+                    tc_sb_cstr(sb, "?")
+                }
+                tc_sb_cstr(sb, ", found ")
+                I err_found != 0 {
+                    found_data := load_i64(err_found)
+                    found_len := load_i64(err_found + 8)
+                    tc_sb_bytes(sb, found_data, found_len)
+                } E {
+                    tc_sb_cstr(sb, "?")
+                }
+                0
+            }
+            E I err_kind == ERR_UNDEFINED_VAR() {
+                tc_sb_cstr(sb, "error: Undefined variable")
+                I self.sp_data != 0 && err_name >= 0 && err_name < self.sp_count {
+                    tc_sb_cstr(sb, ": ")
+                    name_ptr := @.get_string_ptr(err_name)
+                    name_len := @.get_string_len(err_name)
+                    tc_sb_bytes(sb, name_ptr, name_len)
+                } E { 0 }
+                0
+            }
+            E I err_kind == ERR_UNDEFINED_TYPE() {
+                tc_sb_cstr(sb, "error: Undefined type")
+                I self.sp_data != 0 && err_name >= 0 && err_name < self.sp_count {
+                    tc_sb_cstr(sb, ": ")
+                    name_ptr := @.get_string_ptr(err_name)
+                    name_len := @.get_string_len(err_name)
+                    tc_sb_bytes(sb, name_ptr, name_len)
+                } E { 0 }
+                0
+            }
+            E I err_kind == ERR_UNDEFINED_FUNC() {
+                tc_sb_cstr(sb, "error: Undefined function")
+                I self.sp_data != 0 && err_name >= 0 && err_name < self.sp_count {
+                    tc_sb_cstr(sb, ": ")
+                    name_ptr := @.get_string_ptr(err_name)
+                    name_len := @.get_string_len(err_name)
+                    tc_sb_bytes(sb, name_ptr, name_len)
+                } E { 0 }
+                0
+            }
+            E I err_kind == ERR_NOT_CALLABLE() {
+                tc_sb_cstr(sb, "error: Cannot call non-function type")
+                0
+            }
+            E I err_kind == ERR_ARG_COUNT() {
+                tc_sb_cstr(sb, "error: Wrong argument count: expected ")
+                tc_sb_i64(sb, err_expected)
+                tc_sb_cstr(sb, ", got ")
+                tc_sb_i64(sb, err_found)
+                0
+            }
+            E I err_kind == ERR_IMMUTABLE_ASSIGN() {
+                tc_sb_cstr(sb, "error: Cannot assign to immutable variable")
+                I self.sp_data != 0 && err_name >= 0 && err_name < self.sp_count {
+                    tc_sb_cstr(sb, ": ")
+                    name_ptr := @.get_string_ptr(err_name)
+                    name_len := @.get_string_len(err_name)
+                    tc_sb_bytes(sb, name_ptr, name_len)
+                } E { 0 }
+                0
+            }
+            E I err_kind == ERR_CANNOT_INFER() {
+                tc_sb_cstr(sb, "error: Cannot infer type")
+                0
+            }
+            E I err_kind == ERR_DUPLICATE() {
+                tc_sb_cstr(sb, "error: Duplicate definition")
+                I self.sp_data != 0 && err_name >= 0 && err_name < self.sp_count {
+                    tc_sb_cstr(sb, ": ")
+                    name_ptr := @.get_string_ptr(err_name)
+                    name_len := @.get_string_len(err_name)
+                    tc_sb_bytes(sb, name_ptr, name_len)
+                } E { 0 }
+                0
+            }
+            E {
+                tc_sb_cstr(sb, "error: Unknown error kind ")
+                tc_sb_i64(sb, err_kind)
+                0
+            }
+
+            # Append span information
+            tc_sb_cstr(sb, " at ")
+            tc_sb_i64(sb, err_span_start)
+            tc_sb_byte(sb, 45)  # '-'
+            tc_sb_i64(sb, err_span_end)
+
+            # Null-terminate and print
+            tc_sb_byte(sb, 0)
+            data := load_i64(sb)
+            puts_ptr(data)
+
+            # Free the sb
+            free(data)
+            free(sb)
+
+            i = i + 1
+        }
+        self.errors_len
     }
 
     # ========== Type Resolution ==========
@@ -3030,10 +3447,12 @@ X TypeChecker {
             I @.unify(expected_type_ptr, inferred) == 1 {
                 inferred
             } E {
-                # Type mismatch - report error
+                # Type mismatch - report error with actual type info
                 span_start := load_i64(expr_ptr + 8)
                 span_end := load_i64(expr_ptr + 16)
-                err := TypeError.mismatch(0, 0, span_start, span_end)
+                exp_sb := @.format_type(expected_type_ptr)
+                found_sb := @.format_type(inferred)
+                err := TypeError.mismatch(exp_sb, found_sb, span_start, span_end)
                 err_ptr := malloc(TypeError.size())
                 store_i64(err_ptr, err.kind)
                 store_i64(err_ptr + 8, err.span_start)
@@ -4587,6 +5006,90 @@ F test_type_checker_main() -> i64 {
     } E {
         puts("array element type var binding: FAIL (no binding)")
     }
+
+    # Test format_type for primitive types
+    puts("\n--- Type Formatting Tests ---")
+
+    # format_type for i64
+    sb1 := tc.format_type(i64_type)
+    sb1_data := load_i64(sb1)
+    sb1_len := load_i64(sb1 + 8)
+    # i64 = 3 chars: 'i','6','4'
+    I sb1_len == 3 && load_byte(sb1_data) == 105 && load_byte(sb1_data + 1) == 54 && load_byte(sb1_data + 2) == 52 {
+        puts("format_type i64: OK")
+    } E {
+        puts("format_type i64: FAIL")
+    }
+    free(sb1_data)
+    free(sb1)
+
+    # format_type for bool
+    sb2 := tc.format_type(bool_type)
+    sb2_data := load_i64(sb2)
+    sb2_len := load_i64(sb2 + 8)
+    # bool = 4 chars: 'b','o','o','l'
+    I sb2_len == 4 && load_byte(sb2_data) == 98 {
+        puts("format_type bool: OK")
+    } E {
+        puts("format_type bool: FAIL")
+    }
+    free(sb2_data)
+    free(sb2)
+
+    # format_type for array of i64 → "[i64]"
+    sb3 := tc.format_type(arr_i64)
+    sb3_data := load_i64(sb3)
+    sb3_len := load_i64(sb3 + 8)
+    # [i64] = 5 chars: '[','i','6','4',']'
+    I sb3_len == 5 && load_byte(sb3_data) == 91 && load_byte(sb3_data + 4) == 93 {
+        puts("format_type [i64]: OK")
+    } E {
+        puts("format_type [i64]: FAIL")
+    }
+    free(sb3_data)
+    free(sb3)
+
+    # format_type for unit → "()"
+    unit_type_ptr := malloc(ResolvedType.size())
+    unit_ty := ResolvedType.unit_type()
+    store_i64(unit_type_ptr, unit_ty.kind)
+    store_i64(unit_type_ptr + 8, unit_ty.field0)
+    store_i64(unit_type_ptr + 16, unit_ty.field1)
+    store_i64(unit_type_ptr + 24, unit_ty.field2)
+    sb4 := tc.format_type(unit_type_ptr)
+    sb4_data := load_i64(sb4)
+    sb4_len := load_i64(sb4 + 8)
+    I sb4_len == 2 && load_byte(sb4_data) == 40 && load_byte(sb4_data + 1) == 41 {
+        puts("format_type (): OK")
+    } E {
+        puts("format_type (): FAIL")
+    }
+    free(sb4_data)
+    free(sb4)
+
+    # format_type for null pointer → "?"
+    sb5 := tc.format_type(0)
+    sb5_data := load_i64(sb5)
+    sb5_len := load_i64(sb5 + 8)
+    I sb5_len == 1 && load_byte(sb5_data) == 63 {
+        puts("format_type null: OK")
+    } E {
+        puts("format_type null: FAIL")
+    }
+    free(sb5_data)
+    free(sb5)
+
+    # Test print_errors (with no errors — should print nothing)
+    tc2 := TypeChecker.new()
+    count := tc2.print_errors()
+    I count == 0 {
+        puts("print_errors (empty): OK")
+    } E {
+        puts("print_errors (empty): FAIL")
+    }
+    tc2.drop()
+
+    free(unit_type_ptr)
 
     # Cleanup
     free(type_ptr)

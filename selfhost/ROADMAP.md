@@ -139,6 +139,11 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
   - [x] add_trait_impl/find_trait_impl/type_implements_trait
   - [x] check_trait with super trait validation
   - [x] check_impl with trait verification
+- [x] Type mismatch detailed descriptions ✅ (format_type, print_errors)
+  - [x] format_type: ResolvedType → human-readable string
+  - [x] print_errors: formatted error output with type names
+  - [x] mismatch calls pass actual expected/found type info
+- [x] Error recovery (continue checking after errors) ✅
 - [ ] Type inference improvements
 - [ ] Option<T> / Result<T, E>
 
