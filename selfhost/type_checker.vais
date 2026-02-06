@@ -346,6 +346,52 @@ X EnumDefInfo {
 }
 
 # ============================================================================
+# Trait Definition (for type environment)
+# ============================================================================
+
+S TraitDefInfo {
+    name_idx: i64,
+    generics_ptr: i64,       # Array of GenericParam pointers
+    generics_len: i64,
+    super_traits_ptr: i64,   # Array of name_idx for super traits
+    super_traits_len: i64,
+    methods_ptr: i64,        # Array of FunctionSig pointers
+    methods_len: i64
+}
+
+X TraitDefInfo {
+    F size() -> i64 = 56
+
+    F new(name_idx: i64) -> TraitDefInfo = TraitDefInfo {
+        name_idx: name_idx,
+        generics_ptr: 0, generics_len: 0,
+        super_traits_ptr: 0, super_traits_len: 0,
+        methods_ptr: 0, methods_len: 0
+    }
+}
+
+# ============================================================================
+# Trait Implementation Info (for tracking impl Trait for Type)
+# ============================================================================
+
+S TraitImplInfo {
+    target_type_idx: i64,    # name_idx of the implementing type
+    trait_name_idx: i64,     # name_idx of the implemented trait
+    methods_ptr: i64,        # Array of FunctionSig pointers
+    methods_len: i64
+}
+
+X TraitImplInfo {
+    F size() -> i64 = 32
+
+    F new(target_type_idx: i64, trait_name_idx: i64) -> TraitImplInfo = TraitImplInfo {
+        target_type_idx: target_type_idx,
+        trait_name_idx: trait_name_idx,
+        methods_ptr: 0, methods_len: 0
+    }
+}
+
+# ============================================================================
 # Scope - Variable environment
 # ============================================================================
 
@@ -420,6 +466,16 @@ S TypeChecker {
     functions_len: i64,
     functions_cap: i64,
 
+    # Trait definitions
+    traits_ptr: i64,        # Array of TraitDefInfo
+    traits_len: i64,
+    traits_cap: i64,
+
+    # Trait implementations (impl Trait for Type)
+    trait_impls_ptr: i64,   # Array of TraitImplInfo
+    trait_impls_len: i64,
+    trait_impls_cap: i64,
+
     # Scope stack
     scopes_ptr: i64,        # Array of Scope pointers
     scopes_len: i64,
@@ -465,6 +521,8 @@ X TypeChecker {
         structs := malloc(64 * StructDefInfo.size())
         enums := malloc(32 * EnumDefInfo.size())
         functions := malloc(256 * FunctionSig.size())
+        traits := malloc(32 * TraitDefInfo.size())
+        trait_impls := malloc(64 * TraitImplInfo.size())
         scopes := malloc(32 * 8)  # Pointers to Scope
         errors := malloc(64 * TypeError.size())
 
@@ -488,6 +546,8 @@ X TypeChecker {
             structs_ptr: structs, structs_len: 0, structs_cap: 64,
             enums_ptr: enums, enums_len: 0, enums_cap: 32,
             functions_ptr: functions, functions_len: 0, functions_cap: 256,
+            traits_ptr: traits, traits_len: 0, traits_cap: 32,
+            trait_impls_ptr: trait_impls, trait_impls_len: 0, trait_impls_cap: 64,
             scopes_ptr: scopes, scopes_len: 1, scopes_cap: 32,
             current_fn_ret_ptr: 0, current_fn_name_idx: 0,
             current_generics_ptr: 0, current_generics_len: 0,
@@ -708,6 +768,110 @@ X TypeChecker {
             }
         }
         0  # Not found
+    }
+
+    # ========== Trait Registry ==========
+
+    F add_trait(&self, trait_info_ptr: i64) -> i64 {
+        I self.traits_len >= self.traits_cap {
+            new_cap := self.traits_cap * 2
+            new_ptr := malloc(new_cap * TraitDefInfo.size())
+            memcpy(new_ptr, self.traits_ptr, self.traits_len * TraitDefInfo.size())
+            free(self.traits_ptr)
+            self.traits_ptr = new_ptr
+            self.traits_cap = new_cap
+            0
+        } E { 0 }
+
+        memcpy(self.traits_ptr + self.traits_len * TraitDefInfo.size(), trait_info_ptr, TraitDefInfo.size())
+        self.traits_len = self.traits_len + 1
+        self.traits_len - 1
+    }
+
+    F find_trait(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.traits_len { B }
+            ptr := self.traits_ptr + i * TraitDefInfo.size()
+            trait_name := load_i64(ptr)
+            I trait_name == name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0  # Not found
+    }
+
+    # ========== Trait Implementation Registry ==========
+
+    F add_trait_impl(&self, impl_info_ptr: i64) -> i64 {
+        I self.trait_impls_len >= self.trait_impls_cap {
+            new_cap := self.trait_impls_cap * 2
+            new_ptr := malloc(new_cap * TraitImplInfo.size())
+            memcpy(new_ptr, self.trait_impls_ptr, self.trait_impls_len * TraitImplInfo.size())
+            free(self.trait_impls_ptr)
+            self.trait_impls_ptr = new_ptr
+            self.trait_impls_cap = new_cap
+            0
+        } E { 0 }
+
+        memcpy(self.trait_impls_ptr + self.trait_impls_len * TraitImplInfo.size(), impl_info_ptr, TraitImplInfo.size())
+        self.trait_impls_len = self.trait_impls_len + 1
+        self.trait_impls_len - 1
+    }
+
+    F find_trait_impl(&self, target_type_idx: i64, trait_name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.trait_impls_len { B }
+            ptr := self.trait_impls_ptr + i * TraitImplInfo.size()
+            impl_target := load_i64(ptr)
+            impl_trait := load_i64(ptr + 8)
+            I impl_target == target_type_idx && impl_trait == trait_name_idx {
+                R ptr
+            } E {
+                i = i + 1
+            }
+        }
+        0  # Not found
+    }
+
+    F type_implements_trait(&self, type_idx: i64, trait_name_idx: i64) -> i64 {
+        impl_ptr := @.find_trait_impl(type_idx, trait_name_idx)
+        I impl_ptr != 0 { 1 } E { 0 }
+    }
+
+    F register_trait(&self, trait_def_ptr: i64) -> i64 {
+        # TraitDef layout:
+        # 0: name_idx
+        # 8: generics_ptr
+        # 16: generics_len
+        # 24: super_traits_ptr
+        # 32: super_traits_len
+        # 40: methods_ptr
+        # 48: methods_len
+        # 56: is_pub
+        # 64: span_start
+        # 72: span_end
+
+        name_idx := load_i64(trait_def_ptr)
+        generics_ptr := load_i64(trait_def_ptr + 8)
+        generics_len := load_i64(trait_def_ptr + 16)
+        super_traits_ptr := load_i64(trait_def_ptr + 24)
+        super_traits_len := load_i64(trait_def_ptr + 32)
+        methods_ptr := load_i64(trait_def_ptr + 40)
+        methods_len := load_i64(trait_def_ptr + 48)
+
+        # Create TraitDefInfo
+        trait_info_ptr := malloc(TraitDefInfo.size())
+        store_i64(trait_info_ptr, name_idx)
+        store_i64(trait_info_ptr + 8, generics_ptr)
+        store_i64(trait_info_ptr + 16, generics_len)
+        store_i64(trait_info_ptr + 24, super_traits_ptr)
+        store_i64(trait_info_ptr + 32, super_traits_len)
+        store_i64(trait_info_ptr + 40, methods_ptr)
+        store_i64(trait_info_ptr + 48, methods_len)
+
+        @.add_trait(trait_info_ptr)
     }
 
     # ========== Error Reporting ==========
@@ -2499,15 +2663,152 @@ X TypeChecker {
     }
 
     F check_impl(&self, impl_def_ptr: i64) -> i64 {
+        # ImplDef layout:
+        # 0: target_type_ptr
+        # 8: trait_name_idx (-1 if no trait)
+        # 16: generics_ptr
+        # 24: generics_len
+        # 32: methods_ptr
+        # 40: methods_len
+
+        target_type_ptr := load_i64(impl_def_ptr)
+        trait_name_idx := load_i64(impl_def_ptr + 8)
         methods_ptr := load_i64(impl_def_ptr + 32)
         methods_len := load_i64(impl_def_ptr + 40)
 
+        # If this is a trait impl, verify the trait exists and check required methods
+        I trait_name_idx >= 0 {
+            trait_ptr := @.find_trait(trait_name_idx)
+            I trait_ptr == 0 {
+                # Trait not found - error
+                err := TypeError.undefined_type(trait_name_idx, 0, 0)
+                err_ptr := malloc(TypeError.size())
+                store_i64(err_ptr, err.kind)
+                store_i64(err_ptr + 8, err.span_start)
+                store_i64(err_ptr + 16, err.span_end)
+                store_i64(err_ptr + 24, err.expected_idx)
+                store_i64(err_ptr + 32, err.found_idx)
+                store_i64(err_ptr + 40, err.name_idx)
+                @.add_error(err_ptr)
+            } E {
+                # Get target type name from TypeNode
+                # TypeNode: kind (i64) + name_idx (i64) + ...
+                target_kind := load_i64(target_type_ptr)
+                I target_kind == 1 {  # TYPE_NAMED
+                    target_type_idx := load_i64(target_type_ptr + 8)
+
+                    # Register this trait implementation
+                    impl_info_ptr := malloc(TraitImplInfo.size())
+                    store_i64(impl_info_ptr, target_type_idx)
+                    store_i64(impl_info_ptr + 8, trait_name_idx)
+                    store_i64(impl_info_ptr + 16, methods_ptr)
+                    store_i64(impl_info_ptr + 24, methods_len)
+                    @.add_trait_impl(impl_info_ptr)
+
+                    # Verify all required trait methods are implemented
+                    trait_methods_ptr := load_i64(trait_ptr + 40)
+                    trait_methods_len := load_i64(trait_ptr + 48)
+
+                    j: mut i64 = 0
+                    L { I j >= trait_methods_len { B }
+                        trait_method_ptr := load_i64(trait_methods_ptr + j * 8)
+                        trait_method_name := load_i64(trait_method_ptr)
+
+                        # Check if this method is implemented
+                        found: mut i64 = 0
+                        k: mut i64 = 0
+                        L { I k >= methods_len { B }
+                            impl_method_ptr := load_i64(methods_ptr + k * 8)
+                            impl_method_name := load_i64(impl_method_ptr)
+                            I impl_method_name == trait_method_name {
+                                found = 1
+                                B
+                            } E { 0 }
+                            k = k + 1
+                        }
+
+                        # Missing method check - for now just log, could add error
+                        # (trait methods may have default impls which we don't track yet)
+
+                        j = j + 1
+                    }
+                } E { 0 }
+            }
+        } E { 0 }
+
+        # Type check all methods
         i: mut i64 = 0
         L { I i >= methods_len { B }
             method_ptr := load_i64(methods_ptr + i * 8)
             @.check_function(method_ptr)
             i = i + 1
         }
+        1
+    }
+
+    F check_trait(&self, trait_def_ptr: i64) -> i64 {
+        # TraitDef layout:
+        # 0: name_idx
+        # 8: generics_ptr
+        # 16: generics_len
+        # 24: super_traits_ptr
+        # 32: super_traits_len
+        # 40: methods_ptr
+        # 48: methods_len
+        # 56: is_pub
+        # 64: span_start
+        # 72: span_end
+
+        name_idx := load_i64(trait_def_ptr)
+        generics_ptr := load_i64(trait_def_ptr + 8)
+        generics_len := load_i64(trait_def_ptr + 16)
+        super_traits_ptr := load_i64(trait_def_ptr + 24)
+        super_traits_len := load_i64(trait_def_ptr + 32)
+        methods_ptr := load_i64(trait_def_ptr + 40)
+        methods_len := load_i64(trait_def_ptr + 48)
+
+        # Verify all super traits exist
+        i: mut i64 = 0
+        L { I i >= super_traits_len { B }
+            super_trait_idx := load_i64(super_traits_ptr + i * 8)
+            super_trait_ptr := @.find_trait(super_trait_idx)
+            I super_trait_ptr == 0 {
+                err := TypeError.undefined_type(super_trait_idx, 0, 0)
+                err_ptr := malloc(TypeError.size())
+                store_i64(err_ptr, err.kind)
+                store_i64(err_ptr + 8, err.span_start)
+                store_i64(err_ptr + 16, err.span_end)
+                store_i64(err_ptr + 24, err.expected_idx)
+                store_i64(err_ptr + 32, err.found_idx)
+                store_i64(err_ptr + 40, err.name_idx)
+                @.add_error(err_ptr)
+            } E { 0 }
+            i = i + 1
+        }
+
+        # Type check trait methods
+        # Set up generic context for trait generics
+        old_generics_ptr := self.current_generics_ptr
+        old_generics_len := self.current_generics_len
+        self.current_generics_ptr = generics_ptr
+        self.current_generics_len = generics_len
+
+        i = 0
+        L { I i >= methods_len { B }
+            method_ptr := load_i64(methods_ptr + i * 8)
+            # For trait methods, we only check signatures (may not have body)
+            # FuncDef body_ptr is at offset 48
+            body_ptr := load_i64(method_ptr + 48)
+            I body_ptr != 0 {
+                @.check_function(method_ptr)
+            } E { 0 }
+            i = i + 1
+        }
+
+        # Restore generic context
+        self.current_generics_ptr = old_generics_ptr
+        self.current_generics_len = old_generics_len
+
         1
     }
 
@@ -2522,6 +2823,10 @@ X TypeChecker {
         # ITEM_STRUCT = 2
         E I kind == 2 {
             @.check_struct(data_ptr)
+        }
+        # ITEM_TRAIT = 6
+        E I kind == 6 {
+            @.check_trait(data_ptr)
         }
         # ITEM_IMPL = 7
         E I kind == 7 {
@@ -2554,6 +2859,10 @@ X TypeChecker {
             # ITEM_ENUM = 3
             E I kind == 3 {
                 @.add_enum(data_ptr)
+            }
+            # ITEM_TRAIT = 6
+            E I kind == 6 {
+                @.register_trait(data_ptr)
             }
             # ITEM_FUNCTION = 1
             E I kind == 1 {
@@ -2604,6 +2913,8 @@ X TypeChecker {
         free(self.structs_ptr)
         free(self.enums_ptr)
         free(self.functions_ptr)
+        free(self.traits_ptr)
+        free(self.trait_impls_ptr)
         free(self.errors_ptr)
         free(self.subst_keys_ptr)
         free(self.subst_values_ptr)

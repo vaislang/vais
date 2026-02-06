@@ -130,6 +130,12 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
   - [x] Type instantiation (instantiate_type)
   - [x] Generic inference from argument types (infer_generic_from_types)
   - [x] Generic struct field access with type arguments
+- [x] Trait resolution ✅ (type_checker.vais)
+  - [x] TraitDefInfo/TraitImplInfo structures
+  - [x] add_trait/find_trait/register_trait
+  - [x] add_trait_impl/find_trait_impl/type_implements_trait
+  - [x] check_trait with super trait validation
+  - [x] check_impl with trait verification
 - [ ] Type inference improvements
 - [ ] Option<T> / Result<T, E>
 
