@@ -1283,6 +1283,22 @@ X CodeGenerator {
         E I kind == 41 {
             @.generate_range(expr_ptr)
         }
+        # EXPR_TRY = 44
+        E I kind == 44 {
+            @.generate_try(expr_ptr)
+        }
+        # EXPR_UNWRAP = 45
+        E I kind == 45 {
+            @.generate_unwrap(expr_ptr)
+        }
+        # EXPR_REF = 46
+        E I kind == 46 {
+            @.generate_ref(expr_ptr)
+        }
+        # EXPR_DEREF = 47
+        E I kind == 47 {
+            @.generate_deref(expr_ptr)
+        }
         # EXPR_ASSIGN = 48
         E I kind == 48 {
             @.generate_assign(expr_ptr)
@@ -1964,6 +1980,163 @@ X CodeGenerator {
         @.emit_cstr(")\n")
 
         range_ptr
+    }
+
+    # ========== Ref (& operator) ==========
+
+    F generate_ref(&self, expr_ptr: i64) -> i64 {
+        # REF: field0 = inner expr
+        inner_ptr := load_i64(expr_ptr + 24)
+
+        # If inner is an identifier with alloca, return the alloca pointer
+        inner_kind := load_i64(inner_ptr)
+        I inner_kind == 25 {
+            # EXPR_IDENT
+            name_idx := load_i64(inner_ptr + 24)
+            local_ptr := @.find_local(name_idx)
+            I local_ptr != 0 {
+                is_alloca := load_i64(local_ptr + 40)
+                I is_alloca == 1 {
+                    # Return the alloca register as the pointer value
+                    alloca_reg := load_i64(local_ptr + 8)
+                    result := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(result)
+                    @.emit_cstr(" = ptrtoint i64* ")
+                    @.emit_reg(alloca_reg)
+                    @.emit_cstr(" to i64\n")
+                    R result
+                } E { 0 }
+            } E { 0 }
+            0
+        } E { 0 }
+
+        # Fallback: generate expr and store it on stack, return pointer
+        inner_reg := @.generate_expr(inner_ptr)
+        alloca := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(alloca)
+        @.emit_cstr(" = alloca i64\n")
+        @.emit_cstr("  store i64 ")
+        @.emit_reg(inner_reg)
+        @.emit_cstr(", i64* ")
+        @.emit_reg(alloca)
+        @.emit_cstr("\n")
+
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = ptrtoint i64* ")
+        @.emit_reg(alloca)
+        @.emit_cstr(" to i64\n")
+        result
+    }
+
+    # ========== Deref (* operator) ==========
+
+    F generate_deref(&self, expr_ptr: i64) -> i64 {
+        # DEREF: field0 = inner expr (pointer value)
+        inner_ptr := load_i64(expr_ptr + 24)
+        ptr_reg := @.generate_expr(inner_ptr)
+
+        # Load value from pointer
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = call i64 @load_i64(i64 ")
+        @.emit_reg(ptr_reg)
+        @.emit_cstr(")\n")
+        result
+    }
+
+    # ========== Try (? operator) ==========
+
+    F generate_try(&self, expr_ptr: i64) -> i64 {
+        # TRY: field0 = inner expr (Result value)
+        # Result layout: first i64 is tag (0=Ok, 1=Err), second i64 is value
+        inner_ptr := load_i64(expr_ptr + 24)
+        result_reg := @.generate_expr(inner_ptr)
+
+        label_id := @.fresh_label()
+
+        # Load tag (first field of result)
+        tag_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(tag_reg)
+        @.emit_cstr(" = call i64 @load_i64(i64 ")
+        @.emit_reg(result_reg)
+        @.emit_cstr(")\n")
+
+        # Check if Err (tag == 1)
+        is_err := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(is_err)
+        @.emit_cstr(" = icmp eq i64 ")
+        @.emit_reg(tag_reg)
+        @.emit_cstr(", 1\n")
+
+        @.emit_cstr("  br i1 ")
+        @.emit_reg(is_err)
+        @.emit_cstr(", label %try_err")
+        @.emit_i64(label_id)
+        @.emit_cstr(", label %try_ok")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Error path: early return with Err value
+        @.emit_cstr("try_err")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        @.emit_cstr("  ret i64 ")
+        @.emit_reg(result_reg)
+        @.emit_cstr("\n")
+
+        # Ok path: extract value (second field)
+        @.emit_cstr("try_ok")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+
+        val_offset := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(val_offset)
+        @.emit_cstr(" = add i64 ")
+        @.emit_reg(result_reg)
+        @.emit_cstr(", 8\n")
+
+        val_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(val_reg)
+        @.emit_cstr(" = call i64 @load_i64(i64 ")
+        @.emit_reg(val_offset)
+        @.emit_cstr(")\n")
+
+        val_reg
+    }
+
+    # ========== Unwrap (! operator) ==========
+
+    F generate_unwrap(&self, expr_ptr: i64) -> i64 {
+        # UNWRAP: field0 = inner expr (Optional/Result value)
+        # Simply extract the value (second field), assume it's valid
+        inner_ptr := load_i64(expr_ptr + 24)
+        result_reg := @.generate_expr(inner_ptr)
+
+        # Load value from offset 8 (skip tag)
+        val_offset := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(val_offset)
+        @.emit_cstr(" = add i64 ")
+        @.emit_reg(result_reg)
+        @.emit_cstr(", 8\n")
+
+        val_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(val_reg)
+        @.emit_cstr(" = call i64 @load_i64(i64 ")
+        @.emit_reg(val_offset)
+        @.emit_cstr(")\n")
+
+        val_reg
     }
 
     # ========== Assign Op (+=, -=, *=, /=) ==========
