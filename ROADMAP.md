@@ -1481,7 +1481,7 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
   - [x] Lambda → 별도 LLVM 함수 생성 (@__lambda_N)
   - [x] 함수 포인터 반환 (ptrtoint)
   - [x] 캡처 변수 분석 (Free Variable Analysis) — collect_captures 재귀 순회 + 캡처 파라미터 전달 ✅ 2026-02-06
-  - [ ] Move/Ref 캡처 구분 — 후속
+  - [x] Move/Ref 캡처 구분 (mutable→Ref ptrtoint/inttoptr, immutable→Move 값 복사) ✅ 2026-02-06
 - [x] **제네릭 Monomorphization (기본)** ✅ 2026-02-06
   - [x] 타입별 함수 복사본 생성 (monomorphized name mangling, generic binding, specialization)
   - [x] 제네릭 구조체 특화 (generic struct mono: save_generic_struct, add_struct_mono_entry, generate_mono_struct_type 구현) ✅ 2026-02-06
@@ -1489,10 +1489,10 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
 - [x] **Trait Object / Dynamic Dispatch** ✅ 2026-02-06
   - [x] vtable 생성 (VtableEntry, add_vtable, emit_vtable_globals)
   - [x] 동적 메서드 호출 (generate_dyn_call - indirect call through vtable)
-- [ ] **최적화 패스 기초**
+- [x] **최적화 패스 기초** ✅ 2026-02-06
   - [x] Constant folding (Binary: +/-/*/÷/%, Unary: -/~) ✅ 2026-02-06
-  - [ ] Dead code elimination
-  - [ ] 기본 인라이닝
+  - [x] Dead code elimination (2-pass: 정의/사용 수집 → 미사용 순수 명령어 제거) ✅ 2026-02-06
+  - [x] 기본 인라이닝 (≤10 명령어, call-free 함수 텍스트 기반 인라인) ✅ 2026-02-06
 - [x] **식 Codegen 확장** ✅ 2026-02-06
   - [x] Method call codegen (receiver를 첫 인자로 패싱)
   - [x] Static call codegen (TypeName.method 형태)

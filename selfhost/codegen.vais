@@ -1639,6 +1639,12 @@ X CodeGenerator {
         # Emit helper functions
         @.emit_helper_functions()
 
+        # Apply Dead Code Elimination optimization
+        @.optimize_dce()
+
+        # Apply basic function inlining
+        @.optimize_inline()
+
         1
     }
 
@@ -3092,7 +3098,9 @@ X CodeGenerator {
 
     # Collect free variables (captured from outer scope) in an expression
     # params_ptr/params_len: lambda parameter names to exclude
-    # captures_ptr: output buffer to store captured variable name_idx values (preallocated)
+    # captures_ptr: output buffer to store captured variable info (preallocated)
+    #   Each entry is 16 bytes: (name_idx: i64, capture_mode: i64)
+    #   capture_mode: 0 = Move (value copy), 1 = Ref (pointer pass)
     # Returns the number of captured variables found
     F collect_captures(&self, body_ptr: i64, params_ptr: i64, params_len: i64,
                        captures_ptr: i64, captures_len: i64, captures_cap: i64) -> i64 {
@@ -3103,18 +3111,18 @@ X CodeGenerator {
             name_idx := load_i64(body_ptr + 24)
 
             # Check if it's a lambda parameter - skip if so
-            is_param: mut i64 = 0
+            is_lambda_param: mut i64 = 0
             pi: mut i64 = 0
             L { I pi >= params_len { B }
                 param_ptr := params_ptr + pi * 40
                 param_name := load_i64(param_ptr)
                 I param_name == name_idx {
-                    is_param = 1
+                    is_lambda_param = 1
                     B
                 } E { 0 }
                 pi = pi + 1
             }
-            I is_param == 1 { R captures_len }
+            I is_lambda_param == 1 { R captures_len }
 
             # Check if it exists in outer locals (is a capture candidate)
             local_ptr := @.find_local(name_idx)
@@ -3123,15 +3131,20 @@ X CodeGenerator {
             # Check for duplicate
             ci: mut i64 = 0
             L { I ci >= captures_len { B }
-                I load_i64(captures_ptr + ci * 8) == name_idx {
+                I load_i64(captures_ptr + ci * 16) == name_idx {
                     R captures_len  # Already captured
                 } E { 0 }
                 ci = ci + 1
             }
 
-            # Add capture
+            # Determine capture mode: Ref for mutable locals (alloca), Move for params
+            is_alloca := load_i64(local_ptr + 40)
+            cap_mode := I is_alloca == 1 { 1 } E { 0 }  # 1=Ref, 0=Move
+
+            # Add capture with mode
             I captures_len < captures_cap {
-                store_i64(captures_ptr + captures_len * 8, name_idx)
+                store_i64(captures_ptr + captures_len * 16, name_idx)
+                store_i64(captures_ptr + captures_len * 16 + 8, cap_mode)
                 R captures_len + 1
             } E { R captures_len }
         }
@@ -3256,20 +3269,31 @@ X CodeGenerator {
         body_ptr := load_i64(expr_ptr + 40)
 
         # Analyze captures (free variables from outer scope)
-        capture_buf := malloc(32 * 8)  # Max 32 captures
+        # Each entry: 16 bytes (name_idx, capture_mode: 0=Move, 1=Ref)
+        capture_buf := malloc(32 * 16)  # Max 32 captures
         num_captures := @.collect_captures(body_ptr, params_ptr, params_len, capture_buf, 0, 32)
 
         # Generate values for captured variables (before switching context)
         capture_regs := malloc(num_captures * 8)
         ci: mut i64 = 0
         L { I ci >= num_captures { B }
-            cap_name_idx := load_i64(capture_buf + ci * 8)
+            cap_name_idx := load_i64(capture_buf + ci * 16)
+            cap_mode := load_i64(capture_buf + ci * 16 + 8)
             local_ptr := @.find_local(cap_name_idx)
             I local_ptr != 0 {
                 is_param := load_i64(local_ptr + 32)  # LocalVar.is_param
-                I is_param == 1 {
-                    # Parameter: use the register name directly
-                    # We need to emit a load or use of this register
+                I cap_mode == 1 {
+                    # Ref capture: pass the alloca pointer itself
+                    alloca_reg := load_i64(local_ptr + 8)
+                    cap_reg := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(cap_reg)
+                    @.emit_cstr(" = ptrtoint i64* ")
+                    @.emit_reg(alloca_reg)
+                    @.emit_cstr(" to i64 ; ref capture\n")
+                    store_i64(capture_regs + ci * 8, cap_reg)
+                } E I is_param == 1 {
+                    # Move capture of parameter: copy value
                     cap_reg := @.fresh_reg()
                     @.emit_cstr("  ")
                     @.emit_reg(cap_reg)
@@ -3277,17 +3301,17 @@ X CodeGenerator {
                     cap_name_ptr := @.get_string_ptr(cap_name_idx)
                     cap_name_len := @.get_string_len(cap_name_idx)
                     @.emit_ptr(cap_name_ptr, cap_name_len)
-                    @.emit_cstr(", 0\n")
+                    @.emit_cstr(", 0 ; move capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
                 } E {
-                    # Local variable: load from alloca
+                    # Move capture of local: load value from alloca
                     alloca_reg := load_i64(local_ptr + 8)
                     cap_reg := @.fresh_reg()
                     @.emit_cstr("  ")
                     @.emit_reg(cap_reg)
                     @.emit_cstr(" = load i64, i64* ")
                     @.emit_reg(alloca_reg)
-                    @.emit_cstr("\n")
+                    @.emit_cstr(" ; move capture\n")
                     store_i64(capture_regs + ci * 8, cap_reg)
                 }
             } E {
@@ -3322,14 +3346,26 @@ X CodeGenerator {
         L { I ci >= num_captures { B }
             I total_params > 0 { @.lambda_emit_cstr(", ") } E { 0 }
 
-            cap_name_idx := load_i64(capture_buf + ci * 8)
+            cap_name_idx := load_i64(capture_buf + ci * 16)
+            cap_mode := load_i64(capture_buf + ci * 16 + 8)
             @.lambda_emit_cstr("i64 %")
             pname_ptr := @.get_string_ptr(cap_name_idx)
             pname_len := @.get_string_len(cap_name_idx)
             @.lambda_emit_ptr(pname_ptr, pname_len)
 
-            # Register capture as local parameter
-            @.add_local(cap_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
+            I cap_mode == 1 {
+                # Ref capture: register as alloca (pointer semantics)
+                # The parameter holds a pointer, needs alloca-like treatment
+                # We create an alloca and store the pointer into it, or
+                # directly register with alloca flag so reads/writes go through it
+                @.lambda_emit_cstr("_ptr")
+                # We'll create an alloca in the lambda body for ref captures
+            } E { 0 }
+
+            # Register capture as local parameter (Move captures are direct params)
+            I cap_mode == 0 {
+                @.add_local(cap_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
+            } E { 0 }
 
             total_params = total_params + 1
             ci = ci + 1
@@ -3365,6 +3401,34 @@ X CodeGenerator {
         self.output = self.lambda_buf
 
         self.current_fn_ret_type = LLVM_I64()
+
+        # For ref captures: create alloca and inttoptr the parameter
+        # The parameter was named %varname_ptr and holds a pointer as i64
+        # We need to make the variable accessible as if it's an alloca
+        ci = 0
+        L { I ci >= num_captures { B }
+            cap_mode := load_i64(capture_buf + ci * 16 + 8)
+            I cap_mode == 1 {
+                cap_name_idx := load_i64(capture_buf + ci * 16)
+                pname_ptr := @.get_string_ptr(cap_name_idx)
+                pname_len := @.get_string_len(cap_name_idx)
+
+                # Convert param (i64 holding pointer) to i64* via inttoptr
+                ptr_reg := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(ptr_reg)
+                @.emit_cstr(" = inttoptr i64 %")
+                @.emit_ptr(pname_ptr, pname_len)
+                @.emit_cstr("_ptr to i64* ; ref capture unwrap\n")
+
+                # Register as alloca-like local (reads/writes go through pointer)
+                local_idx := @.add_local(cap_name_idx, ptr_reg, 0, LLVM_I64(), 0)
+                local_ptr := self.locals_ptr + local_idx * LocalVar.size()
+                store_i64(local_ptr + 8, ptr_reg)  # llvm_name_ptr = reg number
+                store_i64(local_ptr + 40, 1)  # is_alloca = 1 (pointer semantics)
+            } E { 0 }
+            ci = ci + 1
+        }
 
         # Generate body
         body_reg := @.generate_expr(body_ptr)
@@ -4052,6 +4116,959 @@ X CodeGenerator {
         }
 
         struct_ptr
+    }
+
+    # ========== Dead Code Elimination ==========
+
+    # DCE optimization pass on generated LLVM IR text.
+    # Removes unused variable definitions that have no side effects.
+    # Two-pass algorithm:
+    #   Pass 1: Collect all %N definitions and %N uses
+    #   Pass 2: Remove definitions where %N is never used (side-effect-free only)
+    F optimize_dce(&self) -> i64 {
+        ir_data := load_i64(self.output)
+        ir_len := load_i64(self.output + 8)
+
+        I ir_len == 0 { R 1 }
+
+        # Allocate usage tracking arrays
+        # We track registers %0 .. %(reg_counter_max-1)
+        # For simplicity, use a fixed max of 65536 registers
+        max_regs := 65536
+
+        # defined[i] = 1 if %i appears as definition (%i = ...)
+        defined := malloc(max_regs)
+        # used[i] = 1 if %i appears as a use (not as the definition target)
+        used := malloc(max_regs)
+        # side_effect[i] = 1 if %i = ... has side effects (call, store, etc.)
+        side_effect := malloc(max_regs)
+
+        # Zero-initialize
+        i: mut i64 = 0
+        L { I i >= max_regs { B }
+            store_byte(defined + i, 0)
+            store_byte(used + i, 0)
+            store_byte(side_effect + i, 0)
+            i = i + 1
+        }
+
+        # Pass 1: Scan IR line by line
+        pos: mut i64 = 0
+        L { I pos >= ir_len { B }
+            # Find end of current line
+            line_start := pos
+            L { I pos >= ir_len { B }
+                ch := load_byte(ir_data + pos)
+                I ch == 10 { B }  # newline
+                E { pos = pos + 1 }
+            }
+            line_len := pos - line_start
+
+            # Skip newline
+            I pos < ir_len { pos = pos + 1 } E { 0 }
+
+            # Skip empty lines, comments, labels
+            I line_len == 0 { 0 }
+            E {
+                @.dce_scan_line(ir_data + line_start, line_len, defined, used, side_effect, max_regs)
+            }
+        }
+
+        # Pass 2: Rebuild output, removing dead definitions
+        new_buf := malloc(ir_len + 1024)  # Extra space for DCE comments
+        new_len: mut i64 = 0
+
+        pos = 0
+        L { I pos >= ir_len { B }
+            # Find end of current line
+            line_start := pos
+            L { I pos >= ir_len { B }
+                ch := load_byte(ir_data + pos)
+                I ch == 10 { B }
+                E { pos = pos + 1 }
+            }
+            line_len := pos - line_start
+
+            # Skip newline
+            I pos < ir_len { pos = pos + 1 } E { 0 }
+
+            # Check if this line defines an unused register
+            should_remove := @.dce_should_remove(ir_data + line_start, line_len, defined, used, side_effect, max_regs)
+
+            I should_remove == 1 {
+                # Replace with DCE comment
+                dce_comment := "  ; DCE removed"
+                dce_len := 15
+                memcpy_str(new_buf + new_len, dce_comment, dce_len)
+                new_len = new_len + dce_len
+                store_byte(new_buf + new_len, 10)
+                new_len = new_len + 1
+            } E {
+                # Copy line as-is
+                I line_len > 0 {
+                    memcpy(new_buf + new_len, ir_data + line_start, line_len)
+                    new_len = new_len + line_len
+                } E { 0 }
+                store_byte(new_buf + new_len, 10)
+                new_len = new_len + 1
+            }
+        }
+
+        # Replace output buffer with DCE'd output
+        free(ir_data)
+        store_i64(self.output, new_buf)
+        store_i64(self.output + 8, new_len)
+        store_i64(self.output + 16, ir_len + 1024)
+
+        # Free tracking arrays
+        free(defined)
+        free(used)
+        free(side_effect)
+
+        1
+    }
+
+    # Scan a single IR line to collect definitions, uses, and side effects
+    F dce_scan_line(&self, line_ptr: i64, line_len: i64, defined: i64, used: i64, side_effect: i64, max_regs: i64) -> i64 {
+        # Skip leading whitespace
+        start: mut i64 = 0
+        L { I start >= line_len { B }
+            ch := load_byte(line_ptr + start)
+            I ch == 32 || ch == 9 { start = start + 1 } E { B }
+        }
+        I start >= line_len { R 0 }
+
+        first_ch := load_byte(line_ptr + start)
+
+        # Skip comments (;) and labels (line ending with :)
+        I first_ch == 59 { R 0 }  # ';'
+        last_ch := load_byte(line_ptr + line_len - 1)
+        I last_ch == 58 { R 0 }  # ':'
+
+        # Check if line is a definition: %N = ...
+        # Find the pattern: %<digits> = or %<name> =
+        def_reg := @.dce_extract_def_reg(line_ptr, line_len, start)
+
+        I def_reg >= 0 && def_reg < max_regs {
+            store_byte(defined + def_reg, 1)
+
+            # Check for side effects in the definition RHS
+            has_side := @.dce_has_side_effect(line_ptr, line_len)
+            I has_side == 1 {
+                store_byte(side_effect + def_reg, 1)
+            } E { 0 }
+
+            # Scan for used registers in the RHS (after " = ")
+            eq_pos := @.dce_find_equals(line_ptr, line_len)
+            I eq_pos > 0 {
+                @.dce_scan_uses(line_ptr + eq_pos, line_len - eq_pos, used, max_regs)
+            } E { 0 }
+        } E {
+            # Not a definition line - all %N references are uses
+            # This covers: ret, br, store, call without result, etc.
+            @.dce_scan_uses(line_ptr, line_len, used, max_regs)
+        }
+
+        1
+    }
+
+    # Extract definition register number from a line like "  %5 = add i64 ..."
+    # Returns register number or -1 if not a definition
+    F dce_extract_def_reg(&self, line_ptr: i64, line_len: i64, start: i64) -> i64 {
+        I start >= line_len { R 0 - 1 }
+
+        ch := load_byte(line_ptr + start)
+        I ch != 37 { R 0 - 1 }  # Not '%'
+
+        # Read digits after %
+        pos: mut i64 = start + 1
+        num: mut i64 = 0
+        has_digit: mut i64 = 0
+
+        L { I pos >= line_len { B }
+            d := load_byte(line_ptr + pos)
+            I d >= 48 && d <= 57 {
+                num = num * 10 + (d - 48)
+                has_digit = 1
+                pos = pos + 1
+            } E { B }
+        }
+
+        I has_digit == 0 { R 0 - 1 }
+
+        # Check that next chars are " = "
+        I pos + 3 <= line_len {
+            c1 := load_byte(line_ptr + pos)
+            c2 := load_byte(line_ptr + pos + 1)
+            c3 := load_byte(line_ptr + pos + 2)
+            I c1 == 32 && c2 == 61 && c3 == 32 {
+                num
+            } E { 0 - 1 }
+        } E { 0 - 1 }
+    }
+
+    # Find the position of " = " in a line, returns position after " = " or -1
+    F dce_find_equals(&self, line_ptr: i64, line_len: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i + 2 >= line_len { B }
+            c1 := load_byte(line_ptr + i)
+            c2 := load_byte(line_ptr + i + 1)
+            c3 := load_byte(line_ptr + i + 2)
+            I c1 == 32 && c2 == 61 && c3 == 32 {
+                R i + 3
+            }
+            i = i + 1
+        }
+        0 - 1
+    }
+
+    # Check if line contains a side-effectful instruction
+    # Side effects: call, invoke (function calls have side effects)
+    F dce_has_side_effect(&self, line_ptr: i64, line_len: i64) -> i64 {
+        # Find the RHS after " = "
+        eq_pos := @.dce_find_equals(line_ptr, line_len)
+        rhs_start := I eq_pos > 0 { eq_pos } E { 0 }
+        rhs_ptr := line_ptr + rhs_start
+        rhs_len := line_len - rhs_start
+
+        # Check for "call " (bytes: 99 97 108 108 32)
+        I @.dce_contains_5bytes(rhs_ptr, rhs_len, 99, 97, 108, 108, 32) == 1 { R 1 }
+        # Check for "invoke " - just check "invok" (105 110 118 111 107)
+        I @.dce_contains_5bytes(rhs_ptr, rhs_len, 105, 110, 118, 111, 107) == 1 { R 1 }
+        0
+    }
+
+    # Check if a region contains 5 consecutive bytes matching the given values
+    F dce_contains_5bytes(&self, data: i64, data_len: i64, b0: i64, b1: i64, b2: i64, b3: i64, b4: i64) -> i64 {
+        I data_len < 5 { R 0 }
+        i: mut i64 = 0
+        L { I i + 5 > data_len { B }
+            c0 := load_byte(data + i)
+            I c0 == b0 {
+                c1 := load_byte(data + i + 1)
+                c2 := load_byte(data + i + 2)
+                c3 := load_byte(data + i + 3)
+                c4 := load_byte(data + i + 4)
+                I c1 == b1 && c2 == b2 && c3 == b3 && c4 == b4 { R 1 }
+            }
+            i = i + 1
+        }
+        0
+    }
+
+    # Scan a region for %N register uses and mark them
+    F dce_scan_uses(&self, data: i64, data_len: i64, used: i64, max_regs: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= data_len { B }
+            ch := load_byte(data + i)
+            I ch == 37 {
+                # Found '%', try to read register number
+                j: mut i64 = i + 1
+                num: mut i64 = 0
+                has_digit: mut i64 = 0
+                L { I j >= data_len { B }
+                    d := load_byte(data + j)
+                    I d >= 48 && d <= 57 {
+                        num = num * 10 + (d - 48)
+                        has_digit = 1
+                        j = j + 1
+                    } E { B }
+                }
+                I has_digit == 1 && num < max_regs {
+                    store_byte(used + num, 1)
+                } E { 0 }
+                i = j
+            } E {
+                i = i + 1
+            }
+        }
+        1
+    }
+
+    # Determine if a line should be removed by DCE
+    F dce_should_remove(&self, line_ptr: i64, line_len: i64, defined: i64, used: i64, side_effect: i64, max_regs: i64) -> i64 {
+        # Skip leading whitespace
+        start: mut i64 = 0
+        L { I start >= line_len { B }
+            ch := load_byte(line_ptr + start)
+            I ch == 32 || ch == 9 { start = start + 1 } E { B }
+        }
+        I start >= line_len { R 0 }
+
+        # Extract definition register
+        def_reg := @.dce_extract_def_reg(line_ptr, line_len, start)
+        I def_reg < 0 || def_reg >= max_regs { R 0 }
+
+        # Check: is it defined but not used, and has no side effects?
+        is_defined := load_byte(defined + def_reg)
+        is_used := load_byte(used + def_reg)
+        has_side := load_byte(side_effect + def_reg)
+
+        I is_defined == 1 && is_used == 0 && has_side == 0 { 1 }
+        E { 0 }
+    }
+
+    # ========== Basic Inlining ==========
+
+    # Simple inlining pass: inline small, pure functions (≤10 instructions, no calls)
+    # Works on the generated LLVM IR text after DCE.
+    # Strategy:
+    #   1. Scan for small function definitions (define ... { ... })
+    #   2. Record candidates: name, param count, body lines, return value pattern
+    #   3. Replace call sites with inlined body
+    #
+    # For bootstrapping simplicity, only handles:
+    #   - Functions with all i64 params/return (the common case in selfhost)
+    #   - Numeric register names (%0, %1, etc.)
+    #   - Single-return functions
+    #
+    # InlineCandidate storage (per candidate, 56 bytes):
+    #   offset 0:  name_ptr (i64)       - pointer to function name string
+    #   offset 8:  name_len (i64)       - length of function name
+    #   offset 16: param_count (i64)    - number of parameters
+    #   offset 24: body_ptr (i64)       - pointer to body text
+    #   offset 32: body_len (i64)       - length of body text
+    #   offset 40: ret_type (i64)       - 0=void, 1=i64
+    #   offset 48: max_reg (i64)        - highest register number used in body
+
+    F optimize_inline(&self) -> i64 {
+        ir_data := load_i64(self.output)
+        ir_len := load_i64(self.output + 8)
+        I ir_len == 0 { R 1 }
+
+        # Find inline candidates
+        max_candidates := 256
+        candidates := malloc(max_candidates * 56)
+        num_candidates: mut i64 = 0
+
+        @.inline_find_candidates(ir_data, ir_len, candidates, &num_candidates, max_candidates)
+
+        I num_candidates == 0 {
+            free(candidates)
+            R 1
+        }
+
+        # Apply inlining for each candidate
+        cur_data: mut i64 = ir_data
+        cur_len: mut i64 = ir_len
+        inline_counter: mut i64 = 0
+
+        ci: mut i64 = 0
+        L { I ci >= num_candidates { B }
+            cand_ptr := candidates + ci * 56
+            new_data := @.inline_apply_candidate(cur_data, cur_len, cand_ptr, &inline_counter)
+
+            I new_data != 0 {
+                new_len := load_i64(new_data + 8)  # stored at offset 8 by inline_apply
+                new_buf := load_i64(new_data)       # stored at offset 0
+                I cur_data != ir_data {
+                    free(cur_data)
+                } E { 0 }
+                cur_data = new_buf
+                cur_len = new_len
+                free(new_data)
+            } E { 0 }
+
+            ci = ci + 1
+        }
+
+        # Update output if any inlining happened
+        I cur_data != ir_data {
+            free(ir_data)
+            store_i64(self.output, cur_data)
+            store_i64(self.output + 8, cur_len)
+        } E { 0 }
+
+        # Free candidate body buffers
+        ci = 0
+        L { I ci >= num_candidates { B }
+            cand_ptr := candidates + ci * 56
+            body_ptr := load_i64(cand_ptr + 24)
+            I body_ptr != 0 { free(body_ptr) } E { 0 }
+            name_ptr := load_i64(cand_ptr)
+            I name_ptr != 0 { free(name_ptr) } E { 0 }
+            ci = ci + 1
+        }
+        free(candidates)
+
+        1
+    }
+
+    # Find small functions that are candidates for inlining
+    F inline_find_candidates(&self, ir_data: i64, ir_len: i64, candidates: i64, num_ptr: i64, max_cand: i64) -> i64 {
+        pos: mut i64 = 0
+
+        L { I pos >= ir_len { B }
+            # Find line start/end
+            line_start := pos
+            L { I pos >= ir_len { B }
+                ch := load_byte(ir_data + pos)
+                I ch == 10 { B } E { pos = pos + 1 }
+            }
+            line_len := pos - line_start
+            I pos < ir_len { pos = pos + 1 } E { 0 }
+
+            # Check if line starts with "define " (100 101 102 105 110 101 32)
+            I line_len > 8 {
+                I @.dce_contains_5bytes(ir_data + line_start, line_len, 100, 101, 102, 105, 110) == 1 {
+                    # This is a "defin..." line, verify "define "
+                    c5 := load_byte(ir_data + line_start + 5)
+                    c6 := load_byte(ir_data + line_start + 6)
+                    I c5 == 101 && c6 == 32 {
+                        # "define " found - try to parse as inline candidate
+                        num := load_i64(num_ptr)
+                        I num < max_cand {
+                            cand_ptr := candidates + num * 56
+                            result := @.inline_parse_function(ir_data, ir_len, line_start, cand_ptr)
+                            I result == 1 {
+                                store_i64(num_ptr, num + 1)
+                            } E { 0 }
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+        }
+        1
+    }
+
+    # Parse a function definition and decide if it's an inline candidate
+    # Returns 1 if candidate was stored, 0 if not eligible
+    F inline_parse_function(&self, ir_data: i64, ir_len: i64, def_start: i64, cand_ptr: i64) -> i64 {
+        # Find the function name: look for '@' then read until '('
+        pos: mut i64 = def_start
+        L { I pos >= ir_len { B }
+            ch := load_byte(ir_data + pos)
+            I ch == 64 { B }  # '@'
+            E { pos = pos + 1 }
+        }
+        I pos >= ir_len { R 0 }
+
+        name_start := pos + 1  # skip '@'
+        L { I pos >= ir_len { B }
+            ch := load_byte(ir_data + pos)
+            I ch == 40 { B }  # '('
+            E { pos = pos + 1 }
+        }
+        I pos >= ir_len { R 0 }
+        name_end := pos
+        name_len := name_end - name_start
+
+        # Skip main, __internal, __lambda functions
+        I name_len >= 4 {
+            c0 := load_byte(ir_data + name_start)
+            c1 := load_byte(ir_data + name_start + 1)
+            # Skip "main"
+            I c0 == 109 && c1 == 97 && name_len == 4 { R 0 }
+            # Skip "__" prefix (internal/lambda)
+            I c0 == 95 && c1 == 95 { R 0 }
+        } E { 0 }
+
+        # Count parameters (count commas + 1 if non-empty, 0 if empty)
+        paren_start := pos  # position of '('
+        paren_depth: mut i64 = 1
+        pos = pos + 1
+        param_count: mut i64 = 0
+        has_params: mut i64 = 0
+
+        L { I pos >= ir_len || paren_depth == 0 { B }
+            ch := load_byte(ir_data + pos)
+            I ch == 40 { paren_depth = paren_depth + 1 }
+            E I ch == 41 { paren_depth = paren_depth - 1 }
+            E I ch == 44 && paren_depth == 1 { param_count = param_count + 1 }
+            E I ch != 32 && ch != 41 && paren_depth == 1 { has_params = 1 }
+            pos = pos + 1
+        }
+        I has_params == 1 { param_count = param_count + 1 } E { 0 }
+
+        # Find opening '{' and then scan body lines until '}'
+        L { I pos >= ir_len { B }
+            ch := load_byte(ir_data + pos)
+            I ch == 123 { B }  # '{'
+            E { pos = pos + 1 }
+        }
+        I pos >= ir_len { R 0 }
+        pos = pos + 1  # skip '{'
+
+        # Skip to next line
+        L { I pos >= ir_len { B }
+            ch := load_byte(ir_data + pos)
+            I ch == 10 { pos = pos + 1; B } E { pos = pos + 1 }
+        }
+
+        # Collect body lines and count instructions
+        body_start := pos
+        instruction_count: mut i64 = 0
+        has_call: mut i64 = 0
+        is_recursive: mut i64 = 0
+        max_reg: mut i64 = 0
+        ret_type: mut i64 = 0  # 0=void, 1=i64
+
+        L { I pos >= ir_len { B }
+            ls := pos
+            L { I pos >= ir_len { B }
+                ch := load_byte(ir_data + pos)
+                I ch == 10 { B } E { pos = pos + 1 }
+            }
+            ll := pos - ls
+            I pos < ir_len { pos = pos + 1 } E { 0 }
+
+            # Check for closing '}'
+            I ll >= 1 {
+                fc := load_byte(ir_data + ls)
+                I fc == 125 { B }  # '}'
+            } E { 0 }
+
+            # Skip labels and empty lines
+            I ll == 0 { 0 }
+            E {
+                # Skip leading whitespace
+                ws: mut i64 = 0
+                L { I ws >= ll { B }
+                    wc := load_byte(ir_data + ls + ws)
+                    I wc == 32 || wc == 9 { ws = ws + 1 } E { B }
+                }
+
+                I ws < ll {
+                    tc := load_byte(ir_data + ls + ws)
+                    lc := load_byte(ir_data + ls + ll - 1)
+
+                    # Skip comments and labels
+                    I tc == 59 || lc == 58 { 0 }
+                    E {
+                        instruction_count = instruction_count + 1
+
+                        # Check for call instructions
+                        I @.dce_contains_5bytes(ir_data + ls + ws, ll - ws, 99, 97, 108, 108, 32) == 1 {
+                            has_call = 1
+                            # Check if recursive (calls own function name)
+                            I @.inline_contains_name(ir_data + ls, ll, ir_data + name_start, name_len) == 1 {
+                                is_recursive = 1
+                            } E { 0 }
+                        } E { 0 }
+
+                        # Track max register number
+                        @.inline_scan_max_reg(ir_data + ls, ll, &max_reg)
+
+                        # Check for non-void return
+                        # "ret i64" → bytes 114 101 116 32 105 54 52
+                        I @.dce_contains_5bytes(ir_data + ls + ws, ll - ws, 114, 101, 116, 32, 105) == 1 {
+                            ret_type = 1
+                        } E { 0 }
+                    }
+                } E { 0 }
+            }
+        }
+
+        body_end := pos
+        # Adjust body_end to exclude the '}' line
+        body_len := body_end - body_start
+
+        # Filter: only inline small, non-recursive, call-free functions
+        I instruction_count > 10 || instruction_count == 0 { R 0 }
+        I is_recursive == 1 { R 0 }
+        I has_call == 1 { R 0 }
+
+        # Store candidate
+        name_copy := malloc(name_len)
+        memcpy(name_copy, ir_data + name_start, name_len)
+        store_i64(cand_ptr, name_copy)
+        store_i64(cand_ptr + 8, name_len)
+        store_i64(cand_ptr + 16, param_count)
+
+        body_copy := malloc(body_len)
+        memcpy(body_copy, ir_data + body_start, body_len)
+        store_i64(cand_ptr + 24, body_copy)
+        store_i64(cand_ptr + 32, body_len)
+        store_i64(cand_ptr + 40, ret_type)
+        store_i64(cand_ptr + 48, max_reg)
+
+        1
+    }
+
+    # Check if a region contains a function name (after '@')
+    F inline_contains_name(&self, data: i64, data_len: i64, name_ptr: i64, name_len: i64) -> i64 {
+        I data_len < name_len + 1 { R 0 }
+        i: mut i64 = 0
+        L { I i + name_len + 1 > data_len { B }
+            ch := load_byte(data + i)
+            I ch == 64 {
+                # Found '@', compare name
+                match_ok: mut i64 = 1
+                j: mut i64 = 0
+                L { I j >= name_len { B }
+                    c1 := load_byte(data + i + 1 + j)
+                    c2 := load_byte(name_ptr + j)
+                    I c1 != c2 { match_ok = 0; B }
+                    j = j + 1
+                }
+                I match_ok == 1 {
+                    # Verify name ends (next char is '(' or non-alphanumeric)
+                    I i + 1 + name_len < data_len {
+                        nc := load_byte(data + i + 1 + name_len)
+                        I nc == 40 { R 1 }  # '('
+                    } E { R 1 }
+                } E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Scan a line for register numbers and track the maximum
+    F inline_scan_max_reg(&self, data: i64, data_len: i64, max_ptr: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= data_len { B }
+            ch := load_byte(data + i)
+            I ch == 37 {
+                j: mut i64 = i + 1
+                num: mut i64 = 0
+                has_digit: mut i64 = 0
+                L { I j >= data_len { B }
+                    d := load_byte(data + j)
+                    I d >= 48 && d <= 57 {
+                        num = num * 10 + (d - 48)
+                        has_digit = 1
+                        j = j + 1
+                    } E { B }
+                }
+                I has_digit == 1 {
+                    cur_max := load_i64(max_ptr)
+                    I num > cur_max { store_i64(max_ptr, num) } E { 0 }
+                } E { 0 }
+                i = j
+            } E {
+                i = i + 1
+            }
+        }
+        1
+    }
+
+    # Apply inlining for one candidate across the IR
+    # Returns pointer to (buf_ptr, buf_len) struct or 0 if no changes
+    F inline_apply_candidate(&self, ir_data: i64, ir_len: i64, cand_ptr: i64, counter_ptr: i64) -> i64 {
+        cand_name := load_i64(cand_ptr)
+        cand_name_len := load_i64(cand_ptr + 8)
+        cand_params := load_i64(cand_ptr + 16)
+        cand_body := load_i64(cand_ptr + 24)
+        cand_body_len := load_i64(cand_ptr + 32)
+        cand_ret := load_i64(cand_ptr + 40)
+        cand_max_reg := load_i64(cand_ptr + 48)
+
+        # Build the call pattern: "call i64 @funcname("
+        # We only handle i64 return for now
+        I cand_ret != 1 { R 0 }
+
+        # Scan for call sites
+        new_buf := malloc(ir_len * 2)  # Generous allocation
+        new_len: mut i64 = 0
+        did_inline: mut i64 = 0
+
+        pos: mut i64 = 0
+        L { I pos >= ir_len { B }
+            line_start := pos
+            L { I pos >= ir_len { B }
+                ch := load_byte(ir_data + pos)
+                I ch == 10 { B } E { pos = pos + 1 }
+            }
+            line_len := pos - line_start
+            I pos < ir_len { pos = pos + 1 } E { 0 }
+
+            # Check if this line calls our candidate
+            # Pattern: "call i64 @name("
+            call_pos := @.inline_find_call(ir_data + line_start, line_len, cand_name, cand_name_len)
+
+            I call_pos >= 0 {
+                # Found a call site - inline it
+                counter := load_i64(counter_ptr)
+                store_i64(counter_ptr, counter + 1)
+
+                # Extract destination register (before " = call")
+                dest_reg := @.dce_extract_def_reg(ir_data + line_start, line_len, 0)
+
+                # Skip whitespace at beginning
+                ws: mut i64 = 0
+                L { I ws >= line_len { B }
+                    wc := load_byte(ir_data + line_start + ws)
+                    I wc == 32 || wc == 9 { ws = ws + 1 } E { B }
+                }
+
+                # Extract call arguments
+                # Find '(' after function name
+                arg_start: mut i64 = call_pos + cand_name_len + 1  # +1 for '@' skipped
+                L { I arg_start >= line_len { B }
+                    ac := load_byte(ir_data + line_start + arg_start)
+                    I ac == 40 { arg_start = arg_start + 1; B }  # '('
+                    E { arg_start = arg_start + 1 }
+                }
+
+                # Parse argument values (comma-separated, each has "i64 %N" or "i64 N")
+                arg_values := malloc(cand_params * 8)
+                @.inline_parse_args(ir_data + line_start + arg_start, line_len - arg_start, arg_values, cand_params)
+
+                # Emit inlined body
+                # Comment
+                memcpy_str(new_buf + new_len, "  ; BEGIN INLINE\n", 17)
+                new_len = new_len + 17
+
+                # Inline body with register offset
+                reg_offset := counter * (cand_max_reg + 1) + 100000
+                @.inline_emit_body(new_buf, &new_len, cand_body, cand_body_len, arg_values, cand_params, reg_offset, dest_reg, cand_ret)
+
+                # End comment
+                memcpy_str(new_buf + new_len, "  ; END INLINE\n", 15)
+                new_len = new_len + 15
+
+                free(arg_values)
+                did_inline = 1
+            } E {
+                # Copy line as-is
+                I line_len > 0 {
+                    memcpy(new_buf + new_len, ir_data + line_start, line_len)
+                    new_len = new_len + line_len
+                } E { 0 }
+                store_byte(new_buf + new_len, 10)
+                new_len = new_len + 1
+            }
+        }
+
+        I did_inline == 1 {
+            result := malloc(16)
+            store_i64(result, new_buf)
+            store_i64(result + 8, new_len)
+            result
+        } E {
+            free(new_buf)
+            0
+        }
+    }
+
+    # Find "call i64 @name(" in a line, returns position of "call" or -1
+    F inline_find_call(&self, line: i64, line_len: i64, name: i64, name_len: i64) -> i64 {
+        # Look for "call i64 @" (99 97 108 108 32 105 54 52 32 64)
+        I line_len < 10 + name_len { R 0 - 1 }
+        i: mut i64 = 0
+        L { I i + 10 + name_len > line_len { B }
+            # Check "call " prefix
+            I @.dce_contains_5bytes(line + i, line_len - i, 99, 97, 108, 108, 32) == 1 {
+                # Check "i64 @" after "call "
+                c5 := load_byte(line + i + 5)
+                c6 := load_byte(line + i + 6)
+                c7 := load_byte(line + i + 7)
+                c8 := load_byte(line + i + 8)
+                c9 := load_byte(line + i + 9)
+                I c5 == 105 && c6 == 54 && c7 == 52 && c8 == 32 && c9 == 64 {
+                    # Verify function name matches
+                    match_ok: mut i64 = 1
+                    j: mut i64 = 0
+                    L { I j >= name_len { B }
+                        nc := load_byte(line + i + 10 + j)
+                        ec := load_byte(name + j)
+                        I nc != ec { match_ok = 0; B }
+                        j = j + 1
+                    }
+                    I match_ok == 1 {
+                        # Verify followed by '('
+                        I i + 10 + name_len < line_len {
+                            pc := load_byte(line + i + 10 + name_len)
+                            I pc == 40 { R i }
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+        0 - 1
+    }
+
+    # Parse call arguments into an array of register numbers
+    # Each arg is "i64 %N" or "i64 N" format
+    F inline_parse_args(&self, data: i64, data_len: i64, arg_values: i64, max_args: i64) -> i64 {
+        arg_idx: mut i64 = 0
+        i: mut i64 = 0
+
+        L { I i >= data_len || arg_idx >= max_args { B }
+            ch := load_byte(data + i)
+
+            # Find '%' to read register number
+            I ch == 37 {
+                j: mut i64 = i + 1
+                num: mut i64 = 0
+                has_digit: mut i64 = 0
+                L { I j >= data_len { B }
+                    d := load_byte(data + j)
+                    I d >= 48 && d <= 57 {
+                        num = num * 10 + (d - 48)
+                        has_digit = 1
+                        j = j + 1
+                    } E { B }
+                }
+                I has_digit == 1 {
+                    store_i64(arg_values + arg_idx * 8, num)
+                    arg_idx = arg_idx + 1
+                } E { 0 }
+                i = j
+            }
+            # Handle named parameters (%name) - skip for now, only numeric
+            E I ch == 41 { B }  # ')' end of args
+            E { i = i + 1 }
+        }
+        arg_idx
+    }
+
+    # Emit inlined function body with register renaming
+    F inline_emit_body(&self, out: i64, out_len_ptr: i64, body: i64, body_len: i64, arg_values: i64, param_count: i64, reg_offset: i64, dest_reg: i64, ret_type: i64) -> i64 {
+        out_len: mut i64 = load_i64(out_len_ptr)
+        pos: mut i64 = 0
+
+        L { I pos >= body_len { B }
+            line_start := pos
+            L { I pos >= body_len { B }
+                ch := load_byte(body + pos)
+                I ch == 10 { B } E { pos = pos + 1 }
+            }
+            line_len := pos - line_start
+            I pos < body_len { pos = pos + 1 } E { 0 }
+
+            # Skip empty lines and labels
+            I line_len == 0 { 0 }
+            E {
+                # Skip whitespace
+                ws: mut i64 = 0
+                L { I ws >= line_len { B }
+                    wc := load_byte(body + line_start + ws)
+                    I wc == 32 || wc == 9 { ws = ws + 1 } E { B }
+                }
+
+                I ws >= line_len { 0 }
+                E {
+                    fc := load_byte(body + line_start + ws)
+                    lc := load_byte(body + line_start + line_len - 1)
+
+                    # Skip comments and labels
+                    I fc == 59 || lc == 58 { 0 }
+                    # Handle return: "ret i64 %N" → "%dest = add i64 0, %N_renamed"
+                    E I @.dce_contains_5bytes(body + line_start + ws, line_len - ws, 114, 101, 116, 32, 105) == 1 {
+                        # Extract return value register
+                        ret_val := @.inline_extract_ret_value(body + line_start + ws, line_len - ws)
+                        I dest_reg >= 0 && ret_type == 1 {
+                            # Map the return value (apply register offset)
+                            mapped_val := I ret_val >= 0 && ret_val < param_count {
+                                load_i64(arg_values + ret_val * 8)
+                            } E I ret_val >= 0 {
+                                ret_val + reg_offset
+                            } E { ret_val }
+
+                            memcpy_str(out + out_len, "  %", 3)
+                            out_len = out_len + 3
+                            out_len = out_len + @.inline_write_i64(out + out_len, dest_reg)
+                            memcpy_str(out + out_len, " = add i64 0, %", 15)
+                            out_len = out_len + 15
+                            out_len = out_len + @.inline_write_i64(out + out_len, mapped_val)
+                            memcpy_str(out + out_len, " ; inlined ret\n", 15)
+                            out_len = out_len + 15
+                        } E { 0 }
+                    }
+                    # Regular instruction: copy with register renaming
+                    E {
+                        memcpy_str(out + out_len, "  ", 2)
+                        out_len = out_len + 2
+                        # Copy line byte by byte, renaming %N to %(N+offset) or to arg value
+                        bi: mut i64 = ws
+                        L { I bi >= line_len { B }
+                            bc := load_byte(body + line_start + bi)
+                            I bc == 37 {
+                                # Read register number
+                                bj: mut i64 = bi + 1
+                                rnum: mut i64 = 0
+                                rdig: mut i64 = 0
+                                L { I bj >= line_len { B }
+                                    rd := load_byte(body + line_start + bj)
+                                    I rd >= 48 && rd <= 57 {
+                                        rnum = rnum * 10 + (rd - 48)
+                                        rdig = 1
+                                        bj = bj + 1
+                                    } E { B }
+                                }
+                                I rdig == 1 {
+                                    # Map register: param regs → arg values, others → offset
+                                    mapped := I rnum < param_count {
+                                        load_i64(arg_values + rnum * 8)
+                                    } E {
+                                        rnum + reg_offset
+                                    }
+                                    store_byte(out + out_len, 37)  # '%'
+                                    out_len = out_len + 1
+                                    out_len = out_len + @.inline_write_i64(out + out_len, mapped)
+                                } E {
+                                    # Not a numeric reg, copy '%' and continue
+                                    store_byte(out + out_len, 37)
+                                    out_len = out_len + 1
+                                }
+                                bi = bj
+                            } E {
+                                store_byte(out + out_len, bc)
+                                out_len = out_len + 1
+                                bi = bi + 1
+                            }
+                        }
+                        store_byte(out + out_len, 10)
+                        out_len = out_len + 1
+                    }
+                }
+            }
+        }
+
+        store_i64(out_len_ptr, out_len)
+        1
+    }
+
+    # Extract return value register number from "ret i64 %N"
+    F inline_extract_ret_value(&self, data: i64, data_len: i64) -> i64 {
+        # Find '%'
+        i: mut i64 = 0
+        L { I i >= data_len { B }
+            ch := load_byte(data + i)
+            I ch == 37 {
+                j: mut i64 = i + 1
+                num: mut i64 = 0
+                has_digit: mut i64 = 0
+                L { I j >= data_len { B }
+                    d := load_byte(data + j)
+                    I d >= 48 && d <= 57 {
+                        num = num * 10 + (d - 48)
+                        has_digit = 1
+                        j = j + 1
+                    } E { B }
+                }
+                I has_digit == 1 { R num }
+            }
+            i = i + 1
+        }
+        0 - 1  # No register found (might be a literal)
+    }
+
+    # Write i64 as decimal to buffer, return bytes written
+    F inline_write_i64(&self, out: i64, value: i64) -> i64 {
+        I value < 0 {
+            store_byte(out, 45)  # '-'
+            1 + @.inline_write_i64(out + 1, 0 - value)
+        } E I value == 0 {
+            store_byte(out, 48)  # '0'
+            1
+        } E {
+            # Count digits
+            len := @.inline_write_positive(out, value, 0)
+            len
+        }
+    }
+
+    F inline_write_positive(&self, out: i64, value: i64, depth: i64) -> i64 {
+        I value == 0 { R depth }
+        written := @.inline_write_positive(out, value / 10, depth + 1)
+        digit := (value % 10) + 48
+        pos := written - depth - 1
+        store_byte(out + pos, digit)
+        written
     }
 
     # ========== Output ==========
