@@ -35,6 +35,8 @@ F TY_GENERIC() -> i64 = 26
 F TY_VAR() -> i64 = 27
 F TY_UNKNOWN() -> i64 = 28
 F TY_NEVER() -> i64 = 29
+F TY_DYN_TRAIT() -> i64 = 30   # dyn Trait - trait object type
+F TY_ASSOC() -> i64 = 31       # Associated type projection: Trait::AssocType
 
 # ============================================================================
 # CheckMode Constants for Bidirectional Type Checking
@@ -511,6 +513,16 @@ S TypeChecker {
     bounds_len: i64,
     bounds_cap: i64,
 
+    # Monomorphization tracking: records (fn_name_idx, type_args_ptr, type_args_len) triples
+    mono_entries_ptr: i64,
+    mono_len: i64,
+    mono_cap: i64,
+
+    # Associated types: (trait_name_idx, type_name_idx, assoc_name_idx, resolved_type_ptr) quads
+    assoc_types_ptr: i64,
+    assoc_types_len: i64,
+    assoc_types_cap: i64,
+
     # Errors
     errors_ptr: i64,
     errors_len: i64,
@@ -545,6 +557,12 @@ X TypeChecker {
         bounds_keys := malloc(32 * 8)
         bounds_values := malloc(32 * 8)
 
+        # Allocate monomorphization tracking (each entry = 3 * i64 = 24 bytes)
+        mono_entries := malloc(64 * 24)
+
+        # Allocate associated types storage (each entry = 4 * i64 = 32 bytes)
+        assoc_types := malloc(32 * 32)
+
         # Create initial global scope
         global_scope_ptr := malloc(Scope.size())
         global_scope := Scope.new(64)
@@ -569,6 +587,8 @@ X TypeChecker {
             generic_bind_len: 0, generic_bind_cap: 32,
             bounds_keys_ptr: bounds_keys, bounds_values_ptr: bounds_values,
             bounds_len: 0, bounds_cap: 32,
+            mono_entries_ptr: mono_entries, mono_len: 0, mono_cap: 64,
+            assoc_types_ptr: assoc_types, assoc_types_len: 0, assoc_types_cap: 32,
             errors_ptr: errors, errors_len: 0, errors_cap: 64,
             sp_data: 0, sp_offsets: 0, sp_count: 0
         }
@@ -1487,6 +1507,237 @@ X TypeChecker {
             i = i + 1
         }
         all_ok
+    }
+
+    # ========== Associated Types ==========
+
+    # Register an associated type resolution:
+    # For impl Trait for Type { type Assoc = ConcreteType; }
+    F register_assoc_type(&self, trait_name_idx: i64, type_name_idx: i64,
+                          assoc_name_idx: i64, resolved_type_ptr: i64) -> i64 {
+        I self.assoc_types_len >= self.assoc_types_cap {
+            new_cap := self.assoc_types_cap * 2
+            new_ptr := malloc(new_cap * 32)
+            memcpy(new_ptr, self.assoc_types_ptr, self.assoc_types_len * 32)
+            free(self.assoc_types_ptr)
+            self.assoc_types_ptr = new_ptr
+            self.assoc_types_cap = new_cap
+            0
+        } E { 0 }
+
+        entry_ptr := self.assoc_types_ptr + self.assoc_types_len * 32
+        store_i64(entry_ptr, trait_name_idx)
+        store_i64(entry_ptr + 8, type_name_idx)
+        store_i64(entry_ptr + 16, assoc_name_idx)
+        store_i64(entry_ptr + 24, resolved_type_ptr)
+        self.assoc_types_len = self.assoc_types_len + 1
+        1
+    }
+
+    # Resolve an associated type: look up what Trait::AssocType resolves to
+    # for a given implementing type
+    F resolve_assoc_type(&self, trait_name_idx: i64, type_name_idx: i64,
+                         assoc_name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.assoc_types_len { B }
+            entry_ptr := self.assoc_types_ptr + i * 32
+            entry_trait := load_i64(entry_ptr)
+            entry_type := load_i64(entry_ptr + 8)
+            entry_assoc := load_i64(entry_ptr + 16)
+
+            I entry_trait == trait_name_idx && entry_type == type_name_idx &&
+               entry_assoc == assoc_name_idx {
+                R load_i64(entry_ptr + 24)
+            }
+            i = i + 1
+        }
+        0  # Not found
+    }
+
+    # Create a dyn Trait type
+    F dyn_trait_type(trait_name_idx: i64) -> i64 {
+        type_ptr := malloc(ResolvedType.size())
+        store_i64(type_ptr, TY_DYN_TRAIT())
+        store_i64(type_ptr + 8, trait_name_idx)
+        store_i64(type_ptr + 16, 0)
+        store_i64(type_ptr + 24, 0)
+        type_ptr
+    }
+
+    # Create an associated type projection: Trait::AssocType
+    F assoc_type(trait_name_idx: i64, assoc_name_idx: i64) -> i64 {
+        type_ptr := malloc(ResolvedType.size())
+        store_i64(type_ptr, TY_ASSOC())
+        store_i64(type_ptr + 8, trait_name_idx)
+        store_i64(type_ptr + 16, assoc_name_idx)
+        store_i64(type_ptr + 24, 0)
+        type_ptr
+    }
+
+    # ========== Object Safety Checking ==========
+
+    # Check if a trait is object-safe (can be used as dyn Trait)
+    # A trait is NOT object-safe if:
+    # - Any method has generic type parameters
+    # - Any method returns Self
+    # - Any method lacks a &self receiver
+    F check_object_safety(&self, trait_name_idx: i64) -> i64 {
+        trait_ptr := @.find_trait(trait_name_idx)
+        I trait_ptr == 0 { R 0 }
+
+        methods_ptr := load_i64(trait_ptr + 40)
+        methods_len := load_i64(trait_ptr + 48)
+
+        i: mut i64 = 0
+        L { I i >= methods_len { B }
+            method_ptr := load_i64(methods_ptr + i * 8)
+            # method_ptr is a FuncDef
+
+            # Check for generic type parameters on the method
+            method_generics_len := load_i64(method_ptr + 16)
+            I method_generics_len > 0 {
+                R 0  # Not object-safe: method has type parameters
+            }
+
+            # Check if method has a self receiver (first param named "self")
+            params_ptr := load_i64(method_ptr + 24)
+            params_len := load_i64(method_ptr + 32)
+
+            I params_len == 0 {
+                R 0  # Not object-safe: no self receiver (static method)
+            }
+
+            # Check first param is "self"
+            first_param_name := load_i64(params_ptr)
+            I first_param_name >= 0 && self.sp_data != 0 {
+                name_ptr := @.get_string_ptr(first_param_name)
+                name_len := @.get_string_len(first_param_name)
+                # Check for "self"
+                I name_len != 4 || load_byte(name_ptr) != 115 ||
+                   load_byte(name_ptr + 1) != 101 ||
+                   load_byte(name_ptr + 2) != 108 ||
+                   load_byte(name_ptr + 3) != 102 {
+                    R 0  # Not object-safe: first param not self
+                } E { 0 }
+            } E { 0 }
+
+            i = i + 1
+        }
+        1  # Object-safe
+    }
+
+    # ========== Monomorphization Tracking ==========
+
+    # Record a generic function instantiation for codegen
+    # Entry: (fn_name_idx, type_args_ptr, type_args_len)
+    F add_mono_entry(&self, fn_name_idx: i64, type_args_ptr: i64, type_args_len: i64) -> i64 {
+        # Check for duplicate
+        i: mut i64 = 0
+        L { I i >= self.mono_len { B }
+            entry_ptr := self.mono_entries_ptr + i * 24
+            entry_fn := load_i64(entry_ptr)
+            entry_len := load_i64(entry_ptr + 16)
+
+            I entry_fn == fn_name_idx && entry_len == type_args_len {
+                # Compare type args
+                entry_args := load_i64(entry_ptr + 8)
+                same: mut i64 = 1
+                j: mut i64 = 0
+                L { I j >= type_args_len { B }
+                    ea := load_i64(entry_args + j * 8)
+                    na := load_i64(type_args_ptr + j * 8)
+                    ea_kind := load_i64(ea)
+                    na_kind := load_i64(na)
+                    I ea_kind != na_kind {
+                        same = 0
+                        B
+                    } E {
+                        I ea_kind == TY_NAMED() {
+                            I load_i64(ea + 8) != load_i64(na + 8) {
+                                same = 0
+                                B
+                            } E { 0 }
+                        } E { 0 }
+                    }
+                    j = j + 1
+                }
+                I same == 1 { R 1 }  # Already exists
+                E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        # Grow if needed
+        I self.mono_len >= self.mono_cap {
+            new_cap := self.mono_cap * 2
+            new_ptr := malloc(new_cap * 24)
+            memcpy(new_ptr, self.mono_entries_ptr, self.mono_len * 24)
+            free(self.mono_entries_ptr)
+            self.mono_entries_ptr = new_ptr
+            self.mono_cap = new_cap
+            0
+        } E { 0 }
+
+        # Copy type args
+        args_copy := malloc(type_args_len * 8)
+        memcpy(args_copy, type_args_ptr, type_args_len * 8)
+
+        entry_ptr := self.mono_entries_ptr + self.mono_len * 24
+        store_i64(entry_ptr, fn_name_idx)
+        store_i64(entry_ptr + 8, args_copy)
+        store_i64(entry_ptr + 16, type_args_len)
+        self.mono_len = self.mono_len + 1
+        1
+    }
+
+    # Get monomorphization entry count
+    F get_mono_count(&self) -> i64 = self.mono_len
+
+    # Get monomorphization entry by index
+    # Returns pointer to (fn_name_idx, type_args_ptr, type_args_len) triple
+    F get_mono_entry(&self, idx: i64) -> i64 {
+        I idx >= self.mono_len { 0 }
+        E { self.mono_entries_ptr + idx * 24 }
+    }
+
+    # Record monomorphization when a generic function is called
+    F record_mono_from_call(&self, fn_sig_ptr: i64) -> i64 {
+        fn_name := load_i64(fn_sig_ptr)
+        fn_generics_len := load_i64(fn_sig_ptr + 16)
+
+        I fn_generics_len == 0 { R 0 }
+
+        # Build type args from current generic bindings
+        fn_generics_ptr := load_i64(fn_sig_ptr + 8)
+        type_args := malloc(fn_generics_len * 8)
+        all_concrete: mut i64 = 1
+
+        i: mut i64 = 0
+        L { I i >= fn_generics_len { B }
+            gen_name := load_i64(fn_generics_ptr + i * 8)
+            bound_type := @.get_generic_binding(gen_name)
+            I bound_type != 0 {
+                resolved := @.apply_substitutions(bound_type)
+                resolved_kind := load_i64(resolved)
+                I resolved_kind == TY_GENERIC() || resolved_kind == TY_VAR() ||
+                   resolved_kind == TY_UNKNOWN() {
+                    all_concrete = 0
+                    0
+                } E { 0 }
+                store_i64(type_args + i * 8, resolved)
+            } E {
+                all_concrete = 0
+                store_i64(type_args + i * 8, @.fresh_type_var())
+            }
+            i = i + 1
+        }
+
+        I all_concrete == 1 {
+            @.add_mono_entry(fn_name, type_args, fn_generics_len)
+        } E {
+            free(type_args)
+            0
+        }
     }
 
     # ========== Exhaustiveness Checking ==========
@@ -2506,6 +2757,33 @@ X TypeChecker {
         # Generic type parameters match with any type (type erasure)
         I exp_kind == TY_GENERIC() || found_kind == TY_GENERIC() { R 1 }
 
+        # dyn Trait unifies with any type that implements the trait
+        I exp_kind == TY_DYN_TRAIT() {
+            trait_idx := load_i64(expected + 8)
+            I found_kind == TY_NAMED() {
+                type_idx := load_i64(found + 8)
+                I @.type_implements_trait(type_idx, trait_idx) == 1 { R 1 }
+                E { R 0 }
+            } E I found_kind == TY_DYN_TRAIT() {
+                # Same trait object type
+                found_trait := load_i64(found + 8)
+                I trait_idx == found_trait { R 1 } E { R 0 }
+            }
+            R 0
+        }
+        I found_kind == TY_DYN_TRAIT() {
+            trait_idx := load_i64(found + 8)
+            I exp_kind == TY_NAMED() {
+                type_idx := load_i64(expected + 8)
+                I @.type_implements_trait(type_idx, trait_idx) == 1 { R 1 }
+                E { R 0 }
+            }
+            R 0
+        }
+
+        # Associated type - try to resolve
+        I exp_kind == TY_ASSOC() || found_kind == TY_ASSOC() { R 1 }
+
         # Type variable - bind to the other type
         I exp_kind == TY_VAR() {
             var_id := load_i64(expected + 8)
@@ -3001,6 +3279,8 @@ X TypeChecker {
                         # Get return type and instantiate if needed
                         ret_type_ptr := load_i64(fn_sig + 40)
                         I fn_generics_len > 0 {
+                            # Record monomorphization for codegen
+                            @.record_mono_from_call(fn_sig)
                             @.instantiate_type(ret_type_ptr)
                         } E {
                             ret_type_ptr
@@ -3942,6 +4222,8 @@ X TypeChecker {
         free(self.subst_values_ptr)
         free(self.bounds_keys_ptr)
         free(self.bounds_values_ptr)
+        free(self.mono_entries_ptr)
+        free(self.assoc_types_ptr)
         1
     }
 }

@@ -1330,7 +1330,7 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 | **Token** | vais-lexer | token.vais + constants.vais | **100%** | ✅ 완료 |
 | **AST** | vais-ast | ast.vais | **100%** | ✅ 완료 |
 | **Parser** | vais-parser | parser.vais + parser_s1.vais | **100%** | ✅ 완료 |
-| **Type Checker** | vais-types | type_checker.vais | 55% | ⚠️ 진행 중 |
+| **Type Checker** | vais-types | type_checker.vais | **85%** | ⚠️ 진행 중 |
 | **Codegen** | vais-codegen | codegen.vais + codegen_s1.vais | 70% | ⚠️ 진행 중 |
 | **MIR** | vais-mir | - | 0% | ❌ 미구현 |
 | **Module System** | vaisc | module.vais + main_entry.vais | 80% | ⚠️ 진행 중 |
@@ -1421,15 +1421,15 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
   - [x] verify_trait_bounds() - 인스턴스화 시 바운드 검사
   - [x] register_generic_bounds() - 파라미터 노드에서 bounds 파싱
   - [x] 복수 trait bound: T: Clone + Debug
-- [ ] **3. Associated Types & Trait Object** (Sonnet) → [blockedBy: 2]
-  - [ ] Associated type 해석 (Trait::AssocType)
-  - [ ] GAT (Generic Associated Types) 지원
-  - [ ] Object safety 검사
-  - [ ] dyn Trait 타입 해석
-- [ ] **4. Monomorphization 추적** (Sonnet) ⚡ [blockedBy: 2]
-  - [ ] GenericInstantiation 구조체
-  - [ ] 인스턴스화 목록 수집
-  - [ ] codegen 전달용 직렬화
+- [x] **3. Associated Types & Trait Object** (Opus) → ✅ 2026-02-06
+  - [x] Associated type 해석 (register/resolve_assoc_type)
+  - [x] TY_DYN_TRAIT, TY_ASSOC 타입 상수
+  - [x] Object safety 검사 (generic method, static, non-self)
+  - [x] dyn Trait 타입 해석 + unify 통합
+- [x] **4. Monomorphization 추적** (Opus) ⚡ ✅ 2026-02-06
+  - [x] GenericInstantiation 구조체 (add_mono_entry)
+  - [x] 인스턴스화 목록 수집 (record_mono_from_call)
+  - [x] codegen 전달용 API (get_mono_count/get_mono_entry)
 - [x] **5. 에러 복구 및 제안** (Sonnet) ⚡ ✅ 2026-02-06
   - [x] 유사 심볼 제안 ("did you mean?" - Levenshtein)
   - [x] find_similar_function/variable/struct 구현
