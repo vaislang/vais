@@ -1,9 +1,10 @@
 # Vais Self-Hosting Compiler (Stage 1) Roadmap
 
-## Current Status: v0.4.1
+## Current Status: v0.5.0
 
 Stage 1 컴파일러가 다중 파라미터 함수를 포함한 Vais 프로그램을 안정적으로 컴파일할 수 있음.
 Import 시스템 지원 완료.
+제네릭 타입 해석 (type_checker.vais) 완료.
 
 ---
 
@@ -124,6 +125,11 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 
 ### Type System
 - [x] Generic types <T> parsing ✅ (parser.vais, parser_s1.vais)
+- [x] Generic type resolution ✅ (type_checker.vais)
+  - [x] Generic binding management (add/get/clear_generic_binding)
+  - [x] Type instantiation (instantiate_type)
+  - [x] Generic inference from argument types (infer_generic_from_types)
+  - [x] Generic struct field access with type arguments
 - [ ] Type inference improvements
 - [ ] Option<T> / Result<T, E>
 
@@ -168,7 +174,7 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 
 1. ~~**다중 파라미터 버그**~~ - **해결됨** ✅
 2. **Match scrutinee**: Must be simple identifier (not complex expression) due to `{` ambiguity
-3. **No generics**: All types are concrete
+3. ~~**No generics**~~ - **타입 해석 완료** ✅ (파싱 및 타입 추론 지원, 코드젠은 추후)
 4. **memcpy 등 런타임 함수**: Header에 선언 추가 필요
 
 ---
@@ -192,6 +198,10 @@ clang -O0 /tmp/main_stage1.ll -o selfhost/vaisc-stage1 -lm
 
 ## Version History
 
+- **v0.5.0** - 제네릭 타입 해석 (type_checker.vais)
+  - Generic binding management
+  - Type instantiation for function calls and struct fields
+  - Generic inference from argument types
 - **v0.4.1** - 다중 파라미터 함수 버그 수정, SIGBUS 크래시 해결
 - **v0.4.0** - Import 시스템 (@"path"), 모듈 분리
 - **v0.3.0** - Match expressions (M expr { pattern => body })

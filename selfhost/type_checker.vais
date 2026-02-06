@@ -442,6 +442,12 @@ S TypeChecker {
     subst_len: i64,
     subst_cap: i64,
 
+    # Generic binding map for instantiation (name_idx -> type_ptr pairs)
+    generic_bind_keys_ptr: i64,    # Array of name_idx
+    generic_bind_values_ptr: i64,  # Array of type_ptr
+    generic_bind_len: i64,
+    generic_bind_cap: i64,
+
     # Errors
     errors_ptr: i64,
     errors_len: i64,
@@ -466,6 +472,10 @@ X TypeChecker {
         subst_keys := malloc(64 * 8)
         subst_values := malloc(64 * 8)
 
+        # Allocate generic binding map storage
+        generic_bind_keys := malloc(32 * 8)
+        generic_bind_values := malloc(32 * 8)
+
         # Create initial global scope
         global_scope_ptr := malloc(Scope.size())
         global_scope := Scope.new(64)
@@ -484,6 +494,8 @@ X TypeChecker {
             next_type_var: 0,
             subst_keys_ptr: subst_keys, subst_values_ptr: subst_values,
             subst_len: 0, subst_cap: 64,
+            generic_bind_keys_ptr: generic_bind_keys, generic_bind_values_ptr: generic_bind_values,
+            generic_bind_len: 0, generic_bind_cap: 32,
             errors_ptr: errors, errors_len: 0, errors_cap: 64,
             sp_data: 0, sp_offsets: 0, sp_count: 0
         }
@@ -745,7 +757,9 @@ X TypeChecker {
             # TYPE_NAMED = 60
             I kind == 60 {
                 name_idx := load_i64(type_node_ptr + 24)  # field0
-                @.resolve_named_type(name_idx)
+                generics_ptr := load_i64(type_node_ptr + 32)  # field1
+                generics_len := load_i64(type_node_ptr + 40)  # field2
+                @.resolve_named_type_with_generics(name_idx, generics_ptr, generics_len)
             }
             # TYPE_ARRAY = 61
             E I kind == 61 {
@@ -921,6 +935,38 @@ X TypeChecker {
         }
     }
 
+    # Resolve a named type with generic type arguments
+    # generics_ptr: array of TypeNode pointers (type arguments from parsing)
+    # generics_len: count of type arguments
+    F resolve_named_type_with_generics(&self, name_idx: i64, generics_ptr: i64, generics_len: i64) -> i64 {
+        # First resolve as a base type
+        base_type := @.resolve_named_type(name_idx)
+        base_kind := load_i64(base_type)
+
+        # If no generics provided or not a named type, return as-is
+        I generics_len == 0 || base_kind != TY_NAMED() {
+            R base_type
+        }
+
+        # Resolve each type argument
+        resolved_gens := malloc(generics_len * 8)
+        i: mut i64 = 0
+        L { I i >= generics_len { B }
+            type_node_ptr := load_i64(generics_ptr + i * 8)
+            resolved := @.resolve_type_node(type_node_ptr)
+            store_i64(resolved_gens + i * 8, resolved)
+            i = i + 1
+        }
+
+        # Create a new named type with resolved generic arguments
+        result := malloc(ResolvedType.size())
+        store_i64(result, TY_NAMED())
+        store_i64(result + 8, name_idx)
+        store_i64(result + 16, resolved_gens)
+        store_i64(result + 24, generics_len)
+        result
+    }
+
     F is_generic_param(&self, name_idx: i64) -> i64 {
         I self.current_generics_ptr == 0 { R 0 }
         i: mut i64 = 0
@@ -996,6 +1042,336 @@ X TypeChecker {
     F clear_substitutions(&self) -> i64 {
         self.subst_len = 0
         1
+    }
+
+    # ========== Generic Binding Management ==========
+
+    # Add a generic parameter binding (T -> i64, etc.)
+    F add_generic_binding(&self, name_idx: i64, type_ptr: i64) -> i64 {
+        # Check if already exists, update if so
+        i: mut i64 = 0
+        L { I i >= self.generic_bind_len { B }
+            key := load_i64(self.generic_bind_keys_ptr + i * 8)
+            I key == name_idx {
+                store_i64(self.generic_bind_values_ptr + i * 8, type_ptr)
+                R 1
+            }
+            i = i + 1
+        }
+
+        # Expand capacity if needed
+        I self.generic_bind_len >= self.generic_bind_cap {
+            new_cap := self.generic_bind_cap * 2
+            new_keys := malloc(new_cap * 8)
+            new_values := malloc(new_cap * 8)
+            memcpy(new_keys, self.generic_bind_keys_ptr, self.generic_bind_len * 8)
+            memcpy(new_values, self.generic_bind_values_ptr, self.generic_bind_len * 8)
+            free(self.generic_bind_keys_ptr)
+            free(self.generic_bind_values_ptr)
+            self.generic_bind_keys_ptr = new_keys
+            self.generic_bind_values_ptr = new_values
+            self.generic_bind_cap = new_cap
+            0
+        } E { 0 }
+
+        # Add new binding
+        store_i64(self.generic_bind_keys_ptr + self.generic_bind_len * 8, name_idx)
+        store_i64(self.generic_bind_values_ptr + self.generic_bind_len * 8, type_ptr)
+        self.generic_bind_len = self.generic_bind_len + 1
+        1
+    }
+
+    # Get a generic parameter binding
+    F get_generic_binding(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.generic_bind_len { B }
+            key := load_i64(self.generic_bind_keys_ptr + i * 8)
+            I key == name_idx {
+                R load_i64(self.generic_bind_values_ptr + i * 8)
+            }
+            i = i + 1
+        }
+        0  # Not found
+    }
+
+    # Clear all generic bindings
+    F clear_generic_bindings(&self) -> i64 {
+        self.generic_bind_len = 0
+        1
+    }
+
+    # Bind generic parameters from a function signature to type arguments
+    # generics_ptr: array of name_idx (generic param names)
+    # generics_len: count of generic params
+    # type_args_ptr: array of type_ptr (resolved type arguments)
+    # type_args_len: count of type arguments
+    F bind_generics(&self, generics_ptr: i64, generics_len: i64, type_args_ptr: i64, type_args_len: i64) -> i64 {
+        @.clear_generic_bindings()
+
+        # Only bind up to the minimum of both
+        count := I generics_len < type_args_len { generics_len } E { type_args_len }
+
+        i: mut i64 = 0
+        L { I i >= count { B }
+            name_idx := load_i64(generics_ptr + i * 8)
+            type_ptr := load_i64(type_args_ptr + i * 8)
+            @.add_generic_binding(name_idx, type_ptr)
+            i = i + 1
+        }
+        1
+    }
+
+    # Infer generic bindings by comparing a parameter type with an argument type
+    # If param_type is TY_GENERIC, bind it to arg_type
+    # If param_type is a compound type, recursively infer from inner types
+    F infer_generic_from_types(&self, param_type: i64, arg_type: i64) -> i64 {
+        I param_type == 0 || arg_type == 0 { R 0 }
+
+        param_kind := load_i64(param_type)
+        arg_kind := load_i64(arg_type)
+
+        # If parameter is a generic type, bind it to the argument type
+        I param_kind == TY_GENERIC() {
+            name_idx := load_i64(param_type + 8)
+            # Only bind if not already bound
+            existing := @.get_generic_binding(name_idx)
+            I existing == 0 {
+                @.add_generic_binding(name_idx, arg_type)
+                0
+            } E { 0 }
+            R 1
+        }
+
+        # If parameter is a type variable, use unification
+        I param_kind == TY_VAR() {
+            @.unify(param_type, arg_type)
+            R 1
+        }
+
+        # For compound types, recursively infer from inner types
+        # Array/Optional/Result/Pointer/Ref - infer from inner type
+        I param_kind == TY_ARRAY() || param_kind == TY_OPTIONAL() ||
+           param_kind == TY_RESULT() || param_kind == TY_POINTER() ||
+           param_kind == TY_REF() || param_kind == TY_REF_MUT() {
+            I arg_kind == param_kind {
+                param_inner := load_i64(param_type + 8)
+                arg_inner := load_i64(arg_type + 8)
+                @.infer_generic_from_types(param_inner, arg_inner)
+            } E { 0 }
+            R 1
+        }
+
+        # Function type - infer from params and return
+        I param_kind == TY_FN() && arg_kind == TY_FN() {
+            param_params := load_i64(param_type + 8)
+            param_len := load_i64(param_type + 16)
+            param_ret := load_i64(param_type + 24)
+            arg_params := load_i64(arg_type + 8)
+            arg_len := load_i64(arg_type + 16)
+            arg_ret := load_i64(arg_type + 24)
+
+            I param_len == arg_len {
+                j: mut i64 = 0
+                L { I j >= param_len { B }
+                    pp := load_i64(param_params + j * 8)
+                    ap := load_i64(arg_params + j * 8)
+                    @.infer_generic_from_types(pp, ap)
+                    j = j + 1
+                }
+                @.infer_generic_from_types(param_ret, arg_ret)
+                0
+            } E { 0 }
+            R 1
+        }
+
+        # Named type with generics - infer from type arguments
+        I param_kind == TY_NAMED() && arg_kind == TY_NAMED() {
+            param_name := load_i64(param_type + 8)
+            arg_name := load_i64(arg_type + 8)
+
+            I param_name == arg_name {
+                param_gens := load_i64(param_type + 16)
+                param_gen_len := load_i64(param_type + 24)
+                arg_gens := load_i64(arg_type + 16)
+                arg_gen_len := load_i64(arg_type + 24)
+
+                I param_gen_len == arg_gen_len {
+                    k: mut i64 = 0
+                    L { I k >= param_gen_len { B }
+                        pg := load_i64(param_gens + k * 8)
+                        ag := load_i64(arg_gens + k * 8)
+                        @.infer_generic_from_types(pg, ag)
+                        k = k + 1
+                    }
+                    0
+                } E { 0 }
+                0
+            } E { 0 }
+            R 1
+        }
+
+        0
+    }
+
+    # Instantiate a type by replacing all TY_GENERIC with bound types
+    F instantiate_type(&self, type_ptr: i64) -> i64 {
+        I type_ptr == 0 { R 0 }
+
+        kind := load_i64(type_ptr)
+
+        # Generic type parameter - look up binding
+        I kind == TY_GENERIC() {
+            name_idx := load_i64(type_ptr + 8)
+            bound := @.get_generic_binding(name_idx)
+            I bound != 0 {
+                # Return the bound type (recursively instantiate in case of nested generics)
+                R @.instantiate_type(bound)
+            } E {
+                # No binding found - return as-is
+                R type_ptr
+            }
+        }
+        # Array type - instantiate inner
+        E I kind == TY_ARRAY() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.instantiate_type(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_ARRAY())
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Optional type - instantiate inner
+        E I kind == TY_OPTIONAL() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.instantiate_type(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_OPTIONAL())
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Result type - instantiate inner
+        E I kind == TY_RESULT() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.instantiate_type(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_RESULT())
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Ref/RefMut/Pointer - instantiate inner
+        E I kind == TY_REF() || kind == TY_REF_MUT() || kind == TY_POINTER() {
+            inner_ptr := load_i64(type_ptr + 8)
+            new_inner := @.instantiate_type(inner_ptr)
+            I new_inner != inner_ptr {
+                result := malloc(ResolvedType.size())
+                store_i64(result, kind)
+                store_i64(result + 8, new_inner)
+                store_i64(result + 16, 0)
+                store_i64(result + 24, 0)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Function type - instantiate params and return
+        E I kind == TY_FN() {
+            params_ptr := load_i64(type_ptr + 8)
+            params_len := load_i64(type_ptr + 16)
+            ret_ptr := load_i64(type_ptr + 24)
+
+            new_ret := @.instantiate_type(ret_ptr)
+
+            # Check if any params changed
+            changed: mut i64 = 0
+            I new_ret != ret_ptr { changed = 1 } E { 0 }
+
+            j: mut i64 = 0
+            L { I j >= params_len { B }
+                param_ty := load_i64(params_ptr + j * 8)
+                new_param := @.instantiate_type(param_ty)
+                I new_param != param_ty { changed = 1 } E { 0 }
+                j = j + 1
+            }
+
+            I changed == 1 {
+                new_params := malloc(params_len * 8)
+                k: mut i64 = 0
+                L { I k >= params_len { B }
+                    param_ty := load_i64(params_ptr + k * 8)
+                    store_i64(new_params + k * 8, @.instantiate_type(param_ty))
+                    k = k + 1
+                }
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_FN())
+                store_i64(result + 8, new_params)
+                store_i64(result + 16, params_len)
+                store_i64(result + 24, new_ret)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Named type with generics - instantiate type arguments
+        E I kind == TY_NAMED() {
+            name_idx := load_i64(type_ptr + 8)
+            generics_ptr := load_i64(type_ptr + 16)
+            generics_len := load_i64(type_ptr + 24)
+
+            I generics_len == 0 {
+                # No generics to instantiate
+                R type_ptr
+            }
+
+            # Instantiate each generic argument
+            changed: mut i64 = 0
+            j: mut i64 = 0
+            L { I j >= generics_len { B }
+                gen_ty := load_i64(generics_ptr + j * 8)
+                new_gen := @.instantiate_type(gen_ty)
+                I new_gen != gen_ty { changed = 1 } E { 0 }
+                j = j + 1
+            }
+
+            I changed == 1 {
+                new_gens := malloc(generics_len * 8)
+                k: mut i64 = 0
+                L { I k >= generics_len { B }
+                    gen_ty := load_i64(generics_ptr + k * 8)
+                    store_i64(new_gens + k * 8, @.instantiate_type(gen_ty))
+                    k = k + 1
+                }
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_NAMED())
+                store_i64(result + 8, name_idx)
+                store_i64(result + 16, new_gens)
+                store_i64(result + 24, generics_len)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        E {
+            # Other types (primitives, etc.) - return as-is
+            type_ptr
+        }
     }
 
     # ========== Type Application and Unification ==========
@@ -1110,6 +1486,53 @@ X TypeChecker {
                 store_i64(result + 8, new_params)
                 store_i64(result + 16, params_len)
                 store_i64(result + 24, new_ret)
+                result
+            } E {
+                type_ptr
+            }
+        }
+        # Generic type - also check generic bindings
+        E I kind == TY_GENERIC() {
+            name_idx := load_i64(type_ptr + 8)
+            bound := @.get_generic_binding(name_idx)
+            I bound != 0 {
+                R @.apply_substitutions(bound)
+            } E {
+                type_ptr
+            }
+        }
+        # Named type with generics - apply to type arguments
+        E I kind == TY_NAMED() {
+            name_idx := load_i64(type_ptr + 8)
+            generics_ptr := load_i64(type_ptr + 16)
+            generics_len := load_i64(type_ptr + 24)
+
+            I generics_len == 0 {
+                R type_ptr
+            }
+
+            changed: mut i64 = 0
+            m: mut i64 = 0
+            L { I m >= generics_len { B }
+                gen_ty := load_i64(generics_ptr + m * 8)
+                new_gen := @.apply_substitutions(gen_ty)
+                I new_gen != gen_ty { changed = 1 } E { 0 }
+                m = m + 1
+            }
+
+            I changed == 1 {
+                new_gens := malloc(generics_len * 8)
+                n: mut i64 = 0
+                L { I n >= generics_len { B }
+                    gen_ty := load_i64(generics_ptr + n * 8)
+                    store_i64(new_gens + n * 8, @.apply_substitutions(gen_ty))
+                    n = n + 1
+                }
+                result := malloc(ResolvedType.size())
+                store_i64(result, TY_NAMED())
+                store_i64(result + 8, name_idx)
+                store_i64(result + 16, new_gens)
+                store_i64(result + 24, generics_len)
                 result
             } E {
                 type_ptr
@@ -1610,16 +2033,36 @@ X TypeChecker {
                             0
                         } E { 0 }
 
-                        # Type check arguments
+                        # Get function's generic parameters
+                        fn_generics_ptr := load_i64(fn_sig + 8)   # generics_ptr
+                        fn_generics_len := load_i64(fn_sig + 16)  # generics_len
+                        fn_params_ptr := load_i64(fn_sig + 24)    # params_ptr
+
+                        # Type check arguments and infer generic bindings
+                        @.clear_generic_bindings()
                         i: mut i64 = 0
                         L { I i >= args_len { B }
                             arg_expr_ptr := load_i64(args_ptr + i * 8)
-                            @.check_expr(arg_expr_ptr)
+                            arg_ty := @.check_expr(arg_expr_ptr)
+
+                            # If function has generics, try to infer from argument types
+                            I fn_generics_len > 0 && i < expected_params {
+                                # Get parameter type (params are stored as (name_idx, type_ptr, is_mut) triples)
+                                param_type_ptr := load_i64(fn_params_ptr + i * 24 + 8)
+                                @.infer_generic_from_types(param_type_ptr, arg_ty)
+                                0
+                            } E { 0 }
+
                             i = i + 1
                         }
 
-                        # Return the return type
-                        load_i64(fn_sig + 40)  # ret_type_ptr
+                        # Get return type and instantiate if needed
+                        ret_type_ptr := load_i64(fn_sig + 40)
+                        I fn_generics_len > 0 {
+                            @.instantiate_type(ret_type_ptr)
+                        } E {
+                            ret_type_ptr
+                        }
                     } E {
                         # Undefined function
                         err := TypeError.undefined_func(name_idx, span_start, span_end)
@@ -1772,8 +2215,22 @@ X TypeChecker {
 
                 I base_kind == TY_NAMED() {
                     struct_name := load_i64(base_ty + 8)
+                    base_generics_ptr := load_i64(base_ty + 16)  # type arguments
+                    base_generics_len := load_i64(base_ty + 24)
+
                     struct_ptr := @.find_struct(struct_name)
                     I struct_ptr != 0 {
+                        # Get struct's generic parameters
+                        struct_generics_ptr := load_i64(struct_ptr + 8)   # generics_ptr
+                        struct_generics_len := load_i64(struct_ptr + 16)  # generics_len
+
+                        # If struct has generics and we have type arguments, set up bindings
+                        I struct_generics_len > 0 && base_generics_len > 0 {
+                            @.bind_generics(struct_generics_ptr, struct_generics_len,
+                                          base_generics_ptr, base_generics_len)
+                            0
+                        } E { 0 }
+
                         # Look up field type
                         fields_ptr := load_i64(struct_ptr + 24)
                         fields_len := load_i64(struct_ptr + 32)
@@ -1782,7 +2239,13 @@ X TypeChecker {
                         L { I i >= fields_len { B }
                             field_name := load_i64(fields_ptr + i * 16)
                             I field_name == field_idx {
-                                R load_i64(fields_ptr + i * 16 + 8)
+                                field_type := load_i64(fields_ptr + i * 16 + 8)
+                                # Instantiate if struct has generics
+                                I struct_generics_len > 0 && base_generics_len > 0 {
+                                    R @.instantiate_type(field_type)
+                                } E {
+                                    R field_type
+                                }
                             } E {
                                 i = i + 1
                             }
