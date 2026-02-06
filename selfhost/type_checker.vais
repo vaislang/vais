@@ -874,6 +874,468 @@ X TypeChecker {
         @.add_trait(trait_info_ptr)
     }
 
+    # ========== Method Resolution ==========
+
+    # Find a method in a struct's impl methods
+    # Returns a FunctionSig pointer or 0 if not found
+    F find_method_in_struct(&self, struct_name_idx: i64, method_name_idx: i64) -> i64 {
+        struct_ptr := @.find_struct(struct_name_idx)
+        I struct_ptr == 0 { R 0 }
+
+        methods_ptr := load_i64(struct_ptr + 40)   # methods_ptr
+        methods_len := load_i64(struct_ptr + 48)    # methods_len
+
+        i: mut i64 = 0
+        L { I i >= methods_len { B }
+            method_sig := load_i64(methods_ptr + i * 8)
+            method_name := load_i64(method_sig)
+            I method_name == method_name_idx {
+                R method_sig
+            } E { i = i + 1 }
+        }
+        0
+    }
+
+    # Find a method through trait implementations
+    # Search all trait impls for the given type and method name
+    F find_method_in_trait_impls(&self, type_name_idx: i64, method_name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.trait_impls_len { B }
+            impl_ptr := self.trait_impls_ptr + i * TraitImplInfo.size()
+            impl_target := load_i64(impl_ptr)
+            I impl_target == type_name_idx {
+                impl_methods_ptr := load_i64(impl_ptr + 16)
+                impl_methods_len := load_i64(impl_ptr + 24)
+
+                j: mut i64 = 0
+                L { I j >= impl_methods_len { B }
+                    method_ptr := load_i64(impl_methods_ptr + j * 8)
+                    method_name := load_i64(method_ptr)
+                    I method_name == method_name_idx {
+                        R method_ptr
+                    } E { j = j + 1 }
+                }
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Resolve a method call on a receiver type
+    # Returns the return type of the method, or unknown if not found
+    F resolve_method_call(&self, recv_type_ptr: i64, method_name_idx: i64,
+                          args_ptr: i64, args_len: i64,
+                          span_start: i64, span_end: i64) -> i64 {
+        recv_kind := load_i64(recv_type_ptr)
+
+        I recv_kind == TY_NAMED() {
+            type_name_idx := load_i64(recv_type_ptr + 8)
+            recv_generics_ptr := load_i64(recv_type_ptr + 16)
+            recv_generics_len := load_i64(recv_type_ptr + 24)
+
+            # 1. Look for inherent method on the struct
+            method_sig := @.find_method_in_struct(type_name_idx, method_name_idx)
+
+            # 2. If not found, look in trait implementations
+            I method_sig == 0 {
+                method_sig = @.find_method_in_trait_impls(type_name_idx, method_name_idx)
+                0
+            } E { 0 }
+
+            I method_sig != 0 {
+                # Found method - set up generic bindings from receiver type args
+                fn_generics_ptr := load_i64(method_sig + 8)
+                fn_generics_len := load_i64(method_sig + 16)
+                fn_params_ptr := load_i64(method_sig + 24)
+                fn_params_len := load_i64(method_sig + 32)
+                fn_ret_ptr := load_i64(method_sig + 40)
+
+                # Bind struct's generic params to receiver's type args
+                struct_ptr := @.find_struct(type_name_idx)
+                I struct_ptr != 0 && recv_generics_len > 0 {
+                    struct_gen_ptr := load_i64(struct_ptr + 8)
+                    struct_gen_len := load_i64(struct_ptr + 16)
+                    @.bind_generics(struct_gen_ptr, struct_gen_len,
+                                   recv_generics_ptr, recv_generics_len)
+                    0
+                } E {
+                    @.clear_generic_bindings()
+                    0
+                }
+
+                # Type check arguments (skip first param if &self)
+                param_offset: mut i64 = 0
+                I fn_params_len > 0 {
+                    # Check if first param is &self (name matches "self")
+                    first_param_name := load_i64(fn_params_ptr)
+                    I first_param_name >= 0 {
+                        first_name_ptr := @.get_string_ptr(first_param_name)
+                        first_name_len := @.get_string_len(first_param_name)
+                        # Check for "self" (s=115, e=101, l=108, f=102)
+                        I first_name_len == 4 && load_byte(first_name_ptr) == 115 &&
+                           load_byte(first_name_ptr + 1) == 101 &&
+                           load_byte(first_name_ptr + 2) == 108 &&
+                           load_byte(first_name_ptr + 3) == 102 {
+                            param_offset = 1
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                    0
+                } E { 0 }
+
+                # Infer generics from arguments
+                expected_arg_count := fn_params_len - param_offset
+                i: mut i64 = 0
+                L { I i >= args_len { B }
+                    arg_ptr := load_i64(args_ptr + i * 8)
+                    arg_ty := @.check_expr(arg_ptr)
+
+                    I fn_generics_len > 0 && (i + param_offset) < fn_params_len {
+                        param_type_ptr := load_i64(fn_params_ptr + (i + param_offset) * 24 + 8)
+                        @.infer_generic_from_types(param_type_ptr, arg_ty)
+                        0
+                    } E { 0 }
+                    i = i + 1
+                }
+
+                # Instantiate return type with resolved generics
+                I fn_generics_len > 0 || recv_generics_len > 0 {
+                    R @.instantiate_type(fn_ret_ptr)
+                } E {
+                    R fn_ret_ptr
+                }
+            } E {
+                # Method not found - try to suggest similar names
+                @.report_undefined_method(type_name_idx, method_name_idx, span_start, span_end)
+
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unknown_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+        }
+        # Array methods (len, push, pop, etc.)
+        E I recv_kind == TY_ARRAY() {
+            @.resolve_array_method(recv_type_ptr, method_name_idx)
+        }
+        # String methods (len, etc.)
+        E I recv_kind == TY_STR() {
+            @.resolve_str_method(method_name_idx)
+        }
+        E {
+            # Cannot resolve method on this type
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.unknown_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            type_ptr
+        }
+    }
+
+    # Resolve self-call (@.method) using current function context
+    F resolve_self_call(&self, method_name_idx: i64,
+                        args_ptr: i64, args_len: i64,
+                        span_start: i64, span_end: i64) -> i64 {
+        # Look up "self" variable in scope to determine the current type
+        # In Vais, @ refers to self-recursion or self in impl methods
+
+        # Check all trait impls and struct impls for method
+        # Try each struct that has this method registered
+        i: mut i64 = 0
+        L { I i >= self.structs_len { B }
+            struct_ptr := self.structs_ptr + i * StructDefInfo.size()
+            struct_name := load_i64(struct_ptr)
+            methods_ptr := load_i64(struct_ptr + 40)
+            methods_len := load_i64(struct_ptr + 48)
+
+            j: mut i64 = 0
+            L { I j >= methods_len { B }
+                method_sig := load_i64(methods_ptr + j * 8)
+                method_name := load_i64(method_sig)
+                I method_name == method_name_idx {
+                    ret_ptr := load_i64(method_sig + 40)
+                    R ret_ptr
+                } E { j = j + 1 }
+            }
+            i = i + 1
+        }
+
+        # Also check trait impl methods
+        i = 0
+        L { I i >= self.trait_impls_len { B }
+            impl_ptr := self.trait_impls_ptr + i * TraitImplInfo.size()
+            impl_methods_ptr := load_i64(impl_ptr + 16)
+            impl_methods_len := load_i64(impl_ptr + 24)
+
+            j: mut i64 = 0
+            L { I j >= impl_methods_len { B }
+                method_sig := load_i64(impl_methods_ptr + j * 8)
+                method_name := load_i64(method_sig)
+                I method_name == method_name_idx {
+                    ret_ptr := load_i64(method_sig + 40)
+                    R ret_ptr
+                } E { j = j + 1 }
+            }
+            i = i + 1
+        }
+
+        # Check if it's a known function (@ for self-recursion)
+        fn_sig := @.find_function(method_name_idx)
+        I fn_sig != 0 {
+            R load_i64(fn_sig + 40)
+        }
+
+        # Not found
+        type_ptr := malloc(ResolvedType.size())
+        ty := ResolvedType.unknown_type()
+        store_i64(type_ptr, ty.kind)
+        store_i64(type_ptr + 8, ty.field0)
+        store_i64(type_ptr + 16, ty.field1)
+        store_i64(type_ptr + 24, ty.field2)
+        type_ptr
+    }
+
+    # Built-in array methods
+    F resolve_array_method(&self, array_type_ptr: i64, method_name_idx: i64) -> i64 {
+        inner_type_ptr := load_i64(array_type_ptr + 8)
+        method_name_ptr := @.get_string_ptr(method_name_idx)
+        method_name_len := @.get_string_len(method_name_idx)
+
+        # "len" -> i64
+        I method_name_len == 3 && load_byte(method_name_ptr) == 108 &&
+           load_byte(method_name_ptr + 1) == 101 && load_byte(method_name_ptr + 2) == 110 {
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.i64_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            R type_ptr
+        }
+
+        # "push" -> unit
+        I method_name_len == 4 && load_byte(method_name_ptr) == 112 &&
+           load_byte(method_name_ptr + 1) == 117 && load_byte(method_name_ptr + 2) == 115 &&
+           load_byte(method_name_ptr + 3) == 104 {
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.unit_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            R type_ptr
+        }
+
+        # "pop" -> element type (or optional)
+        I method_name_len == 3 && load_byte(method_name_ptr) == 112 &&
+           load_byte(method_name_ptr + 1) == 111 && load_byte(method_name_ptr + 2) == 112 {
+            R inner_type_ptr
+        }
+
+        # Default: unknown
+        type_ptr := malloc(ResolvedType.size())
+        ty := ResolvedType.unknown_type()
+        store_i64(type_ptr, ty.kind)
+        store_i64(type_ptr + 8, ty.field0)
+        store_i64(type_ptr + 16, ty.field1)
+        store_i64(type_ptr + 24, ty.field2)
+        type_ptr
+    }
+
+    # Built-in string methods
+    F resolve_str_method(&self, method_name_idx: i64) -> i64 {
+        method_name_ptr := @.get_string_ptr(method_name_idx)
+        method_name_len := @.get_string_len(method_name_idx)
+
+        # "len" -> i64
+        I method_name_len == 3 && load_byte(method_name_ptr) == 108 &&
+           load_byte(method_name_ptr + 1) == 101 && load_byte(method_name_ptr + 2) == 110 {
+            type_ptr := malloc(ResolvedType.size())
+            ty := ResolvedType.i64_type()
+            store_i64(type_ptr, ty.kind)
+            store_i64(type_ptr + 8, ty.field0)
+            store_i64(type_ptr + 16, ty.field1)
+            store_i64(type_ptr + 24, ty.field2)
+            R type_ptr
+        }
+
+        # Default: unknown
+        type_ptr := malloc(ResolvedType.size())
+        ty := ResolvedType.unknown_type()
+        store_i64(type_ptr, ty.kind)
+        store_i64(type_ptr + 8, ty.field0)
+        store_i64(type_ptr + 16, ty.field1)
+        store_i64(type_ptr + 24, ty.field2)
+        type_ptr
+    }
+
+    # Report undefined method error (with "did you mean?" suggestion)
+    F report_undefined_method(&self, type_name_idx: i64, method_name_idx: i64,
+                              span_start: i64, span_end: i64) -> i64 {
+        err := TypeError.undefined_func(method_name_idx, span_start, span_end)
+        err_ptr := malloc(TypeError.size())
+        store_i64(err_ptr, err.kind)
+        store_i64(err_ptr + 8, err.span_start)
+        store_i64(err_ptr + 16, err.span_end)
+        store_i64(err_ptr + 24, err.expected_idx)
+        store_i64(err_ptr + 32, err.found_idx)
+        store_i64(err_ptr + 40, err.name_idx)
+        @.add_error(err_ptr)
+    }
+
+    # ========== Error Recovery & Suggestions ==========
+
+    # Compute Levenshtein distance between two strings
+    F levenshtein_distance(&self, a_idx: i64, b_idx: i64) -> i64 {
+        a_ptr := @.get_string_ptr(a_idx)
+        a_len := @.get_string_len(a_idx)
+        b_ptr := @.get_string_ptr(b_idx)
+        b_len := @.get_string_len(b_idx)
+
+        # Quick checks
+        I a_len == 0 { R b_len }
+        I b_len == 0 { R a_len }
+
+        # Use 1-row DP approach: prev_row[j] for j in 0..b_len+1
+        row_size := b_len + 1
+        prev_row := malloc(row_size * 8)
+        curr_row := malloc(row_size * 8)
+
+        # Initialize prev_row = [0, 1, 2, ..., b_len]
+        j: mut i64 = 0
+        L { I j > b_len { B }
+            store_i64(prev_row + j * 8, j)
+            j = j + 1
+        }
+
+        # Fill matrix
+        i: mut i64 = 0
+        L { I i >= a_len { B }
+            store_i64(curr_row, i + 1)  # curr_row[0] = i + 1
+
+            j2: mut i64 = 0
+            L { I j2 >= b_len { B }
+                a_char := load_byte(a_ptr + i)
+                b_char := load_byte(b_ptr + j2)
+
+                cost := I a_char == b_char { 0 } E { 1 }
+
+                # min(delete, insert, replace)
+                delete_cost := load_i64(prev_row + (j2 + 1) * 8) + 1
+                insert_cost := load_i64(curr_row + j2 * 8) + 1
+                replace_cost := load_i64(prev_row + j2 * 8) + cost
+
+                min_val := delete_cost
+                I insert_cost < min_val { min_val = insert_cost } E { 0 }
+                I replace_cost < min_val { min_val = replace_cost } E { 0 }
+
+                store_i64(curr_row + (j2 + 1) * 8, min_val)
+                j2 = j2 + 1
+            }
+
+            # Swap rows
+            tmp := prev_row
+            prev_row = curr_row
+            curr_row = tmp
+
+            i = i + 1
+        }
+
+        result := load_i64(prev_row + b_len * 8)
+        free(prev_row)
+        free(curr_row)
+        result
+    }
+
+    # Find the most similar name in the function registry
+    # Returns name_idx of best match, or -1 if none close enough
+    F find_similar_function(&self, name_idx: i64) -> i64 {
+        best_idx: mut i64 = -1
+        best_dist: mut i64 = 999
+
+        name_len := @.get_string_len(name_idx)
+        # Max distance threshold: max(2, name_len / 3)
+        threshold := I name_len > 6 { name_len / 3 } E { 2 }
+
+        i: mut i64 = 0
+        L { I i >= self.functions_len { B }
+            fn_ptr := self.functions_ptr + i * FunctionSig.size()
+            fn_name_idx := load_i64(fn_ptr)
+
+            dist := @.levenshtein_distance(name_idx, fn_name_idx)
+            I dist < best_dist && dist <= threshold && dist > 0 {
+                best_dist = dist
+                best_idx = fn_name_idx
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        best_idx
+    }
+
+    # Find the most similar variable name in current scopes
+    F find_similar_variable(&self, name_idx: i64) -> i64 {
+        best_idx: mut i64 = -1
+        best_dist: mut i64 = 999
+
+        name_len := @.get_string_len(name_idx)
+        threshold := I name_len > 6 { name_len / 3 } E { 2 }
+
+        # Search all scopes from inner to outer
+        s: mut i64 = self.scopes_len
+        L { I s == 0 { B }
+            s = s - 1
+            scope_ptr := load_i64(self.scopes_ptr + s * 8)
+            vars_ptr := load_i64(scope_ptr)
+            vars_len := load_i64(scope_ptr + 8)
+
+            j: mut i64 = 0
+            L { I j >= vars_len { B }
+                var_ptr := vars_ptr + j * VarInfo.size()
+                var_name_idx := load_i64(var_ptr + 16)
+
+                dist := @.levenshtein_distance(name_idx, var_name_idx)
+                I dist < best_dist && dist <= threshold && dist > 0 {
+                    best_dist = dist
+                    best_idx = var_name_idx
+                    0
+                } E { 0 }
+                j = j + 1
+            }
+        }
+        best_idx
+    }
+
+    # Find the most similar struct name
+    F find_similar_struct(&self, name_idx: i64) -> i64 {
+        best_idx: mut i64 = -1
+        best_dist: mut i64 = 999
+
+        name_len := @.get_string_len(name_idx)
+        threshold := I name_len > 6 { name_len / 3 } E { 2 }
+
+        i: mut i64 = 0
+        L { I i >= self.structs_len { B }
+            struct_ptr := self.structs_ptr + i * StructDefInfo.size()
+            struct_name := load_i64(struct_ptr)
+
+            dist := @.levenshtein_distance(name_idx, struct_name)
+            I dist < best_dist && dist <= threshold && dist > 0 {
+                best_dist = dist
+                best_idx = struct_name
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        best_idx
+    }
+
     # ========== Error Reporting ==========
 
     F add_error(&self, err_ptr: i64) -> i64 {
@@ -2439,6 +2901,44 @@ X TypeChecker {
 
                 recv_ty := @.check_expr(recv_ptr)
 
+                # Resolve method call using receiver type
+                @.resolve_method_call(recv_ty, method_idx, args_ptr, args_len, span_start, span_end)
+            }
+            # EXPR_SELF_CALL = 26
+            E I kind == 26 {
+                # @ alone (self reference) - return current fn context type
+                # When used as @.method(), the parser wraps it in METHOD_CALL
+                # If @ is used standalone, resolve as self-recursion
+                I self.current_fn_name_idx != 0 {
+                    fn_sig := @.find_function(self.current_fn_name_idx)
+                    I fn_sig != 0 {
+                        load_i64(fn_sig + 40)  # Return type of current function
+                    } E {
+                        type_ptr := malloc(ResolvedType.size())
+                        ty := ResolvedType.unknown_type()
+                        store_i64(type_ptr, ty.kind)
+                        store_i64(type_ptr + 8, ty.field0)
+                        store_i64(type_ptr + 16, ty.field1)
+                        store_i64(type_ptr + 24, ty.field2)
+                        type_ptr
+                    }
+                } E {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.unknown_type()
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+            }
+            # EXPR_STATIC_CALL = 35
+            E I kind == 35 {
+                type_idx := load_i64(expr_ptr + 24)    # field0 = type name_idx
+                method_idx := load_i64(expr_ptr + 32)  # field1 = method name_idx
+                args_ptr := load_i64(expr_ptr + 40)    # field2
+                args_len := load_i64(expr_ptr + 48)    # field3
+
                 # Type check arguments
                 i: mut i64 = 0
                 L { I i >= args_len { B }
@@ -2447,25 +2947,25 @@ X TypeChecker {
                     i = i + 1
                 }
 
-                # For now, return unknown - proper method lookup TBD
-                type_ptr := malloc(ResolvedType.size())
-                ty := ResolvedType.unknown_type()
-                store_i64(type_ptr, ty.kind)
-                store_i64(type_ptr + 8, ty.field0)
-                store_i64(type_ptr + 16, ty.field1)
-                store_i64(type_ptr + 24, ty.field2)
-                type_ptr
-            }
-            # EXPR_SELF_CALL = 26
-            E I kind == 26 {
-                # @.method_name(...) - need to resolve self type
-                type_ptr := malloc(ResolvedType.size())
-                ty := ResolvedType.unknown_type()
-                store_i64(type_ptr, ty.kind)
-                store_i64(type_ptr + 8, ty.field0)
-                store_i64(type_ptr + 16, ty.field1)
-                store_i64(type_ptr + 24, ty.field2)
-                type_ptr
+                # Find static method in struct's impl
+                method_sig := @.find_method_in_struct(type_idx, method_idx)
+                I method_sig == 0 {
+                    method_sig = @.find_method_in_trait_impls(type_idx, method_idx)
+                    0
+                } E { 0 }
+
+                I method_sig != 0 {
+                    load_i64(method_sig + 40)  # Return type
+                } E {
+                    # Constructor pattern: Type.new() returns the Named type
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.named_type(type_idx, 0, 0)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
             }
             E {
                 # Unknown expression type
@@ -2659,6 +3159,87 @@ X TypeChecker {
             @.resolve_type_node(field_type_ptr)
             i = i + 1
         }
+        1
+    }
+
+    # Register impl methods on the target struct (called during first pass)
+    F register_impl_methods(&self, impl_def_ptr: i64) -> i64 {
+        # ImplDef layout:
+        # 0: target_type_ptr, 8: trait_name_idx, 16: generics_ptr
+        # 24: generics_len, 32: methods_ptr, 40: methods_len
+
+        target_type_ptr := load_i64(impl_def_ptr)
+        trait_name_idx := load_i64(impl_def_ptr + 8)
+        methods_ptr := load_i64(impl_def_ptr + 32)
+        methods_len := load_i64(impl_def_ptr + 40)
+
+        I methods_len == 0 { R 1 }
+
+        # Get target type name
+        target_kind := load_i64(target_type_ptr)
+        I target_kind == 60 {  # TYPE_NAMED (in ast: 60)
+            target_type_idx := load_i64(target_type_ptr + 24)  # field0 = name_idx
+
+            # Find the struct and update its methods_ptr/methods_len
+            struct_ptr := @.find_struct(target_type_idx)
+            I struct_ptr != 0 {
+                existing_methods_ptr := load_i64(struct_ptr + 40)
+                existing_methods_len := load_i64(struct_ptr + 48)
+
+                # Merge: create new array with existing + new methods
+                total_len := existing_methods_len + methods_len
+                new_methods := malloc(total_len * 8)
+
+                # Copy existing methods
+                I existing_methods_len > 0 {
+                    memcpy(new_methods, existing_methods_ptr, existing_methods_len * 8)
+                    0
+                } E { 0 }
+
+                # Register each new method as a FunctionSig and add to array
+                j: mut i64 = 0
+                L { I j >= methods_len { B }
+                    method_fn_ptr := load_i64(methods_ptr + j * 8)
+                    # Create FunctionSig from method FuncDef
+                    sig_ptr := malloc(FunctionSig.size())
+                    method_name := load_i64(method_fn_ptr)
+                    store_i64(sig_ptr, method_name)
+                    store_i64(sig_ptr + 8, load_i64(method_fn_ptr + 8))   # generics_ptr
+                    store_i64(sig_ptr + 16, load_i64(method_fn_ptr + 16)) # generics_len
+                    store_i64(sig_ptr + 24, load_i64(method_fn_ptr + 24)) # params_ptr
+                    store_i64(sig_ptr + 32, load_i64(method_fn_ptr + 32)) # params_len
+
+                    # Resolve return type
+                    ret_type_node := load_i64(method_fn_ptr + 40)
+                    ret_resolved := @.resolve_type_node(ret_type_node)
+                    store_i64(sig_ptr + 40, ret_resolved)
+                    store_i64(sig_ptr + 48, 0)  # is_async
+
+                    store_i64(new_methods + (existing_methods_len + j) * 8, sig_ptr)
+
+                    # Also register as a global function for find_function lookup
+                    @.add_function(sig_ptr)
+
+                    j = j + 1
+                }
+
+                # Update struct
+                store_i64(struct_ptr + 40, new_methods)
+                store_i64(struct_ptr + 48, total_len)
+                0
+            } E { 0 }
+
+            # If this is a trait impl, also register TraitImplInfo
+            I trait_name_idx >= 0 {
+                impl_info_ptr := malloc(TraitImplInfo.size())
+                store_i64(impl_info_ptr, target_type_idx)
+                store_i64(impl_info_ptr + 8, trait_name_idx)
+                store_i64(impl_info_ptr + 16, methods_ptr)
+                store_i64(impl_info_ptr + 24, methods_len)
+                @.add_trait_impl(impl_info_ptr)
+                0
+            } E { 0 }
+        } E { 0 }
         1
     }
 
@@ -2882,6 +3463,11 @@ X TypeChecker {
                 store_i64(sig_ptr + 48, load_i64(data_ptr + 88)) # is_async
 
                 @.add_function(sig_ptr)
+            }
+            # ITEM_IMPL = 7
+            E I kind == 7 {
+                # Register impl methods on the struct for method resolution
+                @.register_impl_methods(data_ptr)
             } E { 0 }
 
             i = i + 1

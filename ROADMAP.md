@@ -1409,21 +1409,35 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
   - [x] apply_substitutions - 타입 변수 대체 적용
   - [x] unify - 두 타입 통일화 (재귀적 구조체 지원)
   - [x] fresh_type_var - 새로운 타입 변수 생성
-- [ ] **제네릭 타입 해석**
-  - [ ] 제네릭 인스턴스화 (Monomorphization 준비)
-  - [ ] 타입 파라미터 바운드 검사
-- [ ] **Trait 해석**
-  - [ ] Trait 구현 검색 (impl resolution)
-  - [ ] Method resolution (메서드 찾기)
-  - [ ] Trait object 검사
-  - [ ] Object safety 검사
-- [ ] **Associated Types**
-  - [ ] Associated type 해석
+- [x] **1. Method Resolution 구현** (Opus) → ✅ 2026-02-06
+  - [x] inherent method vs trait method 구분
+  - [x] receiver type 처리 (self, &self, &mut self)
+  - [x] method call 반환 타입 해석
+  - [x] static call (Type.method()) 해석
+  - [x] 배열/문자열 내장 메서드
+  - [x] first pass에서 impl methods 등록
+- [ ] **2. Trait Bounds & Where Clauses** (Sonnet) → [blockedBy: 1]
+  - [ ] generic_bounds 구조 (파라미터별 trait bound)
+  - [ ] verify_trait_bounds() - 인스턴스화 시 바운드 검사
+  - [ ] where 절 기초 지원
+  - [ ] 복수 trait bound: T: Clone + Debug
+- [ ] **3. Associated Types & Trait Object** (Sonnet) → [blockedBy: 2]
+  - [ ] Associated type 해석 (Trait::AssocType)
   - [ ] GAT (Generic Associated Types) 지원
-- [ ] **에러 복구 및 제안**
-  - [ ] 유사 심볼 제안 ("did you mean?")
-  - [ ] 타입 불일치 상세 설명
-  - [ ] 에러 후 계속 검사 (error recovery)
+  - [ ] Object safety 검사
+  - [ ] dyn Trait 타입 해석
+- [ ] **4. Monomorphization 추적** (Sonnet) ⚡ [blockedBy: 2]
+  - [ ] GenericInstantiation 구조체
+  - [ ] 인스턴스화 목록 수집
+  - [ ] codegen 전달용 직렬화
+- [x] **5. 에러 복구 및 제안** (Sonnet) ⚡ ✅ 2026-02-06
+  - [x] 유사 심볼 제안 ("did you mean?" - Levenshtein)
+  - [x] find_similar_function/variable/struct 구현
+  - [ ] 타입 불일치 상세 설명 (후속 개선)
+  - [ ] 에러 후 계속 검사 (후속 개선)
+- [ ] **6. Exhaustiveness 검사** (Sonnet) → [blockedBy: 1]
+  - [ ] 패턴 트리 구축 (enum variant, literal, wildcard)
+  - [ ] 커버리지 분석 + 도달 불가 패턴 감지
 - **예상 작업량**: 3,000+ LOC
 - **의존성**: Stage 1, 2 완료 권장
 - **파일**: `selfhost/type_checker.vais`
