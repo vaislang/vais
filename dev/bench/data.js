@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770379593698,
+  "lastUpdate": 1770382774327,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -4871,6 +4871,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1815455,
             "range": "± 34661",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "f2e98a6cfe74fff559392309835c472adcdf7d70",
+          "message": "feat(selfhost): add struct mono, vtable dispatch, lambda captures, and constant folding\n\nStage 4 codegen improvements:\n- Generic struct monomorphization (save_generic_struct, generate_mono_struct_type)\n- Trait vtable infrastructure (VtableEntry, emit_vtable_globals, generate_dyn_call)\n- Lambda free variable capture analysis (collect_captures with recursive AST walk)\n- Constant folding optimization for binary (+/-/*/÷/%) and unary (-/~) expressions\n- Type checker struct mono tracking (add_struct_mono_entry, record_struct_mono)\n- ROADMAP progress updates (Loop labels, Try-catch already complete)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-06T21:52:30+09:00",
+          "tree_id": "3c732d32f852684f2fd1af64260ba77ba451f4c6",
+          "url": "https://github.com/vaislang/vais/commit/f2e98a6cfe74fff559392309835c472adcdf7d70"
+        },
+        "date": 1770382773440,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2408,
+            "range": "± 20",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5572,
+            "range": "± 44",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6237,
+            "range": "± 192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11040,
+            "range": "± 192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17781,
+            "range": "± 102",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33981,
+            "range": "± 156",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29985,
+            "range": "± 199",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 65601,
+            "range": "± 651",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 271736,
+            "range": "± 987",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 414750,
+            "range": "± 3017",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 99388,
+            "range": "± 773",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 717506,
+            "range": "± 2064",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 150386,
+            "range": "± 672",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 178203,
+            "range": "± 775",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 187782,
+            "range": "± 873",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 229523,
+            "range": "± 2778",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 492776,
+            "range": "± 4387",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 704083,
+            "range": "± 8054",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 374000,
+            "range": "± 1921",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1126802,
+            "range": "± 24927",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 37940,
+            "range": "± 346",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 195422,
+            "range": "± 3682",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 379568,
+            "range": "± 3438",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1843387,
+            "range": "± 20196",
             "unit": "ns/iter"
           }
         ]
