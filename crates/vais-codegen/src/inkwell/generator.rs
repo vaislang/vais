@@ -3893,6 +3893,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     "Cannot infer struct type for call expression".to_string(),
                 ))
             }
+            Expr::SelfCall => {
+                // @ in a method context refers to the current struct instance
+                // Look up "self" in var_struct_types
+                if let Some(struct_name) = self.var_struct_types.get("self") {
+                    return Ok(struct_name.clone());
+                }
+                Err(CodegenError::Unsupported(
+                    "SelfCall (@) used outside of method context".to_string(),
+                ))
+            }
             _ => Err(CodegenError::Unsupported(format!(
                 "Cannot infer struct type for expression: {:?}",
                 expr
@@ -4877,6 +4887,50 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 if let Some(last) = stmts.last() {
                     if let Stmt::Expr(e) = &last.node {
                         return self.infer_value_struct_type(&e.node);
+                    }
+                }
+                None
+            }
+            Expr::StaticMethodCall {
+                type_name, method, ..
+            } => {
+                // For static method calls like `FunctionSig.new(...)`, the return type
+                // is typically the struct itself (constructor pattern)
+                let qualified = format!("{}_{}", type_name.node, method.node);
+                // First check function_return_structs for explicit mapping
+                if let Some(sn) = self.function_return_structs.get(&qualified) {
+                    return Some(sn.clone());
+                }
+                // For common constructor patterns (new, default, from_*, etc.),
+                // assume the return type is the struct itself
+                let method_name = method.node.as_str();
+                if method_name == "new"
+                    || method_name == "default"
+                    || method_name.starts_with("from_")
+                    || method_name.starts_with("with_")
+                {
+                    // Check if the type_name is a known struct
+                    if self.generated_structs.contains_key(&type_name.node) {
+                        return Some(type_name.node.clone());
+                    }
+                }
+                // Fallback: check LLVM return type
+                let fn_value = self
+                    .functions
+                    .get(&qualified)
+                    .copied()
+                    .or_else(|| self.module.get_function(&qualified));
+                if let Some(fn_value) = fn_value {
+                    let ret_type = fn_value.get_type().get_return_type();
+                    if let Some(ret) = ret_type {
+                        if ret.is_struct_type() {
+                            let struct_type = ret.into_struct_type();
+                            for (name, st) in &self.generated_structs {
+                                if *st == struct_type {
+                                    return Some(name.clone());
+                                }
+                            }
+                        }
                     }
                 }
                 None

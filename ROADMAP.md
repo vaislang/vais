@@ -1430,30 +1430,25 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 
 **검증**: `examples/` 파일 중 타입 에러 테스트 10개 정확히 감지
 
-### 🐛 Known Issue: Inkwell 백엔드 Selfhost 컴파일 버그
+### ✅ Resolved: Inkwell 백엔드 Selfhost 컴파일 버그
 
 **발견일**: 2026-02-06
+**해결일**: 2026-02-06
 **증상**: `selfhost/type_checker.vais` 컴파일 시 inkwell 에러
 ```
 error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in struct 'VarInfo'
 ```
 
 **원인 분석**:
-- inkwell 백엔드에서 구조체 필드 탐색 시 잘못된 구조체를 참조
-- `vars_ptr`는 `Scope` 구조체의 필드인데 `VarInfo`에서 찾으려고 함
-- 타입 체커는 통과 (`vaisc check selfhost/type_checker.vais` → OK)
-- 문제는 inkwell 코드젠의 구조체 필드 해석 로직에 있음
+- 동일한 LLVM struct type을 가진 구조체들 (예: `FunctionSig`, `StructDefInfo`, `Token`, `Variant` - 모두 6-7개 i64 필드)
+- LLVM type 비교 fallback이 HashMap 순서에 따라 첫 번째 매칭되는 구조체를 반환
+- `StaticMethodCall` (`Type.method()`) 반환 타입 추론 누락
+- `SelfCall` (`@`) 타입 추론 누락
 
-**영향 범위**:
-- selfhost/*.vais 파일의 inkwell 백엔드 컴파일
-- 일반 examples/ 파일은 정상 동작 (E2E 테스트 210개 통과)
-
-**해결 방안**:
-- [ ] inkwell 백엔드의 `generate_field_access()` 함수 디버깅
-- [ ] 구조체 타입 컨텍스트 추적 로직 점검
-- [ ] selfhost 파일 전용 E2E 테스트 추가
-
-**임시 해결책**: 텍스트 기반 백엔드 사용 (`--no-inkwell` 옵션 필요시 추가)
+**해결 방안** (완료):
+- [x] `infer_value_struct_type`에 `StaticMethodCall` 케이스 추가 - constructor 패턴 인식 (`new`, `default`, `from_*`, `with_*`)
+- [x] `infer_struct_name`에 `SelfCall` 케이스 추가 - `@.method()` 형태 지원
+- [x] E2E 테스트 241개 전부 통과 확인
 
 ---
 
