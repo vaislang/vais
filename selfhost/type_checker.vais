@@ -504,6 +504,13 @@ S TypeChecker {
     generic_bind_len: i64,
     generic_bind_cap: i64,
 
+    # Trait bounds for current generic context
+    # Each entry: (generic_name_idx, trait_name_idx) pairs
+    bounds_keys_ptr: i64,          # Array of generic_name_idx
+    bounds_values_ptr: i64,        # Array of trait_name_idx
+    bounds_len: i64,
+    bounds_cap: i64,
+
     # Errors
     errors_ptr: i64,
     errors_len: i64,
@@ -534,6 +541,10 @@ X TypeChecker {
         generic_bind_keys := malloc(32 * 8)
         generic_bind_values := malloc(32 * 8)
 
+        # Allocate trait bounds storage
+        bounds_keys := malloc(32 * 8)
+        bounds_values := malloc(32 * 8)
+
         # Create initial global scope
         global_scope_ptr := malloc(Scope.size())
         global_scope := Scope.new(64)
@@ -556,6 +567,8 @@ X TypeChecker {
             subst_len: 0, subst_cap: 64,
             generic_bind_keys_ptr: generic_bind_keys, generic_bind_values_ptr: generic_bind_values,
             generic_bind_len: 0, generic_bind_cap: 32,
+            bounds_keys_ptr: bounds_keys, bounds_values_ptr: bounds_values,
+            bounds_len: 0, bounds_cap: 32,
             errors_ptr: errors, errors_len: 0, errors_cap: 64,
             sp_data: 0, sp_offsets: 0, sp_count: 0
         }
@@ -1334,6 +1347,309 @@ X TypeChecker {
             i = i + 1
         }
         best_idx
+    }
+
+    # ========== Trait Bounds Management ==========
+
+    # Add a trait bound for a generic parameter: T: TraitName
+    F add_trait_bound(&self, generic_name_idx: i64, trait_name_idx: i64) -> i64 {
+        I self.bounds_len >= self.bounds_cap {
+            new_cap := self.bounds_cap * 2
+            new_keys := malloc(new_cap * 8)
+            new_values := malloc(new_cap * 8)
+            memcpy(new_keys, self.bounds_keys_ptr, self.bounds_len * 8)
+            memcpy(new_values, self.bounds_values_ptr, self.bounds_len * 8)
+            free(self.bounds_keys_ptr)
+            free(self.bounds_values_ptr)
+            self.bounds_keys_ptr = new_keys
+            self.bounds_values_ptr = new_values
+            self.bounds_cap = new_cap
+            0
+        } E { 0 }
+
+        store_i64(self.bounds_keys_ptr + self.bounds_len * 8, generic_name_idx)
+        store_i64(self.bounds_values_ptr + self.bounds_len * 8, trait_name_idx)
+        self.bounds_len = self.bounds_len + 1
+        1
+    }
+
+    # Clear all trait bounds (e.g., when leaving a generic context)
+    F clear_trait_bounds(&self) -> i64 {
+        self.bounds_len = 0
+        1
+    }
+
+    # Get trait bounds for a generic parameter
+    # Returns count of bounds found, stores trait_name_idx values in out_buf
+    F get_trait_bounds(&self, generic_name_idx: i64, out_buf: i64, max_count: i64) -> i64 {
+        count: mut i64 = 0
+        i: mut i64 = 0
+        L { I i >= self.bounds_len { B }
+            key := load_i64(self.bounds_keys_ptr + i * 8)
+            I key == generic_name_idx && count < max_count {
+                trait_idx := load_i64(self.bounds_values_ptr + i * 8)
+                store_i64(out_buf + count * 8, trait_idx)
+                count = count + 1
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        count
+    }
+
+    # Verify that a concrete type satisfies all trait bounds for a generic parameter
+    # Returns 1 if all bounds satisfied, 0 otherwise
+    F verify_trait_bounds(&self, generic_name_idx: i64, concrete_type_ptr: i64,
+                          span_start: i64, span_end: i64) -> i64 {
+        concrete_kind := load_i64(concrete_type_ptr)
+
+        # Unknown/Generic/Var types satisfy all bounds (defer checking)
+        I concrete_kind == TY_UNKNOWN() || concrete_kind == TY_GENERIC() || concrete_kind == TY_VAR() {
+            R 1
+        }
+
+        # Get concrete type name for trait impl lookup
+        type_name_idx: mut i64 = -1
+        I concrete_kind == TY_NAMED() {
+            type_name_idx = load_i64(concrete_type_ptr + 8)
+            0
+        } E { 0 }
+
+        # Check each bound
+        all_ok: mut i64 = 1
+        i: mut i64 = 0
+        L { I i >= self.bounds_len { B }
+            key := load_i64(self.bounds_keys_ptr + i * 8)
+            I key == generic_name_idx {
+                trait_name_idx := load_i64(self.bounds_values_ptr + i * 8)
+
+                # Check if concrete type implements this trait
+                I type_name_idx >= 0 {
+                    I @.type_implements_trait(type_name_idx, trait_name_idx) == 0 {
+                        # Bound not satisfied - report error
+                        err := TypeError.mismatch(trait_name_idx, type_name_idx, span_start, span_end)
+                        err_ptr := malloc(TypeError.size())
+                        store_i64(err_ptr, err.kind)
+                        store_i64(err_ptr + 8, err.span_start)
+                        store_i64(err_ptr + 16, err.span_end)
+                        store_i64(err_ptr + 24, err.expected_idx)
+                        store_i64(err_ptr + 32, err.found_idx)
+                        store_i64(err_ptr + 40, err.name_idx)
+                        @.add_error(err_ptr)
+                        all_ok = 0
+                        0
+                    } E { 0 }
+                } E { 0 }
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        all_ok
+    }
+
+    # Parse and register trait bounds from generic parameter nodes
+    # GenericParam layout (from parser):
+    # 0: name_idx, 8: bounds_ptr, 16: bounds_len
+    F register_generic_bounds(&self, generics_ptr: i64, generics_len: i64) -> i64 {
+        @.clear_trait_bounds()
+
+        i: mut i64 = 0
+        L { I i >= generics_len { B }
+            param_ptr := generics_ptr + i * 24  # GenericParam.size() = 24
+            param_name := load_i64(param_ptr)
+            bounds_ptr := load_i64(param_ptr + 8)
+            bounds_len := load_i64(param_ptr + 16)
+
+            # Register each bound
+            j: mut i64 = 0
+            L { I j >= bounds_len { B }
+                bound_name_idx := load_i64(bounds_ptr + j * 8)
+                @.add_trait_bound(param_name, bound_name_idx)
+                j = j + 1
+            }
+            i = i + 1
+        }
+        1
+    }
+
+    # Verify bounds for all generic bindings after inference
+    F verify_all_generic_bounds(&self, span_start: i64, span_end: i64) -> i64 {
+        all_ok: mut i64 = 1
+        i: mut i64 = 0
+        L { I i >= self.generic_bind_len { B }
+            generic_name := load_i64(self.generic_bind_keys_ptr + i * 8)
+            concrete_type := load_i64(self.generic_bind_values_ptr + i * 8)
+
+            I @.verify_trait_bounds(generic_name, concrete_type, span_start, span_end) == 0 {
+                all_ok = 0
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        all_ok
+    }
+
+    # ========== Exhaustiveness Checking ==========
+
+    # Check if a match expression covers all enum variants
+    # Returns 1 if exhaustive, 0 if not (and adds error)
+    F check_match_exhaustiveness(&self, match_expr_ptr: i64, arms_ptr: i64, arms_len: i64,
+                                 span_start: i64, span_end: i64) -> i64 {
+        # Get the type of the match expression
+        match_ty := @.check_expr(match_expr_ptr)
+        match_kind := load_i64(match_ty)
+
+        # Only check exhaustiveness for enum types
+        I match_kind == TY_NAMED() {
+            type_name_idx := load_i64(match_ty + 8)
+            enum_ptr := @.find_enum(type_name_idx)
+
+            I enum_ptr != 0 {
+                # Get enum variants
+                variants_ptr := load_i64(enum_ptr + 24)
+                variants_len := load_i64(enum_ptr + 32)
+
+                # Check if wildcard pattern exists
+                has_wildcard: mut i64 = 0
+
+                # Track which variants are covered
+                covered := malloc(variants_len * 8)
+                k: mut i64 = 0
+                L { I k >= variants_len { B }
+                    store_i64(covered + k * 8, 0)
+                    k = k + 1
+                }
+
+                # Check each arm's pattern
+                i: mut i64 = 0
+                L { I i >= arms_len { B }
+                    arm_ptr := arms_ptr + i * 32  # MatchArm size estimate
+                    pattern_ptr := load_i64(arm_ptr)
+
+                    I pattern_ptr != 0 {
+                        pat_kind := load_i64(pattern_ptr)
+
+                        # PATTERN_WILDCARD = 80 (assume)
+                        I pat_kind == 80 {
+                            has_wildcard = 1
+                            0
+                        }
+                        # PATTERN_IDENT = 81 (assume) - binding pattern also acts as wildcard
+                        E I pat_kind == 81 {
+                            has_wildcard = 1
+                            0
+                        }
+                        # PATTERN_ENUM = 85 (assume)
+                        E I pat_kind == 85 {
+                            variant_name := load_i64(pattern_ptr + 24)  # variant name_idx
+                            # Find which variant this is
+                            v: mut i64 = 0
+                            L { I v >= variants_len { B }
+                                # Variant layout: name_idx at start
+                                var_name := load_i64(variants_ptr + v * 24)  # Variant.size() estimate
+                                I var_name == variant_name {
+                                    store_i64(covered + v * 8, 1)
+                                    B
+                                } E { v = v + 1 }
+                            }
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                    i = i + 1
+                }
+
+                # If wildcard exists, it's exhaustive
+                I has_wildcard == 1 {
+                    free(covered)
+                    R 1
+                }
+
+                # Check if all variants are covered
+                all_covered: mut i64 = 1
+                m: mut i64 = 0
+                L { I m >= variants_len { B }
+                    I load_i64(covered + m * 8) == 0 {
+                        all_covered = 0
+                        B
+                    } E { m = m + 1 }
+                }
+
+                free(covered)
+
+                I all_covered == 0 {
+                    # Non-exhaustive match - add error
+                    err := TypeError.mismatch(0, 0, span_start, span_end)
+                    err_ptr := malloc(TypeError.size())
+                    store_i64(err_ptr, err.kind)
+                    store_i64(err_ptr + 8, err.span_start)
+                    store_i64(err_ptr + 16, err.span_end)
+                    store_i64(err_ptr + 24, err.expected_idx)
+                    store_i64(err_ptr + 32, err.found_idx)
+                    store_i64(err_ptr + 40, err.name_idx)
+                    @.add_error(err_ptr)
+                    0
+                } E { 1 }
+            } E {
+                # Not an enum - check for wildcard/default arm
+                @.check_has_wildcard_arm(arms_ptr, arms_len)
+            }
+        }
+        # For non-named types (int, bool, etc.) - check for wildcard
+        E I match_kind == TY_BOOL() {
+            @.check_bool_exhaustiveness(arms_ptr, arms_len, span_start, span_end)
+        }
+        E {
+            @.check_has_wildcard_arm(arms_ptr, arms_len)
+        }
+    }
+
+    # Check if arms include a wildcard/default arm
+    F check_has_wildcard_arm(&self, arms_ptr: i64, arms_len: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= arms_len { B }
+            arm_ptr := arms_ptr + i * 32
+            pattern_ptr := load_i64(arm_ptr)
+            I pattern_ptr != 0 {
+                pat_kind := load_i64(pattern_ptr)
+                # Wildcard or binding pattern
+                I pat_kind == 80 || pat_kind == 81 {
+                    R 1
+                } E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Check bool exhaustiveness (both true and false covered)
+    F check_bool_exhaustiveness(&self, arms_ptr: i64, arms_len: i64,
+                                span_start: i64, span_end: i64) -> i64 {
+        has_true: mut i64 = 0
+        has_false: mut i64 = 0
+        has_wildcard: mut i64 = 0
+
+        i: mut i64 = 0
+        L { I i >= arms_len { B }
+            arm_ptr := arms_ptr + i * 32
+            pattern_ptr := load_i64(arm_ptr)
+            I pattern_ptr != 0 {
+                pat_kind := load_i64(pattern_ptr)
+                I pat_kind == 80 || pat_kind == 81 {
+                    has_wildcard = 1
+                    0
+                }
+                # PATTERN_BOOL = 82 (assume)
+                E I pat_kind == 82 {
+                    val := load_i64(pattern_ptr + 24)
+                    I val == 1 { has_true = 1 } E { has_false = 1 }
+                    0
+                } E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        I has_wildcard == 1 || (has_true == 1 && has_false == 1) { 1 }
+        E { 0 }
     }
 
     # ========== Error Reporting ==========
@@ -2967,6 +3283,118 @@ X TypeChecker {
                     type_ptr
                 }
             }
+            # EXPR_MATCH = 32
+            E I kind == 32 {
+                match_expr_ptr := load_i64(expr_ptr + 24)  # field0: expression
+                arms_ptr := load_i64(expr_ptr + 32)        # field1: match arms array
+                arms_len := load_i64(expr_ptr + 40)        # field2: arms count
+
+                # Check the match expression
+                match_ty := @.check_expr(match_expr_ptr)
+
+                # Check exhaustiveness
+                @.check_match_exhaustiveness(match_expr_ptr, arms_ptr, arms_len, span_start, span_end)
+
+                # Check each arm and compute result type
+                result_type: mut i64 = 0
+                i: mut i64 = 0
+                L { I i >= arms_len { B }
+                    arm_ptr := arms_ptr + i * 32  # MatchArm size estimate
+                    # arm layout: pattern_ptr, guard_ptr, body_ptr, ...
+                    body_ptr := load_i64(arm_ptr + 16)
+
+                    @.push_scope()
+                    arm_ty := @.check_expr(body_ptr)
+                    @.pop_scope()
+
+                    I i == 0 {
+                        result_type = arm_ty
+                    } E {
+                        @.unify(result_type, arm_ty)
+                        0
+                    }
+                    i = i + 1
+                }
+
+                I result_type != 0 {
+                    result_type
+                } E {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.unit_type()
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+            }
+            # EXPR_TERNARY = 29
+            E I kind == 29 {
+                cond_ptr := load_i64(expr_ptr + 24)   # field0
+                then_ptr := load_i64(expr_ptr + 32)   # field1
+                else_ptr := load_i64(expr_ptr + 40)   # field2
+
+                @.check_expr(cond_ptr)
+                then_ty := @.check_expr(then_ptr)
+                else_ty := @.check_expr(else_ptr)
+                @.unify(then_ty, else_ty)
+                then_ty
+            }
+            # EXPR_INDEX = 37
+            E I kind == 37 {
+                base_ptr := load_i64(expr_ptr + 24)    # field0: base expression
+                index_ptr := load_i64(expr_ptr + 32)   # field1: index expression
+
+                base_ty := @.check_expr(base_ptr)
+                @.check_expr(index_ptr)
+
+                base_kind := load_i64(base_ty)
+                I base_kind == TY_ARRAY() {
+                    # Return element type
+                    load_i64(base_ty + 8)
+                } E I base_kind == TY_MAP() {
+                    # Return value type
+                    load_i64(base_ty + 16)
+                } E {
+                    base_ty
+                }
+            }
+            # EXPR_LAMBDA = 50
+            E I kind == 50 {
+                @.check_lambda_with_expected(expr_ptr, @.fresh_type_var())
+            }
+            # EXPR_TUPLE = 39
+            E I kind == 39 {
+                # Check as array (Vais arrays use this expr kind)
+                elements_ptr := load_i64(expr_ptr + 24)
+                elements_len := load_i64(expr_ptr + 32)
+
+                I elements_len == 0 {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.array_type(0)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                } E {
+                    first := load_i64(elements_ptr)
+                    first_ty := @.check_expr(first)
+                    idx: mut i64 = 1
+                    L { I idx >= elements_len { B }
+                        elem := load_i64(elements_ptr + idx * 8)
+                        @.check_expr(elem)
+                        idx = idx + 1
+                    }
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.array_type(first_ty)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+            }
             E {
                 # Unknown expression type
                 type_ptr := malloc(ResolvedType.size())
@@ -3100,11 +3528,18 @@ X TypeChecker {
         body_stmts_ptr := load_i64(fn_def_ptr + 64)
         body_stmts_len := load_i64(fn_def_ptr + 72)
 
-        # Set current generics
+        # Set current generics and register bounds
         old_generics_ptr := self.current_generics_ptr
         old_generics_len := self.current_generics_len
+        old_bounds_len := self.bounds_len
         self.current_generics_ptr = generics_ptr
         self.current_generics_len = generics_len
+
+        # Register trait bounds from generic parameters if present
+        I generics_len > 0 {
+            @.register_generic_bounds(generics_ptr, generics_len)
+            0
+        } E { 0 }
 
         # Resolve return type
         ret_resolved := @.resolve_type_node(ret_type_ptr)
@@ -3138,9 +3573,10 @@ X TypeChecker {
 
         @.pop_scope()
 
-        # Restore generics
+        # Restore generics and bounds
         self.current_generics_ptr = old_generics_ptr
         self.current_generics_len = old_generics_len
+        self.bounds_len = old_bounds_len
         self.current_fn_ret_ptr = 0
         self.current_fn_name_idx = 0
 
@@ -3504,6 +3940,8 @@ X TypeChecker {
         free(self.errors_ptr)
         free(self.subst_keys_ptr)
         free(self.subst_values_ptr)
+        free(self.bounds_keys_ptr)
+        free(self.bounds_values_ptr)
         1
     }
 }

@@ -1416,11 +1416,11 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
   - [x] static call (Type.method()) 해석
   - [x] 배열/문자열 내장 메서드
   - [x] first pass에서 impl methods 등록
-- [ ] **2. Trait Bounds & Where Clauses** (Sonnet) → [blockedBy: 1]
-  - [ ] generic_bounds 구조 (파라미터별 trait bound)
-  - [ ] verify_trait_bounds() - 인스턴스화 시 바운드 검사
-  - [ ] where 절 기초 지원
-  - [ ] 복수 trait bound: T: Clone + Debug
+- [x] **2. Trait Bounds & Where Clauses** (Opus) → ✅ 2026-02-06
+  - [x] generic_bounds 구조 (파라미터별 trait bound)
+  - [x] verify_trait_bounds() - 인스턴스화 시 바운드 검사
+  - [x] register_generic_bounds() - 파라미터 노드에서 bounds 파싱
+  - [x] 복수 trait bound: T: Clone + Debug
 - [ ] **3. Associated Types & Trait Object** (Sonnet) → [blockedBy: 2]
   - [ ] Associated type 해석 (Trait::AssocType)
   - [ ] GAT (Generic Associated Types) 지원
@@ -1435,9 +1435,11 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
   - [x] find_similar_function/variable/struct 구현
   - [ ] 타입 불일치 상세 설명 (후속 개선)
   - [ ] 에러 후 계속 검사 (후속 개선)
-- [ ] **6. Exhaustiveness 검사** (Sonnet) → [blockedBy: 1]
-  - [ ] 패턴 트리 구축 (enum variant, literal, wildcard)
-  - [ ] 커버리지 분석 + 도달 불가 패턴 감지
+- [x] **6. Exhaustiveness 검사** (Opus) → ✅ 2026-02-06
+  - [x] enum variant 커버리지 분석
+  - [x] bool exhaustiveness (true/false)
+  - [x] wildcard/binding 패턴 감지
+  - [x] EXPR_MATCH/TERNARY/INDEX/LAMBDA/TUPLE 핸들러 추가
 - **예상 작업량**: 3,000+ LOC
 - **의존성**: Stage 1, 2 완료 권장
 - **파일**: `selfhost/type_checker.vais`
