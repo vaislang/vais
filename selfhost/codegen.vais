@@ -1202,10 +1202,22 @@ X CodeGenerator {
 
             result2
         }
+        # EXPR_UNIT = 24
+        E I kind == 24 {
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, 0 ; unit\n")
+            result
+        }
         # EXPR_IDENT = 25
         E I kind == 25 {
             name_idx := load_i64(expr_ptr + 24)
             @.generate_ident(name_idx)
+        }
+        # EXPR_SELF_CALL = 26
+        E I kind == 26 {
+            @.generate_self_call(expr_ptr)
         }
         # EXPR_BINARY = 27
         E I kind == 27 {
@@ -1259,13 +1271,25 @@ X CodeGenerator {
         E I kind == 36 {
             @.generate_field_access(expr_ptr)
         }
+        # EXPR_TUPLE = 39
+        E I kind == 39 {
+            @.generate_tuple(expr_ptr)
+        }
         # EXPR_STRUCT_LIT = 40
         E I kind == 40 {
             @.generate_struct_lit(expr_ptr)
         }
+        # EXPR_RANGE = 41
+        E I kind == 41 {
+            @.generate_range(expr_ptr)
+        }
         # EXPR_ASSIGN = 48
         E I kind == 48 {
             @.generate_assign(expr_ptr)
+        }
+        # EXPR_ASSIGN_OP = 49
+        E I kind == 49 {
+            @.generate_assign_op(expr_ptr)
         }
         E {
             # Unknown expression, return 0
@@ -1794,6 +1818,228 @@ X CodeGenerator {
         @.emit_cstr("\n")
 
         value_reg
+    }
+
+    # ========== Self Call (@ operator) ==========
+
+    F generate_self_call(&self, expr_ptr: i64) -> i64 {
+        # @ = recursive call to current function
+        # Self call has no explicit data; it refers to the current function
+        # Emit a call to the current function with no args (caller will wrap with method_call)
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = call i64 @")
+        @.emit_string_idx(self.current_fn_name_idx)
+        @.emit_cstr("()\n")
+        result
+    }
+
+    # ========== Tuple ==========
+
+    F generate_tuple(&self, expr_ptr: i64) -> i64 {
+        # TUPLE: field0 = elements_ptr, field1 = len
+        elements_ptr := load_i64(expr_ptr + 24)
+        elements_len := load_i64(expr_ptr + 32)
+
+        # Allocate memory for tuple (elements_len * 8 bytes)
+        size := elements_len * 8
+        I size == 0 { size = 8 } E { 0 }
+
+        size_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(size_reg)
+        @.emit_cstr(" = add i64 0, ")
+        @.emit_i64(size)
+        @.emit_cstr("\n")
+
+        raw_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(raw_ptr)
+        @.emit_cstr(" = call i8* @malloc(i64 ")
+        @.emit_reg(size_reg)
+        @.emit_cstr(")\n")
+
+        tuple_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(tuple_ptr)
+        @.emit_cstr(" = ptrtoint i8* ")
+        @.emit_reg(raw_ptr)
+        @.emit_cstr(" to i64\n")
+
+        # Store each element
+        i: mut i64 = 0
+        L { I i >= elements_len { B }
+            elem_expr := load_i64(elements_ptr + i * 8)
+            elem_reg := @.generate_expr(elem_expr)
+
+            offset_reg := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(offset_reg)
+            @.emit_cstr(" = add i64 ")
+            @.emit_reg(tuple_ptr)
+            @.emit_cstr(", ")
+            @.emit_i64(i * 8)
+            @.emit_cstr("\n")
+
+            @.emit_cstr("  call void @store_i64(i64 ")
+            @.emit_reg(offset_reg)
+            @.emit_cstr(", i64 ")
+            @.emit_reg(elem_reg)
+            @.emit_cstr(")\n")
+
+            i = i + 1
+        }
+
+        tuple_ptr
+    }
+
+    # ========== Range ==========
+
+    F generate_range(&self, expr_ptr: i64) -> i64 {
+        # RANGE: field0 = start_ptr, field1 = end_ptr, field2 = inclusive
+        start_ptr := load_i64(expr_ptr + 24)
+        end_ptr := load_i64(expr_ptr + 32)
+        inclusive := load_i64(expr_ptr + 40)
+
+        # Allocate a 3-element struct: (start, end, inclusive)
+        raw_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(raw_ptr)
+        @.emit_cstr(" = call i8* @malloc(i64 24)\n")
+
+        range_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(range_ptr)
+        @.emit_cstr(" = ptrtoint i8* ")
+        @.emit_reg(raw_ptr)
+        @.emit_cstr(" to i64\n")
+
+        # Store start
+        start_reg := I start_ptr != 0 { @.generate_expr(start_ptr) } E {
+            zero := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(zero)
+            @.emit_cstr(" = add i64 0, 0\n")
+            zero
+        }
+        @.emit_cstr("  call void @store_i64(i64 ")
+        @.emit_reg(range_ptr)
+        @.emit_cstr(", i64 ")
+        @.emit_reg(start_reg)
+        @.emit_cstr(")\n")
+
+        # Store end
+        end_offset := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(end_offset)
+        @.emit_cstr(" = add i64 ")
+        @.emit_reg(range_ptr)
+        @.emit_cstr(", 8\n")
+
+        end_reg := I end_ptr != 0 { @.generate_expr(end_ptr) } E {
+            max := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(max)
+            @.emit_cstr(" = add i64 0, 9223372036854775807\n")
+            max
+        }
+        @.emit_cstr("  call void @store_i64(i64 ")
+        @.emit_reg(end_offset)
+        @.emit_cstr(", i64 ")
+        @.emit_reg(end_reg)
+        @.emit_cstr(")\n")
+
+        # Store inclusive flag
+        incl_offset := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(incl_offset)
+        @.emit_cstr(" = add i64 ")
+        @.emit_reg(range_ptr)
+        @.emit_cstr(", 16\n")
+        @.emit_cstr("  call void @store_i64(i64 ")
+        @.emit_reg(incl_offset)
+        @.emit_cstr(", i64 ")
+        @.emit_i64(inclusive)
+        @.emit_cstr(")\n")
+
+        range_ptr
+    }
+
+    # ========== Assign Op (+=, -=, *=, /=) ==========
+
+    F generate_assign_op(&self, expr_ptr: i64) -> i64 {
+        # ASSIGN_OP: field0 = target, field1 = value, field2 = op
+        target_ptr := load_i64(expr_ptr + 24)
+        value_ptr := load_i64(expr_ptr + 32)
+        op := load_i64(expr_ptr + 40)
+
+        target_kind := load_i64(target_ptr)
+        I target_kind != 25 {
+            # Not an identifier target
+            R @.generate_expr(value_ptr)
+        }
+
+        target_name_idx := load_i64(target_ptr + 24)
+        local_ptr := @.find_local(target_name_idx)
+
+        I local_ptr == 0 {
+            R @.generate_expr(value_ptr)
+        }
+
+        is_alloca := load_i64(local_ptr + 40)
+        type_kind := load_i64(local_ptr + 24)
+
+        I is_alloca != 1 {
+            R @.generate_expr(value_ptr)
+        }
+
+        # Load current value
+        alloca_reg := load_i64(local_ptr + 8)
+        current_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(current_reg)
+        @.emit_cstr(" = load ")
+        @.type_to_llvm_str(type_kind)
+        @.emit_cstr(", ")
+        @.type_to_llvm_str(type_kind)
+        @.emit_cstr("* ")
+        @.emit_reg(alloca_reg)
+        @.emit_cstr("\n")
+
+        # Generate RHS
+        rhs_reg := @.generate_expr(value_ptr)
+
+        # Apply operation
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = ")
+
+        I op == OP_ADD() { @.emit_cstr("add i64 ") }
+        E I op == OP_SUB() { @.emit_cstr("sub i64 ") }
+        E I op == OP_MUL() { @.emit_cstr("mul i64 ") }
+        E I op == OP_DIV() { @.emit_cstr("sdiv i64 ") }
+        E I op == OP_MOD() { @.emit_cstr("srem i64 ") }
+        E { @.emit_cstr("add i64 ") }
+
+        @.emit_reg(current_reg)
+        @.emit_cstr(", ")
+        @.emit_reg(rhs_reg)
+        @.emit_cstr("\n")
+
+        # Store back
+        @.emit_cstr("  store ")
+        @.type_to_llvm_str(type_kind)
+        @.emit_cstr(" ")
+        @.emit_reg(result)
+        @.emit_cstr(", ")
+        @.type_to_llvm_str(type_kind)
+        @.emit_cstr("* ")
+        @.emit_reg(alloca_reg)
+        @.emit_cstr("\n")
+
+        result
     }
 
     # ========== Match Expression ==========

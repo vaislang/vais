@@ -1497,6 +1497,8 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
   - [x] Static call codegen (TypeName.method 형태)
   - [x] Field access codegen (포인터 오프셋 + load_i64)
   - [x] Struct literal codegen (malloc + 필드별 store_i64)
+  - [x] Unit, Self call (@), Tuple, Range, Assign op (+=/-=/*=/÷=) codegen ✅ 2026-02-06
+- **Codegen 식 커버리지**: 25/32 (78%) — 잔여: Lambda, Ref/Deref, Try/Unwrap, Await, Spawn, Deref
 - **예상 작업량**: 2,000+ LOC
 - **의존성**: Stage 3 완료 필수
 - **파일**: `selfhost/codegen.vais`, `selfhost/codegen_s1.vais`
