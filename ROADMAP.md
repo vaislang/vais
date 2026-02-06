@@ -1474,7 +1474,8 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
 
 - [ ] **Control Flow 완전 구현**
   - [ ] Loop with break/continue labels
-  - [ ] Match expression (exhaustiveness 검사 포함)
+  - [x] Match expression codegen (패턴 매칭 IR 생성: wildcard/ident/literal/variant + phi 병합) ✅ 2026-02-06
+  - [x] Ternary expression codegen (cond ? then : else → br + phi) ✅ 2026-02-06
   - [ ] Try-catch (에러 처리)
 - [ ] **클로저 Codegen**
   - [ ] 클로저 캡처 환경 생성
@@ -1491,6 +1492,11 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
   - [ ] Constant folding
   - [ ] Dead code elimination
   - [ ] 기본 인라이닝
+- [x] **식 Codegen 확장** ✅ 2026-02-06
+  - [x] Method call codegen (receiver를 첫 인자로 패싱)
+  - [x] Static call codegen (TypeName.method 형태)
+  - [x] Field access codegen (포인터 오프셋 + load_i64)
+  - [x] Struct literal codegen (malloc + 필드별 store_i64)
 - **예상 작업량**: 2,000+ LOC
 - **의존성**: Stage 3 완료 필수
 - **파일**: `selfhost/codegen.vais`, `selfhost/codegen_s1.vais`

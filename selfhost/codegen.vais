@@ -1239,6 +1239,30 @@ X CodeGenerator {
         E I kind == 42 {
             @.generate_block_expr(expr_ptr)
         }
+        # EXPR_TERNARY = 29
+        E I kind == 29 {
+            @.generate_ternary(expr_ptr)
+        }
+        # EXPR_MATCH = 32
+        E I kind == 32 {
+            @.generate_match(expr_ptr)
+        }
+        # EXPR_METHOD_CALL = 34
+        E I kind == 34 {
+            @.generate_method_call(expr_ptr)
+        }
+        # EXPR_STATIC_CALL = 35
+        E I kind == 35 {
+            @.generate_static_call(expr_ptr)
+        }
+        # EXPR_FIELD = 36
+        E I kind == 36 {
+            @.generate_field_access(expr_ptr)
+        }
+        # EXPR_STRUCT_LIT = 40
+        E I kind == 40 {
+            @.generate_struct_lit(expr_ptr)
+        }
         # EXPR_ASSIGN = 48
         E I kind == 48 {
             @.generate_assign(expr_ptr)
@@ -1770,6 +1794,418 @@ X CodeGenerator {
         @.emit_cstr("\n")
 
         value_reg
+    }
+
+    # ========== Match Expression ==========
+
+    F generate_match(&self, expr_ptr: i64) -> i64 {
+        # MATCH: field0 = scrutinee expr, field1 = arms ptr, field2 = arms_len
+        scrutinee_ptr := load_i64(expr_ptr + 24)
+        arms_ptr := load_i64(expr_ptr + 32)
+        arms_len := load_i64(expr_ptr + 40)
+
+        # Generate scrutinee
+        scrutinee_reg := @.generate_expr(scrutinee_ptr)
+
+        merge_label := @.fresh_label()
+
+        # Allocate array for (arm_label, result_reg) pairs for phi node
+        arm_results_ptr := malloc(arms_len * 16)  # (label_id, result_reg) pairs
+
+        i: mut i64 = 0
+        L { I i >= arms_len { B }
+            arm_ptr := arms_ptr + i * 40  # MatchArm.size() = 40
+            pattern_ptr := load_i64(arm_ptr)
+            body_ptr := load_i64(arm_ptr + 16)
+
+            arm_label := @.fresh_label()
+            next_label := I i + 1 < arms_len { @.fresh_label() } E { merge_label }
+
+            # Pattern matching: compare scrutinee against pattern
+            pat_kind := load_i64(pattern_ptr)
+
+            # PAT_WILDCARD = 80, PAT_IDENT = 81
+            I pat_kind == 80 || pat_kind == 81 {
+                # Wildcard/ident always matches
+                I pat_kind == 81 {
+                    # Bind the scrutinee value to the pattern variable
+                    bind_name_idx := load_i64(pattern_ptr + 24)
+                    alloca_reg := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(alloca_reg)
+                    @.emit_cstr(" = alloca i64\n")
+                    @.emit_cstr("  store i64 ")
+                    @.emit_reg(scrutinee_reg)
+                    @.emit_cstr(", i64* ")
+                    @.emit_reg(alloca_reg)
+                    @.emit_cstr("\n")
+                    name_ptr := @.get_string_ptr(bind_name_idx)
+                    name_len := @.get_string_len(bind_name_idx)
+                    local_idx := @.add_local(bind_name_idx, alloca_reg, 0, LLVM_I64(), 0)
+                    local_ptr := self.locals_ptr + local_idx * 48  # LocalVar.size()
+                    store_i64(local_ptr + 40, 1)  # is_alloca = 1
+                    0
+                } E { 0 }
+                @.emit_cstr("  br label %arm")
+                @.emit_i64(arm_label)
+                @.emit_cstr("\n")
+            }
+            # PAT_LITERAL = 82
+            E I pat_kind == 82 {
+                lit_value := load_i64(pattern_ptr + 24)
+                cmp_reg := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(cmp_reg)
+                @.emit_cstr(" = icmp eq i64 ")
+                @.emit_reg(scrutinee_reg)
+                @.emit_cstr(", ")
+                @.emit_i64(lit_value)
+                @.emit_cstr("\n")
+                @.emit_cstr("  br i1 ")
+                @.emit_reg(cmp_reg)
+                @.emit_cstr(", label %arm")
+                @.emit_i64(arm_label)
+                @.emit_cstr(", label %next")
+                @.emit_i64(next_label)
+                @.emit_cstr("\n")
+            }
+            # PAT_VARIANT = 85 (enum variant: compare tag)
+            E I pat_kind == 85 {
+                variant_name_idx := load_i64(pattern_ptr + 24)
+                # Compare tag (treat variant name as tag index for now)
+                cmp_reg := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(cmp_reg)
+                @.emit_cstr(" = icmp eq i64 ")
+                @.emit_reg(scrutinee_reg)
+                @.emit_cstr(", ")
+                @.emit_i64(variant_name_idx)
+                @.emit_cstr("\n")
+                @.emit_cstr("  br i1 ")
+                @.emit_reg(cmp_reg)
+                @.emit_cstr(", label %arm")
+                @.emit_i64(arm_label)
+                @.emit_cstr(", label %next")
+                @.emit_i64(next_label)
+                @.emit_cstr("\n")
+            }
+            E {
+                # Other patterns: default to always-match
+                @.emit_cstr("  br label %arm")
+                @.emit_i64(arm_label)
+                @.emit_cstr("\n")
+            }
+
+            # Arm body
+            @.emit_cstr("arm")
+            @.emit_i64(arm_label)
+            @.emit_cstr(":\n")
+            arm_result := @.generate_expr(body_ptr)
+
+            # Store result for phi
+            store_i64(arm_results_ptr + i * 16, arm_label)
+            store_i64(arm_results_ptr + i * 16 + 8, arm_result)
+
+            @.emit_cstr("  br label %merge")
+            @.emit_i64(merge_label)
+            @.emit_cstr("\n")
+
+            # Next label (for non-wildcard patterns)
+            I i + 1 < arms_len && pat_kind != 80 && pat_kind != 81 {
+                @.emit_cstr("next")
+                @.emit_i64(next_label)
+                @.emit_cstr(":\n")
+            } E { 0 }
+
+            i = i + 1
+        }
+
+        # Merge block with phi
+        @.emit_cstr("merge")
+        @.emit_i64(merge_label)
+        @.emit_cstr(":\n")
+
+        result := @.fresh_reg()
+        I arms_len > 0 {
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = phi i64 ")
+            j: mut i64 = 0
+            L { I j >= arms_len { B }
+                I j > 0 { @.emit_cstr(", ") } E { 0 }
+                arm_label := load_i64(arm_results_ptr + j * 16)
+                arm_result := load_i64(arm_results_ptr + j * 16 + 8)
+                @.emit_cstr("[ ")
+                @.emit_reg(arm_result)
+                @.emit_cstr(", %arm")
+                @.emit_i64(arm_label)
+                @.emit_cstr(" ]")
+                j = j + 1
+            }
+            @.emit_cstr("\n")
+        } E {
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, 0\n")
+        }
+
+        free(arm_results_ptr)
+        result
+    }
+
+    # ========== Ternary Expression ==========
+
+    F generate_ternary(&self, expr_ptr: i64) -> i64 {
+        # TERNARY: field0 = cond, field1 = then_expr, field2 = else_expr
+        cond_ptr := load_i64(expr_ptr + 24)
+        then_ptr := load_i64(expr_ptr + 32)
+        else_ptr := load_i64(expr_ptr + 40)
+
+        label_id := @.fresh_label()
+
+        # Generate condition
+        cond_reg := @.generate_expr(cond_ptr)
+
+        cond_i1 := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(cond_i1)
+        @.emit_cstr(" = trunc i64 ")
+        @.emit_reg(cond_reg)
+        @.emit_cstr(" to i1\n")
+
+        @.emit_cstr("  br i1 ")
+        @.emit_reg(cond_i1)
+        @.emit_cstr(", label %tern_then")
+        @.emit_i64(label_id)
+        @.emit_cstr(", label %tern_else")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Then branch
+        @.emit_cstr("tern_then")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        then_reg := @.generate_expr(then_ptr)
+        @.emit_cstr("  br label %tern_merge")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Else branch
+        @.emit_cstr("tern_else")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        else_reg := @.generate_expr(else_ptr)
+        @.emit_cstr("  br label %tern_merge")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Merge with phi
+        @.emit_cstr("tern_merge")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = phi i64 [ ")
+        @.emit_reg(then_reg)
+        @.emit_cstr(", %tern_then")
+        @.emit_i64(label_id)
+        @.emit_cstr(" ], [ ")
+        @.emit_reg(else_reg)
+        @.emit_cstr(", %tern_else")
+        @.emit_i64(label_id)
+        @.emit_cstr(" ]\n")
+
+        result
+    }
+
+    # ========== Method Call ==========
+
+    F generate_method_call(&self, expr_ptr: i64) -> i64 {
+        # METHOD_CALL: field0 = receiver, field1 = method_idx, field2 = args_ptr, field3 = args_len
+        receiver_ptr := load_i64(expr_ptr + 24)
+        method_idx := load_i64(expr_ptr + 32)
+        args_ptr := load_i64(expr_ptr + 40)
+        args_len := load_i64(expr_ptr + 48)
+
+        # Generate receiver
+        recv_reg := @.generate_expr(receiver_ptr)
+
+        # Generate arguments
+        total_args := args_len + 1  # receiver + args
+        arg_regs_ptr := malloc(total_args * 8)
+        store_i64(arg_regs_ptr, recv_reg)  # receiver is first arg
+
+        i: mut i64 = 0
+        L { I i >= args_len { B }
+            arg_expr := load_i64(args_ptr + i * 8)
+            arg_reg := @.generate_expr(arg_expr)
+            store_i64(arg_regs_ptr + (i + 1) * 8, arg_reg)
+            i = i + 1
+        }
+
+        # For now, emit call using method name directly
+        # TODO: proper method dispatch with receiver type prefix
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = call i64 @")
+        @.emit_string_idx(method_idx)
+        @.emit_cstr("(")
+
+        j: mut i64 = 0
+        L { I j >= total_args { B }
+            I j > 0 { @.emit_cstr(", ") } E { 0 }
+            @.emit_cstr("i64 ")
+            arg_reg := load_i64(arg_regs_ptr + j * 8)
+            @.emit_reg(arg_reg)
+            j = j + 1
+        }
+
+        @.emit_cstr(")\n")
+        free(arg_regs_ptr)
+        result
+    }
+
+    # ========== Static Call ==========
+
+    F generate_static_call(&self, expr_ptr: i64) -> i64 {
+        # STATIC_CALL: field0 = type_idx, field1 = method_idx, field2 = args_ptr, field3 = args_len
+        type_idx := load_i64(expr_ptr + 24)
+        method_idx := load_i64(expr_ptr + 32)
+        args_ptr := load_i64(expr_ptr + 40)
+        args_len := load_i64(expr_ptr + 48)
+
+        # Generate arguments
+        arg_regs_ptr := malloc(args_len * 8)
+        i: mut i64 = 0
+        L { I i >= args_len { B }
+            arg_expr := load_i64(args_ptr + i * 8)
+            arg_reg := @.generate_expr(arg_expr)
+            store_i64(arg_regs_ptr + i * 8, arg_reg)
+            i = i + 1
+        }
+
+        # Emit call as TypeName.method_name
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = call i64 @")
+        @.emit_string_idx(type_idx)
+        @.emit_cstr(".")
+        @.emit_string_idx(method_idx)
+        @.emit_cstr("(")
+
+        j: mut i64 = 0
+        L { I j >= args_len { B }
+            I j > 0 { @.emit_cstr(", ") } E { 0 }
+            @.emit_cstr("i64 ")
+            arg_reg := load_i64(arg_regs_ptr + j * 8)
+            @.emit_reg(arg_reg)
+            j = j + 1
+        }
+
+        @.emit_cstr(")\n")
+        free(arg_regs_ptr)
+        result
+    }
+
+    # ========== Field Access ==========
+
+    F generate_field_access(&self, expr_ptr: i64) -> i64 {
+        # FIELD: field0 = expr_ptr, field1 = field_idx
+        obj_expr := load_i64(expr_ptr + 24)
+        field_idx := load_i64(expr_ptr + 32)
+
+        # Generate object expression (should be a pointer to struct)
+        obj_reg := @.generate_expr(obj_expr)
+
+        # Look up field offset in struct info
+        # For now, use field_idx as offset index (field_idx * 8)
+        offset_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(offset_reg)
+        @.emit_cstr(" = add i64 ")
+        @.emit_reg(obj_reg)
+        @.emit_cstr(", ")
+        @.emit_i64(field_idx * 8)
+        @.emit_cstr("\n")
+
+        # Load the field value
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = call i64 @load_i64(i64 ")
+        @.emit_reg(offset_reg)
+        @.emit_cstr(")\n")
+
+        result
+    }
+
+    # ========== Struct Literal ==========
+
+    F generate_struct_lit(&self, expr_ptr: i64) -> i64 {
+        # STRUCT_LIT: field0 = name_idx, field1 = fields_ptr, field2 = fields_len
+        name_idx := load_i64(expr_ptr + 24)
+        fields_ptr := load_i64(expr_ptr + 32)
+        fields_len := load_i64(expr_ptr + 40)
+
+        # Allocate memory for the struct (fields_len * 8 bytes)
+        size := fields_len * 8
+        I size == 0 { size = 8 } E { 0 }  # Minimum 8 bytes
+
+        # Call malloc
+        size_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(size_reg)
+        @.emit_cstr(" = add i64 0, ")
+        @.emit_i64(size)
+        @.emit_cstr("\n")
+
+        raw_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(raw_ptr)
+        @.emit_cstr(" = call i8* @malloc(i64 ")
+        @.emit_reg(size_reg)
+        @.emit_cstr(")\n")
+
+        struct_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(struct_ptr)
+        @.emit_cstr(" = ptrtoint i8* ")
+        @.emit_reg(raw_ptr)
+        @.emit_cstr(" to i64\n")
+
+        # Initialize each field
+        # FieldInit: name_idx (0), value_ptr (8), span_start (16), span_end (24) - size 32
+        i: mut i64 = 0
+        L { I i >= fields_len { B }
+            field_ptr := fields_ptr + i * 32  # FieldInit.size() = 32
+            value_expr := load_i64(field_ptr + 8)
+
+            value_reg := @.generate_expr(value_expr)
+
+            # Store at offset i * 8
+            field_offset := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(field_offset)
+            @.emit_cstr(" = add i64 ")
+            @.emit_reg(struct_ptr)
+            @.emit_cstr(", ")
+            @.emit_i64(i * 8)
+            @.emit_cstr("\n")
+
+            @.emit_cstr("  call void @store_i64(i64 ")
+            @.emit_reg(field_offset)
+            @.emit_cstr(", i64 ")
+            @.emit_reg(value_reg)
+            @.emit_cstr(")\n")
+
+            i = i + 1
+        }
+
+        struct_ptr
     }
 
     # ========== Output ==========
