@@ -287,7 +287,26 @@ S CodeGenerator {
 
     # Lambda functions buffer (emitted after main functions)
     lambda_buf: i64,      # Pointer to StringBuffer for lambda function defs
-    lambda_counter: i64   # Counter for generating unique lambda names
+    lambda_counter: i64,  # Counter for generating unique lambda names
+
+    # Monomorphization support
+    # Generic function AST pointers (saved for later specialization)
+    generic_fns_ptr: i64,    # Array of fn_ptr (i64 pointers to FunctionDef AST nodes)
+    generic_fns_len: i64,
+    generic_fns_cap: i64,
+
+    # Monomorphization entries from type checker
+    # Each entry: (fn_name_idx: i64, type_args_ptr: i64, type_args_len: i64) = 24 bytes
+    mono_entries_ptr: i64,
+    mono_entries_len: i64,
+    mono_entries_cap: i64,
+
+    # Current generic bindings for monomorphized function generation
+    # Each binding: (generic_name_idx: i64, concrete_type_kind: i64) = 16 bytes
+    mono_bind_keys_ptr: i64,
+    mono_bind_values_ptr: i64,
+    mono_bind_len: i64,
+    mono_bind_cap: i64
 }
 
 X CodeGenerator {
@@ -330,7 +349,14 @@ X CodeGenerator {
             current_fn_ret_type: LLVM_VOID(),
             temp_buf: temp_buf,
             lambda_buf: lambda_buf,
-            lambda_counter: 0
+            lambda_counter: 0,
+            generic_fns_ptr: malloc(64 * 8),
+            generic_fns_len: 0, generic_fns_cap: 64,
+            mono_entries_ptr: malloc(64 * 24),
+            mono_entries_len: 0, mono_entries_cap: 64,
+            mono_bind_keys_ptr: malloc(32 * 8),
+            mono_bind_values_ptr: malloc(32 * 8),
+            mono_bind_len: 0, mono_bind_cap: 32
         }
     }
 
@@ -656,6 +682,395 @@ X CodeGenerator {
         E { self.loop_stack_ptr + (self.loop_stack_len - 1) * LoopContext.size() }
     }
 
+    # ========== Monomorphization Support ==========
+
+    # Save a generic function's AST pointer for later specialization
+    F save_generic_fn(&self, fn_ptr: i64) -> i64 {
+        I self.generic_fns_len >= self.generic_fns_cap {
+            new_cap := self.generic_fns_cap * 2
+            new_ptr := malloc(new_cap * 8)
+            memcpy(new_ptr, self.generic_fns_ptr, self.generic_fns_len * 8)
+            free(self.generic_fns_ptr)
+            self.generic_fns_ptr = new_ptr
+            self.generic_fns_cap = new_cap
+            0
+        } E { 0 }
+
+        store_i64(self.generic_fns_ptr + self.generic_fns_len * 8, fn_ptr)
+        self.generic_fns_len = self.generic_fns_len + 1
+        1
+    }
+
+    # Find a saved generic function by name_idx
+    F find_generic_fn(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.generic_fns_len { B }
+            fn_ptr := load_i64(self.generic_fns_ptr + i * 8)
+            fn_name := load_i64(fn_ptr)
+            I fn_name == name_idx {
+                R fn_ptr
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Add a monomorphization entry
+    # Each entry: fn_name_idx(8) + type_args_ptr(8) + type_args_len(8) = 24 bytes
+    F add_mono_entry(&self, fn_name_idx: i64, type_args_ptr: i64, type_args_len: i64) -> i64 {
+        # Check for duplicate
+        i: mut i64 = 0
+        L { I i >= self.mono_entries_len { B }
+            entry_ptr := self.mono_entries_ptr + i * 24
+            entry_fn := load_i64(entry_ptr)
+            entry_len := load_i64(entry_ptr + 16)
+
+            I entry_fn == fn_name_idx && entry_len == type_args_len {
+                entry_args := load_i64(entry_ptr + 8)
+                same: mut i64 = 1
+                j: mut i64 = 0
+                L { I j >= type_args_len { B }
+                    I load_i64(entry_args + j * 8) != load_i64(type_args_ptr + j * 8) {
+                        same = 0
+                        B
+                    } E { 0 }
+                    j = j + 1
+                }
+                I same == 1 { R 1 }  # Already exists
+                E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        # Grow if needed
+        I self.mono_entries_len >= self.mono_entries_cap {
+            new_cap := self.mono_entries_cap * 2
+            new_ptr := malloc(new_cap * 24)
+            memcpy(new_ptr, self.mono_entries_ptr, self.mono_entries_len * 24)
+            free(self.mono_entries_ptr)
+            self.mono_entries_ptr = new_ptr
+            self.mono_entries_cap = new_cap
+            0
+        } E { 0 }
+
+        entry_ptr := self.mono_entries_ptr + self.mono_entries_len * 24
+        store_i64(entry_ptr, fn_name_idx)
+        store_i64(entry_ptr + 8, type_args_ptr)
+        store_i64(entry_ptr + 16, type_args_len)
+        self.mono_entries_len = self.mono_entries_len + 1
+        1
+    }
+
+    # Import monomorphization entries from type checker
+    # tc_mono_ptr: pointer to type checker's mono_entries array
+    # tc_mono_len: number of entries
+    F import_mono_entries(&self, tc_mono_ptr: i64, tc_mono_len: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= tc_mono_len { B }
+            entry_ptr := tc_mono_ptr + i * 24
+            fn_name := load_i64(entry_ptr)
+            type_args := load_i64(entry_ptr + 8)
+            type_args_len := load_i64(entry_ptr + 16)
+
+            # Build concrete type kind array from ResolvedType pointers
+            concrete_kinds := malloc(type_args_len * 8)
+            j: mut i64 = 0
+            L { I j >= type_args_len { B }
+                type_ptr := load_i64(type_args + j * 8)
+                type_kind := load_i64(type_ptr)  # ResolvedType.kind
+                llvm_kind := @.resolved_type_to_llvm(type_kind)
+                store_i64(concrete_kinds + j * 8, llvm_kind)
+                j = j + 1
+            }
+
+            @.add_mono_entry(fn_name, concrete_kinds, type_args_len)
+            i = i + 1
+        }
+        1
+    }
+
+    # Set generic binding for monomorphization
+    F set_mono_binding(&self, name_idx: i64, llvm_type_kind: i64) -> i64 {
+        I self.mono_bind_len >= self.mono_bind_cap {
+            new_cap := self.mono_bind_cap * 2
+            new_keys := malloc(new_cap * 8)
+            new_vals := malloc(new_cap * 8)
+            memcpy(new_keys, self.mono_bind_keys_ptr, self.mono_bind_len * 8)
+            memcpy(new_vals, self.mono_bind_values_ptr, self.mono_bind_len * 8)
+            free(self.mono_bind_keys_ptr)
+            free(self.mono_bind_values_ptr)
+            self.mono_bind_keys_ptr = new_keys
+            self.mono_bind_values_ptr = new_vals
+            self.mono_bind_cap = new_cap
+            0
+        } E { 0 }
+
+        store_i64(self.mono_bind_keys_ptr + self.mono_bind_len * 8, name_idx)
+        store_i64(self.mono_bind_values_ptr + self.mono_bind_len * 8, llvm_type_kind)
+        self.mono_bind_len = self.mono_bind_len + 1
+        1
+    }
+
+    # Get generic binding (returns LLVM type kind, or -1 if not found)
+    F get_mono_binding(&self, name_idx: i64) -> i64 {
+        i: mut i64 = self.mono_bind_len
+        L { I i == 0 { B }
+            i = i - 1
+            key := load_i64(self.mono_bind_keys_ptr + i * 8)
+            I key == name_idx {
+                R load_i64(self.mono_bind_values_ptr + i * 8)
+            } E { 0 }
+        }
+        0 - 1  # Not found
+    }
+
+    # Clear all generic bindings
+    F clear_mono_bindings(&self) -> i64 {
+        self.mono_bind_len = 0
+        1
+    }
+
+    # Build monomorphized function name: "fn_name_T1_T2"
+    # Returns (name_ptr, name_len) via temp buffer
+    F build_mono_name(&self, fn_name_idx: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+        # Clear temp buffer
+        store_i64(self.temp_buf + 8, 0)  # len = 0
+
+        # Get base function name
+        base_ptr := @.get_string_ptr(fn_name_idx)
+        base_len := @.get_string_len(fn_name_idx)
+
+        # Build: base_name + "_mono_" + kind1 + "_" + kind2 + ...
+        tb_data := load_i64(self.temp_buf)
+        tb_cap := load_i64(self.temp_buf + 16)
+
+        # Ensure capacity
+        needed := base_len + 6 + type_kinds_len * 6  # Generous estimate
+        I needed > tb_cap {
+            new_cap := needed * 2
+            new_data := malloc(new_cap)
+            free(tb_data)
+            store_i64(self.temp_buf, new_data)
+            store_i64(self.temp_buf + 16, new_cap)
+            tb_data = new_data
+            0
+        } E { 0 }
+
+        # Copy base name
+        memcpy(tb_data, base_ptr, base_len)
+        pos: mut i64 = base_len
+
+        # Add "_mono_"
+        store_byte(tb_data + pos, 95)  # _
+        pos = pos + 1
+        store_byte(tb_data + pos, 109) # m
+        pos = pos + 1
+        store_byte(tb_data + pos, 111) # o
+        pos = pos + 1
+        store_byte(tb_data + pos, 110) # n
+        pos = pos + 1
+        store_byte(tb_data + pos, 111) # o
+        pos = pos + 1
+        store_byte(tb_data + pos, 95)  # _
+        pos = pos + 1
+
+        # Add each type kind as number separated by _
+        i: mut i64 = 0
+        L { I i >= type_kinds_len { B }
+            I i > 0 {
+                store_byte(tb_data + pos, 95)  # _
+                pos = pos + 1
+                0
+            } E { 0 }
+
+            kind := load_i64(type_kinds_ptr + i * 8)
+            # Write kind as digits
+            I kind >= 10 {
+                store_byte(tb_data + pos, 48 + kind / 10)
+                pos = pos + 1
+                store_byte(tb_data + pos, 48 + kind % 10)
+                pos = pos + 1
+                0
+            } E {
+                store_byte(tb_data + pos, 48 + kind)
+                pos = pos + 1
+                0
+            }
+
+            i = i + 1
+        }
+
+        store_i64(self.temp_buf + 8, pos)  # Update length
+        tb_data  # Return pointer (length is at self.temp_buf + 8)
+    }
+
+    # Generate all monomorphized function specializations
+    F generate_mono_functions(&self) -> i64 {
+        I self.mono_entries_len == 0 { R 1 }
+
+        @.emit_cstr("\n; ========== Monomorphized Functions ==========\n")
+
+        i: mut i64 = 0
+        L { I i >= self.mono_entries_len { B }
+            entry_ptr := self.mono_entries_ptr + i * 24
+            fn_name_idx := load_i64(entry_ptr)
+            type_kinds_ptr := load_i64(entry_ptr + 8)
+            type_kinds_len := load_i64(entry_ptr + 16)
+
+            # Find the generic function AST
+            fn_ptr := @.find_generic_fn(fn_name_idx)
+            I fn_ptr != 0 {
+                @.generate_mono_function(fn_ptr, type_kinds_ptr, type_kinds_len)
+                0
+            } E { 0 }
+
+            i = i + 1
+        }
+        1
+    }
+
+    # Generate a single monomorphized function
+    F generate_mono_function(&self, fn_ptr: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+        name_idx := load_i64(fn_ptr)
+        generics_ptr := load_i64(fn_ptr + 8)
+        generics_len := load_i64(fn_ptr + 16)
+        params_ptr := load_i64(fn_ptr + 24)
+        params_len := load_i64(fn_ptr + 32)
+        ret_type_ptr := load_i64(fn_ptr + 40)
+        body_kind := load_i64(fn_ptr + 48)
+        body_expr_ptr := load_i64(fn_ptr + 56)
+        body_stmts_ptr := load_i64(fn_ptr + 64)
+        body_stmts_len := load_i64(fn_ptr + 72)
+
+        # Set up generic bindings
+        @.clear_mono_bindings()
+        bind_count := I generics_len < type_kinds_len { generics_len } E { type_kinds_len }
+        j: mut i64 = 0
+        L { I j >= bind_count { B }
+            # GenericParam.name_idx is at offset 0, GenericParam.size() = 40
+            gen_name := load_i64(generics_ptr + j * 40)
+            concrete_kind := load_i64(type_kinds_ptr + j * 8)
+            @.set_mono_binding(gen_name, concrete_kind)
+            j = j + 1
+        }
+
+        # Reset state for this function
+        @.clear_locals()
+        self.reg_counter = 0
+        self.label_counter = 0
+        self.current_fn_name_idx = name_idx
+
+        # Determine return type (resolve generics)
+        ret_llvm := I ret_type_ptr == 0 {
+            self.current_fn_ret_type = LLVM_VOID()
+            LLVM_VOID()
+        } E {
+            ret_kind := load_i64(ret_type_ptr)
+            llvm_kind := @.resolve_mono_type(ret_type_ptr)
+            self.current_fn_ret_type = llvm_kind
+            llvm_kind
+        }
+
+        # Build monomorphized name
+        mono_name_ptr := @.build_mono_name(name_idx, type_kinds_ptr, type_kinds_len)
+        mono_name_len := load_i64(self.temp_buf + 8)
+
+        # Emit function signature
+        @.emit_cstr("define ")
+        @.type_to_llvm_str(ret_llvm)
+        @.emit_cstr(" @")
+        @.emit_ptr(mono_name_ptr, mono_name_len)
+        @.emit_cstr("(")
+
+        # Register the mono function in function table
+        @.add_function(name_idx, ret_llvm, 0)
+
+        # Emit parameters (resolve generic types)
+        k: mut i64 = 0
+        L { I k >= params_len { B }
+            I k > 0 { @.emit_cstr(", ") } E { 0 }
+
+            param_ptr := params_ptr + k * 40  # Param.size() = 40
+            param_name_idx := load_i64(param_ptr)
+            param_type_ptr := load_i64(param_ptr + 8)
+
+            param_llvm := I param_type_ptr == 0 {
+                LLVM_I64()
+            } E {
+                @.resolve_mono_type(param_type_ptr)
+            }
+
+            @.type_to_llvm_str(param_llvm)
+            @.emit_cstr(" %")
+            @.emit_string_idx(param_name_idx)
+
+            # Register parameter as local
+            param_name_ptr := @.get_string_ptr(param_name_idx)
+            param_name_len := @.get_string_len(param_name_idx)
+            @.add_local(param_name_idx, param_name_ptr, param_name_len, param_llvm, 1)
+
+            k = k + 1
+        }
+
+        @.emit_cstr(") {\n")
+        @.emit_cstr("entry:\n")
+
+        # Generate body (same as regular function)
+        I body_kind == 0 {
+            result_reg := @.generate_expr(body_expr_ptr)
+            I ret_llvm == LLVM_VOID() {
+                @.emit_cstr("  ret void\n")
+            } E {
+                @.emit_cstr("  ret ")
+                @.type_to_llvm_str(ret_llvm)
+                @.emit_cstr(" ")
+                @.emit_reg(result_reg)
+                @.emit_cstr("\n")
+            }
+        } E {
+            @.generate_stmts(body_stmts_ptr, body_stmts_len)
+            I ret_llvm == LLVM_VOID() {
+                @.emit_cstr("  ret void\n")
+            } E {
+                @.emit_cstr("  ret ")
+                @.type_to_llvm_str(ret_llvm)
+                @.emit_cstr(" 0 ; implicit return\n")
+            }
+        }
+
+        @.emit_cstr("}\n\n")
+
+        # Clean up bindings
+        @.clear_mono_bindings()
+        1
+    }
+
+    # Resolve a type pointer considering current mono bindings
+    # If the type is a generic parameter, look up the concrete type
+    F resolve_mono_type(&self, type_ptr: i64) -> i64 {
+        I type_ptr == 0 { R LLVM_I64() }
+
+        type_kind := load_i64(type_ptr)
+
+        # TY_GENERIC = 26 (from type_checker.vais)
+        I type_kind == 26 {
+            gen_name := load_i64(type_ptr + 8)  # ResolvedType.field0 = name_idx
+            bound := @.get_mono_binding(gen_name)
+            I bound != 0 - 1 {
+                bound  # Return the concrete LLVM type kind
+            } E {
+                LLVM_I64()  # Fallback
+            }
+        }
+        # TY_NAMED = 25 - check if it has generic args
+        E I type_kind == 25 {
+            LLVM_I64()  # Named types default to pointer-sized
+        }
+        E {
+            @.resolved_type_to_llvm(type_kind)
+        }
+    }
+
     # ========== String Constants ==========
 
     F add_string_constant(&self, value_ptr: i64, value_len: i64) -> i64 {
@@ -749,6 +1164,9 @@ X CodeGenerator {
 
             i = i + 1
         }
+
+        # Emit monomorphized function specializations
+        @.generate_mono_functions()
 
         # Emit lambda functions
         @.emit_lambda_functions()
@@ -918,8 +1336,11 @@ X CodeGenerator {
         body_stmts_ptr := load_i64(fn_ptr + 64)
         body_stmts_len := load_i64(fn_ptr + 72)
 
-        # Skip generic functions for now
-        I generics_len > 0 { R 1 }
+        # Save generic functions for monomorphization, don't generate them directly
+        I generics_len > 0 {
+            @.save_generic_fn(fn_ptr)
+            R 1
+        }
 
         # Reset state
         @.clear_locals()
@@ -2863,6 +3284,12 @@ X CodeGenerator {
         free(self.locals_ptr)
         free(self.loop_stack_ptr)
         free(self.strings_ptr)
+
+        # Free monomorphization allocations
+        free(self.generic_fns_ptr)
+        free(self.mono_entries_ptr)
+        free(self.mono_bind_keys_ptr)
+        free(self.mono_bind_values_ptr)
 
         1
     }

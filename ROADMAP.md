@@ -1482,8 +1482,8 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
   - [x] 함수 포인터 반환 (ptrtoint)
   - [ ] 캡처 변수 분석 (Free Variable Analysis) — 후속
   - [ ] Move/Ref 캡처 구분 — 후속
-- [ ] **제네릭 Monomorphization**
-  - [ ] 타입별 함수 복사본 생성
+- [x] **제네릭 Monomorphization (기본)** ✅ 2026-02-06
+  - [x] 타입별 함수 복사본 생성 (monomorphized name mangling, generic binding, specialization)
   - [ ] 제네릭 구조체 특화
   - [ ] Trait method dispatch
 - [ ] **Trait Object / Dynamic Dispatch**
