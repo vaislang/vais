@@ -236,6 +236,23 @@ X LoopContext {
 }
 
 # ============================================================================
+# VTable Entry (for trait dispatch)
+# ============================================================================
+
+S VtableEntry {
+    impl_type_idx: i64,     # Name index of the implementing type
+    trait_name_idx: i64,    # Name index of the trait
+    methods_ptr: i64,       # Array of method name_idx (in trait declaration order)
+    methods_len: i64,       # Number of methods
+    vtable_name_ptr: i64,   # Pointer to mangled vtable name string
+    vtable_name_len: i64    # Length of vtable name string
+}
+
+X VtableEntry {
+    F size() -> i64 = 48
+}
+
+# ============================================================================
 # Code Generator
 # ============================================================================
 
@@ -306,7 +323,29 @@ S CodeGenerator {
     mono_bind_keys_ptr: i64,
     mono_bind_values_ptr: i64,
     mono_bind_len: i64,
-    mono_bind_cap: i64
+    mono_bind_cap: i64,
+
+    # VTable entries for trait dispatch
+    vtables_ptr: i64,        # Array of VtableEntry
+    vtables_len: i64,
+    vtables_cap: i64,
+
+    # Trait definition info (from type checker)
+    # Each: (trait_name_idx, methods_ptr, methods_len) = 24 bytes
+    trait_defs_ptr: i64,
+    trait_defs_len: i64,
+    trait_defs_cap: i64,
+
+    # Generic struct AST pointers (saved for later specialization)
+    generic_structs_ptr: i64,    # Array of struct_ptr (i64 pointers to StructDef AST nodes)
+    generic_structs_len: i64,
+    generic_structs_cap: i64,
+
+    # Struct monomorphization entries
+    # Each entry: (struct_name_idx: i64, type_args_ptr: i64, type_args_len: i64) = 24 bytes
+    struct_mono_ptr: i64,
+    struct_mono_len: i64,
+    struct_mono_cap: i64
 }
 
 X CodeGenerator {
@@ -356,7 +395,15 @@ X CodeGenerator {
             mono_entries_len: 0, mono_entries_cap: 64,
             mono_bind_keys_ptr: malloc(32 * 8),
             mono_bind_values_ptr: malloc(32 * 8),
-            mono_bind_len: 0, mono_bind_cap: 32
+            mono_bind_len: 0, mono_bind_cap: 32,
+            vtables_ptr: malloc(32 * VtableEntry.size()),
+            vtables_len: 0, vtables_cap: 32,
+            trait_defs_ptr: malloc(32 * 24),
+            trait_defs_len: 0, trait_defs_cap: 32,
+            generic_structs_ptr: malloc(32 * 8),
+            generic_structs_len: 0, generic_structs_cap: 32,
+            struct_mono_ptr: malloc(32 * 24),
+            struct_mono_len: 0, struct_mono_cap: 32
         }
     }
 
@@ -789,6 +836,32 @@ X CodeGenerator {
         1
     }
 
+    # Import struct monomorphization entries from type checker
+    F import_struct_mono_entries(&self, tc_mono_ptr: i64, tc_mono_len: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= tc_mono_len { B }
+            entry_ptr := tc_mono_ptr + i * 24
+            struct_name := load_i64(entry_ptr)
+            type_args := load_i64(entry_ptr + 8)
+            type_args_len := load_i64(entry_ptr + 16)
+
+            # Build concrete type kind array from ResolvedType pointers
+            concrete_kinds := malloc(type_args_len * 8)
+            j: mut i64 = 0
+            L { I j >= type_args_len { B }
+                type_ptr := load_i64(type_args + j * 8)
+                type_kind := load_i64(type_ptr)  # ResolvedType.kind
+                llvm_kind := @.resolved_type_to_llvm(type_kind)
+                store_i64(concrete_kinds + j * 8, llvm_kind)
+                j = j + 1
+            }
+
+            @.add_struct_mono_entry(struct_name, concrete_kinds, type_args_len)
+            i = i + 1
+        }
+        1
+    }
+
     # Set generic binding for monomorphization
     F set_mono_binding(&self, name_idx: i64, llvm_type_kind: i64) -> i64 {
         I self.mono_bind_len >= self.mono_bind_cap {
@@ -828,6 +901,385 @@ X CodeGenerator {
     F clear_mono_bindings(&self) -> i64 {
         self.mono_bind_len = 0
         1
+    }
+
+    # ========== Generic Struct Monomorphization ==========
+
+    # Save a generic struct's AST pointer for later specialization
+    F save_generic_struct(&self, struct_ptr: i64) -> i64 {
+        I self.generic_structs_len >= self.generic_structs_cap {
+            new_cap := self.generic_structs_cap * 2
+            new_ptr := malloc(new_cap * 8)
+            memcpy(new_ptr, self.generic_structs_ptr, self.generic_structs_len * 8)
+            free(self.generic_structs_ptr)
+            self.generic_structs_ptr = new_ptr
+            self.generic_structs_cap = new_cap
+            0
+        } E { 0 }
+
+        store_i64(self.generic_structs_ptr + self.generic_structs_len * 8, struct_ptr)
+        self.generic_structs_len = self.generic_structs_len + 1
+        1
+    }
+
+    # Find a saved generic struct by name_idx
+    F find_generic_struct(&self, name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.generic_structs_len { B }
+            struct_ptr := load_i64(self.generic_structs_ptr + i * 8)
+            struct_name := load_i64(struct_ptr)  # StructDef.name_idx at offset 0
+            I struct_name == name_idx {
+                R struct_ptr
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Add a struct monomorphization entry
+    F add_struct_mono_entry(&self, struct_name_idx: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+        # Check for duplicate
+        i: mut i64 = 0
+        L { I i >= self.struct_mono_len { B }
+            entry_ptr := self.struct_mono_ptr + i * 24
+            entry_name := load_i64(entry_ptr)
+            entry_len := load_i64(entry_ptr + 16)
+
+            I entry_name == struct_name_idx && entry_len == type_kinds_len {
+                entry_args := load_i64(entry_ptr + 8)
+                same: mut i64 = 1
+                j: mut i64 = 0
+                L { I j >= type_kinds_len { B }
+                    I load_i64(entry_args + j * 8) != load_i64(type_kinds_ptr + j * 8) {
+                        same = 0
+                        B
+                    } E { 0 }
+                    j = j + 1
+                }
+                I same == 1 { R 1 }  # Already exists
+                E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        # Grow if needed
+        I self.struct_mono_len >= self.struct_mono_cap {
+            new_cap := self.struct_mono_cap * 2
+            new_ptr := malloc(new_cap * 24)
+            memcpy(new_ptr, self.struct_mono_ptr, self.struct_mono_len * 24)
+            free(self.struct_mono_ptr)
+            self.struct_mono_ptr = new_ptr
+            self.struct_mono_cap = new_cap
+            0
+        } E { 0 }
+
+        # Copy type args
+        args_copy := malloc(type_kinds_len * 8)
+        memcpy(args_copy, type_kinds_ptr, type_kinds_len * 8)
+
+        entry_ptr := self.struct_mono_ptr + self.struct_mono_len * 24
+        store_i64(entry_ptr, struct_name_idx)
+        store_i64(entry_ptr + 8, args_copy)
+        store_i64(entry_ptr + 16, type_kinds_len)
+        self.struct_mono_len = self.struct_mono_len + 1
+        1
+    }
+
+    # Generate all monomorphized struct type definitions
+    F generate_mono_struct_types(&self) -> i64 {
+        I self.struct_mono_len == 0 { R 1 }
+
+        @.emit_cstr("\n; ========== Monomorphized Struct Types ==========\n")
+
+        i: mut i64 = 0
+        L { I i >= self.struct_mono_len { B }
+            entry_ptr := self.struct_mono_ptr + i * 24
+            struct_name_idx := load_i64(entry_ptr)
+            type_kinds_ptr := load_i64(entry_ptr + 8)
+            type_kinds_len := load_i64(entry_ptr + 16)
+
+            # Find the generic struct AST
+            struct_ptr := @.find_generic_struct(struct_name_idx)
+            I struct_ptr != 0 {
+                @.generate_mono_struct_type(struct_ptr, type_kinds_ptr, type_kinds_len)
+                0
+            } E { 0 }
+
+            i = i + 1
+        }
+        1
+    }
+
+    # Generate a single monomorphized struct type definition
+    F generate_mono_struct_type(&self, struct_ptr: i64, type_kinds_ptr: i64, type_kinds_len: i64) -> i64 {
+        name_idx := load_i64(struct_ptr)
+        # StructDef: name_idx(0), generics_ptr(8), generics_len(16), fields_ptr(24), fields_len(32)
+        generics_ptr := load_i64(struct_ptr + 8)
+        generics_len := load_i64(struct_ptr + 16)
+        fields_ptr := load_i64(struct_ptr + 24)
+        fields_len := load_i64(struct_ptr + 32)
+
+        # Set up generic bindings
+        @.clear_mono_bindings()
+        bind_count := I generics_len < type_kinds_len { generics_len } E { type_kinds_len }
+        j: mut i64 = 0
+        L { I j >= bind_count { B }
+            # GenericParam.name_idx is at offset 0, GenericParam.size() = 40
+            gen_name := load_i64(generics_ptr + j * 40)
+            concrete_kind := load_i64(type_kinds_ptr + j * 8)
+            @.set_mono_binding(gen_name, concrete_kind)
+            j = j + 1
+        }
+
+        # Build monomorphized struct name
+        mono_name_ptr := @.build_mono_name(name_idx, type_kinds_ptr, type_kinds_len)
+        mono_name_len := load_i64(self.temp_buf + 8)
+
+        # Emit: %StructName_mono_T1_T2 = type { i64, i64, ... }
+        @.emit_cstr("%")
+        @.emit_ptr(mono_name_ptr, mono_name_len)
+        @.emit_cstr(" = type { ")
+
+        # Emit field types (all fields are i64 in our simplified model, but resolve generics)
+        i: mut i64 = 0
+        L { I i >= fields_len { B }
+            I i > 0 { @.emit_cstr(", ") } E { 0 }
+
+            # FieldDef: name_idx(0), type_ptr(8), ... - FieldDef.size() = 40
+            field_ptr := fields_ptr + i * 40
+            field_type_ptr := load_i64(field_ptr + 8)
+
+            field_llvm := I field_type_ptr == 0 {
+                LLVM_I64()
+            } E {
+                @.resolve_mono_type(field_type_ptr)
+            }
+            @.type_to_llvm_str(field_llvm)
+
+            i = i + 1
+        }
+
+        @.emit_cstr(" }\n")
+
+        # Register the specialized struct in struct table
+        @.add_struct(name_idx)
+
+        # Clean up bindings
+        @.clear_mono_bindings()
+        1
+    }
+
+    # ========== VTable / Trait Dispatch ==========
+
+    # Register a trait definition (called during first pass)
+    F register_trait_def(&self, trait_name_idx: i64, methods_ptr: i64, methods_len: i64) -> i64 {
+        I self.trait_defs_len >= self.trait_defs_cap {
+            new_cap := self.trait_defs_cap * 2
+            new_ptr := malloc(new_cap * 24)
+            memcpy(new_ptr, self.trait_defs_ptr, self.trait_defs_len * 24)
+            free(self.trait_defs_ptr)
+            self.trait_defs_ptr = new_ptr
+            self.trait_defs_cap = new_cap
+            0
+        } E { 0 }
+
+        ptr := self.trait_defs_ptr + self.trait_defs_len * 24
+        store_i64(ptr, trait_name_idx)
+        store_i64(ptr + 8, methods_ptr)
+        store_i64(ptr + 16, methods_len)
+        self.trait_defs_len = self.trait_defs_len + 1
+        1
+    }
+
+    # Find a trait definition by name_idx
+    F find_trait_def(&self, trait_name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.trait_defs_len { B }
+            ptr := self.trait_defs_ptr + i * 24
+            name := load_i64(ptr)
+            I name == trait_name_idx { R ptr } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Register a vtable for a (type, trait) pair
+    # impl_methods_ptr: array of method name_idx in trait declaration order
+    F add_vtable(&self, impl_type_idx: i64, trait_name_idx: i64,
+                 impl_methods_ptr: i64, impl_methods_len: i64) -> i64 {
+        I self.vtables_len >= self.vtables_cap {
+            new_cap := self.vtables_cap * 2
+            new_ptr := malloc(new_cap * VtableEntry.size())
+            memcpy(new_ptr, self.vtables_ptr, self.vtables_len * VtableEntry.size())
+            free(self.vtables_ptr)
+            self.vtables_ptr = new_ptr
+            self.vtables_cap = new_cap
+            0
+        } E { 0 }
+
+        # Build vtable name: __vtable_TypeName_TraitName
+        store_i64(self.temp_buf + 8, 0)  # Clear temp buffer
+        tb_data := load_i64(self.temp_buf)
+        tb_cap := load_i64(self.temp_buf + 16)
+
+        type_ptr := @.get_string_ptr(impl_type_idx)
+        type_len := @.get_string_len(impl_type_idx)
+        trait_ptr := @.get_string_ptr(trait_name_idx)
+        trait_len := @.get_string_len(trait_name_idx)
+        needed := 10 + type_len + trait_len  # __vtable_ + TypeName + _ + TraitName
+        I needed > tb_cap {
+            new_data := malloc(needed * 2)
+            free(tb_data)
+            store_i64(self.temp_buf, new_data)
+            store_i64(self.temp_buf + 16, needed * 2)
+            tb_data = new_data
+            0
+        } E { 0 }
+
+        # "__vtable_"
+        memcpy_str(tb_data, "__vtable_", 9)
+        pos: mut i64 = 9
+        memcpy(tb_data + pos, type_ptr, type_len)
+        pos = pos + type_len
+        store_byte(tb_data + pos, 95)  # _
+        pos = pos + 1
+        memcpy(tb_data + pos, trait_ptr, trait_len)
+        pos = pos + trait_len
+
+        # Allocate permanent copy of vtable name
+        vt_name := malloc(pos)
+        memcpy(vt_name, tb_data, pos)
+
+        ptr := self.vtables_ptr + self.vtables_len * VtableEntry.size()
+        store_i64(ptr, impl_type_idx)
+        store_i64(ptr + 8, trait_name_idx)
+        store_i64(ptr + 16, impl_methods_ptr)
+        store_i64(ptr + 24, impl_methods_len)
+        store_i64(ptr + 32, vt_name)
+        store_i64(ptr + 40, pos)
+
+        self.vtables_len = self.vtables_len + 1
+        1
+    }
+
+    # Find vtable for a (type, trait) pair
+    F find_vtable(&self, impl_type_idx: i64, trait_name_idx: i64) -> i64 {
+        i: mut i64 = 0
+        L { I i >= self.vtables_len { B }
+            ptr := self.vtables_ptr + i * VtableEntry.size()
+            vt_type := load_i64(ptr)
+            vt_trait := load_i64(ptr + 8)
+            I vt_type == impl_type_idx && vt_trait == trait_name_idx {
+                R ptr
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    }
+
+    # Emit all vtable globals as LLVM IR constants
+    F emit_vtable_globals(&self) -> i64 {
+        I self.vtables_len == 0 { R 1 }
+
+        @.emit_cstr("\n; ========== VTable Globals ==========\n")
+
+        i: mut i64 = 0
+        L { I i >= self.vtables_len { B }
+            ptr := self.vtables_ptr + i * VtableEntry.size()
+            impl_type := load_i64(ptr)
+            trait_name := load_i64(ptr + 8)
+            methods_ptr := load_i64(ptr + 16)
+            methods_len := load_i64(ptr + 24)
+            vt_name_ptr := load_i64(ptr + 32)
+            vt_name_len := load_i64(ptr + 40)
+
+            # Emit: @__vtable_Type_Trait = constant [N x i64] [
+            #   i64 ptrtoint (i64 (i64, ...)* @method1 to i64),
+            #   i64 ptrtoint (i64 (i64, ...)* @method2 to i64), ...]
+            @.emit_cstr("@")
+            @.emit_ptr(vt_name_ptr, vt_name_len)
+            @.emit_cstr(" = private constant [")
+            @.emit_i64(methods_len)
+            @.emit_cstr(" x i64] [\n")
+
+            j: mut i64 = 0
+            L { I j >= methods_len { B }
+                I j > 0 { @.emit_cstr(",\n") } E { 0 }
+
+                method_name_idx := load_i64(methods_ptr + j * 8)
+                @.emit_cstr("  i64 ptrtoint (i64 (i64)* @")
+                @.emit_string_idx(method_name_idx)
+                @.emit_cstr(" to i64)")
+
+                j = j + 1
+            }
+
+            @.emit_cstr("\n]\n\n")
+
+            i = i + 1
+        }
+        1
+    }
+
+    # Generate dynamic dispatch call through vtable
+    # data_reg: register holding the data pointer (receiver)
+    # vtable_reg: register holding the vtable pointer
+    # method_index: index of method in vtable
+    # args_ptr/args_len: additional argument registers
+    F generate_dyn_call(&self, data_reg: i64, vtable_reg: i64, method_index: i64,
+                        args_ptr: i64, args_len: i64) -> i64 {
+        # Load function pointer from vtable at method_index
+        # vtable is an array of i64 function pointers
+        offset_reg := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(offset_reg)
+        @.emit_cstr(" = add i64 ")
+        @.emit_reg(vtable_reg)
+        @.emit_cstr(", ")
+        @.emit_i64(method_index * 8)
+        @.emit_cstr("\n")
+
+        fn_ptr_val := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(fn_ptr_val)
+        @.emit_cstr(" = call i64 @load_i64(i64 ")
+        @.emit_reg(offset_reg)
+        @.emit_cstr(")\n")
+
+        # Cast i64 to function pointer
+        fn_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(fn_ptr)
+        @.emit_cstr(" = inttoptr i64 ")
+        @.emit_reg(fn_ptr_val)
+        @.emit_cstr(" to i64 (i64")
+        # Additional parameter types
+        ai: mut i64 = 0
+        L { I ai >= args_len { B }
+            @.emit_cstr(", i64")
+            ai = ai + 1
+        }
+        @.emit_cstr(")*\n")
+
+        # Emit indirect call
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = call i64 ")
+        @.emit_reg(fn_ptr)
+        @.emit_cstr("(i64 ")
+        @.emit_reg(data_reg)
+
+        ai = 0
+        L { I ai >= args_len { B }
+            @.emit_cstr(", i64 ")
+            arg_reg := load_i64(args_ptr + ai * 8)
+            @.emit_reg(arg_reg)
+            ai = ai + 1
+        }
+
+        @.emit_cstr(")\n")
+        result
     }
 
     # Build monomorphized function name: "fn_name_T1_T2"
@@ -1129,6 +1581,10 @@ X CodeGenerator {
             E I kind == 2 {
                 @.register_struct_decl(data_ptr)
             }
+            # ITEM_TRAIT = 6
+            E I kind == 6 {
+                @.register_trait_decl(data_ptr)
+            }
             E { 0 }
 
             i = i + 1
@@ -1141,6 +1597,9 @@ X CodeGenerator {
             @.emit_struct_type(struct_ptr)
             j = j + 1
         }
+
+        # Emit monomorphized struct type definitions
+        @.generate_mono_struct_types()
 
         # Emit extern function declarations
         @.emit_extern_declarations()
@@ -1167,6 +1626,9 @@ X CodeGenerator {
 
         # Emit monomorphized function specializations
         @.generate_mono_functions()
+
+        # Emit vtable globals
+        @.emit_vtable_globals()
 
         # Emit lambda functions
         @.emit_lambda_functions()
@@ -1196,7 +1658,39 @@ X CodeGenerator {
 
     F register_struct_decl(&self, struct_ptr: i64) -> i64 {
         name_idx := load_i64(struct_ptr)
-        @.add_struct(name_idx)
+        # StructDef: name_idx(0), generics_ptr(8), generics_len(16)
+        generics_len := load_i64(struct_ptr + 16)
+
+        # Save generic structs for monomorphization, register non-generic normally
+        I generics_len > 0 {
+            @.save_generic_struct(struct_ptr)
+        } E {
+            @.add_struct(name_idx)
+        }
+    }
+
+    F register_trait_decl(&self, trait_ptr: i64) -> i64 {
+        # TraitDef: name_idx(0), generics_ptr(8), generics_len(16),
+        #           super_traits_ptr(24), super_traits_len(32),
+        #           methods_ptr(40), methods_len(48)
+        name_idx := load_i64(trait_ptr)
+        methods_ptr := load_i64(trait_ptr + 40)
+        methods_len := load_i64(trait_ptr + 48)
+
+        # Build method name_idx array from FunctionDef AST nodes
+        I methods_len > 0 {
+            method_names := malloc(methods_len * 8)
+            mi: mut i64 = 0
+            L { I mi >= methods_len { B }
+                fn_ptr := load_i64(methods_ptr + mi * 8)
+                fn_name_idx := load_i64(fn_ptr)  # FunctionDef.name_idx at offset 0
+                store_i64(method_names + mi * 8, fn_name_idx)
+                mi = mi + 1
+            }
+            @.register_trait_def(name_idx, method_names, methods_len)
+        } E {
+            @.register_trait_def(name_idx, 0, 0)
+        }
     }
 
     F emit_struct_type(&self, struct_info_ptr: i64) -> i64 {
@@ -1426,15 +1920,43 @@ X CodeGenerator {
     }
 
     F generate_impl(&self, impl_ptr: i64) -> i64 {
+        # ImplDef: target_type_ptr(0), trait_name_idx(8), generics_ptr(16), generics_len(24),
+        #          methods_ptr(32), methods_len(40)
+        target_type_ptr := load_i64(impl_ptr)
+        trait_name_idx := load_i64(impl_ptr + 8)
         methods_ptr := load_i64(impl_ptr + 32)
         methods_len := load_i64(impl_ptr + 40)
 
+        # Generate all methods
         i: mut i64 = 0
         L { I i >= methods_len { B }
             method_ptr := load_i64(methods_ptr + i * 8)
             @.generate_function(method_ptr)
             i = i + 1
         }
+
+        # If this is a trait impl (trait_name_idx != -1), register vtable
+        I trait_name_idx != 0 - 1 {
+            # Get target type name_idx from TypeNode (kind at 0, name_idx at field0 = 24)
+            impl_type_idx := I target_type_ptr != 0 {
+                load_i64(target_type_ptr + 24)  # TypeNode.field0 = name_idx for NAMED type
+            } E { 0 }
+
+            I impl_type_idx != 0 {
+                # Build method name_idx array for vtable (in declaration order)
+                method_names := malloc(methods_len * 8)
+                mi: mut i64 = 0
+                L { I mi >= methods_len { B }
+                    fn_ptr := load_i64(methods_ptr + mi * 8)
+                    fn_name_idx := load_i64(fn_ptr)  # FunctionDef.name_idx at offset 0
+                    store_i64(method_names + mi * 8, fn_name_idx)
+                    mi = mi + 1
+                }
+                @.add_vtable(impl_type_idx, trait_name_idx, method_names, methods_len)
+                0
+            } E { 0 }
+        } E { 0 }
+
         1
     }
 
@@ -1657,11 +2179,69 @@ X CodeGenerator {
         }
         # EXPR_BINARY = 27
         E I kind == 27 {
-            @.generate_binary(expr_ptr)
+            # Try constant folding first
+            left_ptr := load_i64(expr_ptr + 24)
+            right_ptr := load_i64(expr_ptr + 32)
+            left_kind := load_i64(left_ptr)
+            right_kind := load_i64(right_ptr)
+
+            I left_kind == 20 && right_kind == 20 {
+                # Both operands are integer literals - constant fold
+                left_val := load_i64(left_ptr + 24)
+                right_val := load_i64(right_ptr + 24)
+                op := load_i64(expr_ptr + 40)
+
+                folded := I op == OP_ADD() { left_val + right_val }
+                          E I op == OP_SUB() { left_val - right_val }
+                          E I op == OP_MUL() { left_val * right_val }
+                          E I op == OP_DIV() && right_val != 0 { left_val / right_val }
+                          E I op == OP_MOD() && right_val != 0 { left_val % right_val }
+                          E { 0 - 1 }  # sentinel: can't fold
+
+                I folded != 0 - 1 {
+                    result := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(result)
+                    @.emit_cstr(" = add i64 0, ")
+                    @.emit_i64(folded)
+                    @.emit_cstr(" ; constant fold\n")
+                    result
+                } E {
+                    @.generate_binary(expr_ptr)
+                }
+            } E {
+                @.generate_binary(expr_ptr)
+            }
         }
         # EXPR_UNARY = 28
         E I kind == 28 {
-            @.generate_unary(expr_ptr)
+            # Try constant folding first
+            inner_ptr := load_i64(expr_ptr + 24)
+            inner_kind := load_i64(inner_ptr)
+
+            I inner_kind == 20 {
+                # Operand is integer literal - constant fold
+                inner_val := load_i64(inner_ptr + 24)
+                op := load_i64(expr_ptr + 32)
+
+                folded := I op == UOP_NEG() { 0 - inner_val }
+                          E I op == UOP_BITNOT() { 0 - 1 - inner_val }  # ~x = -1 - x
+                          E { 0 - 1 }  # sentinel: can't fold
+
+                I folded != 0 - 1 {
+                    result := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(result)
+                    @.emit_cstr(" = add i64 0, ")
+                    @.emit_i64(folded)
+                    @.emit_cstr(" ; constant fold\n")
+                    result
+                } E {
+                    @.generate_unary(expr_ptr)
+                }
+            } E {
+                @.generate_unary(expr_ptr)
+            }
         }
         # EXPR_IF = 30
         E I kind == 30 {
@@ -2508,6 +3088,165 @@ X CodeGenerator {
         1
     }
 
+    # ========== Lambda Capture Analysis ==========
+
+    # Collect free variables (captured from outer scope) in an expression
+    # params_ptr/params_len: lambda parameter names to exclude
+    # captures_ptr: output buffer to store captured variable name_idx values (preallocated)
+    # Returns the number of captured variables found
+    F collect_captures(&self, body_ptr: i64, params_ptr: i64, params_len: i64,
+                       captures_ptr: i64, captures_len: i64, captures_cap: i64) -> i64 {
+        body_kind := load_i64(body_ptr)
+
+        # EXPR_IDENT = 25 - check if this ident is a capture
+        I body_kind == 25 {
+            name_idx := load_i64(body_ptr + 24)
+
+            # Check if it's a lambda parameter - skip if so
+            is_param: mut i64 = 0
+            pi: mut i64 = 0
+            L { I pi >= params_len { B }
+                param_ptr := params_ptr + pi * 40
+                param_name := load_i64(param_ptr)
+                I param_name == name_idx {
+                    is_param = 1
+                    B
+                } E { 0 }
+                pi = pi + 1
+            }
+            I is_param == 1 { R captures_len }
+
+            # Check if it exists in outer locals (is a capture candidate)
+            local_ptr := @.find_local(name_idx)
+            I local_ptr == 0 { R captures_len }  # Not in scope, skip
+
+            # Check for duplicate
+            ci: mut i64 = 0
+            L { I ci >= captures_len { B }
+                I load_i64(captures_ptr + ci * 8) == name_idx {
+                    R captures_len  # Already captured
+                } E { 0 }
+                ci = ci + 1
+            }
+
+            # Add capture
+            I captures_len < captures_cap {
+                store_i64(captures_ptr + captures_len * 8, name_idx)
+                R captures_len + 1
+            } E { R captures_len }
+        }
+
+        # EXPR_BINARY = 27: recurse into left and right
+        E I body_kind == 27 {
+            left_ptr := load_i64(body_ptr + 24)
+            right_ptr := load_i64(body_ptr + 32)
+            len1 := @.collect_captures(left_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+            @.collect_captures(right_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
+        }
+        # EXPR_UNARY = 28: recurse into operand
+        E I body_kind == 28 {
+            inner_ptr := load_i64(body_ptr + 24)
+            @.collect_captures(inner_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+        }
+        # EXPR_CALL = 33: recurse into func and args
+        E I body_kind == 33 {
+            func_ptr := load_i64(body_ptr + 24)
+            args_ptr := load_i64(body_ptr + 32)
+            args_len := load_i64(body_ptr + 40)
+            cur_len: mut i64 = @.collect_captures(func_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+            ai: mut i64 = 0
+            L { I ai >= args_len { B }
+                arg_expr := load_i64(args_ptr + ai * 8)
+                cur_len = @.collect_captures(arg_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
+                ai = ai + 1
+            }
+            cur_len
+        }
+        # EXPR_IF = 30: cond, then stmts, else ptr
+        E I body_kind == 30 {
+            cond_ptr := load_i64(body_ptr + 24)
+            cur_len: mut i64 = @.collect_captures(cond_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+            # then block stmts
+            then_stmts := load_i64(body_ptr + 32)
+            then_len := load_i64(body_ptr + 40)
+            si: mut i64 = 0
+            L { I si >= then_len { B }
+                stmt_ptr := then_stmts + si * 32
+                stmt_kind := load_i64(stmt_ptr)
+                # STMT_EXPR = 4 or others - try to extract expr
+                stmt_expr := load_i64(stmt_ptr + 8)
+                I stmt_expr != 0 {
+                    cur_len = @.collect_captures(stmt_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
+                    0
+                } E { 0 }
+                si = si + 1
+            }
+            # else branch
+            else_ptr := load_i64(body_ptr + 48)
+            I else_ptr != 0 {
+                cur_len = @.collect_captures(else_ptr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
+                0
+            } E { 0 }
+            cur_len
+        }
+        # EXPR_BLOCK = 42: stmts
+        E I body_kind == 42 {
+            stmts_ptr := load_i64(body_ptr + 24)
+            stmts_len := load_i64(body_ptr + 32)
+            cur_len: mut i64 = captures_len
+            si: mut i64 = 0
+            L { I si >= stmts_len { B }
+                stmt_ptr := stmts_ptr + si * 32
+                stmt_expr := load_i64(stmt_ptr + 8)
+                I stmt_expr != 0 {
+                    cur_len = @.collect_captures(stmt_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
+                    0
+                } E { 0 }
+                si = si + 1
+            }
+            cur_len
+        }
+        # EXPR_METHOD_CALL = 34: receiver + args
+        E I body_kind == 34 {
+            recv_ptr := load_i64(body_ptr + 24)
+            args_ptr := load_i64(body_ptr + 40)
+            args_len := load_i64(body_ptr + 48)
+            cur_len: mut i64 = @.collect_captures(recv_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+            ai: mut i64 = 0
+            L { I ai >= args_len { B }
+                arg_expr := load_i64(args_ptr + ai * 8)
+                cur_len = @.collect_captures(arg_expr, params_ptr, params_len, captures_ptr, cur_len, captures_cap)
+                ai = ai + 1
+            }
+            cur_len
+        }
+        # EXPR_FIELD = 36: inner expr
+        E I body_kind == 36 {
+            inner_ptr := load_i64(body_ptr + 24)
+            @.collect_captures(inner_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+        }
+        # EXPR_INDEX = 37: expr + index
+        E I body_kind == 37 {
+            base_ptr := load_i64(body_ptr + 24)
+            idx_ptr := load_i64(body_ptr + 32)
+            len1 := @.collect_captures(base_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+            @.collect_captures(idx_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
+        }
+        # EXPR_TERNARY = 29: cond, then, else
+        E I body_kind == 29 {
+            cond_ptr := load_i64(body_ptr + 24)
+            then_ptr := load_i64(body_ptr + 32)
+            else_ptr := load_i64(body_ptr + 40)
+            len1 := @.collect_captures(cond_ptr, params_ptr, params_len, captures_ptr, captures_len, captures_cap)
+            len2 := @.collect_captures(then_ptr, params_ptr, params_len, captures_ptr, len1, captures_cap)
+            @.collect_captures(else_ptr, params_ptr, params_len, captures_ptr, len2, captures_cap)
+        }
+        E {
+            # For literal types (INT, FLOAT, BOOL, STRING, UNIT) - no captures
+            captures_len
+        }
+    }
+
     # ========== Lambda Codegen ==========
 
     F generate_lambda(&self, expr_ptr: i64) -> i64 {
@@ -2515,6 +3254,47 @@ X CodeGenerator {
         params_ptr := load_i64(expr_ptr + 24)
         params_len := load_i64(expr_ptr + 32)
         body_ptr := load_i64(expr_ptr + 40)
+
+        # Analyze captures (free variables from outer scope)
+        capture_buf := malloc(32 * 8)  # Max 32 captures
+        num_captures := @.collect_captures(body_ptr, params_ptr, params_len, capture_buf, 0, 32)
+
+        # Generate values for captured variables (before switching context)
+        capture_regs := malloc(num_captures * 8)
+        ci: mut i64 = 0
+        L { I ci >= num_captures { B }
+            cap_name_idx := load_i64(capture_buf + ci * 8)
+            local_ptr := @.find_local(cap_name_idx)
+            I local_ptr != 0 {
+                is_param := load_i64(local_ptr + 32)  # LocalVar.is_param
+                I is_param == 1 {
+                    # Parameter: use the register name directly
+                    # We need to emit a load or use of this register
+                    cap_reg := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(cap_reg)
+                    @.emit_cstr(" = add i64 %")
+                    cap_name_ptr := @.get_string_ptr(cap_name_idx)
+                    cap_name_len := @.get_string_len(cap_name_idx)
+                    @.emit_ptr(cap_name_ptr, cap_name_len)
+                    @.emit_cstr(", 0\n")
+                    store_i64(capture_regs + ci * 8, cap_reg)
+                } E {
+                    # Local variable: load from alloca
+                    alloca_reg := load_i64(local_ptr + 8)
+                    cap_reg := @.fresh_reg()
+                    @.emit_cstr("  ")
+                    @.emit_reg(cap_reg)
+                    @.emit_cstr(" = load i64, i64* ")
+                    @.emit_reg(alloca_reg)
+                    @.emit_cstr("\n")
+                    store_i64(capture_regs + ci * 8, cap_reg)
+                }
+            } E {
+                store_i64(capture_regs + ci * 8, 0)
+            }
+            ci = ci + 1
+        }
 
         # Generate unique lambda name
         lambda_id := self.lambda_counter
@@ -2536,10 +3316,29 @@ X CodeGenerator {
         @.lambda_emit_i64(lambda_id)
         @.lambda_emit_cstr("(")
 
-        # Emit parameters
+        # Emit captured variable parameters first
+        total_params: mut i64 = 0
+        ci = 0
+        L { I ci >= num_captures { B }
+            I total_params > 0 { @.lambda_emit_cstr(", ") } E { 0 }
+
+            cap_name_idx := load_i64(capture_buf + ci * 8)
+            @.lambda_emit_cstr("i64 %")
+            pname_ptr := @.get_string_ptr(cap_name_idx)
+            pname_len := @.get_string_len(cap_name_idx)
+            @.lambda_emit_ptr(pname_ptr, pname_len)
+
+            # Register capture as local parameter
+            @.add_local(cap_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
+
+            total_params = total_params + 1
+            ci = ci + 1
+        }
+
+        # Emit regular parameters
         i: mut i64 = 0
         L { I i >= params_len { B }
-            I i > 0 { @.lambda_emit_cstr(", ") } E { 0 }
+            I total_params > 0 { @.lambda_emit_cstr(", ") } E { 0 }
 
             param_ptr := params_ptr + i * 40  # Param.size() = 40
             param_name_idx := load_i64(param_ptr)
@@ -2554,19 +3353,14 @@ X CodeGenerator {
             # Register parameter as local
             @.add_local(param_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
 
+            total_params = total_params + 1
             i = i + 1
         }
 
         @.lambda_emit_cstr(") {\n")
         @.lambda_emit_cstr("entry:\n")
 
-        # Save main output and switch to lambda buffer
-        # We need to temporarily redirect emit to lambda buffer
-        # Strategy: generate body to main output, then copy to lambda buffer
-        # This is simpler but requires saving/restoring output state
-
-        # Actually, for simplicity, generate body expr directly to lambda buffer
-        # by swapping output pointer temporarily
+        # Swap output to lambda buffer for body generation
         saved_output := self.output
         self.output = self.lambda_buf
 
@@ -2597,9 +3391,9 @@ X CodeGenerator {
         @.emit_reg(result)
         @.emit_cstr(" = ptrtoint i64 (")
 
-        # Emit parameter types for function pointer type
+        # Emit parameter types for function pointer type (captures + params)
         j: mut i64 = 0
-        L { I j >= params_len { B }
+        L { I j >= num_captures + params_len { B }
             I j > 0 { @.emit_cstr(", ") } E { 0 }
             @.emit_cstr("i64")
             j = j + 1
@@ -2608,6 +3402,9 @@ X CodeGenerator {
         @.emit_cstr(")* @__lambda_")
         @.emit_i64(lambda_id)
         @.emit_cstr(" to i64\n")
+
+        free(capture_buf)
+        free(capture_regs)
 
         result
     }

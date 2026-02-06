@@ -518,6 +518,11 @@ S TypeChecker {
     mono_len: i64,
     mono_cap: i64,
 
+    # Struct monomorphization tracking: (struct_name_idx, type_args_ptr, type_args_len) triples
+    struct_mono_ptr: i64,
+    struct_mono_len: i64,
+    struct_mono_cap: i64,
+
     # Associated types: (trait_name_idx, type_name_idx, assoc_name_idx, resolved_type_ptr) quads
     assoc_types_ptr: i64,
     assoc_types_len: i64,
@@ -560,6 +565,9 @@ X TypeChecker {
         # Allocate monomorphization tracking (each entry = 3 * i64 = 24 bytes)
         mono_entries := malloc(64 * 24)
 
+        # Allocate struct monomorphization tracking (each entry = 3 * i64 = 24 bytes)
+        struct_mono := malloc(32 * 24)
+
         # Allocate associated types storage (each entry = 4 * i64 = 32 bytes)
         assoc_types := malloc(32 * 32)
 
@@ -588,6 +596,7 @@ X TypeChecker {
             bounds_keys_ptr: bounds_keys, bounds_values_ptr: bounds_values,
             bounds_len: 0, bounds_cap: 32,
             mono_entries_ptr: mono_entries, mono_len: 0, mono_cap: 64,
+            struct_mono_ptr: struct_mono, struct_mono_len: 0, struct_mono_cap: 32,
             assoc_types_ptr: assoc_types, assoc_types_len: 0, assoc_types_cap: 32,
             errors_ptr: errors, errors_len: 0, errors_cap: 64,
             sp_data: 0, sp_offsets: 0, sp_count: 0
@@ -1734,6 +1743,106 @@ X TypeChecker {
 
         I all_concrete == 1 {
             @.add_mono_entry(fn_name, type_args, fn_generics_len)
+        } E {
+            free(type_args)
+            0
+        }
+    }
+
+    # ========== Struct Monomorphization ==========
+
+    # Add a struct monomorphization entry
+    F add_struct_mono_entry(&self, struct_name_idx: i64, type_args_ptr: i64, type_args_len: i64) -> i64 {
+        # Check for duplicate
+        i: mut i64 = 0
+        L { I i >= self.struct_mono_len { B }
+            entry_ptr := self.struct_mono_ptr + i * 24
+            entry_name := load_i64(entry_ptr)
+            entry_len := load_i64(entry_ptr + 16)
+
+            I entry_name == struct_name_idx && entry_len == type_args_len {
+                entry_args := load_i64(entry_ptr + 8)
+                same: mut i64 = 1
+                j: mut i64 = 0
+                L { I j >= type_args_len { B }
+                    ea := load_i64(entry_args + j * 8)
+                    na := load_i64(type_args_ptr + j * 8)
+                    ea_kind := load_i64(ea)
+                    na_kind := load_i64(na)
+                    I ea_kind != na_kind {
+                        same = 0
+                        B
+                    } E { 0 }
+                    j = j + 1
+                }
+                I same == 1 { R 1 }  # Already exists
+                E { 0 }
+            } E { 0 }
+            i = i + 1
+        }
+
+        # Grow if needed
+        I self.struct_mono_len >= self.struct_mono_cap {
+            new_cap := self.struct_mono_cap * 2
+            new_ptr := malloc(new_cap * 24)
+            memcpy(new_ptr, self.struct_mono_ptr, self.struct_mono_len * 24)
+            free(self.struct_mono_ptr)
+            self.struct_mono_ptr = new_ptr
+            self.struct_mono_cap = new_cap
+            0
+        } E { 0 }
+
+        # Copy type args
+        args_copy := malloc(type_args_len * 8)
+        memcpy(args_copy, type_args_ptr, type_args_len * 8)
+
+        entry_ptr := self.struct_mono_ptr + self.struct_mono_len * 24
+        store_i64(entry_ptr, struct_name_idx)
+        store_i64(entry_ptr + 8, args_copy)
+        store_i64(entry_ptr + 16, type_args_len)
+        self.struct_mono_len = self.struct_mono_len + 1
+        1
+    }
+
+    # Get struct mono entry count
+    F get_struct_mono_count(&self) -> i64 = self.struct_mono_len
+
+    # Get struct mono entry by index
+    F get_struct_mono_entry(&self, idx: i64) -> i64 {
+        I idx >= self.struct_mono_len { 0 }
+        E { self.struct_mono_ptr + idx * 24 }
+    }
+
+    # Record struct monomorphization when a generic struct is instantiated
+    F record_struct_mono(&self, struct_name_idx: i64, struct_generics_ptr: i64, struct_generics_len: i64) -> i64 {
+        I struct_generics_len == 0 { R 0 }
+
+        # Build type args from current generic bindings
+        type_args := malloc(struct_generics_len * 8)
+        all_concrete: mut i64 = 1
+
+        i: mut i64 = 0
+        L { I i >= struct_generics_len { B }
+            gen_name := load_i64(struct_generics_ptr + i * 8)
+            bound_type := @.get_generic_binding(gen_name)
+            I bound_type != 0 {
+                resolved := @.apply_substitutions(bound_type)
+                resolved_kind := load_i64(resolved)
+                I resolved_kind == TY_GENERIC() || resolved_kind == TY_VAR() ||
+                   resolved_kind == TY_UNKNOWN() {
+                    all_concrete = 0
+                    0
+                } E { 0 }
+                store_i64(type_args + i * 8, resolved)
+            } E {
+                all_concrete = 0
+                store_i64(type_args + i * 8, @.fresh_type_var())
+            }
+            i = i + 1
+        }
+
+        I all_concrete == 1 {
+            @.add_struct_mono_entry(struct_name_idx, type_args, struct_generics_len)
         } E {
             free(type_args)
             0
@@ -3400,6 +3509,14 @@ X TypeChecker {
                 # Check if struct exists
                 struct_ptr := @.find_struct(name_idx)
                 I struct_ptr != 0 {
+                    # Record struct monomorphization if it has generics
+                    struct_generics_ptr := load_i64(struct_ptr + 8)
+                    struct_generics_len := load_i64(struct_ptr + 16)
+                    I struct_generics_len > 0 {
+                        @.record_struct_mono(name_idx, struct_generics_ptr, struct_generics_len)
+                        0
+                    } E { 0 }
+
                     type_ptr := malloc(ResolvedType.size())
                     ty := ResolvedType.named_type(name_idx, 0, 0)
                     store_i64(type_ptr, ty.kind)
@@ -4223,6 +4340,7 @@ X TypeChecker {
         free(self.bounds_keys_ptr)
         free(self.bounds_values_ptr)
         free(self.mono_entries_ptr)
+        free(self.struct_mono_ptr)
         free(self.assoc_types_ptr)
         1
     }

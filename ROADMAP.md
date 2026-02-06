@@ -1319,7 +1319,7 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 
 > **상태**: 🚧 진행 중
 > **목표**: Vais 컴파일러를 100% Vais로 작성하여 자기 자신을 컴파일
-> **현재 진도**: 80% (Lexer 100%, Parser 100%, AST 100%, Type Checker 55%, Codegen 70%)
+> **현재 진도**: 85% (Lexer 100%, Parser 100%, AST 100%, Type Checker 85%, Codegen 94%)
 > **예상 규모**: 17,871 LOC → ~42,000 LOC (2.3배 증가)
 
 ### 현재 상태 요약
@@ -1331,7 +1331,7 @@ Stage 5 (셀프호스팅) ───────┘──→ Stage 7 (도입 가�
 | **AST** | vais-ast | ast.vais | **100%** | ✅ 완료 |
 | **Parser** | vais-parser | parser.vais + parser_s1.vais | **100%** | ✅ 완료 |
 | **Type Checker** | vais-types | type_checker.vais | **85%** | ⚠️ 진행 중 |
-| **Codegen** | vais-codegen | codegen.vais + codegen_s1.vais | 70% | ⚠️ 진행 중 |
+| **Codegen** | vais-codegen | codegen.vais + codegen_s1.vais | **94%** | ⚠️ 진행 중 |
 | **MIR** | vais-mir | - | 0% | ❌ 미구현 |
 | **Module System** | vaisc | module.vais + main_entry.vais | 80% | ⚠️ 진행 중 |
 
@@ -1473,24 +1473,24 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
 **목표**: 모든 Vais 구문을 LLVM IR로 변환
 
 - [ ] **Control Flow 완전 구현**
-  - [ ] Loop with break/continue labels
+  - [x] Loop with break/continue labels (LoopContext + push_loop/pop_loop 구현 완료) ✅
   - [x] Match expression codegen (패턴 매칭 IR 생성: wildcard/ident/literal/variant + phi 병합) ✅ 2026-02-06
   - [x] Ternary expression codegen (cond ? then : else → br + phi) ✅ 2026-02-06
-  - [ ] Try-catch (에러 처리)
+  - [x] Try-catch (에러 처리) — Try(?)/Unwrap(!) 연산자로 구현 완료 ✅
 - [x] **클로저 Codegen (기본)** ✅ 2026-02-06
   - [x] Lambda → 별도 LLVM 함수 생성 (@__lambda_N)
   - [x] 함수 포인터 반환 (ptrtoint)
-  - [ ] 캡처 변수 분석 (Free Variable Analysis) — 후속
+  - [x] 캡처 변수 분석 (Free Variable Analysis) — collect_captures 재귀 순회 + 캡처 파라미터 전달 ✅ 2026-02-06
   - [ ] Move/Ref 캡처 구분 — 후속
 - [x] **제네릭 Monomorphization (기본)** ✅ 2026-02-06
   - [x] 타입별 함수 복사본 생성 (monomorphized name mangling, generic binding, specialization)
-  - [ ] 제네릭 구조체 특화
-  - [ ] Trait method dispatch
-- [ ] **Trait Object / Dynamic Dispatch**
-  - [ ] vtable 생성
-  - [ ] 동적 메서드 호출
+  - [x] 제네릭 구조체 특화 (generic struct mono: save_generic_struct, add_struct_mono_entry, generate_mono_struct_type 구현) ✅ 2026-02-06
+  - [x] Trait method dispatch ✅ 2026-02-06
+- [x] **Trait Object / Dynamic Dispatch** ✅ 2026-02-06
+  - [x] vtable 생성 (VtableEntry, add_vtable, emit_vtable_globals)
+  - [x] 동적 메서드 호출 (generate_dyn_call - indirect call through vtable)
 - [ ] **최적화 패스 기초**
-  - [ ] Constant folding
+  - [x] Constant folding (Binary: +/-/*/÷/%, Unary: -/~) ✅ 2026-02-06
   - [ ] Dead code elimination
   - [ ] 기본 인라이닝
 - [x] **식 Codegen 확장** ✅ 2026-02-06
