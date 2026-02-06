@@ -2142,7 +2142,7 @@ X Parser {
     }
 
     F parse_assignment(&self) -> i64 {
-        left := @.parse_or()
+        left := @.parse_ternary()
         I left == 0 { R 0 }
 
         # Assignment: lhs = rhs
@@ -2166,6 +2166,40 @@ X Parser {
         }
 
         left
+    }
+
+    # Ternary expression: cond ? then_expr : else_expr
+    F parse_ternary(&self) -> i64 {
+        cond := @.parse_or()
+        I cond == 0 { R 0 }
+
+        # Check for ? (ternary operator)
+        I @.check(TOK_QUESTION()) == 1 {
+            @.advance()
+            then_expr := @.parse_ternary()
+            I then_expr == 0 { R 0 }
+
+            I @.expect(TOK_COLON()) == 0 { R 0 }
+
+            else_expr := @.parse_ternary()
+            I else_expr == 0 { R 0 }
+
+            expr_ptr := malloc(ExprNode.size())
+            cond_span_start := load_i64(cond + 8)
+            else_span_end := load_i64(else_expr + 16)
+            store_i64(expr_ptr + 0, EXPR_TERNARY())
+            store_i64(expr_ptr + 8, cond_span_start)
+            store_i64(expr_ptr + 16, else_span_end)
+            store_i64(expr_ptr + 24, cond)
+            store_i64(expr_ptr + 32, then_expr)
+            store_i64(expr_ptr + 40, else_expr)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            R expr_ptr
+        }
+
+        cond
     }
 
     F parse_or(&self) -> i64 {

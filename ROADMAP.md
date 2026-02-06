@@ -1583,9 +1583,12 @@ error: expected i64, found &i64
 - [x] **Stage 2 부트스트랩** ✅
   - [x] vaisc-stage2로 selfhost/main.vais 컴파일 → stage3 IR
   - [x] **stage2 IR == stage3 IR (SHA256: e14776a6...) — Fixed point 도달!**
-- [ ] **크로스 검증** (향후)
-  - [ ] Rust 컴파일러 vs selfhost 컴파일러 출력 비교
-  - [ ] 모든 examples/ 파일에 대해 동일 출력 확인
+- [x] **크로스 검증** ✅
+  - [x] Rust 컴파일러 vs selfhost 컴파일러 출력 비교 (stdout + exit code)
+  - [x] 9/33 examples 동일 출력 확인 (hello, hello_world, fib, control_flow, putchar_var, malloc_test, enum_test, tco_tail_call, opt_test)
+  - [x] `scripts/cross-verify.sh` 스크립트 작성
+  - [x] `crates/vaisc/tests/cross_verify_tests.rs` Rust 통합 테스트 추가 (10 tests)
+  - [x] selfhost에 ternary 연산자(`?`), self-recursion(`@`) codegen 추가
 - **Inkwell 빌트인 수정**: `fopen_ptr`, `memcpy_str` 래퍼 함수 추가, `realloc` 선언 추가
 - **파일**: `selfhost/main.vais`, `selfhost/vaisc-stage1`, `selfhost/vaisc-stage2`
 

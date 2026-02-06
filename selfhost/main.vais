@@ -136,6 +136,7 @@ F EXPR_IDENT() -> i64 = 25
 F EXPR_SELF_CALL() -> i64 = 26
 F EXPR_BINARY() -> i64 = 27
 F EXPR_UNARY() -> i64 = 28
+F EXPR_TERNARY() -> i64 = 29
 F EXPR_IF() -> i64 = 30
 F EXPR_LOOP() -> i64 = 31
 F EXPR_CALL() -> i64 = 33
@@ -580,6 +581,7 @@ F lexer_scan_operator(lex: i64, tokens: i64, count: i64) -> i64 {
             0
         }
     }
+    E I c == 63 { kind = TOK_QUESTION(); 0 }  # ?
     E { 0 }
 
     end := lexer_get_pos(lex)
@@ -1380,6 +1382,28 @@ F parser_parse_expr(p: i64) -> i64 {
     left := parser_parse_binary(p, 1)
     I left == 0 { R 0 }
 
+    # Check for ternary: cond ? then_expr : else_expr
+    I parser_current_kind(p) == TOK_QUESTION() {
+        parser_advance(p)
+        then_expr := parser_parse_expr(p)
+        I then_expr == 0 { R 0 }
+
+        # Expect colon
+        I parser_current_kind(p) == TOK_COLON() {
+            parser_advance(p)
+            0
+        } E { R 0 }
+
+        else_expr := parser_parse_expr(p)
+        I else_expr == 0 { R 0 }
+
+        e := expr_new(EXPR_TERNARY())
+        expr_set_field0(e, left)       # cond
+        expr_set_field1(e, then_expr)  # then
+        expr_set_field2(e, else_expr)  # else
+        R e
+    }
+
     # Check for assignment: expr = value
     I parser_current_kind(p) == TOK_EQ() {
         parser_advance(p)
@@ -1913,7 +1937,7 @@ F parser_free(p: i64) -> i64 {
 # ============================================================================
 
 F cg_new() -> i64 {
-    cg := malloc(120)
+    cg := malloc(136)
     sb := sb_new(1048576)  # Test 1MB buffer
     store_i64(cg + 0, sb)
     store_i64(cg + 8, 0)    # reg_counter
@@ -1935,6 +1959,8 @@ F cg_new() -> i64 {
     store_i64(cg + 104, 0)  # string_count
     strings_sb := sb_new(65536)  # StringBuilder for string constant declarations
     store_i64(cg + 112, strings_sb)
+    store_i64(cg + 120, 0)  # current_func_name_ptr
+    store_i64(cg + 128, 0)  # current_func_name_len
     cg
 }
 
@@ -3516,6 +3542,118 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
             result = operand_reg
             0
         }
+    } E I kind == EXPR_TERNARY() {
+        # Ternary: cond ? then_expr : else_expr
+        cond := expr_get_field0(expr)
+        then_expr := expr_get_field1(expr)
+        else_expr := expr_get_field2(expr)
+
+        # Generate condition
+        cond_reg := cg_gen_expr(cg, cond, param_name_ptr, param_name_len)
+
+        label_id := cg_fresh_label(cg)
+
+        # Truncate to i1
+        cond_i1 := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, cond_i1)
+        cg_emit(cg, " = trunc i64 ")
+        cg_emit_operand(cg, cond_reg, param_name_ptr, param_name_len)
+        cg_emit(cg, " to i1")
+        cg_emit_newline(cg)
+
+        # Branch
+        cg_emit(cg, "  br i1 %")
+        cg_emit_i64(cg, cond_i1)
+        cg_emit(cg, ", label %tern_then")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, ", label %tern_else")
+        cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
+
+        # Then branch
+        cg_emit(cg, "tern_then")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, ":")
+        cg_emit_newline(cg)
+        then_reg := cg_gen_expr(cg, then_expr, param_name_ptr, param_name_len)
+        cg_emit(cg, "  br label %tern_merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
+
+        # Else branch
+        cg_emit(cg, "tern_else")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, ":")
+        cg_emit_newline(cg)
+        else_reg := cg_gen_expr(cg, else_expr, param_name_ptr, param_name_len)
+        cg_emit(cg, "  br label %tern_merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit_newline(cg)
+
+        # Merge with phi
+        cg_emit(cg, "tern_merge")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, ":")
+        cg_emit_newline(cg)
+
+        phi_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, phi_reg)
+        cg_emit(cg, " = phi i64 [ ")
+        cg_emit_operand(cg, then_reg, param_name_ptr, param_name_len)
+        cg_emit(cg, ", %tern_then")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, " ], [ ")
+        cg_emit_operand(cg, else_reg, param_name_ptr, param_name_len)
+        cg_emit(cg, ", %tern_else")
+        cg_emit_i64(cg, label_id)
+        cg_emit(cg, " ]")
+        cg_emit_newline(cg)
+
+        result = phi_reg
+        0
+    } E I kind == EXPR_SELF_CALL() {
+        # Self-recursion: @(args...) calls current function
+        cur_func_ptr := load_i64(cg + 120)
+        cur_func_len := load_i64(cg + 128)
+        args := expr_get_field2(expr)
+        arg_count := expr_get_field3(expr)
+
+        # Generate arguments
+        arg_regs := malloc(16 * 8)
+        j: mut i64 = 0
+        L {
+            I j >= arg_count { B } E { 0 }
+            arg := load_i64(args + j * 8)
+            arg_reg := cg_gen_expr(cg, arg, param_name_ptr, param_name_len)
+            store_i64(arg_regs + j * 8, arg_reg)
+            j = j + 1
+        }
+
+        # Emit call
+        call_reg := cg_fresh_reg(cg)
+        cg_emit(cg, "  %")
+        cg_emit_i64(cg, call_reg)
+        cg_emit(cg, " = call i64 @")
+        cg_emit_str(cg, cur_func_ptr, cur_func_len)
+        cg_emit(cg, "(")
+
+        j = 0
+        L {
+            I j >= arg_count { B } E { 0 }
+            I j > 0 { cg_emit(cg, ", "); 0 } E { 0 }
+            cg_emit(cg, "i64 ")
+            cg_emit_operand(cg, load_i64(arg_regs + j * 8), param_name_ptr, param_name_len)
+            j = j + 1
+        }
+
+        cg_emit(cg, ")")
+        cg_emit_newline(cg)
+
+        free(arg_regs)
+        result = call_reg
+        0
     } E { 0 }
 
     result
@@ -3527,6 +3665,10 @@ F cg_gen_function_multi(cg: i64, func_name_ptr: i64, func_name_len: i64,
                         params: i64, param_count: i64, body_expr: i64) -> i64 {
     # Clear variables for this function
     cg_clear_vars(cg)
+
+    # Store current function name for @() self-recursion
+    store_i64(cg + 120, func_name_ptr)
+    store_i64(cg + 128, func_name_len)
 
     # Set first param for backward compat (used by cg_gen_expr for single param)
     I param_count > 0 {
