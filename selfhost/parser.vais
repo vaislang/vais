@@ -2137,11 +2137,92 @@ X Parser {
     }
 
     F parse_and(&self) -> i64 {
-        left: mut i64 = @.parse_equality()
+        left: mut i64 = @.parse_bitor()
         I left == 0 { R 0 }
 
         L {
             I @.check(TOK_AND()) == 0 { B }
+            @.advance()
+            right := @.parse_bitor()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, BINOP_AND())
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_bitor(&self) -> i64 {
+        left: mut i64 = @.parse_bitxor()
+        I left == 0 { R 0 }
+
+        L {
+            I @.check(TOK_PIPE()) == 0 { B }
+            @.advance()
+            right := @.parse_bitxor()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, BINOP_BIT_OR())
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_bitxor(&self) -> i64 {
+        left: mut i64 = @.parse_bitand()
+        I left == 0 { R 0 }
+
+        L {
+            I @.check(TOK_CARET()) == 0 { B }
+            @.advance()
+            right := @.parse_bitand()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, BINOP_BIT_XOR())
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_bitand(&self) -> i64 {
+        left: mut i64 = @.parse_equality()
+        I left == 0 { R 0 }
+
+        L {
+            I @.check(TOK_AMP()) == 0 { B }
             @.advance()
             right := @.parse_equality()
 
@@ -2153,7 +2234,7 @@ X Parser {
             store_i64(expr_ptr + 16, right_span_end)
             store_i64(expr_ptr + 24, left)
             store_i64(expr_ptr + 32, right)
-            store_i64(expr_ptr + 40, BINOP_AND())
+            store_i64(expr_ptr + 40, BINOP_BIT_AND())
             store_i64(expr_ptr + 48, 0)
             store_i64(expr_ptr + 56, 0)
             store_i64(expr_ptr + 64, 0)
@@ -2195,7 +2276,7 @@ X Parser {
     }
 
     F parse_comparison(&self) -> i64 {
-        left: mut i64 = @.parse_additive()
+        left: mut i64 = @.parse_shift()
         I left == 0 { R 0 }
 
         L {
@@ -2204,6 +2285,37 @@ X Parser {
             E I @.check(TOK_GT()) == 1 { op = BINOP_GT(); 0 }
             E I @.check(TOK_LT_EQ()) == 1 { op = BINOP_LTE(); 0 }
             E I @.check(TOK_GT_EQ()) == 1 { op = BINOP_GTE(); 0 }
+            E { B }
+
+            @.advance()
+            right := @.parse_shift()
+
+            expr_ptr := malloc(ExprNode.size())
+            left_span_start := load_i64(left + 8)
+            right_span_end := load_i64(right + 16)
+            store_i64(expr_ptr + 0, EXPR_BINARY())
+            store_i64(expr_ptr + 8, left_span_start)
+            store_i64(expr_ptr + 16, right_span_end)
+            store_i64(expr_ptr + 24, left)
+            store_i64(expr_ptr + 32, right)
+            store_i64(expr_ptr + 40, op)
+            store_i64(expr_ptr + 48, 0)
+            store_i64(expr_ptr + 56, 0)
+            store_i64(expr_ptr + 64, 0)
+            left = expr_ptr
+        }
+
+        left
+    }
+
+    F parse_shift(&self) -> i64 {
+        left: mut i64 = @.parse_additive()
+        I left == 0 { R 0 }
+
+        L {
+            op: mut i64 = 0
+            I @.check(TOK_SHL()) == 1 { op = BINOP_SHL(); 0 }
+            E I @.check(TOK_SHR()) == 1 { op = BINOP_SHR(); 0 }
             E { B }
 
             @.advance()
@@ -2417,6 +2529,28 @@ X Parser {
                 store_i64(expr_ptr + 24, left)
                 store_i64(expr_ptr + 32, args)
                 store_i64(expr_ptr + 40, 0)  # args_len
+                store_i64(expr_ptr + 48, 0)
+                store_i64(expr_ptr + 56, 0)
+                store_i64(expr_ptr + 64, 0)
+                left = expr_ptr
+                C
+            }
+
+            # Index expression: expr[index]
+            I @.check(TOK_LBRACKET()) == 1 {
+                @.advance()
+                index_expr := @.parse_expr()
+                I index_expr == 0 { R 0 }
+                I @.expect(TOK_RBRACKET()) == 0 { R 0 }
+
+                expr_ptr := malloc(ExprNode.size())
+                left_span_start := load_i64(left + 8)
+                store_i64(expr_ptr + 0, EXPR_INDEX())
+                store_i64(expr_ptr + 8, left_span_start)
+                store_i64(expr_ptr + 16, @.current_span_start())
+                store_i64(expr_ptr + 24, left)
+                store_i64(expr_ptr + 32, index_expr)
+                store_i64(expr_ptr + 40, 0)
                 store_i64(expr_ptr + 48, 0)
                 store_i64(expr_ptr + 56, 0)
                 store_i64(expr_ptr + 64, 0)

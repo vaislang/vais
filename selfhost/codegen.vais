@@ -1227,6 +1227,10 @@ X CodeGenerator {
         E I kind == 33 {
             @.generate_call(expr_ptr)
         }
+        # EXPR_INDEX = 37
+        E I kind == 37 {
+            @.generate_index(expr_ptr)
+        }
         # EXPR_BLOCK = 42
         E I kind == 42 {
             @.generate_block_expr(expr_ptr)
@@ -1619,6 +1623,39 @@ X CodeGenerator {
         } E {
             result
         }
+    }
+
+    F generate_index(&self, expr_ptr: i64) -> i64 {
+        # Get base and index expressions
+        base_expr := load_i64(expr_ptr + 24)
+        index_expr := load_i64(expr_ptr + 32)
+
+        # Generate code for base (array/pointer)
+        base_reg := @.generate_expr(base_expr)
+
+        # Generate code for index
+        index_reg := @.generate_expr(index_expr)
+
+        # Calculate element pointer using GEP
+        # Assuming i64 element type for simplicity
+        elem_ptr := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(elem_ptr)
+        @.emit_cstr(" = getelementptr i64, i64* ")
+        @.emit_reg(base_reg)
+        @.emit_cstr(", i64 ")
+        @.emit_reg(index_reg)
+        @.emit_cstr("\n")
+
+        # Load the value at the calculated address
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = load i64, i64* ")
+        @.emit_reg(elem_ptr)
+        @.emit_cstr("\n")
+
+        result
     }
 
     F generate_block_expr(&self, expr_ptr: i64) -> i64 {

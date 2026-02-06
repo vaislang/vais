@@ -1,0 +1,31 @@
+# Test bitwise operators parsing
+F main() -> i64 {
+    # Basic bitwise operations
+    a := 12
+    b := 5
+
+    # Bitwise AND
+    c := a & b
+
+    # Bitwise OR
+    d := a | b
+
+    # Bitwise XOR
+    e := a ^ b
+
+    # Left shift
+    f := a << 2
+
+    # Right shift
+    g := a >> 1
+
+    # Combined expression testing precedence
+    # Should be parsed as: ((a & b) | (c ^ d)) << 1
+    result := a & b | c ^ d << 1
+
+    # Test complex expression with multiple operators
+    # Testing precedence: shift > comparison > bitwise > logical
+    h := (a << 1) & (b >> 1)
+
+    result
+}

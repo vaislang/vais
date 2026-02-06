@@ -1,10 +1,11 @@
 # Vais Self-Hosting Compiler (Stage 1) Roadmap
 
-## Current Status: v0.5.0
+## Current Status: v0.5.1
 
 Stage 1 컴파일러가 다중 파라미터 함수를 포함한 Vais 프로그램을 안정적으로 컴파일할 수 있음.
 Import 시스템 지원 완료.
 제네릭 타입 해석 (type_checker.vais) 완료.
+Bitwise 연산자 및 Index expression 지원 완료.
 
 ---
 
@@ -71,7 +72,7 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 - [x] Integer literals
 - [x] String literals
 - [x] Identifiers
-- [x] Binary operators (+, -, *, /, %, <, >, <=, >=, ==, !=, &&, ||)
+- [x] Binary operators (+, -, *, /, %, <, >, <=, >=, ==, !=, &&, ||, &, |, ^, <<, >>)
 - [x] Unary operators (-)
 - [x] Function calls (다중 파라미터 지원 ✅)
 - [x] Method calls (.method())
@@ -102,15 +103,17 @@ vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 �
 
 ## Phase 1: Core Language (Current)
 
+### Completed
+- [x] Index expressions [i] ✅
+- [x] Bitwise operators (&, |, ^, <<, >>) ✅
+- [x] Unary not (!) ✅ (이미 구현됨)
+- [x] Continue statement (C) ✅ (이미 구현됨)
+
 ### In Progress
-- [ ] Array/slice support
-- [ ] Index expressions [i]
+- [ ] Array/slice support (타입만 파싱, 리터럴 미구현)
 
 ### Todo
-- [ ] Continue statement (C)
 - [ ] While loop sugar
-- [ ] Bitwise operators (&, |, ^, <<, >>)
-- [ ] Unary not (!)
 - [ ] Negative numbers in lexer
 
 ---
@@ -204,6 +207,9 @@ clang -O0 /tmp/main_stage1.ll -o selfhost/vaisc-stage1 -lm
 
 ## Version History
 
+- **v0.5.1** - Bitwise 연산자 및 Index expression 지원
+  - Bitwise operators (&, |, ^, <<, >>) 파싱 완성
+  - Index expression [i] 파싱 및 코드젠 구현
 - **v0.5.0** - 제네릭 타입 해석 (type_checker.vais)
   - Generic binding management
   - Type instantiation for function calls and struct fields

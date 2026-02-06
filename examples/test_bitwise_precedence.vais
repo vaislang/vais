@@ -1,0 +1,23 @@
+# Test bitwise operator precedence
+F main() -> i64 {
+    # Test 1: & has higher precedence than |
+    # 8 | 4 & 2 should be 8 | (4 & 2) = 8 | 0 = 8
+    test1 := 8 | 4 & 2
+
+    # Test 2: ^ has precedence between | and &
+    # 8 | 4 ^ 2 & 1 should be 8 | (4 ^ (2 & 1)) = 8 | (4 ^ 0) = 8 | 4 = 12
+    test2 := 8 | 4 ^ 2 & 1
+
+    # Test 3: shift has higher precedence than comparison
+    # 8 << 1 should be 16, then 16 compared
+    test3 := 8 << 1
+
+    # Test 4: comparison has higher precedence than bitwise
+    # This tests the chain: equality < bitwise
+    # 4 & 3 should be 0, then check if equal to 0
+    test4_a := 4 & 3
+    test4_b := test4_a == 0
+
+    # Return a test value
+    test1 + test2 + test3
+}
