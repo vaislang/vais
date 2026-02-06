@@ -4211,8 +4211,165 @@ X TypeChecker {
                     type_ptr
                 }
             }
+            # EXPR_ARRAY = 38
+            E I kind == 38 {
+                elements_ptr := load_i64(expr_ptr + 24)
+                elements_len := load_i64(expr_ptr + 32)
+
+                I elements_len == 0 {
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.array_type(0)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                } E {
+                    first := load_i64(elements_ptr)
+                    first_ty := @.check_expr(first)
+                    idx: mut i64 = 1
+                    L { I idx >= elements_len { B }
+                        elem := load_i64(elements_ptr + idx * 8)
+                        @.check_expr(elem)
+                        idx = idx + 1
+                    }
+                    type_ptr := malloc(ResolvedType.size())
+                    ty := ResolvedType.array_type(first_ty)
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    type_ptr
+                }
+            }
+            # EXPR_RANGE = 41
+            E I kind == 41 {
+                start_expr := load_i64(expr_ptr + 24)  # field0
+                end_expr := load_i64(expr_ptr + 32)    # field1
+
+                I start_expr != 0 { @.check_expr(start_expr) } E { 0 }
+                I end_expr != 0 { @.check_expr(end_expr) } E { 0 }
+
+                # Range type - returns i64 (range bounds are integers)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.i64_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_AWAIT = 43
+            E I kind == 43 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0: Future expression
+                inner_ty := @.check_expr(inner_ptr)
+
+                # Await unwraps Future<T> → T
+                # If inner is Optional (Future representation), return inner type
+                inner_kind := load_i64(inner_ty)
+                I inner_kind == TY_OPTIONAL() || inner_kind == TY_RESULT() {
+                    load_i64(inner_ty + 8)  # inner type
+                } E {
+                    inner_ty  # Pass through if not a Future wrapper
+                }
+            }
+            # EXPR_TRY = 44
+            E I kind == 44 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0
+                inner_ty := @.check_expr(inner_ptr)
+
+                # Try (?) unwraps Result<T,E> → T or Option<T> → T
+                inner_kind := load_i64(inner_ty)
+                I inner_kind == TY_RESULT() || inner_kind == TY_OPTIONAL() {
+                    load_i64(inner_ty + 8)  # Ok/Some inner type
+                } E {
+                    inner_ty
+                }
+            }
+            # EXPR_UNWRAP = 45
+            E I kind == 45 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0
+                inner_ty := @.check_expr(inner_ptr)
+
+                # Unwrap (!) extracts value from Result/Option
+                inner_kind := load_i64(inner_ty)
+                I inner_kind == TY_RESULT() || inner_kind == TY_OPTIONAL() {
+                    load_i64(inner_ty + 8)  # Ok/Some inner type
+                } E {
+                    inner_ty
+                }
+            }
+            # EXPR_REF = 46
+            E I kind == 46 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0
+                is_mut := load_i64(expr_ptr + 32)     # field1
+
+                inner_ty := @.check_expr(inner_ptr)
+
+                type_ptr := malloc(ResolvedType.size())
+                I is_mut == 1 {
+                    ty := ResolvedType { kind: TY_REF_MUT(), field0: inner_ty, field1: 0, field2: 0 }
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    0
+                } E {
+                    ty := ResolvedType { kind: TY_REF(), field0: inner_ty, field1: 0, field2: 0 }
+                    store_i64(type_ptr, ty.kind)
+                    store_i64(type_ptr + 8, ty.field0)
+                    store_i64(type_ptr + 16, ty.field1)
+                    store_i64(type_ptr + 24, ty.field2)
+                    0
+                }
+                type_ptr
+            }
+            # EXPR_DEREF = 47
+            E I kind == 47 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0
+                inner_ty := @.check_expr(inner_ptr)
+
+                # Deref (*) extracts inner type from Ref/RefMut/Pointer
+                inner_kind := load_i64(inner_ty)
+                I inner_kind == TY_REF() || inner_kind == TY_REF_MUT() || inner_kind == TY_POINTER() {
+                    load_i64(inner_ty + 8)  # inner type pointer
+                } E {
+                    inner_ty
+                }
+            }
+            # EXPR_ASSIGN_OP = 49
+            E I kind == 49 {
+                target_ptr := load_i64(expr_ptr + 24)  # field0
+                value_ptr := load_i64(expr_ptr + 32)   # field1
+
+                @.check_expr(target_ptr)
+                @.check_expr(value_ptr)
+
+                # Assignment operations (+=, -=, etc.) return unit
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unit_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
+            # EXPR_SPAWN = 51
+            E I kind == 51 {
+                inner_ptr := load_i64(expr_ptr + 24)  # field0: expression to spawn
+                inner_ty := @.check_expr(inner_ptr)
+
+                # Spawn wraps result in a Future/Task type (represented as Optional)
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType { kind: TY_OPTIONAL(), field0: inner_ty, field1: 0, field2: 0 }
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
             E {
-                # Unknown expression type
+                # Unknown expression type - return unknown and continue
                 type_ptr := malloc(ResolvedType.size())
                 ty := ResolvedType.unknown_type()
                 store_i64(type_ptr, ty.kind)
@@ -4411,6 +4568,49 @@ X TypeChecker {
             @.resolve_type_node(field_type_ptr)
             i = i + 1
         }
+        1
+    }
+
+    F check_enum(&self, enum_def_ptr: i64) -> i64 {
+        # EnumDefInfo layout:
+        # 0: name_idx, 8: generics_ptr, 16: generics_len
+        # 24: variants_ptr, 32: variants_len
+        variants_ptr := load_i64(enum_def_ptr + 24)
+        variants_len := load_i64(enum_def_ptr + 32)
+
+        # Validate each variant's field types
+        i: mut i64 = 0
+        L { I i >= variants_len { B }
+            # Variant layout: name_idx(0), fields_kind(8), fields_ptr(16), fields_len(24)
+            variant_ptr := variants_ptr + i * 48
+            fields_kind := load_i64(variant_ptr + 8)
+            fields_ptr := load_i64(variant_ptr + 16)
+            fields_len := load_i64(variant_ptr + 24)
+
+            # For tuple variants (fields_kind=1), resolve each field type
+            I fields_kind == 1 {
+                j: mut i64 = 0
+                L { I j >= fields_len { B }
+                    field_type_ptr := load_i64(fields_ptr + j * 8)
+                    @.resolve_type_node(field_type_ptr)
+                    j = j + 1
+                }
+                0
+            } E { 0 }
+
+            i = i + 1
+        }
+        1
+    }
+
+    F check_type_alias(&self, alias_def_ptr: i64) -> i64 {
+        # TypeAlias is resolved during registration, just validate target type
+        # TypeAliasDef layout: name_idx(0), type_ptr(8)
+        target_type := load_i64(alias_def_ptr + 8)
+        I target_type != 0 {
+            @.resolve_type_node(target_type)
+            0
+        } E { 0 }
         1
     }
 
@@ -4657,6 +4857,15 @@ X TypeChecker {
         E I kind == 2 {
             @.check_struct(data_ptr)
         }
+        # ITEM_ENUM = 3
+        E I kind == 3 {
+            @.check_enum(data_ptr)
+        }
+        # ITEM_TYPE_ALIAS = 4
+        E I kind == 4 {
+            @.check_type_alias(data_ptr)
+        }
+        # ITEM_USE = 5 (handled at module level, skip)
         # ITEM_TRAIT = 6
         E I kind == 6 {
             @.check_trait(data_ptr)

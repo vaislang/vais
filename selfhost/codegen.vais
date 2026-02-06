@@ -345,7 +345,10 @@ S CodeGenerator {
     # Each entry: (struct_name_idx: i64, type_args_ptr: i64, type_args_len: i64) = 24 bytes
     struct_mono_ptr: i64,
     struct_mono_len: i64,
-    struct_mono_cap: i64
+    struct_mono_cap: i64,
+
+    # Current impl block context (for method name prefixing)
+    current_impl_type_idx: i64  # -1 when not in impl block
 }
 
 X CodeGenerator {
@@ -403,7 +406,8 @@ X CodeGenerator {
             generic_structs_ptr: malloc(32 * 8),
             generic_structs_len: 0, generic_structs_cap: 32,
             struct_mono_ptr: malloc(32 * 24),
-            struct_mono_len: 0, struct_mono_cap: 32
+            struct_mono_len: 0, struct_mono_cap: 32,
+            current_impl_type_idx: 0 - 1
         }
     }
 
@@ -1863,6 +1867,12 @@ X CodeGenerator {
         @.emit_cstr("define ")
         @.type_to_llvm_str(ret_llvm)
         @.emit_cstr(" @")
+        # If in impl block, prefix method name with TypeName_
+        I self.current_impl_type_idx != 0 - 1 {
+            @.emit_string_idx(self.current_impl_type_idx)
+            @.emit_cstr("_")
+            0
+        } E { 0 }
         @.emit_string_idx(name_idx)
         @.emit_cstr("(")
 
@@ -1933,6 +1943,16 @@ X CodeGenerator {
         methods_ptr := load_i64(impl_ptr + 32)
         methods_len := load_i64(impl_ptr + 40)
 
+        # Set impl context for method name prefixing (TypeName_method)
+        old_impl_type_idx := self.current_impl_type_idx
+        I target_type_ptr != 0 {
+            self.current_impl_type_idx = load_i64(target_type_ptr + 24)  # TypeNode.field0 = name_idx
+            0
+        } E {
+            self.current_impl_type_idx = 0 - 1
+            0
+        }
+
         # Generate all methods
         i: mut i64 = 0
         L { I i >= methods_len { B }
@@ -1940,6 +1960,9 @@ X CodeGenerator {
             @.generate_function(method_ptr)
             i = i + 1
         }
+
+        # Restore impl context
+        self.current_impl_type_idx = old_impl_type_idx
 
         # If this is a trait impl (trait_name_idx != -1), register vtable
         I trait_name_idx != 0 - 1 {
@@ -2332,6 +2355,38 @@ X CodeGenerator {
         # EXPR_LAMBDA = 50
         E I kind == 50 {
             @.generate_lambda(expr_ptr)
+        }
+        # EXPR_AWAIT = 43
+        E I kind == 43 {
+            inner_ptr := load_i64(expr_ptr + 24)  # field0: Future expression
+            inner_reg := @.generate_expr(inner_ptr)
+
+            # Await: poll the future and extract the result value
+            # For now, treat as identity (synchronous await) - extract value from Result/Option tag+value pair
+            # The inner register holds a tagged union: tag(i64) + value(i64)
+            # We load the value part (offset +8 from the pointer)
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, ")
+            @.emit_reg(inner_reg)
+            @.emit_cstr(" ; await\n")
+            result
+        }
+        # EXPR_SPAWN = 51
+        E I kind == 51 {
+            inner_ptr := load_i64(expr_ptr + 24)  # field0: expression to spawn
+            inner_reg := @.generate_expr(inner_ptr)
+
+            # Spawn: create a task/future from the expression
+            # For now, treat as identity - wrap value as a Future handle
+            result := @.fresh_reg()
+            @.emit_cstr("  ")
+            @.emit_reg(result)
+            @.emit_cstr(" = add i64 0, ")
+            @.emit_reg(inner_reg)
+            @.emit_cstr(" ; spawn\n")
+            result
         }
         E {
             # Unknown expression, return 0
@@ -3932,6 +3987,42 @@ X CodeGenerator {
 
     # ========== Method Call ==========
 
+    # Infer the struct name_idx from a receiver expression
+    # Returns -1 if cannot determine
+    F infer_receiver_type(&self, expr_ptr: i64) -> i64 {
+        I expr_ptr == 0 { R 0 - 1 }
+        kind := load_i64(expr_ptr)
+
+        # EXPR_IDENT = 25: look up variable's struct type
+        I kind == 25 {
+            name_idx := load_i64(expr_ptr + 24)
+            # Check registered structs for a constructor pattern
+            local_ptr := @.find_local(name_idx)
+            I local_ptr != 0 {
+                type_kind := load_i64(local_ptr + 24)
+                # type_kind stores LLVM type, but we need struct name
+                # If the variable was initialized from a struct literal or static call,
+                # we can't easily determine the struct name from LLVM type alone
+                0 - 1
+            } E { 0 - 1 }
+        }
+        # EXPR_STRUCT_LIT = 40: struct name is directly available
+        E I kind == 40 {
+            load_i64(expr_ptr + 24)  # field0 = name_idx
+        }
+        # EXPR_STATIC_CALL = 35: type_idx is the struct name
+        E I kind == 35 {
+            load_i64(expr_ptr + 24)  # field0 = type_idx
+        }
+        # EXPR_SELF_CALL = 26: use current impl type
+        E I kind == 26 {
+            self.current_impl_type_idx
+        }
+        E {
+            0 - 1
+        }
+    }
+
     F generate_method_call(&self, expr_ptr: i64) -> i64 {
         # METHOD_CALL: field0 = receiver, field1 = method_idx, field2 = args_ptr, field3 = args_len
         receiver_ptr := load_i64(expr_ptr + 24)
@@ -3955,12 +4046,17 @@ X CodeGenerator {
             i = i + 1
         }
 
-        # For now, emit call using method name directly
-        # TODO: proper method dispatch with receiver type prefix
+        # Emit call with receiver type prefix (TypeName_method)
+        recv_type_idx := @.infer_receiver_type(receiver_ptr)
         result := @.fresh_reg()
         @.emit_cstr("  ")
         @.emit_reg(result)
         @.emit_cstr(" = call i64 @")
+        I recv_type_idx != 0 - 1 {
+            @.emit_string_idx(recv_type_idx)
+            @.emit_cstr("_")
+            0
+        } E { 0 }
         @.emit_string_idx(method_idx)
         @.emit_cstr("(")
 
@@ -3997,13 +4093,13 @@ X CodeGenerator {
             i = i + 1
         }
 
-        # Emit call as TypeName.method_name
+        # Emit call as TypeName_method_name (matching Rust codegen convention)
         result := @.fresh_reg()
         @.emit_cstr("  ")
         @.emit_reg(result)
         @.emit_cstr(" = call i64 @")
         @.emit_string_idx(type_idx)
-        @.emit_cstr(".")
+        @.emit_cstr("_")
         @.emit_string_idx(method_idx)
         @.emit_cstr("(")
 

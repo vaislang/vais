@@ -1087,6 +1087,9 @@ X Parser {
         } E I @.check(TOK_KW_W()) == 1 {
             @.advance()
             @.parse_trait(is_pub, start)
+        } E I @.check(TOK_KW_U()) == 1 {
+            @.advance()
+            @.parse_use(start)
         } E {
             @.set_error_expected(TOK_KW_F())
             0
@@ -1626,6 +1629,62 @@ X Parser {
         store_i64(trait_ptr + 72, end)
 
         @.add_item(ITEM_TRAIT(), trait_ptr, start, end)
+    }
+
+    # =========== Parse Use Statement ===========
+    # Parses: U std/vec or U std::vec or U std/vec::{Item1, Item2}
+
+    F parse_use(&self, start: i64) -> i64 {
+        # Parse module path: ident (/ ident | :: ident)*
+        I @.check(TOK_IDENT()) == 0 {
+            @.set_error_expected(TOK_IDENT())
+            R 0
+        }
+
+        # Build path string using raw memory buffer
+        buf := malloc(1024)
+        buf_len: mut i64 = 0
+
+        tok := @.advance()
+        memcpy(buf + buf_len, tok.str_ptr, tok.str_len)
+        buf_len = buf_len + tok.str_len
+
+        # Continue parsing path segments separated by / or ::
+        L {
+            I @.check(TOK_SLASH()) == 1 {
+                store_byte(buf + buf_len, 47)  # '/'
+                buf_len = buf_len + 1
+                @.advance()
+                0
+            } E I @.check(TOK_COLON_COLON()) == 1 {
+                store_byte(buf + buf_len, 47)  # normalize :: to /
+                buf_len = buf_len + 1
+                @.advance()
+                0
+            } E { B }
+
+            I @.check(TOK_IDENT()) == 0 {
+                @.set_error_expected(TOK_IDENT())
+                B
+            }
+            seg_tok := @.advance()
+            memcpy(buf + buf_len, seg_tok.str_ptr, seg_tok.str_len)
+            buf_len = buf_len + seg_tok.str_len
+        }
+
+        # Intern the path string
+        path_idx := @.intern_string(buf, buf_len)
+        free(buf)
+
+        # Allocate UseDef (24 bytes): path_idx, items_ptr, items_len
+        use_ptr := malloc(24)
+        store_i64(use_ptr + 0, path_idx)
+        store_i64(use_ptr + 8, 0)   # items_ptr (selective imports - future)
+        store_i64(use_ptr + 16, 0)  # items_len
+
+        end := @.current_span_start()
+
+        @.add_item(ITEM_USE(), use_ptr, start, end)
     }
 
     # =========== Parse Super Traits ===========

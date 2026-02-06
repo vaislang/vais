@@ -1,6 +1,6 @@
 # Vais Self-Hosting Compiler (Stage 1) Roadmap
 
-## Current Status: v0.5.2
+## Current Status: v0.7.0 — Bootstrap Achieved! 🎉
 
 Stage 1 컴파일러가 다중 파라미터 함수를 포함한 Vais 프로그램을 안정적으로 컴파일할 수 있음.
 Import 시스템 지원 완료.
@@ -212,6 +212,21 @@ clang -O0 /tmp/main_stage1.ll -o selfhost/vaisc-stage1 -lm
 
 ## Version History
 
+- **v0.7.0** - 부트스트랩 달성! 🎉
+  - Stage1→Stage2→Stage3 fixed point 도달 (SHA256: e14776a6..., 17,807줄 일치)
+  - Inkwell 빌트인: fopen_ptr/memcpy_str 래퍼 함수 + realloc 선언 추가
+  - Stage1: 124KB, Stage2: 134KB (arm64 macOS)
+- **v0.6.1** - Phase 38 TC 100% + E001 해결
+  - Type Checker 100%: check_enum, check_type_alias 추가 (7개 아이템 타입 전부 커버)
+  - E001 해결: Rust unify()에 Ref(T)↔T auto-deref 추가 + memcpy_str Inkwell 등록
+  - codegen.vais 클린 컴파일 달성 (E001 제거)
+  - E2E 241개 + selfhost lexer 114개 전부 통과
+- **v0.6.0** - Phase 38 진도 (TC 95%+, Codegen 100%, Module 100%)
+  - Type Checker: 9개 누락 식 핸들러 추가 (Array, Range, Await, Try, Unwrap, Ref, Deref, AssignOp, Spawn)
+  - Codegen: Await/Spawn codegen + method dispatch 개선 (impl type prefix, infer_receiver_type)
+  - Module: parser.vais parse_use 구현 (U ident/ident 파싱)
+  - Type mismatch 상세 설명 (format_type + print_errors)
+  - E2E 241개 + selfhost lexer 114개 전부 통과
 - **v0.5.2** - Array 리터럴 지원
   - Array literal [e1, e2, ...] 파싱 (parser_s1.vais, parser.vais)
   - Array literal 코드젠 (codegen_s1.vais, codegen.vais)

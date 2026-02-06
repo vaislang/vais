@@ -35,6 +35,36 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
         i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into(), i64_type.into()], false),
         None,
     );
+    // memcpy_str: wrapper that calls memcpy (used by selfhost codegen.vais)
+    {
+        let memcpy_fn = module.get_function("memcpy").unwrap();
+        let fn_type = i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into(), i64_type.into()], false);
+        let func = module.add_function("memcpy_str", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let result = builder
+            .build_call(
+                memcpy_fn,
+                &[
+                    func.get_nth_param(0).unwrap().into(),
+                    func.get_nth_param(1).unwrap().into(),
+                    func.get_nth_param(2).unwrap().into(),
+                ],
+                "result",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap();
+        builder.build_return(Some(&result)).unwrap();
+    }
+    // realloc(ptr, size) -> ptr
+    module.add_function(
+        "realloc",
+        i8_ptr.fn_type(&[i8_ptr.into(), i64_type.into()], false),
+        None,
+    );
     // memset(dest, val, n) -> ptr
     module.add_function(
         "memset",
@@ -77,6 +107,29 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
         i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false),
         None,
     );
+    // fopen_ptr: wrapper that calls fopen (for selfhost, accepts i64 path as ptr)
+    {
+        let fopen_fn = module.get_function("fopen").unwrap();
+        let fn_type = i8_ptr.fn_type(&[i8_ptr.into(), i8_ptr.into()], false);
+        let func = module.add_function("fopen_ptr", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let result = builder
+            .build_call(
+                fopen_fn,
+                &[
+                    func.get_nth_param(0).unwrap().into(),
+                    func.get_nth_param(1).unwrap().into(),
+                ],
+                "result",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap();
+        builder.build_return(Some(&result)).unwrap();
+    }
     // fclose(stream) -> i32
     module.add_function("fclose", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // fread(ptr, size, count, stream) -> i64
