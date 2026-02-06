@@ -1477,10 +1477,11 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
   - [x] Match expression codegen (패턴 매칭 IR 생성: wildcard/ident/literal/variant + phi 병합) ✅ 2026-02-06
   - [x] Ternary expression codegen (cond ? then : else → br + phi) ✅ 2026-02-06
   - [ ] Try-catch (에러 처리)
-- [ ] **클로저 Codegen**
-  - [ ] 클로저 캡처 환경 생성
-  - [ ] 클로저 호출 코드
-  - [ ] Move/Ref 캡처 구분
+- [x] **클로저 Codegen (기본)** ✅ 2026-02-06
+  - [x] Lambda → 별도 LLVM 함수 생성 (@__lambda_N)
+  - [x] 함수 포인터 반환 (ptrtoint)
+  - [ ] 캡처 변수 분석 (Free Variable Analysis) — 후속
+  - [ ] Move/Ref 캡처 구분 — 후속
 - [ ] **제네릭 Monomorphization**
   - [ ] 타입별 함수 복사본 생성
   - [ ] 제네릭 구조체 특화
@@ -1499,7 +1500,8 @@ error: Inkwell codegen error: Undefined variable: Field 'vars_ptr' not found in 
   - [x] Struct literal codegen (malloc + 필드별 store_i64)
   - [x] Unit, Self call (@), Tuple, Range, Assign op (+=/-=/*=/÷=) codegen ✅ 2026-02-06
   - [x] Ref (&), Deref (*), Try (?), Unwrap (!) codegen ✅ 2026-02-06
-- **Codegen 식 커버리지**: 29/32 (91%) — 잔여: Lambda, Await, Spawn
+  - [x] Lambda codegen (별도 함수 생성 + 함수 포인터 반환) ✅ 2026-02-06
+- **Codegen 식 커버리지**: 30/32 (94%) — 잔여: Await, Spawn (async 런타임 의존)
 - **예상 작업량**: 2,000+ LOC
 - **의존성**: Stage 3 완료 필수
 - **파일**: `selfhost/codegen.vais`, `selfhost/codegen_s1.vais`

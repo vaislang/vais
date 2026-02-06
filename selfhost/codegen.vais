@@ -283,7 +283,11 @@ S CodeGenerator {
     current_fn_ret_type: i64,
 
     # Temp buffer for building strings
-    temp_buf: i64         # Pointer to StringBuffer
+    temp_buf: i64,        # Pointer to StringBuffer
+
+    # Lambda functions buffer (emitted after main functions)
+    lambda_buf: i64,      # Pointer to StringBuffer for lambda function defs
+    lambda_counter: i64   # Counter for generating unique lambda names
 }
 
 X CodeGenerator {
@@ -299,6 +303,12 @@ X CodeGenerator {
         store_i64(temp_buf, temp2.data)
         store_i64(temp_buf + 8, temp2.len)
         store_i64(temp_buf + 16, temp2.cap)
+
+        lambda_buf := malloc(88)
+        lambda_sb := StringBuffer.new(4096)
+        store_i64(lambda_buf, lambda_sb.data)
+        store_i64(lambda_buf + 8, lambda_sb.len)
+        store_i64(lambda_buf + 16, lambda_sb.cap)
 
         CodeGenerator {
             output: output_buf,
@@ -318,7 +328,9 @@ X CodeGenerator {
             strings_len: 0, strings_cap: 256,
             current_fn_name_idx: 0,
             current_fn_ret_type: LLVM_VOID(),
-            temp_buf: temp_buf
+            temp_buf: temp_buf,
+            lambda_buf: lambda_buf,
+            lambda_counter: 0
         }
     }
 
@@ -737,6 +749,9 @@ X CodeGenerator {
 
             i = i + 1
         }
+
+        # Emit lambda functions
+        @.emit_lambda_functions()
 
         # Emit string constants
         @.emit_string_constants()
@@ -1306,6 +1321,10 @@ X CodeGenerator {
         # EXPR_ASSIGN_OP = 49
         E I kind == 49 {
             @.generate_assign_op(expr_ptr)
+        }
+        # EXPR_LAMBDA = 50
+        E I kind == 50 {
+            @.generate_lambda(expr_ptr)
         }
         E {
             # Unknown expression, return 0
@@ -1982,6 +2001,196 @@ X CodeGenerator {
         range_ptr
     }
 
+    # ========== Lambda Helpers ==========
+
+    F lambda_emit_cstr(&self, s: str) -> i64 {
+        len := strlen(s)
+        lb_data: mut i64 = load_i64(self.lambda_buf)
+        lb_len := load_i64(self.lambda_buf + 8)
+        lb_cap := load_i64(self.lambda_buf + 16)
+
+        I lb_len + len > lb_cap {
+            new_cap := (lb_cap + len) * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, lb_data, lb_len)
+            free(lb_data)
+            store_i64(self.lambda_buf, new_data)
+            store_i64(self.lambda_buf + 16, new_cap)
+            lb_data = new_data
+            0
+        } E { 0 }
+
+        memcpy_str(lb_data + lb_len, s, len)
+        store_i64(self.lambda_buf + 8, lb_len + len)
+        1
+    }
+
+    F lambda_emit_i64(&self, value: i64) -> i64 {
+        # Write i64 to lambda buffer using temp buf
+        store_i64(self.temp_buf + 8, 0)
+        tb_data := load_i64(self.temp_buf)
+
+        I value == 0 {
+            store_byte(tb_data, 48)
+            @.lambda_emit_ptr(tb_data, 1)
+        } E I value < 0 {
+            store_byte(tb_data, 45)
+            @.lambda_emit_ptr(tb_data, 1)
+            @.lambda_emit_i64(0 - value)
+        } E {
+            @.lambda_emit_positive_i64(value)
+        }
+    }
+
+    F lambda_emit_positive_i64(&self, value: i64) -> i64 {
+        I value == 0 { R 1 }
+        @.lambda_emit_positive_i64(value / 10)
+        digit := (value % 10) + 48
+        tb_data := load_i64(self.temp_buf)
+        store_byte(tb_data, digit)
+        @.lambda_emit_ptr(tb_data, 1)
+    }
+
+    F lambda_emit_ptr(&self, ptr: i64, len: i64) -> i64 {
+        lb_data: mut i64 = load_i64(self.lambda_buf)
+        lb_len := load_i64(self.lambda_buf + 8)
+        lb_cap := load_i64(self.lambda_buf + 16)
+
+        I lb_len + len > lb_cap {
+            new_cap := (lb_cap + len) * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, lb_data, lb_len)
+            free(lb_data)
+            store_i64(self.lambda_buf, new_data)
+            store_i64(self.lambda_buf + 16, new_cap)
+            lb_data = new_data
+            0
+        } E { 0 }
+
+        memcpy(lb_data + lb_len, ptr, len)
+        store_i64(self.lambda_buf + 8, lb_len + len)
+        1
+    }
+
+    F lambda_emit_reg(&self, n: i64) -> i64 {
+        @.lambda_emit_cstr("%")
+        @.lambda_emit_i64(n)
+    }
+
+    F emit_lambda_functions(&self) -> i64 {
+        lb_len := load_i64(self.lambda_buf + 8)
+        I lb_len == 0 { R 1 }
+
+        @.emit_cstr("\n; Lambda functions\n")
+        lb_data := load_i64(self.lambda_buf)
+        @.emit_ptr(lb_data, lb_len)
+        1
+    }
+
+    # ========== Lambda Codegen ==========
+
+    F generate_lambda(&self, expr_ptr: i64) -> i64 {
+        # LAMBDA: field0 = params_ptr, field1 = params_len, field2 = body_ptr
+        params_ptr := load_i64(expr_ptr + 24)
+        params_len := load_i64(expr_ptr + 32)
+        body_ptr := load_i64(expr_ptr + 40)
+
+        # Generate unique lambda name
+        lambda_id := self.lambda_counter
+        self.lambda_counter = self.lambda_counter + 1
+
+        # Save current function context
+        saved_fn_name := self.current_fn_name_idx
+        saved_fn_ret := self.current_fn_ret_type
+        saved_locals_len := self.locals_len
+        saved_reg := self.reg_counter
+        saved_label := self.label_counter
+
+        # Reset counters for lambda function
+        self.reg_counter = 0
+        self.label_counter = 0
+
+        # Emit lambda function definition to lambda buffer
+        @.lambda_emit_cstr("define i64 @__lambda_")
+        @.lambda_emit_i64(lambda_id)
+        @.lambda_emit_cstr("(")
+
+        # Emit parameters
+        i: mut i64 = 0
+        L { I i >= params_len { B }
+            I i > 0 { @.lambda_emit_cstr(", ") } E { 0 }
+
+            param_ptr := params_ptr + i * 40  # Param.size() = 40
+            param_name_idx := load_i64(param_ptr)
+
+            @.lambda_emit_cstr("i64 %")
+
+            # Emit param name
+            pname_ptr := @.get_string_ptr(param_name_idx)
+            pname_len := @.get_string_len(param_name_idx)
+            @.lambda_emit_ptr(pname_ptr, pname_len)
+
+            # Register parameter as local
+            @.add_local(param_name_idx, pname_ptr, pname_len, LLVM_I64(), 1)
+
+            i = i + 1
+        }
+
+        @.lambda_emit_cstr(") {\n")
+        @.lambda_emit_cstr("entry:\n")
+
+        # Save main output and switch to lambda buffer
+        # We need to temporarily redirect emit to lambda buffer
+        # Strategy: generate body to main output, then copy to lambda buffer
+        # This is simpler but requires saving/restoring output state
+
+        # Actually, for simplicity, generate body expr directly to lambda buffer
+        # by swapping output pointer temporarily
+        saved_output := self.output
+        self.output = self.lambda_buf
+
+        self.current_fn_ret_type = LLVM_I64()
+
+        # Generate body
+        body_reg := @.generate_expr(body_ptr)
+
+        # Emit return
+        @.emit_cstr("  ret i64 ")
+        @.emit_reg(body_reg)
+        @.emit_cstr("\n")
+        @.emit_cstr("}\n\n")
+
+        # Restore output
+        self.output = saved_output
+
+        # Restore function context
+        self.current_fn_name_idx = saved_fn_name
+        self.current_fn_ret_type = saved_fn_ret
+        self.locals_len = saved_locals_len
+        self.reg_counter = saved_reg
+        self.label_counter = saved_label
+
+        # Return function pointer as i64
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = ptrtoint i64 (")
+
+        # Emit parameter types for function pointer type
+        j: mut i64 = 0
+        L { I j >= params_len { B }
+            I j > 0 { @.emit_cstr(", ") } E { 0 }
+            @.emit_cstr("i64")
+            j = j + 1
+        }
+
+        @.emit_cstr(")* @__lambda_")
+        @.emit_i64(lambda_id)
+        @.emit_cstr(" to i64\n")
+
+        result
+    }
+
     # ========== Ref (& operator) ==========
 
     F generate_ref(&self, expr_ptr: i64) -> i64 {
@@ -2642,6 +2851,11 @@ X CodeGenerator {
         temp_data := load_i64(self.temp_buf)
         free(temp_data)
         free(self.temp_buf)
+
+        # Free lambda buffer
+        lambda_data := load_i64(self.lambda_buf)
+        free(lambda_data)
+        free(self.lambda_buf)
 
         # Free other allocations
         free(self.functions_ptr)
