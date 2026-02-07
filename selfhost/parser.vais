@@ -28,6 +28,9 @@ F TOK_KW_MUT() -> i64 = 18
 F TOK_KW_ELSE() -> i64 = 19
 F TOK_KW_D() -> i64 = 20        # defer (same as TOK_KW_MOVE in selfhost context)
 F TOK_KW_AWAIT() -> i64 = 21
+F TOK_KW_N() -> i64 = 22          # extern
+F TOK_KW_SELF() -> i64 = 25       # self
+F TOK_KW_CONST() -> i64 = 28      # const
 F TOK_KW_MOVE() -> i64 = 125
 
 # Literal tokens (51-60)
@@ -799,12 +802,20 @@ S Parser {
     items_len: i64,
     items_cap: i64,
 
-    # Error state
+    # Error state (legacy single-error)
     has_error: i64,
     error_msg_ptr: i64,
     error_msg_len: i64,
     error_span_start: i64,
-    error_span_end: i64
+    error_span_end: i64,
+
+    # Error recovery mode
+    recovery_mode: i64,      # 0 = fail-fast (default), 1 = recovery mode
+    errors_ptr: i64,         # Pointer to error array (each entry = 32 bytes)
+    errors_len: i64,         # Current number of collected errors
+    errors_cap: i64,         # Capacity of error array
+    source_ptr: i64,         # Source text pointer (for line:col calc)
+    source_len: i64          # Source text length
 }
 
 X Parser {
@@ -812,6 +823,7 @@ X Parser {
         sp_data := malloc(4096)
         sp_offsets := malloc(256 * 16)
         items_ptr := malloc(64 * 32)
+        errors_ptr := malloc(20 * 32)
         Parser {
             tokens_ptr: tokens_ptr,
             tokens_len: tokens_len,
@@ -829,8 +841,22 @@ X Parser {
             error_msg_ptr: 0,
             error_msg_len: 0,
             error_span_start: 0,
-            error_span_end: 0
+            error_span_end: 0,
+            recovery_mode: 0,
+            errors_ptr: errors_ptr,
+            errors_len: 0,
+            errors_cap: 20,
+            source_ptr: 0,
+            source_len: 0
         }
+    }
+
+    # Set recovery mode and source text for error reporting
+    F set_recovery_mode(&self, source_ptr: i64, source_len: i64) -> i64 {
+        self.recovery_mode = 1
+        self.source_ptr = source_ptr
+        self.source_len = source_len
+        1
     }
 
     # =========== Token Access ===========
@@ -919,29 +945,100 @@ X Parser {
 
     # =========== Error Handling ===========
 
+    # Error entry layout (32 bytes):
+    #   offset  0: error_type (0 = custom msg, 1 = expected token)
+    #   offset  8: msg_ptr (custom) or expected_kind (expected)
+    #   offset 16: msg_len (custom) or 0 (expected)
+    #   offset 24: span_start (byte offset in source)
+
+    F add_error_entry(&self, error_type: i64, msg_ptr: i64, msg_len: i64, span_start: i64) -> i64 {
+        I self.errors_len >= self.errors_cap { R 0 }
+        ptr := self.errors_ptr + self.errors_len * 32
+        store_i64(ptr + 0, error_type)
+        store_i64(ptr + 8, msg_ptr)
+        store_i64(ptr + 16, msg_len)
+        store_i64(ptr + 24, span_start)
+        self.errors_len = self.errors_len + 1
+        1
+    }
+
     F set_error(&self, msg_ptr: i64, msg_len: i64) -> i64 {
-        I self.has_error == 0 {
+        tok := @.peek()
+        I self.recovery_mode == 1 {
+            @.add_error_entry(0, msg_ptr, msg_len, tok.span_start)
             self.has_error = 1
-            self.error_msg_ptr = msg_ptr
-            self.error_msg_len = msg_len
-            tok := @.peek()
-            self.error_span_start = tok.span_start
-            self.error_span_end = tok.span_end
             0
-        } E { 0 }
+        } E {
+            I self.has_error == 0 {
+                self.has_error = 1
+                self.error_msg_ptr = msg_ptr
+                self.error_msg_len = msg_len
+                self.error_span_start = tok.span_start
+                self.error_span_end = tok.span_end
+                0
+            } E { 0 }
+        }
     }
 
     F set_error_expected(&self, expected_kind: i64) -> i64 {
-        # Simple error message - store expected kind
-        I self.has_error == 0 {
+        tok := @.peek()
+        I self.recovery_mode == 1 {
+            @.add_error_entry(1, expected_kind, 0, tok.span_start)
             self.has_error = 1
-            self.error_msg_ptr = expected_kind  # Reuse for expected token kind
-            self.error_msg_len = 0 - 1          # Marker for "expected token" error
-            tok := @.peek()
-            self.error_span_start = tok.span_start
-            self.error_span_end = tok.span_end
+            0
+        } E {
+            I self.has_error == 0 {
+                self.has_error = 1
+                self.error_msg_ptr = expected_kind
+                self.error_msg_len = 0 - 1
+                self.error_span_start = tok.span_start
+                self.error_span_end = tok.span_end
+                0
+            } E { 0 }
+        }
+    }
+
+    # =========== Synchronization ===========
+
+    # Skip tokens until we find a top-level item keyword (F, S, E, W, X, U, P, A, N)
+    F synchronize_to_item(&self) -> i64 {
+        L {
+            I @.is_at_end() == 1 { B }
+            kind := @.peek_kind()
+            I kind == TOK_KW_F() || kind == TOK_KW_S() || kind == TOK_KW_E() ||
+              kind == TOK_KW_W() || kind == TOK_KW_X() || kind == TOK_KW_U() ||
+              kind == TOK_KW_P() || kind == TOK_KW_A() || kind == TOK_KW_N() ||
+              kind == TOK_HASH_BRACKET() {
+                B
+            }
+            @.advance()
+        }
+        1
+    }
+
+    # Skip tokens until we find a statement boundary (; } or statement-starting keyword)
+    F synchronize_to_stmt(&self) -> i64 {
+        L {
+            I @.is_at_end() == 1 { B }
+            kind := @.peek_kind()
+            # Stop at statement boundaries
+            I kind == TOK_RBRACE() || kind == TOK_SEMI() { B }
+            # Stop at statement-starting keywords
+            I kind == TOK_KW_R() || kind == TOK_KW_B() || kind == TOK_KW_C() ||
+              kind == TOK_KW_D() || kind == TOK_KW_I() || kind == TOK_KW_L() ||
+              kind == TOK_KW_M() { B }
+            # Stop at item-level keywords (indicates we left the block)
+            I kind == TOK_KW_F() || kind == TOK_KW_S() || kind == TOK_KW_E() ||
+              kind == TOK_KW_W() || kind == TOK_KW_X() || kind == TOK_KW_U() ||
+              kind == TOK_KW_P() || kind == TOK_KW_A() || kind == TOK_KW_N() { B }
+            @.advance()
+        }
+        # Consume semicolons
+        I @.peek_kind() == TOK_SEMI() {
+            @.advance()
             0
         } E { 0 }
+        1
     }
 
     # =========== String Interning ===========
@@ -1012,10 +1109,25 @@ X Parser {
     F parse_module(&self) -> i64 {
         L {
             I @.is_at_end() == 1 { B }
-            I self.has_error == 1 { B }
-            @.parse_item()
+            I self.recovery_mode == 1 {
+                # Recovery mode: try parse_item, on error sync and continue
+                self.has_error = 0
+                @.parse_item()
+                I self.has_error == 1 {
+                    @.synchronize_to_item()
+                    0
+                } E { 0 }
+            } E {
+                # Normal mode: stop on first error
+                I self.has_error == 1 { B }
+                @.parse_item()
+            }
         }
-        I self.has_error == 0 { 1 } E { 0 }
+        I self.recovery_mode == 1 {
+            I self.errors_len == 0 { 1 } E { 0 }
+        } E {
+            I self.has_error == 0 { 1 } E { 0 }
+        }
     }
 
     # =========== Parse Attributes ===========
@@ -2084,15 +2196,32 @@ X Parser {
         L {
             I @.check(TOK_RBRACE()) == 1 { B }
             I @.is_at_end() == 1 { B }
-            I self.has_error == 1 { B }
 
-            stmt := @.parse_stmt()
-            I stmt != 0 {
-                # Copy stmt to array
-                memcpy(stmts_ptr + stmts_len * StmtNode.size(), stmt, StmtNode.size())
-                stmts_len = stmts_len + 1
-                0
-            } E { 0 }
+            I self.recovery_mode == 1 {
+                # Recovery mode: try parse stmt, on error sync and continue
+                saved_error := self.has_error
+                self.has_error = 0
+                stmt := @.parse_stmt()
+                I self.has_error == 1 {
+                    # Error during stmt parse — sync to next stmt
+                    @.synchronize_to_stmt()
+                    self.has_error = 0
+                    0
+                } E I stmt != 0 {
+                    memcpy(stmts_ptr + stmts_len * StmtNode.size(), stmt, StmtNode.size())
+                    stmts_len = stmts_len + 1
+                    0
+                } E { 0 }
+            } E {
+                # Normal mode: stop on first error
+                I self.has_error == 1 { B }
+                stmt := @.parse_stmt()
+                I stmt != 0 {
+                    memcpy(stmts_ptr + stmts_len * StmtNode.size(), stmt, StmtNode.size())
+                    stmts_len = stmts_len + 1
+                    0
+                } E { 0 }
+            }
         }
 
         # Store length at buffer start (stmts_ptr - 8)
@@ -3616,12 +3745,198 @@ X Parser {
 
     # =========== Cleanup ===========
 
+    # =========== Error Reporting ===========
+
+    # Print all collected errors with line:col information
+    # Returns number of errors printed
+    F print_errors(&self) -> i64 {
+        I self.errors_len == 0 { R 0 }
+
+        i: mut i64 = 0
+        L {
+            I i >= self.errors_len { B }
+            entry := self.errors_ptr + i * 32
+            error_type := load_i64(entry + 0)
+            msg_val := load_i64(entry + 8)
+            msg_len := load_i64(entry + 16)
+            span_start := load_i64(entry + 24)
+
+            line := offset_to_line(self.source_ptr, self.source_len, span_start)
+            col := offset_to_col(self.source_ptr, self.source_len, span_start)
+
+            sb := p_sb_new()
+            p_sb_cstr(sb, "  ")
+            p_sb_i64(sb, line)
+            p_sb_byte(sb, 58)  # ':'
+            p_sb_i64(sb, col)
+
+            I error_type == 1 {
+                # Expected token error
+                p_sb_cstr(sb, ": error: expected ")
+                I msg_val == TOK_IDENT() { p_sb_cstr(sb, "identifier"); 0 }
+                E I msg_val == TOK_KW_F() { p_sb_cstr(sb, "'F'"); 0 }
+                E I msg_val == TOK_LPAREN() { p_sb_cstr(sb, "'('"); 0 }
+                E I msg_val == TOK_RPAREN() { p_sb_cstr(sb, "')'"); 0 }
+                E I msg_val == TOK_LBRACE() { p_sb_cstr(sb, "'{'"); 0 }
+                E I msg_val == TOK_RBRACE() { p_sb_cstr(sb, "'}'"); 0 }
+                E I msg_val == TOK_LBRACKET() { p_sb_cstr(sb, "'['"); 0 }
+                E I msg_val == TOK_RBRACKET() { p_sb_cstr(sb, "']'"); 0 }
+                E I msg_val == TOK_COLON() { p_sb_cstr(sb, "':'"); 0 }
+                E I msg_val == TOK_COMMA() { p_sb_cstr(sb, "','"); 0 }
+                E I msg_val == TOK_ARROW() { p_sb_cstr(sb, "'->'"); 0 }
+                E I msg_val == TOK_EQ() { p_sb_cstr(sb, "'='"); 0 }
+                E I msg_val == TOK_SEMI() { p_sb_cstr(sb, "';'"); 0 }
+                E I msg_val == TOK_FAT_ARROW() { p_sb_cstr(sb, "'=>'"); 0 }
+                E I msg_val == TOK_COLON_EQ() { p_sb_cstr(sb, "':='"); 0 }
+                E { p_sb_cstr(sb, "token"); 0 }
+            } E {
+                # Custom error message
+                p_sb_cstr(sb, ": error: ")
+                I msg_len > 0 {
+                    p_sb_bytes(sb, msg_val, msg_len)
+                    0
+                } E {
+                    p_sb_cstr(sb, "parse error")
+                    0
+                }
+            }
+
+            p_sb_print_free(sb)
+            i = i + 1
+        }
+        self.errors_len
+    }
+
+    # =========== Cleanup ===========
+
     F drop(&self) -> i64 {
         free(self.sp_data)
         free(self.sp_offsets)
         free(self.items_ptr)
+        free(self.errors_ptr)
         1
     }
+}
+
+# ============================================================================
+# String Buffer (for error formatting)
+# ============================================================================
+# Layout: data(8) + len(8) + cap(8) = 24 bytes
+
+F p_sb_new() -> i64 {
+    sb := malloc(24)
+    data := malloc(256)
+    store_i64(sb, data)
+    store_i64(sb + 8, 0)
+    store_i64(sb + 16, 256)
+    sb
+}
+
+F p_sb_byte(sb: i64, byte: i64) -> i64 {
+    len := load_i64(sb + 8)
+    cap := load_i64(sb + 16)
+    I len >= cap {
+        new_cap := cap * 2
+        old_data := load_i64(sb)
+        new_data := malloc(new_cap)
+        memcpy(new_data, old_data, len)
+        free(old_data)
+        store_i64(sb, new_data)
+        store_i64(sb + 16, new_cap)
+        0
+    } E { 0 }
+    data := load_i64(sb)
+    store_byte(data + len, byte)
+    store_i64(sb + 8, len + 1)
+    1
+}
+
+F p_sb_cstr(sb: i64, s: str) -> i64 {
+    ptr := str_to_ptr(s)
+    slen: mut i64 = 0
+    L { I load_byte(ptr + slen) == 0 { B } E { slen = slen + 1 } }
+    p_sb_bytes(sb, ptr, slen)
+}
+
+F p_sb_bytes(sb: i64, src: i64, slen: i64) -> i64 {
+    len := load_i64(sb + 8)
+    cap := load_i64(sb + 16)
+    I len + slen > cap {
+        new_cap := len + slen + 256
+        old_data := load_i64(sb)
+        new_data := malloc(new_cap)
+        memcpy(new_data, old_data, len)
+        free(old_data)
+        store_i64(sb, new_data)
+        store_i64(sb + 16, new_cap)
+        0
+    } E { 0 }
+    data := load_i64(sb)
+    memcpy(data + len, src, slen)
+    store_i64(sb + 8, len + slen)
+    1
+}
+
+F p_sb_i64(sb: i64, value: i64) -> i64 {
+    I value == 0 {
+        p_sb_byte(sb, 48)
+    } E I value < 0 {
+        p_sb_byte(sb, 45)
+        p_sb_i64(sb, 0 - value)
+    } E {
+        I value >= 10 {
+            p_sb_i64(sb, value / 10)
+            0
+        } E { 0 }
+        p_sb_byte(sb, (value % 10) + 48)
+    }
+}
+
+F p_sb_print_free(sb: i64) -> i64 {
+    p_sb_byte(sb, 0)
+    data := load_i64(sb)
+    puts_ptr(data)
+    free(data)
+    free(sb)
+    1
+}
+
+# ============================================================================
+# Error Reporting Utilities
+# ============================================================================
+
+# Convert a byte offset to line number (1-based) by scanning source text
+F offset_to_line(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
+    line: mut i64 = 1
+    i: mut i64 = 0
+    limit := offset
+    I limit > source_len { limit = source_len; 0 } E { 0 }
+    L {
+        I i >= limit { B }
+        c := load_byte(source_ptr + i)
+        I c == 10 {
+            line = line + 1
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    line
+}
+
+# Convert a byte offset to column number (1-based) by scanning back to last newline
+F offset_to_col(source_ptr: i64, source_len: i64, offset: i64) -> i64 {
+    pos := offset
+    I pos > source_len { pos = source_len; 0 } E { 0 }
+    # Scan backwards to find last newline
+    i: mut i64 = pos - 1
+    L {
+        I i < 0 { B }
+        c := load_byte(source_ptr + i)
+        I c == 10 { B }
+        i = i - 1
+    }
+    # Column = distance from last newline (or start of file)
+    pos - i
 }
 
 # ============================================================================

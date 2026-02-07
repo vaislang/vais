@@ -5535,3 +5535,156 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+// ==================== Error Recovery E2E Tests ====================
+
+/// Helper: parse with recovery and return (module, errors)
+fn parse_recovery(source: &str) -> (vais_ast::Module, Vec<vais_parser::ParseError>) {
+    vais_parser::parse_with_recovery(source)
+}
+
+#[test]
+fn e2e_recovery_multiple_broken_functions() {
+    // Three functions: good → broken → good. Recovery should find at least good1.
+    let source = r#"
+F good1() -> i64 = 1
+F broken(
+F good2() -> i64 = 2
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(!errors.is_empty(), "Should report at least one error");
+    // Should recover at least one valid item (good1 is parsed before error)
+    let valid: Vec<_> = module.items.iter().filter(|i| !matches!(i.node, vais_ast::Item::Error { .. })).collect();
+    assert!(valid.len() >= 1, "Should recover at least 1 valid item, got {}", valid.len());
+    // Total items (valid + error) should be more than just the error
+    assert!(module.items.len() >= 2, "Should have at least 2 items (valid + error), got {}", module.items.len());
+}
+
+#[test]
+fn e2e_recovery_missing_closing_brace() {
+    // Missing } after function body
+    let source = r#"
+F broken() -> i64 {
+    x := 1
+F good() -> i64 = 42
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(!errors.is_empty(), "Should report missing brace error");
+    // good() should still be parsed
+    let has_good = module.items.iter().any(|i| {
+        matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good")
+    });
+    assert!(has_good, "Should recover and parse 'good' function");
+}
+
+#[test]
+fn e2e_recovery_invalid_top_level_token() {
+    // Random token at top level
+    let source = r#"
+F good1() -> i64 = 1
+42
+F good2() -> i64 = 2
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(!errors.is_empty(), "Should report error for '42' at top level");
+    let valid: Vec<_> = module.items.iter().filter(|i| !matches!(i.node, vais_ast::Item::Error { .. })).collect();
+    assert!(valid.len() >= 2, "Should recover both valid functions, got {}", valid.len());
+}
+
+#[test]
+fn e2e_recovery_broken_struct() {
+    // Broken struct followed by valid function
+    let source = r#"
+S Broken {
+    x: i64,
+    y
+}
+F good() -> i64 = 0
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(!errors.is_empty(), "Should report struct field error");
+    let has_good = module.items.iter().any(|i| {
+        matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good")
+    });
+    assert!(has_good, "Should recover and parse 'good' function");
+}
+
+#[test]
+fn e2e_recovery_multiple_errors_collected() {
+    // Multiple broken items — should collect multiple errors
+    let source = r#"
+F broken1(
+F broken2(
+F broken3(
+F good() -> i64 = 0
+"#;
+    let (_module, errors) = parse_recovery(source);
+    assert!(errors.len() >= 2, "Should collect at least 2 errors, got {}", errors.len());
+}
+
+#[test]
+fn e2e_recovery_error_preserves_span() {
+    // Verify that errors contain span information
+    let source = "F broken(\nF good() -> i64 = 0\n";
+    let (_module, errors) = parse_recovery(source);
+    assert!(!errors.is_empty(), "Should have errors");
+    for error in &errors {
+        let span = error.span();
+        assert!(span.is_some(), "Each error should have a span");
+    }
+}
+
+#[test]
+fn e2e_recovery_broken_enum_then_valid() {
+    // Broken enum followed by valid function
+    let source = r#"
+E Broken {
+    A(
+}
+F good() -> i64 = 0
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(!errors.is_empty(), "Should report enum error");
+    let has_good = module.items.iter().any(|i| {
+        matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good")
+    });
+    assert!(has_good, "Should recover and parse 'good' function");
+}
+
+#[test]
+fn e2e_recovery_mixed_valid_and_broken() {
+    // Interleaved valid and broken items
+    let source = r#"
+F f1() -> i64 = 1
+S Broken1 { x }
+F f2() -> i64 = 2
+S Broken2 { y }
+F f3() -> i64 = 3
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(errors.len() >= 2, "Should report at least 2 errors, got {}", errors.len());
+    let valid_fns: Vec<_> = module.items.iter().filter(|i| {
+        matches!(&i.node, vais_ast::Item::Function(_))
+    }).collect();
+    assert!(valid_fns.len() >= 3, "Should recover all 3 valid functions, got {}", valid_fns.len());
+}
+
+#[test]
+fn e2e_recovery_max_errors_limit() {
+    // Normal mode should fail fast on first error
+    let source = "F broken(\nF good() -> i64 = 0\n";
+    let result = vais_parser::parse(source);
+    assert!(result.is_err(), "Normal mode should fail on first error");
+}
+
+#[test]
+fn e2e_recovery_valid_code_no_errors() {
+    // Valid code should produce no errors in recovery mode
+    let source = r#"
+F add(a: i64, b: i64) -> i64 = a + b
+F main() -> i64 = add(1, 2)
+"#;
+    let (module, errors) = parse_recovery(source);
+    assert!(errors.is_empty(), "Valid code should have no errors, got {:?}", errors);
+    assert!(module.items.len() >= 2, "Should parse both functions");
+}
