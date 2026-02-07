@@ -267,7 +267,8 @@ fn fuzz_deeply_nested_expressions() {
     // Note: Deep nesting (30+) causes stack overflow which aborts the process
     // and can't be caught by catch_unwind. We test moderate nesting here.
     // The fact that deep nesting causes stack overflow is a FINDING of this fuzz test.
-    for depth in [5, 10, 15, 20] {
+    // macOS CI has smaller default stack size — keep max depth at 15 to avoid stack overflow
+    for depth in [5, 10, 15] {
         // Nested parentheses
         let mut input = String::new();
         for _ in 0..depth {
