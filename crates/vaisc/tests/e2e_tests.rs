@@ -6602,6 +6602,218 @@ F main() -> i64 {
     assert_eq!(result.exit_code, 0, "closure in loop failed: {}", result.stderr);
 }
 
+// ===== Additional E2E Tests for 300 target =====
+
+#[test]
+fn e2e_recursive_fibonacci() {
+    // Classic recursive fibonacci
+    let source = r#"
+F fib(n: i64) -> i64 {
+    I n <= 1 { R n }
+    fib(n - 1) + fib(n - 2)
+}
+F main() -> i64 {
+    I fib(10) == 55 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "recursive fibonacci failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_self_recursion_operator() {
+    // Test @ self-recursion operator
+    let source = r#"
+F factorial(n: i64) -> i64 {
+    I n <= 1 { 1 } E { n * @(n - 1) }
+}
+F main() -> i64 {
+    I factorial(5) == 120 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "self recursion failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_bitwise_operations() {
+    // Test bitwise operations: AND, OR, XOR, shift
+    let source = r#"
+F main() -> i64 {
+    a := 255
+    b := 15
+    and_result := a & b    # 15
+    or_result := a | b     # 255
+    xor_result := a ^ b    # 240
+    shl := 1 << 8          # 256
+    shr := 256 >> 4         # 16
+    I and_result == 15 && or_result == 255 && xor_result == 240 && shl == 256 && shr == 16 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "bitwise ops failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_multiple_return_paths() {
+    // Test function with multiple early returns
+    let source = r#"
+F classify(n: i64) -> i64 {
+    I n < 0 { R 0 - 1 }
+    I n == 0 { R 0 }
+    I n < 10 { R 1 }
+    I n < 100 { R 2 }
+    3
+}
+F main() -> i64 {
+    a := classify(0 - 5)
+    b := classify(0)
+    c := classify(7)
+    d := classify(50)
+    e := classify(999)
+    I a == 0 - 1 && b == 0 && c == 1 && d == 2 && e == 3 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "multiple return paths failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_compose_apply_twice() {
+    // Test passing closures as callbacks: apply_twice and compose
+    let source = r#"
+F apply_twice(x: i64, f: fn(i64) -> i64) -> i64 { f(f(x)) }
+F compose(x: i64, f: fn(i64) -> i64, g: fn(i64) -> i64) -> i64 { g(f(x)) }
+F main() -> i64 {
+    a := apply_twice(3, |x: i64| x * 2)   # 3*2=6, 6*2=12
+    b := compose(5, |x: i64| x + 1, |x: i64| x * 3)  # (5+1)*3=18
+    I a == 12 && b == 18 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure compose failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_mutable_accumulator_pattern() {
+    // Test mutable variable accumulation in loops
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    product := mut 1
+    max := mut 0
+    L i:1..11 {
+        sum = sum + i
+        product = I i <= 5 { product * i } E { product }
+        I i > max { max = i }
+    }
+    # sum=55, product=120 (1*2*3*4*5), max=10
+    I sum == 55 && product == 120 && max == 10 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "mutable accumulator failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_struct_method_chaining() {
+    // Test struct with methods used in sequence
+    let source = r#"
+S Counter { value: i64 }
+X Counter {
+    F get(&self) -> i64 { self.value }
+    F inc(&self) -> i64 {
+        self.value = self.value + 1
+        self.value
+    }
+    F add(&self, n: i64) -> i64 {
+        self.value = self.value + n
+        self.value
+    }
+}
+F main() -> i64 {
+    c := Counter { value: 0 }
+    c.inc()
+    c.inc()
+    c.add(10)
+    v := c.get()
+    I v == 12 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "struct method chaining failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_enum_tag_matching() {
+    // Test enum tag-based matching with different variants
+    let source = r#"
+E Shape { Circle(i64), Rect(i64), Triangle(i64) }
+F area(s: Shape) -> i64 {
+    M s {
+        Circle(r) => r * r * 3,
+        Rect(side) => side * side,
+        Triangle(base) => base * base / 2
+    }
+}
+F main() -> i64 {
+    c := area(Circle(5))    # 75
+    r := area(Rect(4))       # 16
+    t := area(Triangle(6))   # 18
+    I c == 75 && r == 16 && t == 18 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "enum tag matching failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_higher_order_pipeline() {
+    // Test combining higher-order functions in a data processing pipeline
+    let source = r#"
+F map_arr(data: i64, len: i64, f: fn(i64) -> i64) -> i64 {
+    out := malloc(len * 8)
+    i := mut 0
+    L {
+        I i >= len { B }
+        store_i64(out + i * 8, f(load_i64(data + i * 8)))
+        i = i + 1
+    }
+    out
+}
+F sum_arr(data: i64, len: i64) -> i64 {
+    acc := mut 0
+    i := mut 0
+    L {
+        I i >= len { B }
+        acc = acc + load_i64(data + i * 8)
+        i = i + 1
+    }
+    acc
+}
+F main() -> i64 {
+    # Pipeline: [1..5] -> square -> add_one -> sum
+    data := malloc(40)
+    store_i64(data, 1)
+    store_i64(data + 8, 2)
+    store_i64(data + 16, 3)
+    store_i64(data + 24, 4)
+    store_i64(data + 32, 5)
+
+    squared := map_arr(data, 5, |x: i64| x * x)       # [1,4,9,16,25]
+    plus_one := map_arr(squared, 5, |x: i64| x + 1)    # [2,5,10,17,26]
+    result := sum_arr(plus_one, 5)                       # 60
+
+    free(data)
+    free(squared)
+    free(plus_one)
+    I result == 60 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "higher-order pipeline failed: {}", result.stderr);
+}
+
 #[test]
 fn e2e_recovery_max_errors_limit() {
     // Normal mode should fail fast on first error
