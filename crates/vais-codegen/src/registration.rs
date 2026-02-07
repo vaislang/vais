@@ -47,11 +47,13 @@ impl CodeGenerator {
                 .collect()
         };
 
-        let ret_type = f
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = f.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
 
         self.functions.insert(
             f.name.node.to_string(),
@@ -120,11 +122,15 @@ impl CodeGenerator {
             }
         }
 
-        let ret_type = f
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = f.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&method_name) {
+            resolved_sig.ret.clone()
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&f.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
 
         self.functions.insert(
             method_name.to_string(),
@@ -283,11 +289,13 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = func
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func_name) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
 
         self.functions.insert(
             func_name,

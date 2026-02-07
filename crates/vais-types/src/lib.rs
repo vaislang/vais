@@ -2688,7 +2688,7 @@ impl TypeChecker {
             .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+            .unwrap_or_else(|| self.fresh_type_var());
 
         // Restore previous generics
         self.restore_generics(prev_generics, prev_bounds, prev_const_generics);
@@ -3377,11 +3377,12 @@ impl TypeChecker {
         }
 
         // Set current function context
+        let ret_type_inferred = f.ret_type.is_none();
         let ret_type = f
             .ret_type
             .as_ref()
             .map(|t| self.resolve_type(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+            .unwrap_or_else(|| self.fresh_type_var());
         self.validate_dyn_trait_object_safety(&ret_type);
         self.current_fn_ret = Some(ret_type.clone());
         self.current_fn_name = Some(f.name.node.clone());
@@ -3423,6 +3424,21 @@ impl TypeChecker {
             body_type.clone()
         };
         self.unify(&expected_ret, &body_type_deref)?;
+
+        // Resolve inferred return type: if return type was omitted, apply substitutions
+        // to resolve the type variable to the concrete type from the body.
+        if ret_type_inferred {
+            let resolved_ret = self.apply_substitutions(&ret_type);
+            let final_ret = if matches!(resolved_ret, ResolvedType::Var(_)) {
+                // Unresolved: default to i64 for numeric expressions
+                ResolvedType::I64
+            } else {
+                resolved_ret
+            };
+            if let Some(sig) = self.functions.get_mut(&f.name.node) {
+                sig.ret = final_ret;
+            }
+        }
 
         // Resolve inferred parameter types after body type checking.
         // Parameters declared without type annotations (Type::Infer) get Var(id) types

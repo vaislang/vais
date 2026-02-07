@@ -1869,6 +1869,7 @@ fn cmd_build(
             module_name,
             target.clone(),
         );
+        gen.set_resolved_functions(checker.get_all_functions().clone());
         gen.generate_module(&final_ast)
             .map_err(|e| format!("Inkwell codegen error: {}", e))?;
         let ir = gen.get_ir_string();

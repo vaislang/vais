@@ -124,6 +124,9 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// TCO state: when generating a tail-recursive function as a loop,
     /// this holds the parameter allocas and the loop header block for jumping back.
     tco_state: Option<TcoState<'ctx>>,
+
+    /// Resolved function signatures from type checker (for return/param type inference)
+    resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -182,6 +185,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             function_return_structs: HashMap::new(),
             defer_stack: Vec::new(),
             tco_state: None,
+            resolved_function_sigs: HashMap::new(),
         };
 
         // Declare built-in functions
@@ -270,6 +274,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         &self.module
     }
 
+    /// Set resolved function signatures from the type checker.
+    pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
+        self.resolved_function_sigs = resolved;
+    }
+
     /// Returns the LLVM IR as a string.
     pub fn get_ir_string(&self) -> String {
         self.module.print_to_string().to_string()
@@ -293,18 +302,30 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        let ret_resolved = func
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
         let ret_substituted = self.substitute_type(&ret_resolved);
 
         let param_types: Vec<BasicMetadataTypeEnum> = func
             .params
             .iter()
-            .map(|p| {
-                let resolved = self.ast_type_to_resolved(&p.ty.node);
+            .enumerate()
+            .map(|(i, p)| {
+                let resolved = if matches!(p.ty.node, Type::Infer) {
+                    // Use type checker's resolved param type
+                    self.resolved_function_sigs
+                        .get(&func.name.node)
+                        .and_then(|sig| sig.params.get(i))
+                        .map(|(_, ty, _)| ty.clone())
+                        .unwrap_or_else(|| self.ast_type_to_resolved(&p.ty.node))
+                } else {
+                    self.ast_type_to_resolved(&p.ty.node)
+                };
                 // If param type is inferred (defaults to I64) but return type is F64,
                 // infer param as F64 too (for simple arithmetic functions)
                 let resolved = if matches!(p.ty.node, Type::Infer)
@@ -654,12 +675,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             loop_header,
         });
 
-        // Generate function body
-        let ret_resolved = func
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        // Generate function body (TCO path)
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
         let ret_substituted = self.substitute_type(&ret_resolved);
 
         match &func.body {
@@ -897,11 +920,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
 
         // Generate function body
-        let ret_resolved = func
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
         let ret_substituted = self.substitute_type(&ret_resolved);
 
         match &func.body {
@@ -2087,9 +2112,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Keep float type
                     val.get_type()
                 } else if val.is_pointer_value()
-                    && matches!(&value.node, Expr::Array(_) | Expr::Index { .. })
+                    && matches!(
+                        &value.node,
+                        Expr::Array(_)
+                            | Expr::Index { .. }
+                            | Expr::String(_)
+                            | Expr::StringInterp(_)
+                    )
                 {
-                    // Keep pointer type for array allocations and slice results
+                    // Keep pointer type for array allocations, slice results, and strings
                     val.get_type()
                 } else {
                     // Default to i64 for non-struct values (backward compatible)
@@ -5004,11 +5035,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
-        let ret_resolved = func
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&method_name) {
+            resolved_sig.ret.clone()
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
         let ret_substituted = self.substitute_type(&ret_resolved);
 
         let fn_type = if ret_substituted == ResolvedType::Unit {
@@ -5106,11 +5141,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         }
 
         // Generate body
-        let ret_resolved = func
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_resolved = if let Some(t) = func.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&method_name) {
+            resolved_sig.ret.clone()
+        } else if let Some(resolved_sig) = self.resolved_function_sigs.get(&func.name.node) {
+            resolved_sig.ret.clone()
+        } else {
+            ResolvedType::Unit
+        };
         let ret_substituted = self.substitute_type(&ret_resolved);
 
         match &func.body {

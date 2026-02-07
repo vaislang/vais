@@ -133,14 +133,15 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = generic_fn
-            .ret_type
-            .as_ref()
-            .map(|t| {
-                let ty = self.ast_type_to_resolved(&t.node);
-                vais_types::substitute_type(&ty, &substitutions)
-            })
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = generic_fn.ret_type.as_ref() {
+            let ty = self.ast_type_to_resolved(&t.node);
+            vais_types::substitute_type(&ty, &substitutions)
+        } else {
+            self.functions
+                .get(&generic_fn.name.node)
+                .map(|info| info.signature.ret.clone())
+                .unwrap_or(ResolvedType::Unit)
+        };
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
@@ -657,11 +658,15 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = f
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = f.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else {
+            // Use registered return type from type checker (supports return type inference)
+            self.functions
+                .get(&f.name.node)
+                .map(|info| info.signature.ret.clone())
+                .unwrap_or(ResolvedType::Unit)
+        };
 
         // Store current return type for nested return statements
         self.current_return_type = Some(ret_type.clone());
@@ -829,11 +834,14 @@ impl CodeGenerator {
             })
             .collect();
 
-        let ret_type = f
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = f.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else {
+            self.functions
+                .get(func_name)
+                .map(|info| info.signature.ret.clone())
+                .unwrap_or(ResolvedType::Unit)
+        };
 
         let ret_llvm = self.type_to_llvm(&ret_type);
 
@@ -1089,11 +1097,14 @@ impl CodeGenerator {
             params.push(format!("{} %{}", llvm_ty, p.name.node));
         }
 
-        let ret_type = f
-            .ret_type
-            .as_ref()
-            .map(|t| self.ast_type_to_resolved(&t.node))
-            .unwrap_or(ResolvedType::Unit);
+        let ret_type = if let Some(t) = f.ret_type.as_ref() {
+            self.ast_type_to_resolved(&t.node)
+        } else {
+            self.functions
+                .get(&f.name.node)
+                .map(|info| info.signature.ret.clone())
+                .unwrap_or(ResolvedType::Unit)
+        };
 
         // Store current return type for nested return statements
         self.current_return_type = Some(ret_type.clone());
