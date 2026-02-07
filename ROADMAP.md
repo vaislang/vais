@@ -155,6 +155,13 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 38** | 셀프호스팅 100% | Parser/AST/TC/Codegen/Module 100%, **부트스트랩 달성** (Stage1→Stage2→Stage3 fixed point, SHA256 일치, 17,807줄) | 2026-02-06 |
 | **Phase 39** | 셀프호스트 MIR | MIR 전체 파이프라인 (8,000+ LOC): 구조체/빌더/lowering/LLVM emission/optimizer/analysis/borrow checker + 파이프라인 통합 | 2026-02-07 |
 | **Phase 40** | Stdlib 테스트 강화 | 276 assertions (Vec 103, String 58, HashMap 50, Option 32, File I/O 12, Print 21), Rust E2E 6개, 버그 3건 수정 | 2026-02-07 |
+| **Phase 41** | 언어 진화 | Error 트레이트, enum impl 블록, Iterator 어댑터 (map/filter/take/skip/chain/zip/enumerate), yield 키워드, 301 E2E | 2026-02-07 |
+| **Phase 42** | 인크리멘탈 컴파일 | per-module .o 캐싱, rayon 병렬, atomic write, 순환 감지, 30K lines 1-file: **571ms→96ms** (5.9x), 312 E2E | 2026-02-08 |
+| **Phase 43** | Codegen 품질 개선 | match phi node 수정 (enum/struct 반환), clippy 0건, ignored 35개 분류, 315 E2E | 2026-02-08 |
+| **Phase 44** | Nested Struct 접근 | 📋 예정 — `o.a.val` 다단계 필드 접근 지원 | - |
+| **Phase 45** | Stdlib 확장 | 📋 예정 — std/process, std/env, std/signal 모듈 추가 | - |
+| **Phase 46** | Parser 모듈화 | 📋 예정 — parser/lib.rs 4,208줄을 expr/stmt/type 모듈로 분리 | - |
+| **Phase 47** | Incremental TC | 📋 예정 — per-module 타입체킹 캐싱, Phase 42 codegen 캐싱 확장 | - |
 
 ---
 
@@ -502,6 +509,188 @@ Stage 0 ✅ → Stage 1 ✅ → Stage 2 ✅ → Stage 3 ✅ → Stage 4 ✅ → 
 
 ```
 Stage 0 ✅ → Stage 1 ✅ → Stage 2 ✅ → Stage 3 ✅  🎉 완료!
+```
+
+---
+
+## 🚀 Phase 44: Nested Struct Field Access
+
+> **상태**: 📋 예정
+> **목표**: `o.a.val` 같은 다단계 필드 접근 지원 — 현재 단일 레벨(`o.a`)만 가능
+> **배경**: E2E 테스트 주석에도 명시된 실사용 제약. 중간 변수 없이 체이닝 가능하게 개선
+
+### Stage 0: Parser 다단계 FieldAccess 지원
+
+**목표**: `a.b.c` 파싱 시 중첩 FieldAccess AST 노드 생성
+
+- [ ] parser `parse_postfix()`에서 연속 `.field` 를 재귀 FieldAccess로 변환
+- [ ] AST 프린터/visitor에서 중첩 FieldAccess 순회 지원
+- [ ] 파서 유닛 테스트 추가
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 1: Type Checker 다단계 FieldAccess 추론
+
+**목표**: `a.b.c` 타입 추론 — 각 단계별 구조체 타입 확인
+
+- [ ] type checker `check_field_access()`에서 중첩 FieldAccess 처리
+- [ ] 중간 필드가 구조체가 아닌 경우 에러 메시지 (E003 or 신규)
+- [ ] Ref/RefMut 자동 역참조 지원
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 2: Codegen 다단계 GEP 체이닝
+
+**목표**: text codegen에서 `getelementptr` 체이닝으로 다단계 접근
+
+- [ ] `generate_field_access()`에서 중첩 필드 → 연속 GEP 명령 생성
+- [ ] Inkwell 백엔드도 동일 지원
+- [ ] E2E 테스트 추가 (2~3단계 접근, 구조체 안 구조체 등)
+- **난이도**: 중 | **모델**: Opus 직접
+
+### 우선순위
+
+```
+Stage 0 → Stage 1 → Stage 2
+```
+
+---
+
+## 🚀 Phase 45: Stdlib 확장 (process/env/signal)
+
+> **상태**: 📋 예정
+> **목표**: 실제 CLI 프로그램 작성에 필요한 시스템 모듈 추가
+> **배경**: 현재 stdlib 60개 모듈이지만 subprocess 실행, 환경변수, 시그널 처리 없음
+
+### Stage 0: std/env 모듈
+
+**목표**: 환경변수 접근 — `env_get("PATH")`, `env_set("KEY", "val")`, `env_vars()`
+
+- [ ] `std/env.vais` 작성 — getenv/setenv FFI 래퍼
+- [ ] codegen에 getenv/setenv 빌트인 또는 extern 선언
+- [ ] E2E 테스트
+- **난이도**: 하 | **모델**: Sonnet 위임
+
+### Stage 1: std/process 모듈
+
+**목표**: 서브프로세스 실행 — `process_run("ls", args)`, exit code 수집
+
+- [ ] `std/process.vais` 작성 — fork/exec 또는 system() FFI 래퍼
+- [ ] 프로세스 출력 캡처 (popen/pclose)
+- [ ] E2E 테스트
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 2: std/signal 모듈
+
+**목표**: 시그널 핸들링 — `signal_handle(SIGINT, handler)`
+
+- [ ] `std/signal.vais` 작성 — signal() FFI 래퍼
+- [ ] 시그널 번호 상수 정의 (SIGINT, SIGTERM 등)
+- [ ] E2E 테스트 (시그널 전송/수신)
+- **난이도**: 중 | **모델**: Opus 직접
+
+### 우선순위
+
+```
+Stage 0 → Stage 1 → Stage 2
+```
+
+---
+
+## 🚀 Phase 46: Parser 모듈화
+
+> **상태**: 📋 예정
+> **목표**: `parser/lib.rs` 4,208줄을 기능별 모듈로 분리하여 유지보수성 개선
+> **배경**: 단일 파일 4,000줄+ 은 탐색/수정이 어려움. 논리적 단위로 분리
+
+### Stage 0: 모듈 구조 설계 + Expression Parser 분리
+
+**목표**: expression 파싱 로직을 `expr.rs`로 분리
+
+- [ ] `crates/vais-parser/src/expr.rs` 생성 — parse_expr, parse_primary, parse_binary 등
+- [ ] lib.rs에서 `mod expr; use expr::*;` 로 재export
+- [ ] 기존 테스트 전부 통과 확인
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 1: Statement Parser 분리
+
+**목표**: statement 파싱 로직을 `stmt.rs`로 분리
+
+- [ ] `crates/vais-parser/src/stmt.rs` 생성 — parse_stmt, parse_let, parse_assign 등
+- [ ] lib.rs 연동
+- [ ] 기존 테스트 전부 통과 확인
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 2: Type/Pattern Parser 분리
+
+**목표**: 타입/패턴 파싱 로직을 `types.rs`, `pattern.rs`로 분리
+
+- [ ] `crates/vais-parser/src/types.rs` — parse_type, parse_generic_params
+- [ ] `crates/vais-parser/src/pattern.rs` — parse_pattern, parse_match_arm
+- [ ] 기존 테스트 전부 통과 확인
+- **난이도**: 중 | **모델**: Sonnet 위임
+
+### Stage 3: Item Parser 분리 + 검증
+
+**목표**: 최상위 아이템 파싱 분리 + 전체 검증
+
+- [ ] `crates/vais-parser/src/item.rs` — parse_function, parse_struct, parse_enum, parse_impl 등
+- [ ] lib.rs를 조율 레이어로 축소 (목표 500줄 이하)
+- [ ] 전체 E2E + 파서 테스트 통과
+- **난이도**: 중 | **모델**: Opus 직접
+
+### 우선순위
+
+```
+Stage 0 → Stage 1 → Stage 2 → Stage 3
+```
+
+---
+
+## 🚀 Phase 47: Incremental Type Checking
+
+> **상태**: 📋 예정
+> **목표**: per-module 타입체킹 결과 캐싱 — Phase 42 codegen 캐싱의 자연스러운 확장
+> **배경**: 현재 매번 전체 AST를 타입체킹. 모듈별 캐싱으로 변경 없는 모듈 재검사 생략
+
+### Stage 0: 모듈별 타입 시그니처 해시
+
+**목표**: 각 모듈의 public 타입/함수 시그니처 해시 계산
+
+- [ ] 모듈별 시그니처 해시 생성 (함수 이름+타입, struct 필드, enum variant)
+- [ ] 해시 저장/로드 (`.vais-cache/` 디렉토리)
+- [ ] 해시 변경 감지 로직
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 1: 모듈별 TC 결과 캐싱
+
+**목표**: 시그니처 해시 불변 시 TC 결과 재사용
+
+- [ ] TypedModule 직렬화/역직렬화
+- [ ] 캐시 hit/miss 로직
+- [ ] 의존 모듈 시그니처 변경 시 캐시 무효화
+- **난이도**: 상 | **모델**: Opus 직접
+
+### Stage 2: 통합 + 벤치마크
+
+**목표**: codegen 캐싱과 TC 캐싱 연동, 성능 측정
+
+- [ ] `--incremental` 플래그로 TC+codegen 캐싱 통합
+- [ ] 벤치마크: 30K lines, 1-file change에서 TC 시간 측정
+- [ ] E2E 테스트 + 캐시 무효화 테스트
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 3: 안정성 + Edge Case
+
+**목표**: 캐시 정합성 보장
+
+- [ ] circular dependency 캐시 처리
+- [ ] trait impl 추가/삭제 시 캐시 무효화
+- [ ] 제네릭 모노모픽화 캐시 전략
+- **난이도**: 상 | **모델**: Opus 직접
+
+### 우선순위
+
+```
+Stage 0 → Stage 1 → Stage 2 → Stage 3
 ```
 
 ---
