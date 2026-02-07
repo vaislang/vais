@@ -711,7 +711,11 @@ fn main() {
                         "{} Directory build: entry={}, search_paths=[{}]",
                         "info:".blue().bold(),
                         entry.display(),
-                        dep_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+                        dep_paths
+                            .iter()
+                            .map(|p| p.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     );
                 }
 
@@ -723,7 +727,10 @@ fn main() {
             // Set up module search paths for directory builds
             if !dir_dep_paths.is_empty() {
                 let existing = std::env::var("VAIS_DEP_PATHS").unwrap_or_default();
-                let new_paths: Vec<String> = dir_dep_paths.iter().map(|p| p.display().to_string()).collect();
+                let new_paths: Vec<String> = dir_dep_paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
                 let combined = if existing.is_empty() {
                     new_paths.join(":")
                 } else {
@@ -2971,7 +2978,15 @@ fn compile_ir_to_binary(
             compile_to_wasi(ir_path, bin_path, opt_level, verbose)
         }
         _ => compile_to_native(
-            ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode, used_modules,
+            ir_path,
+            bin_path,
+            opt_level,
+            debug,
+            verbose,
+            hot,
+            lto_mode,
+            pgo_mode,
+            used_modules,
             native_deps,
         ),
     }
@@ -3660,19 +3675,11 @@ fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), Stri
         match result {
             Ok(true) => {
                 passed += 1;
-                println!(
-                    "  {} {}",
-                    "PASS".green().bold(),
-                    test_file.display()
-                );
+                println!("  {} {}", "PASS".green().bold(), test_file.display());
             }
             Ok(false) => {
                 failed += 1;
-                println!(
-                    "  {} {}",
-                    "FAIL".red().bold(),
-                    test_file.display()
-                );
+                println!("  {} {}", "FAIL".red().bold(), test_file.display());
             }
             Err(e) => {
                 failed += 1;
@@ -3690,11 +3697,7 @@ fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), Stri
 
     println!();
     if failed == 0 {
-        println!(
-            "{} {} test(s) passed",
-            "✓".green().bold(),
-            passed
-        );
+        println!("{} {} test(s) passed", "✓".green().bold(), passed);
         Ok(())
     } else {
         if !errors.is_empty() && verbose {
@@ -3703,10 +3706,7 @@ fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), Stri
                 println!("  {}: {}", path.display(), err);
             }
         }
-        Err(format!(
-            "{} passed, {} failed",
-            passed, failed
-        ))
+        Err(format!("{} passed, {} failed", passed, failed))
     }
 }
 
@@ -3744,12 +3744,7 @@ fn run_single_test(path: &Path, verbose: bool) -> Result<(), String> {
             Err("test failed (non-zero exit code)".to_string())
         }
         Err(e) => {
-            println!(
-                "  {} {} - {}",
-                "ERROR".red().bold(),
-                path.display(),
-                e
-            );
+            println!("  {} {} - {}", "ERROR".red().bold(), path.display(), e);
             Err(e)
         }
     }
@@ -3810,8 +3805,8 @@ fn run_single_test_inner(path: &Path, verbose: bool) -> Result<bool, String> {
 }
 
 fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
-    let source = fs::read_to_string(path)
-        .map_err(|e| format!("cannot read '{}': {}", path.display(), e))?;
+    let source =
+        fs::read_to_string(path).map_err(|e| format!("cannot read '{}': {}", path.display(), e))?;
 
     // Parse
     let ast = parse(&source).map_err(|e| format!("parse error: {:?}", e))?;
@@ -3824,10 +3819,7 @@ fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     }
 
     // Codegen
-    let module_name = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("test");
+    let module_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("test");
     let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
     codegen.set_resolved_functions(checker.get_all_functions().clone());
 
@@ -4152,9 +4144,8 @@ fn cmd_pkg_tree(
     );
 
     let cache_root = package::default_registry_cache_root();
-    let deps =
-        package::resolve_all_dependencies(manifest, pkg_dir, cache_root.as_deref())
-            .map_err(|e| e.to_string())?;
+    let deps = package::resolve_all_dependencies(manifest, pkg_dir, cache_root.as_deref())
+        .map_err(|e| e.to_string())?;
 
     if deps.is_empty() {
         println!("  (no dependencies)");
@@ -4169,7 +4160,13 @@ fn cmd_pkg_tree(
         // Try to get version from dependency's manifest
         let version = dep._manifest.package.version.clone();
         let path_info = if dep.path.starts_with(pkg_dir) {
-            format!(" ({})", dep.path.strip_prefix(pkg_dir).unwrap_or(&dep.path).display())
+            format!(
+                " ({})",
+                dep.path
+                    .strip_prefix(pkg_dir)
+                    .unwrap_or(&dep.path)
+                    .display()
+            )
         } else {
             String::new()
         };
@@ -4179,11 +4176,9 @@ fn cmd_pkg_tree(
         // Show transitive dependencies (1 level deep unless max_depth allows more)
         if max_depth.is_none_or(|d| d > 0) {
             let child_cache = package::default_registry_cache_root();
-            if let Ok(child_deps) = package::resolve_all_dependencies(
-                &dep._manifest,
-                &dep.path,
-                child_cache.as_deref(),
-            ) {
+            if let Ok(child_deps) =
+                package::resolve_all_dependencies(&dep._manifest, &dep.path, child_cache.as_deref())
+            {
                 let child_prefix = if is_last { "    " } else { "│   " };
                 let child_count = child_deps.len();
                 let child_max = max_depth.map(|d| d.saturating_sub(1));
@@ -4192,7 +4187,11 @@ fn cmd_pkg_tree(
                         break;
                     }
                     let child_last = j == child_count - 1;
-                    let child_sym = if child_last { "└── " } else { "├── " };
+                    let child_sym = if child_last {
+                        "└── "
+                    } else {
+                        "├── "
+                    };
                     println!(
                         "{}{}{}  v{}",
                         child_prefix,
@@ -4205,11 +4204,7 @@ fn cmd_pkg_tree(
         }
     }
 
-    println!(
-        "\n{} {} direct dependencies",
-        "✓".green(),
-        dep_count
-    );
+    println!("\n{} {} direct dependencies", "✓".green(), dep_count);
     Ok(())
 }
 
@@ -4312,8 +4307,7 @@ fn cmd_pkg_doc(
     }
 
     let index_path = output_dir.join(format!("index.{}", ext));
-    fs::write(&index_path, index_content)
-        .map_err(|e| format!("failed to write index: {}", e))?;
+    fs::write(&index_path, index_content).map_err(|e| format!("failed to write index: {}", e))?;
 
     println!(
         "\n{} Documentation generated in {}",

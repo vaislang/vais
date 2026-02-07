@@ -889,7 +889,10 @@ sources = ["vendor/mylib.c"]
 
         let ssl = &manifest.native_dependencies["openssl"];
         assert_eq!(ssl.lib_flags(), vec!["-lssl", "-lcrypto"]);
-        assert_eq!(ssl.include_flag(), Some("-I/usr/include/openssl".to_string()));
+        assert_eq!(
+            ssl.include_flag(),
+            Some("-I/usr/include/openssl".to_string())
+        );
         assert_eq!(ssl.lib_path_flag(), Some("-L/usr/lib".to_string()));
 
         let custom = &manifest.native_dependencies["custom"];

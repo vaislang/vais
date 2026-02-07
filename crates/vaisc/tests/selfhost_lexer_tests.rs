@@ -1588,24 +1588,24 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
     use vais_lexer::Token;
     match token {
         // Keywords (1-30)
-        Token::Function => 1,   // TOK_KW_F
-        Token::Struct => 2,     // TOK_KW_S
-        Token::Enum => 3,       // TOK_KW_E
-        Token::If => 4,         // TOK_KW_I
-        Token::Loop => 5,       // TOK_KW_L
-        Token::Match => 6,      // TOK_KW_M
-        Token::Trait => 7,      // TOK_KW_W
-        Token::Impl => 8,       // TOK_KW_X
+        Token::Function => 1,    // TOK_KW_F
+        Token::Struct => 2,      // TOK_KW_S
+        Token::Enum => 3,        // TOK_KW_E
+        Token::If => 4,          // TOK_KW_I
+        Token::Loop => 5,        // TOK_KW_L
+        Token::Match => 6,       // TOK_KW_M
+        Token::Trait => 7,       // TOK_KW_W
+        Token::Impl => 8,        // TOK_KW_X
         Token::TypeKeyword => 9, // TOK_KW_T
-        Token::Use => 10,       // TOK_KW_U
-        Token::Pub => 11,       // TOK_KW_P
-        Token::Async => 12,     // TOK_KW_A
-        Token::Return => 13,    // TOK_KW_R
-        Token::Break => 14,     // TOK_KW_B
-        Token::Continue => 15,  // TOK_KW_C
-        Token::True => 16,      // TOK_KW_TRUE
-        Token::False => 17,     // TOK_KW_FALSE
-        Token::Mut => 18,       // TOK_KW_MUT
+        Token::Use => 10,        // TOK_KW_U
+        Token::Pub => 11,        // TOK_KW_P
+        Token::Async => 12,      // TOK_KW_A
+        Token::Return => 13,     // TOK_KW_R
+        Token::Break => 14,      // TOK_KW_B
+        Token::Continue => 15,   // TOK_KW_C
+        Token::True => 16,       // TOK_KW_TRUE
+        Token::False => 17,      // TOK_KW_FALSE
+        Token::Mut => 18,        // TOK_KW_MUT
         // Note: Else is context-dependent in Vais; E token is reused
         Token::Defer => 20,     // TOK_KW_D
         Token::Union => 21,     // TOK_KW_O
@@ -1725,14 +1725,14 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
 
         // Tokens not yet in selfhost lexer (return -1 for "not mapped")
         // These are rarely used features that can be added later if needed
-        Token::DocComment(_) => -1,  // Doc comments are stripped by the lexer anyway
-        Token::Weak => -1,           // weak references (rare)
-        Token::Clone => -1,          // clone (rare)
-        Token::Pure => -1,           // pure functions (effect system)
-        Token::Effect => -1,         // effect system
-        Token::Io => -1,             // io effect
-        Token::Unsafe => -1,         // unsafe blocks
-        Token::Yield => -1,          // yield keyword
+        Token::DocComment(_) => -1, // Doc comments are stripped by the lexer anyway
+        Token::Weak => -1,          // weak references (rare)
+        Token::Clone => -1,         // clone (rare)
+        Token::Pure => -1,          // pure functions (effect system)
+        Token::Effect => -1,        // effect system
+        Token::Io => -1,            // io effect
+        Token::Unsafe => -1,        // unsafe blocks
+        Token::Yield => -1,         // yield keyword
     }
 }
 
@@ -1744,39 +1744,114 @@ fn is_token_supported_by_selfhost(token: &vais_lexer::Token) -> bool {
 /// Get a human-readable name for a selfhost token ID
 fn selfhost_id_to_name(id: i64) -> &'static str {
     match id {
-        1 => "TOK_KW_F", 2 => "TOK_KW_S", 3 => "TOK_KW_E", 4 => "TOK_KW_I",
-        5 => "TOK_KW_L", 6 => "TOK_KW_M", 7 => "TOK_KW_W", 8 => "TOK_KW_X",
-        9 => "TOK_KW_T", 10 => "TOK_KW_U", 11 => "TOK_KW_P", 12 => "TOK_KW_A",
-        13 => "TOK_KW_R", 14 => "TOK_KW_B", 15 => "TOK_KW_C", 16 => "TOK_KW_TRUE",
-        17 => "TOK_KW_FALSE", 18 => "TOK_KW_MUT", 19 => "TOK_KW_ELSE",
-        20 => "TOK_KW_D", 21 => "TOK_KW_O", 22 => "TOK_KW_N", 23 => "TOK_KW_G",
-        24 => "TOK_KW_Y", 25 => "TOK_KW_SELF", 26 => "TOK_KW_SELF_UPPER",
-        27 => "TOK_KW_AS", 28 => "TOK_KW_CONST",
-        31 => "TOK_TY_I8", 32 => "TOK_TY_I16", 33 => "TOK_TY_I32", 34 => "TOK_TY_I64",
-        35 => "TOK_TY_I128", 36 => "TOK_TY_U8", 37 => "TOK_TY_U16", 38 => "TOK_TY_U32",
-        39 => "TOK_TY_U64", 40 => "TOK_TY_U128", 41 => "TOK_TY_F32", 42 => "TOK_TY_F64",
-        43 => "TOK_TY_BOOL", 44 => "TOK_TY_STR",
-        51 => "TOK_INT", 52 => "TOK_FLOAT", 53 => "TOK_STRING", 54 => "TOK_IDENT",
-        61 => "TOK_PLUS", 62 => "TOK_MINUS", 63 => "TOK_STAR", 64 => "TOK_SLASH",
-        65 => "TOK_PERCENT", 66 => "TOK_LT", 67 => "TOK_GT", 68 => "TOK_LT_EQ",
-        69 => "TOK_GT_EQ", 70 => "TOK_EQ_EQ", 71 => "TOK_NOT_EQ", 72 => "TOK_AMP",
-        73 => "TOK_PIPE", 74 => "TOK_CARET", 75 => "TOK_TILDE", 76 => "TOK_SHL",
-        77 => "TOK_SHR", 78 => "TOK_BANG", 79 => "TOK_AND", 80 => "TOK_OR",
-        81 => "TOK_EQ", 82 => "TOK_COLON_EQ", 83 => "TOK_PLUS_EQ", 84 => "TOK_MINUS_EQ",
-        85 => "TOK_STAR_EQ", 86 => "TOK_SLASH_EQ",
-        91 => "TOK_LPAREN", 92 => "TOK_RPAREN", 93 => "TOK_LBRACE", 94 => "TOK_RBRACE",
-        95 => "TOK_LBRACKET", 96 => "TOK_RBRACKET",
-        101 => "TOK_COMMA", 102 => "TOK_COLON", 103 => "TOK_SEMI", 104 => "TOK_DOT",
-        105 => "TOK_DOT_DOT", 106 => "TOK_DOT_DOT_EQ", 107 => "TOK_ARROW",
-        108 => "TOK_FAT_ARROW", 109 => "TOK_COLON_COLON", 110 => "TOK_QUESTION",
-        111 => "TOK_AT", 112 => "TOK_HASH",
-        113 => "TOK_PIPE_ARROW", 114 => "TOK_ELLIPSIS", 115 => "TOK_DOLLAR",
-        116 => "TOK_HASH_BRACKET", 117 => "TOK_LIFETIME",
-        121 => "TOK_KW_COMPTIME", 122 => "TOK_KW_DYN", 123 => "TOK_KW_LINEAR",
-        124 => "TOK_KW_AFFINE", 125 => "TOK_KW_MOVE", 126 => "TOK_KW_CONSUME",
-        127 => "TOK_KW_LAZY", 128 => "TOK_KW_FORCE",
-        141 => "TOK_TY_VEC8I32", 142 => "TOK_TY_VEC2I64", 143 => "TOK_TY_VEC4I64",
-        200 => "TOK_EOF", 201 => "TOK_ERROR",
+        1 => "TOK_KW_F",
+        2 => "TOK_KW_S",
+        3 => "TOK_KW_E",
+        4 => "TOK_KW_I",
+        5 => "TOK_KW_L",
+        6 => "TOK_KW_M",
+        7 => "TOK_KW_W",
+        8 => "TOK_KW_X",
+        9 => "TOK_KW_T",
+        10 => "TOK_KW_U",
+        11 => "TOK_KW_P",
+        12 => "TOK_KW_A",
+        13 => "TOK_KW_R",
+        14 => "TOK_KW_B",
+        15 => "TOK_KW_C",
+        16 => "TOK_KW_TRUE",
+        17 => "TOK_KW_FALSE",
+        18 => "TOK_KW_MUT",
+        19 => "TOK_KW_ELSE",
+        20 => "TOK_KW_D",
+        21 => "TOK_KW_O",
+        22 => "TOK_KW_N",
+        23 => "TOK_KW_G",
+        24 => "TOK_KW_Y",
+        25 => "TOK_KW_SELF",
+        26 => "TOK_KW_SELF_UPPER",
+        27 => "TOK_KW_AS",
+        28 => "TOK_KW_CONST",
+        31 => "TOK_TY_I8",
+        32 => "TOK_TY_I16",
+        33 => "TOK_TY_I32",
+        34 => "TOK_TY_I64",
+        35 => "TOK_TY_I128",
+        36 => "TOK_TY_U8",
+        37 => "TOK_TY_U16",
+        38 => "TOK_TY_U32",
+        39 => "TOK_TY_U64",
+        40 => "TOK_TY_U128",
+        41 => "TOK_TY_F32",
+        42 => "TOK_TY_F64",
+        43 => "TOK_TY_BOOL",
+        44 => "TOK_TY_STR",
+        51 => "TOK_INT",
+        52 => "TOK_FLOAT",
+        53 => "TOK_STRING",
+        54 => "TOK_IDENT",
+        61 => "TOK_PLUS",
+        62 => "TOK_MINUS",
+        63 => "TOK_STAR",
+        64 => "TOK_SLASH",
+        65 => "TOK_PERCENT",
+        66 => "TOK_LT",
+        67 => "TOK_GT",
+        68 => "TOK_LT_EQ",
+        69 => "TOK_GT_EQ",
+        70 => "TOK_EQ_EQ",
+        71 => "TOK_NOT_EQ",
+        72 => "TOK_AMP",
+        73 => "TOK_PIPE",
+        74 => "TOK_CARET",
+        75 => "TOK_TILDE",
+        76 => "TOK_SHL",
+        77 => "TOK_SHR",
+        78 => "TOK_BANG",
+        79 => "TOK_AND",
+        80 => "TOK_OR",
+        81 => "TOK_EQ",
+        82 => "TOK_COLON_EQ",
+        83 => "TOK_PLUS_EQ",
+        84 => "TOK_MINUS_EQ",
+        85 => "TOK_STAR_EQ",
+        86 => "TOK_SLASH_EQ",
+        91 => "TOK_LPAREN",
+        92 => "TOK_RPAREN",
+        93 => "TOK_LBRACE",
+        94 => "TOK_RBRACE",
+        95 => "TOK_LBRACKET",
+        96 => "TOK_RBRACKET",
+        101 => "TOK_COMMA",
+        102 => "TOK_COLON",
+        103 => "TOK_SEMI",
+        104 => "TOK_DOT",
+        105 => "TOK_DOT_DOT",
+        106 => "TOK_DOT_DOT_EQ",
+        107 => "TOK_ARROW",
+        108 => "TOK_FAT_ARROW",
+        109 => "TOK_COLON_COLON",
+        110 => "TOK_QUESTION",
+        111 => "TOK_AT",
+        112 => "TOK_HASH",
+        113 => "TOK_PIPE_ARROW",
+        114 => "TOK_ELLIPSIS",
+        115 => "TOK_DOLLAR",
+        116 => "TOK_HASH_BRACKET",
+        117 => "TOK_LIFETIME",
+        121 => "TOK_KW_COMPTIME",
+        122 => "TOK_KW_DYN",
+        123 => "TOK_KW_LINEAR",
+        124 => "TOK_KW_AFFINE",
+        125 => "TOK_KW_MOVE",
+        126 => "TOK_KW_CONSUME",
+        127 => "TOK_KW_LAZY",
+        128 => "TOK_KW_FORCE",
+        141 => "TOK_TY_VEC8I32",
+        142 => "TOK_TY_VEC2I64",
+        143 => "TOK_TY_VEC4I64",
+        200 => "TOK_EOF",
+        201 => "TOK_ERROR",
         -1 => "UNSUPPORTED",
         _ => "UNKNOWN",
     }
@@ -1788,22 +1863,76 @@ fn selfhost_token_mapping_completeness() {
     use vais_lexer::Token;
 
     let critical_tokens = vec![
-        Token::Function, Token::Struct, Token::Enum, Token::If, Token::Loop,
-        Token::Match, Token::Return, Token::Break, Token::Continue,
-        Token::True, Token::False, Token::Mut,
-        Token::I8, Token::I16, Token::I32, Token::I64, Token::I128,
-        Token::U8, Token::U16, Token::U32, Token::U64, Token::U128,
-        Token::F32, Token::F64, Token::Bool, Token::Str,
-        Token::Int(0), Token::Float(0.0), Token::String("".to_string()),
+        Token::Function,
+        Token::Struct,
+        Token::Enum,
+        Token::If,
+        Token::Loop,
+        Token::Match,
+        Token::Return,
+        Token::Break,
+        Token::Continue,
+        Token::True,
+        Token::False,
+        Token::Mut,
+        Token::I8,
+        Token::I16,
+        Token::I32,
+        Token::I64,
+        Token::I128,
+        Token::U8,
+        Token::U16,
+        Token::U32,
+        Token::U64,
+        Token::U128,
+        Token::F32,
+        Token::F64,
+        Token::Bool,
+        Token::Str,
+        Token::Int(0),
+        Token::Float(0.0),
+        Token::String("".to_string()),
         Token::Ident("x".to_string()),
-        Token::Plus, Token::Minus, Token::Star, Token::Slash, Token::Percent,
-        Token::Lt, Token::Gt, Token::Lte, Token::Gte, Token::EqEq, Token::Neq,
-        Token::Amp, Token::Pipe, Token::Caret, Token::Tilde, Token::Shl, Token::Shr,
-        Token::Eq, Token::ColonEq, Token::PlusEq, Token::MinusEq, Token::StarEq, Token::SlashEq,
-        Token::LParen, Token::RParen, Token::LBrace, Token::RBrace,
-        Token::LBracket, Token::RBracket,
-        Token::Comma, Token::Colon, Token::Semi, Token::Dot, Token::DotDot, Token::DotDotEq,
-        Token::Arrow, Token::FatArrow, Token::ColonColon, Token::Question, Token::At,
+        Token::Plus,
+        Token::Minus,
+        Token::Star,
+        Token::Slash,
+        Token::Percent,
+        Token::Lt,
+        Token::Gt,
+        Token::Lte,
+        Token::Gte,
+        Token::EqEq,
+        Token::Neq,
+        Token::Amp,
+        Token::Pipe,
+        Token::Caret,
+        Token::Tilde,
+        Token::Shl,
+        Token::Shr,
+        Token::Eq,
+        Token::ColonEq,
+        Token::PlusEq,
+        Token::MinusEq,
+        Token::StarEq,
+        Token::SlashEq,
+        Token::LParen,
+        Token::RParen,
+        Token::LBrace,
+        Token::RBrace,
+        Token::LBracket,
+        Token::RBracket,
+        Token::Comma,
+        Token::Colon,
+        Token::Semi,
+        Token::Dot,
+        Token::DotDot,
+        Token::DotDotEq,
+        Token::Arrow,
+        Token::FatArrow,
+        Token::ColonColon,
+        Token::Question,
+        Token::At,
     ];
 
     for token in &critical_tokens {
@@ -1811,7 +1940,8 @@ fn selfhost_token_mapping_completeness() {
         assert!(
             id != -1,
             "Critical token {:?} should be mapped to selfhost, got id={}",
-            token, id
+            token,
+            id
         );
     }
 }
@@ -1819,27 +1949,92 @@ fn selfhost_token_mapping_completeness() {
 #[test]
 fn selfhost_token_mapping_uniqueness() {
     // Verify that each token maps to a unique selfhost ID (no collisions)
-    use vais_lexer::Token;
     use std::collections::HashMap;
+    use vais_lexer::Token;
 
     let tokens = vec![
-        Token::Function, Token::Struct, Token::Enum, Token::If, Token::Loop,
-        Token::Match, Token::Trait, Token::Impl, Token::TypeKeyword, Token::Use,
-        Token::Pub, Token::Async, Token::Return, Token::Break, Token::Continue,
-        Token::True, Token::False, Token::Mut,
-        Token::Defer, Token::Union, Token::Extern, Token::Global, Token::Await,
-        Token::SelfLower, Token::SelfUpper, Token::As, Token::Const,
-        Token::I8, Token::I16, Token::I32, Token::I64, Token::I128,
-        Token::U8, Token::U16, Token::U32, Token::U64, Token::U128,
-        Token::F32, Token::F64, Token::Bool, Token::Str,
-        Token::Plus, Token::Minus, Token::Star, Token::Slash, Token::Percent,
-        Token::Lt, Token::Gt, Token::Lte, Token::Gte, Token::EqEq, Token::Neq,
-        Token::Amp, Token::Pipe, Token::Caret, Token::Tilde, Token::Shl, Token::Shr, Token::Bang,
-        Token::Eq, Token::ColonEq, Token::PlusEq, Token::MinusEq, Token::StarEq, Token::SlashEq,
-        Token::LParen, Token::RParen, Token::LBrace, Token::RBrace,
-        Token::LBracket, Token::RBracket,
-        Token::Comma, Token::Colon, Token::Semi, Token::Dot, Token::DotDot, Token::DotDotEq,
-        Token::Arrow, Token::FatArrow, Token::ColonColon, Token::Question, Token::At,
+        Token::Function,
+        Token::Struct,
+        Token::Enum,
+        Token::If,
+        Token::Loop,
+        Token::Match,
+        Token::Trait,
+        Token::Impl,
+        Token::TypeKeyword,
+        Token::Use,
+        Token::Pub,
+        Token::Async,
+        Token::Return,
+        Token::Break,
+        Token::Continue,
+        Token::True,
+        Token::False,
+        Token::Mut,
+        Token::Defer,
+        Token::Union,
+        Token::Extern,
+        Token::Global,
+        Token::Await,
+        Token::SelfLower,
+        Token::SelfUpper,
+        Token::As,
+        Token::Const,
+        Token::I8,
+        Token::I16,
+        Token::I32,
+        Token::I64,
+        Token::I128,
+        Token::U8,
+        Token::U16,
+        Token::U32,
+        Token::U64,
+        Token::U128,
+        Token::F32,
+        Token::F64,
+        Token::Bool,
+        Token::Str,
+        Token::Plus,
+        Token::Minus,
+        Token::Star,
+        Token::Slash,
+        Token::Percent,
+        Token::Lt,
+        Token::Gt,
+        Token::Lte,
+        Token::Gte,
+        Token::EqEq,
+        Token::Neq,
+        Token::Amp,
+        Token::Pipe,
+        Token::Caret,
+        Token::Tilde,
+        Token::Shl,
+        Token::Shr,
+        Token::Bang,
+        Token::Eq,
+        Token::ColonEq,
+        Token::PlusEq,
+        Token::MinusEq,
+        Token::StarEq,
+        Token::SlashEq,
+        Token::LParen,
+        Token::RParen,
+        Token::LBrace,
+        Token::RBrace,
+        Token::LBracket,
+        Token::RBracket,
+        Token::Comma,
+        Token::Colon,
+        Token::Semi,
+        Token::Dot,
+        Token::DotDot,
+        Token::DotDotEq,
+        Token::Arrow,
+        Token::FatArrow,
+        Token::ColonColon,
+        Token::Question,
+        Token::At,
     ];
 
     let mut seen_ids: HashMap<i64, &Token> = HashMap::new();
@@ -1864,11 +2059,10 @@ fn selfhost_token_mapping_uniqueness() {
 
 /// Analyze a single example file and return statistics
 fn analyze_example_file(path: &str) -> Result<(usize, usize, Vec<String>), String> {
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+    let source =
+        std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path, e))?;
 
-    let tokens = tokenize(&source)
-        .map_err(|e| format!("Lexer error in {}: {:?}", path, e))?;
+    let tokens = tokenize(&source).map_err(|e| format!("Lexer error in {}: {:?}", path, e))?;
 
     let total = tokens.len();
     let mut unsupported_tokens = Vec::new();
@@ -1929,9 +2123,14 @@ fn selfhost_examples_token_coverage_report() {
     println!("Total .vais files: {}", total_files);
     println!("Successfully lexed: {}", successful_files);
     println!("Total tokens: {}", total_tokens);
-    println!("Supported by selfhost: {} ({:.1}%)",
+    println!(
+        "Supported by selfhost: {} ({:.1}%)",
         supported_tokens,
-        if total_tokens > 0 { (supported_tokens as f64 / total_tokens as f64) * 100.0 } else { 0.0 }
+        if total_tokens > 0 {
+            (supported_tokens as f64 / total_tokens as f64) * 100.0
+        } else {
+            0.0
+        }
     );
 
     if !all_unsupported.is_empty() {
@@ -1990,18 +2189,24 @@ fn selfhost_examples_individual_file_verification() {
             continue; // Skip if file doesn't exist
         }
 
-        let source = std::fs::read_to_string(&full_path)
-            .expect(&format!("Failed to read {}", full_path));
+        let source =
+            std::fs::read_to_string(&full_path).expect(&format!("Failed to read {}", full_path));
 
-        let tokens = tokenize(&source)
-            .expect(&format!("Failed to lex {}", full_path));
+        let tokens = tokenize(&source).expect(&format!("Failed to lex {}", full_path));
 
         for expected in expected_tokens {
-            let found = tokens.iter().any(|t| format!("{:?}", t.token).starts_with(expected));
+            let found = tokens
+                .iter()
+                .any(|t| format!("{:?}", t.token).starts_with(expected));
             assert!(
                 found,
                 "Expected to find {:?} token in {}, but didn't.\nTokens: {:?}",
-                expected, rel_path, tokens.iter().map(|t| format!("{:?}", t.token)).collect::<Vec<_>>()
+                expected,
+                rel_path,
+                tokens
+                    .iter()
+                    .map(|t| format!("{:?}", t.token))
+                    .collect::<Vec<_>>()
             );
         }
     }
@@ -2038,19 +2243,29 @@ fn selfhost_verify_token_sequence_function_def() {
         54,  // b (Ident)
     ];
 
-    assert_eq!(tokens.len(), expected_ids.len(),
+    assert_eq!(
+        tokens.len(),
+        expected_ids.len(),
         "Token count mismatch. Expected {}, got {}.\nTokens: {:?}",
-        expected_ids.len(), tokens.len(),
-        tokens.iter().map(|t| format!("{:?}", t.token)).collect::<Vec<_>>()
+        expected_ids.len(),
+        tokens.len(),
+        tokens
+            .iter()
+            .map(|t| format!("{:?}", t.token))
+            .collect::<Vec<_>>()
     );
 
     for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
         let actual_id = rust_token_to_selfhost_id(&spanned.token);
         assert_eq!(
-            actual_id, *expected_id,
+            actual_id,
+            *expected_id,
             "Token {} mismatch: expected {} ({}), got {} ({}) for {:?}",
-            i, expected_id, selfhost_id_to_name(*expected_id),
-            actual_id, selfhost_id_to_name(actual_id),
+            i,
+            expected_id,
+            selfhost_id_to_name(*expected_id),
+            actual_id,
+            selfhost_id_to_name(actual_id),
             spanned.token
         );
     }
@@ -2079,9 +2294,13 @@ fn selfhost_verify_token_sequence_struct_def() {
     for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
         let actual_id = rust_token_to_selfhost_id(&spanned.token);
         assert_eq!(
-            actual_id, *expected_id,
+            actual_id,
+            *expected_id,
             "Token {} mismatch: expected {}, got {} for {:?}",
-            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+            i,
+            selfhost_id_to_name(*expected_id),
+            selfhost_id_to_name(actual_id),
+            spanned.token
         );
     }
 }
@@ -2094,26 +2313,30 @@ fn selfhost_verify_token_sequence_if_else() {
     // I x > 0 { 1 } E { 0 }
     // 4 54 67 51 93 51 94 3 93 51 94
     let expected_ids: Vec<i64> = vec![
-        4,   // I (If)
-        54,  // x (Ident)
-        67,  // >
-        51,  // 0 (Int)
-        93,  // {
-        51,  // 1 (Int)
-        94,  // }
-        3,   // E (Enum, used as Else)
-        93,  // {
-        51,  // 0 (Int)
-        94,  // }
+        4,  // I (If)
+        54, // x (Ident)
+        67, // >
+        51, // 0 (Int)
+        93, // {
+        51, // 1 (Int)
+        94, // }
+        3,  // E (Enum, used as Else)
+        93, // {
+        51, // 0 (Int)
+        94, // }
     ];
 
     assert_eq!(tokens.len(), expected_ids.len());
     for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
         let actual_id = rust_token_to_selfhost_id(&spanned.token);
         assert_eq!(
-            actual_id, *expected_id,
+            actual_id,
+            *expected_id,
             "Token {} mismatch: expected {}, got {} for {:?}",
-            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+            i,
+            selfhost_id_to_name(*expected_id),
+            selfhost_id_to_name(actual_id),
+            spanned.token
         );
     }
 }
@@ -2124,21 +2347,25 @@ fn selfhost_verify_token_sequence_loop() {
     let tokens = tokenize(source).unwrap();
 
     let expected_ids: Vec<i64> = vec![
-        5,   // L (Loop)
-        93,  // {
-        54,  // x (Ident)
-        83,  // +=
-        51,  // 1 (Int)
-        94,  // }
+        5,  // L (Loop)
+        93, // {
+        54, // x (Ident)
+        83, // +=
+        51, // 1 (Int)
+        94, // }
     ];
 
     assert_eq!(tokens.len(), expected_ids.len());
     for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
         let actual_id = rust_token_to_selfhost_id(&spanned.token);
         assert_eq!(
-            actual_id, *expected_id,
+            actual_id,
+            *expected_id,
             "Token {} mismatch: expected {}, got {} for {:?}",
-            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+            i,
+            selfhost_id_to_name(*expected_id),
+            selfhost_id_to_name(actual_id),
+            spanned.token
         );
     }
 }
@@ -2166,9 +2393,13 @@ fn selfhost_verify_token_sequence_match() {
     for (i, (spanned, expected_id)) in tokens.iter().zip(expected_ids.iter()).enumerate() {
         let actual_id = rust_token_to_selfhost_id(&spanned.token);
         assert_eq!(
-            actual_id, *expected_id,
+            actual_id,
+            *expected_id,
             "Token {} mismatch: expected {}, got {} for {:?}",
-            i, selfhost_id_to_name(*expected_id), selfhost_id_to_name(actual_id), spanned.token
+            i,
+            selfhost_id_to_name(*expected_id),
+            selfhost_id_to_name(actual_id),
+            spanned.token
         );
     }
 }
@@ -2179,7 +2410,10 @@ fn selfhost_verify_token_sequence_self_recursion() {
     let tokens = tokenize(source).unwrap();
 
     // Check that @ tokens are present
-    let at_count = tokens.iter().filter(|t| rust_token_to_selfhost_id(&t.token) == 111).count();
+    let at_count = tokens
+        .iter()
+        .filter(|t| rust_token_to_selfhost_id(&t.token) == 111)
+        .count();
     assert_eq!(at_count, 2, "Should have 2 @ tokens for self-recursion");
 }
 
@@ -2187,16 +2421,32 @@ fn selfhost_verify_token_sequence_self_recursion() {
 fn selfhost_verify_new_keywords() {
     // Test the newly added keywords: self, Self, as, const
     let tokens_self = tokenize("self").unwrap();
-    assert_eq!(rust_token_to_selfhost_id(&tokens_self[0].token), 25, "self should map to TOK_KW_SELF (25)");
+    assert_eq!(
+        rust_token_to_selfhost_id(&tokens_self[0].token),
+        25,
+        "self should map to TOK_KW_SELF (25)"
+    );
 
     let tokens_self_upper = tokenize("Self").unwrap();
-    assert_eq!(rust_token_to_selfhost_id(&tokens_self_upper[0].token), 26, "Self should map to TOK_KW_SELF_UPPER (26)");
+    assert_eq!(
+        rust_token_to_selfhost_id(&tokens_self_upper[0].token),
+        26,
+        "Self should map to TOK_KW_SELF_UPPER (26)"
+    );
 
     let tokens_as = tokenize("as").unwrap();
-    assert_eq!(rust_token_to_selfhost_id(&tokens_as[0].token), 27, "as should map to TOK_KW_AS (27)");
+    assert_eq!(
+        rust_token_to_selfhost_id(&tokens_as[0].token),
+        27,
+        "as should map to TOK_KW_AS (27)"
+    );
 
     let tokens_const = tokenize("const").unwrap();
-    assert_eq!(rust_token_to_selfhost_id(&tokens_const[0].token), 28, "const should map to TOK_KW_CONST (28)");
+    assert_eq!(
+        rust_token_to_selfhost_id(&tokens_const[0].token),
+        28,
+        "const should map to TOK_KW_CONST (28)"
+    );
 }
 
 #[test]
@@ -2206,7 +2456,11 @@ fn selfhost_verify_string_with_escape_sequences() {
     let tokens = tokenize(source).unwrap();
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(rust_token_to_selfhost_id(&tokens[0].token), 53, "String should map to TOK_STRING (53)");
+    assert_eq!(
+        rust_token_to_selfhost_id(&tokens[0].token),
+        53,
+        "String should map to TOK_STRING (53)"
+    );
 
     // Verify the escape sequences were decoded
     if let vais_lexer::Token::String(s) = &tokens[0].token {

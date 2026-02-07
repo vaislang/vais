@@ -53,10 +53,7 @@ fn compile_and_run_selfhost(test_file: &str) -> (i32, String, String) {
 
     if !compile.status.success() {
         let stderr = String::from_utf8_lossy(&compile.stderr);
-        panic!(
-            "Compilation of {} failed:\n{}",
-            test_file, stderr
-        );
+        panic!("Compilation of {} failed:\n{}", test_file, stderr);
     }
 
     // Run the compiled test

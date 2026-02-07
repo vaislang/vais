@@ -20,7 +20,8 @@ fn generate_large_project(target_lines: usize) -> String {
     let funcs_per_module = 20;
     let structs_per_module = 5;
     let enums_per_module = 3;
-    let module_count = target_lines / (funcs_per_module * 3 + structs_per_module * 5 + enums_per_module * 6 + 10);
+    let module_count =
+        target_lines / (funcs_per_module * 3 + structs_per_module * 5 + enums_per_module * 6 + 10);
     let module_count = module_count.max(1);
 
     for m in 0..module_count {
@@ -29,7 +30,10 @@ fn generate_large_project(target_lines: usize) -> String {
         }
 
         // Comment header
-        code.push_str(&format!("# Module {} — auto-generated benchmark code\n\n", m));
+        code.push_str(&format!(
+            "# Module {} — auto-generated benchmark code\n\n",
+            m
+        ));
         lines += 2;
 
         // Structs
@@ -69,10 +73,7 @@ fn generate_large_project(target_lines: usize) -> String {
             match f % 5 {
                 0 => {
                     // Simple arithmetic
-                    code.push_str(&format!(
-                        "F mod{}_func{}(x: i64, y: i64) -> i64 {{\n",
-                        m, f
-                    ));
+                    code.push_str(&format!("F mod{}_func{}(x: i64, y: i64) -> i64 {{\n", m, f));
                     code.push_str(&format!("    a := x * {} + y\n", f + 1));
                     code.push_str(&format!("    b := a - {} * x\n", f % 7 + 1));
                     code.push_str("    R a + b\n");
@@ -81,24 +82,15 @@ fn generate_large_project(target_lines: usize) -> String {
                 }
                 1 => {
                     // Recursive
-                    code.push_str(&format!(
-                        "F mod{}_rec{}(n: i64) -> i64 {{\n",
-                        m, f
-                    ));
-                    code.push_str(&format!(
-                        "    I n <= 1 {{ R {} }}\n",
-                        f % 3 + 1
-                    ));
+                    code.push_str(&format!("F mod{}_rec{}(n: i64) -> i64 {{\n", m, f));
+                    code.push_str(&format!("    I n <= 1 {{ R {} }}\n", f % 3 + 1));
                     code.push_str(&format!("    R n * @(n - 1)\n"));
                     code.push_str("}\n\n");
                     lines += 5;
                 }
                 2 => {
                     // Conditional chain
-                    code.push_str(&format!(
-                        "F mod{}_cond{}(x: i64) -> i64 {{\n",
-                        m, f
-                    ));
+                    code.push_str(&format!("F mod{}_cond{}(x: i64) -> i64 {{\n", m, f));
                     code.push_str(&format!("    I x < {} {{ R x * 2 }}\n", f * 3));
                     code.push_str(&format!("    I x < {} {{ R x + {} }}\n", f * 10, f));
                     code.push_str("    R x\n");
@@ -107,10 +99,7 @@ fn generate_large_project(target_lines: usize) -> String {
                 }
                 3 => {
                     // Loop-based
-                    code.push_str(&format!(
-                        "F mod{}_loop{}(n: i64) -> i64 {{\n",
-                        m, f
-                    ));
+                    code.push_str(&format!("F mod{}_loop{}(n: i64) -> i64 {{\n", m, f));
                     code.push_str("    sum := mut 0\n");
                     code.push_str("    i := mut 0\n");
                     code.push_str("    L {\n");
@@ -191,9 +180,7 @@ fn bench_lexer_large_scaling(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("tokenize", format!("{}lines", actual_lines)),
             &source,
-            |b, source| {
-                b.iter(|| tokenize(black_box(source)))
-            },
+            |b, source| b.iter(|| tokenize(black_box(source))),
         );
     }
 
@@ -214,9 +201,7 @@ fn bench_parser_large_scaling(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("parse", format!("{}lines", actual_lines)),
             &source,
-            |b, source| {
-                b.iter(|| parse(black_box(source)))
-            },
+            |b, source| b.iter(|| parse(black_box(source))),
         );
     }
 

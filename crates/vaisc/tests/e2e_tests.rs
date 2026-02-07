@@ -5633,10 +5633,22 @@ F good2() -> i64 = 2
     let (module, errors) = parse_recovery(source);
     assert!(!errors.is_empty(), "Should report at least one error");
     // Should recover at least one valid item (good1 is parsed before error)
-    let valid: Vec<_> = module.items.iter().filter(|i| !matches!(i.node, vais_ast::Item::Error { .. })).collect();
-    assert!(valid.len() >= 1, "Should recover at least 1 valid item, got {}", valid.len());
+    let valid: Vec<_> = module
+        .items
+        .iter()
+        .filter(|i| !matches!(i.node, vais_ast::Item::Error { .. }))
+        .collect();
+    assert!(
+        valid.len() >= 1,
+        "Should recover at least 1 valid item, got {}",
+        valid.len()
+    );
     // Total items (valid + error) should be more than just the error
-    assert!(module.items.len() >= 2, "Should have at least 2 items (valid + error), got {}", module.items.len());
+    assert!(
+        module.items.len() >= 2,
+        "Should have at least 2 items (valid + error), got {}",
+        module.items.len()
+    );
 }
 
 #[test]
@@ -5650,9 +5662,10 @@ F good() -> i64 = 42
     let (module, errors) = parse_recovery(source);
     assert!(!errors.is_empty(), "Should report missing brace error");
     // good() should still be parsed
-    let has_good = module.items.iter().any(|i| {
-        matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good")
-    });
+    let has_good = module
+        .items
+        .iter()
+        .any(|i| matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good"));
     assert!(has_good, "Should recover and parse 'good' function");
 }
 
@@ -5665,9 +5678,20 @@ F good1() -> i64 = 1
 F good2() -> i64 = 2
 "#;
     let (module, errors) = parse_recovery(source);
-    assert!(!errors.is_empty(), "Should report error for '42' at top level");
-    let valid: Vec<_> = module.items.iter().filter(|i| !matches!(i.node, vais_ast::Item::Error { .. })).collect();
-    assert!(valid.len() >= 2, "Should recover both valid functions, got {}", valid.len());
+    assert!(
+        !errors.is_empty(),
+        "Should report error for '42' at top level"
+    );
+    let valid: Vec<_> = module
+        .items
+        .iter()
+        .filter(|i| !matches!(i.node, vais_ast::Item::Error { .. }))
+        .collect();
+    assert!(
+        valid.len() >= 2,
+        "Should recover both valid functions, got {}",
+        valid.len()
+    );
 }
 
 #[test]
@@ -5682,9 +5706,10 @@ F good() -> i64 = 0
 "#;
     let (module, errors) = parse_recovery(source);
     assert!(!errors.is_empty(), "Should report struct field error");
-    let has_good = module.items.iter().any(|i| {
-        matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good")
-    });
+    let has_good = module
+        .items
+        .iter()
+        .any(|i| matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good"));
     assert!(has_good, "Should recover and parse 'good' function");
 }
 
@@ -5698,7 +5723,11 @@ F broken3(
 F good() -> i64 = 0
 "#;
     let (_module, errors) = parse_recovery(source);
-    assert!(errors.len() >= 2, "Should collect at least 2 errors, got {}", errors.len());
+    assert!(
+        errors.len() >= 2,
+        "Should collect at least 2 errors, got {}",
+        errors.len()
+    );
 }
 
 #[test]
@@ -5724,9 +5753,10 @@ F good() -> i64 = 0
 "#;
     let (module, errors) = parse_recovery(source);
     assert!(!errors.is_empty(), "Should report enum error");
-    let has_good = module.items.iter().any(|i| {
-        matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good")
-    });
+    let has_good = module
+        .items
+        .iter()
+        .any(|i| matches!(&i.node, vais_ast::Item::Function(f) if f.name.node == "good"));
     assert!(has_good, "Should recover and parse 'good' function");
 }
 
@@ -5741,11 +5771,21 @@ S Broken2 { y }
 F f3() -> i64 = 3
 "#;
     let (module, errors) = parse_recovery(source);
-    assert!(errors.len() >= 2, "Should report at least 2 errors, got {}", errors.len());
-    let valid_fns: Vec<_> = module.items.iter().filter(|i| {
-        matches!(&i.node, vais_ast::Item::Function(_))
-    }).collect();
-    assert!(valid_fns.len() >= 3, "Should recover all 3 valid functions, got {}", valid_fns.len());
+    assert!(
+        errors.len() >= 2,
+        "Should report at least 2 errors, got {}",
+        errors.len()
+    );
+    let valid_fns: Vec<_> = module
+        .items
+        .iter()
+        .filter(|i| matches!(&i.node, vais_ast::Item::Function(_)))
+        .collect();
+    assert!(
+        valid_fns.len() >= 3,
+        "Should recover all 3 valid functions, got {}",
+        valid_fns.len()
+    );
 }
 
 // ===== Stage 2: Closure & Higher-Order Function Tests =====
@@ -5762,7 +5802,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure inferred params failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure inferred params failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5777,7 +5821,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure capture failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure capture failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5794,7 +5842,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "multiple captures failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "multiple captures failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5812,7 +5864,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "nested closure failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "nested closure failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5829,7 +5885,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure as callback failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure as callback failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5857,7 +5917,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "higher-order chain failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "higher-order chain failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5875,7 +5939,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure block body failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure block body failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5912,7 +5980,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure in loop failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure in loop failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5944,7 +6016,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "higher-order fold failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "higher-order fold failed: {}",
+        result.stderr
+    );
 }
 
 // ===== Stage 3: Error Type & Chaining Tests =====
@@ -5966,7 +6042,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "result is_ok/is_err failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "result is_ok/is_err failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -5984,7 +6064,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "result unwrap_or failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "result unwrap_or failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6001,7 +6085,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "result err value failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "result err value failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6019,7 +6107,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "error context encoding failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "error context encoding failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6041,7 +6133,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "error context chaining failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "error context chaining failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6080,7 +6176,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "typed error enum failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "typed error enum failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6111,7 +6211,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "result with custom error failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "result with custom error failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6147,7 +6251,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "ensure pattern failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "ensure pattern failed: {}",
+        result.stderr
+    );
 }
 
 // ===== Stage 4: Iterator Protocol & Generator Tests =====
@@ -6165,7 +6273,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "range for loop failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "range for loop failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6185,7 +6297,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "manual step range failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "manual step range failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6225,7 +6341,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "iter map array failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "iter map array failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6271,7 +6391,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "iter filter array failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "iter filter array failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6451,7 +6575,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "iter enumerate failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "iter enumerate failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6503,7 +6631,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "any/all/find failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "any/all/find failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6557,7 +6689,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "map-filter-chain failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "map-filter-chain failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6591,7 +6727,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "collect to array failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "collect to array failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6622,7 +6762,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "iter position failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "iter position failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6659,7 +6803,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "nested loops failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "nested loops failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6678,7 +6826,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure in loop failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure in loop failed: {}",
+        result.stderr
+    );
 }
 
 // ===== Additional E2E Tests for 300 target =====
@@ -6696,7 +6848,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "recursive fibonacci failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "recursive fibonacci failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6711,7 +6867,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "self recursion failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "self recursion failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6754,7 +6914,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "multiple return paths failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "multiple return paths failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6770,7 +6934,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "closure compose failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "closure compose failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6791,7 +6959,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "mutable accumulator failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "mutable accumulator failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6820,7 +6992,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "struct method chaining failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "struct method chaining failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6843,7 +7019,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "enum tag matching failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "enum tag matching failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6890,7 +7070,11 @@ F main() -> i64 {
 }
 "#;
     let result = compile_and_run(source).expect("should compile and run");
-    assert_eq!(result.exit_code, 0, "higher-order pipeline failed: {}", result.stderr);
+    assert_eq!(
+        result.exit_code, 0,
+        "higher-order pipeline failed: {}",
+        result.stderr
+    );
 }
 
 #[test]
@@ -6909,6 +7093,10 @@ F add(a: i64, b: i64) -> i64 = a + b
 F main() -> i64 = add(1, 2)
 "#;
     let (module, errors) = parse_recovery(source);
-    assert!(errors.is_empty(), "Valid code should have no errors, got {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Valid code should have no errors, got {:?}",
+        errors
+    );
     assert!(module.items.len() >= 2, "Should parse both functions");
 }

@@ -104,69 +104,94 @@ export class VaisCompiler {
   mockCompile(sourceCode) {
     const errors = [];
     const warnings = [];
+    const lines = sourceCode.split('\n');
 
     if (!sourceCode.trim()) {
       errors.push({ line: 1, column: 1, message: 'Empty source file' });
+      return { success: false, errors, warnings, output: null };
     }
 
+    // Check for main function
     if (!sourceCode.includes('F main')) {
-      warnings.push({ line: 1, column: 1, message: 'No main function found' });
+      errors.push({ line: 1, column: 1, message: 'No main function found (expected `F main()`)' });
     }
 
+    // Brace matching
     const openBraces = (sourceCode.match(/\{/g) || []).length;
     const closeBraces = (sourceCode.match(/\}/g) || []).length;
     if (openBraces !== closeBraces) {
       errors.push({
-        line: sourceCode.split('\n').length,
+        line: lines.length,
         column: 1,
         message: `Mismatched braces: ${openBraces} opening, ${closeBraces} closing`,
       });
     }
 
+    // Parenthesis matching
+    const openParens = (sourceCode.match(/\(/g) || []).length;
+    const closeParens = (sourceCode.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      errors.push({
+        line: lines.length,
+        column: 1,
+        message: `Mismatched parentheses: ${openParens} opening, ${closeParens} closing`,
+      });
+    }
+
+    // Check for common syntax issues per line
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('#') || !trimmed) return; // skip comments and empty lines
+
+      // Detect unterminated strings
+      const quotes = (trimmed.match(/"/g) || []).length;
+      if (quotes % 2 !== 0) {
+        errors.push({ line: idx + 1, column: 1, message: 'Unterminated string literal' });
+      }
+    });
+
     if (errors.length > 0) {
       return { success: false, errors, warnings, output: null };
     }
 
-    const ir = this.generateMockIR(sourceCode);
     return {
       success: true,
       errors: [],
       warnings,
-      ir,
-      output: 'Compilation successful (mock mode)',
+      ir: null,
+      output: null,
     };
   }
 
-  generateMockIR(sourceCode) {
-    return `; ModuleID = 'playground.vais'
-source_filename = "playground.vais"
-
-declare i32 @puts(i8*)
-declare i32 @putchar(i32)
-
-define i64 @main() {
-entry:
-  ; Your code would be compiled here
-  ret i64 0
-}
-`;
-  }
-
-  mockExecute(ir) {
+  mockSimulateOutput(sourceCode) {
+    // Extract expected output by parsing puts/println/putchar calls from source
     const output = [];
-    const putsMatches = ir.match(/@puts\("([^"]*)"\)/g);
-    if (putsMatches) {
-      putsMatches.forEach(match => {
-        const str = match.match(/"([^"]*)"/)[1];
-        output.push(str);
-      });
+    const lines = sourceCode.split('\n');
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // Match puts("...") calls
+      const putsMatch = trimmed.match(/puts\("([^"]*)"\)/);
+      if (putsMatch) {
+        output.push(putsMatch[1]);
+        continue;
+      }
+
+      // Match println("...") calls (with simple interpolation)
+      const printlnMatch = trimmed.match(/println\("([^"]*)"\)/);
+      if (printlnMatch) {
+        // Replace {expr} with <expr> for display
+        const text = printlnMatch[1]
+          .replace(/\{\{/g, '{')
+          .replace(/\}\}/g, '}')
+          .replace(/\{([^}]+)\}/g, '<$1>');
+        output.push(text);
+        continue;
+      }
     }
 
-    return {
-      success: true,
-      output: output.length > 0 ? output.join('\n') : 'Program executed successfully',
-      exitCode: 0,
-    };
+    return output;
   }
 
   async mockCompileAndRun(sourceCode) {
@@ -180,13 +205,34 @@ entry:
       };
     }
 
-    const execResult = this.mockExecute(compileResult.ir);
+    // Simulate output from source code analysis
+    const simulatedOutput = this.mockSimulateOutput(sourceCode);
+
+    // Count language constructs for summary
+    const funcCount = (sourceCode.match(/\bF\s+\w+/g) || []).length;
+    const structCount = (sourceCode.match(/\bS\s+\w+/g) || []).length;
+    const enumCount = (sourceCode.match(/\bE\s+\w+/g) || []).length;
+
+    const summary = [];
+    if (funcCount > 0) summary.push(`${funcCount} function(s)`);
+    if (structCount > 0) summary.push(`${structCount} struct(s)`);
+    if (enumCount > 0) summary.push(`${enumCount} enum(s)`);
+
+    let outputText = '';
+    if (simulatedOutput.length > 0) {
+      outputText = simulatedOutput.join('\n');
+    } else {
+      outputText = `Program compiled successfully (${summary.join(', ')})`;
+    }
+
+    outputText += '\n\n[Preview mode — compile server offline. Install locally: cargo install vaisc]';
+
     return {
       success: true,
       errors: [],
       warnings: compileResult.warnings,
-      output: execResult.output + ' (mock mode - start server for real compilation)',
-      exitCode: execResult.exitCode,
+      output: outputText,
+      exitCode: 0,
     };
   }
 

@@ -2997,10 +2997,7 @@ impl TypeChecker {
                     e.generics
                         .iter()
                         .map(|g| {
-                            GenericParam::new_type(
-                                Spanned::new(g.clone(), Span::default()),
-                                vec![],
-                            )
+                            GenericParam::new_type(Spanned::new(g.clone(), Span::default()), vec![])
                         })
                         .collect()
                 })
@@ -3012,10 +3009,7 @@ impl TypeChecker {
                     s.generics
                         .iter()
                         .map(|g| {
-                            GenericParam::new_type(
-                                Spanned::new(g.clone(), Span::default()),
-                                vec![],
-                            )
+                            GenericParam::new_type(Spanned::new(g.clone(), Span::default()), vec![])
                         })
                         .collect()
                 })
@@ -4231,59 +4225,57 @@ impl TypeChecker {
                         .or_else(|| self.enums.get(&inner_type).map(|e| e.generics.clone()))
                         .unwrap_or_default();
                     if let Some(method_sig) = found_method {
-                            // Skip self parameter
-                            let param_types: Vec<_> = method_sig
-                                .params
-                                .iter()
-                                .skip(1)
-                                .map(|(_, t, _)| t.clone())
-                                .collect();
+                        // Skip self parameter
+                        let param_types: Vec<_> = method_sig
+                            .params
+                            .iter()
+                            .skip(1)
+                            .map(|(_, t, _)| t.clone())
+                            .collect();
 
-                            if param_types.len() != args.len() {
-                                return Err(TypeError::ArgCount {
-                                    expected: param_types.len(),
-                                    got: args.len(),
-                                    span: None,
-                                });
-                            }
+                        if param_types.len() != args.len() {
+                            return Err(TypeError::ArgCount {
+                                expected: param_types.len(),
+                                got: args.len(),
+                                span: None,
+                            });
+                        }
 
-                            // Build substitution map from type's generic params to receiver's concrete types
-                            let generic_substitutions: std::collections::HashMap<
-                                String,
-                                ResolvedType,
-                            > = found_generics
+                        // Build substitution map from type's generic params to receiver's concrete types
+                        let generic_substitutions: std::collections::HashMap<String, ResolvedType> =
+                            found_generics
                                 .iter()
                                 .zip(receiver_generics.iter())
                                 .map(|(param, arg)| (param.clone(), arg.clone()))
                                 .collect();
 
-                            // Check arguments with substituted parameter types
-                            for (param_type, arg) in param_types.iter().zip(args) {
-                                let arg_type = self.check_expr(arg)?;
-                                let expected_type = if generic_substitutions.is_empty() {
-                                    param_type.clone()
-                                } else {
-                                    self.substitute_generics(param_type, &generic_substitutions)
-                                };
-                                self.unify(&expected_type, &arg_type)?;
-                            }
-
-                            // Substitute generics in return type
-                            let ret_type_raw = if generic_substitutions.is_empty() {
-                                method_sig.ret.clone()
+                        // Check arguments with substituted parameter types
+                        for (param_type, arg) in param_types.iter().zip(args) {
+                            let arg_type = self.check_expr(arg)?;
+                            let expected_type = if generic_substitutions.is_empty() {
+                                param_type.clone()
                             } else {
-                                self.substitute_generics(&method_sig.ret, &generic_substitutions)
+                                self.substitute_generics(param_type, &generic_substitutions)
                             };
-
-                            // For async methods, wrap the return type in Future
-                            let ret_type = if method_sig.is_async {
-                                ResolvedType::Future(Box::new(ret_type_raw))
-                            } else {
-                                ret_type_raw
-                            };
-
-                            return Ok(ret_type);
+                            self.unify(&expected_type, &arg_type)?;
                         }
+
+                        // Substitute generics in return type
+                        let ret_type_raw = if generic_substitutions.is_empty() {
+                            method_sig.ret.clone()
+                        } else {
+                            self.substitute_generics(&method_sig.ret, &generic_substitutions)
+                        };
+
+                        // For async methods, wrap the return type in Future
+                        let ret_type = if method_sig.is_async {
+                            ResolvedType::Future(Box::new(ret_type_raw))
+                        } else {
+                            ret_type_raw
+                        };
+
+                        return Ok(ret_type);
+                    }
                 }
 
                 // If not found on struct/enum, try to find it in trait implementations

@@ -221,8 +221,7 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
         let entry = context.append_basic_block(func, "entry");
         let builder = context.create_builder();
         builder.position_at_end(entry);
-        let stdout_global =
-            module.add_global(i8_ptr, Some(AddressSpace::default()), "__stdoutp");
+        let stdout_global = module.add_global(i8_ptr, Some(AddressSpace::default()), "__stdoutp");
         stdout_global.set_externally_initialized(true);
         let val = builder
             .build_load(i8_ptr, stdout_global.as_pointer_value(), "stdout_val")

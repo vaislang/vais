@@ -150,9 +150,7 @@ fn compile_run_selfhost(vais_file: &Path, tmp: &Path) -> Result<CompileRunResult
 /// Core cross-verify function: compile with both compilers, compare results
 fn cross_verify(example_name: &str) {
     if !prerequisites_met() {
-        eprintln!(
-            "SKIP: prerequisites not met (need release vaisc, vaisc-stage1, runtime.o)"
-        );
+        eprintln!("SKIP: prerequisites not met (need release vaisc, vaisc-stage1, runtime.o)");
         return;
     }
 
@@ -257,9 +255,7 @@ fn cross_verify_all_passing() {
     ];
 
     if !prerequisites_met() {
-        eprintln!(
-            "SKIP: prerequisites not met (need release vaisc, vaisc-stage1, runtime.o)"
-        );
+        eprintln!("SKIP: prerequisites not met (need release vaisc, vaisc-stage1, runtime.o)");
         return;
     }
 
@@ -297,10 +293,7 @@ fn cross_verify_all_passing() {
                 name, rust.exit_code, selfhost.exit_code
             ));
         } else if rust.stdout != selfhost.stdout {
-            failed.push(format!(
-                "{}: stdout mismatch",
-                name
-            ));
+            failed.push(format!("{}: stdout mismatch", name));
         } else {
             passed += 1;
         }
@@ -313,9 +306,6 @@ fn cross_verify_all_passing() {
     );
 
     if !failed.is_empty() {
-        panic!(
-            "Cross-verification failures:\n  {}",
-            failed.join("\n  ")
-        );
+        panic!("Cross-verification failures:\n  {}", failed.join("\n  "));
     }
 }

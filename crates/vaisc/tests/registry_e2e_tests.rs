@@ -1919,7 +1919,10 @@ fn test_build_directory_with_multifile_import() {
                 }
             } else {
                 let stderr = String::from_utf8_lossy(&o.stderr);
-                eprintln!("multifile build returned non-zero (may be expected in CI): {}", stderr);
+                eprintln!(
+                    "multifile build returned non-zero (may be expected in CI): {}",
+                    stderr
+                );
             }
         }
         Err(_) => {
@@ -1973,8 +1976,7 @@ fn test_vaisc_new_creates_project() {
                 );
 
                 // Check vais.toml content
-                let manifest_content =
-                    fs::read_to_string(project_dir.join("vais.toml")).unwrap();
+                let manifest_content = fs::read_to_string(project_dir.join("vais.toml")).unwrap();
                 assert!(
                     manifest_content.contains(project_name),
                     "vais.toml should contain project name"
@@ -2347,10 +2349,7 @@ fn test_vaisc_pkg_doc_html_format() {
                 );
 
                 let content = fs::read_to_string(docs_dir.join("index.html")).unwrap();
-                assert!(
-                    content.contains("<html>"),
-                    "should be valid HTML"
-                );
+                assert!(content.contains("<html>"), "should be valid HTML");
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 eprintln!("pkg doc --format html returned non-zero: {}", stderr);

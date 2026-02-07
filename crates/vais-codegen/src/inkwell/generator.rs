@@ -1115,7 +1115,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.builder
                         .build_int_to_ptr(
                             int_val,
-                            self.context.i64_type().ptr_type(inkwell::AddressSpace::default()),
+                            self.context
+                                .i64_type()
+                                .ptr_type(inkwell::AddressSpace::default()),
                             "deref_ptr",
                         )
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
@@ -2146,11 +2148,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     // Fallback: match the generated value's struct type against known structs
                     // Only use if unambiguous (exactly one struct matches the LLVM type)
                     let struct_type = val.into_struct_value().get_type();
-                    let matches: Vec<_> = self.generated_structs.iter()
+                    let matches: Vec<_> = self
+                        .generated_structs
+                        .iter()
                         .filter(|(_, st)| **st == struct_type)
                         .collect();
                     if matches.len() == 1 {
-                        self.var_struct_types.insert(name.node.clone(), matches[0].0.clone());
+                        self.var_struct_types
+                            .insert(name.node.clone(), matches[0].0.clone());
                     }
                 }
 
@@ -4893,7 +4898,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             if ret.is_struct_type() {
                                 let struct_type = ret.into_struct_type();
                                 // Only use LLVM type match if unambiguous (exactly one match)
-                                let matches: Vec<_> = self.generated_structs.iter()
+                                let matches: Vec<_> = self
+                                    .generated_structs
+                                    .iter()
                                     .filter(|(_, st)| **st == struct_type)
                                     .collect();
                                 if matches.len() == 1 {
@@ -4926,7 +4933,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         if ret.is_struct_type() {
                             let struct_type = ret.into_struct_type();
                             // Only use LLVM type match if unambiguous (exactly one match)
-                            let matches: Vec<_> = self.generated_structs.iter()
+                            let matches: Vec<_> = self
+                                .generated_structs
+                                .iter()
                                 .filter(|(_, st)| **st == struct_type)
                                 .collect();
                             if matches.len() == 1 {

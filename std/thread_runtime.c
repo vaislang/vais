@@ -3,6 +3,7 @@
 //
 // Linked automatically by vaisc when std/thread is imported.
 
+#define _GNU_SOURCE  // Required for pthread_tryjoin_np on Linux
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
