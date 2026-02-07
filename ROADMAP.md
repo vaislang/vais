@@ -87,7 +87,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 33 | 프로덕션 블로커 해소 | ✅ 완료 | 7/7 (100%) — TLS/Async 크로스플랫폼/로깅/압축 |
 | 34 | 실전 검증 & 에코시스템 | ✅ 완료 | 8/8 (100%) — CLI·HTTP·데이터 실전 프로젝트 3개 |
 | 35 | 프로덕션 완성 & 커뮤니티 런칭 | ✅ 완료 | 7/7 (100%) — CI/CD, API 문서, 커뮤니티 인프라 |
-| 36 | Production Readiness | ✅ 완료 | 8/8 (100%) — 50K lines 79ms, 641K lines/s |
+| 36 | Production Readiness | ✅ 완료 | 8/8 (100%) — 50K lines 63ms, 800K lines/s |
 | 37 | 프로덕션 갭 해소 | ✅ 완료 | 7/7 (100%) — CI green, 원커맨드 빌드, 레지스트리 배포 |
 | 38 | 셀프호스팅 100% 달성 | ✅ 완료 | 부트스트랩 달성! (SHA256 일치, 17,807줄) |
 | 39 | 셀프호스트 MIR Borrow Checker | ✅ 완료 | mir_borrow.vais 1,357줄 + 8,000+ LOC MIR 전체 |
@@ -148,7 +148,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 33** | 프로덕션 블로커 해소 | TLS/HTTPS, Async 크로스플랫폼(epoll/IOCP/kqueue), 패키지 레지스트리 배포, DAP 검증, 구조화 로깅, gzip 압축 (7/7) | 2026-02-04 |
 | **Phase 34** | 실전 검증 & 에코시스템 | Borrow Checker strict, Windows E2E, API 문서 사이트, 온보딩 가이드, 10개 공개 패키지, CLI/HTTP/데이터 실전 프로젝트 3개 (8/8) | 2026-02-04 |
 | **Phase 35** | 프로덕션 완성 | selfhost lexer 검증 (114 테스트), 패키지 publish/install 라운드트립 (60 E2E), CI/CD 파이프라인, 에러 메시지 개선, API 문서 전체, 커뮤니티 인프라, v1.0 릴리스 (7/7) | 2026-02-05 |
-| **Phase 36** | Production Readiness | 모듈 시스템 수정, i18n 에러 메시지, 크로스 모듈 타입, selfhost 75%, 소유권 strict, CI/CD, **50K lines 79ms (641K lines/s)** (8/8) | 2026-02-07 |
+| **Phase 36** | Production Readiness | 모듈 시스템 수정, i18n 에러 메시지, 크로스 모듈 타입, selfhost 75%, 소유권 strict, CI/CD, **50K lines 63ms (800K lines/s)** (8/8) | 2026-02-07 |
 | **Phase 37** | 프로덕션 갭 해소 | CI green 복구, 통합 빌드 시스템 (`vaisc build`), 의존성 보안, 레지스트리 Fly.io 배포, selfhost lexer 100% (45,640 토큰), 프로덕션 가이드 (7/7) | 2026-02-07 |
 | **Phase 38** | 셀프호스팅 100% | Parser/AST/TC/Codegen/Module 100%, **부트스트랩 달성** (Stage1→Stage2→Stage3 fixed point, SHA256 일치, 17,807줄) | 2026-02-06 |
 | **Phase 39** | 셀프호스트 MIR | MIR 전체 파이프라인 (8,000+ LOC): 구조체/빌더/lowering/LLVM emission/optimizer/analysis/borrow checker + 파이프라인 통합 | 2026-02-07 |
@@ -177,10 +177,10 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 | 지표 | 값 |
 |------|-----|
-| 전체 테스트 | 2,017+ (E2E 258+, 통합 256+) |
+| 전체 테스트 | 2,100+ (E2E 307+, 통합 256+) |
 | 표준 라이브러리 | 65개 .vais + 19개 C 런타임 |
 | 셀프호스트 코드 | 30,000+ LOC (컴파일러 + MIR + LSP + Formatter + Doc + Stdlib) |
-| 컴파일 성능 | 50K lines → 79ms (641K lines/s) |
+| 컴파일 성능 | 50K lines → 63ms (800K lines/s) |
 | 토큰 절감 | Rust 대비 30%+ |
 | 실전 프로젝트 | 3개 (CLI, HTTP API, 데이터 파이프라인) |
 

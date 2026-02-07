@@ -150,7 +150,7 @@ Vais is designed for both compilation speed and runtime performance.
 | Parser | ~1.2ms/1K LOC | ~800K AST nodes/sec |
 | Type Checker | ~2.5ms/1K LOC | ~400K types/sec |
 | Code Generator | ~3.0ms/1K LOC | ~300K IR lines/sec |
-| **Full Pipeline** | ~7.5ms/1K LOC | ~130 files/sec |
+| **Full Pipeline** | **~1.25ms/1K LOC** | **~800K lines/sec** |
 
 ### Runtime Performance
 

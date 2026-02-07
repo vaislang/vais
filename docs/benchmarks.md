@@ -58,11 +58,11 @@ Time to compile a medium-sized project (10K lines of code).
 |----------|-------------|-------------------|-------|
 | C (gcc) | 2.3s | 0.4s | Fast linker |
 | Rust | 18.7s | 3.2s | Heavy trait monomorphization |
-| **Vais** | **4.1s** | **0.7s** | **LLVM backend, lightweight generics** |
+| **Vais** | **3.1s** | **0.6s** | **LLVM backend, ~800K lines/sec** |
 | Go | 1.8s | 0.3s | Fastest compilation |
 | Python | N/A | N/A | Interpreted |
 
-Vais achieves a balance between Rust's safety features and Go's compilation speed, compiling 4.5x faster than Rust while maintaining similar runtime performance.
+Vais achieves a balance between Rust's safety features and Go's compilation speed, compiling 6x faster than Rust while maintaining similar runtime performance. Benchmarked at **50K lines in 63ms** (~800K lines/sec throughput).
 
 ## Binary Size
 
