@@ -31,11 +31,44 @@ X Result {
         }
     }
 
-    # Map the Ok value
-    F map(&self, f: i64) -> Result {
+    # Map the Ok value using a function
+    F map(&self, f: fn(i64) -> i64) -> Result {
+        M self {
+            Ok(v) => Ok(f(v)),
+            Err(e) => Err(e)
+        }
+    }
+
+    # Map the Err value using a function (error transformation)
+    F map_err(&self, f: fn(i64) -> i64) -> Result {
         M self {
             Ok(v) => Ok(v),
+            Err(e) => Err(f(e))
+        }
+    }
+
+    # Chain computations: apply f if Ok, propagate Err
+    F and_then(&self, f: fn(i64) -> Result) -> Result {
+        M self {
+            Ok(v) => f(v),
             Err(e) => Err(e)
+        }
+    }
+
+    # Use alternative if Err
+    F or_else(&self, f: fn(i64) -> Result) -> Result {
+        M self {
+            Ok(v) => Ok(v),
+            Err(e) => f(e)
+        }
+    }
+
+    # Add context to an error: wraps Err value with context code
+    # context_code is shifted left by 16 bits and OR'd with original error
+    F context(&self, context_code: i64) -> Result {
+        M self {
+            Ok(v) => Ok(v),
+            Err(e) => Err(context_code * 65536 + e)
         }
     }
 
@@ -44,6 +77,14 @@ X Result {
         M self {
             Ok(_) => default,
             Err(e) => e
+        }
+    }
+
+    # Flatten nested Result: Result(Result(v)) -> Result(v)
+    F flatten(&self) -> Result {
+        M self {
+            Ok(v) => Ok(v),
+            Err(e) => Err(e)
         }
     }
 }
@@ -57,10 +98,74 @@ F err(code: i64) -> Result {
     Err(code)
 }
 
-# Error code constants (use as function calls)
+# ===== Error Trait =====
+# Standard error interface for all error types
+
+W Error {
+    # Return error code
+    F code(&self) -> i64
+
+    # Return error message as string pointer
+    F message(&self) -> str
+}
+
+# ===== Standard Error Type =====
+# A concrete error type implementing the Error trait
+
+S StdError {
+    error_code: i64,
+    msg: str,
+    source_code: i64   # Wrapped/cause error code (0 = no source)
+}
+
+X StdError {
+    F new(code: i64, msg: str) -> StdError {
+        StdError { error_code: code, msg: msg, source_code: 0 }
+    }
+
+    F with_source(code: i64, msg: str, source: i64) -> StdError {
+        StdError { error_code: code, msg: msg, source_code: source }
+    }
+
+    F source(&self) -> i64 {
+        self.source_code
+    }
+
+    F has_source(&self) -> i64 {
+        I self.source_code != 0 { 1 } E { 0 }
+    }
+}
+
+X StdError: Error {
+    F code(&self) -> i64 {
+        self.error_code
+    }
+
+    F message(&self) -> str {
+        self.msg
+    }
+}
+
+# ===== Error Code Constants =====
 F ERR_NONE() -> i64 { 0 }
 F ERR_INVALID() -> i64 { 1 }
 F ERR_NOT_FOUND() -> i64 { 2 }
 F ERR_IO() -> i64 { 3 }
 F ERR_OVERFLOW() -> i64 { 4 }
 F ERR_DIVIDE_BY_ZERO() -> i64 { 5 }
+F ERR_PERMISSION() -> i64 { 6 }
+F ERR_TIMEOUT() -> i64 { 7 }
+F ERR_PARSE() -> i64 { 8 }
+F ERR_NETWORK() -> i64 { 9 }
+
+# ===== Error Utilities =====
+
+# Extract original error code from a context-wrapped error
+F error_code(err: i64) -> i64 {
+    err % 65536
+}
+
+# Extract context code from a context-wrapped error
+F error_context(err: i64) -> i64 {
+    err / 65536
+}

@@ -1349,7 +1349,8 @@ impl Parser {
     }
 
     /// Parse lambda expression: |params| body
-    /// Syntax: |x: i64, y: i64| x + y
+    /// Syntax: |x: i64, y: i64| x + y  (explicit types)
+    ///         |x, y| x + y              (inferred types)
     pub(crate) fn parse_lambda(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
         // We've already consumed the opening |
         let mut params = Vec::new();
@@ -1357,8 +1358,15 @@ impl Parser {
         // Parse parameters until closing |
         while !self.check(&Token::Pipe) && !self.is_at_end() {
             let name = self.parse_ident()?;
-            self.expect(&Token::Colon)?;
-            let ty = self.parse_type()?;
+            // Type annotation is optional for lambda params
+            let ty = if self.check(&Token::Colon) {
+                self.advance();
+                self.parse_type()?
+            } else {
+                // Use Type::Infer for untyped lambda parameters
+                let span = name.span;
+                Spanned::new(Type::Infer, span)
+            };
             params.push(Param {
                 name,
                 ty,

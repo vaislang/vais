@@ -5669,6 +5669,338 @@ F f3() -> i64 = 3
     assert!(valid_fns.len() >= 3, "Should recover all 3 valid functions, got {}", valid_fns.len());
 }
 
+// ===== Stage 2: Closure & Higher-Order Function Tests =====
+
+#[test]
+fn e2e_closure_inferred_params() {
+    // Test closure with inferred parameter types
+    let source = r#"
+F apply(x: i64, f: fn(i64) -> i64) -> i64 = f(x)
+F main() -> i64 {
+    double := |x: i64| x * 2
+    result := apply(21, double)
+    I result == 42 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure inferred params failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_capture_variable() {
+    // Test closure capturing a variable from enclosing scope
+    let source = r#"
+F main() -> i64 {
+    multiplier := 10
+    scale := |x: i64| x * multiplier
+    result := scale(5)
+    I result == 50 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure capture failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_multiple_captures() {
+    // Test closure capturing multiple variables
+    let source = r#"
+F main() -> i64 {
+    a := 10
+    b := 20
+    c := 30
+    sum_all := |x: i64| x + a + b + c
+    result := sum_all(1)
+    I result == 61 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "multiple captures failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_nested() {
+    // Test nested closures
+    let source = r#"
+F main() -> i64 {
+    outer := 100
+    f := |x: i64| {
+        inner := outer + x
+        inner
+    }
+    result := f(23)
+    I result == 123 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "nested closure failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_as_callback() {
+    // Test passing closure as callback parameter
+    let source = r#"
+F transform(a: i64, b: i64, f: fn(i64, i64) -> i64) -> i64 = f(a, b)
+F main() -> i64 {
+    add := |x: i64, y: i64| x + y
+    mul := |x: i64, y: i64| x * y
+    r1 := transform(3, 4, add)
+    r2 := transform(3, 4, mul)
+    I r1 == 7 && r2 == 12 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure as callback failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_higher_order_chain() {
+    // Test chaining higher-order function calls with closures
+    let source = r#"
+F apply_twice(x: i64, f: fn(i64) -> i64) -> i64 = f(f(x))
+F apply_n(x: i64, n: i64, f: fn(i64) -> i64) -> i64 {
+    result := mut x
+    i := mut 0
+    L {
+        I i >= n { B }
+        result = f(result)
+        i = i + 1
+    }
+    result
+}
+F main() -> i64 {
+    inc := |x: i64| x + 1
+    double := |x: i64| x * 2
+    r1 := apply_twice(3, inc)
+    r2 := apply_twice(3, double)
+    r3 := apply_n(1, 5, inc)
+    I r1 == 5 && r2 == 12 && r3 == 6 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "higher-order chain failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_with_block_body() {
+    // Test closure with block body (multiple statements)
+    let source = r#"
+F main() -> i64 {
+    compute := |x: i64| {
+        doubled := x * 2
+        tripled := x * 3
+        doubled + tripled
+    }
+    result := compute(4)
+    I result == 20 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure block body failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_identity_and_composition() {
+    // Test identity closure and function composition
+    let source = r#"
+F compose(f: fn(i64) -> i64, g: fn(i64) -> i64, x: i64) -> i64 = f(g(x))
+F main() -> i64 {
+    double := |x: i64| x * 2
+    inc := |x: i64| x + 1
+    result := compose(double, inc, 5)
+    I result == 12 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "composition failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_in_loop() {
+    // Test using closure inside a loop
+    let source = r#"
+F main() -> i64 {
+    sum := mut 0
+    add_to_sum := |x: i64| x * x
+    i := mut 1
+    L {
+        I i > 5 { B }
+        sum = sum + add_to_sum(i)
+        i = i + 1
+    }
+    # 1 + 4 + 9 + 16 + 25 = 55
+    I sum == 55 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "closure in loop failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_closure_higher_order_fold() {
+    // Test fold-like pattern with closure
+    let source = r#"
+F fold(arr: i64, len: i64, init: i64, f: fn(i64, i64) -> i64) -> i64 {
+    acc := mut init
+    i := mut 0
+    L {
+        I i >= len { B }
+        elem := load_i64(arr + i * 8)
+        acc = f(acc, elem)
+        i = i + 1
+    }
+    acc
+}
+F main() -> i64 {
+    data := malloc(40)
+    store_i64(data, 1)
+    store_i64(data + 8, 2)
+    store_i64(data + 16, 3)
+    store_i64(data + 24, 4)
+    store_i64(data + 32, 5)
+    sum := fold(data, 5, 0, |acc: i64, x: i64| acc + x)
+    product := fold(data, 5, 1, |acc: i64, x: i64| acc * x)
+    free(data)
+    I sum == 15 && product == 120 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "higher-order fold failed: {}", result.stderr);
+}
+
+// ===== Stage 3: Error Type & Chaining Tests =====
+
+#[test]
+fn e2e_result_map() {
+    // Test Result.map() with function pointer
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+X Result {
+    F map(&self, f: fn(i64) -> i64) -> Result {
+        M self { Ok(v) => Ok(f(v)), Err(e) => Err(e) }
+    }
+}
+F main() -> i64 {
+    r := Ok(5)
+    doubled := r.map(|x: i64| x * 2)
+    M doubled {
+        Ok(v) => I v == 10 { 0 } E { 1 },
+        Err(_) => 2
+    }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "result map failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_result_map_err() {
+    // Test Result.map_err() for error transformation
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+X Result {
+    F map_err(&self, f: fn(i64) -> i64) -> Result {
+        M self { Ok(v) => Ok(v), Err(e) => Err(f(e)) }
+    }
+}
+F main() -> i64 {
+    r: Result = Err(1)
+    transformed := r.map_err(|e: i64| e + 100)
+    M transformed {
+        Ok(_) => 1,
+        Err(e) => I e == 101 { 0 } E { 2 }
+    }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "result map_err failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_result_and_then_chain() {
+    // Test chaining with and_then
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+X Result {
+    F and_then(&self, f: fn(i64) -> Result) -> Result {
+        M self { Ok(v) => f(v), Err(e) => Err(e) }
+    }
+    F unwrap_or(&self, default: i64) -> i64 {
+        M self { Ok(v) => v, Err(_) => default }
+    }
+    F is_err(&self) -> i64 {
+        M self { Ok(_) => 0, Err(_) => 1 }
+    }
+}
+F parse_positive(x: i64) -> Result {
+    I x > 0 { Ok(x) } E { Err(1) }
+}
+F double_if_small(x: i64) -> Result {
+    I x < 100 { Ok(x * 2) } E { Err(2) }
+}
+F main() -> i64 {
+    r1 := parse_positive(5).and_then(|x: i64| double_if_small(x))
+    r2 := parse_positive(0 - 1).and_then(|x: i64| double_if_small(x))
+    ok_val := r1.unwrap_or(0 - 1)
+    err_val := r2.is_err()
+    I ok_val == 10 && err_val == 1 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "result and_then chain failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_result_context() {
+    // Test error context wrapping
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+X Result {
+    F context(&self, ctx_code: i64) -> Result {
+        M self { Ok(v) => Ok(v), Err(e) => Err(ctx_code * 65536 + e) }
+    }
+}
+F main() -> i64 {
+    r: Result = Err(3)
+    with_ctx := r.context(42)
+    M with_ctx {
+        Ok(_) => 1,
+        Err(e) => {
+            orig := e % 65536
+            ctx := e / 65536
+            I orig == 3 && ctx == 42 { 0 } E { 2 }
+        }
+    }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "result context failed: {}", result.stderr);
+}
+
+#[test]
+fn e2e_result_or_else() {
+    // Test or_else for fallback computation
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+X Result {
+    F or_else(&self, f: fn(i64) -> Result) -> Result {
+        M self { Ok(v) => Ok(v), Err(e) => f(e) }
+    }
+    F unwrap_or(&self, default: i64) -> i64 {
+        M self { Ok(v) => v, Err(_) => default }
+    }
+}
+F main() -> i64 {
+    r: Result = Err(1)
+    fallback := r.or_else(|e: i64| Ok(e + 99))
+    val := fallback.unwrap_or(0 - 1)
+    I val == 100 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(result.exit_code, 0, "result or_else failed: {}", result.stderr);
+}
+
 #[test]
 fn e2e_recovery_max_errors_limit() {
     // Normal mode should fail fast on first error
