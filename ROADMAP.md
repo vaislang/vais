@@ -201,7 +201,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 🚀 Phase 41: v2.0 언어 진화
 
-> **상태**: 📋 예정
+> **상태**: ✅ 완료
 > **목표**: v1.0 안정 기반 위에서 언어 표현력, 생태계, 실전 활용도를 한 단계 끌어올림
 > **방향**: 사용자 피드백 기반 개선 + 언어 기능 확장 + 생태계 성숙
 
@@ -271,14 +271,14 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] **총 301개 E2E 테스트**, 전부 통과 ✅
 - **난이도**: 하 | **모델**: Opus 직접
 
-### Stage 7: 성능 회귀 CI 자동화
+### Stage 7: 성능 회귀 CI 자동화 ✅
 
 **목표**: PR마다 성능 벤치마크를 자동 실행하여 회귀 방지
 
-- [ ] GitHub Actions에 criterion 벤치마크 자동 실행
-- [ ] PR 코멘트에 성능 비교 테이블 자동 게시
-- [ ] 10% 이상 회귀 시 CI 실패 처리
-- [ ] 벤치마크 히스토리 대시보드 (GitHub Pages)
+- [x] GitHub Actions에 criterion 벤치마크 자동 실행 (bench.yml + bench-regression.yml) ✅
+- [x] PR 코멘트에 성능 비교 테이블 자동 게시 (actions/github-script PR 코멘트) ✅
+- [x] 10% 이상 회귀 시 CI 실패 처리 (BENCH_THRESHOLD: 10) ✅
+- [x] 벤치마크 히스토리 대시보드 (GitHub Pages — benchmark-action/github-action-benchmark) ✅
 - **난이도**: 중 | **모델**: Sonnet 위임
 
 ### 검증 기준
