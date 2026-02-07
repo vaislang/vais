@@ -152,6 +152,20 @@ impl Parser {
                 } else {
                     false
                 }
+            } else if matches!(tok.token, Token::Tilde) {
+                // Check for ~ ident := expr (mutable shorthand prefix)
+                if let Some(next) = self.tokens.get(self.pos + 1) {
+                    if let Token::Ident(_) = &next.token {
+                        self.tokens
+                            .get(self.pos + 2)
+                            .map(|t| matches!(t.token, Token::ColonEq | Token::Colon))
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
             } else if matches!(tok.token, Token::LParen) {
                 // Check for tuple destructuring: (a, b) := expr
                 // Lookahead past matching parens to find :=
@@ -193,6 +207,12 @@ impl Parser {
     /// Parse let statement: `x := expr` or `x: T = expr` or `(a, b) := expr`
     /// Also supports ownership modifiers: `x := linear expr` or `x: affine T = expr`
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
+        // Check for ~ prefix (mutable shorthand): ~ x := expr
+        let tilde_prefix = self.check(&Token::Tilde);
+        if tilde_prefix {
+            self.advance();
+        }
+
         // Check for tuple destructuring: (a, b) := expr
         if self.check(&Token::LParen) {
             let pattern = self.parse_pattern()?;
@@ -227,8 +247,8 @@ impl Parser {
                 Ownership::Regular
             };
             // Check for mut: `x := mut expr` or `x := ~ expr`
-            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
-            if is_mut {
+            let is_mut = tilde_prefix || self.check(&Token::Mut) || self.check(&Token::Tilde);
+            if !tilde_prefix && is_mut {
                 self.advance();
             }
             (None, is_mut, ownership)
@@ -248,8 +268,8 @@ impl Parser {
                 Ownership::Regular
             };
             // Check for mut: `x: mut T = expr` or `x: ~ T = expr`
-            let is_mut = self.check(&Token::Mut) || self.check(&Token::Tilde);
-            if is_mut {
+            let is_mut = tilde_prefix || self.check(&Token::Mut) || self.check(&Token::Tilde);
+            if !tilde_prefix && is_mut {
                 self.advance();
             }
             let ty = self.parse_type()?;

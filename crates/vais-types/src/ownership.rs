@@ -855,8 +855,10 @@ impl OwnershipChecker {
                 expr: scrutinee,
                 arms,
             } => {
+                // check_expr_ownership already handles the move via use_var,
+                // so we don't need check_move_from_expr here (which would
+                // incorrectly report E022 since the value is already marked as moved)
                 self.check_expr_ownership(scrutinee)?;
-                self.check_move_from_expr(scrutinee)?;
                 for arm in arms {
                     self.push_scope();
                     self.check_expr_ownership(&arm.body)?;

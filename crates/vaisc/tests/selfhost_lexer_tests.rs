@@ -1732,6 +1732,7 @@ fn rust_token_to_selfhost_id(token: &vais_lexer::Token) -> i64 {
         Token::Effect => -1,         // effect system
         Token::Io => -1,             // io effect
         Token::Unsafe => -1,         // unsafe blocks
+        Token::Yield => -1,          // yield keyword
     }
 }
 

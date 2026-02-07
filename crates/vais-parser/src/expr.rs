@@ -465,6 +465,17 @@ impl Parser {
         let mut left = self.parse_factor()?;
 
         loop {
+            // Don't treat +/- as binary operators across newlines
+            // This prevents `puts("hello")\n-1` from being parsed as `puts("hello") - 1`
+            let op_on_new_line = if let Some(tok) = self.peek() {
+                self.has_newline_between(left.span.end, tok.span.start)
+            } else {
+                false
+            };
+            if op_on_new_line {
+                break;
+            }
+
             let op = if self.check(&Token::Plus) {
                 Some(BinOp::Add)
             } else if self.check(&Token::Minus) {
@@ -634,6 +645,16 @@ impl Parser {
             let start = expr.span.start;
 
             if self.check(&Token::LParen) {
+                // Don't treat `(` as function call if there's a newline between
+                // the expression and the `(`. This prevents:
+                //   x := get_pair()
+                //   (a, b) := ...
+                // from being parsed as `get_pair()(a, b)`
+                let paren_start = self.peek().map(|t| t.span.start).unwrap_or(0);
+                let expr_end = expr.span.end;
+                if self.has_newline_between(expr_end, paren_start) {
+                    break;
+                }
                 self.advance();
                 let args = self.parse_args()?;
                 self.expect(&Token::RParen)?;

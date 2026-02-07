@@ -373,22 +373,21 @@ F main() -> i64 {
   },
 
   'type-infer-params': {
-    name: 'Parameter Type Inference',
-    description: 'Omit parameter types when inferable',
-    code: `# Parameter types can be omitted
-F add(a, b) = a + b
-F multiply(a, b) = a * b
+    name: 'Type Inference',
+    description: 'Variables and return values are inferred',
+    code: `# Single expression functions
+F add(a: i64, b: i64) -> i64 = a + b
+F multiply(a: i64, b: i64) -> i64 = a * b
 
-# Mixed: some explicit, some inferred
-F greet(name: str) -> i64 {
-    println("Hello, {name}!")
-    0
-}
-
+# Variable types are inferred from expressions
 F main() -> i64 {
+    # Inferred as i64
     result := add(10, 20)
     product := multiply(3, 4)
-    greet("Vais")
+
+    # Inferred from conditional
+    max := result > product ? result : product
+
     0
 }`
   },

@@ -115,6 +115,8 @@ pub struct Parser {
     allow_struct_literal: bool,
     /// Current recursion depth for nested expression parsing
     depth: usize,
+    /// Source code for newline detection (used to prevent cross-line postfix parsing)
+    source: String,
 }
 
 impl Parser {
@@ -127,6 +129,20 @@ impl Parser {
             recovery_mode: false,
             allow_struct_literal: true,
             depth: 0,
+            source: String::new(),
+        }
+    }
+
+    /// Creates a new parser with source code for newline detection.
+    pub fn new_with_source(tokens: Vec<SpannedToken>, source: &str) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            errors: Vec::new(),
+            recovery_mode: false,
+            allow_struct_literal: true,
+            depth: 0,
+            source: source.to_string(),
         }
     }
 
@@ -142,7 +158,18 @@ impl Parser {
             recovery_mode: true,
             allow_struct_literal: true,
             depth: 0,
+            source: String::new(),
         }
+    }
+
+    /// Check if there is a newline between two byte positions in the source.
+    fn has_newline_between(&self, start: usize, end: usize) -> bool {
+        if self.source.is_empty() {
+            return false;
+        }
+        let s = start.min(self.source.len());
+        let e = end.min(self.source.len());
+        self.source[s..e].contains('\n')
     }
 
     /// Increment the recursion depth, returning an error if MAX_PARSE_DEPTH is exceeded.
@@ -2612,7 +2639,7 @@ pub fn parse(source: &str) -> Result<Module, ParseError> {
         expected: "valid token".into(),
     })?;
 
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new_with_source(tokens, source);
     parser.parse_module()
 }
 
@@ -2662,6 +2689,7 @@ pub fn parse_with_recovery(source: &str) -> (Module, Vec<ParseError>) {
     };
 
     let mut parser = Parser::new_with_recovery(tokens);
+    parser.source = source.to_string();
     parser.parse_module_with_recovery()
 }
 

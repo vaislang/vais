@@ -4176,7 +4176,7 @@ fn cmd_pkg_tree(
         println!("{}{} v{}{}", prefix, dep.name.cyan(), version, path_info);
 
         // Show transitive dependencies (1 level deep unless max_depth allows more)
-        if max_depth.map_or(true, |d| d > 0) {
+        if max_depth.is_none_or(|d| d > 0) {
             let child_cache = package::default_registry_cache_root();
             if let Ok(child_deps) = package::resolve_all_dependencies(
                 &dep._manifest,

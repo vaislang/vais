@@ -14,12 +14,20 @@ Version: 1.0.0
 8. [Functions](#functions)
 9. [Structs](#structs)
 10. [Enums](#enums)
-11. [Traits and Implementations](#traits-and-implementations)
-12. [Pattern Matching](#pattern-matching)
-13. [Generics](#generics)
-14. [Module System](#module-system)
-15. [Async/Await](#asyncawait)
-16. [Memory Management](#memory-management)
+11. [Error Handling](#error-handling)
+12. [Traits and Implementations](#traits-and-implementations)
+13. [Pattern Matching](#pattern-matching)
+14. [Generics](#generics)
+15. [Module System](#module-system)
+16. [Async/Await](#asyncawait)
+17. [Iterators and Generators](#iterators-and-generators)
+18. [Memory Management](#memory-management)
+19. [Built-in Functions](#built-in-functions)
+20. [Constants](#constants)
+21. [Package Ecosystem](#package-ecosystem)
+22. [Best Practices](#best-practices)
+23. [Examples](#examples)
+24. [Grammar Summary](#grammar-summary)
 
 ---
 
@@ -134,6 +142,7 @@ Note: Constants are defined with the `C` keyword followed by identifier, type, a
 - `await` - Await async result (also available as `Y` shorthand)
 - `weak` - Weak reference
 - `clone` - Clone operation
+- `yield` - Yield value in iterator/coroutine (simplified implementation)
 
 ### Shorthand Keywords (Phase 29)
 
@@ -235,7 +244,8 @@ Pair<A, B>  # Multiple type parameters
 | Operator | Description | Example |
 |----------|-------------|---------|
 | `@` | Self-recursion | `@(n-1)` |
-| `?` | Ternary conditional | `x > 0 ? 1 : -1` |
+| `?` | Ternary conditional or Try operator | `x > 0 ? 1 : -1` or `file.read()?` |
+| `!` | Logical NOT or Unwrap operator | `!x` or `option!` |
 | `.` | Member access | `point.x` |
 | `::` | Path separator | `std::math::PI` |
 | `->` | Function return type | `F add()->i64` |
@@ -244,6 +254,10 @@ Pair<A, B>  # Multiple type parameters
 | `..=` | Range (inclusive) | `0..=10` |
 | `\|>` | Pipe operator | `x \|> f \|> g` (equivalent to `g(f(x))`) |
 | `~` | Mutable shorthand | `x := ~ 0` (same as `x := mut 0`) |
+
+**Note on `?` operator:** The `?` operator has two uses:
+- **Ternary conditional**: `condition ? true_val : false_val`
+- **Try operator**: `result?` - propagates errors to caller (see [Error Handling](#error-handling))
 
 ---
 
@@ -640,6 +654,147 @@ opt := Some(42)
 err := Err("file not found")
 ```
 
+### Enum Implementation Blocks
+
+Enums can have methods just like structs:
+
+```vais
+E Color {
+    Red,
+    Green,
+    Blue
+}
+
+X Color {
+    F is_warm(&self) -> bool {
+        M self {
+            Red => true,
+            Green => false,
+            Blue => false,
+            _ => false
+        }
+    }
+
+    F to_hex(&self) -> str {
+        M self {
+            Red => "#FF0000",
+            Green => "#00FF00",
+            Blue => "#0000FF",
+            _ => "#000000"
+        }
+    }
+}
+
+# Usage
+F main() -> i64 {
+    c := Red
+    I c.is_warm() {
+        puts("This is a warm color")
+    }
+    puts(c.to_hex())
+    0
+}
+```
+
+---
+
+## Error Handling
+
+Vais uses a Result/Option-based error handling system without traditional try-catch blocks. Error handling is done through the `?` (try) and `!` (unwrap) operators.
+
+### The `?` Operator (Error Propagation)
+
+The `?` operator is used to propagate errors to the caller. When applied to a `Result<T, E>` or `Option<T>`, it:
+- Returns the inner value if `Ok(value)` or `Some(value)`
+- Early-returns the error/None to the calling function if `Err(e)` or `None`
+
+```vais
+E Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+
+F read_file(path: str) -> Result<str, str> {
+    # If open fails, propagate the error immediately
+    file := open(path)?
+
+    # If read fails, propagate the error
+    data := file.read()?
+
+    # Success case
+    Ok(data)
+}
+
+F process() -> Result<i64, str> {
+    # The ? operator automatically propagates errors
+    content := read_file("config.txt")?
+
+    # Continue processing if no error
+    Ok(parse(content))
+}
+```
+
+### The `!` Operator (Unwrap)
+
+The `!` operator forcefully extracts the value from a `Result` or `Option`. If the value is `Err` or `None`, the program will panic:
+
+```vais
+# Unwrap an Option - panics if None
+value := some_option!
+
+# Unwrap a Result - panics if Err
+data := some_result!
+
+# Example usage
+F get_config() -> Option<str> {
+    # ... returns Some(config) or None
+}
+
+F main() -> i64 {
+    # This panics if get_config returns None
+    config := get_config()!
+
+    puts(config)
+    0
+}
+```
+
+### Error Type Derivation
+
+Use `#[derive(Error)]` to automatically implement error traits:
+
+```vais
+#[derive(Error)]
+E AppError {
+    NotFound(str),
+    Permission(str),
+    Network(str)
+}
+
+F find_user(id: i64) -> Result<str, AppError> {
+    I id < 0 {
+        Err(NotFound("User ID cannot be negative"))
+    } E {
+        Ok("User data")
+    }
+}
+```
+
+### Standard Library Error Module
+
+Vais provides `std/error.vais` with common error handling utilities (similar to Rust's `anyhow` and `thiserror`):
+
+```vais
+U std/error
+
+# Error trait implementation
+F handle_errors() -> Result<i64, str> {
+    data := read_file("data.txt")?
+    result := process(data)?
+    Ok(result)
+}
+```
+
 ---
 
 ## Traits and Implementations
@@ -890,6 +1045,123 @@ result := task.await
 
 ---
 
+## Iterators and Generators
+
+### The `yield` Keyword
+
+The `yield` keyword is used to produce values in iterators and coroutines. In the current simplified implementation, `yield` returns a value from the iteration:
+
+```vais
+F counter(max: i64) -> i64 {
+    L i: 0..max {
+        yield i
+    }
+    0
+}
+
+F fibonacci(n: i64) -> i64 {
+    a := 0
+    b := 1
+    L i: 0..n {
+        yield a
+        tmp := a + b
+        a = b
+        b = tmp
+    }
+    0
+}
+```
+
+### Iterator Protocol
+
+Vais implements an iterator protocol similar to Rust's Iterator trait. Collections can be iterated using the standard for-loop syntax:
+
+```vais
+# Iterate over a range
+L i: 0..10 {
+    puts("Value: ")
+    print_i64(i)
+}
+
+# Iterate over an array
+items := [1, 2, 3, 4, 5]
+L item: items {
+    print_i64(item)
+}
+```
+
+### Iterator Adapters
+
+Vais provides functional iterator adapters for transforming and filtering collections:
+
+**`iter_map` - Transform each element:**
+```vais
+items := [1, 2, 3, 4, 5]
+doubled := iter_map(items, |x| x * 2)
+# Result: [2, 4, 6, 8, 10]
+```
+
+**`iter_filter` - Keep elements matching a predicate:**
+```vais
+numbers := [1, 2, 3, 4, 5, 6]
+evens := iter_filter(numbers, |x| x % 2 == 0)
+# Result: [2, 4, 6]
+```
+
+**`iter_take` - Take first N elements:**
+```vais
+data := [10, 20, 30, 40, 50]
+first_three := iter_take(data, 3)
+# Result: [10, 20, 30]
+```
+
+**`iter_skip` - Skip first N elements:**
+```vais
+data := [10, 20, 30, 40, 50]
+after_two := iter_skip(data, 2)
+# Result: [30, 40, 50]
+```
+
+**`iter_chain` - Concatenate two iterators:**
+```vais
+first := [1, 2, 3]
+second := [4, 5, 6]
+combined := iter_chain(first, second)
+# Result: [1, 2, 3, 4, 5, 6]
+```
+
+**`iter_zip` - Combine two iterators pairwise:**
+```vais
+a := [1, 2, 3]
+b := [10, 20, 30]
+pairs := iter_zip(a, b)
+# Result: [(1, 10), (2, 20), (3, 30)]
+```
+
+**`iter_enumerate` - Add indices to elements:**
+```vais
+items := ["a", "b", "c"]
+indexed := iter_enumerate(items)
+# Result: [(0, "a"), (1, "b"), (2, "c")]
+```
+
+### Chaining Iterator Adapters
+
+Iterator adapters can be chained together for complex transformations:
+
+```vais
+numbers := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# Get first 5 even numbers, doubled
+result := numbers
+    |> iter_filter(|x| x % 2 == 0)
+    |> iter_take(5)
+    |> iter_map(|x| x * 2)
+# Result: [4, 8, 12, 16, 20]
+```
+
+---
+
 ## Memory Management
 
 ### Stack Allocation
@@ -1005,6 +1277,122 @@ C VERSION: str = "0.0.1"
 
 ---
 
+## Package Ecosystem
+
+Vais includes a built-in package management system integrated into the `vaisc` compiler.
+
+### Creating a New Package
+
+Use `vaisc new` to create a new Vais project:
+
+```bash
+# Create a new package
+vaisc new myproject
+
+# Creates directory structure:
+# myproject/
+#   ├── Vais.toml       # Package manifest
+#   ├── src/
+#   │   └── main.vais   # Entry point
+#   └── tests/          # Test directory
+```
+
+### Package Manifest (Vais.toml)
+
+The `Vais.toml` file configures your package:
+
+```toml
+[package]
+name = "myproject"
+version = "0.1.0"
+authors = ["Your Name <you@example.com>"]
+edition = "2024"
+
+[dependencies]
+# Add dependencies here
+# std = "1.0"
+
+[dev-dependencies]
+# Test-only dependencies
+
+[build]
+optimization = 2
+target = "x86_64-unknown-linux-gnu"
+```
+
+### Running Tests
+
+Use `vaisc test` to run all tests in your package:
+
+```bash
+# Run all tests
+vaisc test
+
+# Run specific test file
+vaisc test tests/my_test.vais
+```
+
+**Writing tests:**
+```vais
+# tests/math_test.vais
+
+F test_addition() -> i64 {
+    result := add(2, 3)
+    I result != 5 {
+        puts("FAIL: expected 5, got different value")
+        R 1
+    }
+    puts("PASS: addition works")
+    0
+}
+
+F test_multiplication() -> i64 {
+    result := multiply(3, 4)
+    I result != 12 {
+        puts("FAIL: expected 12")
+        R 1
+    }
+    puts("PASS: multiplication works")
+    0
+}
+```
+
+### Package Commands
+
+```bash
+# Create new package
+vaisc new <package_name>
+
+# Build package
+vaisc build
+
+# Run package
+vaisc run
+
+# Run tests
+vaisc test
+
+# Check package validity
+vaisc check
+
+# Generate documentation
+vaisc doc
+```
+
+### Package Tree and Documentation
+
+View package structure and generate documentation:
+
+```bash
+# Show package dependency tree
+vaisc pkg tree
+
+# Generate package documentation
+vaisc pkg doc
+```
+
+---
+
 ## Best Practices
 
 1. **Use type inference** with `:=` when the type is obvious
@@ -1018,6 +1406,11 @@ C VERSION: str = "0.0.1"
 9. **Use `|>` pipe operator** for readable function chaining
 10. **Use string interpolation** `println("x={x}")` instead of manual concatenation
 11. **Omit parameter types** when they can be inferred from call sites
+12. **Use `?` operator** for error propagation instead of manual match/return
+13. **Use iterator adapters** (`iter_map`, `iter_filter`, etc.) for functional transformations
+14. **Prefer `derive(Error)`** for custom error types to reduce boilerplate
+15. **Use enum impl blocks** to add behavior to enums
+16. **Structure projects** with `vaisc new` and `Vais.toml` for better organization
 
 ---
 
@@ -1076,6 +1469,107 @@ F main() -> i64 {
 }
 ```
 
+### Error Handling with `?` and `!`
+
+```vais
+E FileError {
+    NotFound(str),
+    PermissionDenied(str)
+}
+
+F read_config(path: str) -> Result<str, FileError> {
+    # Use ? to propagate errors
+    file := open_file(path)?
+    data := file.read_all()?
+    Ok(data)
+}
+
+F main() -> i64 {
+    # Use ! to unwrap (panics on error)
+    config := read_config("config.txt")!
+    puts(config)
+
+    # Or handle errors with match
+    result := read_config("data.txt")
+    M result {
+        Ok(content) => {
+            puts("Success:")
+            puts(content)
+        },
+        Err(NotFound(msg)) => {
+            puts("File not found:")
+            puts(msg)
+        },
+        Err(PermissionDenied(msg)) => {
+            puts("Permission denied:")
+            puts(msg)
+        },
+        _ => puts("Unknown error")
+    }
+    0
+}
+```
+
+### Iterator Adapters
+
+```vais
+F main() -> i64 {
+    numbers := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    # Chain iterator adapters
+    result := numbers
+        |> iter_filter(|x| x % 2 == 0)    # Keep even numbers
+        |> iter_map(|x| x * x)             # Square them
+        |> iter_take(3)                    # Take first 3
+
+    # result = [4, 16, 36]
+
+    L item: result {
+        print_i64(item)
+    }
+
+    0
+}
+```
+
+### Enum with Methods
+
+```vais
+#[derive(Error)]
+E Color {
+    Red,
+    Green,
+    Blue
+}
+
+X Color {
+    F is_primary(&self) -> bool {
+        true  # All are primary colors
+    }
+
+    F to_rgb(&self) -> (i64, i64, i64) {
+        M self {
+            Red => (255, 0, 0),
+            Green => (0, 255, 0),
+            Blue => (0, 0, 255),
+            _ => (0, 0, 0)
+        }
+    }
+}
+
+F main() -> i64 {
+    color := Red
+    (r, g, b) := color.to_rgb()
+
+    puts("RGB values:")
+    print_i64(r)
+    print_i64(g)
+    print_i64(b)
+
+    0
+}
+```
+
 ---
 
 ## Grammar Summary
@@ -1090,8 +1584,10 @@ Function     ::= 'F' Ident TypeParams? '(' Params? ')' '->' Type ('=' Expr | Blo
 
 Struct       ::= 'S' Ident TypeParams? '{' Fields '}'
 Enum         ::= 'E' Ident TypeParams? '{' Variants '}'
+               | '#[derive(Error)]' 'E' Ident '{' Variants '}'
 Trait        ::= 'W' Ident TypeParams? '{' TraitItems '}'
 Impl         ::= 'X' Ident TypeParams? (':' Trait)? '{' ImplItems '}'
+               # Note: Impl blocks work for both structs and enums
 Use          ::= 'U' Path
 Const        ::= 'C' Ident ':' Type '=' Expr
 
@@ -1111,12 +1607,16 @@ Expr         ::= Literal
                | Expr '|>' Expr
                | StringInterp
                | '..' Expr
+               | Expr '?'          # Try operator (error propagation)
+               | Expr '!'          # Unwrap operator
+               | 'yield' Expr      # Yield expression
 
 Stmt         ::= 'R' Expr?
                | 'B'
                | 'C'
                | Let
                | Expr
+               | 'yield' Expr
 
 Type         ::= PrimitiveType
                | Ident TypeArgs?
