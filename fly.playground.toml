@@ -1,0 +1,40 @@
+# Fly.io configuration for Vais Playground Server (api.vaislang.dev)
+# Deploy with: flyctl deploy --config fly.playground.toml
+# Prerequisites:
+#   1. flyctl auth login
+#   2. flyctl apps create vais-playground (or let fly auto-create)
+#   3. flyctl certs add api.vaislang.dev -a vais-playground
+
+app = "vais-playground"
+primary_region = "nrt"  # Tokyo, closest to Korea
+
+[build]
+  dockerfile = "Dockerfile.playground"
+
+[env]
+  PLAYGROUND_HOST = "0.0.0.0"
+  PLAYGROUND_PORT = "8080"
+  RUST_LOG = "vais_playground=info,tower_http=info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 50
+    soft_limit = 30
+
+[[http_service.checks]]
+  grace_period = "30s"
+  interval = "30s"
+  method = "GET"
+  path = "/api/health"
+  timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

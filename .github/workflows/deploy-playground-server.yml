@@ -1,0 +1,35 @@
+name: Deploy Playground Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/vais-playground-server/**'
+      - 'crates/vais-codegen/**'
+      - 'crates/vais-parser/**'
+      - 'crates/vais-lexer/**'
+      - 'crates/vais-types/**'
+      - 'crates/vais-ast/**'
+      - 'crates/vaisc/**'
+      - 'std/**'
+      - 'Dockerfile.playground'
+      - 'fly.playground.toml'
+      - '.github/workflows/deploy-playground-server.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Fly.io
+    runs-on: ubuntu-latest
+    concurrency: deploy-playground-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Fly.io CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --config fly.playground.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

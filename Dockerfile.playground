@@ -1,11 +1,18 @@
 # Multi-stage build for Vais Playground Server
 # Stage 1: Build the playground server and vaisc compiler
-FROM rust:1.93-bookworm AS builder
+FROM rust:1.89-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
-    clang \
-    llvm-dev \
+    wget \
+    gnupg \
+    software-properties-common \
+    && wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
+    && echo "deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-17 main" > /etc/apt/sources.list.d/llvm.list \
+    && apt-get update \
+    && apt-get install -y llvm-17-dev libpolly-17-dev clang-17 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV LLVM_SYS_170_PREFIX=/usr/lib/llvm-17
 
 WORKDIR /build
 COPY . .
@@ -16,8 +23,15 @@ RUN cargo build --release -p vais-playground-server -p vaisc
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
-    clang \
+    wget \
+    gnupg \
     ca-certificates \
+    && wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
+    && echo "deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-17 main" > /etc/apt/sources.list.d/llvm.list \
+    && apt-get update \
+    && apt-get install -y clang-17 \
+    && ln -sf /usr/bin/clang-17 /usr/bin/clang \
+    && ln -sf /usr/bin/clang++-17 /usr/bin/clang++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/target/release/vais-playground /usr/local/bin/vais-playground

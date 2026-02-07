@@ -97,28 +97,34 @@ F main() -> i64 {
 
   'enum': {
     name: 'Enum',
-    description: 'Enum types and pattern matching',
+    description: 'Enum types and variants',
     code: `# Enum definition
-E Option<T> {
-    Some(T),
-    None
+E Direction {
+    North,
+    South,
+    East,
+    West
 }
 
-# Function using enum
-F get_value(opt: Option<i64>) -> i64 {
-    M opt {
-        Some(v) => v,
-        None => 0
-    }
+# Enums are represented as integers
+F describe(d: i64) -> i64 {
+    I d == 0 {
+        puts("Going North")
+    } E { I d == 1 {
+        puts("Going South")
+    } E { I d == 2 {
+        puts("Going East")
+    } E {
+        puts("Going West")
+    }}}
+    0
 }
 
 F main() -> i64 {
-    x := Some(42)
-    y := None
-
-    result := get_value(x)
-    default := get_value(y)
-
+    n := North
+    s := South
+    describe(0)
+    describe(2)
     0
 }`
   },
