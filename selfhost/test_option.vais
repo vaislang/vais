@@ -1,0 +1,262 @@
+# ============================================================================
+# Test Suite for Option/Result Support
+# ============================================================================
+# Tests all functions in option.vais
+# ============================================================================
+
+U option
+
+# ============================================================================
+# Test Helpers
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        putchar(10)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        putchar(10)
+        puts("  Expected: ")
+        println_i64(expected)
+        puts("  Actual:   ")
+        println_i64(actual)
+        0
+    }
+}
+
+# ============================================================================
+# Option Tests
+# ============================================================================
+
+F test_option_some() -> i64 {
+    puts("=== Testing Option::Some ===")
+
+    # Create Some(42)
+    opt := opt_some(42)
+
+    # Test is_some
+    passes := 0
+    passes := passes + assert_eq(opt_is_some(opt), 1, "opt_is_some(Some(42)) == 1")
+
+    # Test is_none
+    passes := passes + assert_eq(opt_is_none(opt), 0, "opt_is_none(Some(42)) == 0")
+
+    # Test unwrap
+    passes := passes + assert_eq(opt_unwrap(opt), 42, "opt_unwrap(Some(42)) == 42")
+
+    # Test tag
+    passes := passes + assert_eq(opt_tag(opt), 0, "opt_tag(Some(42)) == 0")
+
+    # Test value
+    passes := passes + assert_eq(opt_value(opt), 42, "opt_value(Some(42)) == 42")
+
+    # Test unwrap_or (should return value, not default)
+    passes := passes + assert_eq(opt_unwrap_or(opt, 999), 42, "opt_unwrap_or(Some(42), 999) == 42")
+
+    passes
+}
+
+F test_option_none() -> i64 {
+    puts("=== Testing Option::None ===")
+
+    # Create None
+    opt := opt_none()
+
+    # Test is_some
+    passes := 0
+    passes := passes + assert_eq(opt_is_some(opt), 0, "opt_is_some(None) == 0")
+
+    # Test is_none
+    passes := passes + assert_eq(opt_is_none(opt), 1, "opt_is_none(None) == 1")
+
+    # Test tag
+    passes := passes + assert_eq(opt_tag(opt), 1, "opt_tag(None) == 1")
+
+    # Test unwrap_or (should return default)
+    passes := passes + assert_eq(opt_unwrap_or(opt, 999), 999, "opt_unwrap_or(None, 999) == 999")
+
+    passes
+}
+
+F test_option_map() -> i64 {
+    puts("=== Testing Option::map ===")
+
+    # Test map on Some
+    opt := opt_some(10)
+    mapped := opt_map(opt, 0)  # func is placeholder
+
+    passes := 0
+    passes := passes + assert_eq(opt_is_some(mapped), 1, "opt_map(Some(10), f) is Some")
+    passes := passes + assert_eq(opt_unwrap(mapped), 10, "opt_map preserves value (placeholder)")
+
+    # Test map on None
+    none := opt_none()
+    mapped_none := opt_map(none, 0)
+
+    passes := passes + assert_eq(opt_is_none(mapped_none), 1, "opt_map(None, f) is None")
+
+    passes
+}
+
+F test_option_edge_cases() -> i64 {
+    puts("=== Testing Option Edge Cases ===")
+
+    # Test Some(0) - zero is a valid value
+    opt := opt_some(0)
+
+    passes := 0
+    passes := passes + assert_eq(opt_is_some(opt), 1, "Some(0) is Some")
+    passes := passes + assert_eq(opt_unwrap(opt), 0, "Some(0) unwraps to 0")
+
+    # Test Some(-42) - negative value
+    opt_neg := opt_some(0 - 42)
+    passes := passes + assert_eq(opt_unwrap(opt_neg), 0 - 42, "Some(-42) unwraps to -42")
+
+    passes
+}
+
+# ============================================================================
+# Result Tests
+# ============================================================================
+
+F test_result_ok() -> i64 {
+    puts("=== Testing Result::Ok ===")
+
+    # Create Ok(100)
+    res := res_ok(100)
+
+    # Test is_ok
+    passes := 0
+    passes := passes + assert_eq(res_is_ok(res), 1, "res_is_ok(Ok(100)) == 1")
+
+    # Test is_err
+    passes := passes + assert_eq(res_is_err(res), 0, "res_is_err(Ok(100)) == 0")
+
+    # Test unwrap
+    passes := passes + assert_eq(res_unwrap(res), 100, "res_unwrap(Ok(100)) == 100")
+
+    # Test tag
+    passes := passes + assert_eq(res_tag(res), 0, "res_tag(Ok(100)) == 0")
+
+    # Test value
+    passes := passes + assert_eq(res_value(res), 100, "res_value(Ok(100)) == 100")
+
+    # Test unwrap_or (should return value, not default)
+    passes := passes + assert_eq(res_unwrap_or(res, 555), 100, "res_unwrap_or(Ok(100), 555) == 100")
+
+    passes
+}
+
+F test_result_err() -> i64 {
+    puts("=== Testing Result::Err ===")
+
+    # Create Err(404)
+    res := res_err(404)
+
+    # Test is_ok
+    passes := 0
+    passes := passes + assert_eq(res_is_ok(res), 0, "res_is_ok(Err(404)) == 0")
+
+    # Test is_err
+    passes := passes + assert_eq(res_is_err(res), 1, "res_is_err(Err(404)) == 1")
+
+    # Test unwrap_err
+    passes := passes + assert_eq(res_unwrap_err(res), 404, "res_unwrap_err(Err(404)) == 404")
+
+    # Test tag
+    passes := passes + assert_eq(res_tag(res), 1, "res_tag(Err(404)) == 1")
+
+    # Test value (error value)
+    passes := passes + assert_eq(res_value(res), 404, "res_value(Err(404)) == 404")
+
+    # Test unwrap_or (should return default)
+    passes := passes + assert_eq(res_unwrap_or(res, 555), 555, "res_unwrap_or(Err(404), 555) == 555")
+
+    passes
+}
+
+F test_result_edge_cases() -> i64 {
+    puts("=== Testing Result Edge Cases ===")
+
+    # Test Ok(0) - zero is a valid success value
+    res := res_ok(0)
+
+    passes := 0
+    passes := passes + assert_eq(res_is_ok(res), 1, "Ok(0) is Ok")
+    passes := passes + assert_eq(res_unwrap(res), 0, "Ok(0) unwraps to 0")
+
+    # Test Err(0) - zero error code
+    err := res_err(0)
+    passes := passes + assert_eq(res_is_err(err), 1, "Err(0) is Err")
+    passes := passes + assert_eq(res_unwrap_err(err), 0, "Err(0) unwraps to 0")
+
+    passes
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("============================================================================")
+    puts("Option/Result Test Suite")
+    puts("============================================================================")
+    putchar(10)
+
+    total_passes := 0
+
+    # Run Option tests
+    total_passes := total_passes + test_option_some()
+    putchar(10)
+    total_passes := total_passes + test_option_none()
+    putchar(10)
+    total_passes := total_passes + test_option_map()
+    putchar(10)
+    total_passes := total_passes + test_option_edge_cases()
+    putchar(10)
+
+    # Run Result tests
+    total_passes := total_passes + test_result_ok()
+    putchar(10)
+    total_passes := total_passes + test_result_err()
+    putchar(10)
+    total_passes := total_passes + test_result_edge_cases()
+    putchar(10)
+
+    # Summary
+    puts("============================================================================")
+    puts("Test Summary: ")
+    print_i64(total_passes)
+    puts(" / 32 tests passed")
+    puts("============================================================================")
+
+    # Return 0 if all passed, 1 if any failed
+    I total_passes == 32 { 0 } E { 1 }
+}

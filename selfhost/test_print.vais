@@ -1,0 +1,270 @@
+# test_print.vais - Test suite for print.vais utility functions
+# Tests string length calculation, integer/boolean/hex output, and formatting utilities
+
+U print
+
+# Test helpers — use puts for output to avoid depending on print.vais in assert
+F my_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        my_print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            my_print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Expected: ")
+        my_print_i64(expected)
+        putchar(10)
+        puts("  Actual: ")
+        my_print_i64(actual)
+        putchar(10)
+        0
+    }
+}
+
+# ============================================================================
+# Test: str_len
+# ============================================================================
+
+F test_str_len() -> i64 {
+    puts("\n--- str_len Tests ---")
+    passed := mut 0
+
+    ptr1 := str_to_ptr("")
+    passed = passed + assert_eq(str_len(ptr1), 0, "str_len: empty string")
+
+    ptr2 := str_to_ptr("a")
+    passed = passed + assert_eq(str_len(ptr2), 1, "str_len: single char")
+
+    ptr3 := str_to_ptr("hello")
+    passed = passed + assert_eq(str_len(ptr3), 5, "str_len: hello")
+
+    ptr4 := str_to_ptr("Vais is awesome!")
+    passed = passed + assert_eq(str_len(ptr4), 16, "str_len: long string")
+
+    passed
+}
+
+# ============================================================================
+# Test: print_i64, println_i64
+# ============================================================================
+
+F test_print_i64() -> i64 {
+    puts("\n--- print_i64 Tests ---")
+    passed := mut 0
+
+    puts("Output: ")
+    r1 := print_i64(0)
+    putchar(10)
+    passed = passed + assert_eq(r1, 0, "print_i64(0) returns 0")
+
+    puts("Output: ")
+    r2 := print_i64(42)
+    putchar(10)
+    passed = passed + assert_eq(r2, 0, "print_i64(42) returns 0")
+
+    puts("Output: ")
+    r3 := print_i64(0 - 7)
+    putchar(10)
+    passed = passed + assert_eq(r3, 0, "print_i64(-7) returns 0")
+
+    puts("Output: ")
+    r4 := println_i64(123)
+    passed = passed + assert_eq(r4, 0, "println_i64(123) returns 0")
+
+    passed
+}
+
+# ============================================================================
+# Test: print_bool
+# ============================================================================
+
+F test_print_bool() -> i64 {
+    puts("\n--- print_bool Tests ---")
+    passed := mut 0
+
+    puts("Output: ")
+    r1 := print_bool(0)
+    putchar(10)
+    passed = passed + assert_eq(r1, 0, "print_bool(0) returns 0")
+
+    puts("Output: ")
+    r2 := print_bool(1)
+    putchar(10)
+    passed = passed + assert_eq(r2, 0, "print_bool(1) returns 0")
+
+    passed
+}
+
+# ============================================================================
+# Test: print_hex
+# ============================================================================
+
+F test_print_hex() -> i64 {
+    puts("\n--- print_hex Tests ---")
+    passed := mut 0
+
+    puts("Output: ")
+    r1 := print_hex(0)
+    putchar(10)
+    passed = passed + assert_eq(r1, 0, "print_hex(0) returns 0")
+
+    puts("Output: ")
+    r2 := print_hex(255)
+    putchar(10)
+    passed = passed + assert_eq(r2, 0, "print_hex(255) returns 0")
+
+    puts("Output: ")
+    r3 := print_hex(16)
+    putchar(10)
+    passed = passed + assert_eq(r3, 0, "print_hex(16) returns 0")
+
+    passed
+}
+
+# ============================================================================
+# Test: print_bytes
+# ============================================================================
+
+F test_print_bytes() -> i64 {
+    puts("\n--- print_bytes Tests ---")
+    passed := mut 0
+
+    buf := malloc(3)
+    store_byte(buf, 65)
+    store_byte(buf + 1, 66)
+    store_byte(buf + 2, 67)
+
+    puts("Output: ")
+    r1 := print_bytes(buf, 3)
+    putchar(10)
+    passed = passed + assert_eq(r1, 0, "print_bytes returns 0")
+
+    puts("Output: ")
+    r2 := print_bytes(buf, 0)
+    putchar(10)
+    passed = passed + assert_eq(r2, 0, "print_bytes empty returns 0")
+
+    free(buf)
+    passed
+}
+
+# ============================================================================
+# Test: print_str, println_str
+# ============================================================================
+
+F test_print_str() -> i64 {
+    puts("\n--- print_str Tests ---")
+    passed := mut 0
+
+    puts("Output: ")
+    r1 := print_str("Hello")
+    putchar(10)
+    passed = passed + assert_eq(r1, 0, "print_str returns 0")
+
+    puts("Output: ")
+    r2 := println_str("World")
+    passed = passed + assert_eq(r2, 0, "println_str returns 0")
+
+    passed
+}
+
+# ============================================================================
+# Test: print_char, print_repeat, println
+# ============================================================================
+
+F test_print_misc() -> i64 {
+    puts("\n--- Misc Tests ---")
+    passed := mut 0
+
+    puts("Output: ")
+    r1 := print_char(65)
+    putchar(10)
+    passed = passed + assert_eq(r1, 0, "print_char returns 0")
+
+    puts("Output: ")
+    r2 := print_repeat(45, 5)
+    putchar(10)
+    passed = passed + assert_eq(r2, 0, "print_repeat returns 0")
+
+    # Note: println() cannot be tested directly because "println" is a
+    # compiler builtin (mapped to printf). Use putchar(10) instead.
+
+    r4 := print_label_i64("count", 42)
+    passed = passed + assert_eq(r4, 0, "print_label_i64 returns 0")
+
+    r5 := print_indent(2)
+    putchar(10)
+    passed = passed + assert_eq(r5, 0, "print_indent returns 0")
+
+    passed
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("  Print Utility Test Suite")
+    puts("===========================================")
+
+    total: mut i64 = 0
+    passed: mut i64 = 0
+
+    passed = passed + test_str_len()
+    total = total + 4
+
+    passed = passed + test_print_i64()
+    total = total + 4
+
+    passed = passed + test_print_bool()
+    total = total + 2
+
+    passed = passed + test_print_hex()
+    total = total + 3
+
+    passed = passed + test_print_bytes()
+    total = total + 2
+
+    passed = passed + test_print_str()
+    total = total + 2
+
+    passed = passed + test_print_misc()
+    total = total + 4
+
+    puts("\n===========================================")
+    puts("  Test Summary")
+    puts("===========================================")
+    puts("Total: ")
+    my_print_i64(total)
+    putchar(10)
+    puts("Passed: ")
+    my_print_i64(passed)
+    putchar(10)
+
+    I passed == total {
+        puts("\nAll tests PASSED!")
+        0
+    } E {
+        puts("\nSome tests FAILED!")
+        1
+    }
+}

@@ -10,32 +10,38 @@
 # Returns file pointer as i64, or 0 on failure
 F file_open_r(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
-    fopen_ptr(path_ptr, "r")
+    fp := fopen_ptr(path_ptr, "r")
+    fp
 }
 
 F file_open_w(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
-    fopen_ptr(path_ptr, "w")
+    fp := fopen_ptr(path_ptr, "w")
+    fp
 }
 
 F file_open_rb(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
-    fopen_ptr(path_ptr, "rb")
+    fp := fopen_ptr(path_ptr, "rb")
+    fp
 }
 
 F file_open_wb(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
-    fopen_ptr(path_ptr, "wb")
+    fp := fopen_ptr(path_ptr, "wb")
+    fp
 }
 
 F file_open_a(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
-    fopen_ptr(path_ptr, "a")
+    fp := fopen_ptr(path_ptr, "a")
+    fp
 }
 
 F file_open_ab(path: str) -> i64 {
     path_ptr := str_to_ptr(path)
-    fopen_ptr(path_ptr, "ab")
+    fp := fopen_ptr(path_ptr, "ab")
+    fp
 }
 
 # Close a file pointer
@@ -83,45 +89,35 @@ F file_read_line(fp: i64) -> i64 {
     len := mut 0
 
     byte_buf := malloc(1)
-    done := mut 0
-    L done == 0 {
-        eof := feof(fp)
-        I eof != 0 {
-            done = 1
-        } E {
-            bytes_read := fread(byte_buf, 1, 1, fp)
-            I bytes_read == 0 {
-                done = 1
-            } E {
-                byte := load_byte(byte_buf)
-                I byte == 10 {
-                    done = 1  # newline
-                } E {
-                    # Grow if needed
-                    I len >= cap {
-                        new_cap := cap * 2
-                        new_data := malloc(new_cap)
-                        memcpy(new_data, data, len)
-                        free(data)
-                        data = new_data
-                        cap = new_cap
-                        0
-                    } E { 0 }
-                    store_byte(data + len, byte)
-                    len = len + 1
-                }
-            }
-        }
+    L {
+        # Read one byte; fread returns 0 on EOF/error
+        bytes_read := fread(byte_buf, 1, 1, fp)
+        I bytes_read == 0 { B } E { 0 }
+
+        byte := load_byte(byte_buf)
+        I byte == 10 { B } E { 0 }
+
+        # Grow if needed
+        I len >= cap {
+            new_cap := cap * 2
+            new_data := malloc(new_cap)
+            memcpy(new_data, data, len)
+            free(data)
+            data = new_data
+            cap = new_cap
+            0
+        } E { 0 }
+        store_byte(data + len, byte)
+        len = len + 1
+        0
     }
     free(byte_buf)
 
-    # EOF with no data read
+    # EOF with no data read → return 0
     I len == 0 {
-        eof2 := feof(fp)
-        I eof2 != 0 {
-            free(data)
-            R 0
-        } E { 0 }
+        # Check if fread returned 0 due to EOF (no bytes read at all)
+        free(data)
+        R 0
     } E { 0 }
 
     store_byte(data + len, 0)  # null terminate
@@ -208,7 +204,9 @@ F file_tell(fp: i64) -> i64 {
 
 F file_is_eof(fp: i64) -> i64 {
     I fp == 0 { R 0 } E { 0 }
-    eof := feof(fp)
+    # feof returns i32 but Vais treats as i64 — mask to 32 bits
+    eof_raw := feof(fp)
+    eof := eof_raw & 4294967295
     I eof == 0 { 0 } E { 1 }
 }
 

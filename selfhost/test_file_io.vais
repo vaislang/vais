@@ -1,0 +1,610 @@
+# ============================================================================
+# File I/O Test Suite
+# ============================================================================
+
+U file_io
+
+# ============================================================================
+# Test Infrastructure
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Expected: ")
+        println_i64(expected)
+        puts("  Actual: ")
+        println_i64(actual)
+        0
+    }
+}
+
+F assert_true(actual: i64, test_name: str) -> i64 {
+    I actual != 0 {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Expected: non-zero")
+        puts("  Actual: 0")
+        0
+    }
+}
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+# Create test data buffer from string
+F make_test_data(content: str) -> i64 {
+    len := strlen(content)
+    ptr := str_to_ptr(content)
+
+    data := malloc(len)
+    i := mut 0
+    L i < len {
+        byte := load_byte(ptr + i)
+        store_byte(data + i, byte)
+        i = i + 1
+    }
+    data
+}
+
+# Compare buffer contents with string
+F compare_data(data_ptr: i64, len: i64, expected: str) -> i64 {
+    exp_len := strlen(expected)
+    I len != exp_len { R 0 } E { 0 }
+
+    exp_ptr := str_to_ptr(expected)
+    i := mut 0
+    L i < len {
+        actual_byte := load_byte(data_ptr + i)
+        expected_byte := load_byte(exp_ptr + i)
+        I actual_byte != expected_byte { R 0 } E { 0 }
+        i = i + 1
+    }
+    1
+}
+
+# ============================================================================
+# Test Functions
+# ============================================================================
+
+# Test 1: Write and read roundtrip
+F test_write_read_roundtrip() -> i64 {
+    path := "/tmp/vais_test_roundtrip.txt"
+    content := "Hello, Vais!"
+
+    data := make_test_data(content)
+    len := strlen(content)
+
+    # Write
+    write_ok := file_write_all(path, data, len)
+    free(data)
+
+    I write_ok == 0 {
+        puts("[FAIL] test_write_read_roundtrip: write failed")
+        R 0
+    } E { 0 }
+
+    # Read
+    result := file_read_all(path)
+    I result == 0 {
+        puts("[FAIL] test_write_read_roundtrip: read failed")
+        R 0
+    } E { 0 }
+
+    read_data := load_i64(result)
+    read_len := load_i64(result + 8)
+
+    match := compare_data(read_data, read_len, content)
+    file_result_free(result)
+
+    assert_true(match, "write_read_roundtrip")
+}
+
+# Test 2: File exists - existing file
+F test_file_exists_true() -> i64 {
+    path := "/tmp/vais_test_exists.txt"
+    content := "test"
+    data := make_test_data(content)
+    len := strlen(content)
+
+    file_write_all(path, data, len)
+    free(data)
+
+    exists := file_exists(path)
+    assert_true(exists, "file_exists (existing)")
+}
+
+# Test 3: File exists - non-existing file
+F test_file_exists_false() -> i64 {
+    path := "/tmp/vais_test_nonexistent_12345.txt"
+    exists := file_exists(path)
+    assert_eq(exists, 0, "file_exists (non-existing)")
+}
+
+# Test 4: File size
+F test_file_size() -> i64 {
+    path := "/tmp/vais_test_size.txt"
+    content := "12345678"
+    data := make_test_data(content)
+    len := strlen(content)
+
+    file_write_all(path, data, len)
+    free(data)
+
+    sz := file_size(path)
+    assert_eq(sz, 8, "file_size")
+}
+
+# Test 5: File append
+F test_file_append() -> i64 {
+    path := "/tmp/vais_test_append.txt"
+
+    # Write initial content
+    content1 := "Hello"
+    data1 := make_test_data(content1)
+    len1 := strlen(content1)
+    file_write_all(path, data1, len1)
+    free(data1)
+
+    # Append more content
+    content2 := " World"
+    data2 := make_test_data(content2)
+    len2 := strlen(content2)
+    file_append(path, data2, len2)
+    free(data2)
+
+    # Read and verify
+    result := file_read_all(path)
+    I result == 0 {
+        puts("[FAIL] test_file_append: read failed")
+        R 0
+    } E { 0 }
+
+    read_data := load_i64(result)
+    read_len := load_i64(result + 8)
+
+    expected := "Hello World"
+    match := compare_data(read_data, read_len, expected)
+    file_result_free(result)
+
+    assert_true(match, "file_append")
+}
+
+# Test 6: Open/write/close with file_write_bytes
+F test_manual_write() -> i64 {
+    path := "/tmp/vais_test_manual_write.txt"
+    content := "ABC"
+    data := make_test_data(content)
+    len := strlen(content)
+
+    fp := file_open_w(path)
+    I fp == 0 {
+        free(data)
+        puts("[FAIL] test_manual_write: open failed")
+        R 0
+    } E { 0 }
+
+    bytes_written := file_write_bytes(fp, data, len)
+    file_close(fp)
+    free(data)
+
+    I bytes_written != len {
+        puts("[FAIL] test_manual_write: wrong byte count")
+        R 0
+    } E { 0 }
+
+    # Verify by reading
+    result := file_read_all(path)
+    I result == 0 {
+        puts("[FAIL] test_manual_write: read failed")
+        R 0
+    } E { 0 }
+
+    read_data := load_i64(result)
+    read_len := load_i64(result + 8)
+
+    match := compare_data(read_data, read_len, content)
+    file_result_free(result)
+
+    assert_true(match, "manual_write")
+}
+
+# Test 7: Read line by line
+F test_read_line() -> i64 {
+    path := "/tmp/vais_test_readline.txt"
+
+    # Create multi-line file
+    line1 := "First line\n"
+    line2 := "Second line\n"
+    line3 := "Third line"
+
+    len1 := strlen(line1)
+    len2 := strlen(line2)
+    len3 := strlen(line3)
+    total_len := len1 + len2 + len3
+
+    # Build content buffer
+    data := malloc(total_len)
+    ptr1 := str_to_ptr(line1)
+    ptr2 := str_to_ptr(line2)
+    ptr3 := str_to_ptr(line3)
+
+    i := mut 0
+    L i < len1 {
+        byte := load_byte(ptr1 + i)
+        store_byte(data + i, byte)
+        i = i + 1
+    }
+    offset := mut len1
+    i = 0
+    L i < len2 {
+        byte := load_byte(ptr2 + i)
+        store_byte(data + offset + i, byte)
+        i = i + 1
+    }
+    offset = offset + len2
+    i = 0
+    L i < len3 {
+        byte := load_byte(ptr3 + i)
+        store_byte(data + offset + i, byte)
+        i = i + 1
+    }
+
+    file_write_all(path, data, total_len)
+    free(data)
+
+    # Read line by line
+    fp := file_open_r(path)
+    I fp == 0 {
+        puts("[FAIL] test_read_line: open failed")
+        R 0
+    } E { 0 }
+
+    # Read first line
+    result1 := file_read_line(fp)
+    I result1 == 0 {
+        file_close(fp)
+        puts("[FAIL] test_read_line: first line failed")
+        R 0
+    } E { 0 }
+
+    data1 := load_i64(result1)
+    len_read1 := load_i64(result1 + 8)
+    match1 := compare_data(data1, len_read1, "First line")
+    file_result_free(result1)
+
+    # Read second line
+    result2 := file_read_line(fp)
+    I result2 == 0 {
+        file_close(fp)
+        puts("[FAIL] test_read_line: second line failed")
+        R 0
+    } E { 0 }
+
+    data2 := load_i64(result2)
+    len_read2 := load_i64(result2 + 8)
+    match2 := compare_data(data2, len_read2, "Second line")
+    file_result_free(result2)
+
+    # Read third line
+    result3 := file_read_line(fp)
+    I result3 == 0 {
+        file_close(fp)
+        puts("[FAIL] test_read_line: third line failed")
+        R 0
+    } E { 0 }
+
+    data3 := load_i64(result3)
+    len_read3 := load_i64(result3 + 8)
+    match3 := compare_data(data3, len_read3, "Third line")
+    file_result_free(result3)
+
+    # EOF check
+    result4 := file_read_line(fp)
+    file_close(fp)
+
+    I result4 != 0 {
+        file_result_free(result4)
+        puts("[FAIL] test_read_line: expected EOF")
+        R 0
+    } E { 0 }
+
+    all_match := match1 & match2
+    all_match = all_match & match3
+
+    assert_true(all_match, "read_line")
+}
+
+# Test 8: Seek and tell
+F test_seek_tell() -> i64 {
+    path := "/tmp/vais_test_seek.txt"
+    content := "0123456789"
+    data := make_test_data(content)
+    len := strlen(content)
+
+    file_write_all(path, data, len)
+    free(data)
+
+    fp := file_open_r(path)
+    I fp == 0 {
+        puts("[FAIL] test_seek_tell: open failed")
+        R 0
+    } E { 0 }
+
+    # Initial position should be 0
+    pos1 := file_tell(fp)
+
+    # Seek to position 5
+    file_seek(fp, 5, 0)  # SEEK_SET = 0
+    pos2 := file_tell(fp)
+
+    # Seek to end
+    file_seek(fp, 0, 2)  # SEEK_END = 2
+    pos3 := file_tell(fp)
+
+    file_close(fp)
+
+    ok1 := assert_eq(pos1, 0, "seek_tell: initial position")
+    ok2 := assert_eq(pos2, 5, "seek_tell: seek to 5")
+    ok3 := assert_eq(pos3, 10, "seek_tell: seek to end")
+
+    all_ok := ok1 & ok2
+    all_ok = all_ok & ok3
+    all_ok
+}
+
+# Test 9: Read bytes with file_read_bytes
+F test_read_bytes() -> i64 {
+    path := "/tmp/vais_test_readbytes.txt"
+    content := "ABCDEFGH"
+    data := make_test_data(content)
+    len := strlen(content)
+
+    file_write_all(path, data, len)
+    free(data)
+
+    fp := file_open_r(path)
+    I fp == 0 {
+        puts("[FAIL] test_read_bytes: open failed")
+        R 0
+    } E { 0 }
+
+    # Read first 3 bytes
+    result := file_read_bytes(fp, 3)
+    I result == 0 {
+        file_close(fp)
+        puts("[FAIL] test_read_bytes: read failed")
+        R 0
+    } E { 0 }
+
+    read_data := load_i64(result)
+    read_len := load_i64(result + 8)
+
+    match := compare_data(read_data, read_len, "ABC")
+    file_result_free(result)
+    file_close(fp)
+
+    assert_true(match, "read_bytes")
+}
+
+# Test 10: Empty file
+F test_empty_file() -> i64 {
+    path := "/tmp/vais_test_empty.txt"
+    data := malloc(1)  # Empty buffer
+
+    file_write_all(path, data, 0)
+    free(data)
+
+    sz := file_size(path)
+    assert_eq(sz, 0, "empty_file")
+}
+
+# Test 11: Large content (stress test)
+F test_large_content() -> i64 {
+    path := "/tmp/vais_test_large.txt"
+
+    # Create 1KB of 'X'
+    size := 1024
+    data := malloc(size)
+    i := mut 0
+    L i < size {
+        store_byte(data + i, 88)  # 'X' = 88
+        i = i + 1
+    }
+
+    file_write_all(path, data, size)
+    free(data)
+
+    # Verify size
+    sz := file_size(path)
+    size_ok := assert_eq(sz, 1024, "large_content: size")
+
+    # Verify content
+    result := file_read_all(path)
+    I result == 0 {
+        puts("[FAIL] test_large_content: read failed")
+        R 0
+    } E { 0 }
+
+    read_data := load_i64(result)
+    read_len := load_i64(result + 8)
+
+    # Check length
+    I read_len != 1024 {
+        file_result_free(result)
+        puts("[FAIL] test_large_content: wrong length")
+        R 0
+    } E { 0 }
+
+    # Check all bytes are 'X'
+    i = 0
+    all_match := mut 1
+    L i < 1024 {
+        byte := load_byte(read_data + i)
+        I byte != 88 {
+            all_match = 0
+        } E { 0 }
+        i = i + 1
+    }
+
+    file_result_free(result)
+    content_ok := assert_true(all_match, "large_content: data")
+
+    both_ok := size_ok & content_ok
+    both_ok
+}
+
+# Test 12: Binary data (non-text)
+F test_binary_data() -> i64 {
+    path := "/tmp/vais_test_binary.bin"
+
+    # Create binary data: 0, 1, 2, ..., 255, 0, 1, ...
+    size := 512
+    data := malloc(size)
+    i := mut 0
+    L i < size {
+        value := i % 256
+        store_byte(data + i, value)
+        i = i + 1
+    }
+
+    file_write_all(path, data, size)
+
+    # Read back
+    result := file_read_all(path)
+    I result == 0 {
+        free(data)
+        puts("[FAIL] test_binary_data: read failed")
+        R 0
+    } E { 0 }
+
+    read_data := load_i64(result)
+    read_len := load_i64(result + 8)
+
+    # Verify
+    I read_len != size {
+        free(data)
+        file_result_free(result)
+        puts("[FAIL] test_binary_data: wrong length")
+        R 0
+    } E { 0 }
+
+    i = 0
+    match := mut 1
+    L i < size {
+        original := load_byte(data + i)
+        read_byte := load_byte(read_data + i)
+        I original != read_byte {
+            match = 0
+        } E { 0 }
+        i = i + 1
+    }
+
+    free(data)
+    file_result_free(result)
+
+    assert_true(match, "binary_data")
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("==============================================")
+    puts("Vais File I/O Test Suite")
+    puts("==============================================")
+    putchar(10)
+
+    passed := mut 0
+    total := mut 0
+
+    # Run all tests
+    total = total + 1
+    I test_write_read_roundtrip() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_file_exists_true() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_file_exists_false() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_file_size() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_file_append() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_manual_write() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_read_line() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_seek_tell() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_read_bytes() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_empty_file() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_large_content() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    total = total + 1
+    I test_binary_data() != 0 { passed = passed + 1; 0 } E { 0 }
+
+    # Summary
+    putchar(10)
+    puts("==============================================")
+    puts("Test Summary")
+    puts("==============================================")
+    puts("Passed: ")
+    print_i64(passed)
+    puts(" / ")
+    println_i64(total)
+
+    failed := total - passed
+    I failed == 0 {
+        puts("All tests passed!")
+        0
+    } E {
+        puts("Some tests failed!")
+        1
+    }
+}

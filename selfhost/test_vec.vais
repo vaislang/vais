@@ -1,0 +1,578 @@
+# ============================================================================
+# Vec Test Suite
+# ============================================================================
+# Tests all functions in vec.vais module
+
+U vec
+
+# ============================================================================
+# Test Infrastructure
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Expected: ")
+        println_i64(expected)
+        puts("  Actual: ")
+        println_i64(actual)
+        0
+    }
+}
+
+F assert_neq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual != expected {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Values should be different but both are: ")
+        println_i64(actual)
+        0
+    }
+}
+
+# ============================================================================
+# Constructor Tests
+# ============================================================================
+
+F test_vec_new() -> i64 {
+    puts("\n--- Constructor Tests ---")
+
+    v := vec_new()
+    r1 := assert_neq(v, 0, "vec_new() returns non-null")
+    r2 := assert_eq(vec_len(v), 0, "vec_new() has len=0")
+    r3 := assert_eq(vec_cap(v), 8, "vec_new() has default cap=8")
+    r4 := assert_eq(vec_is_empty(v), 1, "vec_new() is empty")
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4
+}
+
+F test_vec_with_cap() -> i64 {
+    v := vec_with_cap(16)
+    r1 := assert_neq(v, 0, "vec_with_cap(16) returns non-null")
+    r2 := assert_eq(vec_len(v), 0, "vec_with_cap(16) has len=0")
+    r3 := assert_eq(vec_cap(v), 16, "vec_with_cap(16) has cap=16")
+    r4 := assert_eq(vec_is_empty(v), 1, "vec_with_cap(16) is empty")
+    vec_drop(v)
+
+    v2 := vec_with_cap(32)
+    r5 := assert_eq(vec_cap(v2), 32, "vec_with_cap(32) has cap=32")
+    vec_drop(v2)
+
+    r1 + r2 + r3 + r4 + r5
+}
+
+# ============================================================================
+# Push/Pop Tests
+# ============================================================================
+
+F test_vec_push_pop() -> i64 {
+    puts("\n--- Push/Pop Tests ---")
+
+    v := vec_new()
+
+    vec_push(v, 10)
+    r1 := assert_eq(vec_len(v), 1, "push increases len to 1")
+    r2 := assert_eq(vec_is_empty(v), 0, "push makes vec non-empty")
+
+    vec_push(v, 20)
+    vec_push(v, 30)
+    r3 := assert_eq(vec_len(v), 3, "push 3 elements -> len=3")
+
+    val := vec_pop(v)
+    r4 := assert_eq(val, 30, "pop returns last element (30)")
+    r5 := assert_eq(vec_len(v), 2, "pop decreases len to 2")
+
+    val2 := vec_pop(v)
+    r6 := assert_eq(val2, 20, "pop returns 20")
+    r7 := assert_eq(vec_len(v), 1, "len=1 after second pop")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7
+}
+
+# ============================================================================
+# Element Access Tests
+# ============================================================================
+
+F test_vec_get_set() -> i64 {
+    puts("\n--- Element Access Tests ---")
+
+    v := vec_new()
+    vec_push(v, 100)
+    vec_push(v, 200)
+    vec_push(v, 300)
+
+    r1 := assert_eq(vec_get(v, 0), 100, "get index 0 returns 100")
+    r2 := assert_eq(vec_get(v, 1), 200, "get index 1 returns 200")
+    r3 := assert_eq(vec_get(v, 2), 300, "get index 2 returns 300")
+
+    vec_set(v, 1, 999)
+    r4 := assert_eq(vec_get(v, 1), 999, "set index 1 to 999")
+    r5 := assert_eq(vec_get(v, 0), 100, "get index 0 still 100")
+    r6 := assert_eq(vec_get(v, 2), 300, "get index 2 still 300")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6
+}
+
+F test_vec_get_checked() -> i64 {
+    puts("\n--- Checked Access Tests ---")
+
+    v := vec_new()
+    vec_push(v, 42)
+    vec_push(v, 84)
+
+    opt1 := vec_get_checked(v, 0)
+    tag1 := load_i64(opt1)
+    val1 := load_i64(opt1 + 8)
+    r1 := assert_eq(tag1, 0, "get_checked(0) returns Some (tag=0)")
+    r2 := assert_eq(val1, 42, "get_checked(0) value is 42")
+
+    opt2 := vec_get_checked(v, 1)
+    tag2 := load_i64(opt2)
+    val2 := load_i64(opt2 + 8)
+    r3 := assert_eq(tag2, 0, "get_checked(1) returns Some")
+    r4 := assert_eq(val2, 84, "get_checked(1) value is 84")
+
+    opt3 := vec_get_checked(v, 5)
+    tag3 := load_i64(opt3)
+    r5 := assert_eq(tag3, 1, "get_checked(5) returns None (tag=1)")
+
+    opt4 := vec_get_checked(v, 0 - 1)
+    tag4 := load_i64(opt4)
+    r6 := assert_eq(tag4, 1, "get_checked(-1) returns None")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6
+}
+
+F test_vec_first_last() -> i64 {
+    puts("\n--- First/Last Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 20)
+    vec_push(v, 30)
+    vec_push(v, 40)
+
+    r1 := assert_eq(vec_first(v), 10, "first() returns 10")
+    r2 := assert_eq(vec_last(v), 40, "last() returns 40")
+
+    vec_pop(v)
+    r3 := assert_eq(vec_last(v), 30, "last() returns 30 after pop")
+
+    vec_drop(v)
+
+    r1 + r2 + r3
+}
+
+# ============================================================================
+# Insert/Remove Tests
+# ============================================================================
+
+F test_vec_insert() -> i64 {
+    puts("\n--- Insert Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 30)
+    vec_push(v, 40)
+
+    vec_insert(v, 1, 20)
+    r1 := assert_eq(vec_len(v), 4, "insert increases len to 4")
+    r2 := assert_eq(vec_get(v, 0), 10, "index 0 still 10")
+    r3 := assert_eq(vec_get(v, 1), 20, "index 1 is inserted 20")
+    r4 := assert_eq(vec_get(v, 2), 30, "index 2 shifted to 30")
+    r5 := assert_eq(vec_get(v, 3), 40, "index 3 shifted to 40")
+
+    vec_insert(v, 0, 5)
+    r6 := assert_eq(vec_get(v, 0), 5, "insert at 0 puts 5 at front")
+    r7 := assert_eq(vec_get(v, 1), 10, "old index 0 shifted to 1")
+    r8 := assert_eq(vec_len(v), 5, "len is now 5")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8
+}
+
+F test_vec_remove() -> i64 {
+    puts("\n--- Remove Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 20)
+    vec_push(v, 30)
+    vec_push(v, 40)
+
+    val := vec_remove(v, 1)
+    r1 := assert_eq(val, 20, "remove(1) returns 20")
+    r2 := assert_eq(vec_len(v), 3, "remove decreases len to 3")
+    r3 := assert_eq(vec_get(v, 0), 10, "index 0 still 10")
+    r4 := assert_eq(vec_get(v, 1), 30, "index 1 shifted to 30")
+    r5 := assert_eq(vec_get(v, 2), 40, "index 2 shifted to 40")
+
+    val2 := vec_remove(v, 0)
+    r6 := assert_eq(val2, 10, "remove(0) returns 10")
+    r7 := assert_eq(vec_get(v, 0), 30, "index 0 now 30")
+    r8 := assert_eq(vec_len(v), 2, "len is now 2")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8
+}
+
+F test_vec_swap_remove() -> i64 {
+    puts("\n--- Swap Remove Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 20)
+    vec_push(v, 30)
+    vec_push(v, 40)
+
+    val := vec_swap_remove(v, 1)
+    r1 := assert_eq(val, 20, "swap_remove(1) returns 20")
+    r2 := assert_eq(vec_len(v), 3, "swap_remove decreases len")
+    r3 := assert_eq(vec_get(v, 0), 10, "index 0 still 10")
+    r4 := assert_eq(vec_get(v, 1), 40, "index 1 swapped to 40 (last)")
+    r5 := assert_eq(vec_get(v, 2), 30, "index 2 still 30")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5
+}
+
+# ============================================================================
+# Clear/Truncate Tests
+# ============================================================================
+
+F test_vec_clear_truncate() -> i64 {
+    puts("\n--- Clear/Truncate Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 20)
+    vec_push(v, 30)
+    vec_push(v, 40)
+
+    cap_before := vec_cap(v)
+    vec_clear(v)
+    r1 := assert_eq(vec_len(v), 0, "clear sets len to 0")
+    r2 := assert_eq(vec_is_empty(v), 1, "clear makes vec empty")
+    r3 := assert_eq(vec_cap(v), cap_before, "clear preserves capacity")
+
+    vec_push(v, 100)
+    vec_push(v, 200)
+    vec_push(v, 300)
+    vec_push(v, 400)
+    vec_push(v, 500)
+
+    vec_truncate(v, 3)
+    r4 := assert_eq(vec_len(v), 3, "truncate(3) sets len to 3")
+    r5 := assert_eq(vec_get(v, 0), 100, "truncate preserves elements")
+    r6 := assert_eq(vec_get(v, 2), 300, "truncate keeps first 3")
+
+    vec_truncate(v, 10)
+    r7 := assert_eq(vec_len(v), 3, "truncate(10) does not increase len")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7
+}
+
+# ============================================================================
+# Search Tests
+# ============================================================================
+
+F test_vec_search() -> i64 {
+    puts("\n--- Search Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 20)
+    vec_push(v, 30)
+    vec_push(v, 20)
+    vec_push(v, 40)
+
+    r1 := assert_eq(vec_index_of(v, 20), 1, "index_of(20) returns 1 (first)")
+    r2 := assert_eq(vec_index_of(v, 30), 2, "index_of(30) returns 2")
+    r3 := assert_eq(vec_index_of(v, 40), 4, "index_of(40) returns 4")
+    r4 := assert_eq(vec_index_of(v, 99), 0 - 1, "index_of(99) returns -1")
+
+    r5 := assert_eq(vec_contains(v, 30), 1, "contains(30) returns 1")
+    r6 := assert_eq(vec_contains(v, 99), 0, "contains(99) returns 0")
+    r7 := assert_eq(vec_contains(v, 10), 1, "contains(10) returns 1")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7
+}
+
+# ============================================================================
+# Bulk Operations Tests
+# ============================================================================
+
+F test_vec_extend() -> i64 {
+    puts("\n--- Extend Tests ---")
+
+    v1 := vec_new()
+    vec_push(v1, 10)
+    vec_push(v1, 20)
+    vec_push(v1, 30)
+
+    v2 := vec_new()
+    vec_push(v2, 40)
+    vec_push(v2, 50)
+
+    vec_extend(v1, v2)
+    r1 := assert_eq(vec_len(v1), 5, "extend increases len to 5")
+    r2 := assert_eq(vec_get(v1, 0), 10, "original elements preserved")
+    r3 := assert_eq(vec_get(v1, 2), 30, "original elements preserved")
+    r4 := assert_eq(vec_get(v1, 3), 40, "extended element 40")
+    r5 := assert_eq(vec_get(v1, 4), 50, "extended element 50")
+    r6 := assert_eq(vec_len(v2), 2, "source vec unchanged")
+
+    vec_drop(v1)
+    vec_drop(v2)
+
+    r1 + r2 + r3 + r4 + r5 + r6
+}
+
+F test_vec_clone() -> i64 {
+    puts("\n--- Clone Tests ---")
+
+    v1 := vec_new()
+    vec_push(v1, 100)
+    vec_push(v1, 200)
+    vec_push(v1, 300)
+
+    v2 := vec_clone(v1)
+    r1 := assert_neq(v2, v1, "clone returns different vec pointer")
+    r2 := assert_eq(vec_len(v2), 3, "clone has same len")
+    r3 := assert_eq(vec_cap(v2), vec_cap(v1), "clone has same cap")
+    r4 := assert_eq(vec_get(v2, 0), 100, "clone has same elements")
+    r5 := assert_eq(vec_get(v2, 1), 200, "clone has same elements")
+    r6 := assert_eq(vec_get(v2, 2), 300, "clone has same elements")
+
+    vec_set(v2, 0, 999)
+    r7 := assert_eq(vec_get(v1, 0), 100, "modifying clone doesn't affect original")
+    r8 := assert_eq(vec_get(v2, 0), 999, "clone is mutable")
+
+    vec_drop(v1)
+    vec_drop(v2)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8
+}
+
+# ============================================================================
+# Reverse Tests
+# ============================================================================
+
+F test_vec_reverse() -> i64 {
+    puts("\n--- Reverse Tests ---")
+
+    v := vec_new()
+    vec_push(v, 10)
+    vec_push(v, 20)
+    vec_push(v, 30)
+    vec_push(v, 40)
+    vec_push(v, 50)
+
+    vec_reverse(v)
+    r1 := assert_eq(vec_get(v, 0), 50, "reverse: index 0 is 50")
+    r2 := assert_eq(vec_get(v, 1), 40, "reverse: index 1 is 40")
+    r3 := assert_eq(vec_get(v, 2), 30, "reverse: index 2 is 30")
+    r4 := assert_eq(vec_get(v, 3), 20, "reverse: index 3 is 20")
+    r5 := assert_eq(vec_get(v, 4), 10, "reverse: index 4 is 10")
+    r6 := assert_eq(vec_len(v), 5, "reverse preserves len")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6
+}
+
+# ============================================================================
+# Sort Tests
+# ============================================================================
+
+F test_vec_sort() -> i64 {
+    puts("\n--- Sort Tests ---")
+
+    v := vec_new()
+    vec_push(v, 50)
+    vec_push(v, 10)
+    vec_push(v, 40)
+    vec_push(v, 20)
+    vec_push(v, 30)
+
+    vec_sort(v)
+    r1 := assert_eq(vec_get(v, 0), 10, "sort: index 0 is 10")
+    r2 := assert_eq(vec_get(v, 1), 20, "sort: index 1 is 20")
+    r3 := assert_eq(vec_get(v, 2), 30, "sort: index 2 is 30")
+    r4 := assert_eq(vec_get(v, 3), 40, "sort: index 3 is 40")
+    r5 := assert_eq(vec_get(v, 4), 50, "sort: index 4 is 50")
+    r6 := assert_eq(vec_len(v), 5, "sort preserves len")
+
+    v2 := vec_new()
+    vec_push(v2, 5)
+    vec_sort(v2)
+    r7 := assert_eq(vec_get(v2, 0), 5, "sort single element")
+
+    vec_drop(v)
+    vec_drop(v2)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7
+}
+
+# ============================================================================
+# Growth Tests (indirect via push)
+# ============================================================================
+
+F test_vec_growth() -> i64 {
+    puts("\n--- Growth Tests ---")
+
+    v := vec_with_cap(4)
+    r1 := assert_eq(vec_cap(v), 4, "initial cap is 4")
+
+    vec_push(v, 1)
+    vec_push(v, 2)
+    vec_push(v, 3)
+    vec_push(v, 4)
+    r2 := assert_eq(vec_len(v), 4, "len is 4 before growth")
+    r3 := assert_eq(vec_cap(v), 4, "cap is 4 before growth")
+
+    vec_push(v, 5)
+    r4 := assert_eq(vec_len(v), 5, "len is 5 after growth trigger")
+    r5 := assert_eq(vec_cap(v), 8, "cap doubled to 8 after growth")
+
+    r6 := assert_eq(vec_get(v, 0), 1, "growth preserves element 0")
+    r7 := assert_eq(vec_get(v, 3), 4, "growth preserves element 3")
+    r8 := assert_eq(vec_get(v, 4), 5, "new element stored correctly")
+
+    # Push many more to trigger another growth
+    vec_push(v, 6)
+    vec_push(v, 7)
+    vec_push(v, 8)
+    vec_push(v, 9)
+    r9 := assert_eq(vec_len(v), 9, "len is 9 after second growth")
+    r10 := assert_eq(vec_cap(v), 16, "cap doubled to 16 after second growth")
+
+    vec_drop(v)
+
+    r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10
+}
+
+# ============================================================================
+# Main Test Runner
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("  Vec Test Suite")
+    puts("===========================================")
+
+    total: mut i64 = 0
+    passed: mut i64 = 0
+
+    passed = passed + test_vec_new()
+    total = total + 4
+
+    passed = passed + test_vec_with_cap()
+    total = total + 5
+
+    passed = passed + test_vec_push_pop()
+    total = total + 7
+
+    passed = passed + test_vec_get_set()
+    total = total + 6
+
+    passed = passed + test_vec_get_checked()
+    total = total + 6
+
+    passed = passed + test_vec_first_last()
+    total = total + 3
+
+    passed = passed + test_vec_insert()
+    total = total + 8
+
+    passed = passed + test_vec_remove()
+    total = total + 8
+
+    passed = passed + test_vec_swap_remove()
+    total = total + 5
+
+    passed = passed + test_vec_clear_truncate()
+    total = total + 7
+
+    passed = passed + test_vec_search()
+    total = total + 7
+
+    passed = passed + test_vec_extend()
+    total = total + 6
+
+    passed = passed + test_vec_clone()
+    total = total + 8
+
+    passed = passed + test_vec_reverse()
+    total = total + 6
+
+    passed = passed + test_vec_sort()
+    total = total + 7
+
+    passed = passed + test_vec_growth()
+    total = total + 10
+
+    puts("\n===========================================")
+    puts("  Test Summary")
+    puts("===========================================")
+    puts("Total: ")
+    println_i64(total)
+    puts("Passed: ")
+    println_i64(passed)
+    puts("Failed: ")
+    println_i64(total - passed)
+
+    I passed == total {
+        puts("\nAll tests PASSED!")
+        0
+    } E {
+        puts("\nSome tests FAILED!")
+        1
+    }
+}

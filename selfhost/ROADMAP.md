@@ -1,9 +1,9 @@
 # Vais Self-Hosting Compiler Roadmap
 
-## Current Status: v0.8.0 — Full Bootstrap + Toolchain 🎉
+## Current Status: v0.9.0 — Full Bootstrap + Toolchain + Stdlib Tests 🎉
 
 Bootstrap achieved (Stage1→Stage2→Stage3 fixed point).
-MIR pipeline, LSP server, code formatter, and doc generator implemented.
+MIR pipeline, LSP server, code formatter, doc generator, and stdlib test suites implemented.
 
 ---
 
@@ -12,7 +12,7 @@ MIR pipeline, LSP server, code formatter, and doc generator implemented.
 ### Bootstrap (v0.7.0) ✅
 - [x] Stage1→Stage2→Stage3 fixed point (SHA256: e14776a6..., 17,807줄)
 - [x] Inkwell builtins: fopen_ptr/memcpy_str wrappers + realloc
-- [x] E2E: 241 tests, selfhost lexer: 114 tests — all passing
+- [x] E2E: 248 tests + 6 stdlib tests, selfhost lexer: 114 tests — all passing
 
 ### Core Language ✅
 - [x] All keywords: F, S, E, I, L, R, B, C, M, X, W, T, U, P, mut
@@ -82,6 +82,21 @@ MIR pipeline, LSP server, code formatter, and doc generator implemented.
 - [x] Better print functions — print.vais (229 LOC): i64/bool/hex/char/repeat/println ✅ 2026-02-07
 진행률: 6/6 (100%)
 
+### Stdlib Test Suites ✅ (276 assertions)
+- [x] Vec test suite — test_vec.vais (578 LOC): 103/103 assertions ✅ 2026-02-07
+- [x] String test suite — test_string.vais (343 LOC): 58/58 assertions ✅ 2026-02-07
+- [x] HashMap test suite — test_hashmap.vais (471 LOC): 50/50 assertions ✅ 2026-02-07
+- [x] Option/Result test suite — test_option.vais (262 LOC): 32/32 assertions ✅ 2026-02-07
+- [x] File I/O test suite — test_file_io.vais (610 LOC): 12/12 assertions ✅ 2026-02-07
+- [x] Print test suite — test_print.vais (270 LOC): 21/21 assertions ✅ 2026-02-07
+- [x] Rust E2E integration — selfhost_stdlib_tests.rs: 6/6 tests ✅ 2026-02-07
+진행률: 7/7 (100%)
+
+#### Bugs Found & Fixed During Testing
+- **fopen_ptr return discarded**: codegen drops ptr return when used as final expression; fixed by storing in variable first
+- **feof i32→i64 garbage bits**: C feof() returns 32-bit int, upper 32 bits are garbage in Vais i64; fixed file_read_line to use fread return value instead
+- **println builtin collision**: compiler maps bare `println()` to C printf, conflicting with user-defined function
+
 ### Known Limitations
 1. Match scrutinee: must be simple identifier (not complex expression) due to `{` ambiguity
 2. Selfhost parser: doesn't handle all Vais syntax (e.g., attributes, closures) — designed for selfhost source files
@@ -109,6 +124,10 @@ cargo run --bin vaisc -- selfhost/mir_main.vais -o /tmp/vais-mir --no-ownership-
 
 ## Version History
 
+- **v0.9.0** - Stdlib Test Suites: 276 assertions across 6 modules + Rust E2E integration
+  - Vec (103), String (58), HashMap (50), Option (32), File I/O (12), Print (21)
+  - 3 codegen bugs found & fixed (fopen_ptr return, feof i32/i64, println collision)
+  - Rust E2E integration: selfhost_stdlib_tests.rs (6 tests)
 - **v0.8.0** - Toolchain: Formatter + Doc Generator + Parser Fixes
   - Code formatter: AST-based pretty-printing with --check/--write modes (1,475 LOC)
   - Doc generator: Markdown output with signatures, field tables, doc comments (1,236 LOC)

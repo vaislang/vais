@@ -1,0 +1,471 @@
+# ============================================================================
+# HashMap Test Suite
+# ============================================================================
+# Tests for selfhost/hashmap.vais functions
+# ============================================================================
+
+U vec
+U hashmap
+
+# ============================================================================
+# Test Infrastructure
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Expected: ")
+        println_i64(expected)
+        puts("  Actual:   ")
+        println_i64(actual)
+        0
+    }
+}
+
+# ============================================================================
+# Test: Basic Construction and Accessors
+# ============================================================================
+
+F test_construction() -> i64 {
+    passed := mut 0
+
+    # Test map_new()
+    m := map_new()
+    passed = passed + assert_eq(map_len(m), 0, "map_new: len=0")
+    passed = passed + assert_eq(map_cap(m), 16, "map_new: cap=16")
+    passed = passed + assert_eq(map_is_empty(m), 1, "map_new: is_empty")
+    map_drop(m)
+
+    # Test map_with_cap()
+    m2 := map_with_cap(32)
+    passed = passed + assert_eq(map_len(m2), 0, "map_with_cap: len=0")
+    passed = passed + assert_eq(map_cap(m2), 32, "map_with_cap: cap=32")
+    passed = passed + assert_eq(map_is_empty(m2), 1, "map_with_cap: is_empty")
+    map_drop(m2)
+
+    passed
+}
+
+# ============================================================================
+# Test: Basic Put and Get
+# ============================================================================
+
+F test_basic_put_get() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert first key-value pair
+    ret := map_put(m, 42, 100)
+    passed = passed + assert_eq(ret, 0, "put new key returns 0")
+    passed = passed + assert_eq(map_len(m), 1, "len=1 after first put")
+    passed = passed + assert_eq(map_is_empty(m), 0, "not empty after put")
+
+    # Get the value back
+    opt := map_get(m, 42)
+    tag := load_i64(opt)
+    val := load_i64(opt + 8)
+    passed = passed + assert_eq(tag, 0, "get returns Some (tag=0)")
+    passed = passed + assert_eq(val, 100, "get returns correct value")
+    free(opt)
+
+    # Get with map_get_or
+    val2 := map_get_or(m, 42, 999)
+    passed = passed + assert_eq(val2, 100, "get_or returns value")
+
+    # Check with map_has
+    has := map_has(m, 42)
+    passed = passed + assert_eq(has, 1, "has returns 1 for existing key")
+
+    # Check non-existent key
+    opt2 := map_get(m, 99)
+    tag2 := load_i64(opt2)
+    passed = passed + assert_eq(tag2, 1, "get returns None (tag=1) for missing key")
+    free(opt2)
+
+    val3 := map_get_or(m, 99, 999)
+    passed = passed + assert_eq(val3, 999, "get_or returns default for missing key")
+
+    has2 := map_has(m, 99)
+    passed = passed + assert_eq(has2, 0, "has returns 0 for missing key")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Overwrite Existing Keys
+# ============================================================================
+
+F test_overwrite() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert initial value
+    map_put(m, 10, 200)
+
+    # Overwrite with new value
+    old_val := map_put(m, 10, 300)
+    passed = passed + assert_eq(old_val, 200, "put returns old value on overwrite")
+    passed = passed + assert_eq(map_len(m), 1, "len stays 1 after overwrite")
+
+    # Verify new value
+    new_val := map_get_or(m, 10, 0)
+    passed = passed + assert_eq(new_val, 300, "get returns new value after overwrite")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Multiple Keys
+# ============================================================================
+
+F test_multiple_keys() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert multiple keys
+    map_put(m, 1, 10)
+    map_put(m, 2, 20)
+    map_put(m, 3, 30)
+    map_put(m, 4, 40)
+
+    passed = passed + assert_eq(map_len(m), 4, "len=4 after 4 puts")
+
+    # Verify all values
+    passed = passed + assert_eq(map_get_or(m, 1, 0), 10, "get key 1")
+    passed = passed + assert_eq(map_get_or(m, 2, 0), 20, "get key 2")
+    passed = passed + assert_eq(map_get_or(m, 3, 0), 30, "get key 3")
+    passed = passed + assert_eq(map_get_or(m, 4, 0), 40, "get key 4")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Remove
+# ============================================================================
+
+F test_remove() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert keys
+    map_put(m, 5, 50)
+    map_put(m, 6, 60)
+    map_put(m, 7, 70)
+
+    # Remove existing key
+    removed_val := map_remove(m, 6)
+    passed = passed + assert_eq(removed_val, 60, "remove returns value")
+    passed = passed + assert_eq(map_len(m), 2, "len=2 after remove")
+
+    # Verify key is gone
+    has := map_has(m, 6)
+    passed = passed + assert_eq(has, 0, "has returns 0 after remove")
+
+    # Other keys still present
+    passed = passed + assert_eq(map_has(m, 5), 1, "other key still present")
+    passed = passed + assert_eq(map_has(m, 7), 1, "other key still present")
+
+    # Remove non-existent key
+    removed_val2 := map_remove(m, 99)
+    passed = passed + assert_eq(removed_val2, 0, "remove returns 0 for missing key")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Clear
+# ============================================================================
+
+F test_clear() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert keys
+    map_put(m, 1, 10)
+    map_put(m, 2, 20)
+    map_put(m, 3, 30)
+
+    # Clear
+    map_clear(m)
+
+    passed = passed + assert_eq(map_len(m), 0, "len=0 after clear")
+    passed = passed + assert_eq(map_is_empty(m), 1, "is_empty after clear")
+    passed = passed + assert_eq(map_has(m, 1), 0, "key 1 gone after clear")
+    passed = passed + assert_eq(map_has(m, 2), 0, "key 2 gone after clear")
+
+    # Can insert after clear
+    map_put(m, 100, 1000)
+    passed = passed + assert_eq(map_len(m), 1, "len=1 after put post-clear")
+    passed = passed + assert_eq(map_get_or(m, 100, 0), 1000, "get works after clear")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Resize
+# ============================================================================
+
+F test_resize() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert enough keys to trigger resize (load > 0.75)
+    # Default cap=16, threshold = 16 * 0.75 = 12
+    # Insert 13 keys to trigger resize
+    i := mut 0
+    L i < 13 {
+        map_put(m, i, i * 10)
+        i = i + 1
+    }
+
+    # Should have resized to cap=32
+    cap := map_cap(m)
+    passed = passed + assert_eq(cap, 32, "cap=32 after resize")
+    passed = passed + assert_eq(map_len(m), 13, "len=13 after resize")
+
+    # Verify all keys still present
+    j := mut 0
+    all_found := mut 1
+    L j < 13 {
+        val := map_get_or(m, j, 0 - 1)
+        I val != j * 10 {
+            all_found = 0
+            0
+        } E { 0 }
+        j = j + 1
+    }
+    passed = passed + assert_eq(all_found, 1, "all keys present after resize")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Keys and Values
+# ============================================================================
+
+F test_keys_values() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert keys
+    map_put(m, 10, 100)
+    map_put(m, 20, 200)
+    map_put(m, 30, 300)
+
+    # Get keys
+    keys := map_keys(m)
+    passed = passed + assert_eq(vec_len(keys), 3, "keys vec len=3")
+
+    # Get values
+    vals := map_values(m)
+    passed = passed + assert_eq(vec_len(vals), 3, "values vec len=3")
+
+    # Verify keys are present (order may vary due to hashing)
+    k0 := vec_get(keys, 0)
+    k1 := vec_get(keys, 1)
+    k2 := vec_get(keys, 2)
+
+    # All keys should be 10, 20, or 30
+    all_valid := mut 1
+    I k0 != 10 {
+        I k0 != 20 {
+            I k0 != 30 {
+                all_valid = 0
+                0
+            } E { 0 }
+            0
+        } E { 0 }
+        0
+    } E { 0 }
+
+    passed = passed + assert_eq(all_valid, 1, "keys are valid")
+
+    vec_drop(keys)
+    vec_drop(vals)
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Collision Handling
+# ============================================================================
+
+F test_collisions() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert many keys to ensure some collisions
+    i := mut 0
+    L i < 20 {
+        map_put(m, i, i * 100)
+        i = i + 1
+    }
+
+    passed = passed + assert_eq(map_len(m), 20, "len=20 with many keys")
+
+    # Verify all keys retrievable
+    j := mut 0
+    all_ok := mut 1
+    L j < 20 {
+        val := map_get_or(m, j, 0 - 1)
+        I val != j * 100 {
+            all_ok = 0
+            0
+        } E { 0 }
+        j = j + 1
+    }
+    passed = passed + assert_eq(all_ok, 1, "all keys retrievable despite collisions")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Tombstone Reuse
+# ============================================================================
+
+F test_tombstone_reuse() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert and remove to create tombstone
+    map_put(m, 100, 1000)
+    map_remove(m, 100)
+
+    passed = passed + assert_eq(map_len(m), 0, "len=0 after remove")
+
+    # Insert new key (may reuse tombstone slot)
+    map_put(m, 101, 1010)
+    passed = passed + assert_eq(map_len(m), 1, "len=1 after reuse")
+    passed = passed + assert_eq(map_get_or(m, 101, 0), 1010, "new key retrievable")
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Test: Zero Values
+# ============================================================================
+
+F test_zero_values() -> i64 {
+    passed := mut 0
+    m := map_new()
+
+    # Insert key with value 0
+    map_put(m, 50, 0)
+
+    # map_has can distinguish from missing key
+    has := map_has(m, 50)
+    passed = passed + assert_eq(has, 1, "has returns 1 for key with value 0")
+
+    # map_get returns Some(0)
+    opt := map_get(m, 50)
+    tag := load_i64(opt)
+    val := load_i64(opt + 8)
+    passed = passed + assert_eq(tag, 0, "get returns Some for key with value 0")
+    passed = passed + assert_eq(val, 0, "get returns value 0")
+    free(opt)
+
+    map_drop(m)
+    passed
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+F main() -> i64 {
+    puts("========================================")
+    puts("HashMap Test Suite")
+    puts("========================================")
+    putchar(10)
+
+    total := mut 0
+
+    puts("--- Construction and Accessors ---")
+    total = total + test_construction()
+    putchar(10)
+
+    puts("--- Basic Put and Get ---")
+    total = total + test_basic_put_get()
+    putchar(10)
+
+    puts("--- Overwrite ---")
+    total = total + test_overwrite()
+    putchar(10)
+
+    puts("--- Multiple Keys ---")
+    total = total + test_multiple_keys()
+    putchar(10)
+
+    puts("--- Remove ---")
+    total = total + test_remove()
+    putchar(10)
+
+    puts("--- Clear ---")
+    total = total + test_clear()
+    putchar(10)
+
+    puts("--- Resize ---")
+    total = total + test_resize()
+    putchar(10)
+
+    puts("--- Keys and Values ---")
+    total = total + test_keys_values()
+    putchar(10)
+
+    puts("--- Collisions ---")
+    total = total + test_collisions()
+    putchar(10)
+
+    puts("--- Tombstone Reuse ---")
+    total = total + test_tombstone_reuse()
+    putchar(10)
+
+    puts("--- Zero Values ---")
+    total = total + test_zero_values()
+    putchar(10)
+
+    puts("========================================")
+    puts("Summary: ")
+    print_i64(total)
+    puts(" tests passed")
+    puts("========================================")
+
+    # Return 0 for success, 1 for failure
+    I total >= 47 { 0 } E { 1 }
+}

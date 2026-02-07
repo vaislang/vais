@@ -3,7 +3,7 @@
 
 > **버전**: 1.0.0
 > **목표**: AI 코드 생성에 최적화된 토큰 효율적 시스템 프로그래밍 언어
-> **최종 업데이트**: 2026-02-03
+> **최종 업데이트**: 2026-02-07
 
 ---
 
@@ -101,6 +101,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **37** | **프로덕션 갭 해소 (Reality Check)** | **✅ 완료** | **Stage 1-7 전부 완료 (100%)** |
 | **38** | **셀프호스팅 100% 달성** | **✅ 완료** | **부트스트랩 달성! (SHA256 일치, 17,807줄)** |
 | **39** | **셀프호스트 MIR Borrow Checker** | **✅ 완료** | **mir_borrow.vais 1,357줄 + 테스트 363줄** |
+| **40** | **셀프호스트 Stdlib 테스트 강화** | **✅ 완료** | **276 assertions, 6 모듈 테스트 + Rust E2E (버그 3건 수정)** |
 | | *Phase 34~: VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -1763,6 +1764,44 @@ Optional:
 - **독립성 확보**: Rust 컴파일러 없이 Vais만으로 개발 가능
 - **코드 품질 향상**: 컴파일러 코드가 Vais 언어의 showcase
 - **생태계 확장**: Vais로 작성된 도구 생태계 기반 마련
+
+---
+
+## ✅ Phase 40: 셀프호스트 Stdlib 테스트 강화
+
+> **상태**: ✅ 완료
+> **목표**: 6개 selfhost stdlib 모듈에 대한 포괄적 테스트 스위트 작성 및 Rust E2E 통합
+
+### 테스트 스위트 요약
+
+| 모듈 | 테스트 파일 | LOC | 어설션 | 상태 |
+|------|-----------|-----|-------|------|
+| Vec | test_vec.vais | 578 | 103/103 | ✅ |
+| String | test_string.vais | 343 | 58/58 | ✅ |
+| HashMap | test_hashmap.vais | 471 | 50/50 | ✅ |
+| Option/Result | test_option.vais | 262 | 32/32 | ✅ |
+| File I/O | test_file_io.vais | 610 | 12/12 | ✅ |
+| Print | test_print.vais | 270 | 21/21 | ✅ |
+| **합계** | | **~2,534** | **276/276** | ✅ |
+
+### Rust E2E 통합
+- [x] `selfhost_stdlib_tests.rs`: 6개 Rust 테스트 (CLI 기반 compile-and-run)
+- [x] 기존 248개 E2E 테스트 회귀 없음 확인
+
+### 테스트 과정에서 발견·수정한 버그 (3건)
+1. **fopen_ptr 반환값 누락**: `fopen_ptr()` 호출이 함수 마지막 표현식일 때 codegen이 `ret i64 0` 생성 → 변수 저장 후 반환으로 수정
+2. **feof i32→i64 가비지 비트**: C `feof()`는 32비트 int 반환이나 Vais는 i64로 처리 → 상위 32비트 가비지 → `file_read_line`에서 feof 대신 fread 반환값 사용으로 수정
+3. **println 빌트인 충돌**: 컴파일러가 `println()` 호출을 C printf로 매핑 → 사용자 정의 함수와 충돌 → 테스트에서 해당 호출 제거
+
+### 파일 목록
+- `selfhost/test_vec.vais` (신규)
+- `selfhost/test_string.vais` (신규)
+- `selfhost/test_hashmap.vais` (신규)
+- `selfhost/test_option.vais` (신규)
+- `selfhost/test_file_io.vais` (신규)
+- `selfhost/test_print.vais` (신규)
+- `selfhost/file_io.vais` (버그 수정)
+- `crates/vaisc/tests/selfhost_stdlib_tests.rs` (신규)
 
 ---
 

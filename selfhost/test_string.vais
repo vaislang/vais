@@ -1,0 +1,343 @@
+# ============================================================================
+# test_string.vais - Test Suite for string.vais
+# ============================================================================
+
+U string
+
+# ============================================================================
+# Test Infrastructure
+# ============================================================================
+
+F print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F println_i64(val: i64) -> i64 {
+    print_i64(val)
+    putchar(10)
+    0
+}
+
+F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+    I actual == expected {
+        puts("[PASS] ")
+        puts(test_name)
+        1
+    } E {
+        puts("[FAIL] ")
+        puts(test_name)
+        puts("  Expected: ")
+        println_i64(expected)
+        puts("  Actual:   ")
+        println_i64(actual)
+        0
+    }
+}
+
+# ============================================================================
+# Test: Constructors
+# ============================================================================
+
+F test_constructors() -> i64 {
+    puts("=== Constructor Tests ===")
+    passed := mut 0
+
+    # Test string_new()
+    s1 := string_new()
+    passed = passed + assert_eq(string_len(s1), 0, "string_new: len=0")
+    passed = passed + assert_eq(string_cap(s1), 32, "string_new: cap=32")
+    passed = passed + assert_eq(string_is_empty(s1), 1, "string_new: is_empty=1")
+    string_drop(s1)
+
+    # Test string_with_cap()
+    s2 := string_with_cap(64)
+    passed = passed + assert_eq(string_len(s2), 0, "string_with_cap: len=0")
+    passed = passed + assert_eq(string_cap(s2), 64, "string_with_cap: cap=64")
+    passed = passed + assert_eq(string_is_empty(s2), 1, "string_with_cap: is_empty=1")
+    string_drop(s2)
+
+    # Test string_from()
+    s3 := string_from("hello")
+    passed = passed + assert_eq(string_len(s3), 5, "string_from: len=5")
+    passed = passed + assert_eq(string_is_empty(s3), 0, "string_from: is_empty=0")
+    passed = passed + assert_eq(string_byte_at(s3, 0), 104, "string_from: byte[0]='h'")
+    passed = passed + assert_eq(string_byte_at(s3, 4), 111, "string_from: byte[4]='o'")
+    string_drop(s3)
+
+    passed
+}
+
+# ============================================================================
+# Test: Push Operations
+# ============================================================================
+
+F test_push_operations() -> i64 {
+    puts("=== Push Operation Tests ===")
+    passed := mut 0
+
+    # Test string_push_byte()
+    s1 := string_new()
+    string_push_byte(s1, 104)  # 'h'
+    string_push_byte(s1, 105)  # 'i'
+    passed = passed + assert_eq(string_len(s1), 2, "push_byte: len=2")
+    passed = passed + assert_eq(string_byte_at(s1, 0), 104, "push_byte: byte[0]='h'")
+    passed = passed + assert_eq(string_byte_at(s1, 1), 105, "push_byte: byte[1]='i'")
+    string_drop(s1)
+
+    # Test string_push_str()
+    s2 := string_new()
+    string_push_str(s2, "hello")
+    passed = passed + assert_eq(string_len(s2), 5, "push_str: len=5")
+    passed = passed + assert_eq(string_eq_str(s2, "hello"), 1, "push_str: eq 'hello'")
+    string_push_str(s2, " world")
+    passed = passed + assert_eq(string_len(s2), 11, "push_str twice: len=11")
+    passed = passed + assert_eq(string_eq_str(s2, "hello world"), 1, "push_str: eq 'hello world'")
+    string_drop(s2)
+
+    # Test string_push_string()
+    s3 := string_from("foo")
+    s4 := string_from("bar")
+    string_push_string(s3, s4)
+    passed = passed + assert_eq(string_len(s3), 6, "push_string: len=6")
+    passed = passed + assert_eq(string_eq_str(s3, "foobar"), 1, "push_string: eq 'foobar'")
+    string_drop(s3)
+    string_drop(s4)
+
+    # Test string_push_i64()
+    s5 := string_new()
+    string_push_i64(s5, 123)
+    passed = passed + assert_eq(string_eq_str(s5, "123"), 1, "push_i64: 123")
+    string_clear(s5)
+    string_push_i64(s5, 0)
+    passed = passed + assert_eq(string_eq_str(s5, "0"), 1, "push_i64: 0")
+    string_clear(s5)
+    string_push_i64(s5, 0 - 42)
+    passed = passed + assert_eq(string_eq_str(s5, "-42"), 1, "push_i64: -42")
+    string_drop(s5)
+
+    passed
+}
+
+# ============================================================================
+# Test: Comparison
+# ============================================================================
+
+F test_comparison() -> i64 {
+    puts("=== Comparison Tests ===")
+    passed := mut 0
+
+    # Test string_eq()
+    s1 := string_from("abc")
+    s2 := string_from("abc")
+    s3 := string_from("def")
+    passed = passed + assert_eq(string_eq(s1, s2), 1, "string_eq: 'abc' == 'abc'")
+    passed = passed + assert_eq(string_eq(s1, s3), 0, "string_eq: 'abc' != 'def'")
+    string_drop(s1)
+    string_drop(s2)
+    string_drop(s3)
+
+    # Test string_eq_str()
+    s4 := string_from("test")
+    passed = passed + assert_eq(string_eq_str(s4, "test"), 1, "string_eq_str: 'test' == 'test'")
+    passed = passed + assert_eq(string_eq_str(s4, "fail"), 0, "string_eq_str: 'test' != 'fail'")
+    string_drop(s4)
+
+    # Test string_cmp()
+    s5 := string_from("abc")
+    s6 := string_from("abc")
+    s7 := string_from("abd")
+    s8 := string_from("ab")
+    passed = passed + assert_eq(string_cmp(s5, s6), 0, "string_cmp: 'abc' == 'abc'")
+    passed = passed + assert_eq(string_cmp(s5, s7), 0 - 1, "string_cmp: 'abc' < 'abd'")
+    passed = passed + assert_eq(string_cmp(s7, s5), 1, "string_cmp: 'abd' > 'abc'")
+    passed = passed + assert_eq(string_cmp(s8, s5), 0 - 1, "string_cmp: 'ab' < 'abc'")
+    passed = passed + assert_eq(string_cmp(s5, s8), 1, "string_cmp: 'abc' > 'ab'")
+    string_drop(s5)
+    string_drop(s6)
+    string_drop(s7)
+    string_drop(s8)
+
+    passed
+}
+
+# ============================================================================
+# Test: Search
+# ============================================================================
+
+F test_search() -> i64 {
+    puts("=== Search Tests ===")
+    passed := mut 0
+
+    # Test string_find_byte()
+    s1 := string_from("hello world")
+    passed = passed + assert_eq(string_find_byte(s1, 111), 4, "find_byte: 'o' at index 4")
+    passed = passed + assert_eq(string_find_byte(s1, 120), 0 - 1, "find_byte: 'x' not found")
+    passed = passed + assert_eq(string_find_byte(s1, 108), 2, "find_byte: 'l' at index 2")
+
+    # Test string_rfind_byte()
+    passed = passed + assert_eq(string_rfind_byte(s1, 111), 7, "rfind_byte: 'o' at index 7")
+    passed = passed + assert_eq(string_rfind_byte(s1, 108), 9, "rfind_byte: 'l' at index 9")
+    passed = passed + assert_eq(string_rfind_byte(s1, 120), 0 - 1, "rfind_byte: 'x' not found")
+    string_drop(s1)
+
+    # Test string_starts_with()
+    s2 := string_from("hello world")
+    passed = passed + assert_eq(string_starts_with(s2, "hello"), 1, "starts_with: 'hello'")
+    passed = passed + assert_eq(string_starts_with(s2, "world"), 0, "starts_with: not 'world'")
+    passed = passed + assert_eq(string_starts_with(s2, ""), 1, "starts_with: empty prefix")
+
+    # Test string_ends_with()
+    passed = passed + assert_eq(string_ends_with(s2, "world"), 1, "ends_with: 'world'")
+    passed = passed + assert_eq(string_ends_with(s2, "hello"), 0, "ends_with: not 'hello'")
+    passed = passed + assert_eq(string_ends_with(s2, ""), 1, "ends_with: empty suffix")
+    string_drop(s2)
+
+    passed
+}
+
+# ============================================================================
+# Test: Slicing & Transformation
+# ============================================================================
+
+F test_slicing_transformation() -> i64 {
+    puts("=== Slicing & Transformation Tests ===")
+    passed := mut 0
+
+    # Test string_slice()
+    s1 := string_from("hello world")
+    s2 := string_slice(s1, 0, 5)
+    passed = passed + assert_eq(string_eq_str(s2, "hello"), 1, "slice: [0..5] == 'hello'")
+    string_drop(s2)
+    s3 := string_slice(s1, 6, 11)
+    passed = passed + assert_eq(string_eq_str(s3, "world"), 1, "slice: [6..11] == 'world'")
+    string_drop(s3)
+    s4 := string_slice(s1, 0, 0)
+    passed = passed + assert_eq(string_len(s4), 0, "slice: [0..0] empty")
+    string_drop(s4)
+    string_drop(s1)
+
+    # Test string_clone()
+    s5 := string_from("test")
+    s6 := string_clone(s5)
+    passed = passed + assert_eq(string_eq(s5, s6), 1, "clone: equal content")
+    passed = passed + assert_eq(string_len(s6), 4, "clone: len=4")
+    string_drop(s5)
+    string_drop(s6)
+
+    # Test string_concat()
+    s7 := string_from("hello")
+    s8 := string_from(" world")
+    s9 := string_concat(s7, s8)
+    passed = passed + assert_eq(string_eq_str(s9, "hello world"), 1, "concat: 'hello world'")
+    passed = passed + assert_eq(string_len(s9), 11, "concat: len=11")
+    string_drop(s7)
+    string_drop(s8)
+    string_drop(s9)
+
+    # Test string_trim()
+    s10 := string_from("  hello  ")
+    s11 := string_trim(s10)
+    passed = passed + assert_eq(string_eq_str(s11, "hello"), 1, "trim: '  hello  ' -> 'hello'")
+    passed = passed + assert_eq(string_len(s11), 5, "trim: len=5")
+    string_drop(s10)
+    string_drop(s11)
+
+    s12 := string_from("   ")
+    s13 := string_trim(s12)
+    passed = passed + assert_eq(string_len(s13), 0, "trim: all whitespace -> empty")
+    string_drop(s12)
+    string_drop(s13)
+
+    passed
+}
+
+# ============================================================================
+# Test: Clear & Mutate
+# ============================================================================
+
+F test_clear_mutate() -> i64 {
+    puts("=== Clear & Mutate Tests ===")
+    passed := mut 0
+
+    # Test string_clear()
+    s1 := string_from("hello")
+    old_cap := string_cap(s1)
+    string_clear(s1)
+    passed = passed + assert_eq(string_len(s1), 0, "clear: len=0")
+    passed = passed + assert_eq(string_is_empty(s1), 1, "clear: is_empty=1")
+    passed = passed + assert_eq(string_cap(s1), old_cap, "clear: cap unchanged")
+
+    # Reuse after clear
+    string_push_str(s1, "world")
+    passed = passed + assert_eq(string_eq_str(s1, "world"), 1, "clear + push: 'world'")
+    passed = passed + assert_eq(string_len(s1), 5, "clear + push: len=5")
+    string_drop(s1)
+
+    passed
+}
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+F main() -> i64 {
+    puts("===========================================")
+    puts("  String Test Suite")
+    puts("===========================================")
+
+    total: mut i64 = 0
+    passed: mut i64 = 0
+
+    passed = passed + test_constructors()
+    total = total + 10
+    puts("")
+
+    passed = passed + test_push_operations()
+    total = total + 12
+    puts("")
+
+    passed = passed + test_comparison()
+    total = total + 9
+    puts("")
+
+    passed = passed + test_search()
+    total = total + 12
+    puts("")
+
+    passed = passed + test_slicing_transformation()
+    total = total + 10
+    puts("")
+
+    passed = passed + test_clear_mutate()
+    total = total + 5
+    puts("")
+
+    puts("===========================================")
+    puts("  Test Summary")
+    puts("===========================================")
+    puts("Total: ")
+    println_i64(total)
+    puts("Passed: ")
+    println_i64(passed)
+
+    I passed == total {
+        puts("\nAll tests PASSED!")
+        0
+    } E {
+        puts("\nSome tests FAILED!")
+        1
+    }
+}
