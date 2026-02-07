@@ -1646,6 +1646,13 @@ error: expected i64, found &i64
   - 문자열 상수 전역 emission + 이스케이프 처리
   - 빌트인 함수 (load_i64/store_i64/load_byte/store_byte)
   - Public API: mir_emit_llvm(), mir_emit_llvm_to_file()
+- [x] **MIR Optimizer** (mir_optimizer.vais, 756줄) ✅ 2026-02-07
+  - Constant Propagation: 단일 상수 대입 추적 + 오퍼랜드 치환
+  - Constant Folding: 두 정수 상수 BinOp/UnOp 컴파일 타임 평가
+  - Dead Code Elimination: 미사용 로컬 대입 제거
+  - Unreachable Block Elimination: BFS 기반 도달불가 블록 제거
+  - 유틸리티: mir_count_statements, mir_count_reachable_blocks
+  - Public API: mir_optimize_module(), mir_optimize_body()
 - **예상 작업량**: 4,000+ LOC
 - **의존성**: Stage 5 완료 후 시작
 - **파일**: `selfhost/mir.vais`, `selfhost/mir_builder.vais`, `selfhost/borrow_checker.vais`

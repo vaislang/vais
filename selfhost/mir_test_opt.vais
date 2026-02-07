@@ -1,0 +1,236 @@
+U mir
+
+F mir_optimize_module(mod_ptr: i64) -> i64 = 1
+F mir_optimize_body(body_ptr: i64) -> i64 = 1
+F mir_constant_propagation(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Phase 1: Collect single-assignment constants
+    # const_values[local_idx] = operand_ptr if single constant, 0 if not
+    # assign_count[local_idx] = number of assignments
+    const_values := malloc(8 * locals_len)
+    assign_count := malloc(8 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        store_i64(const_values + i * 8, 0)
+        store_i64(assign_count + i * 8, 0)
+        i = i + 1
+    }
+
+    # Scan all statements for assignments
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                local_idx := load_i64(place_ptr)
+                proj_len := load_i64(place_ptr + 16)
+
+                I proj_len == 0 {
+                    cnt := load_i64(assign_count + local_idx * 8)
+                    store_i64(assign_count + local_idx * 8, cnt + 1)
+
+                    # Check if rvalue is Use(Constant)
+                    rv_kind := load_i64(rvalue_ptr)
+                    I rv_kind == RVALUE_USE() {
+                        operand := load_i64(rvalue_ptr + 8)
+                        op_kind := load_i64(operand)
+                        I op_kind == OPERAND_CONSTANT() {
+                            I cnt == 0 {
+                                store_i64(const_values + local_idx * 8, operand)
+                                0
+                            } E {
+                                # Assigned more than once → clear
+                                store_i64(const_values + local_idx * 8, 0)
+                                0
+                            }
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+
+    # Remove multi-assigned locals from const_values
+    i = 0
+    L {
+        I i >= locals_len { R 0 }
+        cnt := load_i64(assign_count + i * 8)
+        I cnt > 1 {
+            store_i64(const_values + i * 8, 0)
+            0
+        } E { 0 }
+        i = i + 1
+    }
+
+    # Phase 2: Propagate constants into operands
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        # Propagate in statements
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+            I kind == STMT_MIR_ASSIGN() {
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                cp_propagate_rvalue(rvalue_ptr, const_values, locals_len)
+            } E { 0 }
+            si = si + 1
+        }
+
+        # Propagate in terminator
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            cp_propagate_terminator(term_ptr, const_values, locals_len)
+            0
+        } E { 0 }
+
+        bi = bi + 1
+    }
+
+    free(const_values)
+    free(assign_count)
+    1
+}
+F cp_propagate_rvalue(rvalue_ptr: i64, const_values: i64, locals_len: i64) -> i64 {
+    kind := load_i64(rvalue_ptr)
+
+    I kind == RVALUE_USE() {
+        operand := load_i64(rvalue_ptr + 8)
+        new_op := cp_try_replace(operand, const_values, locals_len)
+        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } E { 0 }
+    }
+    E I kind == RVALUE_BINOP() {
+        lhs := load_i64(rvalue_ptr + 24)
+        rhs := load_i64(rvalue_ptr + 32)
+        new_lhs := cp_try_replace(lhs, const_values, locals_len)
+        new_rhs := cp_try_replace(rhs, const_values, locals_len)
+        I new_lhs != 0 { store_i64(rvalue_ptr + 24, new_lhs); 0 } E { 0 }
+        I new_rhs != 0 { store_i64(rvalue_ptr + 32, new_rhs); 0 } E { 0 }
+    }
+    E I kind == RVALUE_UNOP() {
+        operand := load_i64(rvalue_ptr + 8)
+        new_op := cp_try_replace(operand, const_values, locals_len)
+        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } E { 0 }
+    }
+    E I kind == RVALUE_CAST() {
+        operand := load_i64(rvalue_ptr + 8)
+        new_op := cp_try_replace(operand, const_values, locals_len)
+        I new_op != 0 { store_i64(rvalue_ptr + 8, new_op); 0 } E { 0 }
+    }
+    E I kind == RVALUE_AGGREGATE() {
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        j := mut 0
+        L {
+            I j >= agg_len { R 0 }
+            op := load_i64(agg_ops + j * 8)
+            new_op := cp_try_replace(op, const_values, locals_len)
+            I new_op != 0 { store_i64(agg_ops + j * 8, new_op); 0 } E { 0 }
+            j = j + 1
+        }
+        0
+    }
+    E { 0 }
+}
+
+# Try to replace an operand with its constant value.
+# Returns new operand ptr if replaced, 0 otherwise.
+F cp_try_replace(op_ptr: i64, const_values: i64, locals_len: i64) -> i64 {
+    op_kind := load_i64(op_ptr)
+    I op_kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            const_op := load_i64(const_values + local_idx * 8)
+            I const_op != 0 {
+                # Clone the constant operand
+                cp_clone_operand(const_op)
+            } E { 0 }
+        } E { 0 }
+    }
+    E I op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            const_op := load_i64(const_values + local_idx * 8)
+            I const_op != 0 {
+                cp_clone_operand(const_op)
+            } E { 0 }
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Clone an operand (allocate fresh copy)
+F cp_clone_operand(op_ptr: i64) -> i64 {
+    new_ptr := malloc(40)
+    store_i64(new_ptr, load_i64(op_ptr))
+    store_i64(new_ptr + 8, load_i64(op_ptr + 8))
+    store_i64(new_ptr + 16, load_i64(op_ptr + 16))
+    store_i64(new_ptr + 24, load_i64(op_ptr + 24))
+    store_i64(new_ptr + 32, load_i64(op_ptr + 32))
+    R new_ptr
+}
+
+# Propagate constants in terminator operands
+F cp_propagate_terminator(term_ptr: i64, const_values: i64, locals_len: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_SWITCH_INT() {
+        disc_ptr := load_i64(term_ptr + 16)
+        new_disc := cp_try_replace(disc_ptr, const_values, locals_len)
+        I new_disc != 0 { store_i64(term_ptr + 16, new_disc); 0 } E { 0 }
+    }
+    E I kind == TERM_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            arg := load_i64(args_ptr + j * 8)
+            new_arg := cp_try_replace(arg, const_values, locals_len)
+            I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } E { 0 }
+            j = j + 1
+        }
+        0
+    }
+    E I kind == TERM_TAIL_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            arg := load_i64(args_ptr + j * 8)
+            new_arg := cp_try_replace(arg, const_values, locals_len)
+            I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } E { 0 }
+            j = j + 1
+        }
+        0
+    }
+    E { 0 }
+}
+F mir_constant_folding(body_ptr: i64) -> i64 = 1
+F mir_dead_code_elimination(body_ptr: i64) -> i64 = 1
+F mir_remove_unreachable_blocks(body_ptr: i64) -> i64 = 1
