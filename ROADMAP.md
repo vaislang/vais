@@ -1678,11 +1678,18 @@ error: expected i64, found &i64
 
 **목표**: 개발 편의 도구를 Vais로 재작성
 
-- [ ] **LSP Server (Vais 버전)**
-  - [ ] Go-to definition
-  - [ ] Find references
-  - [ ] Hover information
-  - [ ] Code completion
+- [x] **LSP Server (Vais 버전)** ✅ 2026-02-07
+  - [x] Go-to definition
+  - [x] Find references
+  - [x] Hover information
+  - [x] Code completion
+  - [x] Document symbols
+  - [x] Diagnostics (parse errors)
+  - **구현**: lsp_json.vais (608) + lsp_symbols.vais (688) + lsp_handlers.vais (847) + lsp_main.vais (294) = **2,437 LOC**
+  - **JSON-RPC 2.0**: stdin/stdout 통신, Content-Length 헤더 파싱
+  - **JSON 파서**: 완전한 JSON 파서/빌더 (문자열, 숫자, 배열, 오브젝트, null, bool)
+  - **심볼 테이블**: AST 재귀 순회, 정의/참조 수집, 위치 변환 (offset↔line:col)
+  - **15 빌트인 함수** hover 정보 포함 (puts, malloc, store_i64 등)
 - [ ] **Formatter (Vais 버전)**
   - [ ] AST 기반 코드 포매팅
   - [ ] 설정 가능한 스타일

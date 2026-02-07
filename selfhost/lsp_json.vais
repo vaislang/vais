@@ -1,0 +1,608 @@
+# Vais Self-Hosting LSP Server - JSON Parser & Protocol
+# Minimal JSON parser for LSP JSON-RPC 2.0 messages
+
+U constants
+U stringbuffer_s1
+
+# ============================================================================
+# JSON Value Types
+# ============================================================================
+F JSON_NULL() -> i64 = 0
+F JSON_BOOL() -> i64 = 1
+F JSON_NUMBER() -> i64 = 2
+F JSON_STRING() -> i64 = 3
+F JSON_ARRAY() -> i64 = 4
+F JSON_OBJECT() -> i64 = 5
+
+# ============================================================================
+# JSON Value Node (40 bytes)
+# ============================================================================
+# Layout: type(8) + data0(8) + data1(8) + data2(8) + data3(8)
+# NULL: type=0
+# BOOL: type=1, data0=0/1
+# NUMBER: type=2, data0=value
+# STRING: type=3, data0=ptr, data1=len
+# ARRAY: type=4, data0=elements_ptr, data1=count, data2=cap
+# OBJECT: type=5, data0=keys_ptr, data1=vals_ptr, data2=count, data3=cap
+
+F json_new(typ: i64) -> i64 {
+    v := malloc(40)
+    store_i64(v + 0, typ)
+    store_i64(v + 8, 0)
+    store_i64(v + 16, 0)
+    store_i64(v + 24, 0)
+    store_i64(v + 32, 0)
+    v
+}
+
+F json_type(v: i64) -> i64 = load_i64(v + 0)
+
+F json_null_new() -> i64 = json_new(JSON_NULL())
+
+F json_bool_new(b: i64) -> i64 {
+    v := json_new(JSON_BOOL())
+    store_i64(v + 8, b)
+    v
+}
+F json_bool_val(v: i64) -> i64 = load_i64(v + 8)
+
+F json_number_new(n: i64) -> i64 {
+    v := json_new(JSON_NUMBER())
+    store_i64(v + 8, n)
+    v
+}
+F json_number_val(v: i64) -> i64 = load_i64(v + 8)
+
+F json_string_new(ptr: i64, len: i64) -> i64 {
+    v := json_new(JSON_STRING())
+    store_i64(v + 8, ptr)
+    store_i64(v + 16, len)
+    v
+}
+F json_string_ptr(v: i64) -> i64 = load_i64(v + 8)
+F json_string_len(v: i64) -> i64 = load_i64(v + 16)
+
+F json_array_new(cap: i64) -> i64 {
+    v := json_new(JSON_ARRAY())
+    store_i64(v + 8, malloc(cap * 8))   # elements
+    store_i64(v + 16, 0)                 # count
+    store_i64(v + 24, cap)               # capacity
+    v
+}
+
+F json_array_push(arr: i64, elem: i64) -> i64 {
+    elems := load_i64(arr + 8)
+    count := load_i64(arr + 16)
+    cap := load_i64(arr + 24)
+    I count >= cap {
+        new_cap := cap * 2
+        new_elems := malloc(new_cap * 8)
+        memcpy(new_elems, elems, count * 8)
+        free(elems)
+        store_i64(arr + 8, new_elems)
+        store_i64(arr + 24, new_cap)
+        elems = new_elems
+        0
+    } E { 0 }
+    store_i64(elems + count * 8, elem)
+    store_i64(arr + 16, count + 1)
+    0
+}
+
+F json_array_count(arr: i64) -> i64 = load_i64(arr + 16)
+F json_array_get(arr: i64, idx: i64) -> i64 {
+    elems := load_i64(arr + 8)
+    load_i64(elems + idx * 8)
+}
+
+F json_object_new(cap: i64) -> i64 {
+    v := json_new(JSON_OBJECT())
+    store_i64(v + 8, malloc(cap * 16))   # keys (ptr+len pairs)
+    store_i64(v + 16, malloc(cap * 8))   # values
+    store_i64(v + 24, 0)                  # count
+    store_i64(v + 32, cap)                # capacity
+    v
+}
+
+F json_object_set(obj: i64, key_ptr: i64, key_len: i64, val: i64) -> i64 {
+    keys := load_i64(obj + 8)
+    vals := load_i64(obj + 16)
+    count := load_i64(obj + 24)
+    cap := load_i64(obj + 32)
+    I count >= cap {
+        new_cap := cap * 2
+        new_keys := malloc(new_cap * 16)
+        new_vals := malloc(new_cap * 8)
+        memcpy(new_keys, keys, count * 16)
+        memcpy(new_vals, vals, count * 8)
+        free(keys)
+        free(vals)
+        store_i64(obj + 8, new_keys)
+        store_i64(obj + 16, new_vals)
+        store_i64(obj + 32, new_cap)
+        keys = new_keys
+        vals = new_vals
+        0
+    } E { 0 }
+    store_i64(keys + count * 16, key_ptr)
+    store_i64(keys + count * 16 + 8, key_len)
+    store_i64(vals + count * 8, val)
+    store_i64(obj + 24, count + 1)
+    0
+}
+
+F json_object_count(obj: i64) -> i64 = load_i64(obj + 24)
+
+# memcmp for i64 pointers
+F lsp_memcmp(a: i64, b: i64, len: i64) -> i64 {
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        ca := load_byte(a + i)
+        cb := load_byte(b + i)
+        I ca != cb { R ca - cb } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+# Compare i64 ptr with str literal
+F lsp_streq(ptr: i64, len: i64, s: str) -> i64 {
+    slen := strlen(s)
+    I len != slen { R 0 } E { 0 }
+    sp := str_to_ptr(s)
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        I load_byte(ptr + i) != load_byte(sp + i) { R 0 } E { 0 }
+        i = i + 1
+    }
+    1
+}
+
+F json_object_get(obj: i64, key: str) -> i64 {
+    keys := load_i64(obj + 8)
+    vals := load_i64(obj + 16)
+    count := load_i64(obj + 24)
+    klen := strlen(key)
+    i: mut i64 = 0
+    L {
+        I i >= count { B } E { 0 }
+        kp := load_i64(keys + i * 16)
+        kl := load_i64(keys + i * 16 + 8)
+        I kl == klen {
+            I lsp_streq(kp, kl, key) == 1 {
+                R load_i64(vals + i * 8)
+            } E { 0 }
+        } E { 0 }
+        i = i + 1
+    }
+    0
+}
+
+# ============================================================================
+# JSON Parser
+# ============================================================================
+# Parser state: src_ptr(8) + src_len(8) + pos(8) = 24 bytes
+
+F jp_new(src: i64, len: i64) -> i64 {
+    p := malloc(24)
+    store_i64(p + 0, src)
+    store_i64(p + 8, len)
+    store_i64(p + 16, 0)
+    p
+}
+
+F jp_src(p: i64) -> i64 = load_i64(p + 0)
+F jp_len(p: i64) -> i64 = load_i64(p + 8)
+F jp_pos(p: i64) -> i64 = load_i64(p + 16)
+F jp_set_pos(p: i64, pos: i64) -> i64 { store_i64(p + 16, pos); 0 }
+
+F jp_peek(p: i64) -> i64 {
+    pos := jp_pos(p)
+    I pos >= jp_len(p) { R 0 } E { 0 }
+    load_byte(jp_src(p) + pos)
+}
+
+F jp_advance(p: i64) -> i64 {
+    jp_set_pos(p, jp_pos(p) + 1)
+    0
+}
+
+F jp_skip_ws(p: i64) -> i64 {
+    L {
+        ch := jp_peek(p)
+        I ch == 32 { jp_advance(p); 0 }
+        E I ch == 9 { jp_advance(p); 0 }
+        E I ch == 10 { jp_advance(p); 0 }
+        E I ch == 13 { jp_advance(p); 0 }
+        E { B }
+    }
+    0
+}
+
+# Parse a JSON string (assumes current char is ")
+F jp_parse_string(p: i64) -> i64 {
+    jp_advance(p)  # skip opening "
+    start := jp_pos(p)
+    sb := sb_new(256)
+    L {
+        ch := jp_peek(p)
+        I ch == 34 {  # closing "
+            jp_advance(p)
+            B
+        } E I ch == 92 {  # backslash
+            jp_advance(p)
+            esc := jp_peek(p)
+            jp_advance(p)
+            I esc == 110 { sb_append_byte(sb, 10); 0 }  # \n
+            E I esc == 116 { sb_append_byte(sb, 9); 0 }  # \t
+            E I esc == 114 { sb_append_byte(sb, 13); 0 }  # \r
+            E I esc == 34 { sb_append_byte(sb, 34); 0 }   # \"
+            E I esc == 92 { sb_append_byte(sb, 92); 0 }   # \\
+            E I esc == 47 { sb_append_byte(sb, 47); 0 }   # \/
+            E { sb_append_byte(sb, esc); 0 }
+        } E I ch == 0 { B }
+        E {
+            sb_append_byte(sb, ch)
+            jp_advance(p)
+            0
+        }
+    }
+    ptr := sb_get_data(sb)
+    len := sb_get_len(sb)
+    json_string_new(ptr, len)
+}
+
+# Parse a JSON number
+F jp_parse_number(p: i64) -> i64 {
+    neg: mut i64 = 0
+    I jp_peek(p) == 45 {  # -
+        neg = 1
+        jp_advance(p)
+        0
+    } E { 0 }
+    val: mut i64 = 0
+    L {
+        ch := jp_peek(p)
+        I ch >= 48 {
+            I ch <= 57 {
+                val = val * 10 + (ch - 48)
+                jp_advance(p)
+                0
+            } E { B }
+        } E { B }
+    }
+    # Skip decimal part if present
+    I jp_peek(p) == 46 {
+        jp_advance(p)
+        L {
+            ch := jp_peek(p)
+            I ch >= 48 {
+                I ch <= 57 { jp_advance(p); 0 }
+                E { B }
+            } E { B }
+        }
+        0
+    } E { 0 }
+    I neg == 1 { val = 0 - val; 0 } E { 0 }
+    json_number_new(val)
+}
+
+# Forward declaration helper — parse any JSON value
+F jp_parse_value(p: i64) -> i64 {
+    jp_skip_ws(p)
+    ch := jp_peek(p)
+
+    I ch == 34 {  # "
+        jp_parse_string(p)
+    } E I ch == 123 {  # {
+        jp_advance(p)
+        obj := json_object_new(16)
+        jp_skip_ws(p)
+        I jp_peek(p) == 125 {  # empty object
+            jp_advance(p)
+            R obj
+        } E { 0 }
+        L {
+            jp_skip_ws(p)
+            # Parse key
+            I jp_peek(p) != 34 { B } E { 0 }
+            key := jp_parse_string(p)
+            key_ptr := json_string_ptr(key)
+            key_len := json_string_len(key)
+            jp_skip_ws(p)
+            I jp_peek(p) == 58 { jp_advance(p); 0 } E { 0 }  # :
+            # Parse value
+            val := jp_parse_value(p)
+            json_object_set(obj, key_ptr, key_len, val)
+            jp_skip_ws(p)
+            I jp_peek(p) == 44 {  # ,
+                jp_advance(p)
+                0
+            } E { B }
+        }
+        jp_skip_ws(p)
+        I jp_peek(p) == 125 { jp_advance(p); 0 } E { 0 }
+        obj
+    } E I ch == 91 {  # [
+        jp_advance(p)
+        arr := json_array_new(16)
+        jp_skip_ws(p)
+        I jp_peek(p) == 93 {  # empty array
+            jp_advance(p)
+            R arr
+        } E { 0 }
+        L {
+            val := jp_parse_value(p)
+            json_array_push(arr, val)
+            jp_skip_ws(p)
+            I jp_peek(p) == 44 {  # ,
+                jp_advance(p)
+                0
+            } E { B }
+        }
+        jp_skip_ws(p)
+        I jp_peek(p) == 93 { jp_advance(p); 0 } E { 0 }
+        arr
+    } E I ch == 116 {  # true
+        jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p)
+        json_bool_new(1)
+    } E I ch == 102 {  # false
+        jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p)
+        json_bool_new(0)
+    } E I ch == 110 {  # null
+        jp_advance(p); jp_advance(p); jp_advance(p); jp_advance(p)
+        json_null_new()
+    } E I ch == 45 {  # negative number
+        jp_parse_number(p)
+    } E I ch >= 48 {
+        I ch <= 57 {
+            jp_parse_number(p)
+        } E {
+            json_null_new()
+        }
+    } E {
+        json_null_new()
+    }
+}
+
+F json_parse(src: i64, len: i64) -> i64 {
+    p := jp_new(src, len)
+    result := jp_parse_value(p)
+    free(p)
+    result
+}
+
+# ============================================================================
+# JSON Builder (using StringBuffer)
+# ============================================================================
+
+F jb_new() -> i64 = sb_new(4096)
+
+F jb_string(sb: i64, ptr: i64, len: i64) -> i64 {
+    sb_append_byte(sb, 34)  # "
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        ch := load_byte(ptr + i)
+        I ch == 34 { sb_append_byte(sb, 92); sb_append_byte(sb, 34); 0 }
+        E I ch == 92 { sb_append_byte(sb, 92); sb_append_byte(sb, 92); 0 }
+        E I ch == 10 { sb_append_byte(sb, 92); sb_append_byte(sb, 110); 0 }
+        E I ch == 13 { sb_append_byte(sb, 92); sb_append_byte(sb, 114); 0 }
+        E I ch == 9 { sb_append_byte(sb, 92); sb_append_byte(sb, 116); 0 }
+        E { sb_append_byte(sb, ch); 0 }
+        i = i + 1
+    }
+    sb_append_byte(sb, 34)  # "
+    0
+}
+
+F jb_cstr(sb: i64, s: str) -> i64 {
+    sb_append_byte(sb, 34)
+    sb_append_cstr(sb, s)
+    sb_append_byte(sb, 34)
+    0
+}
+
+F jb_key(sb: i64, s: str) -> i64 {
+    jb_cstr(sb, s)
+    sb_append_byte(sb, 58)  # :
+    0
+}
+
+F jb_int(sb: i64, n: i64) -> i64 {
+    sb_append_i64(sb, n)
+    0
+}
+
+F jb_bool(sb: i64, b: i64) -> i64 {
+    I b != 0 { sb_append_cstr(sb, "true") }
+    E { sb_append_cstr(sb, "false") }
+}
+
+F jb_null(sb: i64) -> i64 {
+    sb_append_cstr(sb, "null")
+}
+
+F jb_comma(sb: i64) -> i64 {
+    sb_append_byte(sb, 44)
+    0
+}
+
+F jb_obj_start(sb: i64) -> i64 { sb_append_byte(sb, 123); 0 }
+F jb_obj_end(sb: i64) -> i64 { sb_append_byte(sb, 125); 0 }
+F jb_arr_start(sb: i64) -> i64 { sb_append_byte(sb, 91); 0 }
+F jb_arr_end(sb: i64) -> i64 { sb_append_byte(sb, 93); 0 }
+
+# ============================================================================
+# LSP Protocol Helpers
+# ============================================================================
+
+# Write LSP response to stdout: Content-Length header + body
+F lsp_send(sb: i64) -> i64 {
+    data := sb_get_data(sb)
+    len := sb_get_len(sb)
+    # Build header
+    hdr := sb_new(64)
+    sb_append_cstr(hdr, "Content-Length: ")
+    sb_append_i64(hdr, len)
+    sb_append_byte(hdr, 13)  # \r
+    sb_append_byte(hdr, 10)  # \n
+    sb_append_byte(hdr, 13)  # \r
+    sb_append_byte(hdr, 10)  # \n
+    # Write header
+    hdr_data := sb_get_data(hdr)
+    hdr_len := sb_get_len(hdr)
+    out := get_stdout()
+    fwrite(hdr_data, 1, hdr_len, out)
+    # Write body
+    fwrite(data, 1, len, out)
+    fflush(out)
+    sb_free(hdr)
+    0
+}
+
+# Build JSON-RPC response envelope
+F lsp_response(id_val: i64, result_sb: i64) -> i64 {
+    sb := jb_new()
+    jb_obj_start(sb)
+    jb_key(sb, "jsonrpc")
+    jb_cstr(sb, "2.0")
+    jb_comma(sb)
+    jb_key(sb, "id")
+    jb_int(sb, id_val)
+    jb_comma(sb)
+    jb_key(sb, "result")
+    sb_append_bytes(sb, sb_get_data(result_sb), sb_get_len(result_sb))
+    jb_obj_end(sb)
+    lsp_send(sb)
+    sb_free(sb)
+    0
+}
+
+# Build JSON-RPC notification (no id)
+F lsp_notification(method: str, params_sb: i64) -> i64 {
+    sb := jb_new()
+    jb_obj_start(sb)
+    jb_key(sb, "jsonrpc")
+    jb_cstr(sb, "2.0")
+    jb_comma(sb)
+    jb_key(sb, "method")
+    jb_cstr(sb, method)
+    jb_comma(sb)
+    jb_key(sb, "params")
+    sb_append_bytes(sb, sb_get_data(params_sb), sb_get_len(params_sb))
+    jb_obj_end(sb)
+    lsp_send(sb)
+    sb_free(sb)
+    0
+}
+
+# Read a single byte from stdin (-1 on EOF)
+F lsp_getchar() -> i64 {
+    buf := malloc(1)
+    n := fread(buf, 1, 1, get_stdin())
+    I n <= 0 {
+        free(buf)
+        R 0 - 1
+    } E { 0 }
+    ch := load_byte(buf)
+    free(buf)
+    ch
+}
+
+# Read Content-Length from stdin headers
+# Returns the content length, or -1 on error/EOF
+F lsp_read_header() -> i64 {
+    # Read lines until empty line (\r\n\r\n)
+    content_len: mut i64 = 0 - 1
+    line := sb_new(256)
+    L {
+        ch := lsp_getchar()
+        I ch < 0 { R 0 - 1 } E { 0 }  # EOF
+        I ch == 10 {  # \n
+            # Check if line is empty (just \r or nothing)
+            ll := sb_get_len(line)
+            I ll == 0 { B }
+            E I ll == 1 {
+                ld := sb_get_data(line)
+                I load_byte(ld) == 13 { B } E { 0 }
+            } E { 0 }
+            # Check for Content-Length
+            I ll > 16 {
+                ld := sb_get_data(line)
+                # "Content-Length: " = 16 chars
+                I load_byte(ld) == 67 {  # C
+                    I load_byte(ld + 8) == 76 {  # L (in Length)
+                        # Parse number after "Content-Length: "
+                        num: mut i64 = 0
+                        ni: mut i64 = 16
+                        L {
+                            I ni >= ll { B } E { 0 }
+                            nch := load_byte(ld + ni)
+                            I nch >= 48 {
+                                I nch <= 57 {
+                                    num = num * 10 + (nch - 48)
+                                    0
+                                } E { B }
+                            } E { B }
+                            ni = ni + 1
+                        }
+                        content_len = num
+                        0
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+            # Reset line buffer
+            sb_set_len(line, 0)
+            0
+        } E {
+            sb_append_byte(line, ch)
+            0
+        }
+    }
+    sb_free(line)
+    content_len
+}
+
+# Read exactly n bytes from stdin
+F lsp_read_body(len: i64) -> i64 {
+    buf := malloc(len + 1)
+    i: mut i64 = 0
+    L {
+        I i >= len { B } E { 0 }
+        ch := lsp_getchar()
+        I ch < 0 { B } E { 0 }
+        store_byte(buf + i, ch)
+        i = i + 1
+    }
+    store_byte(buf + len, 0)
+    buf
+}
+
+# Extract string field from JSON object, returns (ptr, len) packed into result
+# result: ptr at offset 0, len at offset 8
+F json_get_string_field(obj: i64, key: str, out: i64) -> i64 {
+    val := json_object_get(obj, key)
+    I val == 0 {
+        store_i64(out, 0)
+        store_i64(out + 8, 0)
+        R 0
+    } E { 0 }
+    I json_type(val) != JSON_STRING() {
+        store_i64(out, 0)
+        store_i64(out + 8, 0)
+        R 0
+    } E { 0 }
+    store_i64(out, json_string_ptr(val))
+    store_i64(out + 8, json_string_len(val))
+    1
+}
+
+F json_get_int_field(obj: i64, key: str) -> i64 {
+    val := json_object_get(obj, key)
+    I val == 0 { R 0 } E { 0 }
+    I json_type(val) == JSON_NUMBER() { json_number_val(val) }
+    E { 0 }
+}

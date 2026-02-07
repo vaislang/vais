@@ -192,6 +192,37 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
     module.add_function("fflush", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // feof(stream) -> i32
     module.add_function("feof", i32_type.fn_type(&[i8_ptr.into()], false), None);
+
+    // get_stdin() -> FILE* (returns stdin stream)
+    {
+        let fn_type = i8_ptr.fn_type(&[], false);
+        let func = module.add_function("get_stdin", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        // On macOS: __stdinp, on Linux: stdin
+        let stdin_global = module.add_global(i8_ptr, Some(AddressSpace::default()), "__stdinp");
+        stdin_global.set_externally_initialized(true);
+        let val = builder
+            .build_load(i8_ptr, stdin_global.as_pointer_value(), "stdin_val")
+            .unwrap();
+        builder.build_return(Some(&val)).unwrap();
+    }
+    // get_stdout() -> FILE* (returns stdout stream)
+    {
+        let fn_type = i8_ptr.fn_type(&[], false);
+        let func = module.add_function("get_stdout", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        let builder = context.create_builder();
+        builder.position_at_end(entry);
+        let stdout_global =
+            module.add_global(i8_ptr, Some(AddressSpace::default()), "__stdoutp");
+        stdout_global.set_externally_initialized(true);
+        let val = builder
+            .build_load(i8_ptr, stdout_global.as_pointer_value(), "stdout_val")
+            .unwrap();
+        builder.build_return(Some(&val)).unwrap();
+    }
     // fileno(stream) -> i32 (get fd from FILE*)
     module.add_function("fileno", i32_type.fn_type(&[i8_ptr.into()], false), None);
     // fsync(fd) -> i32

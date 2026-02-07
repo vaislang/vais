@@ -1,0 +1,294 @@
+# Vais Self-Hosting LSP Server - Main Entry Point
+# JSON-RPC server loop over stdin/stdout
+
+U constants
+U stringbuffer_s1
+U lexer_s1
+U helpers_s1
+U parser_s1
+U lsp_json
+U lsp_symbols
+U lsp_handlers
+
+# ============================================================================
+# Server State (56 bytes)
+# ============================================================================
+# Layout: src_ptr(8) + src_len(8) + uri_ptr(8) + uri_len(8) +
+#         items_ptr(8) + items_count(8) + symtable_ptr(8)
+
+F server_new() -> i64 {
+    s := malloc(56)
+    store_i64(s + 0, 0)    # src_ptr
+    store_i64(s + 8, 0)    # src_len
+    store_i64(s + 16, 0)   # uri_ptr
+    store_i64(s + 24, 0)   # uri_len
+    store_i64(s + 32, 0)   # items_ptr
+    store_i64(s + 40, 0)   # items_count
+    store_i64(s + 48, symtable_new())  # symtable
+    s
+}
+
+F server_set_src(s: i64, ptr: i64, len: i64) -> i64 {
+    store_i64(s + 0, ptr)
+    store_i64(s + 8, len)
+    0
+}
+
+F server_set_uri(s: i64, ptr: i64, len: i64) -> i64 {
+    store_i64(s + 16, ptr)
+    store_i64(s + 24, len)
+    0
+}
+
+F server_set_items(s: i64, items: i64, count: i64) -> i64 {
+    store_i64(s + 32, items)
+    store_i64(s + 40, count)
+    0
+}
+
+# ============================================================================
+# Document Parsing
+# ============================================================================
+
+# Parse a document and update server state
+F server_parse_document(server: i64, src: i64, src_len: i64) -> i64 {
+    server_set_src(server, src, src_len)
+
+    # Tokenize
+    lex := lexer_new(src, src_len)
+    tokens := malloc(65536 * 48)  # max tokens
+    token_count := lexer_tokenize(lex, tokens)
+    free(lex)
+
+    # Parse
+    p := parser_new(tokens, token_count)
+    items := malloc(4096 * 8)
+    item_count: mut i64 = 0
+    L {
+        I parser_current_kind(p) == TOK_EOF() { B } E { 0 }
+        item := parser_parse_item(p)
+        I item != 0 {
+            store_i64(items + item_count * 8, item)
+            item_count = item_count + 1
+            0
+        } E {
+            # Skip problematic token
+            parser_advance(p)
+            0
+        }
+    }
+
+    server_set_items(server, items, item_count)
+
+    # Rebuild symbol table
+    st := load_i64(server + 48)
+    # Reset counts
+    store_i64(st + 8, 0)   # defs_count = 0
+    store_i64(st + 32, 0)  # refs_count = 0
+    collect_definitions(st, items, item_count)
+    collect_all_refs(st, items, item_count)
+
+    free(p)
+    free(tokens)
+    0
+}
+
+# ============================================================================
+# Diagnostics Publishing
+# ============================================================================
+
+F publish_diagnostics(server: i64) -> i64 {
+    uri_ptr := load_i64(server + 16)
+    uri_len := load_i64(server + 24)
+
+    sb := jb_new()
+    jb_obj_start(sb)
+    jb_key(sb, "uri")
+    jb_string(sb, uri_ptr, uri_len)
+    jb_comma(sb)
+    jb_key(sb, "diagnostics")
+    jb_arr_start(sb)
+    # For now, empty diagnostics (parse errors would go here)
+    jb_arr_end(sb)
+    jb_obj_end(sb)
+
+    lsp_notification("textDocument/publishDiagnostics", sb)
+    sb_free(sb)
+    0
+}
+
+# ============================================================================
+# Document Change Handling
+# ============================================================================
+
+F handle_did_open(params: i64, server: i64) -> i64 {
+    td := json_object_get(params, "textDocument")
+    I td == 0 { R 0 } E { 0 }
+
+    # Get URI
+    uri_val := json_object_get(td, "uri")
+    I uri_val != 0 {
+        I json_type(uri_val) == JSON_STRING() {
+            server_set_uri(server, json_string_ptr(uri_val), json_string_len(uri_val))
+            0
+        } E { 0 }
+    } E { 0 }
+
+    # Get text
+    text_val := json_object_get(td, "text")
+    I text_val != 0 {
+        I json_type(text_val) == JSON_STRING() {
+            src := json_string_ptr(text_val)
+            src_len := json_string_len(text_val)
+            server_parse_document(server, src, src_len)
+            publish_diagnostics(server)
+            0
+        } E { 0 }
+    } E { 0 }
+
+    0
+}
+
+F handle_did_change(params: i64, server: i64) -> i64 {
+    td := json_object_get(params, "textDocument")
+    I td != 0 {
+        uri_val := json_object_get(td, "uri")
+        I uri_val != 0 {
+            I json_type(uri_val) == JSON_STRING() {
+                server_set_uri(server, json_string_ptr(uri_val), json_string_len(uri_val))
+                0
+            } E { 0 }
+        } E { 0 }
+    } E { 0 }
+
+    # Get content changes array
+    changes := json_object_get(params, "contentChanges")
+    I changes == 0 { R 0 } E { 0 }
+    I json_type(changes) != JSON_ARRAY() { R 0 } E { 0 }
+    count := json_array_count(changes)
+    I count == 0 { R 0 } E { 0 }
+
+    # Full sync: take the last change
+    last := json_array_get(changes, count - 1)
+    I last == 0 { R 0 } E { 0 }
+    text_val := json_object_get(last, "text")
+    I text_val == 0 { R 0 } E { 0 }
+    I json_type(text_val) != JSON_STRING() { R 0 } E { 0 }
+
+    src := json_string_ptr(text_val)
+    src_len := json_string_len(text_val)
+    server_parse_document(server, src, src_len)
+    publish_diagnostics(server)
+    0
+}
+
+# ============================================================================
+# Main Server Loop
+# ============================================================================
+
+F lsp_main() -> i64 {
+    server := server_new()
+    running: mut i64 = 1
+
+    L {
+        I running == 0 { B } E { 0 }
+
+        # Read message
+        content_len := lsp_read_header()
+        I content_len <= 0 {
+            running = 0
+            B
+        } E { 0 }
+
+        body := lsp_read_body(content_len)
+        I body == 0 {
+            running = 0
+            B
+        } E { 0 }
+
+        # Parse JSON
+        msg := json_parse(body, content_len)
+        I msg == 0 {
+            free(body)
+            C
+        } E { 0 }
+
+        # Get method
+        method_out := malloc(16)
+        has_method := json_get_string_field(msg, "method", method_out)
+        method_ptr := load_i64(method_out)
+        method_len := load_i64(method_out + 8)
+
+        # Get id (0 if notification)
+        id := json_get_int_field(msg, "id")
+
+        # Get params
+        params := json_object_get(msg, "params")
+
+        I has_method == 1 {
+            # Dispatch based on method
+            I lsp_streq(method_ptr, method_len, "initialize") == 1 {
+                handle_initialize(id)
+                0
+            } E I lsp_streq(method_ptr, method_len, "initialized") == 1 {
+                # No response needed
+                0
+            } E I lsp_streq(method_ptr, method_len, "shutdown") == 1 {
+                sb := jb_new()
+                jb_null(sb)
+                lsp_response(id, sb)
+                sb_free(sb)
+                0
+            } E I lsp_streq(method_ptr, method_len, "exit") == 1 {
+                running = 0
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/didOpen") == 1 {
+                handle_did_open(params, server)
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/didChange") == 1 {
+                handle_did_change(params, server)
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/didClose") == 1 {
+                # No action needed for now
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/hover") == 1 {
+                handle_hover(id, params, server)
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/definition") == 1 {
+                handle_definition(id, params, server)
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/references") == 1 {
+                handle_references(id, params, server)
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/completion") == 1 {
+                handle_completion(id, params, server)
+                0
+            } E I lsp_streq(method_ptr, method_len, "textDocument/documentSymbol") == 1 {
+                handle_document_symbols(id, server)
+                0
+            } E {
+                # Unknown method — if it has an id, respond with null
+                I id > 0 {
+                    sb := jb_new()
+                    jb_null(sb)
+                    lsp_response(id, sb)
+                    sb_free(sb)
+                    0
+                } E { 0 }
+            }
+        } E { 0 }
+
+        free(method_out)
+        free(body)
+    }
+
+    0
+}
+
+# ============================================================================
+# Entry Point
+# ============================================================================
+
+F main() -> i64 {
+    lsp_main()
+}
