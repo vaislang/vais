@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770478823767,
+  "lastUpdate": 1770502041884,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -10079,6 +10079,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1824148,
             "range": "± 30909",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "b884c29978b9329a49db4b8608f196c9ca47970b",
+          "message": "feat: complete Phase 42 incremental compilation (Stage 3~5)\n\nStage 3 - Stability & Automation:\n- Auto-enable per-module for multi-file projects (no --per-module needed)\n- Atomic cache writes (tempfile + rename pattern)\n- Circular import detection with clear error messages\n- --emit-ir --per-module support for per-module .ll output\n- Cache size limit with LRU cleanup (--cache-limit, default 512MB)\n\nStage 4 - Internal Optimization:\n- Remove empty_blocks double clone in optimize.rs\n- Replace clone() with std::mem::take() in parallel.rs\n- Optimize substitute_type() with early-return when unchanged\n- Add modules_map index bounds validation\n\nStage 5 - Benchmark Verification:\n- 5 new per-module E2E tests (312 total)\n- Incremental benchmark: 30K lines 1-file change 571ms → 96ms (5.9x)\n- BASELINE.md updated with Phase 42 results\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-08T07:00:41+09:00",
+          "tree_id": "6055eb4326f001eca195e8a56d2af4304ea696f2",
+          "url": "https://github.com/vaislang/vais/commit/b884c29978b9329a49db4b8608f196c9ca47970b"
+        },
+        "date": 1770502041061,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2407,
+            "range": "± 16",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5525,
+            "range": "± 59",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6157,
+            "range": "± 178",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11484,
+            "range": "± 150",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17829,
+            "range": "± 151",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33860,
+            "range": "± 126",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30288,
+            "range": "± 131",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 67272,
+            "range": "± 342",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 268198,
+            "range": "± 871",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 408905,
+            "range": "± 1860",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 99796,
+            "range": "± 374",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 704862,
+            "range": "± 6284",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 152378,
+            "range": "± 559",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 180544,
+            "range": "± 669",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 189099,
+            "range": "± 984",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 229384,
+            "range": "± 868",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 489899,
+            "range": "± 1977",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 683738,
+            "range": "± 2524",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 380018,
+            "range": "± 1118",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1092416,
+            "range": "± 13613",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38349,
+            "range": "± 264",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 196500,
+            "range": "± 1375",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 380589,
+            "range": "± 2637",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1846052,
+            "range": "± 18404",
             "unit": "ns/iter"
           }
         ]
