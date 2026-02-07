@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770460959855,
+  "lastUpdate": 1770464101553,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -8063,6 +8063,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1750373,
             "range": "± 17665",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "102ac996a6570353c0d56ca0f9b00a8a15ba1888",
+          "message": "docs: mark Phase 41 Stage 7 as complete — all CI workflows already implemented\n\nbench.yml + bench-regression.yml already cover:\n- criterion benchmarks on PR (auto-run)\n- PR comment with performance comparison table\n- 10% regression threshold → CI failure\n- GitHub Pages benchmark dashboard (benchmark-action)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-07T20:27:36+09:00",
+          "tree_id": "f93cd46088eab1285477e3a207fdc85ad6985075",
+          "url": "https://github.com/vaislang/vais/commit/102ac996a6570353c0d56ca0f9b00a8a15ba1888"
+        },
+        "date": 1770464100942,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2408,
+            "range": "± 23",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5334,
+            "range": "± 52",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6087,
+            "range": "± 187",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11093,
+            "range": "± 80",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17707,
+            "range": "± 73",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 33762,
+            "range": "± 252",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30555,
+            "range": "± 113",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 65802,
+            "range": "± 531",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 268189,
+            "range": "± 2077",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 407893,
+            "range": "± 5196",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 100192,
+            "range": "± 436",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 707200,
+            "range": "± 2777",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 150548,
+            "range": "± 706",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 178395,
+            "range": "± 712",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 185832,
+            "range": "± 913",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 229119,
+            "range": "± 1676",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 482669,
+            "range": "± 1930",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 679546,
+            "range": "± 2934",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 376624,
+            "range": "± 2637",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1085702,
+            "range": "± 7956",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 37946,
+            "range": "± 283",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 193463,
+            "range": "± 1718",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 375405,
+            "range": "± 2996",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1819432,
+            "range": "± 16601",
             "unit": "ns/iter"
           }
         ]
