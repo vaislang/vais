@@ -207,7 +207,12 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
         let builder = context.create_builder();
         builder.position_at_end(entry);
         // On macOS: __stdinp, on Linux: stdin
-        let stdin_global = module.add_global(i8_ptr, Some(AddressSpace::default()), "__stdinp");
+        let stdin_sym = if cfg!(target_os = "macos") {
+            "__stdinp"
+        } else {
+            "stdin"
+        };
+        let stdin_global = module.add_global(i8_ptr, Some(AddressSpace::default()), stdin_sym);
         stdin_global.set_externally_initialized(true);
         let val = builder
             .build_load(i8_ptr, stdin_global.as_pointer_value(), "stdin_val")
@@ -221,7 +226,12 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
         let entry = context.append_basic_block(func, "entry");
         let builder = context.create_builder();
         builder.position_at_end(entry);
-        let stdout_global = module.add_global(i8_ptr, Some(AddressSpace::default()), "__stdoutp");
+        let stdout_sym = if cfg!(target_os = "macos") {
+            "__stdoutp"
+        } else {
+            "stdout"
+        };
+        let stdout_global = module.add_global(i8_ptr, Some(AddressSpace::default()), stdout_sym);
         stdout_global.set_externally_initialized(true);
         let val = builder
             .build_load(i8_ptr, stdout_global.as_pointer_value(), "stdout_val")
