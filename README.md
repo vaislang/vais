@@ -3,7 +3,6 @@
 **AI-optimized systems programming language with token-efficient syntax.**
 
 [![CI](https://github.com/vaislang/vais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vaislang/vais/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/vaislang/vais/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/vaislang/vais)
 
 Vais is designed to minimize token usage while maximizing code expressiveness, making it ideal for AI-assisted development and LLM code generation.
 
