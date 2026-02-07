@@ -5,6 +5,8 @@
 Bootstrap achieved (Stage1→Stage2→Stage3 fixed point).
 MIR pipeline, LSP server, code formatter, doc generator, and stdlib test suites implemented.
 
+> **Next**: Phase 41 (v2.0 언어 진화) — 에러 복구 파서, 클로저/이터레이터, 패키지 에코시스템 → 메인 ROADMAP.md 참조
+
 ---
 
 ## Completed Milestones
