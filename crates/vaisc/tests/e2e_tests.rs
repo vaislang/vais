@@ -3410,6 +3410,85 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
+// ===== Return Type Inference Tests =====
+
+#[test]
+fn test_ret_type_infer_simple() {
+    let source = r#"
+F double(x: i64) { x * 2 }
+F main() -> i64 {
+    R double(21)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_ret_type_infer_block_body() {
+    let source = r#"
+F max(a: i64, b: i64) {
+    I a > b { a } E { b }
+}
+F main() -> i64 {
+    R max(10, 20)
+}
+"#;
+    assert_exit_code(source, 20);
+}
+
+#[test]
+fn test_ret_type_infer_with_return() {
+    let source = r#"
+F abs(n: i64) {
+    I n < 0 { R 0 - n }
+    R n
+}
+F main() -> i64 {
+    I abs(0 - 7) == 7 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_ret_type_infer_both_param_and_ret() {
+    let source = r#"
+F add(a, b) { a + b }
+F main() -> i64 {
+    R add(17, 25)
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
+fn test_ret_type_infer_recursive() {
+    let source = r#"
+F fib(n: i64) {
+    I n <= 1 { R n }
+    R @(n - 1) + @(n - 2)
+}
+F main() -> i64 {
+    I fib(10) == 55 { R 0 }
+    R 1
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn test_ret_type_infer_nested_calls() {
+    let source = r#"
+F inc(x: i64) { x + 1 }
+F triple(x: i64) { x * 3 }
+F main() -> i64 {
+    R triple(inc(13))
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
 // ===== Tilde Mut Abbreviation Tests =====
 
 #[test]
