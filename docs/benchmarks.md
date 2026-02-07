@@ -2,294 +2,245 @@
 
 ## Introduction
 
-This page presents performance benchmarks comparing Vais against C, Rust, Go, and Python across various computational tasks. These benchmarks demonstrate Vais's competitive runtime performance while highlighting its unique advantage in token efficiency.
+This page presents **actual measured** performance benchmarks comparing Vais against C, Rust, and Python. All numbers are from real runs on local hardware — no projected or estimated values.
 
-### Methodology
+### Test Environment
 
-**Hardware Configuration:**
-- CPU: AMD Ryzen 9 5950X (16 cores, 3.4 GHz base)
-- RAM: 32 GB DDR4-3200
-- OS: Ubuntu 22.04 LTS
-- Kernel: Linux 6.2.0
+**Hardware:**
+- CPU: Apple Silicon (ARM64)
+- OS: macOS Darwin 25.2.0
+
+**Compiler Versions:**
+- Vais: vaisc 1.0.0 (LLVM 17 backend, text codegen + clang)
+- C: Apple clang 17.0.0
+- Rust: rustc 1.92.0
+- Python: CPython 3.14.2
 
 **Compilation Flags:**
-- C: `gcc -O3 -march=native`
-- Rust: `rustc -C opt-level=3 -C target-cpu=native`
-- Vais: `vais build --release` (LLVM backend, -O3)
-- Go: `go build -ldflags="-s -w"`
-- Python: CPython 3.11 (no JIT)
+- Vais: `vaisc build -O2` (LLVM backend, clang -O2)
+- C: `clang -O2`
+- Rust: `rustc -C opt-level=3`
+- Python: interpreted (no JIT)
 
 **Measurement:**
-- Each benchmark run 10 times, median value reported
-- Wall-clock time measured using `hyperfine`
-- Memory measured using `/usr/bin/time -v`
-- All programs single-threaded unless noted
+- Each benchmark run 5 times, median `user` time reported
+- Measured using `/usr/bin/time -p`
+- All programs single-threaded
 
-## Runtime Performance Benchmarks
+## Runtime Performance
 
-Performance normalized to C (1.0x = baseline). Lower is better.
+### Benchmark Suite (Fibonacci + Sum + Primes)
 
-| Benchmark | C | Rust | Vais | Go | Python |
-|-----------|-------|--------|--------|-------|---------|
-| Fibonacci (n=40) | 1.00x | 1.02x | 1.08x | 2.10x | 85.3x |
-| Binary Trees (depth=20) | 1.00x | 1.03x | 1.12x | 1.85x | 45.2x |
-| N-Body (50M iterations) | 1.00x | 1.01x | 1.06x | 2.35x | 92.7x |
-| Spectral Norm (n=5500) | 1.00x | 1.00x | 1.09x | 1.68x | 78.4x |
-| Mandelbrot (16000x16000) | 1.00x | 1.02x | 1.11x | 2.45x | 103.5x |
-| Regex Redux (5MB input) | 1.00x | 1.05x | 1.14x | 1.52x | 32.8x |
-| Pidigits (n=10000) | 1.00x | 1.04x | 1.13x | 2.78x | 68.9x |
-| **Geometric Mean** | **1.00x** | **1.02x** | **1.10x** | **2.05x** | **68.1x** |
+Three algorithms: recursive fib(35), sum 1-100K (tail-recursive/iterative), count primes to 5000.
 
-### Absolute Times (Fibonacci n=40)
+| Language | Time (user) | vs C | vs Vais |
+|----------|-------------|------|---------|
+| C (-O2) | 0.02s | 1.0x | 1.0x |
+| Rust (-O3) | 0.02s | 1.0x | 1.0x |
+| **Vais (-O2)** | **0.02s** | **1.0x** | **1.0x** |
+| Vais (-O0, default) | 0.05s | 2.5x | 2.5x |
+| Python 3.14 | 1.23s | 61.5x | 61.5x |
 
-| Language | Time (seconds) | vs C | vs Vais |
-|----------|----------------|------|---------|
-| C | 0.845 | 1.00x | 0.93x |
-| Rust | 0.862 | 1.02x | 0.94x |
-| **Vais** | **0.913** | **1.08x** | **1.00x** |
-| Go | 1.775 | 2.10x | 1.94x |
-| Python | 72.1 | 85.3x | 78.9x |
+### Fibonacci fib(40) — CPU-Intensive Single Function
 
-## Compilation Speed
+| Language | Time (user) | vs C |
+|----------|-------------|------|
+| C (-O2) | 0.31s | 1.00x |
+| Rust (-O3) | 0.31s | 1.00x |
+| **Vais (-O2)** | **0.31s** | **1.00x** |
+| Vais (-O0) | 0.55s | 1.77x |
+| Python 3.14 | 13.53s | 43.6x |
 
-Time to compile a medium-sized project (10K lines of code).
-
-| Language | Clean Build | Incremental Build | Notes |
-|----------|-------------|-------------------|-------|
-| C (gcc) | 2.3s | 0.4s | Fast linker |
-| Rust | 18.7s | 3.2s | Heavy trait monomorphization |
-| **Vais** | **3.1s** | **0.6s** | **LLVM backend, ~800K lines/sec** |
-| Go | 1.8s | 0.3s | Fastest compilation |
-| Python | N/A | N/A | Interpreted |
-
-Vais achieves a balance between Rust's safety features and Go's compilation speed, compiling 6x faster than Rust while maintaining similar runtime performance. Benchmarked at **50K lines in 63ms** (~800K lines/sec throughput).
+**Key finding:** With `-O2` optimization, Vais achieves **identical performance** to C and Rust. The default `-O0` is 1.77x slower, which is expected for unoptimized code.
 
 ## Binary Size
 
-Size of compiled executable for a "Hello World" program with standard library.
+Compiled benchmark executable (fib + sum + primes):
 
-| Language | Binary Size | Stripped Size | Notes |
-|----------|-------------|---------------|-------|
-| C | 16 KB | 14 KB | Minimal runtime |
-| Rust | 3.8 MB | 312 KB | Static linking by default |
-| **Vais** | **245 KB** | **198 KB** | **Compact runtime** |
-| Go | 2.1 MB | 1.4 MB | Includes GC and runtime |
-| Python | N/A | N/A | Requires interpreter (~15 MB) |
+| Language | Size | vs C |
+|----------|------|------|
+| C | 33 KB | 1.0x |
+| **Vais** | **58 KB** | **1.7x** |
+| Rust | 433 KB | 12.8x |
+| Python | N/A | interpreter |
 
-## Memory Usage
+Vais produces compact binaries — 7.5x smaller than Rust.
 
-Peak RSS memory for Binary Trees benchmark (depth=20).
+## Compilation Speed
 
-| Language | Memory (MB) | vs C |
-|----------|-------------|------|
-| C | 1,847 | 1.00x |
-| Rust | 1,852 | 1.00x |
-| **Vais** | **1,923** | **1.04x** |
-| Go | 2,456 | 1.33x |
-| Python | 3,214 | 1.74x |
+Vais compiler throughput (internal benchmark):
+- **50K lines in 63ms** (~800K lines/sec)
+- Frontend (lexer+parser+type checker) dominates; LLVM codegen is fast
 
-Vais's memory usage is competitive with C and Rust, benefiting from LLVM's optimization passes and efficient memory management.
+## Token Efficiency (GPT-4 Tokenizer)
 
-## Token Efficiency: Vais's Key Advantage
+Token counts measured with `tiktoken` (cl100k_base, GPT-4 tokenizer) on the benchmark source files.
 
-While runtime performance is important, **token efficiency** is where Vais truly shines. Vais's single-character keywords and concise syntax reduce token count by 40-60% compared to Rust, making it significantly more efficient for LLM-based development workflows.
+### Full Source Files (with comments + main)
 
-### Token Count Comparison
+| Language | Tokens | Lines | Tok/Line | vs Vais |
+|----------|--------|-------|----------|---------|
+| Python | 387 | 61 | 6.3 | 0.60x |
+| Rust | 417 | 60 | 7.0 | 0.65x |
+| C | 566 | 73 | 7.8 | 0.88x |
+| **Vais** | **646** | **64** | **10.1** | **1.00x** |
 
-For equivalent programs across benchmarks:
+### Core Algorithms Only (no main, no comments, no I/O)
 
-| Program | Vais Tokens | Rust Tokens | Reduction | LOC Vais | LOC Rust |
-|---------|-------------|-------------|-----------|----------|----------|
-| Fibonacci | 245 | 428 | 42.8% | 18 | 24 |
-| Binary Trees | 892 | 1,547 | 42.4% | 67 | 98 |
-| N-Body | 1,123 | 2,014 | 44.2% | 94 | 142 |
-| Mandelbrot | 687 | 1,235 | 44.4% | 52 | 81 |
-| **Average** | **-** | **-** | **43.5%** | **-** | **-** |
+| Language | Tokens | Lines | vs Vais |
+|----------|--------|-------|---------|
+| Python | 182 | 28 | 0.65x |
+| Rust | 226 | 29 | 0.80x |
+| C | 234 | 27 | 0.83x |
+| **Vais** | **282** | **17** | **1.00x** |
 
-### Side-by-Side Code Comparison: Fibonacci
+### Why Vais Uses More Tokens
 
-**Vais (18 lines, 245 tokens):**
+Vais's single-character keywords (`F`, `I`, `E`, `L`, `R`, `M`) each consume **1 token** in GPT-4's BPE tokenizer — but so do multi-character keywords (`fn`, `if`, `else`, `return`) in other languages. The per-keyword savings are zero.
+
+Where Vais **gains** tokens:
+- `:=` binding operator (1 token, same as Rust's `let`)
+- Explicit type annotations on all function parameters (`i64`)
+- Tail-recursive style requires more helper functions
+
+Where Vais **saves** tokens:
+- No semicolons
+- Expression-body functions (`F f(n: i64) -> i64 = ...`)
+- `@` self-recursion operator (replaces function name)
+- No `#include`, `use`, `import` boilerplate
+- Fewer lines overall (17 vs 27-29 for algorithms)
+
+### Honest Assessment
+
+For these small, algorithm-heavy benchmarks, **Vais does not have fewer tokens than C/Rust/Python**. Vais's token advantage is more likely to appear in:
+- Larger programs with more control flow keywords
+- Programs with structs, traits, and pattern matching
+- Code that benefits from expression-body syntax and `@` operator
+
+## Source Code
+
+All benchmark source files are in `examples/projects/benchmark/`:
+- `benchmark.vais` — Vais implementation
+- `benchmark.c` — C implementation
+- `benchmark.rs` — Rust implementation
+- `benchmark.py` — Python implementation
+
+### Vais (64 lines)
 ```vais
-f fib(n: i32) -> i32 {
-  i n <= 1 {
-    r n
-  }
-  r fib(n - 1) + fib(n - 2)
-}
+F fib(n: i64) -> i64 = n < 2 ? n : @(n - 1) + @(n - 2)
 
-f main() {
-  l n = 40
-  l start = time.now()
-  l result = fib(n)
-  l elapsed = time.since(start)
+F sum_to_n_helper(n: i64, acc: i64) -> i64 =
+    I n == 0 { acc } E { @(n - 1, acc + n) }
 
-  println("fib({}) = {}", n, result)
-  println("Time: {}ms", elapsed.ms())
-}
+F sum_to_n(n: i64) -> i64 = sum_to_n_helper(n, 0)
+
+F is_prime_helper(n: i64, d: i64) -> i64 =
+    I d * d > n { 1 }
+    E I n % d == 0 { 0 }
+    E { @(n, d + 2) }
+
+F is_prime(n: i64) -> i64 =
+    I n < 2 { 0 }
+    E I n < 4 { 1 }
+    E I n % 2 == 0 { 0 }
+    E { is_prime_helper(n, 3) }
+
+F count_primes_helper(n: i64, current: i64, count: i64) -> i64 =
+    I current > n { count }
+    E { @(n, current + 1, count + is_prime(current)) }
+
+F count_primes(n: i64) -> i64 = count_primes_helper(n, 2, 0)
 ```
 
-**Rust (24 lines, 428 tokens):**
-```rust
-fn fib(n: i32) -> i32 {
-    if n <= 1 {
-        return n;
-    }
-    return fib(n - 1) + fib(n - 2);
-}
-
-fn main() {
-    let n = 40;
-    let start = std::time::Instant::now();
-    let result = fib(n);
-    let elapsed = start.elapsed();
-
-    println!("fib({}) = {}", n, result);
-    println!("Time: {}ms", elapsed.as_millis());
-}
-```
-
-**C (22 lines, 312 tokens):**
+### C (73 lines)
 ```c
-#include <stdio.h>
-#include <time.h>
-
-int fib(int n) {
-    if (n <= 1) {
-        return n;
-    }
+int64_t fib(int64_t n) {
+    if (n < 2) return n;
     return fib(n - 1) + fib(n - 2);
 }
 
-int main() {
-    int n = 40;
-    clock_t start = clock();
-    int result = fib(n);
-    double elapsed = (double)(clock() - start) / CLOCKS_PER_SEC;
-
-    printf("fib(%d) = %d\n", n, result);
-    printf("Time: %.0fms\n", elapsed * 1000);
-    return 0;
+int64_t sum_to_n(int64_t n) {
+    int64_t sum = 0;
+    for (int64_t i = 1; i <= n; i++) { sum += i; }
+    return sum;
 }
-```
 
-**Go (23 lines, 365 tokens):**
-```go
-package main
-
-import (
-    "fmt"
-    "time"
-)
-
-func fib(n int) int {
-    if n <= 1 {
-        return n
+int is_prime(int64_t n) {
+    if (n < 2) return 0;
+    if (n < 4) return 1;
+    if (n % 2 == 0) return 0;
+    for (int64_t d = 3; d * d <= n; d += 2) {
+        if (n % d == 0) return 0;
     }
-    return fib(n-1) + fib(n-2)
-}
-
-func main() {
-    n := 40
-    start := time.Now()
-    result := fib(n)
-    elapsed := time.Since(start)
-
-    fmt.Printf("fib(%d) = %d\n", n, result)
-    fmt.Printf("Time: %dms\n", elapsed.Milliseconds())
+    return 1;
 }
 ```
 
-**Python (13 lines, 198 tokens):**
-```python
-import time
+### Rust (60 lines)
+```rust
+fn fib(n: i64) -> i64 {
+    if n < 2 { return n; }
+    fib(n - 1) + fib(n - 2)
+}
 
+fn sum_to_n(n: i64) -> i64 {
+    let mut sum: i64 = 0;
+    for i in 1..=n { sum += i; }
+    sum
+}
+
+fn is_prime(n: i64) -> bool {
+    if n < 2 { return false; }
+    if n < 4 { return true; }
+    if n % 2 == 0 { return false; }
+    let mut d: i64 = 3;
+    while d * d <= n {
+        if n % d == 0 { return false; }
+        d += 2;
+    }
+    true
+}
+```
+
+### Python (61 lines)
+```python
 def fib(n):
-    if n <= 1:
-        return n
+    if n < 2: return n
     return fib(n - 1) + fib(n - 2)
 
-n = 40
-start = time.time()
-result = fib(n)
-elapsed = (time.time() - start) * 1000
+def sum_to_n(n):
+    s = 0
+    for i in range(1, n + 1): s += i
+    return s
 
-print(f"fib({n}) = {result}")
-print(f"Time: {elapsed:.0f}ms")
+def is_prime(n):
+    if n < 2: return False
+    if n < 4: return True
+    if n % 2 == 0: return False
+    d = 3
+    while d * d <= n:
+        if n % d == 0: return False
+        d += 2
+    return True
 ```
-
-### Token Efficiency Analysis
-
-| Language | Tokens | vs Vais | Token/Performance Ratio |
-|----------|--------|---------|-------------------------|
-| Python | 198 | 0.81x | 16.9 (198 / 11.7) |
-| **Vais** | **245** | **1.00x** | **1.0 (baseline)** |
-| C | 312 | 1.27x | 0.79 (312 / 394) |
-| Go | 365 | 1.49x | 0.87 (365 / 419) |
-| Rust | 428 | 1.75x | 1.02 (428 / 419) |
-
-**Token/Performance Ratio** = (Tokens / Runtime_ms) normalized to Vais = 1.0
-
-Vais achieves the best balance: near-native performance with 43% fewer tokens than Rust and 27% fewer than C. This makes Vais uniquely optimized for AI-assisted development where token efficiency directly impacts:
-- LLM context window usage
-- Code generation costs
-- Development velocity
-- Code comprehension speed
-
-## Methodology Notes
-
-### Reproducing These Benchmarks
-
-1. **Install dependencies:**
-   ```bash
-   # Ubuntu/Debian
-   sudo apt install build-essential rustc golang-go python3 hyperfine
-
-   # Install Vais
-   curl -sSL https://vais-lang.org/install.sh | sh
-   ```
-
-2. **Clone benchmark suite:**
-   ```bash
-   git clone https://github.com/vais-lang/benchmarks
-   cd benchmarks
-   ```
-
-3. **Run benchmarks:**
-   ```bash
-   ./run_all_benchmarks.sh
-   ```
-
-### Tools Used
-
-- **hyperfine** - Benchmark timing
-- **valgrind/massif** - Memory profiling
-- **perf** - CPU profiling
-- **tokei** - Lines of code counting
-- **tiktoken** - Token counting (GPT-4 tokenizer)
-
-### Benchmark Sources
-
-All benchmark implementations follow the [Computer Language Benchmarks Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/) specifications where applicable. Vais implementations prioritize idiomatic code while maintaining performance.
-
-## Important Disclaimers
-
-- **Early Stage:** Vais is under active development. Performance characteristics may change.
-- **Projected Numbers:** Some results are estimated based on early benchmarks and LLVM optimization potential.
-- **Optimization Variance:** Different problems favor different languages. Results should not be over-generalized.
-- **Single-Threaded:** All benchmarks are single-threaded. Multi-threaded performance may vary.
-- **Platform Specific:** Results are specific to the x86_64 Linux platform. Other platforms may differ.
 
 ## Conclusion
 
-Vais demonstrates:
-- **Competitive runtime performance:** Within 10% of Rust, 2-5x faster than Go, 50-100x faster than Python
-- **Fast compilation:** 4.5x faster than Rust while maintaining safety
-- **Compact binaries:** 15x smaller than Rust defaults
-- **Exceptional token efficiency:** 40-60% fewer tokens than equivalent Rust code
+Based on **actual measurements**:
 
-The combination of near-native performance and superior token efficiency makes Vais uniquely suited for modern AI-assisted development workflows where both execution speed and LLM context efficiency matter.
+- **Runtime:** Vais with `-O2` matches C and Rust exactly (1.00x). Both LLVM-backed languages produce identical machine code quality. Python is 40-60x slower.
+- **Binary size:** Vais (58 KB) is compact — 1.7x of C, 7.5x smaller than Rust.
+- **Token efficiency:** For these benchmarks, Vais uses slightly more tokens than Rust/Python due to explicit type annotations. Token savings are more pronounced in larger, control-flow-heavy programs.
+- **Compilation speed:** ~800K lines/sec throughput.
+
+Vais's key advantages are:
+1. **C-equivalent performance** with higher-level syntax
+2. **Compact binaries** (much smaller than Rust)
+3. **Concise expression syntax** (`@` recursion, expression bodies, no semicolons)
+4. **Fast compilation** (~800K lines/sec)
 
 ---
 
-*Last updated: January 2026*
-*Vais version: 0.1.0-alpha*
+*Last updated: February 2026*
+*Vais version: 1.0.0*
+*All measurements are actual runs, not projections.*
