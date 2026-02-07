@@ -1,0 +1,1420 @@
+U mir
+U mir_builder
+
+# Vais Self-Hosting Compiler - MIR Lowering Module
+# Converts AST (from parser) into MIR (Middle Intermediate Representation).
+#
+# This module traverses AST nodes and builds MIR using the MirBuilder API.
+# It mirrors the Rust implementation in crates/vais-mir/src/lower.rs but
+# uses Vais's flat struct + tag pattern with manual memory management.
+#
+# Key design:
+#   - Variable table: maps name_idx → local_idx for name resolution
+#   - Each expression returns a local_idx holding the result
+#   - Control flow (if/loop/match) uses basic blocks + terminators
+#   - Functions produce MirBody via MirBuilder
+
+# ============================================================================
+# Variable Table — name_idx → local_idx mapping
+# ============================================================================
+# Simple linear scan table (sufficient for bootstrapping)
+# Each entry: (name_idx: i64, local_idx: i64) = 16 bytes
+
+F vartab_new(cap: i64) -> i64 {
+    # Returns ptr to (entries_ptr, len, cap) = 24 bytes
+    tab := malloc(24)
+    store_i64(tab, malloc(16 * cap))
+    store_i64(tab + 8, 0)
+    store_i64(tab + 16, cap)
+    R tab
+}
+
+F vartab_bind(tab: i64, name_idx: i64, local_idx: i64) -> i64 {
+    entries := load_i64(tab)
+    len := load_i64(tab + 8)
+    cap := load_i64(tab + 16)
+
+    # Grow if needed
+    I len >= cap {
+        new_cap := cap * 2
+        new_entries := malloc(16 * new_cap)
+        i := mut 0
+        L { I i >= len { R 0 }
+            store_i64(new_entries + i * 16, load_i64(entries + i * 16))
+            store_i64(new_entries + i * 16 + 8, load_i64(entries + i * 16 + 8))
+            i = i + 1
+        }
+        free(entries)
+        store_i64(tab, new_entries)
+        store_i64(tab + 16, new_cap)
+        entries = new_entries
+    }
+
+    # Store new entry
+    store_i64(entries + len * 16, name_idx)
+    store_i64(entries + len * 16 + 8, local_idx)
+    store_i64(tab + 8, len + 1)
+    R 1
+}
+
+F vartab_lookup(tab: i64, name_idx: i64) -> i64 {
+    entries := load_i64(tab)
+    len := load_i64(tab + 8)
+
+    # Search backwards (most recent binding wins for shadowing)
+    i := mut len - 1
+    L { I i < 0 { R 0 - 1 }
+        I load_i64(entries + i * 16) == name_idx {
+            R load_i64(entries + i * 16 + 8)
+        }
+        i = i - 1
+    }
+    R 0 - 1
+}
+
+# ============================================================================
+# AST Type Constants (from ast.vais, duplicated here to avoid import cycle)
+# ============================================================================
+
+F AST_EXPR_INT() -> i64 = 20
+F AST_EXPR_FLOAT() -> i64 = 21
+F AST_EXPR_BOOL() -> i64 = 22
+F AST_EXPR_STRING() -> i64 = 23
+F AST_EXPR_UNIT() -> i64 = 24
+F AST_EXPR_IDENT() -> i64 = 25
+F AST_EXPR_SELF_CALL() -> i64 = 26
+F AST_EXPR_BINARY() -> i64 = 27
+F AST_EXPR_UNARY() -> i64 = 28
+F AST_EXPR_TERNARY() -> i64 = 29
+F AST_EXPR_IF() -> i64 = 30
+F AST_EXPR_LOOP() -> i64 = 31
+F AST_EXPR_MATCH() -> i64 = 32
+F AST_EXPR_CALL() -> i64 = 33
+F AST_EXPR_METHOD_CALL() -> i64 = 34
+F AST_EXPR_STATIC_CALL() -> i64 = 35
+F AST_EXPR_FIELD() -> i64 = 36
+F AST_EXPR_INDEX() -> i64 = 37
+F AST_EXPR_ARRAY() -> i64 = 38
+F AST_EXPR_TUPLE() -> i64 = 39
+F AST_EXPR_STRUCT_LIT() -> i64 = 40
+F AST_EXPR_RANGE() -> i64 = 41
+F AST_EXPR_BLOCK() -> i64 = 42
+F AST_EXPR_AWAIT() -> i64 = 43
+F AST_EXPR_TRY() -> i64 = 44
+F AST_EXPR_UNWRAP() -> i64 = 45
+F AST_EXPR_REF() -> i64 = 46
+F AST_EXPR_DEREF() -> i64 = 47
+F AST_EXPR_ASSIGN() -> i64 = 48
+F AST_EXPR_ASSIGN_OP() -> i64 = 49
+F AST_EXPR_LAMBDA() -> i64 = 50
+F AST_EXPR_SPAWN() -> i64 = 51
+
+F AST_STMT_LET() -> i64 = 10
+F AST_STMT_EXPR() -> i64 = 11
+F AST_STMT_RETURN() -> i64 = 12
+F AST_STMT_BREAK() -> i64 = 13
+F AST_STMT_CONTINUE() -> i64 = 14
+
+F AST_ITEM_FUNCTION() -> i64 = 1
+F AST_ITEM_STRUCT() -> i64 = 2
+F AST_ITEM_ENUM() -> i64 = 3
+F AST_ITEM_USE() -> i64 = 5
+F AST_ITEM_IMPL() -> i64 = 7
+
+F AST_TYPE_NAMED() -> i64 = 60
+F AST_TYPE_ARRAY() -> i64 = 61
+F AST_TYPE_TUPLE() -> i64 = 63
+F AST_TYPE_POINTER() -> i64 = 66
+F AST_TYPE_REF() -> i64 = 67
+F AST_TYPE_REF_MUT() -> i64 = 68
+F AST_TYPE_FN() -> i64 = 69
+F AST_TYPE_UNIT() -> i64 = 70
+
+F AST_PAT_WILDCARD() -> i64 = 80
+F AST_PAT_IDENT() -> i64 = 81
+F AST_PAT_LITERAL() -> i64 = 82
+
+# AST binary operators
+F AST_OP_ADD() -> i64 = 1
+F AST_OP_SUB() -> i64 = 2
+F AST_OP_MUL() -> i64 = 3
+F AST_OP_DIV() -> i64 = 4
+F AST_OP_MOD() -> i64 = 5
+F AST_OP_LT() -> i64 = 6
+F AST_OP_LTE() -> i64 = 7
+F AST_OP_GT() -> i64 = 8
+F AST_OP_GTE() -> i64 = 9
+F AST_OP_EQ() -> i64 = 10
+F AST_OP_NEQ() -> i64 = 11
+F AST_OP_AND() -> i64 = 12
+F AST_OP_OR() -> i64 = 13
+F AST_OP_BIT_AND() -> i64 = 14
+F AST_OP_BIT_OR() -> i64 = 15
+F AST_OP_BIT_XOR() -> i64 = 16
+F AST_OP_SHL() -> i64 = 17
+F AST_OP_SHR() -> i64 = 18
+
+# AST unary operators
+F AST_UOP_NEG() -> i64 = 1
+F AST_UOP_NOT() -> i64 = 2
+
+# ============================================================================
+# AST Binary Op → MIR Binary Op conversion
+# ============================================================================
+# AST: ADD=1..SHR=18, MIR: ADD=1..GE=16 (different ordering after MOD)
+
+F ast_binop_to_mir(ast_op: i64) -> i64 {
+    I ast_op == AST_OP_ADD() { R BINOP_ADD() }
+    E I ast_op == AST_OP_SUB() { R BINOP_SUB() }
+    E I ast_op == AST_OP_MUL() { R BINOP_MUL() }
+    E I ast_op == AST_OP_DIV() { R BINOP_DIV() }
+    E I ast_op == AST_OP_MOD() { R BINOP_REM() }
+    E I ast_op == AST_OP_LT() { R BINOP_LT() }
+    E I ast_op == AST_OP_LTE() { R BINOP_LE() }
+    E I ast_op == AST_OP_GT() { R BINOP_GT() }
+    E I ast_op == AST_OP_GTE() { R BINOP_GE() }
+    E I ast_op == AST_OP_EQ() { R BINOP_EQ() }
+    E I ast_op == AST_OP_NEQ() { R BINOP_NE() }
+    E I ast_op == AST_OP_AND() { R BINOP_BIT_AND() }  # logical AND treated as bitwise AND on i64
+    E I ast_op == AST_OP_OR() { R BINOP_BIT_OR() }    # logical OR treated as bitwise OR on i64
+    E I ast_op == AST_OP_BIT_AND() { R BINOP_BIT_AND() }
+    E I ast_op == AST_OP_BIT_OR() { R BINOP_BIT_OR() }
+    E I ast_op == AST_OP_BIT_XOR() { R BINOP_BIT_XOR() }
+    E I ast_op == AST_OP_SHL() { R BINOP_SHL() }
+    E I ast_op == AST_OP_SHR() { R BINOP_SHR() }
+    E { R BINOP_ADD() }
+}
+
+F ast_unop_to_mir(ast_op: i64) -> i64 {
+    I ast_op == AST_UOP_NEG() { R UNOP_NEG() }
+    E I ast_op == AST_UOP_NOT() { R UNOP_NOT() }
+    E { R UNOP_NEG() }
+}
+
+# ============================================================================
+# AST TypeNode → MirType conversion
+# ============================================================================
+# TypeNode layout: kind(0), span_start(8), span_end(16), field0(24), field1(32), field2(40), field3(48)
+
+F lower_ast_type(type_ptr: i64) -> i64 {
+    I type_ptr == 0 { R mir_type_prim(MIR_TY_I64()) }
+
+    kind := load_i64(type_ptr)
+
+    I kind == AST_TYPE_UNIT() {
+        R mir_type_prim(MIR_TY_UNIT())
+    }
+    E I kind == AST_TYPE_NAMED() {
+        # field0 = name_idx — check known primitive names
+        # For now default to i64; a proper implementation would look up the string
+        R mir_type_prim(MIR_TY_I64())
+    }
+    E I kind == AST_TYPE_ARRAY() {
+        inner := lower_ast_type(load_i64(type_ptr + 24))
+        R mir_type_inner(MIR_TY_ARRAY(), inner)
+    }
+    E I kind == AST_TYPE_TUPLE() {
+        R mir_type_prim(MIR_TY_I64())  # simplified
+    }
+    E I kind == AST_TYPE_POINTER() {
+        inner := lower_ast_type(load_i64(type_ptr + 24))
+        R mir_type_inner(MIR_TY_POINTER(), inner)
+    }
+    E I kind == AST_TYPE_REF() || kind == AST_TYPE_REF_MUT() {
+        inner := lower_ast_type(load_i64(type_ptr + 24))
+        R mir_type_inner(MIR_TY_REF(), inner)
+    }
+    E I kind == AST_TYPE_FN() {
+        R mir_type_prim(MIR_TY_FUNCTION())
+    }
+    E {
+        R mir_type_prim(MIR_TY_I64())
+    }
+}
+
+# ============================================================================
+# Loop context stack for break/continue
+# ============================================================================
+# Each entry: (break_bb: i64, continue_bb: i64, result_local: i64) = 24 bytes
+
+F loop_stack_new() -> i64 {
+    # (entries_ptr, len, cap) = 24 bytes
+    stk := malloc(24)
+    store_i64(stk, malloc(24 * 16))
+    store_i64(stk + 8, 0)
+    store_i64(stk + 16, 16)
+    R stk
+}
+
+F loop_stack_push(stk: i64, break_bb: i64, continue_bb: i64, result_local: i64) -> i64 {
+    entries := load_i64(stk)
+    len := load_i64(stk + 8)
+    store_i64(entries + len * 24, break_bb)
+    store_i64(entries + len * 24 + 8, continue_bb)
+    store_i64(entries + len * 24 + 16, result_local)
+    store_i64(stk + 8, len + 1)
+    R 1
+}
+
+F loop_stack_pop(stk: i64) -> i64 {
+    len := load_i64(stk + 8)
+    I len > 0 {
+        store_i64(stk + 8, len - 1)
+    }
+    R 1
+}
+
+F loop_stack_top(stk: i64) -> i64 {
+    # Returns pointer to top entry, or 0 if empty
+    len := load_i64(stk + 8)
+    I len == 0 { R 0 }
+    entries := load_i64(stk)
+    R entries + (len - 1) * 24
+}
+
+# ============================================================================
+# MIR Lowering Context
+# ============================================================================
+
+S MirLowerCtx {
+    builder: i64,
+    var_tab: i64,
+    func_name_idx: i64,
+    loop_stk: i64
+}
+
+F mir_lower_ctx_new(name_idx: i64, ret_type: i64) -> i64 {
+    ctx := malloc(32)
+    store_i64(ctx, mir_builder_new(name_idx, ret_type))
+    store_i64(ctx + 8, vartab_new(256))
+    store_i64(ctx + 16, name_idx)
+    store_i64(ctx + 24, loop_stack_new())
+    R ctx
+}
+
+# Accessors
+F ctx_builder(ctx: i64) -> i64 = load_i64(ctx)
+F ctx_var_tab(ctx: i64) -> i64 = load_i64(ctx + 8)
+F ctx_func_name(ctx: i64) -> i64 = load_i64(ctx + 16)
+F ctx_loop_stk(ctx: i64) -> i64 = load_i64(ctx + 24)
+
+# ============================================================================
+# Lower Expression — returns local_idx holding the result
+# ============================================================================
+# ExprNode layout: kind(0), span_start(8), span_end(16),
+#   field0(24), field1(32), field2(40), field3(48), field4(56), field5(64)
+
+F lower_expr(ctx: i64, expr_ptr: i64) -> i64 {
+    I expr_ptr == 0 {
+        # Null expression → unit constant
+        tmp := mir_builder_new_local(ctx_builder(ctx), mir_type_prim(MIR_TY_UNIT()), 0)
+        mir_builder_assign(ctx_builder(ctx), place_local(tmp), rvalue_use(operand_const_unit()))
+        R tmp
+    }
+
+    kind := load_i64(expr_ptr)
+
+    # --- Literals ---
+    I kind == AST_EXPR_INT() {
+        R lower_expr_int(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_FLOAT() {
+        R lower_expr_float(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_BOOL() {
+        R lower_expr_bool(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_STRING() {
+        R lower_expr_string(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_UNIT() {
+        R lower_expr_unit(ctx)
+    }
+
+    # --- Identifier ---
+    E I kind == AST_EXPR_IDENT() {
+        R lower_expr_ident(ctx, expr_ptr)
+    }
+
+    # --- Operators ---
+    E I kind == AST_EXPR_BINARY() {
+        R lower_expr_binary(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_UNARY() {
+        R lower_expr_unary(ctx, expr_ptr)
+    }
+
+    # --- Control flow ---
+    E I kind == AST_EXPR_TERNARY() {
+        R lower_expr_ternary(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_IF() {
+        R lower_expr_if(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_LOOP() {
+        R lower_expr_loop(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_MATCH() {
+        R lower_expr_match(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_BLOCK() {
+        R lower_expr_block(ctx, expr_ptr)
+    }
+
+    # --- Function calls ---
+    E I kind == AST_EXPR_CALL() {
+        R lower_expr_call(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_SELF_CALL() {
+        R lower_expr_self_call(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_METHOD_CALL() {
+        R lower_expr_method_call(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_STATIC_CALL() {
+        R lower_expr_static_call(ctx, expr_ptr)
+    }
+
+    # --- Aggregate constructors ---
+    E I kind == AST_EXPR_ARRAY() {
+        R lower_expr_array(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_TUPLE() {
+        R lower_expr_tuple(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_STRUCT_LIT() {
+        R lower_expr_struct_lit(ctx, expr_ptr)
+    }
+
+    # --- Assignment ---
+    E I kind == AST_EXPR_ASSIGN() {
+        R lower_expr_assign(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_ASSIGN_OP() {
+        R lower_expr_assign_op(ctx, expr_ptr)
+    }
+
+    # --- Memory operations ---
+    E I kind == AST_EXPR_REF() {
+        R lower_expr_ref(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_DEREF() {
+        R lower_expr_deref(ctx, expr_ptr)
+    }
+
+    # --- Error handling ---
+    E I kind == AST_EXPR_TRY() {
+        R lower_expr_passthrough(ctx, load_i64(expr_ptr + 24))
+    }
+    E I kind == AST_EXPR_UNWRAP() {
+        R lower_expr_passthrough(ctx, load_i64(expr_ptr + 24))
+    }
+
+    # --- Async (pass-through) ---
+    E I kind == AST_EXPR_AWAIT() {
+        R lower_expr_passthrough(ctx, load_i64(expr_ptr + 24))
+    }
+    E I kind == AST_EXPR_SPAWN() {
+        R lower_expr_passthrough(ctx, load_i64(expr_ptr + 24))
+    }
+
+    # --- Field/Index access ---
+    E I kind == AST_EXPR_FIELD() {
+        R lower_expr_field(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_INDEX() {
+        R lower_expr_index(ctx, expr_ptr)
+    }
+
+    # --- Range ---
+    E I kind == AST_EXPR_RANGE() {
+        R lower_expr_range(ctx, expr_ptr)
+    }
+
+    # --- Lambda ---
+    E I kind == AST_EXPR_LAMBDA() {
+        R lower_expr_lambda(ctx, expr_ptr)
+    }
+
+    # --- Fallback ---
+    E {
+        tmp := mir_builder_new_local(ctx_builder(ctx), mir_type_prim(MIR_TY_I64()), 0)
+        mir_builder_assign_const_int(ctx_builder(ctx), tmp, 0)
+        R tmp
+    }
+}
+
+# ============================================================================
+# Literal Expression Lowering
+# ============================================================================
+
+F lower_expr_int(ctx: i64, expr_ptr: i64) -> i64 {
+    value := load_i64(expr_ptr + 24)
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_const_int(value)))
+    R tmp
+}
+
+F lower_expr_float(ctx: i64, expr_ptr: i64) -> i64 {
+    bits := load_i64(expr_ptr + 24)
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_F64()), 0)
+    # Store float bits as const int (MIR level treats as opaque i64)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_const_int(bits)))
+    R tmp
+}
+
+F lower_expr_bool(ctx: i64, expr_ptr: i64) -> i64 {
+    value := load_i64(expr_ptr + 24)
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_BOOL()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_const_bool(value)))
+    R tmp
+}
+
+F lower_expr_string(ctx: i64, expr_ptr: i64) -> i64 {
+    str_idx := load_i64(expr_ptr + 24)
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_STR()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_const_str(str_idx)))
+    R tmp
+}
+
+F lower_expr_unit(ctx: i64) -> i64 {
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_UNIT()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_const_unit()))
+    R tmp
+}
+
+# ============================================================================
+# Identifier
+# ============================================================================
+
+F lower_expr_ident(ctx: i64, expr_ptr: i64) -> i64 {
+    name_idx := load_i64(expr_ptr + 24)
+    local_idx := vartab_lookup(ctx_var_tab(ctx), name_idx)
+    I local_idx >= 0 {
+        R local_idx
+    }
+    # Unknown identifier — return zero constant
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign_const_int(b, tmp, 0)
+    R tmp
+}
+
+# ============================================================================
+# Binary / Unary
+# ============================================================================
+
+F lower_expr_binary(ctx: i64, expr_ptr: i64) -> i64 {
+    # BINARY: field0=left, field1=right, field2=op
+    left_ptr := load_i64(expr_ptr + 24)
+    right_ptr := load_i64(expr_ptr + 32)
+    ast_op := load_i64(expr_ptr + 40)
+
+    left_local := lower_expr(ctx, left_ptr)
+    right_local := lower_expr(ctx, right_ptr)
+    mir_op := ast_binop_to_mir(ast_op)
+
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign_binop(b, tmp, mir_op, left_local, right_local)
+    R tmp
+}
+
+F lower_expr_unary(ctx: i64, expr_ptr: i64) -> i64 {
+    # UNARY: field0=expr, field1=op
+    inner_ptr := load_i64(expr_ptr + 24)
+    ast_op := load_i64(expr_ptr + 32)
+
+    inner_local := lower_expr(ctx, inner_ptr)
+    mir_op := ast_unop_to_mir(ast_op)
+
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    rv := rvalue_unop(mir_op, operand_copy(inner_local))
+    mir_builder_assign(b, place_local(tmp), rv)
+    R tmp
+}
+
+# ============================================================================
+# Ternary — cond ? then_expr : else_expr
+# ============================================================================
+
+F lower_expr_ternary(ctx: i64, expr_ptr: i64) -> i64 {
+    # TERNARY: field0=cond, field1=then_expr, field2=else_expr
+    cond_ptr := load_i64(expr_ptr + 24)
+    then_ptr := load_i64(expr_ptr + 32)
+    else_ptr := load_i64(expr_ptr + 40)
+
+    b := ctx_builder(ctx)
+
+    # Evaluate condition
+    cond_local := lower_expr(ctx, cond_ptr)
+
+    # Create result local and 3 blocks
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    bb_then := mir_builder_new_block(b)
+    bb_else := mir_builder_new_block(b)
+    bb_merge := mir_builder_new_block(b)
+
+    # Branch: switch_int(cond, [(1, bb_then)], bb_else)
+    targets := malloc(16)
+    store_i64(targets, 1)            # value = 1 (true)
+    store_i64(targets + 8, bb_then)  # target block
+    mir_builder_terminate(b, term_switch_int(operand_copy(cond_local), targets, 1, bb_else))
+
+    # Then block
+    mir_builder_switch_block(b, bb_then)
+    then_local := lower_expr(ctx, then_ptr)
+    mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(then_local)))
+    mir_builder_goto(b, bb_merge)
+
+    # Else block
+    mir_builder_switch_block(b, bb_else)
+    else_local := lower_expr(ctx, else_ptr)
+    mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(else_local)))
+    mir_builder_goto(b, bb_merge)
+
+    # Merge block
+    mir_builder_switch_block(b, bb_merge)
+    R result
+}
+
+# ============================================================================
+# If Expression
+# ============================================================================
+# IF: field0=cond, field1=then_stmts_ptr, field2=then_len, field3=else_ptr
+
+F lower_expr_if(ctx: i64, expr_ptr: i64) -> i64 {
+    cond_ptr := load_i64(expr_ptr + 24)
+    then_stmts_ptr := load_i64(expr_ptr + 32)
+    then_len := load_i64(expr_ptr + 40)
+    else_ptr := load_i64(expr_ptr + 48)
+
+    b := ctx_builder(ctx)
+
+    # Evaluate condition
+    cond_local := lower_expr(ctx, cond_ptr)
+
+    # Create result local and blocks
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    bb_then := mir_builder_new_block(b)
+    bb_else := mir_builder_new_block(b)
+    bb_merge := mir_builder_new_block(b)
+
+    # Branch
+    targets := malloc(16)
+    store_i64(targets, 1)
+    store_i64(targets + 8, bb_then)
+    mir_builder_terminate(b, term_switch_int(operand_copy(cond_local), targets, 1, bb_else))
+
+    # Then block
+    mir_builder_switch_block(b, bb_then)
+    then_last := lower_stmts(ctx, then_stmts_ptr, then_len)
+    mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(then_last)))
+    mir_builder_goto(b, bb_merge)
+
+    # Else block
+    mir_builder_switch_block(b, bb_else)
+    I else_ptr != 0 {
+        else_local := lower_if_else(ctx, else_ptr)
+        mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(else_local)))
+    } E {
+        mir_builder_assign(b, place_local(result), rvalue_use(operand_const_int(0)))
+    }
+    mir_builder_goto(b, bb_merge)
+
+    # Merge
+    mir_builder_switch_block(b, bb_merge)
+    R result
+}
+
+# IfElse chain: kind(0), cond(8), stmts(16), stmts_len(24), next(32)
+F lower_if_else(ctx: i64, ie_ptr: i64) -> i64 {
+    kind := load_i64(ie_ptr)
+
+    I kind == 0 {
+        # Else block
+        stmts_ptr := load_i64(ie_ptr + 16)
+        stmts_len := load_i64(ie_ptr + 24)
+        R lower_stmts(ctx, stmts_ptr, stmts_len)
+    } E {
+        # Else-if: kind=1, cond=field1, stmts=field2, stmts_len=field3, next=field4
+        cond_ptr := load_i64(ie_ptr + 8)
+        stmts_ptr := load_i64(ie_ptr + 16)
+        stmts_len := load_i64(ie_ptr + 24)
+        next_ptr := load_i64(ie_ptr + 32)
+
+        b := ctx_builder(ctx)
+
+        cond_local := lower_expr(ctx, cond_ptr)
+        result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+        bb_then := mir_builder_new_block(b)
+        bb_else := mir_builder_new_block(b)
+        bb_merge := mir_builder_new_block(b)
+
+        targets := malloc(16)
+        store_i64(targets, 1)
+        store_i64(targets + 8, bb_then)
+        mir_builder_terminate(b, term_switch_int(operand_copy(cond_local), targets, 1, bb_else))
+
+        mir_builder_switch_block(b, bb_then)
+        then_last := lower_stmts(ctx, stmts_ptr, stmts_len)
+        mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(then_last)))
+        mir_builder_goto(b, bb_merge)
+
+        mir_builder_switch_block(b, bb_else)
+        I next_ptr != 0 {
+            else_local := lower_if_else(ctx, next_ptr)
+            mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(else_local)))
+        } E {
+            mir_builder_assign(b, place_local(result), rvalue_use(operand_const_int(0)))
+        }
+        mir_builder_goto(b, bb_merge)
+
+        mir_builder_switch_block(b, bb_merge)
+        R result
+    }
+}
+
+# ============================================================================
+# Loop Expression
+# ============================================================================
+# LOOP: field0=pattern(unused), field1=iter(unused for infinite), field2=body_stmts, field3=body_len
+
+F lower_expr_loop(ctx: i64, expr_ptr: i64) -> i64 {
+    body_stmts_ptr := load_i64(expr_ptr + 40)
+    body_len := load_i64(expr_ptr + 48)
+
+    b := ctx_builder(ctx)
+
+    # Create blocks
+    bb_cond := mir_builder_new_block(b)
+    bb_body := mir_builder_new_block(b)
+    bb_end := mir_builder_new_block(b)
+
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign_const_int(b, result, 0)
+
+    # Push loop context (break→bb_end, continue→bb_cond)
+    loop_stack_push(ctx_loop_stk(ctx), bb_end, bb_cond, result)
+
+    # Jump to condition block
+    mir_builder_goto(b, bb_cond)
+
+    # Condition block → unconditional jump to body (infinite loop)
+    mir_builder_switch_block(b, bb_cond)
+    mir_builder_goto(b, bb_body)
+
+    # Body block
+    mir_builder_switch_block(b, bb_body)
+    lower_stmts(ctx, body_stmts_ptr, body_len)
+    mir_builder_goto(b, bb_cond)
+
+    # Pop loop context
+    loop_stack_pop(ctx_loop_stk(ctx))
+
+    # End block
+    mir_builder_switch_block(b, bb_end)
+    R result
+}
+
+# ============================================================================
+# Match Expression
+# ============================================================================
+# MATCH: field0=expr, field1=arms_ptr, field2=arms_len
+
+F lower_expr_match(ctx: i64, expr_ptr: i64) -> i64 {
+    disc_expr_ptr := load_i64(expr_ptr + 24)
+    arms_ptr := load_i64(expr_ptr + 32)
+    arms_len := load_i64(expr_ptr + 40)
+
+    b := ctx_builder(ctx)
+
+    # Evaluate discriminant
+    disc_local := lower_expr(ctx, disc_expr_ptr)
+
+    # Result local and merge block
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    bb_merge := mir_builder_new_block(b)
+
+    # Create a block for each arm
+    arm_blocks := malloc(8 * arms_len)
+    i := mut 0
+    L { I i >= arms_len { R 0 }
+        store_i64(arm_blocks + i * 8, mir_builder_new_block(b))
+        i = i + 1
+    }
+
+    # Build switch targets from patterns
+    # MatchArm: pattern_ptr(0), guard_ptr(8), body_ptr(16), span_start(24), span_end(32) — 40 bytes
+    targets := malloc(16 * arms_len)
+    targets_len := mut 0
+    otherwise_bb := bb_merge  # default if no wildcard/ident arm
+    i = 0
+    L { I i >= arms_len { R 0 }
+        arm_ptr := load_i64(arms_ptr + i * 8)
+        pat_ptr := load_i64(arm_ptr)  # pattern_ptr
+        arm_bb := load_i64(arm_blocks + i * 8)
+
+        pat_kind := load_i64(pat_ptr)
+
+        I pat_kind == AST_PAT_LITERAL() {
+            # Literal pattern: field0 = value
+            pat_value := load_i64(pat_ptr + 24)
+            store_i64(targets + targets_len * 16, pat_value)
+            store_i64(targets + targets_len * 16 + 8, arm_bb)
+            targets_len = targets_len + 1
+        }
+        E I pat_kind == AST_PAT_WILDCARD() || pat_kind == AST_PAT_IDENT() {
+            otherwise_bb = arm_bb
+        }
+        E {
+            # Other patterns → treat as otherwise
+            otherwise_bb = arm_bb
+        }
+
+        i = i + 1
+    }
+
+    # Emit switch_int terminator
+    I targets_len > 0 {
+        mir_builder_terminate(b, term_switch_int(
+            operand_copy(disc_local), targets, targets_len, otherwise_bb))
+    } E {
+        # No literal patterns — just goto otherwise
+        mir_builder_goto(b, otherwise_bb)
+    }
+
+    # Lower each arm body
+    i = 0
+    L { I i >= arms_len { R 0 }
+        arm_ptr := load_i64(arms_ptr + i * 8)
+        pat_ptr := load_i64(arm_ptr)
+        body_ptr := load_i64(arm_ptr + 16)
+        arm_bb := load_i64(arm_blocks + i * 8)
+
+        mir_builder_switch_block(b, arm_bb)
+
+        # If pattern is ident, bind the discriminant value
+        pat_kind := load_i64(pat_ptr)
+        I pat_kind == AST_PAT_IDENT() {
+            pat_name_idx := load_i64(pat_ptr + 24)
+            bind_local := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), pat_name_idx)
+            mir_builder_assign(b, place_local(bind_local), rvalue_use(operand_copy(disc_local)))
+            vartab_bind(ctx_var_tab(ctx), pat_name_idx, bind_local)
+        }
+
+        # body_ptr is an ExprNode (the arm body expression)
+        arm_result := lower_expr(ctx, body_ptr)
+        mir_builder_assign(b, place_local(result), rvalue_use(operand_copy(arm_result)))
+        mir_builder_goto(b, bb_merge)
+
+        i = i + 1
+    }
+
+    free(arm_blocks)
+
+    # Merge
+    mir_builder_switch_block(b, bb_merge)
+    R result
+}
+
+# ============================================================================
+# Block Expression
+# ============================================================================
+
+F lower_expr_block(ctx: i64, expr_ptr: i64) -> i64 {
+    # BLOCK: field0=stmts_ptr, field1=stmts_len
+    stmts_ptr := load_i64(expr_ptr + 24)
+    stmts_len := load_i64(expr_ptr + 32)
+    R lower_stmts(ctx, stmts_ptr, stmts_len)
+}
+
+# ============================================================================
+# Function Call
+# ============================================================================
+# CALL: field0=func_expr, field1=args_ptr, field2=args_len
+
+F lower_expr_call(ctx: i64, expr_ptr: i64) -> i64 {
+    func_expr_ptr := load_i64(expr_ptr + 24)
+    args_ptr := load_i64(expr_ptr + 32)
+    args_len := load_i64(expr_ptr + 40)
+
+    b := ctx_builder(ctx)
+
+    # Get function name from the func expression (should be IDENT)
+    func_name_idx := I func_expr_ptr != 0 && load_i64(func_expr_ptr) == AST_EXPR_IDENT() {
+        load_i64(func_expr_ptr + 24)
+    } E { 0 }
+
+    # Lower arguments
+    mir_args := malloc(8 * (args_len + 1))
+    i := mut 0
+    L { I i >= args_len { R 0 }
+        arg_expr := load_i64(args_ptr + i * 8)
+        arg_local := lower_expr(ctx, arg_expr)
+        store_i64(mir_args + i * 8, operand_copy(arg_local))
+        i = i + 1
+    }
+
+    # Result local and next block
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    next_bb := mir_builder_new_block(b)
+
+    mir_builder_call(b, func_name_idx, mir_args, args_len, result, next_bb)
+    mir_builder_switch_block(b, next_bb)
+
+    R result
+}
+
+# ============================================================================
+# Self Call (@) — tail recursive call
+# ============================================================================
+# SELF_CALL uses the call's args from the parent CALL expression.
+# In codegen, SELF_CALL is the func_expr of a CALL. The parser stores
+# args in the parent CALL's fields. However, the SELF_CALL ExprNode itself
+# has no args. This lowering handles it as a passthrough.
+# The actual tail call detection happens in lower_expr_call when
+# func_name_idx matches ctx_func_name.
+
+F lower_expr_self_call(ctx: i64, expr_ptr: i64) -> i64 {
+    # Self call as standalone expression (rare) — return 0
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign_const_int(b, tmp, 0)
+    R tmp
+}
+
+# ============================================================================
+# Method Call
+# ============================================================================
+# METHOD_CALL: field0=receiver, field1=method_idx, field2=args_ptr, field3=args_len
+
+F lower_expr_method_call(ctx: i64, expr_ptr: i64) -> i64 {
+    recv_ptr := load_i64(expr_ptr + 24)
+    method_idx := load_i64(expr_ptr + 32)
+    args_ptr := load_i64(expr_ptr + 40)
+    args_len := load_i64(expr_ptr + 48)
+
+    b := ctx_builder(ctx)
+
+    # Lower receiver as first arg
+    recv_local := lower_expr(ctx, recv_ptr)
+
+    # Lower other arguments (receiver + args)
+    total_args := args_len + 1
+    mir_args := malloc(8 * total_args)
+    store_i64(mir_args, operand_copy(recv_local))
+    i := mut 0
+    L { I i >= args_len { R 0 }
+        arg_expr := load_i64(args_ptr + i * 8)
+        arg_local := lower_expr(ctx, arg_expr)
+        store_i64(mir_args + (i + 1) * 8, operand_copy(arg_local))
+        i = i + 1
+    }
+
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    next_bb := mir_builder_new_block(b)
+    mir_builder_call(b, method_idx, mir_args, total_args, result, next_bb)
+    mir_builder_switch_block(b, next_bb)
+
+    R result
+}
+
+# ============================================================================
+# Static Call — TypeName.method(args)
+# ============================================================================
+# STATIC_CALL: field0=type_idx, field1=method_idx, field2=args_ptr, field3=args_len
+
+F lower_expr_static_call(ctx: i64, expr_ptr: i64) -> i64 {
+    method_idx := load_i64(expr_ptr + 32)
+    args_ptr := load_i64(expr_ptr + 40)
+    args_len := load_i64(expr_ptr + 48)
+
+    b := ctx_builder(ctx)
+
+    mir_args := malloc(8 * (args_len + 1))
+    i := mut 0
+    L { I i >= args_len { R 0 }
+        arg_expr := load_i64(args_ptr + i * 8)
+        arg_local := lower_expr(ctx, arg_expr)
+        store_i64(mir_args + i * 8, operand_copy(arg_local))
+        i = i + 1
+    }
+
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    next_bb := mir_builder_new_block(b)
+    mir_builder_call(b, method_idx, mir_args, args_len, result, next_bb)
+    mir_builder_switch_block(b, next_bb)
+
+    R result
+}
+
+# ============================================================================
+# Aggregate Constructors
+# ============================================================================
+
+F lower_expr_array(ctx: i64, expr_ptr: i64) -> i64 {
+    # ARRAY: field0=elements_ptr, field1=elements_len
+    elems_ptr := load_i64(expr_ptr + 24)
+    elems_len := load_i64(expr_ptr + 32)
+
+    b := ctx_builder(ctx)
+
+    ops := malloc(8 * (elems_len + 1))
+    i := mut 0
+    L { I i >= elems_len { R 0 }
+        elem_expr := load_i64(elems_ptr + i * 8)
+        elem_local := lower_expr(ctx, elem_expr)
+        store_i64(ops + i * 8, operand_copy(elem_local))
+        i = i + 1
+    }
+
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_aggregate(AGG_ARRAY(), ops, elems_len))
+    R tmp
+}
+
+F lower_expr_tuple(ctx: i64, expr_ptr: i64) -> i64 {
+    # TUPLE: field0=elements_ptr, field1=elements_len
+    elems_ptr := load_i64(expr_ptr + 24)
+    elems_len := load_i64(expr_ptr + 32)
+
+    b := ctx_builder(ctx)
+
+    ops := malloc(8 * (elems_len + 1))
+    i := mut 0
+    L { I i >= elems_len { R 0 }
+        elem_expr := load_i64(elems_ptr + i * 8)
+        elem_local := lower_expr(ctx, elem_expr)
+        store_i64(ops + i * 8, operand_copy(elem_local))
+        i = i + 1
+    }
+
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_aggregate(AGG_TUPLE(), ops, elems_len))
+    R tmp
+}
+
+F lower_expr_struct_lit(ctx: i64, expr_ptr: i64) -> i64 {
+    # STRUCT_LIT: field0=name_idx, field1=fields_ptr, field2=fields_len
+    # FieldInit: name_idx(0), value_ptr(8), span_start(16), span_end(24) — 32 bytes
+    fields_ptr := load_i64(expr_ptr + 32)
+    fields_len := load_i64(expr_ptr + 40)
+
+    b := ctx_builder(ctx)
+
+    ops := malloc(8 * (fields_len + 1))
+    i := mut 0
+    L { I i >= fields_len { R 0 }
+        fi_ptr := load_i64(fields_ptr + i * 8)
+        val_ptr := load_i64(fi_ptr + 8)  # FieldInit.value_ptr
+        val_local := lower_expr(ctx, val_ptr)
+        store_i64(ops + i * 8, operand_copy(val_local))
+        i = i + 1
+    }
+
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_aggregate(AGG_STRUCT(), ops, fields_len))
+    R tmp
+}
+
+# ============================================================================
+# Assignment
+# ============================================================================
+
+F lower_expr_assign(ctx: i64, expr_ptr: i64) -> i64 {
+    # ASSIGN: field0=target, field1=value
+    target_ptr := load_i64(expr_ptr + 24)
+    value_ptr := load_i64(expr_ptr + 32)
+
+    val_local := lower_expr(ctx, value_ptr)
+
+    # If target is IDENT, find the local and assign
+    I target_ptr != 0 && load_i64(target_ptr) == AST_EXPR_IDENT() {
+        name_idx := load_i64(target_ptr + 24)
+        target_local := vartab_lookup(ctx_var_tab(ctx), name_idx)
+        I target_local >= 0 {
+            mir_builder_assign(ctx_builder(ctx), place_local(target_local),
+                rvalue_use(operand_copy(val_local)))
+        }
+    }
+
+    R val_local
+}
+
+F lower_expr_assign_op(ctx: i64, expr_ptr: i64) -> i64 {
+    # ASSIGN_OP: field0=target, field1=value, field2=op
+    target_ptr := load_i64(expr_ptr + 24)
+    value_ptr := load_i64(expr_ptr + 32)
+    ast_op := load_i64(expr_ptr + 40)
+
+    val_local := lower_expr(ctx, value_ptr)
+
+    I target_ptr != 0 && load_i64(target_ptr) == AST_EXPR_IDENT() {
+        name_idx := load_i64(target_ptr + 24)
+        target_local := vartab_lookup(ctx_var_tab(ctx), name_idx)
+        I target_local >= 0 {
+            b := ctx_builder(ctx)
+            mir_op := ast_binop_to_mir(ast_op)
+            tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+            mir_builder_assign_binop(b, tmp, mir_op, target_local, val_local)
+            mir_builder_assign(b, place_local(target_local), rvalue_use(operand_copy(tmp)))
+            R target_local
+        }
+    }
+
+    R val_local
+}
+
+# ============================================================================
+# Memory Operations
+# ============================================================================
+
+F lower_expr_ref(ctx: i64, expr_ptr: i64) -> i64 {
+    # REF: field0=inner_expr
+    inner_ptr := load_i64(expr_ptr + 24)
+    inner_local := lower_expr(ctx, inner_ptr)
+
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_inner(MIR_TY_REF(), mir_type_prim(MIR_TY_I64())), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_ref(place_local(inner_local)))
+    R tmp
+}
+
+F lower_expr_deref(ctx: i64, expr_ptr: i64) -> i64 {
+    # DEREF: field0=inner_expr
+    inner_ptr := load_i64(expr_ptr + 24)
+    inner_local := lower_expr(ctx, inner_ptr)
+
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_copy(inner_local)))
+    R tmp
+}
+
+# ============================================================================
+# Field / Index Access
+# ============================================================================
+
+F lower_expr_field(ctx: i64, expr_ptr: i64) -> i64 {
+    # FIELD: field0=expr, field1=field_idx
+    obj_ptr := load_i64(expr_ptr + 24)
+    field_idx := load_i64(expr_ptr + 32)
+
+    obj_local := lower_expr(ctx, obj_ptr)
+
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    place := place_field(obj_local, field_idx)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_copy(obj_local)))
+    R tmp
+}
+
+F lower_expr_index(ctx: i64, expr_ptr: i64) -> i64 {
+    # INDEX: field0=expr, field1=index_expr
+    arr_ptr := load_i64(expr_ptr + 24)
+    idx_ptr := load_i64(expr_ptr + 32)
+
+    arr_local := lower_expr(ctx, arr_ptr)
+    idx_local := lower_expr(ctx, idx_ptr)
+
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_use(operand_copy(arr_local)))
+    R tmp
+}
+
+# ============================================================================
+# Range
+# ============================================================================
+
+F lower_expr_range(ctx: i64, expr_ptr: i64) -> i64 {
+    # RANGE: field0=start, field1=end, field2=inclusive
+    start_ptr := load_i64(expr_ptr + 24)
+    end_ptr := load_i64(expr_ptr + 32)
+
+    b := ctx_builder(ctx)
+
+    start_local := lower_expr(ctx, start_ptr)
+    end_local := lower_expr(ctx, end_ptr)
+
+    # Package as a 2-element tuple (start, end)
+    ops := malloc(16)
+    store_i64(ops, operand_copy(start_local))
+    store_i64(ops + 8, operand_copy(end_local))
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign(b, place_local(tmp), rvalue_aggregate(AGG_TUPLE(), ops, 2))
+    R tmp
+}
+
+# ============================================================================
+# Lambda
+# ============================================================================
+
+F lower_expr_lambda(ctx: i64, expr_ptr: i64) -> i64 {
+    # LAMBDA: field0=params_ptr, field1=params_len, field2=body_expr
+    # For MIR lowering, treat lambda as a constant function pointer (simplified)
+    b := ctx_builder(ctx)
+    tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_FUNCTION()), 0)
+    mir_builder_assign_const_int(b, tmp, 0)
+    R tmp
+}
+
+# ============================================================================
+# Pass-through (Try/Unwrap/Await/Spawn)
+# ============================================================================
+
+F lower_expr_passthrough(ctx: i64, inner_ptr: i64) -> i64 {
+    R lower_expr(ctx, inner_ptr)
+}
+
+# ============================================================================
+# Lower Statement — returns local_idx of the last expression value
+# ============================================================================
+# StmtNode layout: kind(0), span_start(8), span_end(16),
+#   field0(24), field1(32), field2(40), field3(48)
+
+F lower_stmt(ctx: i64, stmt_ptr: i64) -> i64 {
+    kind := load_i64(stmt_ptr)
+    b := ctx_builder(ctx)
+
+    # STMT_LET
+    I kind == AST_STMT_LET() {
+        # LET: field0=name_idx, field1=type_ptr, field2=value_ptr, field3=is_mut
+        name_idx := load_i64(stmt_ptr + 24)
+        type_ptr := load_i64(stmt_ptr + 32)
+        value_ptr := load_i64(stmt_ptr + 40)
+
+        mir_ty := lower_ast_type(type_ptr)
+        local := mir_builder_new_local(b, mir_ty, name_idx)
+
+        I value_ptr != 0 {
+            val_local := lower_expr(ctx, value_ptr)
+            mir_builder_assign(b, place_local(local), rvalue_use(operand_copy(val_local)))
+        } E {
+            mir_builder_assign(b, place_local(local), rvalue_use(operand_const_int(0)))
+        }
+
+        vartab_bind(ctx_var_tab(ctx), name_idx, local)
+        R local
+    }
+
+    # STMT_EXPR
+    E I kind == AST_STMT_EXPR() {
+        expr_ptr := load_i64(stmt_ptr + 24)
+        R lower_expr(ctx, expr_ptr)
+    }
+
+    # STMT_RETURN
+    E I kind == AST_STMT_RETURN() {
+        expr_ptr := load_i64(stmt_ptr + 24)
+        I expr_ptr != 0 {
+            val_local := lower_expr(ctx, expr_ptr)
+            mir_builder_assign(b, mir_builder_return_place(), rvalue_use(operand_copy(val_local)))
+        }
+        mir_builder_return(b)
+
+        # Create dead block for unreachable code after return
+        dead_bb := mir_builder_new_block(b)
+        mir_builder_switch_block(b, dead_bb)
+        R 0
+    }
+
+    # STMT_BREAK
+    E I kind == AST_STMT_BREAK() {
+        top := loop_stack_top(ctx_loop_stk(ctx))
+        I top != 0 {
+            break_bb := load_i64(top)
+            mir_builder_goto(b, break_bb)
+            dead_bb := mir_builder_new_block(b)
+            mir_builder_switch_block(b, dead_bb)
+        }
+        R 0
+    }
+
+    # STMT_CONTINUE
+    E I kind == AST_STMT_CONTINUE() {
+        top := loop_stack_top(ctx_loop_stk(ctx))
+        I top != 0 {
+            continue_bb := load_i64(top + 8)
+            mir_builder_goto(b, continue_bb)
+            dead_bb := mir_builder_new_block(b)
+            mir_builder_switch_block(b, dead_bb)
+        }
+        R 0
+    }
+
+    E { R 0 }
+}
+
+# ============================================================================
+# Lower Statement Sequence
+# ============================================================================
+
+F lower_stmts(ctx: i64, stmts_ptr: i64, stmts_len: i64) -> i64 {
+    I stmts_len == 0 {
+        b := ctx_builder(ctx)
+        tmp := mir_builder_new_local(b, mir_type_prim(MIR_TY_UNIT()), 0)
+        mir_builder_assign(b, place_local(tmp), rvalue_use(operand_const_unit()))
+        R tmp
+    }
+
+    last := mut 0
+    i := mut 0
+    L { I i >= stmts_len { R 0 }
+        stmt_ptr := load_i64(stmts_ptr + i * 8)
+        last = lower_stmt(ctx, stmt_ptr)
+        i = i + 1
+    }
+    R last
+}
+
+# ============================================================================
+# Lower Function — FunctionDef → MirBody
+# ============================================================================
+# FunctionDef layout:
+#   name_idx(0), generics_ptr(8), generics_len(16),
+#   params_ptr(24), params_len(32), ret_type_ptr(40),
+#   body_kind(48), body_expr_ptr(56), body_stmts_ptr(64), body_stmts_len(72),
+#   is_pub(80), is_async(88), span_start(96), span_end(104) — 112 bytes
+
+F lower_function(fn_ptr: i64) -> i64 {
+    name_idx := load_i64(fn_ptr)
+    params_ptr := load_i64(fn_ptr + 24)
+    params_len := load_i64(fn_ptr + 32)
+    ret_type_ptr := load_i64(fn_ptr + 40)
+    body_kind := load_i64(fn_ptr + 48)
+    body_expr_ptr := load_i64(fn_ptr + 56)
+    body_stmts_ptr := load_i64(fn_ptr + 64)
+    body_stmts_len := load_i64(fn_ptr + 72)
+
+    # Skip generic functions (need monomorphization)
+    generics_len := load_i64(fn_ptr + 16)
+    I generics_len > 0 { R 0 }
+
+    # Create context
+    ret_mir_type := lower_ast_type(ret_type_ptr)
+    ctx := mir_lower_ctx_new(name_idx, ret_mir_type)
+    b := ctx_builder(ctx)
+
+    # Add parameters
+    # Param layout: name_idx(0), type_ptr(8), is_mut(16), span_start(24), span_end(32) — 40 bytes
+    i := mut 0
+    L { I i >= params_len { R 0 }
+        param_base := params_ptr + i * 40
+        param_name_idx := load_i64(param_base)
+        param_type_ptr := load_i64(param_base + 8)
+
+        param_mir_type := lower_ast_type(param_type_ptr)
+        param_local := mir_builder_add_param(b, param_mir_type, param_name_idx)
+        vartab_bind(ctx_var_tab(ctx), param_name_idx, param_local)
+
+        i = i + 1
+    }
+
+    # Lower body
+    I body_kind == 0 {
+        # Expression body
+        result := lower_expr(ctx, body_expr_ptr)
+        mir_builder_assign(b, mir_builder_return_place(), rvalue_use(operand_copy(result)))
+        mir_builder_return(b)
+    } E {
+        # Block body
+        last := lower_stmts(ctx, body_stmts_ptr, body_stmts_len)
+        # If the function has a return type, assign last value to _0
+        I ret_type_ptr != 0 {
+            mir_builder_assign(b, mir_builder_return_place(), rvalue_use(operand_copy(last)))
+        }
+        mir_builder_return(b)
+    }
+
+    R mir_builder_build(b)
+}
+
+# ============================================================================
+# Lower Module — iterate all items, produce MirModule
+# ============================================================================
+# Module: items_ptr(0), items_len(8), items_cap(16), then StringPool fields...
+# Each item: a tagged pointer. The first i64 is the item kind.
+# For ITEM_FUNCTION: the item pointer is a FunctionDef ptr.
+# Items are stored as (kind: i64, ptr: i64) pairs in Module.items
+
+F lower_module(module_ptr: i64, module_name_idx: i64) -> i64 {
+    items_ptr := load_i64(module_ptr)
+    items_len := load_i64(module_ptr + 8)
+
+    mir_mod := mir_module_new(module_name_idx)
+
+    i := mut 0
+    L { I i >= items_len { R 0 }
+        item_ptr := load_i64(items_ptr + i * 8)
+        I item_ptr != 0 {
+            item_kind := load_i64(item_ptr)
+
+            I item_kind == AST_ITEM_FUNCTION() {
+                # item_ptr points to (kind=1, fn_def_ptr)
+                fn_def_ptr := load_i64(item_ptr + 8)
+                I fn_def_ptr != 0 {
+                    body := lower_function(fn_def_ptr)
+                    I body != 0 {
+                        mir_module_add_body(mir_mod, body)
+                    }
+                }
+            }
+            # STRUCT, ENUM, IMPL, etc. — skip for now (MIR focuses on function bodies)
+        }
+        i = i + 1
+    }
+
+    R mir_mod
+}
+
+# ============================================================================
+# Debug: print integer (self-contained, no external dependency)
+# ============================================================================
+
+F mir_lower_print_int(val: i64) -> i64 {
+    I val < 0 {
+        putchar(45)  # '-'
+        mir_lower_print_int(0 - val)
+    } E I val >= 10 {
+        mir_lower_print_int(val / 10)
+        putchar(48 + val % 10)
+    } E {
+        putchar(48 + val)
+    }
+}
+
+# ============================================================================
+# Debug: print MIR stats
+# ============================================================================
+
+F mir_lower_print_stats(mir_mod: i64) -> i64 {
+    bodies_len := load_i64(mir_mod + 16)
+    puts("MIR Module: ")
+    mir_lower_print_int(bodies_len)
+    puts(" function bodies\n")
+
+    bodies_ptr := load_i64(mir_mod + 8)
+    i := mut 0
+    L { I i >= bodies_len { R 0 }
+        body := load_i64(bodies_ptr + i * 8)
+        locals_len := load_i64(body + 40)
+        blocks_len := load_i64(body + 56)
+        puts("  body ")
+        mir_lower_print_int(i)
+        puts(": locals=")
+        mir_lower_print_int(locals_len)
+        puts(" blocks=")
+        mir_lower_print_int(blocks_len)
+        puts("\n")
+        i = i + 1
+    }
+    R 1
+}

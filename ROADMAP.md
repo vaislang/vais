@@ -1626,7 +1626,15 @@ error: expected i64, found &i64
 - [x] **MIR Builder** (mir_builder.vais, 297줄) ✅ 2026-02-07
   - Incremental body construction API: new_local, new_block, assign, terminate
   - Dynamic array growth, convenience helpers (assign_const_int, assign_binop, goto, return)
-- [ ] **AST → MIR 변환** (mir_lower.vais) — 다음 단계
+- [x] **AST → MIR 변환** (mir_lower.vais, 1,420줄) ✅ 2026-02-07
+  - Variable table (name→local mapping with shadowing)
+  - lower_ast_type: AST TypeNode → MirType 변환
+  - lower_expr: 32개 식 타입 전부 처리 (리터럴, 이항/단항, 제어흐름, 호출, 집합, 할당, 메모리)
+  - lower_stmt: Let/Expr/Return/Break/Continue
+  - lower_function: FunctionDef → MirBody (파라미터, 본체, 반환)
+  - lower_module: Module → MirModule (전체 함수 순회)
+  - Loop context stack for break/continue
+  - AST op → MIR op 변환 (18 binop + 2 unop)
 - [ ] **MIR 분석 패스** (도달 가능성, 활성 변수, 데이터 흐름)
 - [ ] **Borrow Checker on MIR** (borrow_checker.vais)
 - [ ] **MIR → LLVM IR 변환** (mir_emit_llvm.vais)
