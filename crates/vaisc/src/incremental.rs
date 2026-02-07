@@ -435,6 +435,11 @@ impl IncrementalCache {
         Ok(())
     }
 
+    /// Get the cache directory path
+    pub fn cache_dir(&self) -> &Path {
+        &self.cache_dir
+    }
+
     /// Get cache statistics
     pub fn stats(&self) -> CacheStats {
         CacheStats {
@@ -743,6 +748,17 @@ pub fn compute_content_hash(content: &str) -> String {
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
     format!("{:x}", result)
+}
+
+/// Get the path for a cached object file based on IR content hash.
+/// This enables skipping `clang -c` when the generated IR hasn't changed.
+pub fn get_ir_cached_object_path(cache_dir: &Path, ir_hash: &str, opt_level: u8) -> PathBuf {
+    cache_dir.join(format!("ir_O{}_{}.o", opt_level, &ir_hash[..16]))
+}
+
+/// Check if a cached object file exists for the given IR hash.
+pub fn has_ir_cached_object(cache_dir: &Path, ir_hash: &str, opt_level: u8) -> bool {
+    get_ir_cached_object_path(cache_dir, ir_hash, opt_level).exists()
 }
 
 /// Function/type extractor for incremental compilation

@@ -2084,6 +2084,7 @@ fn cmd_build(
             &pgo_mode,
             &used_modules,
             &native_deps,
+            cache.as_ref().map(|c| c.cache_dir()),
         )?;
     }
 
@@ -2971,6 +2972,7 @@ fn compile_ir_to_binary(
     pgo_mode: &vais_codegen::optimize::PgoMode,
     used_modules: &HashSet<String>,
     native_deps: &HashMap<String, package::NativeDependency>,
+    obj_cache_dir: Option<&Path>,
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
@@ -2988,6 +2990,7 @@ fn compile_ir_to_binary(
             pgo_mode,
             used_modules,
             native_deps,
+            obj_cache_dir,
         ),
     }
 }
@@ -3004,9 +3007,124 @@ fn compile_to_native(
     pgo_mode: &vais_codegen::optimize::PgoMode,
     used_modules: &HashSet<String>,
     native_deps: &HashMap<String, package::NativeDependency>,
+    obj_cache_dir: Option<&Path>,
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
+    // --- Incremental .o caching: skip clang -c if IR unchanged ---
+    let cached_obj = if let Some(cache_dir) = obj_cache_dir {
+        // Compute hash of the IR file
+        let ir_hash = incremental::compute_file_hash(ir_path)?;
+        let obj_path =
+            incremental::get_ir_cached_object_path(cache_dir, &ir_hash, opt_level);
+        if obj_path.exists() {
+            if verbose {
+                println!(
+                    "{} Using cached object: {}",
+                    "⚡ Cache hit".green().bold(),
+                    obj_path.display()
+                );
+            }
+            Some((obj_path, ir_hash))
+        } else {
+            Some((obj_path, ir_hash))
+        }
+    } else {
+        None
+    };
+
+    // If we have a cache directory, use 2-step: compile .ll → .o (cached), then link .o → binary
+    if let Some((ref obj_path, _)) = cached_obj {
+        if !obj_path.exists() {
+            // Compile IR → .o
+            let compile_args = vec![
+                "-c".to_string(),
+                format!("-O{}", opt_level.min(3)),
+                "-Wno-override-module".to_string(),
+                "-o".to_string(),
+                obj_path.to_str().unwrap_or("cached.o").to_string(),
+                ir_path.to_str().unwrap_or("input.ll").to_string(),
+            ];
+            if debug {
+                // compile_args already set, add -g before -o
+            }
+
+            let compile_status = std::process::Command::new("clang")
+                .args(&compile_args)
+                .status()
+                .map_err(|e| format!("Failed to run clang: {}", e))?;
+
+            if !compile_status.success() {
+                return Err("clang compilation failed (IR → .o)".to_string());
+            }
+
+            if verbose {
+                println!(
+                    "{} Compiled object: {}",
+                    "⚡ Cache miss".yellow().bold(),
+                    obj_path.display()
+                );
+            }
+        }
+
+        // Link .o → binary (this is the fast path: just linking)
+        let mut link_args: Vec<String> = vec![
+            format!("-O{}", opt_level.min(3)),
+        ];
+
+        if debug {
+            link_args.push("-g".to_string());
+        }
+
+        if hot {
+            link_args.push("-shared".to_string());
+            link_args.push("-fPIC".to_string());
+        }
+
+        for flag in lto_mode.clang_flags() {
+            link_args.push(flag.to_string());
+        }
+
+        for flag in pgo_mode.clang_flags() {
+            link_args.push(flag);
+        }
+
+        link_args.push("-o".to_string());
+        link_args.push(
+            bin_path
+                .to_str()
+                .ok_or_else(|| "Invalid UTF-8 in output path".to_string())?
+                .to_string(),
+        );
+        link_args.push(
+            obj_path
+                .to_str()
+                .ok_or_else(|| "Invalid UTF-8 in object path".to_string())?
+                .to_string(),
+        );
+
+        // Add runtime libraries (same as non-cached path)
+        add_runtime_libs(&mut link_args, verbose, used_modules, native_deps, hot)?;
+
+        let link_status = std::process::Command::new("clang")
+            .args(&link_args)
+            .status()
+            .map_err(|e| format!("Failed to run clang (link): {}", e))?;
+
+        if !link_status.success() {
+            return Err("clang linking failed".to_string());
+        }
+
+        if verbose {
+            println!("{}", bin_path.display());
+        } else {
+            println!("{}", bin_path.display());
+        }
+
+        return Ok(());
+    }
+
+    // --- Fallback: original single-step compilation (no cache) ---
     let mut args = vec![
         opt_flag,
         "-Wno-override-module".to_string(), // Suppress warning when clang sets target triple
@@ -3280,6 +3398,114 @@ fn compile_to_native(
                 .to_string(),
         ),
     }
+}
+
+/// Helper to add runtime libraries to clang link arguments.
+/// Extracted from compile_to_native to share with cached .o link path.
+#[allow(clippy::too_many_arguments)]
+fn add_runtime_libs(
+    args: &mut Vec<String>,
+    verbose: bool,
+    used_modules: &HashSet<String>,
+    native_deps: &HashMap<String, package::NativeDependency>,
+    _hot: bool,
+) -> Result<(), String> {
+    // Link math library (required on Linux for sqrt, sin, cos, etc.)
+    #[cfg(not(target_os = "macos"))]
+    args.push("-lm".to_string());
+
+    // Link against libvais_gc if available
+    if let Some(gc_lib_path) = find_gc_library() {
+        let static_lib = gc_lib_path.join("libvais_gc.a");
+        args.push(static_lib.to_str().unwrap_or("libvais_gc.a").to_string());
+    }
+
+    // Link C runtimes based on used modules
+    let mut needs_pthread = false;
+    let mut linked_libs: HashSet<&str> = HashSet::new();
+    let mut linked_runtimes: Vec<String> = Vec::new();
+
+    for module in used_modules {
+        if let Some(runtime_info) = get_runtime_for_module(module) {
+            if let Some(rt_path) = find_runtime_file(runtime_info.file) {
+                let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
+                if !linked_runtimes.contains(&rt_str) {
+                    linked_runtimes.push(rt_str.clone());
+                    args.push(rt_str);
+                }
+            }
+            if runtime_info.needs_pthread {
+                needs_pthread = true;
+            }
+            for lib in runtime_info.libs {
+                if !linked_libs.contains(lib) {
+                    linked_libs.insert(lib);
+                    args.push(lib.to_string());
+                }
+            }
+        }
+    }
+
+    // Legacy fallbacks
+    if linked_runtimes.is_empty() {
+        if let Some(http_rt_path) = find_http_runtime() {
+            args.push(
+                http_rt_path
+                    .to_str()
+                    .unwrap_or("http_runtime.c")
+                    .to_string(),
+            );
+        }
+        if let Some(thread_rt_path) = find_thread_runtime() {
+            args.push(
+                thread_rt_path
+                    .to_str()
+                    .unwrap_or("thread_runtime.c")
+                    .to_string(),
+            );
+            needs_pthread = true;
+        }
+        if let Some(sync_rt_path) = find_sync_runtime() {
+            args.push(
+                sync_rt_path
+                    .to_str()
+                    .unwrap_or("sync_runtime.c")
+                    .to_string(),
+            );
+            needs_pthread = true;
+        }
+    }
+
+    if needs_pthread {
+        args.push("-lpthread".to_string());
+    }
+
+    // Native dependencies from vais.toml
+    for (name, dep) in native_deps {
+        if let Some(lib_path_flag) = dep.lib_path_flag() {
+            args.push(lib_path_flag);
+        }
+        if let Some(include_flag) = dep.include_flag() {
+            args.push(include_flag);
+        }
+        for src in dep.source_files() {
+            args.push(src.to_string());
+        }
+        for flag in dep.lib_flags() {
+            if !args.contains(&flag) {
+                args.push(flag);
+            }
+        }
+        if verbose {
+            println!(
+                "{} Linking native dependency: {}",
+                "info:".blue().bold(),
+                name
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn compile_to_wasm32(
