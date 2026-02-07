@@ -84,11 +84,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 19 | 대형 프로젝트 도입 준비 | ✅ 완료 | 100% |
 | 20 | 근본적 문제 해결 | ✅ 완료 | 100% |
 | 21 | 실사용 완성도 강화 | ✅ 완료 | 100% |
-| 22 | 대형 프로젝트 도입 전략 | 🔄 진행 중 | 11/12 (92%) - 6개월 모니터링 잔여 |
+| 22 | 대형 프로젝트 도입 전략 | ⏳ 대기 | 11/12 (92%) - 6개월 모니터링 잔여 (장기 관찰 항목) |
 | 23 | 코드젠 크로스플랫폼 호환성 | ✅ 완료 | 100% |
 | 24 | Playground Linux 배포 호환성 | ✅ 완료 | 100% |
 | 25 | Vararg float 타입 추론 버그 수정 | ✅ 완료 | 100% |
-| 26a | 홍보 & 커뮤니티 성장 | 🔄 진행 중 | 3/4 (75%) - 프로필 완성 잔여 |
+| 26a | 홍보 & 커뮤니티 성장 | ⏳ 대기 | 3/4 (75%) - Instagram 프로필 완성 잔여 (수작업) |
 | 26b | 기술 부채 해결 - 타입 추론 일관성 | ✅ 완료 | 100% |
 | 27 | GPU 코드젠 & Async 런타임 완성 | ✅ 완료 | 100% |
 | 28 | GPU 런타임 실행 지원 | ✅ 완료 | Stage 1~4 완료 (27/27, 100%) |
@@ -141,11 +141,11 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | **Phase 19** | 대형 프로젝트 도입 준비 | unwrap→Result 전환, panic→graceful fallback, Borrow Checker 3rd pass 통합 (3-모드), HTTP/JSON/Regex 런타임, 패키지 매니저 의존성 해결, vais-query 증분 컴파일 | 2026-02-01 |
 | **Phase 20** | 근본적 문제 해결 | pthread Thread 런타임, f64 포인터 역참조 codegen, std/gpu·hot·dynload stub 표기, 파서 재귀 깊이 안전장치 | 2026-02-01 |
 | **Phase 21** | 실사용 완성도 강화 | Sync 런타임 (Mutex/RwLock/Condvar/Barrier/Semaphore/Atomics), void phi 노드 수정, E2E 152→165개 | 2026-02-01 |
-| **Phase 22** | 대형 프로젝트 도입 전략 | 프로토타입 검증(239줄), 중형 프로젝트 패턴 검증(5종), Number Converter CLI, C 대비 벤치마크, 팀 온보딩 가이드. **잔여: 6개월 모니터링** | 2026-02-01 |
+| **Phase 22** | 대형 프로젝트 도입 전략 | 프로토타입 검증(239줄), 중형 프로젝트 패턴 검증(5종), Number Converter CLI, C 대비 벤치마크, 팀 온보딩 가이드. **⏳ 6개월 모니터링 대기 (장기 관찰)** | 2026-02-01 |
 | **Phase 23** | 코드젠 크로스플랫폼 호환성 | Extern 함수 포인터 타입, Enum 패턴 매칭 LLVM 타입, ExprVisitor float 분기, Playground struct/enum 예제 수정 | 2026-02-01 |
 | **Phase 24** | Playground Linux 배포 호환성 | SSA 네이밍 충돌, Enum GEP 인덱싱, Match phi 누락, Linux `-lm` 링킹, GitHub username 통일, Fly.io 배포, vaislang org 이전 | 2026-02-01 |
 | **Phase 25** | Vararg float 타입 추론 버그 수정 | vararg float→i64 하드코딩 제거, Ternary/If/Match/Cast 타입 추론 보완, float printf E2E 4개 | 2026-02-01 |
-| **Phase 26a** | 홍보 & 커뮤니티 성장 | Instagram 계정, 코드 카드 템플릿, 첫 3개 게시물. **잔여: 프로필 완성** | 2026-02-01 |
+| **Phase 26a** | 홍보 & 커뮤니티 성장 | Instagram 계정, 코드 카드 템플릿, 첫 3개 게시물. **⏳ Instagram 프로필 완성 대기 (수작업)** | 2026-02-01 |
 | **Phase 26b** | 기술 부채 해결 | f64 배열 codegen, GPU 커널 타입 추론, std 런타임 검증, 실사용 주의사항 갱신 | 2026-02-01 |
 | **Phase 27** | GPU 코드젠 & Async 런타임 완성 | Metal CLI, 호스트 코드 생성, GPU E2E 9개, Async 빌트인(poll/kqueue/pipe/time), cooperative yield | 2026-02-01 |
 

@@ -1,280 +1,127 @@
-# Vais Self-Hosting Compiler (Stage 1) Roadmap
+# Vais Self-Hosting Compiler Roadmap
 
-## Current Status: v0.7.0 — Bootstrap Achieved! 🎉
+## Current Status: v0.8.0 — Full Bootstrap + Toolchain 🎉
 
-Stage 1 컴파일러가 다중 파라미터 함수를 포함한 Vais 프로그램을 안정적으로 컴파일할 수 있음.
-Import 시스템 지원 완료.
-제네릭 타입 해석 (type_checker.vais) 완료.
-Bitwise 연산자, Index expression, Array 리터럴 지원 완료.
+Bootstrap achieved (Stage1→Stage2→Stage3 fixed point).
+MIR pipeline, LSP server, code formatter, and doc generator implemented.
 
 ---
 
-## 최근 완료 (2024-01)
+## Completed Milestones
 
-### v0.4.1 - 다중 파라미터 함수 버그 수정 ✅
-- [x] `cg_gen_function_multi` 함수 추가 - 모든 파라미터를 LLVM IR 시그니처에 포함
-- [x] `cg_gen_function_item`이 `cg_gen_function_multi` 사용하도록 수정
-- [x] 식별자 해결 순서 변경 - 변수 테이블 우선 확인
-- [x] **SIGBUS 크래시 해결** - 대용량 파일 (98+ 함수) 컴파일 가능
+### Bootstrap (v0.7.0) ✅
+- [x] Stage1→Stage2→Stage3 fixed point (SHA256: e14776a6..., 17,807줄)
+- [x] Inkwell builtins: fopen_ptr/memcpy_str wrappers + realloc
+- [x] E2E: 241 tests, selfhost lexer: 114 tests — all passing
 
-### v0.4.0 - Import 시스템 ✅
-- [x] `@"path"` import 문법 파싱
-- [x] 재귀적 모듈 로딩 (`load_module_with_imports`)
-- [x] 중복 import 방지 (`loaded_modules` 트래킹)
-- [x] 모듈 분리: constants, stringbuffer, lexer, helpers, parser, codegen, main_entry
-
----
-
-## 현재 작업: Stage 2 부트스트래핑
-
-### 목표
-vaisc-stage1 (Vais로 작성, Rust vaisc로 컴파일) → main.vais 컴파일 → vaisc-stage2
-
-### 남은 작업
-
-#### 1. 런타임 함수 선언 추가 ✅
-- [x] `memcpy` 선언 추가
-- [x] `memcmp` 선언 추가
-- [x] `realloc` 선언 추가
-
-#### 2. Stage 2 컴파일 테스트
-- [ ] stage1으로 main.vais 컴파일 시도
-- [ ] 생성된 LLVM IR 검증
-- [ ] stage2 바이너리 빌드 및 테스트
-
-#### 3. 부트스트랩 검증
-- [ ] stage1과 stage2가 동일한 출력 생성하는지 비교
-- [ ] 기능적 동등성 테스트
-
----
-
-## Implemented Features
-
-### Keywords
-- [x] F (function)
-- [x] S (struct)
-- [x] X (impl)
-- [x] I (if)
-- [x] E (else)
-- [x] L (loop)
-- [x] R (return)
-- [x] B (break)
-- [x] M (match)
-- [x] mut
-
-### Types
-- [x] i64
-- [x] str
-- [x] bool
-- [ ] Custom struct types (partial - parsing only)
-
-### Expressions
-- [x] Integer literals
-- [x] String literals
-- [x] Identifiers
-- [x] Binary operators (+, -, *, /, %, <, >, <=, >=, ==, !=, &&, ||, &, |, ^, <<, >>)
-- [x] Unary operators (-)
-- [x] Function calls (다중 파라미터 지원 ✅)
-- [x] Method calls (.method())
-- [x] Field access (.field)
-- [x] Self calls (@, @.method())
-- [x] Block expressions { ... }
-- [x] If expressions (I cond { } E { })
-- [x] Loop expressions (L { })
-- [x] Match expressions (M expr { pattern => body })
-- [x] Assignment (=)
+### Core Language ✅
+- [x] All keywords: F, S, E, I, L, R, B, C, M, X, W, T, U, P, mut
+- [x] All types: i64, i32, i16, i8, u64, u32, u16, u8, f64, f32, bool, str
+- [x] Binary operators: +, -, *, /, %, <, >, <=, >=, ==, !=, &&, ||, &, |, ^, <<, >>
+- [x] Unary operators: -, !
+- [x] Index expressions [i], Array literals [e1, e2, ...]
+- [x] Bitwise operators: &, |, ^, <<, >>
+- [x] Function calls (multi-param), method calls, field access, self calls (@)
+- [x] Block, if-else, loop, match expressions
 - [x] Struct literals (Name { field: value })
+- [x] Let bindings (:=, := mut, : Type = expr)
+- [x] Import system (U module)
 
-### Statements
-- [x] Let bindings (name := expr)
-- [x] Typed let (name: Type = expr)
-- [x] Mutable let (name: mut Type = expr)
-- [x] Expression statements
-- [x] Return (R)
-- [x] Break (B)
+### Type System ✅
+- [x] Generic types <T> parsing + resolution
+- [x] Trait resolution (TraitDefInfo/TraitImplInfo)
+- [x] Type checker: 32/32 expression types + 7/7 item types
+- [x] Codegen: 32/32 expression types
+- [x] Module system: 100%
+- [x] Type mismatch detailed descriptions
+- [x] Error recovery (continue checking after errors)
 
-### Items
-- [x] Functions (F name(params) -> Type { body })
-- [x] Structs (S Name { fields })
-- [x] Impl blocks (X Name { methods })
-- [x] Import (@"path") ✅
+### MIR Pipeline ✅ (8,000+ LOC)
+- [x] MIR data structures (mir.vais, 659 LOC)
+- [x] MIR builder API (mir_builder.vais, 297 LOC)
+- [x] AST → MIR lowering (mir_lower.vais, 1,420 LOC)
+- [x] MIR → LLVM IR emission (mir_emit_llvm.vais, 1,228 LOC)
+- [x] MIR optimizer: constant prop, const fold, DCE, unreachable elimination (mir_optimizer.vais, 756 LOC)
+- [x] MIR analysis: CFG, liveness, dominance, loops, reaching defs, use-def (mir_analysis.vais, 1,536 LOC)
+- [x] MIR borrow checker: loans, move/copy, borrow conflicts, lifetimes (mir_borrow.vais, 1,357 LOC)
+- [x] Pipeline integration (mir_main.vais, ~350 LOC)
+
+### Toolchain ✅
+- [x] LSP Server (2,437 LOC): hover, go-to-def, find-refs, completion, document-symbols, diagnostics
+  - lsp_json.vais (608) + lsp_symbols.vais (688) + lsp_handlers.vais (847) + lsp_main.vais (294)
+- [x] Code Formatter (1,475 LOC): AST→pretty-print, --check, --write modes
+  - fmt.vais (1,289) + fmt_main.vais (186)
+- [x] Doc Generator (1,236 LOC): Markdown output with signatures, field tables, doc comments
+  - doc_gen.vais (1,046) + doc_gen_main.vais (190)
+
+### Parser Fixes (2026-02-07) ✅
+- [x] Field access: `p.x` now correctly creates EXPR_FIELD nodes
+- [x] Else parsing: `E` (token ID 3) used instead of `TOK_KW_ELSE` (token ID 19)
+- [x] Mutable let: `:= mut` pattern now supported
+- [x] Struct literal ambiguity: only uppercase identifiers attempt struct literal parsing
+- [x] Impl/trait method params_len storage
 
 ---
 
-## Phase 1: Core Language (Current)
+## Future Work
 
-### Completed
-- [x] Index expressions [i] ✅
-- [x] Bitwise operators (&, |, ^, <<, >>) ✅
-- [x] Unary not (!) ✅ (이미 구현됨)
-- [x] Continue statement (C) ✅ (이미 구현됨)
-- [x] Array literal [e1, e2, ...] ✅ (parser_s1.vais, parser.vais, codegen_s1.vais, codegen.vais)
-
-### In Progress
-
-### Todo
+### Language Extensions
 - [ ] While loop sugar
-- [ ] Negative numbers in lexer
-
----
-
-## Phase 2: Advanced Features
-
-### Pattern Matching Enhancements
-- [ ] Wildcard pattern (_)
-- [ ] Variable binding patterns
-- [ ] Multiple patterns (1 | 2 => ...)
-- [ ] Guard expressions (pattern if cond => ...)
-
-### Type System
-- [x] Generic types <T> parsing ✅ (parser.vais, parser_s1.vais)
-- [x] Generic type resolution ✅ (type_checker.vais)
-  - [x] Generic binding management (add/get/clear_generic_binding)
-  - [x] Type instantiation (instantiate_type)
-  - [x] Generic inference from argument types (infer_generic_from_types)
-  - [x] Generic struct field access with type arguments
-- [x] Trait resolution ✅ (type_checker.vais)
-  - [x] TraitDefInfo/TraitImplInfo structures
-  - [x] add_trait/find_trait/register_trait
-  - [x] add_trait_impl/find_trait_impl/type_implements_trait
-  - [x] check_trait with super trait validation
-  - [x] check_impl with trait verification
-- [x] Type mismatch detailed descriptions ✅ (format_type, print_errors)
-  - [x] format_type: ResolvedType → human-readable string
-  - [x] print_errors: formatted error output with type names
-  - [x] mismatch calls pass actual expected/found type info
-- [x] Error recovery (continue checking after errors) ✅
-- [ ] Type inference improvements
-- [ ] Option<T> / Result<T, E>
-
-### Memory
-- [ ] Pointers (*T)
-- [ ] References (&T, &mut T)
+- [ ] Negative number literals in lexer
+- [ ] Pattern matching enhancements (wildcard, variable binding, guards)
+- [ ] Option<T> / Result<T, E> support
+- [ ] Pointer types (*T), references (&T, &mut T)
 - [ ] Defer statement
 
-### MIR (Middle-Level Intermediate Representation)
-- [x] MIR data structures (mir.vais) ✅
-- [x] MIR builder API (mir_builder.vais) ✅
-- [x] AST → MIR lowering (mir_lower.vais, 1,420 LOC) ✅
-- [x] MIR → LLVM IR emission (mir_emit_llvm.vais, 1,228 LOC) ✅
-- [x] MIR optimizer with 4 passes (mir_optimizer.vais, 756 LOC) ✅
-  - [x] Constant Propagation
-  - [x] Constant Folding
-  - [x] Dead Code Elimination
-  - [x] Unreachable Block Elimination
-- [x] MIR analysis passes (mir_analysis.vais, 1,536 LOC) ✅
-  - [x] BitSet utilities
-  - [x] Control Flow Graph (CFG)
-  - [x] Liveness Analysis
-  - [x] Dominance Analysis
-  - [x] Loop Analysis
-  - [x] Reaching Definitions Analysis
-  - [x] Use-Def Chain Analysis
-- [x] MIR Borrow Checker (mir_borrow.vais) ✅
-  - [x] Loan tracking
-  - [x] Move/Copy semantics
-  - [x] Borrow conflict detection
-  - [x] Lifetime validation
-- [ ] MIR pipeline integration in main_entry.vais
-  - [ ] Wire AST → MIR → LLVM IR path
-  - [ ] Add --mir-opt flag support
-  - [ ] Add --dump-mir debug output
-
----
-
-## Phase 3: Standard Library
-
-### Core
+### Standard Library
 - [ ] Vec<T>
-- [ ] String
+- [ ] String (owned)
 - [ ] HashMap<K, V>
-
-### I/O
-- [ ] File operations (partial - fopen, fread, fwrite exist)
+- [ ] File I/O wrappers
 - [ ] Better print functions
 
----
-
-## Phase 4: Self-Compilation
-
-### Goal: Stage 1 컴파일러가 자기 자신을 컴파일
-
-### Requirements
-- [ ] All features used in main.vais must be supported
-- [ ] Stable code generation
-- [ ] Full bootstrap test
-
-### Progress
-- [x] 다중 파라미터 함수 지원
-- [x] Import 시스템
-- [ ] 완전한 main.vais 컴파일
-- [ ] Stage 2 생성 및 검증
-
----
-
-## Known Limitations (Updated)
-
-1. ~~**다중 파라미터 버그**~~ - **해결됨** ✅
-2. **Match scrutinee**: Must be simple identifier (not complex expression) due to `{` ambiguity
-3. ~~**No generics**~~ - **타입 해석 완료** ✅ (파싱 및 타입 추론 지원, 코드젠은 추후)
-4. **memcpy 등 런타임 함수**: Header에 선언 추가 필요
+### Known Limitations
+1. Match scrutinee: must be simple identifier (not complex expression) due to `{` ambiguity
+2. Selfhost parser: doesn't handle all Vais syntax (e.g., attributes, closures) — designed for selfhost source files
+3. `str` type is non-Copy: requires `--no-ownership-check` for selfhost compilation
 
 ---
 
 ## Build Instructions
 
 ```bash
-# Compile main.vais with Rust compiler
-cargo run --package vaisc -- selfhost/main.vais --emit-ir -o /tmp/main_stage1.ll
+# Compile with Rust compiler
+cargo run --bin vaisc -- selfhost/main.vais -o /tmp/vaisc-stage1 --no-ownership-check
 
-# Build Stage 1 binary
-clang -O0 /tmp/main_stage1.ll -o selfhost/vaisc-stage1 -lm
+# Compile formatter
+cargo run --bin vaisc -- selfhost/fmt_main.vais -o /tmp/vais-fmt --no-ownership-check
 
-# Run Stage 1 compiler (compiles /tmp/test_import.vais)
-./selfhost/vaisc-stage1
+# Compile doc generator
+cargo run --bin vaisc -- selfhost/doc_gen_main.vais -o /tmp/vais-doc --no-ownership-check
 
-# Output written to selfhost/main_output.ll
+# Compile MIR pipeline
+cargo run --bin vaisc -- selfhost/mir_main.vais -o /tmp/vais-mir --no-ownership-check
 ```
 
 ---
 
 ## Version History
 
-- **v0.7.0** - 부트스트랩 달성! 🎉
-  - Stage1→Stage2→Stage3 fixed point 도달 (SHA256: e14776a6..., 17,807줄 일치)
-  - Inkwell 빌트인: fopen_ptr/memcpy_str 래퍼 함수 + realloc 선언 추가
-  - Stage1: 124KB, Stage2: 134KB (arm64 macOS)
-- **v0.6.1** - Phase 38 TC 100% + E001 해결
-  - Type Checker 100%: check_enum, check_type_alias 추가 (7개 아이템 타입 전부 커버)
-  - E001 해결: Rust unify()에 Ref(T)↔T auto-deref 추가 + memcpy_str Inkwell 등록
-  - codegen.vais 클린 컴파일 달성 (E001 제거)
-  - E2E 241개 + selfhost lexer 114개 전부 통과
-- **v0.6.0** - Phase 38 진도 (TC 95%+, Codegen 100%, Module 100%)
-  - Type Checker: 9개 누락 식 핸들러 추가 (Array, Range, Await, Try, Unwrap, Ref, Deref, AssignOp, Spawn)
-  - Codegen: Await/Spawn codegen + method dispatch 개선 (impl type prefix, infer_receiver_type)
-  - Module: parser.vais parse_use 구현 (U ident/ident 파싱)
-  - Type mismatch 상세 설명 (format_type + print_errors)
-  - E2E 241개 + selfhost lexer 114개 전부 통과
-- **v0.5.2** - Array 리터럴 지원
-  - Array literal [e1, e2, ...] 파싱 (parser_s1.vais, parser.vais)
-  - Array literal 코드젠 (codegen_s1.vais, codegen.vais)
-- **v0.5.1** - Bitwise 연산자 및 Index expression 지원
-  - Bitwise operators (&, |, ^, <<, >>) 파싱 완성
-  - Index expression [i] 파싱 및 코드젠 구현
-- **v0.5.0** - 제네릭 타입 해석 (type_checker.vais)
-  - Generic binding management
-  - Type instantiation for function calls and struct fields
-  - Generic inference from argument types
-- **v0.4.1** - 다중 파라미터 함수 버그 수정, SIGBUS 크래시 해결
-- **v0.4.0** - Import 시스템 (@"path"), 모듈 분리
-- **v0.3.0** - Match expressions (M expr { pattern => body })
-- **v0.2.0** - Multi-function compilation, structs, impl blocks
+- **v0.8.0** - Toolchain: Formatter + Doc Generator + Parser Fixes
+  - Code formatter: AST-based pretty-printing with --check/--write modes (1,475 LOC)
+  - Doc generator: Markdown output with signatures, field tables, doc comments (1,236 LOC)
+  - Parser fixes: field access, else token, mut let, struct literal ambiguity
+- **v0.7.1** - LSP Server + MIR Pipeline Integration
+  - LSP: hover, go-to-def, find-refs, completion, document-symbols, diagnostics (2,437 LOC)
+  - MIR pipeline: Source→Lex→Parse→MIR→Opt→LLVM IR (~350 LOC)
+- **v0.7.0** - Bootstrap achieved! Stage1→Stage2→Stage3 fixed point
+- **v0.6.1** - Type Checker 100% + E001 resolved
+- **v0.6.0** - TC 95%+, Codegen 100%, Module 100%
+- **v0.5.2** - Array literal support
+- **v0.5.1** - Bitwise operators + Index expressions
+- **v0.5.0** - Generic type resolution
+- **v0.4.1** - Multi-param function fix + SIGBUS crash fix
+- **v0.4.0** - Import system, module separation
+- **v0.3.0** - Match expressions
+- **v0.2.0** - Multi-function, structs, impl blocks
 - **v0.1.0** - Basic single-function compilation
-
----
-
-## Next Steps (for /workflow)
-
-1. **런타임 함수 선언 추가**: `memcpy`, `memcmp` 등을 stage1 codegen header에 추가
-2. **Stage 2 컴파일 테스트**: stage1으로 main.vais 전체 컴파일 시도
-3. **부트스트랩 완성**: stage2 생성 및 동등성 검증

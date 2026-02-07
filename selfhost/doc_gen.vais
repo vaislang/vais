@@ -1,0 +1,1046 @@
+# Vais Self-Hosting Compiler - Documentation Generator
+# Generates Markdown documentation from Vais source files
+#
+# Pipeline: Source → Scan Comments → Lex → Parse → Match → Generate Markdown
+#
+# Approach:
+# 1. Scan source text for # comment lines and record positions
+# 2. Parse source to get AST items with spans
+# 3. Associate comments with items (comments immediately before item = doc comments)
+# 4. Generate Markdown output with function signatures, struct fields, etc.
+
+U constants
+U stringbuffer_s1
+U helpers_s1
+
+# Item types (from ast.vais)
+F ITEM_FUNCTION() -> i64 = 1
+F ITEM_STRUCT() -> i64 = 2
+F ITEM_ENUM() -> i64 = 3
+F ITEM_TYPE_ALIAS() -> i64 = 4
+F ITEM_USE() -> i64 = 5
+F ITEM_TRAIT() -> i64 = 6
+F ITEM_IMPL() -> i64 = 7
+
+# Type node constants (from ast.vais)
+F TYPE_NAMED() -> i64 = 60
+F TYPE_ARRAY() -> i64 = 61
+F TYPE_MAP() -> i64 = 62
+F TYPE_TUPLE() -> i64 = 63
+F TYPE_OPTIONAL() -> i64 = 64
+F TYPE_RESULT() -> i64 = 65
+F TYPE_POINTER() -> i64 = 66
+F TYPE_REF() -> i64 = 67
+F TYPE_REF_MUT() -> i64 = 68
+F TYPE_FN() -> i64 = 69
+F TYPE_UNIT() -> i64 = 70
+F TYPE_INFER() -> i64 = 71
+
+# ============================================================================
+# Doc generator state
+# ============================================================================
+# Layout (96 bytes):
+# +0:  sb (output string buffer)
+# +8:  source_ptr (source text pointer)
+# +16: source_len (source text length)
+# +24: pool_data (string pool data)
+# +32: pool_offsets (string pool offsets)
+# +40: pool_count (string pool count)
+# +48: items_ptr (parsed items)
+# +56: items_len (parsed items count)
+# +64: comments_ptr (comment array: line(8) + text_ptr(8) + text_len(8) = 24 each)
+# +72: comments_len (comment count)
+# +80: module_name_ptr (module name string)
+# +88: module_name_len (module name length)
+
+F doc_new() -> i64 {
+    d := malloc(96)
+    sb := sb_new(16384)
+    store_i64(d + 0, sb)
+    store_i64(d + 8, 0)
+    store_i64(d + 16, 0)
+    store_i64(d + 24, 0)
+    store_i64(d + 32, 0)
+    store_i64(d + 40, 0)
+    store_i64(d + 48, 0)
+    store_i64(d + 56, 0)
+    store_i64(d + 64, 0)
+    store_i64(d + 72, 0)
+    store_i64(d + 80, 0)
+    store_i64(d + 88, 0)
+    d
+}
+
+F doc_get_sb(d: i64) -> i64 = load_i64(d + 0)
+F doc_get_source(d: i64) -> i64 = load_i64(d + 8)
+F doc_get_source_len(d: i64) -> i64 = load_i64(d + 16)
+
+F doc_set_source(d: i64, ptr: i64, len: i64) -> i64 {
+    store_i64(d + 8, ptr)
+    store_i64(d + 16, len)
+    0
+}
+
+F doc_set_pool(d: i64, data: i64, offsets: i64, count: i64) -> i64 {
+    store_i64(d + 24, data)
+    store_i64(d + 32, offsets)
+    store_i64(d + 40, count)
+    0
+}
+
+F doc_set_items(d: i64, items_ptr: i64, items_len: i64) -> i64 {
+    store_i64(d + 48, items_ptr)
+    store_i64(d + 56, items_len)
+    0
+}
+
+F doc_set_module_name(d: i64, ptr: i64, len: i64) -> i64 {
+    store_i64(d + 80, ptr)
+    store_i64(d + 88, len)
+    0
+}
+
+F doc_get_output(d: i64) -> i64 {
+    sb := doc_get_sb(d)
+    sb_get_data(sb)
+}
+
+F doc_get_output_len(d: i64) -> i64 {
+    sb := doc_get_sb(d)
+    sb_get_len(sb)
+}
+
+F doc_free(d: i64) -> i64 {
+    sb := doc_get_sb(d)
+    sb_free(sb)
+    free(d)
+    0
+}
+
+# ============================================================================
+# String pool access
+# ============================================================================
+
+F doc_get_str_ptr(d: i64, idx: i64) -> i64 {
+    offsets := load_i64(d + 32)
+    entry := offsets + idx * 16
+    offset := load_i64(entry)
+    data := load_i64(d + 24)
+    data + offset
+}
+
+F doc_get_str_len(d: i64, idx: i64) -> i64 {
+    offsets := load_i64(d + 32)
+    entry := offsets + idx * 16
+    load_i64(entry + 8)
+}
+
+# ============================================================================
+# Output helpers
+# ============================================================================
+
+F doc_write(d: i64, s: str) -> i64 {
+    sb := doc_get_sb(d)
+    sb_append_cstr(sb, s)
+    0
+}
+
+F doc_write_bytes(d: i64, ptr: i64, len: i64) -> i64 {
+    sb := doc_get_sb(d)
+    sb_append_bytes(sb, ptr, len)
+    0
+}
+
+F doc_write_byte(d: i64, b: i64) -> i64 {
+    sb := doc_get_sb(d)
+    sb_append_byte(sb, b)
+    0
+}
+
+F doc_write_str_idx(d: i64, idx: i64) -> i64 {
+    ptr := doc_get_str_ptr(d, idx)
+    len := doc_get_str_len(d, idx)
+    doc_write_bytes(d, ptr, len)
+}
+
+F doc_newline(d: i64) -> i64 {
+    doc_write_byte(d, 10)
+}
+
+# ============================================================================
+# Comment extraction from source text
+# ============================================================================
+# Scans source text for lines starting with #
+# Stores: line_number(8) + text_ptr(8) + text_len(8) = 24 bytes per comment
+
+F doc_scan_comments(d: i64) -> i64 {
+    source := doc_get_source(d)
+    source_len := doc_get_source_len(d)
+
+    # Allocate comment buffer (max 4096 comments)
+    comments := malloc(4096 * 24)
+    count := mut 0
+    line := mut 1
+    pos := mut 0
+
+    L {
+        I pos >= source_len { B }
+
+        # Find start of current line (skip leading whitespace)
+        line_start := pos
+        L {
+            I pos >= source_len { B }
+            ch := load_byte(source + pos)
+            I ch != 32 && ch != 9 { B }
+            pos = pos + 1
+        }
+
+        # Check if line starts with #
+        I pos < source_len {
+            ch := load_byte(source + pos)
+            I ch == 35 {
+                # Found a # comment
+                # Skip the # and optional space
+                text_start := pos + 1
+                I text_start < source_len {
+                    next_ch := load_byte(source + text_start)
+                    I next_ch == 32 {
+                        text_start = text_start + 1
+                        0
+                    } E { 0 }
+                } E { 0 }
+
+                # Find end of line
+                L {
+                    I pos >= source_len { B }
+                    I load_byte(source + pos) == 10 { B }
+                    pos = pos + 1
+                }
+
+                text_len := pos - text_start
+
+                # Store comment
+                I count < 4096 {
+                    entry := comments + count * 24
+                    store_i64(entry + 0, line)
+                    store_i64(entry + 8, source + text_start)
+                    store_i64(entry + 16, text_len)
+                    count = count + 1
+                    0
+                } E { 0 }
+            } E {
+                # Not a comment, skip to end of line
+                L {
+                    I pos >= source_len { B }
+                    I load_byte(source + pos) == 10 { B }
+                    pos = pos + 1
+                }
+            }
+        } E { 0 }
+
+        # Skip newline
+        I pos < source_len {
+            I load_byte(source + pos) == 10 {
+                pos = pos + 1
+                0
+            } E { 0 }
+        } E { 0 }
+        line = line + 1
+    }
+
+    store_i64(d + 64, comments)
+    store_i64(d + 72, count)
+    0
+}
+
+# Find doc comments for an item at a given source position
+# Returns: pointer to contiguous comment block, sets count via out parameter
+# Doc comments are # lines immediately preceding the item (no blank line gap)
+F doc_find_comments(d: i64, item_span_start: i64, out_count: i64) -> i64 {
+    source := doc_get_source(d)
+    comments_ptr := load_i64(d + 64)
+    comments_len := load_i64(d + 72)
+
+    # Find the line number of the item
+    item_line := mut 1
+    i := mut 0
+    L {
+        I i >= item_span_start { B }
+        I i >= doc_get_source_len(d) { B }
+        I load_byte(source + i) == 10 {
+            item_line = item_line + 1
+            0
+        } E { 0 }
+        i = i + 1
+    }
+
+    # Search backward from item_line to find contiguous comment block
+    # Comments on lines item_line-1, item_line-2, ... are doc comments
+    first_comment_idx := mut 0 - 1
+    last_comment_idx := mut 0 - 1
+    expected_line := mut item_line - 1
+
+    # Find the comment on item_line-1
+    j := mut comments_len - 1
+    L {
+        I j < 0 { B }
+        entry := comments_ptr + j * 24
+        cline := load_i64(entry + 0)
+        I cline == expected_line {
+            last_comment_idx = j
+            first_comment_idx = j
+            expected_line = expected_line - 1
+            # Continue backward to find contiguous block
+            k := mut j - 1
+            L {
+                I k < 0 { B }
+                prev_entry := comments_ptr + k * 24
+                prev_line := load_i64(prev_entry + 0)
+                I prev_line == expected_line {
+                    first_comment_idx = k
+                    expected_line = expected_line - 1
+                    k = k - 1
+                } E {
+                    B
+                }
+            }
+            B
+        }
+        I cline < expected_line { B }
+        j = j - 1
+    }
+
+    I first_comment_idx < 0 {
+        store_i64(out_count, 0)
+        R 0
+    }
+
+    cnt := last_comment_idx - first_comment_idx + 1
+    store_i64(out_count, cnt)
+    comments_ptr + first_comment_idx * 24
+}
+
+# ============================================================================
+# Type formatting (for signatures)
+# ============================================================================
+
+F doc_type(d: i64, type_ptr: i64) -> i64 {
+    I type_ptr == 0 { R 0 }
+
+    kind := load_i64(type_ptr + 0)
+    # TypeNode layout: kind(+0), span_start(+8), span_end(+16), field0(+24), field1(+32), field2(+40), field3(+48)
+
+    I kind == TYPE_NAMED() {
+        name_idx := load_i64(type_ptr + 24)
+        generics_ptr := load_i64(type_ptr + 32)
+        generics_len := load_i64(type_ptr + 40)
+        doc_write_str_idx(d, name_idx)
+
+        I generics_len > 0 {
+            doc_write(d, "<")
+            i := mut 0
+            L {
+                I i >= generics_len { B }
+                I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+                gen_ptr := load_i64(generics_ptr + i * 8)
+                doc_type(d, gen_ptr)
+                i = i + 1
+            }
+            doc_write(d, ">")
+        } E { 0 }
+    } E I kind == TYPE_ARRAY() {
+        inner := load_i64(type_ptr + 24)
+        doc_write(d, "[")
+        doc_type(d, inner)
+        doc_write(d, "]")
+    } E I kind == TYPE_OPTIONAL() {
+        inner := load_i64(type_ptr + 24)
+        doc_type(d, inner)
+        doc_write(d, "?")
+    } E I kind == TYPE_RESULT() {
+        ok := load_i64(type_ptr + 24)
+        err := load_i64(type_ptr + 32)
+        doc_type(d, ok)
+        doc_write(d, "!")
+        I err != 0 {
+            doc_write(d, "<")
+            doc_type(d, err)
+            doc_write(d, ">")
+            0
+        } E { 0 }
+    } E I kind == TYPE_REF() {
+        inner := load_i64(type_ptr + 24)
+        doc_write(d, "&")
+        doc_type(d, inner)
+    } E I kind == TYPE_REF_MUT() {
+        inner := load_i64(type_ptr + 24)
+        doc_write(d, "&mut ")
+        doc_type(d, inner)
+    } E I kind == TYPE_TUPLE() {
+        elems_ptr := load_i64(type_ptr + 24)
+        elems_len := load_i64(type_ptr + 32)
+        doc_write(d, "(")
+        i := mut 0
+        L {
+            I i >= elems_len { B }
+            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            elem := load_i64(elems_ptr + i * 8)
+            doc_type(d, elem)
+            i = i + 1
+        }
+        doc_write(d, ")")
+    } E I kind == TYPE_POINTER() {
+        inner := load_i64(type_ptr + 24)
+        doc_write(d, "*")
+        I inner != 0 { doc_type(d, inner); 0 } E { doc_write(d, "i64") }
+    } E I kind == TYPE_UNIT() {
+        doc_write(d, "()")
+    } E I kind == TYPE_INFER() {
+        doc_write(d, "_")
+    } E {
+        doc_write(d, "?type?")
+    }
+    0
+}
+
+# ============================================================================
+# Signature generation
+# ============================================================================
+
+F doc_function_sig(d: i64, func_ptr: i64) -> i64 {
+    name_idx := load_i64(func_ptr + 0)
+    generics_ptr := load_i64(func_ptr + 8)
+    generics_len := load_i64(func_ptr + 16)
+    params_ptr := load_i64(func_ptr + 24)
+    params_len := load_i64(func_ptr + 32)
+    ret_type := load_i64(func_ptr + 40)
+
+    doc_write(d, "F ")
+    doc_write_str_idx(d, name_idx)
+
+    # Generics
+    I generics_len > 0 {
+        doc_write(d, "<")
+        i := mut 0
+        L {
+            I i >= generics_len { B }
+            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            gp := generics_ptr + i * 40
+            gp_name := load_i64(gp + 0)
+            doc_write_str_idx(d, gp_name)
+            i = i + 1
+        }
+        doc_write(d, ">")
+        0
+    } E { 0 }
+
+    # Params
+    doc_write(d, "(")
+    I params_len > 0 {
+        i := mut 0
+        L {
+            I i >= params_len { B }
+            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            p := params_ptr + i * 40
+            p_name := load_i64(p + 0)
+            p_type := load_i64(p + 8)
+
+            # Check for &self
+            p_str_ptr := doc_get_str_ptr(d, p_name)
+            p_str_len := doc_get_str_len(d, p_name)
+            is_self := mut 0
+            I p_str_len == 4 {
+                I load_byte(p_str_ptr) == 115 {
+                    I load_byte(p_str_ptr + 1) == 101 {
+                        I load_byte(p_str_ptr + 2) == 108 {
+                            I load_byte(p_str_ptr + 3) == 102 {
+                                I p_type == 0 {
+                                    is_self = 1
+                                    0
+                                } E { 0 }
+                            } E { 0 }
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+
+            I is_self == 1 {
+                doc_write(d, "&self")
+            } E {
+                doc_write_str_idx(d, p_name)
+                I p_type != 0 {
+                    doc_write(d, ": ")
+                    doc_type(d, p_type)
+                    0
+                } E { 0 }
+            }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+    doc_write(d, ")")
+
+    # Return type
+    I ret_type != 0 {
+        doc_write(d, " -> ")
+        doc_type(d, ret_type)
+        0
+    } E { 0 }
+    0
+}
+
+# ============================================================================
+# Markdown generation
+# ============================================================================
+
+F doc_write_header(d: i64) -> i64 {
+    doc_write(d, "# Module: ")
+    name_ptr := load_i64(d + 80)
+    name_len := load_i64(d + 88)
+    I name_ptr != 0 {
+        doc_write_bytes(d, name_ptr, name_len)
+        0
+    } E {
+        doc_write(d, "(unnamed)")
+    }
+    doc_newline(d)
+    doc_newline(d)
+
+    # Write module-level doc comments (comments before first item)
+    items_ptr := load_i64(d + 48)
+    items_len := load_i64(d + 56)
+    I items_len > 0 {
+        first_item := items_ptr
+        first_span := load_i64(first_item + 16)  # span_start of first item
+        comments_ptr := load_i64(d + 64)
+        comments_len := load_i64(d + 72)
+
+        # Find line of first item
+        source := doc_get_source(d)
+        first_line := mut 1
+        fi := mut 0
+        L {
+            I fi >= first_span { B }
+            I fi >= doc_get_source_len(d) { B }
+            I load_byte(source + fi) == 10 {
+                first_line = first_line + 1
+                0
+            } E { 0 }
+            fi = fi + 1
+        }
+
+        # Output comments before first item (module-level docs)
+        ci := mut 0
+        L {
+            I ci >= comments_len { B }
+            entry := comments_ptr + ci * 24
+            cline := load_i64(entry + 0)
+            I cline >= first_line { B }
+            text_ptr := load_i64(entry + 8)
+            text_len := load_i64(entry + 16)
+
+            # Skip separator lines (=====)
+            I text_len > 0 {
+                first_ch := load_byte(text_ptr)
+                I first_ch == 61 {
+                    ci = ci + 1
+                    C
+                } E { 0 }
+            } E { 0 }
+
+            doc_write_bytes(d, text_ptr, text_len)
+            doc_newline(d)
+            ci = ci + 1
+        }
+        I ci > 0 {
+            doc_newline(d)
+            0
+        } E { 0 }
+    } E { 0 }
+    0
+}
+
+F doc_write_section(d: i64, title: str) -> i64 {
+    doc_write(d, "## ")
+    doc_write(d, title)
+    doc_newline(d)
+    doc_newline(d)
+}
+
+F doc_write_comments(d: i64, comments_start: i64, count: i64) -> i64 {
+    I count == 0 { R 0 }
+
+    i := mut 0
+    L {
+        I i >= count { B }
+        entry := comments_start + i * 24
+        text_ptr := load_i64(entry + 8)
+        text_len := load_i64(entry + 16)
+
+        # Skip separator lines (=====)
+        I text_len > 0 {
+            first_ch := load_byte(text_ptr)
+            I first_ch == 61 {
+                i = i + 1
+                C
+            } E { 0 }
+        } E { 0 }
+
+        doc_write(d, "> ")
+        doc_write_bytes(d, text_ptr, text_len)
+        doc_newline(d)
+        i = i + 1
+    }
+    doc_newline(d)
+    0
+}
+
+# ============================================================================
+# Item documentation
+# ============================================================================
+
+F doc_function_item(d: i64, func_ptr: i64, span_start: i64) -> i64 {
+    name_idx := load_i64(func_ptr + 0)
+    doc_write(d, "### `")
+    doc_function_sig(d, func_ptr)
+    doc_write(d, "`")
+    doc_newline(d)
+    doc_newline(d)
+
+    # Write doc comments
+    comment_count := malloc(8)
+    comments := doc_find_comments(d, span_start, comment_count)
+    cnt := load_i64(comment_count)
+    doc_write_comments(d, comments, cnt)
+    free(comment_count)
+    0
+}
+
+F doc_struct_item(d: i64, struct_ptr: i64, span_start: i64) -> i64 {
+    name_idx := load_i64(struct_ptr + 0)
+    generics_ptr := load_i64(struct_ptr + 8)
+    generics_len := load_i64(struct_ptr + 16)
+    fields_ptr := load_i64(struct_ptr + 24)
+    fields_len := load_i64(struct_ptr + 32)
+
+    doc_write(d, "### `S ")
+    doc_write_str_idx(d, name_idx)
+    I generics_len > 0 {
+        doc_write(d, "<")
+        i := mut 0
+        L {
+            I i >= generics_len { B }
+            I i > 0 { doc_write(d, ", "); 0 } E { 0 }
+            gp := generics_ptr + i * 40
+            gp_name := load_i64(gp + 0)
+            doc_write_str_idx(d, gp_name)
+            i = i + 1
+        }
+        doc_write(d, ">")
+        0
+    } E { 0 }
+    doc_write(d, "`")
+    doc_newline(d)
+    doc_newline(d)
+
+    # Doc comments
+    comment_count := malloc(8)
+    comments := doc_find_comments(d, span_start, comment_count)
+    cnt := load_i64(comment_count)
+    doc_write_comments(d, comments, cnt)
+    free(comment_count)
+
+    # Fields table
+    I fields_len > 0 {
+        doc_write(d, "**Fields:**")
+        doc_newline(d)
+        doc_newline(d)
+        doc_write(d, "| Field | Type |")
+        doc_newline(d)
+        doc_write(d, "|-------|------|")
+        doc_newline(d)
+
+        i := mut 0
+        L {
+            I i >= fields_len { B }
+            field := fields_ptr + i * 40
+            f_name := load_i64(field + 0)
+            f_type := load_i64(field + 8)
+
+            doc_write(d, "| `")
+            doc_write_str_idx(d, f_name)
+            doc_write(d, "` | `")
+            doc_type(d, f_type)
+            doc_write(d, "` |")
+            doc_newline(d)
+            i = i + 1
+        }
+        doc_newline(d)
+        0
+    } E { 0 }
+    0
+}
+
+F doc_enum_item(d: i64, enum_ptr: i64, span_start: i64) -> i64 {
+    name_idx := load_i64(enum_ptr + 0)
+    generics_ptr := load_i64(enum_ptr + 8)
+    generics_len := load_i64(enum_ptr + 16)
+    variants_ptr := load_i64(enum_ptr + 24)
+    variants_len := load_i64(enum_ptr + 32)
+
+    doc_write(d, "### `E ")
+    doc_write_str_idx(d, name_idx)
+    doc_write(d, "`")
+    doc_newline(d)
+    doc_newline(d)
+
+    # Doc comments
+    comment_count := malloc(8)
+    comments := doc_find_comments(d, span_start, comment_count)
+    cnt := load_i64(comment_count)
+    doc_write_comments(d, comments, cnt)
+    free(comment_count)
+
+    # Variants
+    I variants_len > 0 {
+        doc_write(d, "**Variants:**")
+        doc_newline(d)
+        doc_newline(d)
+        i := mut 0
+        L {
+            I i >= variants_len { B }
+            v := variants_ptr + i * 48
+            v_name := load_i64(v + 0)
+            v_kind := load_i64(v + 8)
+            v_fields_ptr := load_i64(v + 16)
+            v_fields_len := load_i64(v + 24)
+
+            doc_write(d, "- `")
+            doc_write_str_idx(d, v_name)
+            I v_kind == 1 {
+                # Tuple variant
+                doc_write(d, "(")
+                j := mut 0
+                L {
+                    I j >= v_fields_len { B }
+                    I j > 0 { doc_write(d, ", "); 0 } E { 0 }
+                    field := v_fields_ptr + j * 40
+                    f_type := load_i64(field + 8)
+                    doc_type(d, f_type)
+                    j = j + 1
+                }
+                doc_write(d, ")")
+                0
+            } E { 0 }
+            doc_write(d, "`")
+            doc_newline(d)
+            i = i + 1
+        }
+        doc_newline(d)
+        0
+    } E { 0 }
+    0
+}
+
+F doc_impl_item(d: i64, impl_ptr: i64, span_start: i64) -> i64 {
+    target_type := load_i64(impl_ptr + 0)
+    trait_name_idx := load_i64(impl_ptr + 8)
+    methods_ptr := load_i64(impl_ptr + 32)
+    methods_len := load_i64(impl_ptr + 40)
+
+    doc_write(d, "### `X ")
+    I target_type != 0 {
+        doc_type(d, target_type)
+        0
+    } E { 0 }
+    doc_write(d, "`")
+    doc_newline(d)
+    doc_newline(d)
+
+    I trait_name_idx > 0 {
+        doc_write(d, "Implements trait `")
+        doc_write_str_idx(d, trait_name_idx)
+        doc_write(d, "`")
+        doc_newline(d)
+        doc_newline(d)
+        0
+    } E { 0 }
+
+    # Methods
+    I methods_len > 0 {
+        doc_write(d, "**Methods:**")
+        doc_newline(d)
+        doc_newline(d)
+        i := mut 0
+        L {
+            I i >= methods_len { B }
+            method := methods_ptr + i * 112
+            doc_write(d, "- `")
+            doc_function_sig(d, method)
+            doc_write(d, "`")
+            doc_newline(d)
+            i = i + 1
+        }
+        doc_newline(d)
+        0
+    } E { 0 }
+    0
+}
+
+F doc_trait_item(d: i64, trait_ptr: i64, span_start: i64) -> i64 {
+    name_idx := load_i64(trait_ptr + 0)
+    methods_ptr := load_i64(trait_ptr + 40)
+    methods_len := load_i64(trait_ptr + 48)
+
+    doc_write(d, "### `W ")
+    doc_write_str_idx(d, name_idx)
+    doc_write(d, "`")
+    doc_newline(d)
+    doc_newline(d)
+
+    # Doc comments
+    comment_count := malloc(8)
+    comments := doc_find_comments(d, span_start, comment_count)
+    cnt := load_i64(comment_count)
+    doc_write_comments(d, comments, cnt)
+    free(comment_count)
+
+    # Methods
+    I methods_len > 0 {
+        doc_write(d, "**Methods:**")
+        doc_newline(d)
+        doc_newline(d)
+        i := mut 0
+        L {
+            I i >= methods_len { B }
+            method := methods_ptr + i * 112
+            doc_write(d, "- `")
+            doc_function_sig(d, method)
+            doc_write(d, "`")
+            doc_newline(d)
+            i = i + 1
+        }
+        doc_newline(d)
+        0
+    } E { 0 }
+    0
+}
+
+F doc_type_alias_item(d: i64, ta_ptr: i64, span_start: i64) -> i64 {
+    name_idx := load_i64(ta_ptr + 0)
+    type_ptr := load_i64(ta_ptr + 8)
+
+    doc_write(d, "### `T ")
+    doc_write_str_idx(d, name_idx)
+    doc_write(d, " = ")
+    doc_type(d, type_ptr)
+    doc_write(d, "`")
+    doc_newline(d)
+    doc_newline(d)
+
+    # Doc comments
+    comment_count := malloc(8)
+    comments := doc_find_comments(d, span_start, comment_count)
+    cnt := load_i64(comment_count)
+    doc_write_comments(d, comments, cnt)
+    free(comment_count)
+    0
+}
+
+# ============================================================================
+# Main documentation generation
+# ============================================================================
+
+F doc_generate(d: i64) -> i64 {
+    # Scan comments from source
+    doc_scan_comments(d)
+
+    # Write header
+    doc_write_header(d)
+
+    items_ptr := load_i64(d + 48)
+    items_len := load_i64(d + 56)
+
+    # Count items by type
+    func_count := mut 0
+    struct_count := mut 0
+    enum_count := mut 0
+    impl_count := mut 0
+    trait_count := mut 0
+    type_count := mut 0
+    use_count := mut 0
+
+    i := mut 0
+    L {
+        I i >= items_len { B }
+        item := items_ptr + i * 32
+        kind := load_i64(item + 0)
+        I kind == ITEM_FUNCTION() { func_count = func_count + 1; 0 }
+        E I kind == ITEM_STRUCT() { struct_count = struct_count + 1; 0 }
+        E I kind == ITEM_ENUM() { enum_count = enum_count + 1; 0 }
+        E I kind == ITEM_IMPL() { impl_count = impl_count + 1; 0 }
+        E I kind == ITEM_TRAIT() { trait_count = trait_count + 1; 0 }
+        E I kind == ITEM_TYPE_ALIAS() { type_count = type_count + 1; 0 }
+        E I kind == ITEM_USE() { use_count = use_count + 1; 0 }
+        E { 0 }
+        i = i + 1
+    }
+
+    # Write table of contents
+    doc_write(d, "---")
+    doc_newline(d)
+    doc_newline(d)
+
+    I use_count > 0 { doc_write(d, "- [Imports](#imports)"); doc_newline(d); 0 } E { 0 }
+    I struct_count > 0 { doc_write(d, "- [Structs](#structs)"); doc_newline(d); 0 } E { 0 }
+    I enum_count > 0 { doc_write(d, "- [Enums](#enums)"); doc_newline(d); 0 } E { 0 }
+    I trait_count > 0 { doc_write(d, "- [Traits](#traits)"); doc_newline(d); 0 } E { 0 }
+    I impl_count > 0 { doc_write(d, "- [Implementations](#implementations)"); doc_newline(d); 0 } E { 0 }
+    I func_count > 0 { doc_write(d, "- [Functions](#functions)"); doc_newline(d); 0 } E { 0 }
+    I type_count > 0 { doc_write(d, "- [Type Aliases](#type-aliases)"); doc_newline(d); 0 } E { 0 }
+    doc_newline(d)
+
+    # Imports section
+    I use_count > 0 {
+        doc_write_section(d, "Imports")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_USE() {
+                data := load_i64(item + 8)
+                path_idx := load_i64(data + 0)
+                doc_write(d, "- `U ")
+                doc_write_str_idx(d, path_idx)
+                doc_write(d, "`")
+                doc_newline(d)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        doc_newline(d)
+        0
+    } E { 0 }
+
+    # Structs section
+    I struct_count > 0 {
+        doc_write_section(d, "Structs")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_STRUCT() {
+                data := load_i64(item + 8)
+                span := load_i64(item + 16)
+                doc_struct_item(d, data, span)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Enums section
+    I enum_count > 0 {
+        doc_write_section(d, "Enums")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_ENUM() {
+                data := load_i64(item + 8)
+                span := load_i64(item + 16)
+                doc_enum_item(d, data, span)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Traits section
+    I trait_count > 0 {
+        doc_write_section(d, "Traits")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_TRAIT() {
+                data := load_i64(item + 8)
+                span := load_i64(item + 16)
+                doc_trait_item(d, data, span)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Implementations section
+    I impl_count > 0 {
+        doc_write_section(d, "Implementations")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_IMPL() {
+                data := load_i64(item + 8)
+                span := load_i64(item + 16)
+                doc_impl_item(d, data, span)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Functions section
+    I func_count > 0 {
+        doc_write_section(d, "Functions")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_FUNCTION() {
+                data := load_i64(item + 8)
+                span := load_i64(item + 16)
+                doc_function_item(d, data, span)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Type aliases section
+    I type_count > 0 {
+        doc_write_section(d, "Type Aliases")
+        i = 0
+        L {
+            I i >= items_len { B }
+            item := items_ptr + i * 32
+            kind := load_i64(item + 0)
+            I kind == ITEM_TYPE_ALIAS() {
+                data := load_i64(item + 8)
+                span := load_i64(item + 16)
+                doc_type_alias_item(d, data, span)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+
+    # Footer
+    doc_write(d, "---")
+    doc_newline(d)
+    doc_write(d, "*Generated by vais-doc*")
+    doc_newline(d)
+    0
+}

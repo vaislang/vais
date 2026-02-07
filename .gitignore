@@ -132,6 +132,8 @@ DETAILED_ERRORS.txt
 vaisc-stage1
 vaisc-stage2
 selfhost/lsp_main
+selfhost/fmt_main
+selfhost/doc_gen_main
 selfhost/test_index_expr
 selfhost/test_new_features
 stage2.ll

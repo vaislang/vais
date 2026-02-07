@@ -1,0 +1,1308 @@
+# Vais Self-Hosting Compiler - Code Formatter
+# AST-based code formatting with configurable style
+#
+# Pipeline: Source → Lex → Parse → Format (AST → pretty-printed source)
+#
+# Formatting rules:
+# - 4-space indentation
+# - Spaces around binary operators
+# - Spaces after commas
+# - Opening brace on same line
+# - Consistent newlines between items
+
+U constants
+U stringbuffer_s1
+U helpers_s1
+
+# AST node type constants (from ast.vais, needed for formatter)
+# Item types
+F ITEM_FUNCTION() -> i64 = 1
+F ITEM_STRUCT() -> i64 = 2
+F ITEM_ENUM() -> i64 = 3
+F ITEM_TYPE_ALIAS() -> i64 = 4
+F ITEM_USE() -> i64 = 5
+F ITEM_TRAIT() -> i64 = 6
+F ITEM_IMPL() -> i64 = 7
+
+# Expression types not in constants.vais
+F EXPR_FLOAT() -> i64 = 21
+F EXPR_UNIT() -> i64 = 24
+F EXPR_TERNARY() -> i64 = 29
+F EXPR_STATIC_CALL() -> i64 = 35
+F EXPR_TUPLE() -> i64 = 39
+F EXPR_RANGE() -> i64 = 41
+F EXPR_AWAIT() -> i64 = 43
+F EXPR_TRY() -> i64 = 44
+F EXPR_UNWRAP() -> i64 = 45
+F EXPR_REF() -> i64 = 46
+F EXPR_DEREF() -> i64 = 47
+F EXPR_ASSIGN_OP() -> i64 = 49
+F EXPR_LAMBDA() -> i64 = 50
+F EXPR_SPAWN() -> i64 = 51
+
+# Type node constants
+F TYPE_NAMED() -> i64 = 60
+F TYPE_ARRAY() -> i64 = 61
+F TYPE_MAP() -> i64 = 62
+F TYPE_TUPLE() -> i64 = 63
+F TYPE_OPTIONAL() -> i64 = 64
+F TYPE_RESULT() -> i64 = 65
+F TYPE_POINTER() -> i64 = 66
+F TYPE_REF() -> i64 = 67
+F TYPE_REF_MUT() -> i64 = 68
+F TYPE_FN() -> i64 = 69
+F TYPE_UNIT() -> i64 = 70
+F TYPE_INFER() -> i64 = 71
+
+# Additional binary operators not in constants.vais
+F BINOP_BIT_AND() -> i64 = 14
+F BINOP_BIT_OR() -> i64 = 15
+F BINOP_BIT_XOR() -> i64 = 16
+F BINOP_SHL() -> i64 = 17
+F BINOP_SHR() -> i64 = 18
+
+# Additional unary operator
+F UNOP_BIT_NOT() -> i64 = 3
+
+# ============================================================================
+# Formatter State
+# ============================================================================
+
+# Formatter layout:
+# sb(8) + indent(8) + pool_data(8) + pool_offsets(8) + pool_count(8)
+# + items_ptr(8) + items_len(8) + newline_count(8)
+# = 64 bytes
+
+F fmt_new() -> i64 {
+    f := malloc(64)
+    sb := sb_new(8192)
+    store_i64(f + 0, sb)       # output string buffer
+    store_i64(f + 8, 0)        # indent level
+    store_i64(f + 16, 0)       # pool data ptr
+    store_i64(f + 24, 0)       # pool offsets ptr
+    store_i64(f + 32, 0)       # pool count
+    store_i64(f + 40, 0)       # items_ptr
+    store_i64(f + 48, 0)       # items_len
+    store_i64(f + 56, 0)       # newline_count (pending newlines)
+    f
+}
+
+F fmt_get_sb(f: i64) -> i64 = load_i64(f + 0)
+F fmt_get_indent(f: i64) -> i64 = load_i64(f + 8)
+F fmt_set_indent(f: i64, v: i64) -> i64 { store_i64(f + 8, v); 0 }
+F fmt_get_pool_data(f: i64) -> i64 = load_i64(f + 16)
+F fmt_get_pool_offsets(f: i64) -> i64 = load_i64(f + 24)
+F fmt_get_pool_count(f: i64) -> i64 = load_i64(f + 32)
+
+# ============================================================================
+# String pool access (from parser)
+# ============================================================================
+
+F fmt_set_pool(f: i64, data: i64, offsets: i64, count: i64) -> i64 {
+    store_i64(f + 16, data)
+    store_i64(f + 24, offsets)
+    store_i64(f + 32, count)
+    0
+}
+
+F fmt_get_str_ptr(f: i64, idx: i64) -> i64 {
+    offsets := load_i64(f + 24)
+    entry := offsets + idx * 16
+    offset := load_i64(entry)
+    data := load_i64(f + 16)
+    data + offset
+}
+
+F fmt_get_str_len(f: i64, idx: i64) -> i64 {
+    offsets := load_i64(f + 24)
+    entry := offsets + idx * 16
+    load_i64(entry + 8)
+}
+
+# ============================================================================
+# Output helpers
+# ============================================================================
+
+F fmt_write(f: i64, s: str) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_append_cstr(sb, s)
+}
+
+F fmt_write_bytes(f: i64, ptr: i64, len: i64) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_append_bytes(sb, ptr, len)
+}
+
+F fmt_write_i64(f: i64, val: i64) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_append_i64(sb, val)
+}
+
+F fmt_write_byte(f: i64, byte: i64) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_append_byte(sb, byte)
+}
+
+F fmt_write_str_idx(f: i64, idx: i64) -> i64 {
+    ptr := fmt_get_str_ptr(f, idx)
+    len := fmt_get_str_len(f, idx)
+    fmt_write_bytes(f, ptr, len)
+}
+
+F fmt_newline(f: i64) -> i64 {
+    fmt_write_byte(f, 10)
+}
+
+F fmt_indent(f: i64) -> i64 {
+    level := fmt_get_indent(f)
+    i := mut 0
+    L {
+        I i >= level { B }
+        fmt_write(f, "    ")
+        i = i + 1
+    }
+    0
+}
+
+F fmt_indent_inc(f: i64) -> i64 {
+    level := fmt_get_indent(f)
+    fmt_set_indent(f, level + 1)
+}
+
+F fmt_indent_dec(f: i64) -> i64 {
+    level := fmt_get_indent(f)
+    I level > 0 { fmt_set_indent(f, level - 1) } E { 0 }
+}
+
+# ============================================================================
+# Type formatting
+# ============================================================================
+
+F fmt_type(f: i64, type_ptr: i64) -> i64 {
+    I type_ptr == 0 { R 0 }
+
+    kind := load_i64(type_ptr + 0)
+
+    I kind == TYPE_NAMED() {
+        name_idx := load_i64(type_ptr + 24)
+        generics_ptr := load_i64(type_ptr + 32)
+        generics_len := load_i64(type_ptr + 40)
+        fmt_write_str_idx(f, name_idx)
+
+        I generics_len > 0 {
+            fmt_write(f, "<")
+            i := mut 0
+            L {
+                I i >= generics_len { B }
+                I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                gen_ptr := load_i64(generics_ptr + i * 8)
+                fmt_type(f, gen_ptr)
+                i = i + 1
+            }
+            fmt_write(f, ">")
+        } E { 0 }
+    } E I kind == TYPE_ARRAY() {
+        inner := load_i64(type_ptr + 24)
+        fmt_write(f, "[")
+        fmt_type(f, inner)
+        fmt_write(f, "]")
+    } E I kind == TYPE_REF() {
+        inner := load_i64(type_ptr + 24)
+        fmt_write(f, "&")
+        fmt_type(f, inner)
+    } E I kind == TYPE_REF_MUT() {
+        inner := load_i64(type_ptr + 24)
+        fmt_write(f, "&mut ")
+        fmt_type(f, inner)
+    } E I kind == TYPE_POINTER() {
+        inner := load_i64(type_ptr + 24)
+        fmt_write(f, "*")
+        fmt_type(f, inner)
+    } E I kind == TYPE_OPTIONAL() {
+        inner := load_i64(type_ptr + 24)
+        fmt_type(f, inner)
+        fmt_write(f, "?")
+    } E I kind == TYPE_RESULT() {
+        inner := load_i64(type_ptr + 24)
+        fmt_type(f, inner)
+        fmt_write(f, "!")
+    } E I kind == TYPE_TUPLE() {
+        types_ptr := load_i64(type_ptr + 24)
+        types_len := load_i64(type_ptr + 32)
+        fmt_write(f, "(")
+        i := mut 0
+        L {
+            I i >= types_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            t := load_i64(types_ptr + i * 8)
+            fmt_type(f, t)
+            i = i + 1
+        }
+        fmt_write(f, ")")
+    } E I kind == TYPE_FN() {
+        params_ptr := load_i64(type_ptr + 24)
+        params_len := load_i64(type_ptr + 32)
+        ret_type := load_i64(type_ptr + 40)
+        fmt_write(f, "(")
+        i := mut 0
+        L {
+            I i >= params_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            t := load_i64(params_ptr + i * 8)
+            fmt_type(f, t)
+            i = i + 1
+        }
+        fmt_write(f, ") -> ")
+        fmt_type(f, ret_type)
+    } E I kind == TYPE_UNIT() {
+        fmt_write(f, "()")
+    } E I kind == TYPE_MAP() {
+        key := load_i64(type_ptr + 24)
+        val := load_i64(type_ptr + 32)
+        fmt_write(f, "Map<")
+        fmt_type(f, key)
+        fmt_write(f, ", ")
+        fmt_type(f, val)
+        fmt_write(f, ">")
+    } E I kind == TYPE_INFER() {
+        fmt_write(f, "_")
+    } E {
+        fmt_write(f, "?type?")
+    }
+    0
+}
+
+# ============================================================================
+# Expression formatting
+# ============================================================================
+
+F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
+    I expr_ptr == 0 { R 0 }
+
+    kind := load_i64(expr_ptr + 0)
+
+    I kind == EXPR_INT() {
+        val := load_i64(expr_ptr + 24)
+        fmt_write_i64(f, val)
+    } E I kind == EXPR_BOOL() {
+        val := load_i64(expr_ptr + 24)
+        I val == 1 { fmt_write(f, "true") } E { fmt_write(f, "false") }
+    } E I kind == EXPR_STRING() {
+        str_idx := load_i64(expr_ptr + 24)
+        fmt_write(f, "\"")
+        fmt_write_str_idx(f, str_idx)
+        fmt_write(f, "\"")
+    } E I kind == EXPR_UNIT() {
+        fmt_write(f, "()")
+    } E I kind == EXPR_IDENT() {
+        str_idx := load_i64(expr_ptr + 24)
+        fmt_write_str_idx(f, str_idx)
+    } E I kind == EXPR_SELF_CALL() {
+        fmt_write(f, "@")
+    } E I kind == EXPR_BINARY() {
+        left := load_i64(expr_ptr + 24)
+        right := load_i64(expr_ptr + 32)
+        op := load_i64(expr_ptr + 40)
+        fmt_expr(f, left)
+        fmt_write(f, " ")
+        fmt_binop(f, op)
+        fmt_write(f, " ")
+        fmt_expr(f, right)
+    } E I kind == EXPR_UNARY() {
+        inner := load_i64(expr_ptr + 24)
+        op := load_i64(expr_ptr + 32)
+        I op == UNOP_NEG() { fmt_write(f, "-") }
+        E I op == UNOP_NOT() { fmt_write(f, "!") }
+        E I op == UNOP_BIT_NOT() { fmt_write(f, "~") }
+        E { fmt_write(f, "?unop?") }
+        fmt_expr(f, inner)
+    } E I kind == EXPR_CALL() {
+        func_ptr := load_i64(expr_ptr + 24)
+        args_ptr := load_i64(expr_ptr + 32)
+        args_len := load_i64(expr_ptr + 40)
+        fmt_expr(f, func_ptr)
+        fmt_write(f, "(")
+        fmt_expr_list(f, args_ptr, args_len)
+        fmt_write(f, ")")
+    } E I kind == EXPR_METHOD_CALL() {
+        recv := load_i64(expr_ptr + 24)
+        method_idx := load_i64(expr_ptr + 32)
+        args_ptr := load_i64(expr_ptr + 40)
+        args_len := load_i64(expr_ptr + 48)
+        fmt_expr(f, recv)
+        fmt_write(f, ".")
+        fmt_write_str_idx(f, method_idx)
+        fmt_write(f, "(")
+        fmt_expr_list(f, args_ptr, args_len)
+        fmt_write(f, ")")
+    } E I kind == EXPR_STATIC_CALL() {
+        type_idx := load_i64(expr_ptr + 24)
+        method_idx := load_i64(expr_ptr + 32)
+        args_ptr := load_i64(expr_ptr + 40)
+        args_len := load_i64(expr_ptr + 48)
+        fmt_write_str_idx(f, type_idx)
+        fmt_write(f, ".")
+        fmt_write_str_idx(f, method_idx)
+        fmt_write(f, "(")
+        fmt_expr_list(f, args_ptr, args_len)
+        fmt_write(f, ")")
+    } E I kind == EXPR_FIELD() {
+        inner := load_i64(expr_ptr + 24)
+        field_idx := load_i64(expr_ptr + 32)
+        fmt_expr(f, inner)
+        fmt_write(f, ".")
+        fmt_write_str_idx(f, field_idx)
+    } E I kind == EXPR_INDEX() {
+        inner := load_i64(expr_ptr + 24)
+        index := load_i64(expr_ptr + 32)
+        fmt_expr(f, inner)
+        fmt_write(f, "[")
+        fmt_expr(f, index)
+        fmt_write(f, "]")
+    } E I kind == EXPR_ARRAY() {
+        elems_ptr := load_i64(expr_ptr + 24)
+        elems_len := load_i64(expr_ptr + 32)
+        fmt_write(f, "[")
+        fmt_expr_list(f, elems_ptr, elems_len)
+        fmt_write(f, "]")
+    } E I kind == EXPR_TUPLE() {
+        elems_ptr := load_i64(expr_ptr + 24)
+        elems_len := load_i64(expr_ptr + 32)
+        fmt_write(f, "(")
+        fmt_expr_list(f, elems_ptr, elems_len)
+        fmt_write(f, ")")
+    } E I kind == EXPR_STRUCT_LIT() {
+        name_idx := load_i64(expr_ptr + 24)
+        fields_ptr := load_i64(expr_ptr + 32)
+        fields_len := load_i64(expr_ptr + 40)
+        fmt_write_str_idx(f, name_idx)
+        fmt_write(f, " {")
+        I fields_len > 0 {
+            fmt_write(f, " ")
+            i := mut 0
+            L {
+                I i >= fields_len { B }
+                I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                fi_ptr := fields_ptr + i * 32  # FieldInit.size() = 32
+                fi_name := load_i64(fi_ptr + 0)
+                fi_val := load_i64(fi_ptr + 8)
+                fmt_write_str_idx(f, fi_name)
+                fmt_write(f, ": ")
+                fmt_expr(f, fi_val)
+                i = i + 1
+            }
+            fmt_write(f, " ")
+            0
+        } E { 0 }
+        fmt_write(f, "}")
+    } E I kind == EXPR_RANGE() {
+        start := load_i64(expr_ptr + 24)
+        end := load_i64(expr_ptr + 32)
+        inclusive := load_i64(expr_ptr + 40)
+        fmt_expr(f, start)
+        I inclusive == 1 { fmt_write(f, "..=") } E { fmt_write(f, "..") }
+        fmt_expr(f, end)
+    } E I kind == EXPR_IF() {
+        fmt_if_expr(f, expr_ptr)
+    } E I kind == EXPR_LOOP() {
+        fmt_loop_expr(f, expr_ptr)
+    } E I kind == EXPR_BLOCK() {
+        stmts_ptr := load_i64(expr_ptr + 24)
+        stmts_len := load_i64(expr_ptr + 32)
+        fmt_write(f, "{")
+        fmt_newline(f)
+        fmt_indent_inc(f)
+        fmt_stmts(f, stmts_ptr, stmts_len)
+        fmt_indent_dec(f)
+        fmt_indent(f)
+        fmt_write(f, "}")
+    } E I kind == EXPR_ASSIGN() {
+        target := load_i64(expr_ptr + 24)
+        value := load_i64(expr_ptr + 32)
+        fmt_expr(f, target)
+        fmt_write(f, " = ")
+        fmt_expr(f, value)
+    } E I kind == EXPR_ASSIGN_OP() {
+        target := load_i64(expr_ptr + 24)
+        value := load_i64(expr_ptr + 32)
+        op := load_i64(expr_ptr + 40)
+        fmt_expr(f, target)
+        fmt_write(f, " ")
+        fmt_assign_op(f, op)
+        fmt_write(f, " ")
+        fmt_expr(f, value)
+    } E I kind == EXPR_TRY() {
+        inner := load_i64(expr_ptr + 24)
+        fmt_expr(f, inner)
+        fmt_write(f, "?")
+    } E I kind == EXPR_UNWRAP() {
+        inner := load_i64(expr_ptr + 24)
+        fmt_expr(f, inner)
+        fmt_write(f, "!")
+    } E I kind == EXPR_REF() {
+        inner := load_i64(expr_ptr + 24)
+        fmt_write(f, "&")
+        fmt_expr(f, inner)
+    } E I kind == EXPR_DEREF() {
+        inner := load_i64(expr_ptr + 24)
+        fmt_write(f, "*")
+        fmt_expr(f, inner)
+    } E I kind == EXPR_AWAIT() {
+        inner := load_i64(expr_ptr + 24)
+        fmt_expr(f, inner)
+        fmt_write(f, ".Y")
+    } E I kind == EXPR_SPAWN() {
+        inner := load_i64(expr_ptr + 24)
+        fmt_write(f, "spawn ")
+        fmt_expr(f, inner)
+    } E I kind == EXPR_LAMBDA() {
+        params_ptr := load_i64(expr_ptr + 24)
+        params_len := load_i64(expr_ptr + 32)
+        body := load_i64(expr_ptr + 40)
+        fmt_write(f, "|")
+        i := mut 0
+        L {
+            I i >= params_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            p_ptr := params_ptr + i * 40  # Param.size() = 40
+            p_name := load_i64(p_ptr + 0)
+            p_type := load_i64(p_ptr + 8)
+            fmt_write_str_idx(f, p_name)
+            I p_type != 0 {
+                fmt_write(f, ": ")
+                fmt_type(f, p_type)
+                0
+            } E { 0 }
+            i = i + 1
+        }
+        fmt_write(f, "| ")
+        fmt_expr(f, body)
+    } E I kind == EXPR_TERNARY() {
+        cond := load_i64(expr_ptr + 24)
+        then_val := load_i64(expr_ptr + 32)
+        else_val := load_i64(expr_ptr + 40)
+        fmt_expr(f, cond)
+        fmt_write(f, " ? ")
+        fmt_expr(f, then_val)
+        fmt_write(f, " : ")
+        fmt_expr(f, else_val)
+    } E I kind == EXPR_MATCH() {
+        match_val := load_i64(expr_ptr + 24)
+        arms_ptr := load_i64(expr_ptr + 32)
+        arms_len := load_i64(expr_ptr + 40)
+        fmt_write(f, "M ")
+        fmt_expr(f, match_val)
+        fmt_write(f, " {")
+        fmt_newline(f)
+        fmt_indent_inc(f)
+        fmt_match_arms(f, arms_ptr, arms_len)
+        fmt_indent_dec(f)
+        fmt_indent(f)
+        fmt_write(f, "}")
+    } E {
+        fmt_write(f, "?expr?")
+    }
+    0
+}
+
+# ============================================================================
+# Expression list (pointer array of ExprNode*)
+# ============================================================================
+
+# Count args in a pointer array (scan until null, max 16)
+F fmt_count_args(args_ptr: i64) -> i64 {
+    I args_ptr == 0 { R 0 }
+    count := mut 0
+    L {
+        I count >= 16 { B }
+        val := load_i64(args_ptr + count * 8)
+        I val == 0 { B }
+        count = count + 1
+    }
+    count
+}
+
+F fmt_expr_list(f: i64, args_ptr: i64, args_len: i64) -> i64 {
+    # If args_len is 0 but args_ptr is non-null, try counting
+    actual_len := mut args_len
+    I actual_len == 0 {
+        I args_ptr != 0 {
+            actual_len = fmt_count_args(args_ptr)
+            0
+        } E { 0 }
+    } E { 0 }
+
+    i := mut 0
+    L {
+        I i >= actual_len { B }
+        I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+        arg := load_i64(args_ptr + i * 8)
+        fmt_expr(f, arg)
+        i = i + 1
+    }
+    0
+}
+
+# ============================================================================
+# Binary operator formatting
+# ============================================================================
+
+F fmt_binop(f: i64, op: i64) -> i64 {
+    I op == BINOP_ADD() { fmt_write(f, "+") }
+    E I op == BINOP_SUB() { fmt_write(f, "-") }
+    E I op == BINOP_MUL() { fmt_write(f, "*") }
+    E I op == BINOP_DIV() { fmt_write(f, "/") }
+    E I op == BINOP_MOD() { fmt_write(f, "%") }
+    E I op == BINOP_LT() { fmt_write(f, "<") }
+    E I op == BINOP_LTE() { fmt_write(f, "<=") }
+    E I op == BINOP_GT() { fmt_write(f, ">") }
+    E I op == BINOP_GTE() { fmt_write(f, ">=") }
+    E I op == BINOP_EQ() { fmt_write(f, "==") }
+    E I op == BINOP_NEQ() { fmt_write(f, "!=") }
+    E I op == BINOP_AND() { fmt_write(f, "&&") }
+    E I op == BINOP_OR() { fmt_write(f, "||") }
+    E I op == BINOP_BIT_AND() { fmt_write(f, "&") }
+    E I op == BINOP_BIT_OR() { fmt_write(f, "|") }
+    E I op == BINOP_BIT_XOR() { fmt_write(f, "^") }
+    E I op == BINOP_SHL() { fmt_write(f, "<<") }
+    E I op == BINOP_SHR() { fmt_write(f, ">>") }
+    E { fmt_write(f, "?op?") }
+}
+
+# Assignment operator formatting (+=, -=, etc.)
+F fmt_assign_op(f: i64, op: i64) -> i64 {
+    I op == BINOP_ADD() { fmt_write(f, "+=") }
+    E I op == BINOP_SUB() { fmt_write(f, "-=") }
+    E I op == BINOP_MUL() { fmt_write(f, "*=") }
+    E I op == BINOP_DIV() { fmt_write(f, "/=") }
+    E { fmt_write(f, "?aop?") }
+}
+
+# ============================================================================
+# Match arms formatting
+# ============================================================================
+
+F fmt_match_arms(f: i64, arms_ptr: i64, arms_len: i64) -> i64 {
+    # Match arm layout: pattern_ptr(8) + body_ptr(8) + guard_ptr(8) + span(16) = 40 bytes
+    i := mut 0
+    L {
+        I i >= arms_len { B }
+        arm_ptr := arms_ptr + i * 40
+        pattern := load_i64(arm_ptr + 0)
+        body := load_i64(arm_ptr + 8)
+
+        fmt_indent(f)
+        fmt_pattern(f, pattern)
+        fmt_write(f, " => ")
+        fmt_expr(f, body)
+        fmt_newline(f)
+        i = i + 1
+    }
+    0
+}
+
+# ============================================================================
+# Pattern formatting
+# ============================================================================
+
+F fmt_pattern(f: i64, pat_ptr: i64) -> i64 {
+    I pat_ptr == 0 { R 0 }
+
+    kind := load_i64(pat_ptr + 0)
+
+    I kind == PAT_WILDCARD() {
+        fmt_write(f, "_")
+    } E I kind == PAT_IDENT() {
+        name_idx := load_i64(pat_ptr + 24)
+        fmt_write_str_idx(f, name_idx)
+    } E I kind == PAT_LITERAL() {
+        val := load_i64(pat_ptr + 24)
+        fmt_write_i64(f, val)
+    } E I kind == PAT_TUPLE() {
+        pats_ptr := load_i64(pat_ptr + 24)
+        pats_len := load_i64(pat_ptr + 32)
+        fmt_write(f, "(")
+        i := mut 0
+        L {
+            I i >= pats_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            p := load_i64(pats_ptr + i * 8)
+            fmt_pattern(f, p)
+            i = i + 1
+        }
+        fmt_write(f, ")")
+    } E I kind == PAT_VARIANT() {
+        name_idx := load_i64(pat_ptr + 24)
+        inner_ptr := load_i64(pat_ptr + 32)
+        inner_len := load_i64(pat_ptr + 40)
+        fmt_write_str_idx(f, name_idx)
+        I inner_len > 0 {
+            fmt_write(f, "(")
+            i := mut 0
+            L {
+                I i >= inner_len { B }
+                I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                p := load_i64(inner_ptr + i * 8)
+                fmt_pattern(f, p)
+                i = i + 1
+            }
+            fmt_write(f, ")")
+        } E { 0 }
+    } E I kind == PAT_OR() {
+        pats_ptr := load_i64(pat_ptr + 24)
+        pats_len := load_i64(pat_ptr + 32)
+        i := mut 0
+        L {
+            I i >= pats_len { B }
+            I i > 0 { fmt_write(f, " | "); 0 } E { 0 }
+            p := load_i64(pats_ptr + i * 8)
+            fmt_pattern(f, p)
+            i = i + 1
+        }
+        0
+    } E I kind == PAT_RANGE() {
+        start := load_i64(pat_ptr + 24)
+        end := load_i64(pat_ptr + 32)
+        inclusive := load_i64(pat_ptr + 40)
+        fmt_pattern(f, start)
+        I inclusive == 1 { fmt_write(f, "..=") } E { fmt_write(f, "..") }
+        fmt_pattern(f, end)
+    } E {
+        fmt_write(f, "?pat?")
+    }
+    0
+}
+
+# ============================================================================
+# If expression formatting
+# ============================================================================
+
+F fmt_if_expr(f: i64, expr_ptr: i64) -> i64 {
+    cond := load_i64(expr_ptr + 24)
+    then_stmts := load_i64(expr_ptr + 32)
+    then_len := load_i64(expr_ptr + 40)
+    else_ptr := load_i64(expr_ptr + 48)
+
+    fmt_write(f, "I ")
+    fmt_expr(f, cond)
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+    fmt_stmts(f, then_stmts, then_len)
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+
+    I else_ptr != 0 {
+        # Check if else_ptr is another EXPR_IF (else-if chain)
+        else_kind := load_i64(else_ptr + 0)
+        I else_kind == EXPR_IF() {
+            fmt_write(f, " E ")
+            fmt_if_expr(f, else_ptr)
+        } E {
+            # IfElse node: kind(8) + cond_ptr(8) + stmts_ptr(8) + stmts_len(8) + next_ptr(8)
+            ie_kind := load_i64(else_ptr + 0)
+            ie_stmts := load_i64(else_ptr + 16)
+            ie_len := load_i64(else_ptr + 24)
+            fmt_write(f, " E {")
+            fmt_newline(f)
+            fmt_indent_inc(f)
+            fmt_stmts(f, ie_stmts, ie_len)
+            fmt_indent_dec(f)
+            fmt_indent(f)
+            fmt_write(f, "}")
+        }
+        0
+    } E { 0 }
+    0
+}
+
+# ============================================================================
+# Loop expression formatting
+# ============================================================================
+
+F fmt_loop_expr(f: i64, expr_ptr: i64) -> i64 {
+    pattern := load_i64(expr_ptr + 24)
+    iter := load_i64(expr_ptr + 32)
+    body_stmts := load_i64(expr_ptr + 40)
+    body_len := load_i64(expr_ptr + 48)
+
+    fmt_write(f, "L")
+
+    # For loop with pattern: L pattern: iter
+    I pattern != 0 {
+        fmt_write(f, " ")
+        fmt_pattern(f, pattern)
+        I iter != 0 {
+            fmt_write(f, ": ")
+            fmt_expr(f, iter)
+            0
+        } E { 0 }
+        0
+    } E { 0 }
+
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+    fmt_stmts(f, body_stmts, body_len)
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+    0
+}
+
+# ============================================================================
+# Statement formatting
+# ============================================================================
+
+F fmt_stmts(f: i64, stmts_ptr: i64, stmts_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= stmts_len { B }
+        # Statements are stored INLINE (56 bytes each)
+        stmt_ptr := stmts_ptr + i * 56
+        fmt_stmt(f, stmt_ptr)
+        i = i + 1
+    }
+    0
+}
+
+F fmt_stmt(f: i64, stmt_ptr: i64) -> i64 {
+    I stmt_ptr == 0 { R 0 }
+
+    kind := load_i64(stmt_ptr + 0)
+    fmt_indent(f)
+
+    I kind == STMT_LET() {
+        name_idx := load_i64(stmt_ptr + 24)
+        type_ptr := load_i64(stmt_ptr + 32)
+        value_ptr := load_i64(stmt_ptr + 40)
+        is_mut := load_i64(stmt_ptr + 48)
+
+        fmt_write_str_idx(f, name_idx)
+
+        I type_ptr != 0 {
+            fmt_write(f, ": ")
+            I is_mut == 1 { fmt_write(f, "mut "); 0 } E { 0 }
+            fmt_type(f, type_ptr)
+            fmt_write(f, " = ")
+            0
+        } E {
+            fmt_write(f, " := ")
+            I is_mut == 1 { fmt_write(f, "mut "); 0 } E { 0 }
+            0
+        }
+
+        fmt_expr(f, value_ptr)
+        fmt_newline(f)
+    } E I kind == STMT_EXPR() {
+        expr_ptr := load_i64(stmt_ptr + 24)
+        fmt_expr(f, expr_ptr)
+        fmt_newline(f)
+    } E I kind == STMT_RETURN() {
+        expr_ptr := load_i64(stmt_ptr + 24)
+        fmt_write(f, "R")
+        I expr_ptr != 0 {
+            fmt_write(f, " ")
+            fmt_expr(f, expr_ptr)
+            0
+        } E { 0 }
+        fmt_newline(f)
+    } E I kind == STMT_BREAK() {
+        expr_ptr := load_i64(stmt_ptr + 24)
+        fmt_write(f, "B")
+        I expr_ptr != 0 {
+            fmt_write(f, " ")
+            fmt_expr(f, expr_ptr)
+            0
+        } E { 0 }
+        fmt_newline(f)
+    } E I kind == STMT_CONTINUE() {
+        fmt_write(f, "C")
+        fmt_newline(f)
+    } E {
+        fmt_write(f, "?stmt?")
+        fmt_newline(f)
+    }
+    0
+}
+
+# ============================================================================
+# Item formatting (top-level declarations)
+# ============================================================================
+
+F fmt_items(f: i64, items_ptr: i64, items_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= items_len { B }
+        # Item.size() = 32 — kind(8) + data_ptr(8) + span_start(8) + span_end(8)
+        item_ptr := items_ptr + i * 32
+        kind := load_i64(item_ptr + 0)
+        data_ptr := load_i64(item_ptr + 8)
+
+        # Add blank line between items (not before first)
+        I i > 0 { fmt_newline(f); 0 } E { 0 }
+
+        I kind == ITEM_FUNCTION() {
+            fmt_function(f, data_ptr)
+        } E I kind == ITEM_STRUCT() {
+            fmt_struct(f, data_ptr)
+        } E I kind == ITEM_ENUM() {
+            fmt_enum(f, data_ptr)
+        } E I kind == ITEM_IMPL() {
+            fmt_impl(f, data_ptr)
+        } E I kind == ITEM_TRAIT() {
+            fmt_trait(f, data_ptr)
+        } E I kind == ITEM_USE() {
+            fmt_use(f, data_ptr)
+        } E I kind == ITEM_TYPE_ALIAS() {
+            fmt_type_alias(f, data_ptr)
+        } E {
+            fmt_write(f, "# ?unknown item?")
+            fmt_newline(f)
+        }
+
+        i = i + 1
+    }
+    0
+}
+
+# ============================================================================
+# Function formatting
+# ============================================================================
+
+F fmt_function(f: i64, func_ptr: i64) -> i64 {
+    name_idx := load_i64(func_ptr + 0)
+    generics_ptr := load_i64(func_ptr + 8)
+    generics_len := load_i64(func_ptr + 16)
+    params_ptr := load_i64(func_ptr + 24)
+    params_len := load_i64(func_ptr + 32)
+    ret_type := load_i64(func_ptr + 40)
+    body_kind := load_i64(func_ptr + 48)
+    body_expr := load_i64(func_ptr + 56)
+    body_stmts := load_i64(func_ptr + 64)
+    body_stmts_len := load_i64(func_ptr + 72)
+    is_pub := load_i64(func_ptr + 80)
+    is_async := load_i64(func_ptr + 88)
+
+    fmt_indent(f)
+    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    I is_async == 1 { fmt_write(f, "A "); 0 } E { 0 }
+    fmt_write(f, "F ")
+    fmt_write_str_idx(f, name_idx)
+
+    # Generics
+    I generics_len > 0 {
+        fmt_write(f, "<")
+        i := mut 0
+        L {
+            I i >= generics_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            # GenericParam.size() = 40: name_idx(8) + bounds_ptr(8) + bounds_len(8) + span(16)
+            gp := generics_ptr + i * 40
+            gp_name := load_i64(gp + 0)
+            fmt_write_str_idx(f, gp_name)
+            i = i + 1
+        }
+        fmt_write(f, ">")
+        0
+    } E { 0 }
+
+    # Parameters
+    fmt_write(f, "(")
+    I params_len > 0 {
+        i := mut 0
+        L {
+            I i >= params_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            # Param.size() = 40: name_idx(8) + type_ptr(8) + is_mut(8) + span(16)
+            p := params_ptr + i * 40
+            p_name := load_i64(p + 0)
+            p_type := load_i64(p + 8)
+            p_mut := load_i64(p + 16)
+
+            # Check for &self (parser stores name "self" with type_ptr=0)
+            p_str_ptr := fmt_get_str_ptr(f, p_name)
+            p_str_len := fmt_get_str_len(f, p_name)
+            is_self := mut 0
+            I p_str_len == 4 {
+                I load_byte(p_str_ptr) == 115 {  # 's'
+                    I load_byte(p_str_ptr + 1) == 101 {  # 'e'
+                        I load_byte(p_str_ptr + 2) == 108 {  # 'l'
+                            I load_byte(p_str_ptr + 3) == 102 {  # 'f'
+                                I p_type == 0 {
+                                    is_self = 1
+                                    0
+                                } E { 0 }
+                            } E { 0 }
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
+
+            I is_self == 1 {
+                fmt_write(f, "&self")
+            } E {
+                I p_mut == 1 { fmt_write(f, "mut "); 0 } E { 0 }
+                fmt_write_str_idx(f, p_name)
+                I p_type != 0 {
+                    fmt_write(f, ": ")
+                    fmt_type(f, p_type)
+                    0
+                } E { 0 }
+            }
+            i = i + 1
+        }
+        0
+    } E { 0 }
+    fmt_write(f, ")")
+
+    # Return type
+    I ret_type != 0 {
+        fmt_write(f, " -> ")
+        fmt_type(f, ret_type)
+        0
+    } E { 0 }
+
+    # Body
+    I body_kind == 0 {
+        # Expression body
+        fmt_write(f, " = ")
+        fmt_expr(f, body_expr)
+        fmt_newline(f)
+    } E {
+        # Block body
+        fmt_write(f, " {")
+        fmt_newline(f)
+        fmt_indent_inc(f)
+        fmt_stmts(f, body_stmts, body_stmts_len)
+        fmt_indent_dec(f)
+        fmt_indent(f)
+        fmt_write(f, "}")
+        fmt_newline(f)
+    }
+    0
+}
+
+# ============================================================================
+# Struct formatting
+# ============================================================================
+
+F fmt_struct(f: i64, struct_ptr: i64) -> i64 {
+    name_idx := load_i64(struct_ptr + 0)
+    generics_ptr := load_i64(struct_ptr + 8)
+    generics_len := load_i64(struct_ptr + 16)
+    fields_ptr := load_i64(struct_ptr + 24)
+    fields_len := load_i64(struct_ptr + 32)
+    is_pub := load_i64(struct_ptr + 40)
+
+    fmt_indent(f)
+    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    fmt_write(f, "S ")
+    fmt_write_str_idx(f, name_idx)
+
+    # Generics
+    I generics_len > 0 {
+        fmt_write(f, "<")
+        i := mut 0
+        L {
+            I i >= generics_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            gp := generics_ptr + i * 40
+            gp_name := load_i64(gp + 0)
+            fmt_write_str_idx(f, gp_name)
+            i = i + 1
+        }
+        fmt_write(f, ">")
+        0
+    } E { 0 }
+
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+
+    # Fields
+    i := mut 0
+    L {
+        I i >= fields_len { B }
+        # Field.size() = 40: name_idx(8) + type_ptr(8) + is_pub(8) + span(16)
+        field := fields_ptr + i * 40
+        f_name := load_i64(field + 0)
+        f_type := load_i64(field + 8)
+
+        fmt_indent(f)
+        fmt_write_str_idx(f, f_name)
+        fmt_write(f, ": ")
+        fmt_type(f, f_type)
+        I i < fields_len - 1 { fmt_write(f, ","); 0 } E { 0 }
+        fmt_newline(f)
+        i = i + 1
+    }
+
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+    fmt_newline(f)
+    0
+}
+
+# ============================================================================
+# Enum formatting
+# ============================================================================
+
+F fmt_enum(f: i64, enum_ptr: i64) -> i64 {
+    name_idx := load_i64(enum_ptr + 0)
+    generics_ptr := load_i64(enum_ptr + 8)
+    generics_len := load_i64(enum_ptr + 16)
+    variants_ptr := load_i64(enum_ptr + 24)
+    variants_len := load_i64(enum_ptr + 32)
+    is_pub := load_i64(enum_ptr + 40)
+
+    fmt_indent(f)
+    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    fmt_write(f, "E ")
+    fmt_write_str_idx(f, name_idx)
+
+    # Generics
+    I generics_len > 0 {
+        fmt_write(f, "<")
+        i := mut 0
+        L {
+            I i >= generics_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            gp := generics_ptr + i * 40
+            gp_name := load_i64(gp + 0)
+            fmt_write_str_idx(f, gp_name)
+            i = i + 1
+        }
+        fmt_write(f, ">")
+        0
+    } E { 0 }
+
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+
+    # Variants
+    i := mut 0
+    L {
+        I i >= variants_len { B }
+        # Variant.size() = 48: name_idx(8) + fields_kind(8) + fields_ptr(8) + fields_len(8) + span(16)
+        v := variants_ptr + i * 48
+        v_name := load_i64(v + 0)
+        v_kind := load_i64(v + 8)
+        v_fields_ptr := load_i64(v + 16)
+        v_fields_len := load_i64(v + 24)
+
+        fmt_indent(f)
+        fmt_write_str_idx(f, v_name)
+
+        I v_kind == 1 {
+            # Tuple variant
+            fmt_write(f, "(")
+            j := mut 0
+            L {
+                I j >= v_fields_len { B }
+                I j > 0 { fmt_write(f, ", "); 0 } E { 0 }
+                field := v_fields_ptr + j * 40
+                f_type := load_i64(field + 8)
+                fmt_type(f, f_type)
+                j = j + 1
+            }
+            fmt_write(f, ")")
+            0
+        } E I v_kind == 2 {
+            # Struct variant
+            fmt_write(f, " {")
+            fmt_newline(f)
+            fmt_indent_inc(f)
+            j := mut 0
+            L {
+                I j >= v_fields_len { B }
+                field := v_fields_ptr + j * 40
+                f_name := load_i64(field + 0)
+                f_type := load_i64(field + 8)
+                fmt_indent(f)
+                fmt_write_str_idx(f, f_name)
+                fmt_write(f, ": ")
+                fmt_type(f, f_type)
+                fmt_newline(f)
+                j = j + 1
+            }
+            fmt_indent_dec(f)
+            fmt_indent(f)
+            fmt_write(f, "}")
+        } E { 0 }  # Unit variant — no extra output
+
+        I i < variants_len - 1 { fmt_write(f, ","); 0 } E { 0 }
+        fmt_newline(f)
+        i = i + 1
+    }
+
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+    fmt_newline(f)
+    0
+}
+
+# ============================================================================
+# Impl block formatting
+# ============================================================================
+
+F fmt_impl(f: i64, impl_ptr: i64) -> i64 {
+    # ImplDef: target_type_ptr(8) + trait_name_idx(8) + generics(16) + methods(16) + span(16) = 64
+    target_type := load_i64(impl_ptr + 0)
+    trait_name_idx := load_i64(impl_ptr + 8)
+    generics_ptr := load_i64(impl_ptr + 16)
+    generics_len := load_i64(impl_ptr + 24)
+    methods_ptr := load_i64(impl_ptr + 32)
+    methods_len := load_i64(impl_ptr + 40)
+
+    fmt_indent(f)
+    fmt_write(f, "X ")
+    fmt_type(f, target_type)
+
+    # Trait implementation: X Type: Trait { ... }
+    neg_one := 0 - 1
+    I trait_name_idx != neg_one {
+        fmt_write(f, ": ")
+        fmt_write_str_idx(f, trait_name_idx)
+        0
+    } E { 0 }
+
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+
+    # Methods (stored as FunctionDef array)
+    i := mut 0
+    L {
+        I i >= methods_len { B }
+        I i > 0 { fmt_newline(f); 0 } E { 0 }
+        method := methods_ptr + i * 112  # FunctionDef.size() = 112
+        fmt_function(f, method)
+        i = i + 1
+    }
+
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+    fmt_newline(f)
+    0
+}
+
+# ============================================================================
+# Trait formatting
+# ============================================================================
+
+F fmt_trait(f: i64, trait_ptr: i64) -> i64 {
+    # TraitDef: name_idx(8) + generics(16) + super(16) + methods(16) + is_pub(8) + span(16) = 80
+    name_idx := load_i64(trait_ptr + 0)
+    generics_ptr := load_i64(trait_ptr + 8)
+    generics_len := load_i64(trait_ptr + 16)
+    methods_ptr := load_i64(trait_ptr + 40)
+    methods_len := load_i64(trait_ptr + 48)
+    is_pub := load_i64(trait_ptr + 56)
+
+    fmt_indent(f)
+    I is_pub == 1 { fmt_write(f, "P "); 0 } E { 0 }
+    fmt_write(f, "W ")
+    fmt_write_str_idx(f, name_idx)
+
+    # Generics
+    I generics_len > 0 {
+        fmt_write(f, "<")
+        i := mut 0
+        L {
+            I i >= generics_len { B }
+            I i > 0 { fmt_write(f, ", "); 0 } E { 0 }
+            gp := generics_ptr + i * 40
+            gp_name := load_i64(gp + 0)
+            fmt_write_str_idx(f, gp_name)
+            i = i + 1
+        }
+        fmt_write(f, ">")
+        0
+    } E { 0 }
+
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+
+    # Methods
+    i := mut 0
+    L {
+        I i >= methods_len { B }
+        I i > 0 { fmt_newline(f); 0 } E { 0 }
+        method := methods_ptr + i * 112
+        fmt_function(f, method)
+        i = i + 1
+    }
+
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+    fmt_newline(f)
+    0
+}
+
+# ============================================================================
+# Use statement formatting
+# ============================================================================
+
+F fmt_use(f: i64, use_ptr: i64) -> i64 {
+    # UseDef: path_idx(8) + items_ptr(8) + items_len(8) = 24
+    path_idx := load_i64(use_ptr + 0)
+    fmt_indent(f)
+    fmt_write(f, "U ")
+    fmt_write_str_idx(f, path_idx)
+    fmt_newline(f)
+    0
+}
+
+# ============================================================================
+# Type alias formatting
+# ============================================================================
+
+F fmt_type_alias(f: i64, ta_ptr: i64) -> i64 {
+    # TypeAliasDef: name_idx(8) + type_ptr(8) = 16+
+    name_idx := load_i64(ta_ptr + 0)
+    type_ptr := load_i64(ta_ptr + 8)
+    fmt_indent(f)
+    fmt_write(f, "T ")
+    fmt_write_str_idx(f, name_idx)
+    fmt_write(f, " = ")
+    fmt_type(f, type_ptr)
+    fmt_newline(f)
+    0
+}
+
+# ============================================================================
+# Main formatter entry point
+# ============================================================================
+
+F fmt_module(f: i64, items_ptr: i64, items_len: i64) -> i64 {
+    store_i64(f + 40, items_ptr)
+    store_i64(f + 48, items_len)
+    fmt_items(f, items_ptr, items_len)
+}
+
+# Get formatted output: returns (data_ptr, data_len)
+F fmt_get_output(f: i64) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_get_data(sb)
+}
+
+F fmt_get_output_len(f: i64) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_get_len(sb)
+}
+
+# Free formatter resources
+F fmt_free(f: i64) -> i64 {
+    sb := fmt_get_sb(f)
+    sb_free(sb)
+    free(f)
+    0
+}
