@@ -48,6 +48,11 @@ name = "macro_bench"
 path = "macro_bench.rs"
 harness = false
 
+[[bench]]
+name = "largescale_bench"
+path = "largescale_bench.rs"
+harness = false
+
 [dependencies]
 vais-lexer = { path = "../crates/vais-lexer" }
 vais-parser = { path = "../crates/vais-parser" }

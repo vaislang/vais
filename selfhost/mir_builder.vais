@@ -1,0 +1,297 @@
+U mir
+
+# Vais Self-Hosting Compiler - MIR Builder
+# Provides incremental construction API for building MIR function bodies.
+#
+# Usage:
+#   builder := mir_builder_new(name_idx, return_type_ptr)
+#   param_local := mir_builder_add_param(builder, type_ptr, name_idx)
+#   bb0 := mir_builder_entry_block(builder)
+#   tmp := mir_builder_new_local(builder, type_ptr, 0)
+#   mir_builder_assign(builder, place_local(tmp), rvalue_binop(...))
+#   mir_builder_terminate(builder, term_return())
+#   body := mir_builder_build(builder)
+
+# ============================================================================
+# MirBuilder state
+# ============================================================================
+
+# MirBuilder: 80 bytes
+#  name_idx: function name (string pool)
+#  return_type_ptr: MirType for return
+#  locals_ptr: array of MirLocalDecl pointers
+#  locals_len, locals_cap: dynamic array
+#  blocks_ptr: array of MirBasicBlock pointers
+#  blocks_len, blocks_cap: dynamic array
+#  current_block: index of the block being built
+#  next_local: counter for local indices
+#  param_count: number of params (locals 1..param_count)
+S MirBuilder {
+    name_idx: i64,
+    return_type_ptr: i64,
+    locals_ptr: i64,
+    locals_len: i64,
+    locals_cap: i64,
+    blocks_ptr: i64,
+    blocks_len: i64,
+    blocks_cap: i64,
+    current_block: i64,
+    param_count: i64
+}
+
+F mir_builder_new(name_idx: i64, return_type_ptr: i64) -> i64 {
+    # Allocate builder struct
+    builder := malloc(80)
+
+    # Set name and return type
+    store_i64(builder, name_idx)
+    store_i64(builder + 8, return_type_ptr)
+
+    # Allocate locals array (capacity 256)
+    locals_cap := 256
+    locals := malloc(8 * locals_cap)
+    store_i64(builder + 16, locals)
+    store_i64(builder + 24, 0)
+    store_i64(builder + 32, locals_cap)
+
+    # Allocate blocks array (capacity 128)
+    blocks_cap := 128
+    blocks := malloc(8 * blocks_cap)
+    store_i64(builder + 40, blocks)
+    store_i64(builder + 48, 0)
+    store_i64(builder + 56, blocks_cap)
+
+    # Create _0 = return place as first local
+    ret_local := mir_local_decl(0, return_type_ptr, 1)
+    store_i64(locals, ret_local)
+    store_i64(builder + 24, 1)
+
+    # Create entry block bb0
+    entry_bb := mir_bb_new()
+    store_i64(blocks, entry_bb)
+    store_i64(builder + 48, 1)
+
+    # Current block = bb0
+    store_i64(builder + 64, 0)
+
+    # No params yet
+    store_i64(builder + 72, 0)
+
+    R builder
+}
+
+# Add a parameter to the function, returns the local index
+F mir_builder_add_param(builder: i64, type_ptr: i64, name_idx: i64) -> i64 {
+    locals := load_i64(builder + 16)
+    locals_len := load_i64(builder + 24)
+
+    local_decl := mir_local_decl(name_idx, type_ptr, 0)
+    store_i64(locals + locals_len * 8, local_decl)
+    store_i64(builder + 24, locals_len + 1)
+
+    # Increment param count
+    pc := load_i64(builder + 72)
+    store_i64(builder + 72, pc + 1)
+
+    R locals_len
+}
+
+# Create a new temporary local, returns the local index
+F mir_builder_new_local(builder: i64, type_ptr: i64, name_idx: i64) -> i64 {
+    locals := load_i64(builder + 16)
+    locals_len := load_i64(builder + 24)
+    locals_cap := load_i64(builder + 32)
+
+    # Grow if needed
+    I locals_len >= locals_cap {
+        new_cap := locals_cap * 2
+        new_locals := malloc(8 * new_cap)
+        i := mut 0
+        L {
+            I i >= locals_len { R 0 }
+            store_i64(new_locals + i * 8, load_i64(locals + i * 8))
+            i = i + 1
+        }
+        free(locals)
+        store_i64(builder + 16, new_locals)
+        store_i64(builder + 32, new_cap)
+        locals = new_locals
+    }
+
+    local_decl := mir_local_decl(name_idx, type_ptr, 1)
+    store_i64(locals + locals_len * 8, local_decl)
+    store_i64(builder + 24, locals_len + 1)
+
+    R locals_len
+}
+
+# Create a new basic block, returns the block index
+F mir_builder_new_block(builder: i64) -> i64 {
+    blocks := load_i64(builder + 40)
+    blocks_len := load_i64(builder + 48)
+    blocks_cap := load_i64(builder + 56)
+
+    # Grow if needed
+    I blocks_len >= blocks_cap {
+        new_cap := blocks_cap * 2
+        new_blocks := malloc(8 * new_cap)
+        i := mut 0
+        L {
+            I i >= blocks_len { R 0 }
+            store_i64(new_blocks + i * 8, load_i64(blocks + i * 8))
+            i = i + 1
+        }
+        free(blocks)
+        store_i64(builder + 40, new_blocks)
+        store_i64(builder + 56, new_cap)
+        blocks = new_blocks
+    }
+
+    bb := mir_bb_new()
+    store_i64(blocks + blocks_len * 8, bb)
+    store_i64(builder + 48, blocks_len + 1)
+
+    R blocks_len
+}
+
+# Switch to building a different block
+F mir_builder_switch_block(builder: i64, block_idx: i64) -> i64 {
+    store_i64(builder + 64, block_idx)
+    R 1
+}
+
+# Get current block index
+F mir_builder_current_block(builder: i64) -> i64 {
+    R load_i64(builder + 64)
+}
+
+# Get the return place (_0)
+F mir_builder_return_place() -> i64 {
+    R place_local(0)
+}
+
+# Get a parameter place (local 1..n)
+F mir_builder_param_place(param_idx: i64) -> i64 {
+    R place_local(param_idx + 1)
+}
+
+# Add an assignment statement to the current block
+F mir_builder_assign(builder: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
+    blocks := load_i64(builder + 40)
+    current := load_i64(builder + 64)
+    bb := load_i64(blocks + current * 8)
+
+    stmt := mir_stmt_assign(place_ptr, rvalue_ptr)
+    mir_bb_add_stmt(bb, stmt)
+}
+
+# Add a drop statement to the current block
+F mir_builder_drop(builder: i64, place_ptr: i64) -> i64 {
+    blocks := load_i64(builder + 40)
+    current := load_i64(builder + 64)
+    bb := load_i64(blocks + current * 8)
+
+    stmt := mir_stmt_drop(place_ptr)
+    mir_bb_add_stmt(bb, stmt)
+}
+
+# Add a nop statement to the current block
+F mir_builder_nop(builder: i64) -> i64 {
+    blocks := load_i64(builder + 40)
+    current := load_i64(builder + 64)
+    bb := load_i64(blocks + current * 8)
+
+    stmt := mir_stmt_nop()
+    mir_bb_add_stmt(bb, stmt)
+}
+
+# Set the terminator of the current block
+F mir_builder_terminate(builder: i64, term_ptr: i64) -> i64 {
+    blocks := load_i64(builder + 40)
+    current := load_i64(builder + 64)
+    bb := load_i64(blocks + current * 8)
+    mir_bb_set_term(bb, term_ptr)
+}
+
+# Convenience: assign a constant integer to a local
+F mir_builder_assign_const_int(builder: i64, local_idx: i64, value: i64) -> i64 {
+    place := place_local(local_idx)
+    operand := operand_const_int(value)
+    rv := rvalue_use(operand)
+    mir_builder_assign(builder, place, rv)
+}
+
+# Convenience: assign a binary operation result to a local
+F mir_builder_assign_binop(builder: i64, dest_local: i64, op: i64, lhs_local: i64, rhs_local: i64) -> i64 {
+    place := place_local(dest_local)
+    lhs := operand_copy(lhs_local)
+    rhs := operand_copy(rhs_local)
+    rv := rvalue_binop(op, lhs, rhs)
+    mir_builder_assign(builder, place, rv)
+}
+
+# Convenience: add a goto terminator
+F mir_builder_goto(builder: i64, target_bb: i64) -> i64 {
+    mir_builder_terminate(builder, term_goto(target_bb))
+}
+
+# Convenience: add a return terminator
+F mir_builder_return(builder: i64) -> i64 {
+    mir_builder_terminate(builder, term_return())
+}
+
+# Convenience: add a call and assign result to a local
+F mir_builder_call(builder: i64, func_idx: i64, args_ptr: i64, args_len: i64, dest_local: i64, next_bb: i64) -> i64 {
+    dest := place_local(dest_local)
+    mir_builder_terminate(builder, term_call(func_idx, args_ptr, args_len, dest, next_bb))
+}
+
+# ============================================================================
+# Build — finalize the builder into a MirBody
+# ============================================================================
+
+F mir_builder_build(builder: i64) -> i64 {
+    name_idx := load_i64(builder)
+    return_type_ptr := load_i64(builder + 8)
+    locals_ptr := load_i64(builder + 16)
+    locals_len := load_i64(builder + 24)
+    blocks_ptr := load_i64(builder + 40)
+    blocks_len := load_i64(builder + 48)
+    param_count := load_i64(builder + 72)
+
+    # Build params array (MirType ptrs)
+    params := malloc(8 * param_count)
+    i := mut 0
+    L {
+        I i >= param_count { R 0 }
+        local_decl := load_i64(locals_ptr + (i + 1) * 8)
+        type_ptr := load_i64(local_decl + 8)
+        store_i64(params + i * 8, type_ptr)
+        i = i + 1
+    }
+
+    # Allocate MirBody: 64 bytes
+    body := malloc(64)
+    store_i64(body, name_idx)
+    store_i64(body + 8, params)
+    store_i64(body + 16, param_count)
+    store_i64(body + 24, return_type_ptr)
+    store_i64(body + 32, locals_ptr)
+    store_i64(body + 40, locals_len)
+    store_i64(body + 48, blocks_ptr)
+    store_i64(body + 56, blocks_len)
+
+    R body
+}
+
+# ============================================================================
+# Debug: count locals and blocks
+# ============================================================================
+
+F mir_builder_local_count(builder: i64) -> i64 {
+    R load_i64(builder + 24)
+}
+
+F mir_builder_block_count(builder: i64) -> i64 {
+    R load_i64(builder + 48)
+}

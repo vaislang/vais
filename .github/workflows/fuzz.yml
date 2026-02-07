@@ -111,6 +111,33 @@ jobs:
             -- --test-threads=1
         continue-on-error: true
 
+  miri-tests:
+    name: Miri Undefined Behavior Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly with miri
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri, rust-src
+
+      - name: Install LLVM 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev
+
+      - name: Run miri on core crates
+        run: |
+          cargo +nightly miri test -p vais-lexer -- --test-threads=1 2>&1 || true
+          cargo +nightly miri test -p vais-parser -- --test-threads=1 2>&1 || true
+          cargo +nightly miri test -p vais-ast -- --test-threads=1 2>&1 || true
+          cargo +nightly miri test -p vais-types -- --test-threads=1 2>&1 || true
+        env:
+          MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-tree-borrows"
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
