@@ -378,20 +378,18 @@ mod tests {
 
     #[test]
     fn test_global_profiler() {
+        // All global profiler tests run in a single test to avoid race conditions
+        // since they share the same global Mutex<Option<Arc<Profiler>>> state.
         vais_profiler_global_destroy();
 
+        // Test init/double-init/start/stop lifecycle
         assert!(vais_profiler_global_init(std::ptr::null()));
         assert!(!vais_profiler_global_init(std::ptr::null()));
-
         assert!(vais_profiler_global_start());
         assert!(vais_profiler_global_stop());
-
         vais_profiler_global_destroy();
-    }
 
-    #[test]
-    fn test_global_profiler_record() {
-        vais_profiler_global_destroy();
+        // Test recording samples, allocations, and call graph edges
         vais_profiler_global_init(std::ptr::null());
         vais_profiler_global_start();
 
