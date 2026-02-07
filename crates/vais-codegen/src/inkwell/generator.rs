@@ -4147,8 +4147,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
             for (i, arm) in arms.iter().enumerate() {
                 let is_last = i == arms.len() - 1;
+                // For the last arm, create a fallthrough block instead of using merge_block
+                // directly. This prevents invalid phi nodes when the last arm's check has
+                // a false branch that reaches merge_block without a phi entry.
                 let next_block = if is_last {
-                    merge_block
+                    let fallthrough = self
+                        .context
+                        .append_basic_block(fn_value, &self.fresh_label("match.fallthrough"));
+                    fallthrough
                 } else {
                     self.context
                         .append_basic_block(fn_value, &self.fresh_label("match.check"))
@@ -4232,11 +4238,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     arm_results.push((body_val, body_end_block));
                 }
 
+                // For the last arm's fallthrough block, add a default value and jump to merge
+                if is_last {
+                    self.builder.position_at_end(next_block);
+                    let default_val = self.context.i64_type().const_int(0, false);
+                    self.builder
+                        .build_unconditional_branch(merge_block)
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    arm_results.push((default_val.into(), next_block));
+                }
+
                 current_block = next_block;
             }
-
-            // Handle the case when no arm matched (last block leads to merge)
-            // This should be unreachable for exhaustive matches
         }
 
         // Merge block with phi node

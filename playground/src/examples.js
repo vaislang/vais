@@ -97,34 +97,33 @@ F main() -> i64 {
 
   'enum': {
     name: 'Enum',
-    description: 'Enum types and variants',
+    description: 'Enum types with pattern matching',
     code: `# Enum definition
-E Direction {
-    North,
-    South,
-    East,
-    West
+E Color {
+    Red,
+    Green,
+    Blue
 }
 
-# Enums are represented as integers
-F describe(d: i64) -> i64 {
-    I d == 0 {
-        puts("Going North")
-    } E { I d == 1 {
-        puts("Going South")
-    } E { I d == 2 {
-        puts("Going East")
-    } E {
-        puts("Going West")
-    }}}
-    0
+# Match on enum variants
+F color_value(c: Color) -> i64 {
+    M c {
+        Red => 1,
+        Green => 2,
+        Blue => 3,
+        _ => 0
+    }
 }
 
 F main() -> i64 {
-    n := North
-    s := South
-    describe(0)
-    describe(2)
+    r := Red
+    g := Green
+    b := Blue
+
+    rv := color_value(r)
+    gv := color_value(g)
+    bv := color_value(b)
+
     0
 }`
   },
