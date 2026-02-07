@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770436855983,
+  "lastUpdate": 1770443887418,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -6719,6 +6719,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1815006,
             "range": "± 16868",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "77e17db39ed5995cb41ef375c8bd7d224f6142b8",
+          "message": "feat(selfhost): add stdlib modules — Vec, String, HashMap, defer, file I/O, print\n\nAdd 6 new selfhost standard library modules totaling ~1,460 LOC:\n- vec.vais (295 LOC): dynamic array with push/pop/sort/reverse/clone\n- string.vais (351 LOC): owned string with eq/concat/slice/find/trim\n- hashmap.vais (333 LOC): open addressing hash map with put/get/remove\n- file_io.vais (249 LOC): file read/write/exists wrappers around C builtins\n- print.vais (229 LOC): enhanced output — i64/bool/hex/char/repeat\n\nImplement defer statement (D expr) in selfhost codegen:\n- Parser: STMT_DEFER parsing for D keyword\n- Codegen: defer stack with LIFO cleanup at return/function exit\n- Tested: single defer, multiple defers (LIFO order), early return\n\nAlso add memcmp as Inkwell/type-checker builtin for string comparison.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-07T14:51:13+09:00",
+          "tree_id": "861b83ebeac42cc04cd861bee4cf635ddc6c9d3b",
+          "url": "https://github.com/vaislang/vais/commit/77e17db39ed5995cb41ef375c8bd7d224f6142b8"
+        },
+        "date": 1770443887137,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2382,
+            "range": "± 36",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5296,
+            "range": "± 54",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 6015,
+            "range": "± 275",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10929,
+            "range": "± 99",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 17690,
+            "range": "± 180",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34000,
+            "range": "± 333",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29764,
+            "range": "± 138",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 66103,
+            "range": "± 630",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 269129,
+            "range": "± 4107",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 410834,
+            "range": "± 2506",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 100971,
+            "range": "± 523",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 707231,
+            "range": "± 2782",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 151233,
+            "range": "± 1028",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 178039,
+            "range": "± 699",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 186419,
+            "range": "± 1044",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 229424,
+            "range": "± 1038",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 484309,
+            "range": "± 1575",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 682616,
+            "range": "± 3306",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 377695,
+            "range": "± 1606",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1087317,
+            "range": "± 16111",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38302,
+            "range": "± 424",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 186933,
+            "range": "± 3901",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 384477,
+            "range": "± 4277",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1818733,
+            "range": "± 19959",
             "unit": "ns/iter"
           }
         ]
