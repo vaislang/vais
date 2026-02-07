@@ -94,6 +94,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | 40 | 셀프호스트 Stdlib 테스트 강화 | ✅ 완료 | 276 assertions, 6 모듈 + Rust E2E (버그 3건 수정) |
 | **41** | **v2.0 언어 진화** | ✅ 완료 | 7/7 Stage — 에러복구/클로저/에러타입/이터레이터/패키지/E2E 301개/성능CI |
 | **42** | **인크리멘탈 컴파일** | ✅ 완료 | Stage 0~5 전부 — 571ms→96ms (5.9x), 312 E2E |
+| **43** | **Codegen 품질 개선** | **📋 예정** | **아래 상세** |
 | | *VaisDB 본체 → 별도 repo (`vaisdb`)에서 진행* | | |
 
 ---
@@ -446,6 +447,60 @@ Stage 3 (에러 체계) ──→ Stage 5 (패키지)
 
 ```
 Stage 0 ✅ → Stage 1 ✅ → Stage 2 ✅ → Stage 3 ✅ → Stage 4 ✅ → Stage 5 ✅  🎉 완료!
+```
+
+---
+
+## 🚀 Phase 43: Codegen 품질 개선
+
+> **상태**: 📋 예정
+> **목표**: Text codegen의 미해결 버그 수정, clippy 경고 제거, ignored 테스트 활성화
+> **배경**: 42개 Phase 완료 후 남은 기술 부채 정리 — match phi node 버그, clippy 경고 2건, ignored 테스트 35건
+
+### Stage 0: Match Phi Node 타입 추론 수정
+
+**목표**: match arm에서 enum variant 반환 시 phi node 타입 불일치 해결
+
+- [ ] `control_flow.rs:404` — phi node 타입을 i64 하드코딩에서 arm 타입 추론으로 변경
+- [ ] match arm이 enum/struct pointer 반환 시 ptr 타입 phi node 생성
+- [ ] 기존 i64 반환 케이스 호환성 유지
+- [ ] E2E 테스트: match arm에서 enum variant 직접 생성 + 반환
+- **난이도**: 상 | **모델**: Opus 직접
+
+### Stage 1: Clippy 경고 제거 + 코드 품질
+
+**목표**: clippy 경고 0건 달성
+
+- [ ] `main.rs:3710` — if/else 동일 블록 수정 (verbose 분기 정리)
+- [ ] `main.rs:2457` — collapsible if 문 정리
+- [ ] `cargo clippy --workspace` 전체 경고 0건 확인
+- **난이도**: 하 | **모델**: Sonnet 위임
+
+### Stage 2: Ignored 테스트 활성화
+
+**목표**: 의도적 ignore 테스트 중 활성화 가능한 것들 정리
+
+- [ ] `cross_verify_tests.rs` (10개) — CI에서 selfhost 빌드 후 실행 가능하도록 조건부 활성화
+- [ ] `scale_test.rs` (17개) — 벤치마크용이므로 그대로 유지, 문서화
+- [ ] `memory_safety_tests.rs` (3개) — 파서 재귀 깊이 제한 문서화, 필요 시 iterative 변환
+- [ ] `phase33_integration_tests.rs` (2개) — 런타임 의존성 조건부 활성화 (cfg feature)
+- [ ] ignored 테스트 현황 정리 문서 추가
+- **난이도**: 중 | **모델**: Opus 직접
+
+### Stage 3: 검증 + 벤치마크
+
+**목표**: 전체 테스트 통과 + 성능 회귀 없음 확인
+
+- [ ] 312+ E2E 테스트 전부 통과
+- [ ] clippy 경고 0건
+- [ ] 벤치마크 재실행: Phase 42 대비 성능 회귀 없음
+- [ ] BASELINE.md 업데이트
+- **난이도**: 하 | **모델**: Sonnet 위임
+
+### 우선순위
+
+```
+Stage 0 → Stage 1 → Stage 2 → Stage 3
 ```
 
 ---
