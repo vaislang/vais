@@ -2098,12 +2098,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                 } else if val.is_struct_value() {
                     // Fallback: match the generated value's struct type against known structs
+                    // Only use if unambiguous (exactly one struct matches the LLVM type)
                     let struct_type = val.into_struct_value().get_type();
-                    for (sn, st) in &self.generated_structs {
-                        if *st == struct_type {
-                            self.var_struct_types.insert(name.node.clone(), sn.clone());
-                            break;
-                        }
+                    let matches: Vec<_> = self.generated_structs.iter()
+                        .filter(|(_, st)| **st == struct_type)
+                        .collect();
+                    if matches.len() == 1 {
+                        self.var_struct_types.insert(name.node.clone(), matches[0].0.clone());
                     }
                 }
 
@@ -4845,10 +4846,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         if let Some(ret) = ret_type {
                             if ret.is_struct_type() {
                                 let struct_type = ret.into_struct_type();
-                                for (name, st) in &self.generated_structs {
-                                    if *st == struct_type {
-                                        return Some(name.clone());
-                                    }
+                                // Only use LLVM type match if unambiguous (exactly one match)
+                                let matches: Vec<_> = self.generated_structs.iter()
+                                    .filter(|(_, st)| **st == struct_type)
+                                    .collect();
+                                if matches.len() == 1 {
+                                    return Some(matches[0].0.clone());
                                 }
                             }
                         }
@@ -4862,6 +4865,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Try to infer from method return type
                 let struct_name = self.infer_struct_name(&receiver.node).ok()?;
                 let qualified = format!("{}_{}", struct_name, method.node);
+                // First check our explicit function->struct return type map
+                if let Some(sn) = self.function_return_structs.get(&qualified) {
+                    return Some(sn.clone());
+                }
                 let fn_value = self
                     .functions
                     .get(&qualified)
@@ -4872,10 +4879,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     if let Some(ret) = ret_type {
                         if ret.is_struct_type() {
                             let struct_type = ret.into_struct_type();
-                            for (name, st) in &self.generated_structs {
-                                if *st == struct_type {
-                                    return Some(name.clone());
-                                }
+                            // Only use LLVM type match if unambiguous (exactly one match)
+                            let matches: Vec<_> = self.generated_structs.iter()
+                                .filter(|(_, st)| **st == struct_type)
+                                .collect();
+                            if matches.len() == 1 {
+                                return Some(matches[0].0.clone());
                             }
                         }
                     }

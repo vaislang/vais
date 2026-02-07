@@ -53,7 +53,7 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     assign_count := malloc(8 * locals_len)
     i := mut 0
     L {
-        I i >= locals_len { R 0 }
+        I i >= locals_len { B } E { 0 }
         store_i64(const_values + i * 8, 0)
         store_i64(assign_count + i * 8, 0)
         i = i + 1
@@ -62,14 +62,14 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     # Scan all statements for assignments
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -110,7 +110,7 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     # Remove multi-assigned locals from const_values
     i = 0
     L {
-        I i >= locals_len { R 0 }
+        I i >= locals_len { B } E { 0 }
         cnt := load_i64(assign_count + i * 8)
         I cnt > 1 {
             store_i64(const_values + i * 8, 0)
@@ -122,7 +122,7 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
     # Phase 2: Propagate constants into operands
     bi = 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -130,7 +130,7 @@ F mir_constant_propagation(body_ptr: i64) -> i64 {
         # Propagate in statements
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
             I kind == STMT_MIR_ASSIGN() {
@@ -187,7 +187,7 @@ F cp_propagate_rvalue(rvalue_ptr: i64, const_values: i64, locals_len: i64) -> i6
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { R 0 }
+            I j >= agg_len { B } E { 0 }
             op := load_i64(agg_ops + j * 8)
             new_op := cp_try_replace(op, const_values, locals_len)
             I new_op != 0 { store_i64(agg_ops + j * 8, new_op); 0 } E { 0 }
@@ -249,7 +249,7 @@ F cp_propagate_terminator(term_ptr: i64, const_values: i64, locals_len: i64) -> 
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             arg := load_i64(args_ptr + j * 8)
             new_arg := cp_try_replace(arg, const_values, locals_len)
             I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } E { 0 }
@@ -262,7 +262,7 @@ F cp_propagate_terminator(term_ptr: i64, const_values: i64, locals_len: i64) -> 
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             arg := load_i64(args_ptr + j * 8)
             new_arg := cp_try_replace(arg, const_values, locals_len)
             I new_arg != 0 { store_i64(args_ptr + j * 8, new_arg); 0 } E { 0 }
@@ -284,14 +284,14 @@ F mir_constant_folding(body_ptr: i64) -> i64 {
 
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -399,7 +399,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
     used := malloc(8 * locals_len)
     i := mut 0
     L {
-        I i >= locals_len { R 0 }
+        I i >= locals_len { B } E { 0 }
         store_i64(used + i * 8, 0)
         i = i + 1
     }
@@ -410,7 +410,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
     # Scan all blocks
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -419,7 +419,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
         # Scan statements for reads
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -449,7 +449,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
     # Remove assignments to unused locals
     bi = 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -458,7 +458,7 @@ F mir_dead_code_elimination(body_ptr: i64) -> i64 {
         write_idx := mut 0
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -525,7 +525,7 @@ F dce_collect_rvalue_reads(rvalue_ptr: i64, used: i64, locals_len: i64) -> i64 {
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { R 0 }
+            I j >= agg_len { B } E { 0 }
             op := load_i64(agg_ops + j * 8)
             dce_collect_operand_reads(op, used, locals_len)
             j = j + 1
@@ -572,7 +572,7 @@ F dce_collect_terminator_reads(term_ptr: i64, used: i64, locals_len: i64) -> i64
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             arg := load_i64(args_ptr + j * 8)
             dce_collect_operand_reads(arg, used, locals_len)
             j = j + 1
@@ -584,7 +584,7 @@ F dce_collect_terminator_reads(term_ptr: i64, used: i64, locals_len: i64) -> i64
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             arg := load_i64(args_ptr + j * 8)
             dce_collect_operand_reads(arg, used, locals_len)
             j = j + 1
@@ -614,7 +614,7 @@ F mir_remove_unreachable_blocks_v2(body_ptr: i64) -> i64 {
     reachable := malloc(8 * blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(reachable + i * 8, 0)
         i = i + 1
     }
@@ -645,7 +645,7 @@ F mir_remove_unreachable_blocks_v2(body_ptr: i64) -> i64 {
     # Replace unreachable blocks
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         I load_i64(reachable + i * 8) == 0 {
             bb_ptr := load_i64(blocks_ptr + i * 8)
             # Clear statements
@@ -679,7 +679,7 @@ F ub_visit_successors(term_ptr: i64, reachable: i64, worklist: i64, wl_len_buf: 
 
         j := mut 0
         L {
-            I j >= targets_len { R 0 }
+            I j >= targets_len { B } E { 0 }
             target_bb := load_i64(targets_ptr + j * 16 + 8)
             ub_try_add(target_bb, reachable, worklist, wl_len_buf, blocks_len)
             j = j + 1

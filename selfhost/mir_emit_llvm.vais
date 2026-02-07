@@ -180,7 +180,7 @@ F me_add_string_const(em: i64, str_idx: i64) -> i64 {
     # Check if already recorded
     i := mut 0
     L {
-        I i >= sc_len { R 0 }
+        I i >= sc_len { B } E { 0 }
         I load_i64(sc_ptr + i * 8) == str_idx { R i }
         i = i + 1
     }
@@ -258,7 +258,7 @@ F me_emit_type(em: i64, ty_ptr: i64) -> i64 {
         me_emit_cstr(em, "{ ")
         i := mut 0
         L {
-            I i >= count { R 0 }
+            I i >= count { B } E { 0 }
             I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
             elem_ty := load_i64(inner_arr + i * 8)
             me_emit_type(em, elem_ty)
@@ -285,7 +285,7 @@ F me_emit_type(em: i64, ty_ptr: i64) -> i64 {
         me_emit_cstr(em, " (")
         i := mut 0
         L {
-            I i >= params_count { R 0 }
+            I i >= params_count { B } E { 0 }
             I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
             p_ty := load_i64(params_arr + i * 8)
             me_emit_type(em, p_ty)
@@ -743,7 +743,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
             i := mut 0
             L {
-                I i >= targets_len { R 0 }
+                I i >= targets_len { B } E { 0 }
                 val := load_i64(targets_ptr + i * 16)
                 target_bb := load_i64(targets_ptr + i * 16 + 8)
                 me_emit_cstr(em, "    i64 ")
@@ -795,7 +795,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         i := mut 0
         L {
-            I i >= args_len { R 0 }
+            I i >= args_len { B } E { 0 }
             I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
             arg_op := load_i64(args_ptr + i * 8)
             arg_ty := me_operand_type(em, arg_op)
@@ -831,7 +831,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         i := mut 0
         L {
-            I i >= args_len { R 0 }
+            I i >= args_len { B } E { 0 }
             I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
             arg_op := load_i64(args_ptr + i * 8)
             arg_ty := me_operand_type(em, arg_op)
@@ -917,7 +917,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
     # Parameters
     i := mut 0
     L {
-        I i >= params_len { R 0 }
+        I i >= params_len { B } E { 0 }
         I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
         param_ty := load_i64(params_ptr + i * 8)
         me_emit_type(em, param_ty)
@@ -941,7 +941,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
     # Allocate temporaries (locals after params)
     i = params_len + 1
     L {
-        I i >= locals_len { R 0 }
+        I i >= locals_len { B } E { 0 }
         local_decl := load_i64(locals_ptr + i * 8)
         local_ty := load_i64(local_decl + 8)
         me_emit_cstr(em, "  %_")
@@ -955,7 +955,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
     # Emit basic blocks
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
 
         I bi == 0 {
             me_emit_cstr(em, "entry:")
@@ -974,7 +974,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
         # Emit statements
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             me_emit_statement(em, stmt_ptr)
             si = si + 1
@@ -1034,7 +1034,7 @@ F me_emit_module(em: i64, mod_ptr: i64) -> i64 {
     # Function bodies
     i := mut 0
     L {
-        I i >= bodies_len { R 0 }
+        I i >= bodies_len { B } E { 0 }
         body_ptr := load_i64(bodies_ptr + i * 8)
         me_emit_body(em, body_ptr)
         i = i + 1

@@ -108,7 +108,7 @@ F mir_builder_new_local(builder: i64, type_ptr: i64, name_idx: i64) -> i64 {
         new_locals := malloc(8 * new_cap)
         i := mut 0
         L {
-            I i >= locals_len { R 0 }
+            I i >= locals_len { B } E { 0 }
             store_i64(new_locals + i * 8, load_i64(locals + i * 8))
             i = i + 1
         }
@@ -137,7 +137,7 @@ F mir_builder_new_block(builder: i64) -> i64 {
         new_blocks := malloc(8 * new_cap)
         i := mut 0
         L {
-            I i >= blocks_len { R 0 }
+            I i >= blocks_len { B } E { 0 }
             store_i64(new_blocks + i * 8, load_i64(blocks + i * 8))
             i = i + 1
         }
@@ -263,7 +263,7 @@ F mir_builder_build(builder: i64) -> i64 {
     params := malloc(8 * param_count)
     i := mut 0
     L {
-        I i >= param_count { R 0 }
+        I i >= param_count { B } E { 0 }
         local_decl := load_i64(locals_ptr + (i + 1) * 8)
         type_ptr := load_i64(local_decl + 8)
         store_i64(params + i * 8, type_ptr)

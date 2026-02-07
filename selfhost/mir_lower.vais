@@ -39,7 +39,8 @@ F vartab_bind(tab: i64, name_idx: i64, local_idx: i64) -> i64 {
         new_cap := cap * 2
         new_entries := malloc(16 * new_cap)
         i := mut 0
-        L { I i >= len { R 0 }
+        L {
+            I i >= len { B } E { 0 }
             store_i64(new_entries + i * 16, load_i64(entries + i * 16))
             store_i64(new_entries + i * 16 + 8, load_i64(entries + i * 16 + 8))
             i = i + 1
@@ -745,7 +746,8 @@ F lower_expr_match(ctx: i64, expr_ptr: i64) -> i64 {
     # Create a block for each arm
     arm_blocks := malloc(8 * arms_len)
     i := mut 0
-    L { I i >= arms_len { R 0 }
+    L {
+        I i >= arms_len { B } E { 0 }
         store_i64(arm_blocks + i * 8, mir_builder_new_block(b))
         i = i + 1
     }
@@ -756,7 +758,8 @@ F lower_expr_match(ctx: i64, expr_ptr: i64) -> i64 {
     targets_len := mut 0
     otherwise_bb := bb_merge  # default if no wildcard/ident arm
     i = 0
-    L { I i >= arms_len { R 0 }
+    L {
+        I i >= arms_len { B } E { 0 }
         arm_ptr := load_i64(arms_ptr + i * 8)
         pat_ptr := load_i64(arm_ptr)  # pattern_ptr
         arm_bb := load_i64(arm_blocks + i * 8)
@@ -792,7 +795,8 @@ F lower_expr_match(ctx: i64, expr_ptr: i64) -> i64 {
 
     # Lower each arm body
     i = 0
-    L { I i >= arms_len { R 0 }
+    L {
+        I i >= arms_len { B } E { 0 }
         arm_ptr := load_i64(arms_ptr + i * 8)
         pat_ptr := load_i64(arm_ptr)
         body_ptr := load_i64(arm_ptr + 16)
@@ -855,7 +859,8 @@ F lower_expr_call(ctx: i64, expr_ptr: i64) -> i64 {
     # Lower arguments
     mir_args := malloc(8 * (args_len + 1))
     i := mut 0
-    L { I i >= args_len { R 0 }
+    L {
+        I i >= args_len { B } E { 0 }
         arg_expr := load_i64(args_ptr + i * 8)
         arg_local := lower_expr(ctx, arg_expr)
         store_i64(mir_args + i * 8, operand_copy(arg_local))
@@ -911,7 +916,8 @@ F lower_expr_method_call(ctx: i64, expr_ptr: i64) -> i64 {
     mir_args := malloc(8 * total_args)
     store_i64(mir_args, operand_copy(recv_local))
     i := mut 0
-    L { I i >= args_len { R 0 }
+    L {
+        I i >= args_len { B } E { 0 }
         arg_expr := load_i64(args_ptr + i * 8)
         arg_local := lower_expr(ctx, arg_expr)
         store_i64(mir_args + (i + 1) * 8, operand_copy(arg_local))
@@ -940,7 +946,8 @@ F lower_expr_static_call(ctx: i64, expr_ptr: i64) -> i64 {
 
     mir_args := malloc(8 * (args_len + 1))
     i := mut 0
-    L { I i >= args_len { R 0 }
+    L {
+        I i >= args_len { B } E { 0 }
         arg_expr := load_i64(args_ptr + i * 8)
         arg_local := lower_expr(ctx, arg_expr)
         store_i64(mir_args + i * 8, operand_copy(arg_local))
@@ -968,7 +975,8 @@ F lower_expr_array(ctx: i64, expr_ptr: i64) -> i64 {
 
     ops := malloc(8 * (elems_len + 1))
     i := mut 0
-    L { I i >= elems_len { R 0 }
+    L {
+        I i >= elems_len { B } E { 0 }
         elem_expr := load_i64(elems_ptr + i * 8)
         elem_local := lower_expr(ctx, elem_expr)
         store_i64(ops + i * 8, operand_copy(elem_local))
@@ -989,7 +997,8 @@ F lower_expr_tuple(ctx: i64, expr_ptr: i64) -> i64 {
 
     ops := malloc(8 * (elems_len + 1))
     i := mut 0
-    L { I i >= elems_len { R 0 }
+    L {
+        I i >= elems_len { B } E { 0 }
         elem_expr := load_i64(elems_ptr + i * 8)
         elem_local := lower_expr(ctx, elem_expr)
         store_i64(ops + i * 8, operand_copy(elem_local))
@@ -1011,7 +1020,8 @@ F lower_expr_struct_lit(ctx: i64, expr_ptr: i64) -> i64 {
 
     ops := malloc(8 * (fields_len + 1))
     i := mut 0
-    L { I i >= fields_len { R 0 }
+    L {
+        I i >= fields_len { B } E { 0 }
         fi_ptr := load_i64(fields_ptr + i * 8)
         val_ptr := load_i64(fi_ptr + 8)  # FieldInit.value_ptr
         val_local := lower_expr(ctx, val_ptr)
@@ -1267,12 +1277,14 @@ F lower_stmts(ctx: i64, stmts_ptr: i64, stmts_len: i64) -> i64 {
 
     last := mut 0
     i := mut 0
-    L { I i >= stmts_len { R 0 }
-        stmt_ptr := load_i64(stmts_ptr + i * 8)
+    L {
+        I i >= stmts_len { B } E { 0 }
+        # Statements are stored inline as 56-byte structs (StmtNode)
+        stmt_ptr := stmts_ptr + i * 56
         last = lower_stmt(ctx, stmt_ptr)
         i = i + 1
     }
-    R last
+    last
 }
 
 # ============================================================================
@@ -1306,7 +1318,8 @@ F lower_function(fn_ptr: i64) -> i64 {
     # Add parameters
     # Param layout: name_idx(0), type_ptr(8), is_mut(16), span_start(24), span_end(32) — 40 bytes
     i := mut 0
-    L { I i >= params_len { R 0 }
+    L {
+        I i >= params_len { B } E { 0 }
         param_base := params_ptr + i * 40
         param_name_idx := load_i64(param_base)
         param_type_ptr := load_i64(param_base + 8)
@@ -1352,7 +1365,8 @@ F lower_module(module_ptr: i64, module_name_idx: i64) -> i64 {
     mir_mod := mir_module_new(module_name_idx)
 
     i := mut 0
-    L { I i >= items_len { R 0 }
+    L {
+        I i >= items_len { B } E { 0 }
         item_ptr := load_i64(items_ptr + i * 8)
         I item_ptr != 0 {
             item_kind := load_i64(item_ptr)
@@ -1364,15 +1378,15 @@ F lower_module(module_ptr: i64, module_name_idx: i64) -> i64 {
                     body := lower_function(fn_def_ptr)
                     I body != 0 {
                         mir_module_add_body(mir_mod, body)
-                    }
-                }
-            }
+                        0
+                    } E { 0 }
+                } E { 0 }
+            } E { 0 }
             # STRUCT, ENUM, IMPL, etc. — skip for now (MIR focuses on function bodies)
-        }
+        } E { 0 }
         i = i + 1
     }
-
-    R mir_mod
+    mir_mod
 }
 
 # ============================================================================
@@ -1403,7 +1417,8 @@ F mir_lower_print_stats(mir_mod: i64) -> i64 {
 
     bodies_ptr := load_i64(mir_mod + 8)
     i := mut 0
-    L { I i >= bodies_len { R 0 }
+    L {
+        I i >= bodies_len { B } E { 0 }
         body := load_i64(bodies_ptr + i * 8)
         locals_len := load_i64(body + 40)
         blocks_len := load_i64(body + 56)

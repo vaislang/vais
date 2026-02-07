@@ -88,6 +88,22 @@ F TOK_AT() -> i64 = 111
 F TOK_HASH() -> i64 = 112
 F TOK_HASH_BRACKET() -> i64 = 113
 
+# Built-in type tokens (31-50)
+F TOK_TY_I8() -> i64 = 31
+F TOK_TY_I16() -> i64 = 32
+F TOK_TY_I32() -> i64 = 33
+F TOK_TY_I64() -> i64 = 34
+F TOK_TY_I128() -> i64 = 35
+F TOK_TY_U8() -> i64 = 36
+F TOK_TY_U16() -> i64 = 37
+F TOK_TY_U32() -> i64 = 38
+F TOK_TY_U64() -> i64 = 39
+F TOK_TY_U128() -> i64 = 40
+F TOK_TY_F32() -> i64 = 41
+F TOK_TY_F64() -> i64 = 42
+F TOK_TY_BOOL() -> i64 = 43
+F TOK_TY_STR() -> i64 = 44
+
 # Special tokens
 F TOK_EOF() -> i64 = 200
 F TOK_ERROR() -> i64 = 201
@@ -122,28 +138,43 @@ F EXPR_IDENT() -> i64 = 25
 F EXPR_SELF_CALL() -> i64 = 26
 F EXPR_BINARY() -> i64 = 27
 F EXPR_UNARY() -> i64 = 28
+F EXPR_TERNARY() -> i64 = 29
 F EXPR_IF() -> i64 = 30
 F EXPR_LOOP() -> i64 = 31
+F EXPR_MATCH() -> i64 = 32
 F EXPR_CALL() -> i64 = 33
 F EXPR_METHOD_CALL() -> i64 = 34
 F EXPR_STATIC_CALL() -> i64 = 35
 F EXPR_FIELD() -> i64 = 36
 F EXPR_INDEX() -> i64 = 37
 F EXPR_ARRAY() -> i64 = 38
+F EXPR_TUPLE() -> i64 = 39
 F EXPR_STRUCT_LIT() -> i64 = 40
+F EXPR_RANGE() -> i64 = 41
 F EXPR_BLOCK() -> i64 = 42
 F EXPR_AWAIT() -> i64 = 43
+F EXPR_TRY() -> i64 = 44
+F EXPR_UNWRAP() -> i64 = 45
+F EXPR_REF() -> i64 = 46
+F EXPR_DEREF() -> i64 = 47
 F EXPR_ASSIGN() -> i64 = 48
 F EXPR_ASSIGN_OP() -> i64 = 49
 F EXPR_LAMBDA() -> i64 = 50
+F EXPR_SPAWN() -> i64 = 51
 
 # Type node types
 F TYPE_NAMED() -> i64 = 60
 F TYPE_ARRAY() -> i64 = 61
+F TYPE_MAP() -> i64 = 62
+F TYPE_TUPLE() -> i64 = 63
 F TYPE_OPTIONAL() -> i64 = 64
+F TYPE_RESULT() -> i64 = 65
 F TYPE_POINTER() -> i64 = 66
 F TYPE_REF() -> i64 = 67
+F TYPE_REF_MUT() -> i64 = 68
+F TYPE_FN() -> i64 = 69
 F TYPE_UNIT() -> i64 = 70
+F TYPE_INFER() -> i64 = 71
 
 # Pattern types
 F PAT_WILDCARD() -> i64 = 80
@@ -1136,8 +1167,9 @@ X Parser {
 
         # Parse parameters
         params := @.parse_params()
-        store_i64(func_ptr + 24, params)  # params_ptr
-        # params_len is stored during parse_params
+        params_len := load_i64(params - 8)
+        store_i64(func_ptr + 24, params)   # params_ptr
+        store_i64(func_ptr + 32, params_len)  # params_len
 
         # Expect )
         I @.expect(TOK_RPAREN()) == 0 { R 0 }
@@ -1778,7 +1810,9 @@ X Parser {
     # =========== Parse Parameters ===========
 
     F parse_params(&self) -> i64 {
-        params_ptr := malloc(16 * Param.size())
+        # Layout: [len (8 bytes)][param0][param1]...
+        params_buf := malloc(8 + 16 * Param.size())
+        params_ptr := params_buf + 8
         params_len: mut i64 = 0
 
         L {
@@ -1841,6 +1875,8 @@ X Parser {
             I @.check(TOK_COMMA()) == 1 { @.advance(); 0 } E { 0 }
         }
 
+        # Store length at params_ptr - 8
+        store_i64(params_buf, params_len)
         params_ptr
     }
 
@@ -1949,8 +1985,22 @@ X Parser {
             R type_ptr
         }
 
-        # Named type: i64, String, Vec<T>, etc.
-        I @.check(TOK_IDENT()) == 1 {
+        # Named type or built-in type: i64, String, Vec<T>, etc.
+        # Built-in type tokens (31-44) are treated as named types
+        is_type_tok := mut 0
+        I @.check(TOK_IDENT()) == 1 { is_type_tok = 1; 0 } E { 0 }
+        I is_type_tok == 0 {
+            # Check for built-in type tokens (31-44)
+            cur_kind := @.peek_kind()
+            I cur_kind >= 31 {
+                I cur_kind <= 44 {
+                    is_type_tok = 1
+                    0
+                } E { 0 }
+            } E { 0 }
+        }
+
+        I is_type_tok == 1 {
             tok := @.advance()
             name_idx := @.intern_string(tok.str_ptr, tok.str_len)
 

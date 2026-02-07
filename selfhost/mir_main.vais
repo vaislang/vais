@@ -1,0 +1,342 @@
+# Vais Self-Hosting Compiler - MIR Pipeline Entry Point
+# Compiles .vais files through the MIR pipeline:
+#   Source → Lex → Parse → AST → MIR Lower → MIR Optimize → MIR Emit LLVM → .ll
+#
+# Usage: mir-vaisc <input.vais> [--no-opt] [--stats]
+#
+# This uses the full parser (parser.vais + ast.vais) which produces
+# structured AST nodes (FunctionDef, StructDef, etc.) compatible with mir_lower.
+
+U token
+U lexer
+U parser
+U mir
+U mir_builder
+U mir_lower
+U mir_optimizer
+U mir_emit_llvm
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+F mir_main_print_i64(val: i64) -> i64 {
+    I val == 0 {
+        putchar(48)
+        0
+    } E I val < 0 {
+        putchar(45)
+        mir_main_print_i64(0 - val)
+    } E {
+        I val >= 10 {
+            mir_main_print_i64(val / 10)
+            0
+        } E { 0 }
+        putchar(48 + (val % 10))
+        0
+    }
+}
+
+F mir_main_print_str(ptr: i64, len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        putchar(load_byte(ptr + i))
+        i = i + 1
+    }
+    1
+}
+
+F mir_main_strlen(s: i64) -> i64 {
+    len := mut 0
+    L {
+        I load_byte(s + len) == 0 { B } E { 0 }
+        len = len + 1
+    }
+    len
+}
+
+# Read file into memory (takes i64 pointer path), returns data pointer (length at ptr-8)
+F mir_main_read_file_ptr(path_ptr: i64) -> i64 {
+    fp := fopen_ptr(path_ptr, "rb")
+    I fp == 0 { R 0 }
+    fseek(fp, 0, 2)
+    size := ftell(fp)
+    fseek(fp, 0, 0)
+    buf := malloc(size + 9)
+    I buf == 0 {
+        fclose(fp)
+        R 0
+    }
+    bytes_read := fread(buf + 8, 1, size, fp)
+    store_byte(buf + 8 + bytes_read, 0)
+    store_i64(buf, bytes_read)
+    fclose(fp)
+    buf + 8
+}
+
+# ============================================================================
+# Items Adapter: parser.vais items (32-byte inline) → pointer array for mir_lower
+# ============================================================================
+# parser.vais stores items as inline 32-byte structs:
+#   (kind: i64, data_ptr: i64, span_start: i64, span_end: i64)
+# mir_lower.lower_module expects:
+#   module_ptr → (items_ptr: i64, items_len: i64)
+#   where items_ptr[i] is a pointer to (kind: i64, data_ptr: i64, ...)
+#
+# Since each inline struct already has the right layout at its address,
+# we build a pointer array pointing to each inline entry.
+
+F adapt_items_for_mir(parser_items_ptr: i64, parser_items_len: i64) -> i64 {
+    # Allocate module struct: (items_ptr, items_len) = 16 bytes
+    mod_ptr := malloc(16)
+
+    # Allocate pointer array
+    ptr_array := malloc(parser_items_len * 8)
+
+    i := mut 0
+    L {
+        I i >= parser_items_len { B } E { 0 }
+        # Each parser item is 32 bytes inline
+        item_addr := parser_items_ptr + i * 32
+        store_i64(ptr_array + i * 8, item_addr)
+        i = i + 1
+    }
+
+    store_i64(mod_ptr, ptr_array)
+    store_i64(mod_ptr + 8, parser_items_len)
+    mod_ptr
+}
+
+# ============================================================================
+# CLI Argument Parsing
+# ============================================================================
+# Checks if argv contains a flag like "--no-opt" or "--stats"
+
+F has_flag(argc: i64, argv: i64, flag_ptr: i64, flag_len: i64) -> i64 {
+    i := mut 1
+    L {
+        I i >= argc { B } E { 0 }
+        arg_ptr := load_i64(argv + i * 8)
+        arg_len := mir_main_strlen(arg_ptr)
+        I arg_len == flag_len {
+            match := mut 1
+            j := mut 0
+            L {
+                I j >= flag_len { B } E { 0 }
+                I load_byte(arg_ptr + j) != load_byte(flag_ptr + j) {
+                    match = 0
+                    B
+                }
+                j = j + 1
+            }
+            I match == 1 { R 1 }
+        }
+        i = i + 1
+    }
+    0
+}
+
+# Get first non-flag argument (the input file path)
+F get_input_path(argc: i64, argv: i64) -> i64 {
+    i := mut 1
+    L {
+        I i >= argc { B } E { 0 }
+        arg_ptr := load_i64(argv + i * 8)
+        first_byte := load_byte(arg_ptr)
+        # Skip arguments starting with '-'
+        I first_byte != 45 {
+            R arg_ptr
+        }
+        i = i + 1
+    }
+    0
+}
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+F main(argc: i64, argv: i64) -> i64 {
+    puts("==========================================\n")
+    puts("  Vais MIR Compiler (Self-Hosting)\n")
+    puts("  Pipeline: Source → MIR → LLVM IR\n")
+    puts("==========================================\n\n")
+
+    # Parse CLI arguments
+    I argc < 2 {
+        puts("Usage: mir-vaisc <input.vais> [--no-opt] [--stats]\n")
+        puts("  --no-opt   Skip MIR optimization passes\n")
+        puts("  --stats    Print MIR statistics\n")
+        R 1
+    }
+
+    input_path := get_input_path(argc, argv)
+    I input_path == 0 {
+        puts("[ERROR] No input file specified\n")
+        R 1
+    }
+
+    # Check flags
+    # "--no-opt" = 8 bytes
+    no_opt_flag := malloc(9)
+    store_byte(no_opt_flag, 45)      # -
+    store_byte(no_opt_flag + 1, 45)  # -
+    store_byte(no_opt_flag + 2, 110) # n
+    store_byte(no_opt_flag + 3, 111) # o
+    store_byte(no_opt_flag + 4, 45)  # -
+    store_byte(no_opt_flag + 5, 111) # o
+    store_byte(no_opt_flag + 6, 112) # p
+    store_byte(no_opt_flag + 7, 116) # t
+    store_byte(no_opt_flag + 8, 0)
+    no_opt := has_flag(argc, argv, no_opt_flag, 8)
+    free(no_opt_flag)
+
+    # "--stats" = 7 bytes
+    stats_flag := malloc(8)
+    store_byte(stats_flag, 45)      # -
+    store_byte(stats_flag + 1, 45)  # -
+    store_byte(stats_flag + 2, 115) # s
+    store_byte(stats_flag + 3, 116) # t
+    store_byte(stats_flag + 4, 97)  # a
+    store_byte(stats_flag + 5, 116) # t
+    store_byte(stats_flag + 6, 115) # s
+    store_byte(stats_flag + 7, 0)
+    show_stats := has_flag(argc, argv, stats_flag, 7)
+    free(stats_flag)
+
+    # Print input file path
+    puts("[INFO] Input: ")
+    path_len := mir_main_strlen(input_path)
+    mir_main_print_str(input_path, path_len)
+    putchar(10)
+
+    # ======== Step 1: Read source file ========
+    puts("[1] Reading source file...\n")
+    source_data := mir_main_read_file_ptr(input_path)
+    I source_data == 0 {
+        puts("[ERROR] Cannot read input file\n")
+        R 1
+    }
+    source_len := load_i64(source_data - 8)
+    puts("    Source: ")
+    mir_main_print_i64(source_len)
+    puts(" bytes\n")
+
+    # ======== Step 2: Tokenize ========
+    puts("[2] Tokenizing...\n")
+    lex := Lexer.new(source_data, source_len)
+    token_list := lex.tokenize()
+    puts("    Tokens: ")
+    mir_main_print_i64(token_list.len)
+    putchar(10)
+
+    # ======== Step 3: Parse ========
+    puts("[3] Parsing...\n")
+    p := Parser.new(token_list.data, token_list.len)
+    ok := p.parse_module()
+    I ok == 0 {
+        puts("[ERROR] Parse failed at pos ")
+        mir_main_print_i64(p.pos)
+        puts("/")
+        mir_main_print_i64(p.tokens_len)
+        putchar(10)
+        R 1
+    }
+    puts("    Items: ")
+    mir_main_print_i64(p.items_len)
+    putchar(10)
+
+    # Count functions
+    func_count := mut 0
+    fi := mut 0
+    L {
+        I fi >= p.items_len { B } E { 0 }
+        item_addr := p.items_ptr + fi * 32
+        kind := load_i64(item_addr)
+        I kind == ITEM_FUNCTION() {
+            func_count = func_count + 1
+            0
+        } E { 0 }
+        fi = fi + 1
+    }
+    puts("    Functions: ")
+    mir_main_print_i64(func_count)
+    putchar(10)
+
+    # ======== Step 4: AST → MIR Lowering ========
+    puts("[4] Lowering AST → MIR...\n")
+    mod_ptr := adapt_items_for_mir(p.items_ptr, p.items_len)
+    mir_mod := lower_module(mod_ptr, 0)
+
+    I mir_mod == 0 {
+        puts("[ERROR] MIR lowering failed\n")
+        R 1
+    }
+
+    # Print MIR stats if requested
+    I show_stats == 1 {
+        puts("    ")
+        mir_lower_print_stats(mir_mod)
+        0
+    } E { 0 }
+
+    # ======== Step 5: MIR Optimization ========
+    I no_opt == 0 {
+        puts("[5] Optimizing MIR...\n")
+        mir_optimize_module(mir_mod)
+        puts("    Optimization complete\n")
+
+        # Print stats after optimization
+        I show_stats == 1 {
+            puts("    After optimization: ")
+            mir_lower_print_stats(mir_mod)
+            0
+        } E { 0 }
+    } E {
+        puts("[5] Skipping optimization (--no-opt)\n")
+        0
+    }
+
+    # ======== Step 6: MIR → LLVM IR ========
+    puts("[6] Emitting LLVM IR...\n")
+    out_len_ptr := malloc(8)
+    ir_data := mir_emit_llvm(mir_mod, p.sp_data, p.sp_offsets, p.sp_count, out_len_ptr)
+    ir_len := load_i64(out_len_ptr)
+    free(out_len_ptr)
+
+    I ir_data == 0 || ir_len == 0 {
+        puts("[ERROR] LLVM IR emission failed\n")
+        R 1
+    }
+
+    puts("    IR: ")
+    mir_main_print_i64(ir_len)
+    puts(" bytes\n")
+
+    # ======== Step 7: Write output ========
+    # Output file: replace .vais with .ll, or use selfhost/mir_output.ll
+    puts("[7] Writing output...\n")
+    fp := fopen("selfhost/mir_output.ll", "wb")
+    I fp != 0 {
+        fwrite(ir_data, 1, ir_len, fp)
+        fclose(fp)
+        puts("    Written to: selfhost/mir_output.ll\n")
+        0
+    } E {
+        puts("[ERROR] Could not write output file\n")
+        R 1
+    }
+
+    # Print summary
+    puts("\n[OK] MIR compilation successful!\n")
+    puts("    Source → ")
+    mir_main_print_i64(source_len)
+    puts(" bytes → ")
+    mir_main_print_i64(func_count)
+    puts(" functions → ")
+    mir_main_print_i64(ir_len)
+    puts(" bytes IR\n")
+
+    0
+}

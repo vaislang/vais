@@ -76,7 +76,7 @@ F cfg_build_predecessors(body_ptr: i64) -> i64 {
     # Allocate temp count array and pred arrays (max preds = blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(pred_info + i * 16, malloc(8 * blocks_len))
         store_i64(pred_info + i * 16 + 8, 0)
         i = i + 1
@@ -85,14 +85,14 @@ F cfg_build_predecessors(body_ptr: i64) -> i64 {
     # Scan all blocks and record predecessors
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         term_ptr := load_i64(bb_ptr + 16)
         I term_ptr != 0 {
             sc := cfg_successor_count(term_ptr)
             si := mut 0
             L {
-                I si >= sc { R 0 }
+                I si >= sc { B } E { 0 }
                 succ := cfg_successor_at(term_ptr, si)
                 I succ >= 0 {
                     I succ < blocks_len {
@@ -118,7 +118,7 @@ F cfg_build_predecessors(body_ptr: i64) -> i64 {
 F cfg_free_predecessors(pred_info: i64, blocks_len: i64) -> i64 {
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         free(load_i64(pred_info + i * 16))
         i = i + 1
     }
@@ -141,7 +141,7 @@ F bitset_new(n: i64) -> i64 {
     ptr := malloc(8 * words)
     i := mut 0
     L {
-        I i >= words { R 0 }
+        I i >= words { B } E { 0 }
         store_i64(ptr + i * 8, 0)
         i = i + 1
     }
@@ -200,7 +200,7 @@ F bitset_diff(dst: i64, src: i64, n: i64) -> i64 {
     words := bitset_words(n)
     i := mut 0
     L {
-        I i >= words { R 0 }
+        I i >= words { B } E { 0 }
         old := load_i64(dst + i * 8)
         mask := load_i64(src + i * 8) ^ (0 - 1)
         store_i64(dst + i * 8, old & mask)
@@ -214,7 +214,7 @@ F bitset_copy(dst: i64, src: i64, n: i64) -> i64 {
     words := bitset_words(n)
     i := mut 0
     L {
-        I i >= words { R 0 }
+        I i >= words { B } E { 0 }
         store_i64(dst + i * 8, load_i64(src + i * 8))
         i = i + 1
     }
@@ -265,7 +265,7 @@ F mir_liveness_analysis(body_ptr: i64) -> i64 {
     live_out := malloc(8 * blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(live_in + i * 8, bitset_new(locals_len))
         store_i64(live_out + i * 8, bitset_new(locals_len))
         i = i + 1
@@ -276,7 +276,7 @@ F mir_liveness_analysis(body_ptr: i64) -> i64 {
     kill_sets := malloc(8 * blocks_len)
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(gen_sets + i * 8, bitset_new(locals_len))
         store_i64(kill_sets + i * 8, bitset_new(locals_len))
         lv_compute_gen_kill(blocks_ptr, i, load_i64(gen_sets + i * 8), load_i64(kill_sets + i * 8))
@@ -289,7 +289,7 @@ F mir_liveness_analysis(body_ptr: i64) -> i64 {
     # Fixed-point iteration (backward dataflow)
     changed := mut 1
     L {
-        I changed == 0 { R 0 }
+        I changed == 0 { B } E { 0 }
         changed = 0
 
         # Process blocks in reverse order (backward)
@@ -305,7 +305,7 @@ F mir_liveness_analysis(body_ptr: i64) -> i64 {
                 sc := cfg_successor_count(term_ptr)
                 si := mut 0
                 L {
-                    I si >= sc { R 0 }
+                    I si >= sc { B } E { 0 }
                     succ := cfg_successor_at(term_ptr, si)
                     I succ >= 0 {
                         I succ < blocks_len {
@@ -336,7 +336,7 @@ F mir_liveness_analysis(body_ptr: i64) -> i64 {
     free(temp)
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         free(load_i64(gen_sets + i * 8))
         free(load_i64(kill_sets + i * 8))
         i = i + 1
@@ -365,7 +365,7 @@ F lv_compute_gen_kill(blocks_ptr: i64, bi: i64, gen: i64, kill: i64) -> i64 {
     # gen = uses that are not already killed (first use before def)
     si := mut 0
     L {
-        I si >= stmts_len { R 0 }
+        I si >= stmts_len { B } E { 0 }
         stmt_ptr := load_i64(stmts_ptr + si * 8)
         kind := load_i64(stmt_ptr)
 
@@ -442,7 +442,7 @@ F lv_gen_rvalue(rvalue_ptr: i64, gen: i64, kill: i64) -> i64 {
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { R 0 }
+            I j >= agg_len { B } E { 0 }
             lv_gen_operand(load_i64(agg_ops + j * 8), gen, kill)
             j = j + 1
         }
@@ -499,7 +499,7 @@ F lv_gen_terminator(term_ptr: i64, gen: i64, kill: i64) -> i64 {
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             lv_gen_operand(load_i64(args_ptr + j * 8), gen, kill)
             j = j + 1
         }
@@ -516,7 +516,7 @@ F lv_gen_terminator(term_ptr: i64, gen: i64, kill: i64) -> i64 {
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             lv_gen_operand(load_i64(args_ptr + j * 8), gen, kill)
             j = j + 1
         }
@@ -559,7 +559,7 @@ F liveness_free(result: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         free(load_i64(live_in + i * 8))
         free(load_i64(live_out + i * 8))
         i = i + 1
@@ -594,7 +594,7 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
     visited := malloc(8 * blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(visited + i * 8, 0)
         store_i64(rpo_order + i * 8, 0 - 1)
         i = i + 1
@@ -608,7 +608,7 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
     li := mut 0
     ri := mut n - 1
     L {
-        I li >= ri { R 0 }
+        I li >= ri { B } E { 0 }
         tmp := load_i64(rpo + li * 8)
         store_i64(rpo + li * 8, load_i64(rpo + ri * 8))
         store_i64(rpo + ri * 8, tmp)
@@ -619,7 +619,7 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
     # Assign RPO order numbers
     i = 0
     L {
-        I i >= n { R 0 }
+        I i >= n { B } E { 0 }
         bb := load_i64(rpo + i * 8)
         store_i64(rpo_order + bb * 8, i)
         i = i + 1
@@ -629,7 +629,7 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
     idom := malloc(8 * blocks_len)
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(idom + i * 8, 0 - 1)
         i = i + 1
     }
@@ -638,13 +638,13 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
     # Cooper-Harvey-Kennedy iterative dominance algorithm
     changed := mut 1
     L {
-        I changed == 0 { R 0 }
+        I changed == 0 { B } E { 0 }
         changed = 0
 
         # Process in RPO (skip entry)
         ri := mut 1
         L {
-            I ri >= n { R 0 }
+            I ri >= n { B } E { 0 }
             bb := load_i64(rpo + ri * 8)
 
             # Find first predecessor with defined idom
@@ -654,7 +654,7 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
             new_idom := mut 0 - 1
             pi := mut 0
             L {
-                I pi >= pred_cnt { R 0 }
+                I pi >= pred_cnt { B } E { 0 }
                 p := load_i64(pred_list + pi * 8)
                 I load_i64(idom + p * 8) != (0 - 1) {
                     new_idom = p
@@ -666,7 +666,7 @@ F mir_dominance_analysis(body_ptr: i64) -> i64 {
             # Intersect with remaining predecessors
             pi = 0
             L {
-                I pi >= pred_cnt { R 0 }
+                I pi >= pred_cnt { B } E { 0 }
                 p := load_i64(pred_list + pi * 8)
                 I p != new_idom {
                     I load_i64(idom + p * 8) != (0 - 1) {
@@ -709,7 +709,7 @@ F dom_dfs(bb: i64, blocks_ptr: i64, blocks_len: i64, visited: i64, rpo: i64, rpo
         sc := cfg_successor_count(term_ptr)
         si := mut 0
         L {
-            I si >= sc { R 0 }
+            I si >= sc { B } E { 0 }
             succ := cfg_successor_at(term_ptr, si)
             I succ >= 0 {
                 I succ < blocks_len {
@@ -775,7 +775,7 @@ F mir_loop_analysis(body_ptr: i64, idom: i64) -> i64 {
     loop_info := malloc(16 * blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(loop_info + i * 16, 0)      # is_header = 0
         store_i64(loop_info + i * 16 + 8, 0)  # loop_depth = 0
         i = i + 1
@@ -784,14 +784,14 @@ F mir_loop_analysis(body_ptr: i64, idom: i64) -> i64 {
     # Find back-edges and mark loop headers
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         term_ptr := load_i64(bb_ptr + 16)
         I term_ptr != 0 {
             sc := cfg_successor_count(term_ptr)
             si := mut 0
             L {
-                I si >= sc { R 0 }
+                I si >= sc { B } E { 0 }
                 succ := cfg_successor_at(term_ptr, si)
                 I succ >= 0 {
                     I succ < blocks_len {
@@ -814,7 +814,7 @@ F mir_loop_analysis(body_ptr: i64, idom: i64) -> i64 {
     # and can reach header via back-edge), increment their depth
     bi = 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         I load_i64(loop_info + bi * 16) == 1 {
             # bi is a loop header — find loop body
             # A block is in the loop if it is dominated by the header
@@ -838,7 +838,7 @@ F loop_mark_depth(header: i64, blocks_ptr: i64, blocks_len: i64, idom: i64, loop
 
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(in_loop + i * 8, 0)
         i = i + 1
     }
@@ -849,14 +849,14 @@ F loop_mark_depth(header: i64, blocks_ptr: i64, blocks_len: i64, idom: i64, loop
     # Find latches and seed worklist
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         term_ptr := load_i64(bb_ptr + 16)
         I term_ptr != 0 {
             sc := cfg_successor_count(term_ptr)
             si := mut 0
             L {
-                I si >= sc { R 0 }
+                I si >= sc { B } E { 0 }
                 succ := cfg_successor_at(term_ptr, si)
                 I succ == header {
                     I dominates(idom, header, bi) == 1 {
@@ -887,7 +887,7 @@ F loop_mark_depth(header: i64, blocks_ptr: i64, blocks_len: i64, idom: i64, loop
         pred_cnt := load_i64(pred_info + bb * 16 + 8)
         pi := mut 0
         L {
-            I pi >= pred_cnt { R 0 }
+            I pi >= pred_cnt { B } E { 0 }
             p := load_i64(pred_list + pi * 8)
             I load_i64(in_loop + p * 8) == 0 {
                 I dominates(idom, header, p) == 1 {
@@ -905,7 +905,7 @@ F loop_mark_depth(header: i64, blocks_ptr: i64, blocks_len: i64, idom: i64, loop
     # Increment loop depth for all blocks in the loop
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         I load_i64(in_loop + i * 8) == 1 {
             depth := load_i64(loop_info + i * 16 + 8)
             store_i64(loop_info + i * 16 + 8, depth + 1)
@@ -926,7 +926,7 @@ F cfg_build_predecessors_for_body(blocks_ptr: i64, blocks_len: i64) -> i64 {
     pred_info := malloc(16 * blocks_len)
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(pred_info + i * 16, malloc(8 * blocks_len))
         store_i64(pred_info + i * 16 + 8, 0)
         i = i + 1
@@ -934,14 +934,14 @@ F cfg_build_predecessors_for_body(blocks_ptr: i64, blocks_len: i64) -> i64 {
 
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         term_ptr := load_i64(bb_ptr + 16)
         I term_ptr != 0 {
             sc := cfg_successor_count(term_ptr)
             si := mut 0
             L {
-                I si >= sc { R 0 }
+                I si >= sc { B } E { 0 }
                 succ := cfg_successor_at(term_ptr, si)
                 I succ >= 0 {
                     I succ < blocks_len {
@@ -966,7 +966,7 @@ F cfg_build_predecessors_for_body(blocks_ptr: i64, blocks_len: i64) -> i64 {
 F cfg_free_pred_info(pred_info: i64, blocks_len: i64) -> i64 {
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         free(load_i64(pred_info + i * 16))
         i = i + 1
     }
@@ -1005,7 +1005,7 @@ F mir_use_def_counts(body_ptr: i64) -> i64 {
     info := malloc(16 * locals_len)
     i := mut 0
     L {
-        I i >= locals_len { R 0 }
+        I i >= locals_len { B } E { 0 }
         store_i64(info + i * 16, 0)
         store_i64(info + i * 16 + 8, 0)
         i = i + 1
@@ -1014,7 +1014,7 @@ F mir_use_def_counts(body_ptr: i64) -> i64 {
     # Scan all blocks
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -1023,7 +1023,7 @@ F mir_use_def_counts(body_ptr: i64) -> i64 {
         # Scan statements
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             kind := load_i64(stmt_ptr)
 
@@ -1099,7 +1099,7 @@ F ud_count_rvalue(rvalue_ptr: i64, info: i64, locals_len: i64) -> i64 {
         agg_len := load_i64(rvalue_ptr + 64)
         j := mut 0
         L {
-            I j >= agg_len { R 0 }
+            I j >= agg_len { B } E { 0 }
             ud_count_operand(load_i64(agg_ops + j * 8), info, locals_len)
             j = j + 1
         }
@@ -1160,7 +1160,7 @@ F ud_count_terminator(term_ptr: i64, info: i64, locals_len: i64) -> i64 {
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             ud_count_operand(load_i64(args_ptr + j * 8), info, locals_len)
             j = j + 1
         }
@@ -1180,7 +1180,7 @@ F ud_count_terminator(term_ptr: i64, info: i64, locals_len: i64) -> i64 {
         args_len := load_i64(term_ptr + 64)
         j := mut 0
         L {
-            I j >= args_len { R 0 }
+            I j >= args_len { B } E { 0 }
             ud_count_operand(load_i64(args_ptr + j * 8), info, locals_len)
             j = j + 1
         }
@@ -1229,13 +1229,13 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     total_defs := mut 0
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_len := load_i64(bb_ptr + 8)
         stmts_ptr := load_i64(bb_ptr)
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             I load_i64(stmt_ptr) == STMT_MIR_ASSIGN() {
                 total_defs = total_defs + 1
@@ -1264,7 +1264,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
 
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(gen_sets + i * 8, bitset_new(total_defs))
         store_i64(kill_sets + i * 8, bitset_new(total_defs))
         i = i + 1
@@ -1274,14 +1274,14 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     def_id := mut 0
     bi = 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
 
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             I load_i64(stmt_ptr) == STMT_MIR_ASSIGN() {
                 place_ptr := load_i64(stmt_ptr + 8)
@@ -1303,12 +1303,12 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     # kill all other defs of x that are NOT in block b
     d := mut 0
     L {
-        I d >= total_defs { R 0 }
+        I d >= total_defs { B } E { 0 }
         local_x := load_i64(def_to_local + d * 8)
         # Find which block contains def d
         d2 := mut 0
         L {
-            I d2 >= total_defs { R 0 }
+            I d2 >= total_defs { B } E { 0 }
             I d2 != d {
                 I load_i64(def_to_local + d2 * 8) == local_x {
                     # d2 defines the same local as d
@@ -1326,7 +1326,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     # Simpler kill: for each block, kill all defs of locals that are redefined in this block
     bi = 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         bb_ptr := load_i64(blocks_ptr + bi * 8)
         stmts_ptr := load_i64(bb_ptr)
         stmts_len := load_i64(bb_ptr + 8)
@@ -1334,7 +1334,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
 
         si := mut 0
         L {
-            I si >= stmts_len { R 0 }
+            I si >= stmts_len { B } E { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             I load_i64(stmt_ptr) == STMT_MIR_ASSIGN() {
                 place_ptr := load_i64(stmt_ptr + 8)
@@ -1343,7 +1343,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
                 # Kill all defs of this local (except ones in this block's gen)
                 d2 := mut 0
                 L {
-                    I d2 >= total_defs { R 0 }
+                    I d2 >= total_defs { B } E { 0 }
                     I load_i64(def_to_local + d2 * 8) == local_idx {
                         bitset_set(kill_bs, d2)
                         0
@@ -1367,7 +1367,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     reach_out := malloc(8 * blocks_len)
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         store_i64(reach_in + i * 8, bitset_new(total_defs))
         store_i64(reach_out + i * 8, bitset_new(total_defs))
         i = i + 1
@@ -1376,12 +1376,12 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     temp := bitset_new(total_defs)
     changed := mut 1
     L {
-        I changed == 0 { R 0 }
+        I changed == 0 { B } E { 0 }
         changed = 0
 
         bi = 0
         L {
-            I bi >= blocks_len { R 0 }
+            I bi >= blocks_len { B } E { 0 }
             in_bs := load_i64(reach_in + bi * 8)
 
             # Build predecessors for this iteration
@@ -1392,7 +1392,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
             pred_cnt := load_i64(pred_info + bi * 16 + 8)
             pi := mut 0
             L {
-                I pi >= pred_cnt { R 0 }
+                I pi >= pred_cnt { B } E { 0 }
                 p := load_i64(pred_list + pi * 8)
                 bitset_union(in_bs, load_i64(reach_out + p * 8), total_defs)
                 pi = pi + 1
@@ -1416,7 +1416,7 @@ F mir_reaching_defs(body_ptr: i64) -> i64 {
     free(temp)
     i = 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         free(load_i64(gen_sets + i * 8))
         free(load_i64(kill_sets + i * 8))
         i = i + 1
@@ -1463,7 +1463,7 @@ F reach_defs_free(result: i64) -> i64 {
     I reach_in != 0 {
         i := mut 0
         L {
-            I i >= blocks_len { R 0 }
+            I i >= blocks_len { B } E { 0 }
             free(load_i64(reach_in + i * 8))
             free(load_i64(reach_out + i * 8))
             i = i + 1
@@ -1489,7 +1489,7 @@ F mir_analysis_live_total(body_ptr: i64) -> i64 {
     total := mut 0
     bi := mut 0
     L {
-        I bi >= blocks_len { R 0 }
+        I bi >= blocks_len { B } E { 0 }
         total = total + liveness_live_out_count(result, bi)
         bi = bi + 1
     }
@@ -1505,7 +1505,7 @@ F mir_count_loop_headers(body_ptr: i64) -> i64 {
     count := mut 0
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         I loop_is_header(loop_info, i) == 1 {
             count = count + 1
             0
@@ -1525,7 +1525,7 @@ F mir_max_loop_depth(body_ptr: i64) -> i64 {
     max_d := mut 0
     i := mut 0
     L {
-        I i >= blocks_len { R 0 }
+        I i >= blocks_len { B } E { 0 }
         d := loop_depth(loop_info, i)
         I d > max_d { max_d = d; 0 } E { 0 }
         i = i + 1

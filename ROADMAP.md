@@ -1644,7 +1644,9 @@ error: expected i64, found &i64
   - Loop Analysis: 지배 관계 기반 back-edge 탐지 + 자연 루프 body BFS
   - Reaching Definitions: 전방 데이터 흐름, def_id→local 매핑
   - Use/Def Counting: 로컬별 사용/정의 횟수 추적
-- [ ] **Borrow Checker on MIR** (borrow_checker.vais)
+- [x] **Borrow Checker on MIR** (mir_borrow.vais, 1,357줄) ✅ 2026-02-07
+  - 7개 검사: use-after-move, move-while-borrowed, double-mut-borrow, mut/immut conflict, assign-while-borrowed, dangling-ref, mut-borrow-of-immut
+  - NLL 스타일: liveness 기반 borrow invalidation
 - [x] **MIR → LLVM IR 변환** (mir_emit_llvm.vais, 1,228줄) ✅ 2026-02-07
   - MirEmitter 상태 구조체 + 출력 버퍼 관리
   - MirType → LLVM IR 타입 매핑 (23 타입 종류)
@@ -1661,9 +1663,16 @@ error: expected i64, found &i64
   - Unreachable Block Elimination: BFS 기반 도달불가 블록 제거
   - 유틸리티: mir_count_statements, mir_count_reachable_blocks
   - Public API: mir_optimize_module(), mir_optimize_body()
-- **예상 작업량**: 4,000+ LOC
+- [x] **MIR 파이프라인 통합** (mir_main.vais, ~350줄) ✅ 2026-02-07
+  - Source → Lex → Parse → MIR Lower → MIR Optimize → MIR Emit LLVM → .ll
+  - parser.vais에 built-in 타입 토큰 지원 추가 (TOK_TY_I8~TOK_TY_STR)
+  - Items adapter: parser.vais 32-byte inline items → pointer array for mir_lower
+  - CLI 플래그: --no-opt (최적화 스킵), --stats (MIR 통계)
+  - **버그 수정**: 전체 MIR 모듈 `R 0` → `B` 루프 종료 패턴 수정 (136개 인스턴스)
+  - **버그 수정**: vaisc Inkwell codegen 구조체 타입 추론 모호성 해결
+- **실현 규모**: 8,000+ LOC (mir.vais 659 + mir_builder.vais 297 + mir_lower.vais 1,420 + mir_emit_llvm.vais 1,228 + mir_optimizer.vais 756 + mir_analysis.vais 1,536 + mir_borrow.vais 1,357 + mir_main.vais ~350)
 - **의존성**: Stage 5 완료 후 시작
-- **파일**: `selfhost/mir.vais`, `selfhost/mir_builder.vais`, `selfhost/borrow_checker.vais`
+- **파일**: `selfhost/mir*.vais`
 
 ### Stage 7: 도구 지원 (Optional, 향후 확장)
 
