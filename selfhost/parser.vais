@@ -1376,7 +1376,9 @@ X Parser {
 
                 # Parse parameters
                 params := @.parse_params()
+                impl_params_len := load_i64(params - 8)
                 store_i64(method_ptr + 24, params)
+                store_i64(method_ptr + 32, impl_params_len)
 
                 # Expect )
                 I @.expect(TOK_RPAREN()) == 0 { B }
@@ -1610,7 +1612,9 @@ X Parser {
 
                 # Parse parameters
                 params := @.parse_params()
+                trait_params_len := load_i64(params - 8)
                 store_i64(method_ptr + 24, params)
+                store_i64(method_ptr + 32, trait_params_len)
 
                 # Expect )
                 I @.expect(TOK_RPAREN()) == 0 { B }
@@ -2135,6 +2139,12 @@ X Parser {
                 # Check for := or :
                 I @.check(TOK_COLON_EQ()) == 1 {
                     @.advance()
+                    # Check for := mut
+                    I @.check(TOK_KW_MUT()) == 1 {
+                        @.advance()
+                        is_mut = 1
+                        0
+                    } E { 0 }
                     0
                 } E I @.check(TOK_COLON()) == 1 {
                     @.advance()
@@ -2797,7 +2807,9 @@ X Parser {
             name_idx := @.intern_string(tok.str_ptr, tok.str_len)
 
             # Check for struct literal: Name { ... }
-            I @.check(TOK_LBRACE()) == 1 {
+            # Only if identifier starts with uppercase (struct names are capitalized)
+            first_char := load_byte(tok.str_ptr)
+            I @.check(TOK_LBRACE()) == 1 && first_char >= 65 && first_char <= 90 {
                 @.advance()
                 fields_ptr := malloc(16 * FieldInit.size())
                 fields_len: mut i64 = 0
@@ -2864,7 +2876,30 @@ X Parser {
                         store_i64(expr_ptr + 64, 0)
                         R expr_ptr
                     }
-                    0
+
+                    # Field access: ident.field (not a static call)
+                    base_expr := malloc(ExprNode.size())
+                    store_i64(base_expr + 0, EXPR_IDENT())
+                    store_i64(base_expr + 8, tok.span_start)
+                    store_i64(base_expr + 16, tok.span_end)
+                    store_i64(base_expr + 24, name_idx)
+                    store_i64(base_expr + 32, 0)
+                    store_i64(base_expr + 40, 0)
+                    store_i64(base_expr + 48, 0)
+                    store_i64(base_expr + 56, 0)
+                    store_i64(base_expr + 64, 0)
+
+                    field_expr := malloc(ExprNode.size())
+                    store_i64(field_expr + 0, EXPR_FIELD())
+                    store_i64(field_expr + 8, tok.span_start)
+                    store_i64(field_expr + 16, method_tok.span_end)
+                    store_i64(field_expr + 24, base_expr)
+                    store_i64(field_expr + 32, method_idx)
+                    store_i64(field_expr + 40, 0)
+                    store_i64(field_expr + 48, 0)
+                    store_i64(field_expr + 56, 0)
+                    store_i64(field_expr + 64, 0)
+                    R field_expr
                 } E { 0 }
             }
 
@@ -2893,7 +2928,7 @@ X Parser {
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
 
             else_ptr: mut i64 = 0
-            I @.check(TOK_KW_ELSE()) == 1 {
+            I @.check(TOK_KW_E()) == 1 {
                 @.advance()
                 I @.check(TOK_KW_I()) == 1 {
                     # else if
