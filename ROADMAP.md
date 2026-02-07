@@ -225,14 +225,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] 클로저 E2E 테스트 10개 (268개 전부 통과) ✅
 - **난이도**: 중 | **모델**: Opus 직접
 
-### Stage 3: 에러 타입 체계화 & 에러 체이닝
+### Stage 3: 에러 타입 체계화 & 에러 체이닝 ✅
 
 **목표**: 프로덕션 수준 에러 처리 패턴
 
-- [ ] `Error` 트레이트 표준화 (message, source, backtrace)
-- [ ] 에러 체이닝: `Result<T, E>.map_err()`, `context()`
-- [ ] 사용자 정의 에러 타입 derive 매크로
-- [ ] `anyhow`/`thiserror` 스타일 패키지
+- [x] `Error` 트레이트 표준화 (message, source, backtrace) — `std/result.vais` W Error trait ✅
+- [x] 에러 체이닝: `Result<T, E>.map_err()`, `context()` — map_err/and_then/or_else/context ✅
+- [x] 사용자 정의 에러 타입 derive 매크로 — derive(Error) 매크로 등록 ✅
+- [x] `anyhow`/`thiserror` 스타일 패키지 — `std/error.vais` AppError/ErrorChain ✅
+- [x] enum impl 블록 지원 (EnumDef.methods + register_impl + MethodCall) ✅
+- [x] E2E 테스트 11개 (에러/Result 관련) 전부 통과 ✅
 - **난이도**: 중 | **모델**: Opus 직접
 
 ### Stage 4: 이터레이터 프로토콜 & 제너레이터

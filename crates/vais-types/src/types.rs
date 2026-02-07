@@ -1441,6 +1441,7 @@ pub struct EnumDef {
     pub name: String,
     pub generics: Vec<String>,
     pub variants: HashMap<String, VariantFieldTypes>,
+    pub methods: HashMap<String, FunctionSig>,
 }
 
 /// Union definition (untagged, C-style)

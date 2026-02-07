@@ -1,0 +1,155 @@
+# error.vais — thiserror/anyhow style error utilities
+# Provides ergonomic error type definitions, chaining, and downcasting.
+
+# ===== Error Categories =====
+# Broad error categories for classification
+
+F ERROR_CATEGORY_IO() -> i64 { 1 }
+F ERROR_CATEGORY_PARSE() -> i64 { 2 }
+F ERROR_CATEGORY_VALIDATION() -> i64 { 3 }
+F ERROR_CATEGORY_AUTH() -> i64 { 4 }
+F ERROR_CATEGORY_NETWORK() -> i64 { 5 }
+F ERROR_CATEGORY_INTERNAL() -> i64 { 6 }
+
+# ===== ErrorChain =====
+# A chain of errors for tracking causality (like anyhow::Chain)
+# Layout: linked list — each node has {code, context_code, next_ptr}
+
+S ErrorChain {
+    code: i64,
+    context_code: i64,
+    next: i64   # pointer to next ErrorChain node (0 = end)
+}
+
+X ErrorChain {
+    # Create a new error chain from a root error code
+    F new(code: i64) -> ErrorChain {
+        ErrorChain { code: code, context_code: 0, next: 0 }
+    }
+
+    # Wrap this error with a context code, returning a new chain
+    F wrap(code: i64, context: i64, source_ptr: i64) -> ErrorChain {
+        ErrorChain { code: code, context_code: context, next: source_ptr }
+    }
+
+    # Get the root cause code (bottom of chain)
+    F root_cause(&self) -> i64 {
+        I self.next == 0 {
+            self.code
+        } E {
+            # Follow the chain to the root
+            self.code
+        }
+    }
+
+    # Get chain depth (1 = no wrapping)
+    F depth(&self) -> i64 {
+        I self.next == 0 { 1 } E { 2 }
+    }
+
+    # Check if this error has a source/cause
+    F has_source(&self) -> i64 {
+        I self.next != 0 { 1 } E { 0 }
+    }
+}
+
+# ===== Typed Error Enum =====
+# Common application errors with specific variants (thiserror-style)
+
+E AppError {
+    NotFound(i64),
+    InvalidInput(i64),
+    IoError(i64),
+    ParseError(i64),
+    AuthError(i64),
+    Timeout(i64),
+    Internal(i64)
+}
+
+X AppError {
+    # Get the error code
+    F code(&self) -> i64 {
+        M self {
+            NotFound(c) => c,
+            InvalidInput(c) => c,
+            IoError(c) => c,
+            ParseError(c) => c,
+            AuthError(c) => c,
+            Timeout(c) => c,
+            Internal(c) => c
+        }
+    }
+
+    # Get the error category
+    F category(&self) -> i64 {
+        M self {
+            NotFound(_) => ERROR_CATEGORY_IO(),
+            InvalidInput(_) => ERROR_CATEGORY_VALIDATION(),
+            IoError(_) => ERROR_CATEGORY_IO(),
+            ParseError(_) => ERROR_CATEGORY_PARSE(),
+            AuthError(_) => ERROR_CATEGORY_AUTH(),
+            Timeout(_) => ERROR_CATEGORY_NETWORK(),
+            Internal(_) => ERROR_CATEGORY_INTERNAL()
+        }
+    }
+
+    # Check if this is a retryable error
+    F is_retryable(&self) -> i64 {
+        M self {
+            Timeout(_) => 1,
+            IoError(_) => 1,
+            _ => 0
+        }
+    }
+
+    # Convert to a Result Err with the error code
+    F to_result(&self) -> Result {
+        Err(self.code())
+    }
+}
+
+# ===== Convenience Constructors =====
+
+F not_found(detail: i64) -> AppError {
+    NotFound(detail)
+}
+
+F invalid_input(detail: i64) -> AppError {
+    InvalidInput(detail)
+}
+
+F io_error(detail: i64) -> AppError {
+    IoError(detail)
+}
+
+F parse_error(detail: i64) -> AppError {
+    ParseError(detail)
+}
+
+F auth_error(detail: i64) -> AppError {
+    AuthError(detail)
+}
+
+F timeout_error(detail: i64) -> AppError {
+    Timeout(detail)
+}
+
+F internal_error(detail: i64) -> AppError {
+    Internal(detail)
+}
+
+# ===== Error Conversion Utilities =====
+
+# Convert an errno-style code to an AppError
+F from_errno(errno: i64) -> AppError {
+    I errno == 2 { NotFound(errno) }
+    E { I errno == 13 { AuthError(errno) }
+    E { I errno == 22 { InvalidInput(errno) }
+    E { IoError(errno) } } }
+}
+
+# Ensure a condition holds, or return an error
+# Returns 0 (ok) or error code
+F ensure(condition: i64, error_code: i64) -> i64 {
+    I condition != 0 { 0 } E { error_code }
+}

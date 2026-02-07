@@ -2938,6 +2938,7 @@ impl TypeChecker {
                 name,
                 generics: e.generics.iter().map(|g| g.name.node.clone()).collect(),
                 variants,
+                methods: HashMap::new(),
             },
         );
 
@@ -2982,24 +2983,44 @@ impl TypeChecker {
             _ => return Ok(()), // Skip non-named types for now
         };
 
-        // Check if struct exists
-        if !self.structs.contains_key(&type_name) {
-            return Ok(()); // Struct not registered yet, skip
+        // Check if struct or enum exists
+        let is_enum = self.enums.contains_key(&type_name);
+        if !self.structs.contains_key(&type_name) && !is_enum {
+            return Ok(()); // Type not registered yet, skip
         }
 
-        // Get struct generics and set them as current for type resolution
-        let struct_generics: Vec<GenericParam> = self
-            .structs
-            .get(&type_name)
-            .map(|s| {
-                s.generics
-                    .iter()
-                    .map(|g| {
-                        GenericParam::new_type(Spanned::new(g.clone(), Span::default()), vec![])
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        // Get type generics and set them as current for type resolution
+        let struct_generics: Vec<GenericParam> = if is_enum {
+            self.enums
+                .get(&type_name)
+                .map(|e| {
+                    e.generics
+                        .iter()
+                        .map(|g| {
+                            GenericParam::new_type(
+                                Spanned::new(g.clone(), Span::default()),
+                                vec![],
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            self.structs
+                .get(&type_name)
+                .map(|s| {
+                    s.generics
+                        .iter()
+                        .map(|g| {
+                            GenericParam::new_type(
+                                Spanned::new(g.clone(), Span::default()),
+                                vec![],
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
 
         // Combine struct generics with impl-level generics
         let mut all_generics = struct_generics;
@@ -3133,10 +3154,14 @@ impl TypeChecker {
             ));
         }
 
-        // Now insert methods into the struct
+        // Now insert methods into the struct or enum
         if let Some(struct_def) = self.structs.get_mut(&type_name) {
             for (name, sig) in method_sigs {
                 struct_def.methods.insert(name, sig);
+            }
+        } else if let Some(enum_def) = self.enums.get_mut(&type_name) {
+            for (name, sig) in method_sigs {
+                enum_def.methods.insert(name, sig);
             }
         }
 
@@ -4171,10 +4196,25 @@ impl TypeChecker {
                     _ => (String::new(), vec![]),
                 };
 
-                // First, try to find the method on the struct itself
+                // First, try to find the method on the struct or enum itself
                 if !inner_type.is_empty() {
-                    if let Some(struct_def) = self.structs.get(&inner_type).cloned() {
-                        if let Some(method_sig) = struct_def.methods.get(&method.node).cloned() {
+                    // Look up method in struct or enum
+                    let found_method = self
+                        .structs
+                        .get(&inner_type)
+                        .and_then(|s| s.methods.get(&method.node).cloned())
+                        .or_else(|| {
+                            self.enums
+                                .get(&inner_type)
+                                .and_then(|e| e.methods.get(&method.node).cloned())
+                        });
+                    let found_generics = self
+                        .structs
+                        .get(&inner_type)
+                        .map(|s| s.generics.clone())
+                        .or_else(|| self.enums.get(&inner_type).map(|e| e.generics.clone()))
+                        .unwrap_or_default();
+                    if let Some(method_sig) = found_method {
                             // Skip self parameter
                             let param_types: Vec<_> = method_sig
                                 .params
@@ -4191,12 +4231,11 @@ impl TypeChecker {
                                 });
                             }
 
-                            // Build substitution map from struct's generic params to receiver's concrete types
+                            // Build substitution map from type's generic params to receiver's concrete types
                             let generic_substitutions: std::collections::HashMap<
                                 String,
                                 ResolvedType,
-                            > = struct_def
-                                .generics
+                            > = found_generics
                                 .iter()
                                 .zip(receiver_generics.iter())
                                 .map(|(param, arg)| (param.clone(), arg.clone()))
@@ -4229,10 +4268,9 @@ impl TypeChecker {
 
                             return Ok(ret_type);
                         }
-                    }
                 }
 
-                // If not found on struct, try to find it in trait implementations
+                // If not found on struct/enum, try to find it in trait implementations
                 if let Some(trait_method) = self.find_trait_method(&receiver_type, &method.node) {
                     // Skip self parameter (first parameter)
                     let param_types: Vec<_> = trait_method

@@ -10,6 +10,7 @@
 //! - PartialEq: Generate equality comparison
 //! - Default: Generate default value constructor
 //! - Hash: Generate hash implementation
+//! - Error: Generate Error trait implementation (code + message methods)
 
 use std::collections::HashMap;
 use vais_ast::Module;
@@ -36,7 +37,7 @@ impl std::fmt::Display for DeriveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DeriveError::UnsupportedDerive(name) => {
-                write!(f, "Unsupported derive macro: '{}'. Supported: Debug, Clone, PartialEq, Default, Hash", name)
+                write!(f, "Unsupported derive macro: '{}'. Supported: Debug, Clone, PartialEq, Default, Hash, Error", name)
             }
             DeriveError::CannotDerive { derive, reason } => {
                 write!(f, "Cannot derive '{}': {}", derive, reason)
@@ -75,6 +76,7 @@ impl DeriveRegistry {
         registry.supported.insert("PartialEq".to_string(), ());
         registry.supported.insert("Default".to_string(), ());
         registry.supported.insert("Hash".to_string(), ());
+        registry.supported.insert("Error".to_string(), ());
         registry
     }
 
@@ -119,6 +121,7 @@ mod tests {
         assert!(registry.is_supported("PartialEq"));
         assert!(registry.is_supported("Default"));
         assert!(registry.is_supported("Hash"));
+        assert!(registry.is_supported("Error"));
         assert!(!registry.is_supported("Custom"));
     }
 }
