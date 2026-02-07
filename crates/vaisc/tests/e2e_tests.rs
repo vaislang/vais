@@ -5615,6 +5615,90 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
+// ==================== Match Phi Node Type Tests ====================
+
+#[test]
+fn e2e_match_i64_in_function() {
+    // Test match expression returning i64 from a separate function
+    let source = r#"
+F classify(n: i64) -> i64 {
+    M n {
+        1 => 10,
+        2 => 20,
+        3 => 30,
+        _ => 0,
+    }
+}
+F main() -> i64 {
+    a := classify(2)
+    I a == 20 { 0 } E { 1 }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_match_enum_return_variant() {
+    // Test match expression returning enum variant directly (phi node must use ptr, not i64)
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+
+F transform(r: Result) -> Result {
+    M r {
+        Ok(v) => Ok(v * 2),
+        Err(e) => Err(e + 1),
+    }
+}
+
+F unwrap_or(r: Result, default: i64) -> i64 {
+    M r { Ok(v) => v, Err(_) => default }
+}
+
+F main() -> i64 {
+    r1 := transform(Ok(21))
+    val := unwrap_or(r1, 0)
+    I val == 42 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(
+        result.exit_code, 0,
+        "match enum return variant failed: {}",
+        result.stderr
+    );
+}
+
+#[test]
+fn e2e_match_enum_err_transform() {
+    // Test match returning enum variant on error path
+    let source = r#"
+E Result { Ok(i64), Err(i64) }
+
+F map_err(r: Result, offset: i64) -> Result {
+    M r {
+        Ok(v) => Ok(v),
+        Err(e) => Err(e + offset),
+    }
+}
+
+F unwrap_err(r: Result) -> i64 {
+    M r { Ok(_) => 0, Err(e) => e }
+}
+
+F main() -> i64 {
+    r := map_err(Err(10), 32)
+    e := unwrap_err(r)
+    I e == 42 { 0 } E { 1 }
+}
+"#;
+    let result = compile_and_run(source).expect("should compile and run");
+    assert_eq!(
+        result.exit_code, 0,
+        "match enum err transform failed: {}",
+        result.stderr
+    );
+}
+
 // ==================== Error Recovery E2E Tests ====================
 
 /// Helper: parse with recovery and return (module, errors)

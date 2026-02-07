@@ -386,7 +386,22 @@ impl CodeGenerator {
 
             // Default fallthrough block (no arm matched)
             ir.push_str(&format!("{}:\n", default_label));
-            arm_values.push(("0".to_string(), default_label.clone()));
+            // Use appropriate default value based on first arm's body type
+            let default_val = if !arms.is_empty() {
+                let arm_body_type = self.infer_expr_type(&arms[0].body);
+                match &arm_body_type {
+                    ResolvedType::Named { .. }
+                    | ResolvedType::Str
+                    | ResolvedType::Ref(_)
+                    | ResolvedType::RefMut(_) => "null".to_string(),
+                    ResolvedType::F64 => "0.0".to_string(),
+                    ResolvedType::Bool => "false".to_string(),
+                    _ => "0".to_string(),
+                }
+            } else {
+                "0".to_string()
+            };
+            arm_values.push((default_val, default_label.clone()));
             ir.push_str(&format!("  br label %{}\n", merge_label));
         }
 
@@ -396,13 +411,53 @@ impl CodeGenerator {
         if arm_values.is_empty() {
             Ok(("0".to_string(), ir))
         } else {
-            let result = self.next_temp(counter);
+            // Determine phi node type from the first arm's body expression type
+            let arm_body_type = if !arms.is_empty() {
+                self.infer_expr_type(&arms[0].body)
+            } else {
+                ResolvedType::I64
+            };
+
+            let is_named_type = matches!(&arm_body_type, ResolvedType::Named { .. });
+            let phi_type = match &arm_body_type {
+                ResolvedType::Named { .. } => {
+                    // Enum/struct types are returned as pointers in text codegen
+                    let llvm_ty = self.type_to_llvm(&arm_body_type);
+                    format!("{}*", llvm_ty)
+                }
+                ResolvedType::Str => "i8*".to_string(),
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    let inner_ty = self.type_to_llvm(inner);
+                    format!("{}*", inner_ty)
+                }
+                ResolvedType::F64 => "double".to_string(),
+                ResolvedType::Bool => "i1".to_string(),
+                _ => "i64".to_string(),
+            };
+
+            let phi_result = self.next_temp(counter);
             let phi_args: Vec<String> = arm_values
                 .iter()
                 .map(|(val, label)| format!("[ {}, %{} ]", val, label))
                 .collect();
-            ir.push_str(&format!("  {} = phi i64 {}\n", result, phi_args.join(", ")));
-            Ok((result, ir))
+            ir.push_str(&format!(
+                "  {} = phi {} {}\n",
+                phi_result, phi_type, phi_args.join(", ")
+            ));
+
+            // For Named types (enum/struct), the phi gives us a pointer.
+            // Load the value so it can be used directly (e.g., as a return value).
+            if is_named_type {
+                let llvm_ty = self.type_to_llvm(&arm_body_type);
+                let loaded = self.next_temp(counter);
+                ir.push_str(&format!(
+                    "  {} = load {}, {}* {}\n",
+                    loaded, llvm_ty, llvm_ty, phi_result
+                ));
+                Ok((loaded, ir))
+            } else {
+                Ok((phi_result, ir))
+            }
         }
     }
 
