@@ -131,6 +131,9 @@ DETAILED_ERRORS.txt
 .workflow-state.json
 vaisc-stage1
 vaisc-stage2
+selfhost/lsp_main
+selfhost/test_index_expr
+selfhost/test_new_features
 stage2.ll
 temp.ll
 # runtime.c in root - keep selfhost/runtime.c tracked for tests
