@@ -692,10 +692,12 @@ impl Parser {
                         };
 
                         if is_static {
-                            if let Expr::Ident(type_name) = expr.node.clone() {
+                            if let Expr::Ident(type_name) = &expr.node {
+                                let tn = type_name.clone();
+                                let sp = expr.span;
                                 expr = Spanned::new(
                                     Expr::StaticMethodCall {
-                                        type_name: Spanned::new(type_name, expr.span),
+                                        type_name: Spanned::new(tn, sp),
                                         method: field,
                                         args,
                                     },
@@ -732,10 +734,12 @@ impl Parser {
                 self.expect(&Token::RParen)?;
                 let end = self.prev_span().end;
 
-                if let Expr::Ident(type_name) = expr.node.clone() {
+                if let Expr::Ident(type_name) = &expr.node {
+                    let tn = type_name.clone();
+                    let sp = expr.span;
                     expr = Spanned::new(
                         Expr::StaticMethodCall {
-                            type_name: Spanned::new(type_name, expr.span),
+                            type_name: Spanned::new(tn, sp),
                             method,
                             args,
                         },
@@ -817,9 +821,11 @@ impl Parser {
                 };
 
                 if is_macro {
-                    if let Expr::Ident(name) = expr.node.clone() {
+                    if let Expr::Ident(name) = &expr.node {
+                        let name_owned = name.clone();
+                        let sp = expr.span;
                         self.advance(); // consume !
-                        let name_spanned = Spanned::new(name, expr.span);
+                        let name_spanned = Spanned::new(name_owned, sp);
                         let invoke = self.parse_macro_invoke(name_spanned)?;
                         let end = self.prev_span().end;
                         expr = Spanned::new(Expr::MacroInvoke(invoke), Span::new(start, end));

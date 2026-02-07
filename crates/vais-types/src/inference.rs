@@ -238,6 +238,10 @@ impl TypeChecker {
 
     /// Apply substitutions to a type
     pub(crate) fn apply_substitutions(&self, ty: &ResolvedType) -> ResolvedType {
+        // Fast path: no substitutions means no transformation needed
+        if self.substitutions.is_empty() {
+            return ty.clone();
+        }
         match ty {
             ResolvedType::Var(id) => {
                 if let Some(subst) = self.substitutions.get(id) {

@@ -88,7 +88,10 @@ fn escape_llvm_string(s: &str) -> String {
             b'\t' => result.push_str("\\09"),
             b'\0' => result.push_str("\\00"),
             0x01..=0x08 | 0x0B..=0x0C | 0x0E..=0x1F | 0x7F => {
-                result.push_str(&format!("\\{:02X}", byte));
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                result.push('\\');
+                result.push(HEX[(byte >> 4) as usize] as char);
+                result.push(HEX[(byte & 0x0F) as usize] as char);
             }
             _ => result.push(byte as char),
         }
@@ -1077,11 +1080,11 @@ impl CodeGenerator {
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
-        for (name, info) in &self.enums.clone() {
+        for (name, info) in &self.enums {
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
-        for (name, info) in &self.unions.clone() {
+        for (name, info) in &self.unions {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
@@ -1740,13 +1743,13 @@ impl CodeGenerator {
         }
 
         // Generate enum types
-        for (name, info) in &self.enums.clone() {
+        for (name, info) in &self.enums {
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
 
         // Generate union types
-        for (name, info) in &self.unions.clone() {
+        for (name, info) in &self.unions {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
@@ -2098,13 +2101,13 @@ impl CodeGenerator {
         }
 
         // Generate enum types
-        for (name, info) in &self.enums.clone() {
+        for (name, info) in &self.enums {
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
 
         // Generate union types
-        for (name, info) in &self.unions.clone() {
+        for (name, info) in &self.unions {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
