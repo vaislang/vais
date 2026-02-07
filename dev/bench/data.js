@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770422884963,
+  "lastUpdate": 1770424079602,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -5711,6 +5711,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1818201,
             "range": "± 25531",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "235b2deb94f093232e5788b0502103b90d6f3915",
+          "message": "feat(build): add native dependencies, multifile build, and pkg install integration\n\n- Add [native-dependencies] section to vais.toml for declaring C/system library\n  dependencies with -l/-I/-L flags and C source file compilation support\n- Support directory input in `vaisc build src/` — auto-detect main.vais/lib.vais\n  entry point, set VAIS_DEP_PATHS for module resolution, resolve package deps\n- Wire native deps through compile_to_native for automatic clang flag injection\n- Add 4 integration tests (native deps parsing, directory build, multifile import)\n- Update ROADMAP.md Phase 36/37 remaining items as completed\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-07T09:20:51+09:00",
+          "tree_id": "78a0f359211cdbca839efbd2d3a113b103f5a17c",
+          "url": "https://github.com/vaislang/vais/commit/235b2deb94f093232e5788b0502103b90d6f3915"
+        },
+        "date": 1770424078740,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 2390,
+            "range": "± 24",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 5566,
+            "range": "± 56",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5995,
+            "range": "± 313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 11429,
+            "range": "± 133",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 18044,
+            "range": "± 118",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 34413,
+            "range": "± 696",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 30235,
+            "range": "± 190",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 68114,
+            "range": "± 667",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 270103,
+            "range": "± 1298",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 408141,
+            "range": "± 2120",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 101666,
+            "range": "± 1085",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 707827,
+            "range": "± 23832",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 153824,
+            "range": "± 1547",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 179498,
+            "range": "± 957",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 188114,
+            "range": "± 3307",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 232462,
+            "range": "± 1682",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 485031,
+            "range": "± 1594",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 684762,
+            "range": "± 2616",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 379401,
+            "range": "± 1739",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1091752,
+            "range": "± 26464",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 38261,
+            "range": "± 3500",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 193499,
+            "range": "± 1472",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 375192,
+            "range": "± 3192",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1824882,
+            "range": "± 43657",
             "unit": "ns/iter"
           }
         ]
