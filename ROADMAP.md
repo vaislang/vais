@@ -1637,7 +1637,15 @@ error: expected i64, found &i64
   - AST op → MIR op 변환 (18 binop + 2 unop)
 - [ ] **MIR 분석 패스** (도달 가능성, 활성 변수, 데이터 흐름)
 - [ ] **Borrow Checker on MIR** (borrow_checker.vais)
-- [ ] **MIR → LLVM IR 변환** (mir_emit_llvm.vais)
+- [x] **MIR → LLVM IR 변환** (mir_emit_llvm.vais, 1,228줄) ✅ 2026-02-07
+  - MirEmitter 상태 구조체 + 출력 버퍼 관리
+  - MirType → LLVM IR 타입 매핑 (23 타입 종류)
+  - Operand/Rvalue/Statement/Terminator emission
+  - BinOp 16종 (int/float 분기) + UnOp 2종 + 비교 zext
+  - Call/TailCall/SwitchInt/Goto/Return/Assert/Unreachable 터미네이터
+  - 문자열 상수 전역 emission + 이스케이프 처리
+  - 빌트인 함수 (load_i64/store_i64/load_byte/store_byte)
+  - Public API: mir_emit_llvm(), mir_emit_llvm_to_file()
 - **예상 작업량**: 4,000+ LOC
 - **의존성**: Stage 5 완료 후 시작
 - **파일**: `selfhost/mir.vais`, `selfhost/mir_builder.vais`, `selfhost/borrow_checker.vais`

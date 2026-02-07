@@ -1,0 +1,1228 @@
+# Vais Self-Hosting Compiler - MIR → LLVM IR Emitter
+# Converts MirModule to LLVM IR text (.ll format).
+#
+# Architecture:
+#   MirEmitter state struct holds output buffer, string pool, register counter.
+#   Emission is hierarchical: Module → Body → BasicBlock → Statement/Terminator.
+#   Mirrors crates/vais-mir/src/emit_llvm.rs using selfhost patterns from codegen.vais.
+
+U mir
+
+# ============================================================================
+# MIR Emitter State
+# ============================================================================
+
+# MirEmitter: 96 bytes
+#   output_data(8) + output_len(8) + output_cap(8)     = output buffer
+#   sp_data(8) + sp_offsets(8) + sp_count(8)            = string pool
+#   temp_buf(8)                                          = scratch buffer for i64→str
+#   reg_counter(8)                                       = unique register counter
+#   current_body(8)                                      = ptr to current MirBody
+#   string_consts_ptr(8) + string_consts_len(8) + string_consts_cap(8) = string constants
+S MirEmitter {
+    output_data: i64,
+    output_len: i64,
+    output_cap: i64,
+    sp_data: i64,
+    sp_offsets: i64,
+    sp_count: i64,
+    temp_buf: i64,
+    reg_counter: i64,
+    current_body: i64,
+    string_consts_ptr: i64,
+    string_consts_len: i64,
+    string_consts_cap: i64
+}
+
+F mir_emitter_new(sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
+    cap := 1024 * 64
+    em := malloc(96)
+    store_i64(em, malloc(cap))       # output_data
+    store_i64(em + 8, 0)             # output_len
+    store_i64(em + 16, cap)          # output_cap
+    store_i64(em + 24, sp_data)      # sp_data
+    store_i64(em + 32, sp_offsets)   # sp_offsets
+    store_i64(em + 40, sp_count)     # sp_count
+    store_i64(em + 48, malloc(64))   # temp_buf
+    store_i64(em + 56, 0)            # reg_counter
+    store_i64(em + 64, 0)            # current_body
+    # String constants buffer (each entry: str_idx(8), could extend later)
+    sc_cap := 256
+    store_i64(em + 72, malloc(8 * sc_cap))  # string_consts_ptr
+    store_i64(em + 80, 0)                    # string_consts_len
+    store_i64(em + 88, sc_cap)               # string_consts_cap
+    R em
+}
+
+# ============================================================================
+# Output helpers
+# ============================================================================
+
+F me_emit_ptr(em: i64, ptr: i64, len: i64) -> i64 {
+    out_data: mut i64 = load_i64(em)
+    out_len := load_i64(em + 8)
+    out_cap := load_i64(em + 16)
+
+    I out_len + len > out_cap {
+        new_cap := (out_cap + len) * 2
+        new_data := malloc(new_cap)
+        memcpy(new_data, out_data, out_len)
+        free(out_data)
+        store_i64(em, new_data)
+        store_i64(em + 16, new_cap)
+        out_data = new_data
+        0
+    } E { 0 }
+
+    memcpy(out_data + out_len, ptr, len)
+    store_i64(em + 8, out_len + len)
+    1
+}
+
+F me_emit_cstr(em: i64, s: str) -> i64 {
+    len := strlen(s)
+    out_data: mut i64 = load_i64(em)
+    out_len := load_i64(em + 8)
+    out_cap := load_i64(em + 16)
+
+    I out_len + len > out_cap {
+        new_cap := (out_cap + len) * 2
+        new_data := malloc(new_cap)
+        memcpy(new_data, out_data, out_len)
+        free(out_data)
+        store_i64(em, new_data)
+        store_i64(em + 16, new_cap)
+        out_data = new_data
+        0
+    } E { 0 }
+
+    memcpy_str(out_data + out_len, s, len)
+    store_i64(em + 8, out_len + len)
+    1
+}
+
+F me_emit_i64(em: i64, value: i64) -> i64 {
+    I value == 0 {
+        me_emit_cstr(em, "0")
+    } E I value < 0 {
+        me_emit_cstr(em, "-")
+        me_emit_i64(em, 0 - value)
+    } E {
+        me_emit_positive_i64(em, value)
+    }
+}
+
+F me_emit_positive_i64(em: i64, value: i64) -> i64 {
+    I value == 0 { R 1 }
+    me_emit_positive_i64(em, value / 10)
+    digit := (value % 10) + 48
+    tb := load_i64(em + 48)
+    store_byte(tb, digit)
+    me_emit_ptr(em, tb, 1)
+}
+
+F me_emit_newline(em: i64) -> i64 {
+    tb := load_i64(em + 48)
+    store_byte(tb, 10)
+    me_emit_ptr(em, tb, 1)
+}
+
+F me_emit_byte(em: i64, byte: i64) -> i64 {
+    tb := load_i64(em + 48)
+    store_byte(tb, byte)
+    me_emit_ptr(em, tb, 1)
+}
+
+# Emit string from string pool by index
+F me_emit_string_idx(em: i64, idx: i64) -> i64 {
+    sp_offsets := load_i64(em + 32)
+    sp_data := load_i64(em + 24)
+    entry_ptr := sp_offsets + idx * 16
+    offset := load_i64(entry_ptr)
+    len := load_i64(entry_ptr + 8)
+    me_emit_ptr(em, sp_data + offset, len)
+}
+
+# Get string pool pointer
+F me_get_string_ptr(em: i64, idx: i64) -> i64 {
+    sp_offsets := load_i64(em + 32)
+    sp_data := load_i64(em + 24)
+    entry_ptr := sp_offsets + idx * 16
+    offset := load_i64(entry_ptr)
+    sp_data + offset
+}
+
+F me_get_string_len(em: i64, idx: i64) -> i64 {
+    sp_offsets := load_i64(em + 32)
+    entry_ptr := sp_offsets + idx * 16
+    load_i64(entry_ptr + 8)
+}
+
+# Fresh register %N
+F me_fresh_reg(em: i64) -> i64 {
+    n := load_i64(em + 56)
+    store_i64(em + 56, n + 1)
+    n
+}
+
+# Emit register name %N
+F me_emit_reg(em: i64, n: i64) -> i64 {
+    me_emit_cstr(em, "%")
+    me_emit_i64(em, n)
+}
+
+# Record string constant for later global emission
+F me_add_string_const(em: i64, str_idx: i64) -> i64 {
+    sc_ptr := load_i64(em + 72)
+    sc_len := load_i64(em + 80)
+    sc_cap := load_i64(em + 88)
+
+    # Check if already recorded
+    i := mut 0
+    L {
+        I i >= sc_len { R 0 }
+        I load_i64(sc_ptr + i * 8) == str_idx { R i }
+        i = i + 1
+    }
+
+    # Grow if needed
+    I sc_len >= sc_cap {
+        new_cap := sc_cap * 2
+        new_ptr := malloc(8 * new_cap)
+        memcpy(new_ptr, sc_ptr, sc_len * 8)
+        free(sc_ptr)
+        store_i64(em + 72, new_ptr)
+        store_i64(em + 88, new_cap)
+        sc_ptr = new_ptr
+        0
+    } E { 0 }
+
+    store_i64(sc_ptr + sc_len * 8, str_idx)
+    store_i64(em + 80, sc_len + 1)
+    sc_len
+}
+
+# ============================================================================
+# MIR Type → LLVM IR type string
+# ============================================================================
+
+F me_emit_type(em: i64, ty_ptr: i64) -> i64 {
+    kind := load_i64(ty_ptr)
+
+    I kind == MIR_TY_I8() { me_emit_cstr(em, "i8") }
+    E I kind == MIR_TY_I16() { me_emit_cstr(em, "i16") }
+    E I kind == MIR_TY_I32() { me_emit_cstr(em, "i32") }
+    E I kind == MIR_TY_I64() { me_emit_cstr(em, "i64") }
+    E I kind == MIR_TY_I128() { me_emit_cstr(em, "i128") }
+    E I kind == MIR_TY_U8() { me_emit_cstr(em, "i8") }
+    E I kind == MIR_TY_U16() { me_emit_cstr(em, "i16") }
+    E I kind == MIR_TY_U32() { me_emit_cstr(em, "i32") }
+    E I kind == MIR_TY_U64() { me_emit_cstr(em, "i64") }
+    E I kind == MIR_TY_U128() { me_emit_cstr(em, "i128") }
+    E I kind == MIR_TY_F32() { me_emit_cstr(em, "float") }
+    E I kind == MIR_TY_F64() { me_emit_cstr(em, "double") }
+    E I kind == MIR_TY_BOOL() { me_emit_cstr(em, "i1") }
+    E I kind == MIR_TY_STR() { me_emit_cstr(em, "i8*") }
+    E I kind == MIR_TY_UNIT() { me_emit_cstr(em, "void") }
+    E I kind == MIR_TY_NEVER() { me_emit_cstr(em, "void") }
+    E I kind == MIR_TY_POINTER() {
+        inner := load_i64(ty_ptr + 8)
+        I inner != 0 {
+            me_emit_type(em, inner)
+            me_emit_cstr(em, "*")
+        } E {
+            me_emit_cstr(em, "i8*")
+        }
+    }
+    E I kind == MIR_TY_REF() {
+        inner := load_i64(ty_ptr + 8)
+        I inner != 0 {
+            me_emit_type(em, inner)
+            me_emit_cstr(em, "*")
+        } E {
+            me_emit_cstr(em, "i8*")
+        }
+    }
+    E I kind == MIR_TY_ARRAY() {
+        inner := load_i64(ty_ptr + 8)
+        count := load_i64(ty_ptr + 16)
+        me_emit_cstr(em, "[")
+        me_emit_i64(em, count)
+        me_emit_cstr(em, " x ")
+        I inner != 0 { me_emit_type(em, inner) } E { me_emit_cstr(em, "i64") }
+        me_emit_cstr(em, "]")
+    }
+    E I kind == MIR_TY_TUPLE() {
+        inner_arr := load_i64(ty_ptr + 8)
+        count := load_i64(ty_ptr + 16)
+        me_emit_cstr(em, "{ ")
+        i := mut 0
+        L {
+            I i >= count { R 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
+            elem_ty := load_i64(inner_arr + i * 8)
+            me_emit_type(em, elem_ty)
+            i = i + 1
+        }
+        me_emit_cstr(em, " }")
+    }
+    E I kind == MIR_TY_STRUCT() {
+        name_idx := load_i64(ty_ptr + 24)
+        me_emit_cstr(em, "%")
+        me_emit_string_idx(em, name_idx)
+    }
+    E I kind == MIR_TY_ENUM() {
+        name_idx := load_i64(ty_ptr + 24)
+        me_emit_cstr(em, "%")
+        me_emit_string_idx(em, name_idx)
+    }
+    E I kind == MIR_TY_FUNCTION() {
+        # Return type stored in name_idx field, params in inner_type_ptr
+        ret_ty := load_i64(ty_ptr + 24)
+        params_arr := load_i64(ty_ptr + 8)
+        params_count := load_i64(ty_ptr + 16)
+        I ret_ty != 0 { me_emit_type(em, ret_ty) } E { me_emit_cstr(em, "void") }
+        me_emit_cstr(em, " (")
+        i := mut 0
+        L {
+            I i >= params_count { R 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
+            p_ty := load_i64(params_arr + i * 8)
+            me_emit_type(em, p_ty)
+            i = i + 1
+        }
+        me_emit_cstr(em, ")")
+    }
+    E {
+        # Unknown type → default i64
+        me_emit_cstr(em, "i64")
+    }
+}
+
+# Check if type is floating point (for binop selection)
+F me_type_is_float(ty_ptr: i64) -> i64 {
+    kind := load_i64(ty_ptr)
+    I kind == MIR_TY_F32() { 1 }
+    E I kind == MIR_TY_F64() { 1 }
+    E { 0 }
+}
+
+# Check if type is void/unit
+F me_type_is_void(ty_ptr: i64) -> i64 {
+    kind := load_i64(ty_ptr)
+    I kind == MIR_TY_UNIT() { 1 }
+    E I kind == MIR_TY_NEVER() { 1 }
+    E { 0 }
+}
+
+# ============================================================================
+# Block label helpers
+# ============================================================================
+
+F me_emit_bb_label(em: i64, bb_idx: i64) -> i64 {
+    I bb_idx == 0 {
+        me_emit_cstr(em, "entry")
+    } E {
+        me_emit_cstr(em, "bb")
+        me_emit_i64(em, bb_idx)
+    }
+}
+
+# ============================================================================
+# Operand emission — returns register number or emits literal
+# ============================================================================
+
+# Emit operand value inline (for use in instructions)
+# For Copy/Move: emits %_N (local reference)
+# For Constant: emits literal value
+F me_emit_operand(em: i64, op_ptr: i64) -> i64 {
+    kind := load_i64(op_ptr)
+
+    I kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        me_emit_cstr(em, "%_")
+        me_emit_i64(em, local_idx)
+    }
+    E I kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        me_emit_cstr(em, "%_")
+        me_emit_i64(em, local_idx)
+    }
+    E I kind == OPERAND_CONSTANT() {
+        const_kind := load_i64(op_ptr + 16)
+        I const_kind == CONST_INT() {
+            value := load_i64(op_ptr + 24)
+            me_emit_i64(em, value)
+        }
+        E I const_kind == CONST_BOOL() {
+            value := load_i64(op_ptr + 24)
+            me_emit_i64(em, value)
+        }
+        E I const_kind == CONST_FLOAT() {
+            # Emit float as hex double for LLVM
+            bits := load_i64(op_ptr + 32)
+            me_emit_cstr(em, "0x")
+            me_emit_hex_i64(em, bits)
+        }
+        E I const_kind == CONST_STR() {
+            str_idx := load_i64(op_ptr + 24)
+            # Record for global emission, emit as getelementptr reference
+            sc_id := me_add_string_const(em, str_idx)
+            me_emit_cstr(em, "getelementptr inbounds ([")
+            slen := me_get_string_len(em, str_idx)
+            me_emit_i64(em, slen + 1)
+            me_emit_cstr(em, " x i8], [")
+            me_emit_i64(em, slen + 1)
+            me_emit_cstr(em, " x i8]* @.str.")
+            me_emit_i64(em, sc_id)
+            me_emit_cstr(em, ", i64 0, i64 0)")
+        }
+        E I const_kind == CONST_UNIT() {
+            me_emit_cstr(em, "0")
+        }
+        E { me_emit_cstr(em, "0") }
+    }
+    E { me_emit_cstr(em, "0") }
+}
+
+# Emit hex representation of i64 (for float constants)
+F me_emit_hex_i64(em: i64, value: i64) -> i64 {
+    # Emit 16 hex digits (big-endian)
+    i := mut 60
+    L {
+        I i < 0 { R 1 }
+        nibble := (value / me_pow2(i)) % 16
+        I nibble < 10 {
+            me_emit_i64(em, nibble)
+        } E {
+            tb := load_i64(em + 48)
+            store_byte(tb, 55 + nibble)  # 'A' = 65, 65 - 10 = 55
+            me_emit_ptr(em, tb, 1)
+        }
+        i = i - 4
+    }
+    1
+}
+
+# Power of 2 helper (bit shift)
+F me_pow2(n: i64) -> i64 {
+    I n <= 0 { R 1 }
+    result := mut 1
+    i := mut 0
+    L {
+        I i >= n { R result }
+        result = result * 2
+        i = i + 1
+    }
+    0
+}
+
+# Get the LLVM type of an operand
+F me_operand_type(em: i64, op_ptr: i64) -> i64 {
+    kind := load_i64(op_ptr)
+
+    I kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        me_local_type(em, local_idx)
+    }
+    E I kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        me_local_type(em, local_idx)
+    }
+    E I kind == OPERAND_CONSTANT() {
+        const_kind := load_i64(op_ptr + 16)
+        I const_kind == CONST_INT() { mir_type_prim(MIR_TY_I64()) }
+        E I const_kind == CONST_FLOAT() { mir_type_prim(MIR_TY_F64()) }
+        E I const_kind == CONST_BOOL() { mir_type_prim(MIR_TY_BOOL()) }
+        E I const_kind == CONST_STR() { mir_type_prim(MIR_TY_STR()) }
+        E { mir_type_prim(MIR_TY_UNIT()) }
+    }
+    E { mir_type_prim(MIR_TY_I64()) }
+}
+
+# Get local variable's type from current body
+F me_local_type(em: i64, local_idx: i64) -> i64 {
+    body := load_i64(em + 64)
+    I body == 0 { R mir_type_prim(MIR_TY_I64()) }
+
+    locals_ptr := load_i64(body + 32)
+    locals_len := load_i64(body + 40)
+    I local_idx >= locals_len { R mir_type_prim(MIR_TY_I64()) }
+
+    local_decl := load_i64(locals_ptr + local_idx * 8)
+    # LocalDecl: name_idx(8), type_ptr(8), is_mutable(8)
+    load_i64(local_decl + 8)
+}
+
+# ============================================================================
+# Binary/Unary operator → LLVM instruction
+# ============================================================================
+
+F me_emit_binop(em: i64, op: i64, dest_ty: i64) -> i64 {
+    is_float := me_type_is_float(dest_ty)
+
+    I op == BINOP_ADD() {
+        I is_float == 1 { me_emit_cstr(em, "fadd") } E { me_emit_cstr(em, "add") }
+    }
+    E I op == BINOP_SUB() {
+        I is_float == 1 { me_emit_cstr(em, "fsub") } E { me_emit_cstr(em, "sub") }
+    }
+    E I op == BINOP_MUL() {
+        I is_float == 1 { me_emit_cstr(em, "fmul") } E { me_emit_cstr(em, "mul") }
+    }
+    E I op == BINOP_DIV() {
+        I is_float == 1 { me_emit_cstr(em, "fdiv") } E { me_emit_cstr(em, "sdiv") }
+    }
+    E I op == BINOP_REM() {
+        I is_float == 1 { me_emit_cstr(em, "frem") } E { me_emit_cstr(em, "srem") }
+    }
+    E I op == BINOP_BIT_AND() { me_emit_cstr(em, "and") }
+    E I op == BINOP_BIT_OR() { me_emit_cstr(em, "or") }
+    E I op == BINOP_BIT_XOR() { me_emit_cstr(em, "xor") }
+    E I op == BINOP_SHL() { me_emit_cstr(em, "shl") }
+    E I op == BINOP_SHR() { me_emit_cstr(em, "ashr") }
+    E I op == BINOP_EQ() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp oeq") } E { me_emit_cstr(em, "icmp eq") }
+    }
+    E I op == BINOP_NE() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp one") } E { me_emit_cstr(em, "icmp ne") }
+    }
+    E I op == BINOP_LT() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp olt") } E { me_emit_cstr(em, "icmp slt") }
+    }
+    E I op == BINOP_LE() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp ole") } E { me_emit_cstr(em, "icmp sle") }
+    }
+    E I op == BINOP_GT() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp ogt") } E { me_emit_cstr(em, "icmp sgt") }
+    }
+    E I op == BINOP_GE() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp oge") } E { me_emit_cstr(em, "icmp sge") }
+    }
+    E { me_emit_cstr(em, "add") }
+}
+
+# Check if binop is a comparison (produces i1)
+F me_binop_is_cmp(op: i64) -> i64 {
+    I op >= BINOP_EQ() { 1 }
+    E { 0 }
+}
+
+# ============================================================================
+# Statement emission
+# ============================================================================
+
+F me_emit_statement(em: i64, stmt_ptr: i64) -> i64 {
+    kind := load_i64(stmt_ptr)
+
+    I kind == STMT_MIR_ASSIGN() {
+        place_ptr := load_i64(stmt_ptr + 8)
+        rvalue_ptr := load_i64(stmt_ptr + 16)
+        me_emit_assign(em, place_ptr, rvalue_ptr)
+    }
+    E I kind == STMT_MIR_DROP() {
+        me_emit_cstr(em, "  ; drop")
+        me_emit_newline(em)
+    }
+    E I kind == STMT_MIR_NOP() {
+        me_emit_cstr(em, "  ; nop")
+        me_emit_newline(em)
+    }
+    E { 0 }
+}
+
+# ============================================================================
+# Assignment emission
+# ============================================================================
+
+F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
+    local_idx := load_i64(place_ptr)
+    proj_ptr := load_i64(place_ptr + 8)
+    proj_len := load_i64(place_ptr + 16)
+
+    dest_ty := me_local_type(em, local_idx)
+    rv_kind := load_i64(rvalue_ptr)
+
+    I rv_kind == RVALUE_USE() {
+        operand := load_i64(rvalue_ptr + 8)
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, local_idx)
+        me_emit_cstr(em, " = add ")
+        me_emit_type(em, dest_ty)
+        me_emit_cstr(em, " 0, ")
+        me_emit_operand(em, operand)
+        me_emit_newline(em)
+    }
+    E I rv_kind == RVALUE_BINOP() {
+        op := load_i64(rvalue_ptr + 16)
+        lhs := load_i64(rvalue_ptr + 24)
+        rhs := load_i64(rvalue_ptr + 32)
+
+        is_cmp := me_binop_is_cmp(op)
+        I is_cmp == 1 {
+            # Comparison: produces i1, need to zext
+            tmp := me_fresh_reg(em)
+            me_emit_cstr(em, "  %_cmp")
+            me_emit_i64(em, tmp)
+            me_emit_cstr(em, " = ")
+            me_emit_binop(em, op, dest_ty)
+            me_emit_cstr(em, " ")
+            me_emit_type(em, dest_ty)
+            me_emit_cstr(em, " ")
+            me_emit_operand(em, lhs)
+            me_emit_cstr(em, ", ")
+            me_emit_operand(em, rhs)
+            me_emit_newline(em)
+
+            # zext i1 to dest type
+            me_emit_cstr(em, "  %_")
+            me_emit_i64(em, local_idx)
+            me_emit_cstr(em, " = zext i1 %_cmp")
+            me_emit_i64(em, tmp)
+            me_emit_cstr(em, " to ")
+            me_emit_type(em, dest_ty)
+            me_emit_newline(em)
+        } E {
+            me_emit_cstr(em, "  %_")
+            me_emit_i64(em, local_idx)
+            me_emit_cstr(em, " = ")
+            me_emit_binop(em, op, dest_ty)
+            me_emit_cstr(em, " ")
+            me_emit_type(em, dest_ty)
+            me_emit_cstr(em, " ")
+            me_emit_operand(em, lhs)
+            me_emit_cstr(em, ", ")
+            me_emit_operand(em, rhs)
+            me_emit_newline(em)
+        }
+    }
+    E I rv_kind == RVALUE_UNOP() {
+        op := load_i64(rvalue_ptr + 16)
+        operand := load_i64(rvalue_ptr + 8)
+
+        I op == UNOP_NEG() {
+            # sub <type> 0, <val>
+            me_emit_cstr(em, "  %_")
+            me_emit_i64(em, local_idx)
+            me_emit_cstr(em, " = sub ")
+            me_emit_type(em, dest_ty)
+            me_emit_cstr(em, " 0, ")
+            me_emit_operand(em, operand)
+            me_emit_newline(em)
+        } E I op == UNOP_NOT() {
+            # xor <type> <val>, -1
+            me_emit_cstr(em, "  %_")
+            me_emit_i64(em, local_idx)
+            me_emit_cstr(em, " = xor ")
+            me_emit_type(em, dest_ty)
+            me_emit_cstr(em, " ")
+            me_emit_operand(em, operand)
+            me_emit_cstr(em, ", -1")
+            me_emit_newline(em)
+        } E { 0 }
+    }
+    E I rv_kind == RVALUE_CAST() {
+        operand := load_i64(rvalue_ptr + 8)
+        target_ty := load_i64(rvalue_ptr + 40)
+        # Simple identity or bitcast
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, local_idx)
+        me_emit_cstr(em, " = add ")
+        me_emit_type(em, dest_ty)
+        me_emit_cstr(em, " 0, ")
+        me_emit_operand(em, operand)
+        me_emit_cstr(em, "  ; cast")
+        me_emit_newline(em)
+    }
+    E I rv_kind == RVALUE_REF() {
+        ref_place := load_i64(rvalue_ptr + 40)
+        ref_local := load_i64(ref_place)
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, local_idx)
+        me_emit_cstr(em, " = getelementptr ")
+        ref_ty := me_local_type(em, ref_local)
+        me_emit_type(em, ref_ty)
+        me_emit_cstr(em, ", ptr %_")
+        me_emit_i64(em, ref_local)
+        me_emit_cstr(em, ".addr, i32 0")
+        me_emit_newline(em)
+    }
+    E I rv_kind == RVALUE_AGGREGATE() {
+        agg_kind := load_i64(rvalue_ptr + 48)
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        me_emit_cstr(em, "  ; aggregate construction (kind=")
+        me_emit_i64(em, agg_kind)
+        me_emit_cstr(em, ", elems=")
+        me_emit_i64(em, agg_len)
+        me_emit_cstr(em, ")")
+        me_emit_newline(em)
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, local_idx)
+        me_emit_cstr(em, " = add ")
+        me_emit_type(em, dest_ty)
+        me_emit_cstr(em, " 0, 0")
+        me_emit_newline(em)
+    }
+    E I rv_kind == RVALUE_DISCRIMINANT() {
+        disc_place := load_i64(rvalue_ptr + 40)
+        disc_local := load_i64(disc_place)
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, local_idx)
+        me_emit_cstr(em, " = add i64 0, %_")
+        me_emit_i64(em, disc_local)
+        me_emit_cstr(em, "  ; discriminant")
+        me_emit_newline(em)
+    }
+    E I rv_kind == RVALUE_LEN() {
+        len_place := load_i64(rvalue_ptr + 40)
+        len_local := load_i64(len_place)
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, local_idx)
+        me_emit_cstr(em, " = add i64 0, %_")
+        me_emit_i64(em, len_local)
+        me_emit_cstr(em, "  ; len")
+        me_emit_newline(em)
+    }
+    E {
+        me_emit_cstr(em, "  ; unknown rvalue kind=")
+        me_emit_i64(em, rv_kind)
+        me_emit_newline(em)
+    }
+}
+
+# ============================================================================
+# Terminator emission
+# ============================================================================
+
+F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_GOTO() {
+        target := load_i64(term_ptr + 8)
+        me_emit_cstr(em, "  br label %")
+        me_emit_bb_label(em, target)
+        me_emit_newline(em)
+    }
+    E I kind == TERM_SWITCH_INT() {
+        disc_ptr := load_i64(term_ptr + 16)
+        targets_ptr := load_i64(term_ptr + 24)
+        targets_len := load_i64(term_ptr + 32)
+        otherwise := load_i64(term_ptr + 40)
+
+        I targets_len == 1 {
+            # Single target → conditional branch
+            # targets entry: value(8) + bb_idx(8) = 16 bytes per entry
+            val := load_i64(targets_ptr)
+            target_bb := load_i64(targets_ptr + 8)
+
+            tmp := me_fresh_reg(em)
+            me_emit_cstr(em, "  %_sw")
+            me_emit_i64(em, tmp)
+            me_emit_cstr(em, " = icmp eq i64 ")
+            me_emit_operand(em, disc_ptr)
+            me_emit_cstr(em, ", ")
+            me_emit_i64(em, val)
+            me_emit_newline(em)
+
+            me_emit_cstr(em, "  br i1 %_sw")
+            me_emit_i64(em, tmp)
+            me_emit_cstr(em, ", label %")
+            me_emit_bb_label(em, target_bb)
+            me_emit_cstr(em, ", label %")
+            me_emit_bb_label(em, otherwise)
+            me_emit_newline(em)
+        } E {
+            # Multi-target → switch instruction
+            me_emit_cstr(em, "  switch i64 ")
+            me_emit_operand(em, disc_ptr)
+            me_emit_cstr(em, ", label %")
+            me_emit_bb_label(em, otherwise)
+            me_emit_cstr(em, " [")
+            me_emit_newline(em)
+
+            i := mut 0
+            L {
+                I i >= targets_len { R 0 }
+                val := load_i64(targets_ptr + i * 16)
+                target_bb := load_i64(targets_ptr + i * 16 + 8)
+                me_emit_cstr(em, "    i64 ")
+                me_emit_i64(em, val)
+                me_emit_cstr(em, ", label %")
+                me_emit_bb_label(em, target_bb)
+                me_emit_newline(em)
+                i = i + 1
+            }
+
+            me_emit_cstr(em, "  ]")
+            me_emit_newline(em)
+        }
+    }
+    E I kind == TERM_RETURN() {
+        body := load_i64(em + 64)
+        ret_ty := load_i64(body + 24)
+        I me_type_is_void(ret_ty) == 1 {
+            me_emit_cstr(em, "  ret void")
+            me_emit_newline(em)
+        } E {
+            me_emit_cstr(em, "  ret ")
+            me_emit_type(em, ret_ty)
+            me_emit_cstr(em, " %_0")
+            me_emit_newline(em)
+        }
+    }
+    E I kind == TERM_CALL() {
+        target_bb := load_i64(term_ptr + 8)
+        func_idx := load_i64(term_ptr + 48)
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        dest_ptr := load_i64(term_ptr + 72)
+
+        dest_local := load_i64(dest_ptr)
+        dest_ty := me_local_type(em, dest_local)
+
+        I me_type_is_void(dest_ty) == 1 {
+            me_emit_cstr(em, "  call void @")
+        } E {
+            me_emit_cstr(em, "  %_")
+            me_emit_i64(em, dest_local)
+            me_emit_cstr(em, " = call ")
+            me_emit_type(em, dest_ty)
+            me_emit_cstr(em, " @")
+        }
+        me_emit_string_idx(em, func_idx)
+        me_emit_cstr(em, "(")
+
+        i := mut 0
+        L {
+            I i >= args_len { R 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
+            arg_op := load_i64(args_ptr + i * 8)
+            arg_ty := me_operand_type(em, arg_op)
+            me_emit_type(em, arg_ty)
+            me_emit_cstr(em, " ")
+            me_emit_operand(em, arg_op)
+            i = i + 1
+        }
+        me_emit_cstr(em, ")")
+        me_emit_newline(em)
+
+        me_emit_cstr(em, "  br label %")
+        me_emit_bb_label(em, target_bb)
+        me_emit_newline(em)
+    }
+    E I kind == TERM_TAIL_CALL() {
+        func_idx := load_i64(term_ptr + 48)
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+
+        body := load_i64(em + 64)
+        ret_ty := load_i64(body + 24)
+
+        I me_type_is_void(ret_ty) == 1 {
+            me_emit_cstr(em, "  musttail call void @")
+        } E {
+            me_emit_cstr(em, "  %_0 = musttail call ")
+            me_emit_type(em, ret_ty)
+            me_emit_cstr(em, " @")
+        }
+        me_emit_string_idx(em, func_idx)
+        me_emit_cstr(em, "(")
+
+        i := mut 0
+        L {
+            I i >= args_len { R 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
+            arg_op := load_i64(args_ptr + i * 8)
+            arg_ty := me_operand_type(em, arg_op)
+            me_emit_type(em, arg_ty)
+            me_emit_cstr(em, " ")
+            me_emit_operand(em, arg_op)
+            i = i + 1
+        }
+        me_emit_cstr(em, ")")
+        me_emit_newline(em)
+
+        I me_type_is_void(ret_ty) == 1 {
+            me_emit_cstr(em, "  ret void")
+        } E {
+            me_emit_cstr(em, "  ret ")
+            me_emit_type(em, ret_ty)
+            me_emit_cstr(em, " %_0")
+        }
+        me_emit_newline(em)
+    }
+    E I kind == TERM_UNREACHABLE() {
+        me_emit_cstr(em, "  unreachable")
+        me_emit_newline(em)
+    }
+    E I kind == TERM_ASSERT() {
+        # Assert: cond is first arg operand in call_args
+        # Reusing call fields: call_func_idx = expected, call_args_ptr = cond operand
+        # Actually, assert has: disc_ptr = cond, targets(0).value = expected,
+        # goto_target = success bb
+        # We use a simpler encoding: target_bb = success,
+        # switch_disc = cond operand, switch_targets[0].value = expected
+        target_bb := load_i64(term_ptr + 8)
+        disc_ptr := load_i64(term_ptr + 16)
+
+        tmp := me_fresh_reg(em)
+        me_emit_cstr(em, "  %_assert")
+        me_emit_i64(em, tmp)
+        me_emit_cstr(em, " = icmp eq i1 ")
+        me_emit_operand(em, disc_ptr)
+        me_emit_cstr(em, ", 1")
+        me_emit_newline(em)
+
+        me_emit_cstr(em, "  br i1 %_assert")
+        me_emit_i64(em, tmp)
+        me_emit_cstr(em, ", label %")
+        me_emit_bb_label(em, target_bb)
+        me_emit_cstr(em, ", label %assert_fail")
+        me_emit_newline(em)
+    }
+    E {
+        me_emit_cstr(em, "  ; unknown terminator kind=")
+        me_emit_i64(em, kind)
+        me_emit_newline(em)
+    }
+}
+
+# ============================================================================
+# Function body emission
+# ============================================================================
+
+F me_emit_body(em: i64, body_ptr: i64) -> i64 {
+    # Set current body
+    store_i64(em + 64, body_ptr)
+    # Reset register counter
+    store_i64(em + 56, 0)
+
+    name_idx := load_i64(body_ptr)
+    params_ptr := load_i64(body_ptr + 8)
+    params_len := load_i64(body_ptr + 16)
+    ret_ty := load_i64(body_ptr + 24)
+    locals_ptr := load_i64(body_ptr + 32)
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Function signature
+    me_emit_cstr(em, "define ")
+    me_emit_type(em, ret_ty)
+    me_emit_cstr(em, " @")
+    me_emit_string_idx(em, name_idx)
+    me_emit_cstr(em, "(")
+
+    # Parameters
+    i := mut 0
+    L {
+        I i >= params_len { R 0 }
+        I i > 0 { me_emit_cstr(em, ", ") } E { 0 }
+        param_ty := load_i64(params_ptr + i * 8)
+        me_emit_type(em, param_ty)
+        me_emit_cstr(em, " %_")
+        me_emit_i64(em, i + 1)
+        i = i + 1
+    }
+
+    me_emit_cstr(em, ") {")
+    me_emit_newline(em)
+
+    # Alloca for non-parameter locals (skip _0 return place + params)
+    # Return place alloca
+    I me_type_is_void(ret_ty) == 0 {
+        me_emit_cstr(em, "  %_0.addr = alloca ")
+        me_emit_type(em, ret_ty)
+        me_emit_newline(em)
+        0
+    } E { 0 }
+
+    # Allocate temporaries (locals after params)
+    i = params_len + 1
+    L {
+        I i >= locals_len { R 0 }
+        local_decl := load_i64(locals_ptr + i * 8)
+        local_ty := load_i64(local_decl + 8)
+        me_emit_cstr(em, "  %_")
+        me_emit_i64(em, i)
+        me_emit_cstr(em, ".addr = alloca ")
+        me_emit_type(em, local_ty)
+        me_emit_newline(em)
+        i = i + 1
+    }
+
+    # Emit basic blocks
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+
+        I bi == 0 {
+            me_emit_cstr(em, "entry:")
+        } E {
+            me_emit_cstr(em, "bb")
+            me_emit_i64(em, bi)
+            me_emit_cstr(em, ":")
+        }
+        me_emit_newline(em)
+
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+        term_ptr := load_i64(bb_ptr + 16)
+
+        # Emit statements
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            me_emit_statement(em, stmt_ptr)
+            si = si + 1
+        }
+
+        # Emit terminator
+        I term_ptr != 0 {
+            me_emit_terminator(em, term_ptr)
+            0
+        } E {
+            me_emit_cstr(em, "  unreachable  ; missing terminator")
+            me_emit_newline(em)
+        }
+
+        bi = bi + 1
+    }
+
+    me_emit_cstr(em, "}")
+    me_emit_newline(em)
+    me_emit_newline(em)
+}
+
+# ============================================================================
+# Module emission — top-level entry point
+# ============================================================================
+
+F me_emit_module(em: i64, mod_ptr: i64) -> i64 {
+    name_idx := load_i64(mod_ptr)
+    bodies_ptr := load_i64(mod_ptr + 8)
+    bodies_len := load_i64(mod_ptr + 16)
+    structs_ptr := load_i64(mod_ptr + 24)
+    structs_len := load_i64(mod_ptr + 32)
+
+    # Module header
+    me_emit_cstr(em, "; ModuleID = '")
+    me_emit_string_idx(em, name_idx)
+    me_emit_cstr(em, "'")
+    me_emit_newline(em)
+    me_emit_cstr(em, "target triple = \"x86_64-unknown-linux-gnu\"")
+    me_emit_newline(em)
+    me_emit_newline(em)
+
+    # Extern declarations
+    me_emit_cstr(em, "declare i32 @putchar(i32)")
+    me_emit_newline(em)
+    me_emit_cstr(em, "declare i32 @printf(i8*, ...)")
+    me_emit_newline(em)
+    me_emit_cstr(em, "declare i8* @malloc(i64)")
+    me_emit_newline(em)
+    me_emit_cstr(em, "declare void @free(i8*)")
+    me_emit_newline(em)
+    me_emit_newline(em)
+
+    # Struct type definitions
+    # (structs_ptr entries would need name + fields info - simplified for now)
+
+    # Function bodies
+    i := mut 0
+    L {
+        I i >= bodies_len { R 0 }
+        body_ptr := load_i64(bodies_ptr + i * 8)
+        me_emit_body(em, body_ptr)
+        i = i + 1
+    }
+
+    # Emit string constants collected during body emission
+    me_emit_string_constants(em)
+
+    # Emit helper builtins
+    me_emit_builtins(em)
+
+    1
+}
+
+# ============================================================================
+# String constant globals
+# ============================================================================
+
+F me_emit_string_constants(em: i64) -> i64 {
+    sc_ptr := load_i64(em + 72)
+    sc_len := load_i64(em + 80)
+
+    I sc_len == 0 { R 1 }
+
+    me_emit_cstr(em, "; String constants")
+    me_emit_newline(em)
+
+    i := mut 0
+    L {
+        I i >= sc_len { R 1 }
+
+        str_idx := load_i64(sc_ptr + i * 8)
+        sptr := me_get_string_ptr(em, str_idx)
+        slen := me_get_string_len(em, str_idx)
+
+        me_emit_cstr(em, "@.str.")
+        me_emit_i64(em, i)
+        me_emit_cstr(em, " = private unnamed_addr constant [")
+        me_emit_i64(em, slen + 1)
+        me_emit_cstr(em, " x i8] c\"")
+        # Emit string bytes (escaping non-printable)
+        me_emit_escaped_bytes(em, sptr, slen)
+        me_emit_cstr(em, "\\00\"")
+        me_emit_newline(em)
+
+        i = i + 1
+    }
+    me_emit_newline(em)
+}
+
+F me_emit_escaped_bytes(em: i64, ptr: i64, len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { R 1 }
+        byte := load_byte(ptr + i)
+        I byte == 10 {
+            # newline → \0A
+            me_emit_cstr(em, "\\0A")
+        } E I byte == 13 {
+            me_emit_cstr(em, "\\0D")
+        } E I byte == 9 {
+            me_emit_cstr(em, "\\09")
+        } E I byte == 34 {
+            # double quote → \22
+            me_emit_cstr(em, "\\22")
+        } E I byte == 92 {
+            # backslash → \5C
+            me_emit_cstr(em, "\\5C")
+        } E I byte < 32 {
+            # Non-printable → \XX
+            me_emit_cstr(em, "\\")
+            me_emit_hex_byte(em, byte)
+        } E I byte > 126 {
+            me_emit_cstr(em, "\\")
+            me_emit_hex_byte(em, byte)
+        } E {
+            me_emit_byte(em, byte)
+        }
+        i = i + 1
+    }
+    1
+}
+
+F me_emit_hex_byte(em: i64, byte: i64) -> i64 {
+    hi := byte / 16
+    lo := byte % 16
+    I hi < 10 {
+        me_emit_byte(em, hi + 48)
+    } E {
+        me_emit_byte(em, hi + 55)
+    }
+    I lo < 10 {
+        me_emit_byte(em, lo + 48)
+    } E {
+        me_emit_byte(em, lo + 55)
+    }
+}
+
+# ============================================================================
+# Helper builtins (emitted at end of module)
+# ============================================================================
+
+F me_emit_builtins(em: i64) -> i64 {
+    me_emit_cstr(em, "; --- Builtins ---")
+    me_emit_newline(em)
+
+    # load_i64
+    me_emit_cstr(em, "define i64 @load_i64(i64 %addr) {")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %ptr = inttoptr i64 %addr to i64*")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %val = load i64, i64* %ptr")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  ret i64 %val")
+    me_emit_newline(em)
+    me_emit_cstr(em, "}")
+    me_emit_newline(em)
+    me_emit_newline(em)
+
+    # store_i64
+    me_emit_cstr(em, "define void @store_i64(i64 %addr, i64 %val) {")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %ptr = inttoptr i64 %addr to i64*")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  store i64 %val, i64* %ptr")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  ret void")
+    me_emit_newline(em)
+    me_emit_cstr(em, "}")
+    me_emit_newline(em)
+    me_emit_newline(em)
+
+    # load_byte
+    me_emit_cstr(em, "define i64 @load_byte(i64 %addr) {")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %ptr = inttoptr i64 %addr to i8*")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %b = load i8, i8* %ptr")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %val = zext i8 %b to i64")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  ret i64 %val")
+    me_emit_newline(em)
+    me_emit_cstr(em, "}")
+    me_emit_newline(em)
+    me_emit_newline(em)
+
+    # store_byte
+    me_emit_cstr(em, "define void @store_byte(i64 %addr, i64 %val) {")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %ptr = inttoptr i64 %addr to i8*")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  %b = trunc i64 %val to i8")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  store i8 %b, i8* %ptr")
+    me_emit_newline(em)
+    me_emit_cstr(em, "  ret void")
+    me_emit_newline(em)
+    me_emit_cstr(em, "}")
+    me_emit_newline(em)
+}
+
+# ============================================================================
+# Public API — emit MirModule and return output buffer
+# ============================================================================
+
+# Returns: output data ptr. Sets out_len_ptr to output length.
+F mir_emit_llvm(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, out_len_ptr: i64) -> i64 {
+    em := mir_emitter_new(sp_data, sp_offsets, sp_count)
+    me_emit_module(em, mod_ptr)
+
+    out_data := load_i64(em)
+    out_len := load_i64(em + 8)
+    store_i64(out_len_ptr, out_len)
+
+    R out_data
+}
+
+# Convenience: emit and write to file (path as i64 pointer)
+F mir_emit_llvm_to_file(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, path_ptr: i64) -> i64 {
+    len_buf := malloc(8)
+    data := mir_emit_llvm(mod_ptr, sp_data, sp_offsets, sp_count, len_buf)
+    len := load_i64(len_buf)
+    free(len_buf)
+
+    fp := fopen_ptr(path_ptr, "wb")
+    I fp == 0 { R 0 }
+    fwrite(data, 1, len, fp)
+    fclose(fp)
+    R 1
+}
