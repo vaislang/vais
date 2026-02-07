@@ -2568,19 +2568,21 @@ fn basic_block_merging(ir: &str) -> String {
     }
 
     // Resolve transitive empty blocks: if A -> B and B -> C, then A -> C
-    let mut resolved = empty_blocks.clone();
+    let mut resolved = empty_blocks;
     loop {
-        let mut changed = false;
-        for (src, target) in resolved.clone() {
-            if let Some(final_target) = empty_blocks.get(&target) {
-                if resolved.get(&src) != Some(final_target) {
-                    resolved.insert(src, final_target.clone());
-                    changed = true;
+        let mut updates: Vec<(String, String)> = Vec::new();
+        for (src, target) in resolved.iter() {
+            if let Some(final_target) = resolved.get(target) {
+                if target != final_target {
+                    updates.push((src.clone(), final_target.clone()));
                 }
             }
         }
-        if !changed {
+        if updates.is_empty() {
             break;
+        }
+        for (src, final_target) in updates {
+            resolved.insert(src, final_target);
         }
     }
     let empty_blocks = resolved;

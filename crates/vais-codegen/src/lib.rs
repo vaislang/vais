@@ -985,8 +985,31 @@ impl CodeGenerator {
         item_indices: &[usize],
         is_main_module: bool,
     ) -> CodegenResult<String> {
+        // Validate item_indices are within bounds
+        let items_len = full_module.items.len();
+        let mut out_of_bounds = Vec::new();
+        for &idx in item_indices {
+            if idx >= items_len {
+                out_of_bounds.push(idx);
+            }
+        }
+        if !out_of_bounds.is_empty() {
+            eprintln!(
+                "Warning: {} item indices out of bounds (>= {}): {:?}",
+                out_of_bounds.len(),
+                items_len,
+                out_of_bounds
+            );
+        }
+
+        // Filter to valid indices only
+        let valid_indices: Vec<usize> = item_indices.iter()
+            .copied()
+            .filter(|&i| i < items_len)
+            .collect();
+
         let mut ir = String::new();
-        let index_set: std::collections::HashSet<usize> = item_indices.iter().copied().collect();
+        let index_set: std::collections::HashSet<usize> = valid_indices.iter().copied().collect();
 
         // Header
         ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
@@ -1015,7 +1038,8 @@ impl CodeGenerator {
 
         // First pass: register ALL type definitions (structs, enums, unions) from full module
         // and register functions — tracking which are "ours" vs external
-        let mut module_functions: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut module_functions: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for (idx, item) in full_module.items.iter().enumerate() {
             let is_ours = index_set.contains(&idx);
@@ -1031,7 +1055,8 @@ impl CodeGenerator {
                     for method in &s.methods {
                         self.register_method(&s.name.node, &method.node)?;
                         if is_ours {
-                            module_functions.insert(format!("{}_{}", s.name.node, method.node.name.node));
+                            module_functions
+                                .insert(format!("{}_{}", s.name.node, method.node.name.node));
                         }
                     }
                 }
@@ -1045,7 +1070,8 @@ impl CodeGenerator {
                     for method in &impl_block.methods {
                         self.register_method(&type_name, &method.node)?;
                         if is_ours {
-                            module_functions.insert(format!("{}_{}", type_name, method.node.name.node));
+                            module_functions
+                                .insert(format!("{}_{}", type_name, method.node.name.node));
                         }
                     }
                     if let Some(ref trait_name) = impl_block.trait_name {
@@ -1103,11 +1129,18 @@ impl CodeGenerator {
                 if !is_main_module && info.signature.name == "fopen_ptr" {
                     // Non-main modules should declare fopen_ptr (not define it).
                     // The wrapper definition lives in the main module only.
-                    let params: Vec<_> = info.signature.params.iter()
+                    let params: Vec<_> = info
+                        .signature
+                        .params
+                        .iter()
                         .map(|(_, ty, _)| self.type_to_llvm(ty))
                         .collect();
                     let ret = self.type_to_llvm(&info.signature.ret);
-                    ir.push_str(&format!("declare {} @fopen_ptr({})\n", ret, params.join(", ")));
+                    ir.push_str(&format!(
+                        "declare {} @fopen_ptr({})\n",
+                        ret,
+                        params.join(", ")
+                    ));
                 } else {
                     ir.push_str(&self.generate_extern_decl(info));
                     ir.push('\n');
@@ -1133,10 +1166,7 @@ impl CodeGenerator {
 
         // Generate function bodies only for this module's items
         let mut body_ir = String::new();
-        for &idx in item_indices {
-            if idx >= full_module.items.len() {
-                continue;
-            }
+        for &idx in &valid_indices {
             let item = &full_module.items[idx];
             match &item.node {
                 Item::Function(f) => {

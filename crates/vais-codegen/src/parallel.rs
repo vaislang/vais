@@ -88,9 +88,8 @@ pub fn split_ir_into_functions(ir: &str) -> (String, Vec<(String, String)>) {
                 if brace_depth <= 0 {
                     in_function = false;
                     if let Some(name) = current_fn_name.take() {
-                        functions.push((name, current_fn_ir.clone()));
+                        functions.push((name, std::mem::take(&mut current_fn_ir)));
                     }
-                    current_fn_ir.clear();
                 }
             } else {
                 preamble.push_str(line);
@@ -104,9 +103,8 @@ pub fn split_ir_into_functions(ir: &str) -> (String, Vec<(String, String)>) {
             if brace_depth <= 0 {
                 in_function = false;
                 if let Some(name) = current_fn_name.take() {
-                    functions.push((name, current_fn_ir.clone()));
+                    functions.push((name, std::mem::take(&mut current_fn_ir)));
                 }
-                current_fn_ir.clear();
             }
         }
     }
@@ -143,17 +141,14 @@ where
         return pass(ir);
     }
 
-    let optimized_functions: Vec<(String, String)> = functions
+    let optimized_functions: Vec<String> = functions
         .par_iter()
-        .map(|(name, fn_ir)| {
-            let optimized = pass(fn_ir);
-            (name.clone(), optimized)
-        })
+        .map(|(_name, fn_ir)| pass(fn_ir))
         .collect();
 
     // Reassemble
     let mut result = preamble;
-    for (_, fn_ir) in optimized_functions {
+    for fn_ir in optimized_functions {
         result.push_str(&fn_ir);
         result.push('\n');
     }

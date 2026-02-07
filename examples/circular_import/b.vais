@@ -1,0 +1,6 @@
+# Circular import test - module b
+U a
+
+F bar() -> i64 {
+    R 10
+}

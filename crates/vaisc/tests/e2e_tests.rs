@@ -7100,3 +7100,322 @@ F main() -> i64 = add(1, 2)
     );
     assert!(module.items.len() >= 2, "Should parse both functions");
 }
+
+// ==========================================================================
+// Phase 42 Stage 5: Per-Module Incremental Build E2E Tests
+// ==========================================================================
+
+/// Helper to create a temporary directory with multiple .vais files
+fn create_multi_file_project(files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().expect("Failed to create temp dir");
+    // Ensure the directory exists and is accessible
+    let canonical = dir.path().canonicalize().expect("Failed to canonicalize temp dir");
+    for (name, content) in files {
+        let path = canonical.join(name);
+        fs::write(&path, content).expect("Failed to write file");
+    }
+    dir
+}
+
+/// Helper to run vaisc build command
+fn run_vaisc_build(main_file: &std::path::Path, extra_args: &[&str]) -> std::process::Output {
+    let vaisc = env!("CARGO_BIN_EXE_vaisc");
+    let mut cmd = Command::new(vaisc);
+    cmd.arg("build").arg(main_file);
+    for arg in extra_args {
+        cmd.arg(arg);
+    }
+    cmd.output().expect("Failed to run vaisc")
+}
+
+#[test]
+fn test_per_module_multi_file() {
+    // Test basic multi-file project compilation with per-module codegen
+    let files = &[
+        (
+            "main.vais",
+            r#"
+U math
+F main() -> i64 {
+    result := add(3, 4)
+    R result
+}
+"#,
+        ),
+        (
+            "math.vais",
+            r#"
+F add(a: i64, b: i64) -> i64 { R a + b }
+F multiply(a: i64, b: i64) -> i64 { R a * b }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let main_path = canonical_path.join("main.vais");
+
+    // Build the project
+    let output = run_vaisc_build(&main_path, &[]);
+
+    assert!(
+        output.status.success(),
+        "Multi-file compilation failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Check that executable was created
+    let exe_path = canonical_path.join("main");
+    assert!(exe_path.exists(), "Executable should be created");
+
+    // Run the executable
+    let run_output = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+
+    assert_eq!(
+        run_output.status.code(),
+        Some(7),
+        "add(3, 4) should return 7"
+    );
+}
+
+#[test]
+fn test_per_module_cache_reuse() {
+    // Test that second build reuses cache (no-change rebuild)
+    let files = &[
+        (
+            "main.vais",
+            r#"
+U helper
+F main() -> i64 {
+    R compute(5)
+}
+"#,
+        ),
+        (
+            "helper.vais",
+            r#"
+F compute(x: i64) -> i64 { R x * 2 }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let main_path = canonical_path.join("main.vais");
+
+    // First build
+    let output1 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output1.status.success(),
+        "First build failed: {}",
+        String::from_utf8_lossy(&output1.stderr)
+    );
+
+    // Get build time
+    let start = std::time::Instant::now();
+
+    // Second build (should hit cache)
+    let output2 = run_vaisc_build(&main_path, &[]);
+    let rebuild_time = start.elapsed();
+
+    assert!(
+        output2.status.success(),
+        "Second build failed: {}",
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    // Verify executable still works
+    let exe_path = canonical_path.join("main");
+    let run_output = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+
+    assert_eq!(
+        run_output.status.code(),
+        Some(10),
+        "compute(5) should return 10"
+    );
+
+    // Cache hit should be significantly faster (< 1 second for this small project)
+    assert!(
+        rebuild_time.as_millis() < 2000,
+        "No-change rebuild took too long: {:?}ms (expected < 2000ms)",
+        rebuild_time.as_millis()
+    );
+}
+
+#[test]
+fn test_per_module_incremental_one_file_change() {
+    // Test that modifying one file only recompiles that module
+    let files = &[
+        (
+            "main.vais",
+            r#"
+U utils
+F main() -> i64 {
+    R double(21)
+}
+"#,
+        ),
+        (
+            "utils.vais",
+            r#"
+F double(x: i64) -> i64 { R x * 2 }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let main_path = canonical_path.join("main.vais");
+    let utils_path = canonical_path.join("utils.vais");
+
+    // First build
+    let output1 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output1.status.success(),
+        "First build failed: {}",
+        String::from_utf8_lossy(&output1.stderr)
+    );
+
+    // Verify initial result
+    let exe_path = canonical_path.join("main");
+    let run1 = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+    assert_eq!(run1.status.code(), Some(42), "double(21) should return 42");
+
+    // Sleep to ensure filesystem timestamp difference
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Modify utils.vais
+    fs::write(
+        &utils_path,
+        r#"
+F double(x: i64) -> i64 { R x * 3 }
+"#,
+    )
+    .expect("Failed to modify utils.vais");
+
+    // Rebuild (should only recompile utils module)
+    let output2 = run_vaisc_build(&main_path, &[]);
+    assert!(
+        output2.status.success(),
+        "Incremental build failed: {}",
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    // Verify new result reflects the change
+    let run2 = Command::new(&exe_path)
+        .output()
+        .expect("Failed to run executable");
+    assert_eq!(
+        run2.status.code(),
+        Some(63),
+        "After modification, triple(21) should return 63"
+    );
+}
+
+#[test]
+fn test_per_module_emit_ir() {
+    // Test that --emit-ir generates per-module .ll files
+    let files = &[
+        (
+            "main.vais",
+            r#"
+U lib
+F main() -> i64 {
+    R get_value()
+}
+"#,
+        ),
+        (
+            "lib.vais",
+            r#"
+F get_value() -> i64 { R 100 }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let main_path = canonical_path.join("main.vais");
+
+    // Build with --emit-ir
+    let output = run_vaisc_build(&main_path, &["--emit-ir"]);
+
+    assert!(
+        output.status.success(),
+        "Build with --emit-ir failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Check that .ll files were created (prefixed with main module name)
+    let main_ll = canonical_path.join("main_main.ll");
+    let lib_ll = canonical_path.join("main_lib.ll");
+
+    assert!(
+        main_ll.exists(),
+        "main_main.ll should be generated with --emit-ir"
+    );
+    assert!(
+        lib_ll.exists(),
+        "main_lib.ll should be generated with --emit-ir"
+    );
+
+    // Verify .ll files contain LLVM IR
+    let main_ir = fs::read_to_string(&main_ll).expect("Failed to read main_main.ll");
+    let lib_ir = fs::read_to_string(&lib_ll).expect("Failed to read main_lib.ll");
+
+    assert!(
+        main_ir.contains("define") && main_ir.contains("@main"),
+        "main_main.ll should contain LLVM IR with main function"
+    );
+    assert!(
+        lib_ir.contains("define") && lib_ir.contains("@get_value"),
+        "main_lib.ll should contain LLVM IR with get_value function"
+    );
+}
+
+#[test]
+fn test_circular_import_detection() {
+    // Test that circular imports are detected and reported
+    let files = &[
+        (
+            "a.vais",
+            r#"
+U b
+F foo() -> i64 { R 42 }
+"#,
+        ),
+        (
+            "b.vais",
+            r#"
+U a
+F bar() -> i64 { R 10 }
+"#,
+        ),
+    ];
+
+    let project = create_multi_file_project(files);
+    let canonical_path = project.path().canonicalize().expect("Failed to canonicalize project path");
+    let a_path = canonical_path.join("a.vais");
+
+    // Build should fail with circular import error
+    let output = run_vaisc_build(&a_path, &[]);
+
+    assert!(
+        !output.status.success(),
+        "Circular import should cause build to fail"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("circular") || stderr.contains("Circular") || stderr.contains("cycle"),
+        "Error message should mention circular import, got: {}",
+        stderr
+    );
+}

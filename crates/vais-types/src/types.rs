@@ -1700,41 +1700,99 @@ pub fn substitute_type(
             .cloned()
             .unwrap_or_else(|| ty.clone()),
         ResolvedType::Named { name, generics } => {
-            let new_generics = generics
+            // Early return if no substitution needed and no generics to recurse into
+            if generics.is_empty() && !substitutions.contains_key(name) {
+                return ty.clone();
+            }
+
+            // Check if any generic parameter changed
+            let mut changed = false;
+            let new_generics: Vec<ResolvedType> = generics
                 .iter()
-                .map(|g| substitute_type(g, substitutions))
+                .map(|g| {
+                    let subst = substitute_type(g, substitutions);
+                    if !changed && g != &subst {
+                        changed = true;
+                    }
+                    subst
+                })
                 .collect();
+
+            // If no changes, return clone of original
+            if !changed {
+                return ty.clone();
+            }
+
             ResolvedType::Named {
                 name: name.clone(),
                 generics: new_generics,
             }
         }
         ResolvedType::Array(inner) => {
-            ResolvedType::Array(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Array(Box::new(new_inner))
         }
         ResolvedType::Pointer(inner) => {
-            ResolvedType::Pointer(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Pointer(Box::new(new_inner))
         }
         ResolvedType::Ref(inner) => {
-            ResolvedType::Ref(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Ref(Box::new(new_inner))
         }
         ResolvedType::RefMut(inner) => {
-            ResolvedType::RefMut(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::RefMut(Box::new(new_inner))
         }
         ResolvedType::Optional(inner) => {
-            ResolvedType::Optional(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Optional(Box::new(new_inner))
         }
         ResolvedType::Result(inner) => {
-            ResolvedType::Result(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Result(Box::new(new_inner))
         }
         ResolvedType::Future(inner) => {
-            ResolvedType::Future(Box::new(substitute_type(inner, substitutions)))
+            let new_inner = substitute_type(inner, substitutions);
+            if inner.as_ref() == &new_inner {
+                return ty.clone();
+            }
+            ResolvedType::Future(Box::new(new_inner))
         }
         ResolvedType::Tuple(types) => {
-            let new_types = types
+            let mut changed = false;
+            let new_types: Vec<ResolvedType> = types
                 .iter()
-                .map(|t| substitute_type(t, substitutions))
+                .map(|t| {
+                    let subst = substitute_type(t, substitutions);
+                    if !changed && t != &subst {
+                        changed = true;
+                    }
+                    subst
+                })
                 .collect();
+
+            if !changed {
+                return ty.clone();
+            }
             ResolvedType::Tuple(new_types)
         }
         ResolvedType::Fn {
@@ -1742,21 +1800,42 @@ pub fn substitute_type(
             ret,
             effects,
         } => {
-            let new_params = params
+            let mut changed = false;
+            let new_params: Vec<ResolvedType> = params
                 .iter()
-                .map(|p| substitute_type(p, substitutions))
+                .map(|p| {
+                    let subst = substitute_type(p, substitutions);
+                    if !changed && p != &subst {
+                        changed = true;
+                    }
+                    subst
+                })
                 .collect();
-            let new_ret = Box::new(substitute_type(ret, substitutions));
+            let new_ret = substitute_type(ret, substitutions);
+            if !changed && ret.as_ref() != &new_ret {
+                changed = true;
+            }
+
+            if !changed {
+                return ty.clone();
+            }
+
             ResolvedType::Fn {
                 params: new_params,
-                ret: new_ret,
+                ret: Box::new(new_ret),
                 effects: effects.clone(),
             }
         }
-        ResolvedType::Vector { element, lanes } => ResolvedType::Vector {
-            element: Box::new(substitute_type(element, substitutions)),
-            lanes: *lanes,
-        },
+        ResolvedType::Vector { element, lanes } => {
+            let new_element = substitute_type(element, substitutions);
+            if element.as_ref() == &new_element {
+                return ty.clone();
+            }
+            ResolvedType::Vector {
+                element: Box::new(new_element),
+                lanes: *lanes,
+            }
+        }
         ResolvedType::ConstGeneric(name) => {
             // Const generics can be substituted if a mapping exists
             substitutions
@@ -1765,11 +1844,17 @@ pub fn substitute_type(
                 .unwrap_or_else(|| ty.clone())
         }
         ResolvedType::ConstArray { element, size } => {
-            let new_element = Box::new(substitute_type(element, substitutions));
+            let new_element = substitute_type(element, substitutions);
             // Substitute const parameter names in size expression
             let new_size = substitute_const(size, substitutions);
+
+            // Check if anything changed
+            if element.as_ref() == &new_element && size == &new_size {
+                return ty.clone();
+            }
+
             ResolvedType::ConstArray {
-                element: new_element,
+                element: Box::new(new_element),
                 size: new_size,
             }
         }

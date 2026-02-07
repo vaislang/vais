@@ -420,7 +420,10 @@ impl Parser {
             }
         }
 
-        Ok(Module { items, modules_map: None })
+        Ok(Module {
+            items,
+            modules_map: None,
+        })
     }
 
     /// Parses a complete module with error recovery enabled.
@@ -439,7 +442,10 @@ impl Parser {
         let module = self.parse_module().unwrap_or_else(|e| {
             // This shouldn't happen in recovery mode, but just in case
             self.record_error(e);
-            Module { items: Vec::new(), modules_map: None }
+            Module {
+                items: Vec::new(),
+                modules_map: None,
+            }
         });
         let errors = self.take_errors();
         (module, errors)
@@ -2678,7 +2684,10 @@ pub fn parse_with_recovery(source: &str) -> (Module, Vec<ParseError>) {
         Ok(tokens) => tokens,
         Err(e) => {
             return (
-                Module { items: Vec::new(), modules_map: None },
+                Module {
+                    items: Vec::new(),
+                    modules_map: None,
+                },
                 vec![ParseError::UnexpectedToken {
                     found: Token::Ident(format!("LexError: {}", e)),
                     span: 0..0,

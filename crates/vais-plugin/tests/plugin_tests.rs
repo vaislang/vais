@@ -276,7 +276,10 @@ fn test_plugin_registry_default() {
 #[test]
 fn test_empty_registry_operations() {
     let registry = PluginRegistry::new();
-    let module = Module { items: vec![], modules_map: None };
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
 
     // Running lint on empty registry should return no diagnostics
     let diagnostics = registry.run_lint(&module);
@@ -699,7 +702,10 @@ fn test_plugin_default_init() {
 #[test]
 fn test_formatter_plugin_basic() {
     let formatter = MockFormatterPlugin::new("test-formatter");
-    let module = Module { items: vec![], modules_map: None };
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
     let config = FormatConfig::new();
 
     let result = formatter.format_module(&module, &config);
@@ -714,7 +720,10 @@ fn test_formatter_plugin_basic() {
 #[test]
 fn test_formatter_plugin_with_custom_config() {
     let formatter = MockFormatterPlugin::new("test-formatter");
-    let module = Module { items: vec![], modules_map: None };
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
     let mut config = FormatConfig::new();
     config.indent_size = 2;
     config.line_length = 80;
@@ -753,7 +762,10 @@ fn test_format_config_from_plugin_config() {
 #[test]
 fn test_analysis_plugin_complexity_empty_module() {
     let analyzer = MockAnalysisPlugin::new("test-analyzer");
-    let module = Module { items: vec![], modules_map: None };
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
 
     let report = analyzer.analyze_complexity(&module);
     assert_eq!(report.overall_complexity, 0);
@@ -764,7 +776,10 @@ fn test_analysis_plugin_complexity_empty_module() {
 #[test]
 fn test_analysis_plugin_dependencies_empty_module() {
     let analyzer = MockAnalysisPlugin::new("test-analyzer");
-    let module = Module { items: vec![], modules_map: None };
+    let module = Module {
+        items: vec![],
+        modules_map: None,
+    };
 
     let graph = analyzer.analyze_dependencies(&module);
     assert_eq!(graph.dependency_count(), 0);

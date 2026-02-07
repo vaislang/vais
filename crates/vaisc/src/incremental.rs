@@ -416,7 +416,22 @@ impl IncrementalCache {
         let content = serde_json::to_string_pretty(&self.state)
             .map_err(|e| format!("Cannot serialize cache state: {}", e))?;
 
-        fs::write(&state_file, content).map_err(|e| format!("Cannot write cache state: {}", e))?;
+        // Atomic write: write to temp file, then rename
+        let tmp_file = self.cache_dir.join("cache_state.json.tmp");
+
+        // Write to temp file
+        if let Err(e) = fs::write(&tmp_file, &content) {
+            // Clean up temp file on error
+            let _ = fs::remove_file(&tmp_file);
+            return Err(format!("Cannot write cache state to temp file: {}", e));
+        }
+
+        // Atomically replace the target file
+        if let Err(e) = fs::rename(&tmp_file, &state_file) {
+            // Clean up temp file on error
+            let _ = fs::remove_file(&tmp_file);
+            return Err(format!("Cannot rename cache state file: {}", e));
+        }
 
         Ok(())
     }
@@ -453,6 +468,78 @@ impl IncrementalCache {
                 .sum(),
             last_build: self.state.last_build,
         }
+    }
+
+    /// Clean up cache to keep total size under max_bytes
+    /// Deletes oldest .o files first based on modification time
+    /// Returns the number of files deleted
+    pub fn cleanup_cache(&self, max_bytes: u64) -> Result<usize, String> {
+        // Collect all .o files in cache_dir
+        let entries = fs::read_dir(&self.cache_dir)
+            .map_err(|e| format!("Cannot read cache directory: {}", e))?;
+
+        let mut cache_files: Vec<(PathBuf, u64, std::time::SystemTime)> = Vec::new();
+        let mut total_size: u64 = 0;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Cannot read directory entry: {}", e))?;
+            let path = entry.path();
+
+            // Skip cache_state.json
+            if path.file_name().and_then(|n| n.to_str()) == Some("cache_state.json")
+                || path.file_name().and_then(|n| n.to_str()) == Some("cache_state.json.tmp")
+            {
+                continue;
+            }
+
+            // Only process .o files
+            if path.extension().and_then(|e| e.to_str()) != Some("o") {
+                continue;
+            }
+
+            if let Ok(metadata) = fs::metadata(&path) {
+                let size = metadata.len();
+                let modified = metadata
+                    .modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+                cache_files.push((path, size, modified));
+                total_size += size;
+            }
+        }
+
+        // If total size is within limit, nothing to do
+        if total_size <= max_bytes {
+            return Ok(0);
+        }
+
+        // Sort by modification time (oldest first)
+        cache_files.sort_by_key(|(_path, _size, modified)| *modified);
+
+        // Delete files until we're under the limit
+        let mut deleted_count = 0;
+        let mut current_size = total_size;
+
+        for (path, size, _modified) in cache_files {
+            if current_size <= max_bytes {
+                break;
+            }
+
+            if let Err(e) = fs::remove_file(&path) {
+                // Continue on error, just skip this file
+                eprintln!(
+                    "Warning: Failed to delete cache file '{}': {}",
+                    path.display(),
+                    e
+                );
+                continue;
+            }
+
+            current_size -= size;
+            deleted_count += 1;
+        }
+
+        Ok(deleted_count)
     }
 
     /// Detect function-level changes in a file

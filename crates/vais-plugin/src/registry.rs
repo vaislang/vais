@@ -434,7 +434,10 @@ mod tests {
     #[test]
     fn test_run_lint_empty() {
         let registry = PluginRegistry::new();
-        let module = Module { items: vec![], modules_map: None };
+        let module = Module {
+            items: vec![],
+            modules_map: None,
+        };
         let diagnostics = registry.run_lint(&module);
         assert!(diagnostics.is_empty());
     }
@@ -442,7 +445,10 @@ mod tests {
     #[test]
     fn test_run_transform_empty() {
         let registry = PluginRegistry::new();
-        let module = Module { items: vec![], modules_map: None };
+        let module = Module {
+            items: vec![],
+            modules_map: None,
+        };
         let result = registry.run_transform(module).unwrap();
         assert!(result.items.is_empty());
     }
@@ -525,7 +531,10 @@ mod tests {
         use crate::traits::FormatConfig;
 
         let registry = PluginRegistry::new();
-        let module = Module { items: vec![], modules_map: None };
+        let module = Module {
+            items: vec![],
+            modules_map: None,
+        };
         let config = FormatConfig::new();
 
         let result = registry.run_format(&module, &config);
@@ -536,7 +545,10 @@ mod tests {
     #[test]
     fn test_run_analysis_complexity_empty() {
         let registry = PluginRegistry::new();
-        let module = Module { items: vec![], modules_map: None };
+        let module = Module {
+            items: vec![],
+            modules_map: None,
+        };
 
         let report = registry.run_analysis_complexity(&module);
         assert_eq!(report.overall_complexity, 0);
@@ -547,7 +559,10 @@ mod tests {
     #[test]
     fn test_run_analysis_dependencies_empty() {
         let registry = PluginRegistry::new();
-        let module = Module { items: vec![], modules_map: None };
+        let module = Module {
+            items: vec![],
+            modules_map: None,
+        };
 
         let graph = registry.run_analysis_dependencies(&module);
         assert!(graph.dependencies.is_empty());

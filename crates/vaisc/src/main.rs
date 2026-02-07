@@ -263,6 +263,11 @@ enum Commands {
         /// Each module gets its own .ll/.o file, enabling future incremental compilation
         #[arg(long)]
         per_module: bool,
+
+        /// Cache size limit in bytes (default: 536870912 = 512MB)
+        /// Old .o files will be deleted automatically to stay under this limit
+        #[arg(long, value_name = "BYTES", default_value = "536870912")]
+        cache_limit: u64,
     },
 
     /// Run a Vais source file
@@ -662,6 +667,7 @@ fn main() {
             parallel,
             inkwell: _build_inkwell,
             per_module,
+            cache_limit,
         }) => {
             // Resolve directory input to entry point file
             let (resolved_input, dir_dep_paths) = if input.is_dir() {
@@ -814,6 +820,7 @@ fn main() {
                     parallel_config,
                     use_inkwell,
                     per_module,
+                    cache_limit,
                 )
             }
         }
@@ -892,6 +899,7 @@ fn main() {
                         }
                     },
                     false, // per_module
+                    536870912, // cache_limit (512MB default)
                 )
             } else {
                 println!(
@@ -1493,6 +1501,7 @@ fn cmd_build_with_timing(
     parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
     use_inkwell: bool,
     per_module: bool,
+    cache_limit: u64,
 ) -> Result<(), String> {
     use std::time::Instant;
 
@@ -1516,6 +1525,7 @@ fn cmd_build_with_timing(
         parallel_config,
         use_inkwell,
         per_module,
+        cache_limit,
     );
     let elapsed = start.elapsed();
 
@@ -1623,6 +1633,7 @@ fn cmd_build(
     parallel_config: Option<vais_codegen::parallel::ParallelConfig>,
     use_inkwell: bool,
     per_module: bool,
+    cache_limit: u64,
 ) -> Result<(), String> {
     use incremental::{get_cache_dir, CompilationOptions, IncrementalCache};
 
@@ -1726,6 +1737,7 @@ fn cmd_build(
     // Parse main file and resolve imports
     let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
+    let mut loading_stack: Vec<PathBuf> = Vec::new();
     let merged_ast = if use_parallel {
         load_module_with_imports_parallel(
             input,
@@ -1738,6 +1750,7 @@ fn cmd_build(
         load_module_with_imports_internal(
             input,
             &mut loaded_modules,
+            &mut loading_stack,
             verbose,
             &main_source,
             &query_db,
@@ -1853,10 +1866,115 @@ fn cmd_build(
     }
 
     // Per-module codegen path: split AST by source module, generate per-module .ll → .o → link
-    if per_module && !emit_ir {
+    // Auto-enable per-module for multi-file projects (opt-in flag OR auto-detect)
+    let use_per_module = per_module
+        || final_ast
+            .modules_map
+            .as_ref()
+            .is_some_and(|m| m.len() > 1);
+    if use_per_module {
         if let Some(ref mmap) = final_ast.modules_map {
             if mmap.len() > 1 {
                 let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
+
+                // Special path for --emit-ir with per-module: just generate .ll files, no .o compilation
+                if emit_ir {
+                    use rayon::prelude::*;
+
+                    let output_dir = output
+                        .as_ref()
+                        .and_then(|p| p.parent())
+                        .unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")));
+                    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+
+                    let effective_opt_level = if debug { 0 } else { opt_level };
+                    let resolved_functions = checker.get_all_functions().clone();
+
+                    let codegen_start = std::time::Instant::now();
+
+                    // Generate IR for each module (parallel with rayon)
+                    let module_entries: Vec<_> = mmap.iter().collect();
+                    let ir_results: Vec<Result<(String, String), String>> = module_entries
+                        .par_iter()
+                        .map(|(module_path, item_indices)| {
+                            let module_stem = module_path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            let is_main = **module_path == input_canonical;
+
+                            // Create a fresh CodeGenerator for this module
+                            let mut codegen = CodeGenerator::new_with_target(&module_stem, target.clone());
+                            codegen.set_resolved_functions(resolved_functions.clone());
+                            codegen.set_string_prefix(&module_stem);
+
+                            if gc {
+                                codegen.enable_gc();
+                                if let Some(threshold) = gc_threshold {
+                                    codegen.set_gc_threshold(threshold);
+                                }
+                            }
+
+                            if debug && is_main {
+                                let source_file = module_path
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or("unknown.vais");
+                                let source_dir = module_path
+                                    .parent()
+                                    .and_then(|p| p.to_str())
+                                    .unwrap_or(".");
+                                codegen.enable_debug(source_file, source_dir, &main_source);
+                            }
+
+                            // Generate IR for this module's subset
+                            let raw_ir = codegen
+                                .generate_module_subset(&final_ast, item_indices, is_main)
+                                .map_err(|e| format!("Codegen error for {}: {}", module_stem, e))?;
+
+                            // Apply optimizations
+                            let opt = match effective_opt_level {
+                                0 => vais_codegen::optimize::OptLevel::O0,
+                                1 => vais_codegen::optimize::OptLevel::O1,
+                                2 => vais_codegen::optimize::OptLevel::O2,
+                                _ => vais_codegen::optimize::OptLevel::O3,
+                            };
+                            let ir = vais_codegen::optimize::optimize_ir(&raw_ir, opt);
+
+                            Ok((module_stem, ir))
+                        })
+                        .collect();
+
+                    // Write each module's IR to a separate .ll file
+                    for result in ir_results {
+                        let (module_stem, ir) = result?;
+                        let ll_path = output_dir.join(format!("{}_{}.ll", stem, module_stem));
+                        fs::write(&ll_path, &ir)
+                            .map_err(|e| format!("Cannot write '{}': {}", ll_path.display(), e))?;
+                        println!("{} {}", "Wrote".green().bold(), ll_path.display());
+                    }
+
+                    if verbose {
+                        println!(
+                            "  {} IR generation: {:.3}s",
+                            "⏱".cyan(),
+                            codegen_start.elapsed().as_secs_f64()
+                        );
+                    }
+
+                    // Update incremental cache
+                    if let Some(ref mut c) = cache {
+                        for loaded_path in &loaded_modules {
+                            let _ = c.update_file(loaded_path);
+                        }
+                        let _ = c.persist();
+                    }
+
+                    return Ok(());
+                }
+
+                // Normal per-module path: compile to .o and link
                 let default_ext = match target {
                     TargetTriple::Wasm32Unknown
                     | TargetTriple::WasiPreview1
@@ -2171,6 +2289,25 @@ fn cmd_build(
                 stats.total_dependencies
             );
         }
+
+        // Clean up cache to stay under size limit
+        match c.cleanup_cache(cache_limit) {
+            Ok(deleted_count) => {
+                if verbose && deleted_count > 0 {
+                    println!(
+                        "{} {} old cache file(s) to stay under {} bytes",
+                        "Cache cleanup:".cyan(),
+                        deleted_count,
+                        cache_limit
+                    );
+                }
+            }
+            Err(e) => {
+                if verbose {
+                    eprintln!("{}: Cache cleanup failed: {}", "Warning".yellow(), e);
+                }
+            }
+        }
     }
 
     Ok(())
@@ -2194,18 +2331,20 @@ fn filter_imported_items(items: Vec<Spanned<Item>>) -> Vec<Spanned<Item>> {
 fn load_module_with_imports(
     path: &PathBuf,
     loaded: &mut HashSet<PathBuf>,
+    loading_stack: &mut Vec<PathBuf>,
     verbose: bool,
     query_db: &QueryDatabase,
 ) -> Result<Module, String> {
     let source =
         fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path.display(), e))?;
-    load_module_with_imports_internal(path, loaded, verbose, &source, query_db)
+    load_module_with_imports_internal(path, loaded, loading_stack, verbose, &source, query_db)
 }
 
 /// Internal function to load a module with source already read
 fn load_module_with_imports_internal(
     path: &Path,
     loaded: &mut HashSet<PathBuf>,
+    loading_stack: &mut Vec<PathBuf>,
     verbose: bool,
     source: &str,
     query_db: &QueryDatabase,
@@ -2215,11 +2354,39 @@ fn load_module_with_imports_internal(
         .canonicalize()
         .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
 
-    // Skip if already loaded
+    // Check for circular imports (module already in loading stack)
+    if loading_stack.contains(&canonical) {
+        // Build error message showing the import chain
+        let mut chain: Vec<String> = loading_stack
+            .iter()
+            .map(|p| {
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect();
+        chain.push(
+            canonical
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+        );
+        return Err(format!("Circular import detected: {}", chain.join(" → ")));
+    }
+
+    // Skip if already loaded (completed loading)
     if loaded.contains(&canonical) {
-        return Ok(Module { items: vec![], modules_map: None });
+        return Ok(Module {
+            items: vec![],
+            modules_map: None,
+        });
     }
     loaded.insert(canonical.clone());
+
+    // Push to loading stack
+    loading_stack.push(canonical.clone());
 
     // Use QueryDatabase for memoized parsing
     let cached = query_db.has_current_source(&canonical, source);
@@ -2266,22 +2433,50 @@ fn load_module_with_imports_internal(
                 }
 
                 // Recursively load the imported module
-                let imported = load_module_with_imports(&module_path, loaded, verbose, query_db)?;
+                let imported = load_module_with_imports(
+                    &module_path,
+                    loaded,
+                    loading_stack,
+                    verbose,
+                    query_db,
+                )?;
 
                 // Propagate sub-module mappings with offset, or create new mapping
                 let offset = all_items.len();
                 let filtered = filter_imported_items(imported.items);
+                let filtered_len = filtered.len();
+
                 if let Some(sub_map) = imported.modules_map {
                     // Items are already tracked in sub_map — just remap indices
                     for (sub_path, sub_indices) in sub_map {
                         let remapped: Vec<usize> = sub_indices.iter().map(|i| i + offset).collect();
+
+                        // Validate remapped indices will be within bounds after extending all_items
+                        let future_total_len = offset + filtered_len;
+                        for (&original_idx, &remapped_idx) in sub_indices.iter().zip(remapped.iter()) {
+                            if remapped_idx >= future_total_len {
+                                if verbose {
+                                    eprintln!(
+                                        "{}: Remapped index {} (original {} + offset {}) >= total items {} for module '{}'",
+                                        "Warning".yellow(),
+                                        remapped_idx,
+                                        original_idx,
+                                        offset,
+                                        future_total_len,
+                                        sub_path.display()
+                                    );
+                                }
+                            }
+                        }
+
                         modules_map.entry(sub_path).or_default().extend(remapped);
                     }
                 } else {
                     // No sub_map — record all items under the imported module path
                     let module_canonical = module_path.canonicalize().unwrap_or(module_path);
-                    for i in 0..filtered.len() {
-                        modules_map.entry(module_canonical.clone())
+                    for i in 0..filtered_len {
+                        modules_map
+                            .entry(module_canonical.clone())
                             .or_default()
                             .push(offset + i);
                     }
@@ -2289,7 +2484,8 @@ fn load_module_with_imports_internal(
                 all_items.extend(filtered);
             }
             _ => {
-                modules_map.entry(canonical.clone())
+                modules_map
+                    .entry(canonical.clone())
                     .or_default()
                     .push(all_items.len());
                 all_items.push(item.clone());
@@ -2297,7 +2493,13 @@ fn load_module_with_imports_internal(
         }
     }
 
-    Ok(Module { items: all_items, modules_map: Some(modules_map) })
+    // Pop from loading stack
+    loading_stack.pop();
+
+    Ok(Module {
+        items: all_items,
+        modules_map: Some(modules_map),
+    })
 }
 
 /// Load a module with parallel parsing of imports
@@ -2320,7 +2522,10 @@ fn load_module_with_imports_parallel(
         .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
 
     if loaded.contains(&canonical) {
-        return Ok(Module { items: vec![], modules_map: None });
+        return Ok(Module {
+            items: vec![],
+            modules_map: None,
+        });
     }
     loaded.insert(canonical.clone());
 
@@ -2428,15 +2633,18 @@ fn load_module_with_imports_parallel(
         let parsed_module = result?;
         // Recursively resolve imports within each parsed module
         let sub_base = import_path.parent().unwrap_or(Path::new("."));
-        let import_canonical = import_path.canonicalize().unwrap_or_else(|_| import_path.clone());
+        let import_canonical = import_path
+            .canonicalize()
+            .unwrap_or_else(|_| import_path.clone());
         let mut sub_items = Vec::new();
         let mut sub_modules_map: HashMap<PathBuf, Vec<usize>> = HashMap::new();
         for item in parsed_module.items {
             match &item.node {
                 Item::Use(use_stmt) => {
                     let sub_path = resolve_import_path(sub_base, &use_stmt.path)?;
+                    let mut sub_loading_stack = Vec::new();
                     let sub_imported =
-                        load_module_with_imports(&sub_path, loaded, verbose, query_db)?;
+                        load_module_with_imports(&sub_path, loaded, &mut sub_loading_stack, verbose, query_db)?;
                     let sub_canonical = sub_path.canonicalize().unwrap_or(sub_path);
 
                     let offset = sub_items.len();
@@ -2450,7 +2658,8 @@ fn load_module_with_imports_parallel(
                         }
                     } else {
                         for i in 0..filtered.len() {
-                            sub_modules_map.entry(sub_canonical.clone())
+                            sub_modules_map
+                                .entry(sub_canonical.clone())
                                 .or_default()
                                 .push(offset + i);
                         }
@@ -2458,14 +2667,21 @@ fn load_module_with_imports_parallel(
                     sub_items.extend(filtered);
                 }
                 _ => {
-                    sub_modules_map.entry(import_canonical.clone())
+                    sub_modules_map
+                        .entry(import_canonical.clone())
                         .or_default()
                         .push(sub_items.len());
                     sub_items.push(item);
                 }
             }
         }
-        parsed_map.insert(import_path, Module { items: sub_items, modules_map: Some(sub_modules_map) });
+        parsed_map.insert(
+            import_path,
+            Module {
+                items: sub_items,
+                modules_map: Some(sub_modules_map),
+            },
+        );
     }
 
     // Phase 3: Merge items in correct order, building modules_map
@@ -2487,12 +2703,14 @@ fn load_module_with_imports_parallel(
                         // Propagate sub-module mappings or create new
                         if let Some(sub_map) = imported_module.modules_map {
                             for (sub_path, sub_indices) in sub_map {
-                                let remapped: Vec<usize> = sub_indices.iter().map(|i| i + offset).collect();
+                                let remapped: Vec<usize> =
+                                    sub_indices.iter().map(|i| i + offset).collect();
                                 modules_map.entry(sub_path).or_default().extend(remapped);
                             }
                         } else {
                             for i in 0..filtered.len() {
-                                modules_map.entry(import_canonical.clone())
+                                modules_map
+                                    .entry(import_canonical.clone())
                                     .or_default()
                                     .push(offset + i);
                             }
@@ -2503,7 +2721,8 @@ fn load_module_with_imports_parallel(
                 }
             }
             _ => {
-                modules_map.entry(canonical.clone())
+                modules_map
+                    .entry(canonical.clone())
                     .or_default()
                     .push(all_items.len());
                 all_items.push(item.clone());
@@ -2511,7 +2730,10 @@ fn load_module_with_imports_parallel(
         }
     }
 
-    Ok(Module { items: all_items, modules_map: Some(modules_map) })
+    Ok(Module {
+        items: all_items,
+        modules_map: Some(modules_map),
+    })
 }
 
 /// Get the standard library path
@@ -3105,7 +3327,9 @@ fn compile_per_module(
     use rayon::prelude::*;
     use vais_codegen::CodeGenerator;
 
-    let modules_map = final_ast.modules_map.as_ref()
+    let modules_map = final_ast
+        .modules_map
+        .as_ref()
         .ok_or_else(|| "Per-module codegen requires modules_map".to_string())?;
 
     if verbose {
@@ -3124,8 +3348,7 @@ fn compile_per_module(
     } else {
         incremental::get_cache_dir(input).join("modules")
     };
-    fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("Cannot create module cache dir: {}", e))?;
+    fs::create_dir_all(&cache_dir).map_err(|e| format!("Cannot create module cache dir: {}", e))?;
 
     let effective_opt_level = if debug { 0 } else { opt_level };
     let resolved_functions = checker.get_all_functions().clone();
@@ -3161,10 +3384,7 @@ fn compile_per_module(
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("unknown.vais");
-                let source_dir = module_path
-                    .parent()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or(".");
+                let source_dir = module_path.parent().and_then(|p| p.to_str()).unwrap_or(".");
                 codegen.enable_debug(source_file, source_dir, main_source);
             }
 
@@ -3208,9 +3428,8 @@ fn compile_per_module(
         .map(|(module_stem, _is_main, ir)| {
             // Compute content hash of the IR
             let ir_hash = incremental::compute_content_hash(ir);
-            let cached_obj_path = incremental::get_ir_cached_object_path(
-                &cache_dir, &ir_hash, effective_opt_level,
-            );
+            let cached_obj_path =
+                incremental::get_ir_cached_object_path(&cache_dir, &ir_hash, effective_opt_level);
 
             // Check cache: if .o exists for this IR hash, skip clang
             if cached_obj_path.exists() {
@@ -3391,8 +3610,7 @@ fn compile_to_native(
     let cached_obj = if let Some(cache_dir) = obj_cache_dir {
         // Compute hash of the IR file
         let ir_hash = incremental::compute_file_hash(ir_path)?;
-        let obj_path =
-            incremental::get_ir_cached_object_path(cache_dir, &ir_hash, opt_level);
+        let obj_path = incremental::get_ir_cached_object_path(cache_dir, &ir_hash, opt_level);
         if obj_path.exists() {
             if verbose {
                 println!(
@@ -3444,9 +3662,7 @@ fn compile_to_native(
         }
 
         // Link .o → binary (this is the fast path: just linking)
-        let mut link_args: Vec<String> = vec![
-            format!("-O{}", opt_level.min(3)),
-        ];
+        let mut link_args: Vec<String> = vec![format!("-O{}", opt_level.min(3))];
 
         if debug {
             link_args.push("-g".to_string());
@@ -3997,6 +4213,7 @@ fn cmd_run(
         None,  // parallel_config
         false, // use_inkwell
         false, // per_module
+        536870912, // cache_limit (512MB default)
     )?;
 
     // Run the binary
@@ -4554,6 +4771,7 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
                 None,  // parallel_config
                 false, // use_inkwell
                 false, // per_module
+                536870912, // cache_limit (512MB default)
             )?;
 
             if hot {
@@ -5981,6 +6199,7 @@ fn cmd_pgo(
             None,  // parallel_config
             false, // use_inkwell
             false, // per_module
+            536870912, // cache_limit (512MB default)
         )?;
 
         println!(
@@ -6081,6 +6300,7 @@ fn cmd_pgo(
         None,  // parallel_config
         false, // use_inkwell
         false, // per_module
+        536870912, // cache_limit (512MB default)
     )?;
 
     println!(
@@ -6171,6 +6391,7 @@ fn cmd_watch(
         None,  // parallel_config
         false, // use_inkwell
         false, // per_module
+        536870912, // cache_limit (512MB default)
     )?;
 
     // Execute initial run if requested
@@ -6261,6 +6482,7 @@ fn cmd_watch(
                         None,  // parallel_config
                         false, // use_inkwell
                         false, // per_module
+                        536870912, // cache_limit (512MB default)
                     ) {
                         Ok(_) => {
                             println!("{} Compilation successful", "✓".green().bold());
