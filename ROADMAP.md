@@ -1635,7 +1635,14 @@ error: expected i64, found &i64
   - lower_module: Module → MirModule (전체 함수 순회)
   - Loop context stack for break/continue
   - AST op → MIR op 변환 (18 binop + 2 unop)
-- [ ] **MIR 분석 패스** (도달 가능성, 활성 변수, 데이터 흐름)
+- [x] **MIR 분석 패스** (mir_analysis.vais, 1,536줄) ✅ 2026-02-07
+  - BitSet 자료구조: union, diff, copy, count (비트맵 기반 효율적 집합 연산)
+  - CFG 인프라: successors, predecessors 계산
+  - Liveness Analysis: 후방 데이터 흐름, gen/kill 기반 고정점 반복
+  - Dominance Analysis: Cooper-Harvey-Kennedy 반복 알고리즘 + RPO
+  - Loop Analysis: 지배 관계 기반 back-edge 탐지 + 자연 루프 body BFS
+  - Reaching Definitions: 전방 데이터 흐름, def_id→local 매핑
+  - Use/Def Counting: 로컬별 사용/정의 횟수 추적
 - [ ] **Borrow Checker on MIR** (borrow_checker.vais)
 - [x] **MIR → LLVM IR 변환** (mir_emit_llvm.vais, 1,228줄) ✅ 2026-02-07
   - MirEmitter 상태 구조체 + 출력 버퍼 관리

@@ -1,0 +1,1536 @@
+# Vais Self-Hosting Compiler - MIR Analysis Passes
+# Provides reusable analysis on MIR: CFG construction, liveness, reaching definitions,
+# dominance, loop detection, and use/def counting.
+#
+# Operates on MirBody data structures defined in mir.vais.
+# Results are returned as allocated arrays that callers must free().
+#
+# Layout reference:
+#   MirBody: name_idx(0), params_ptr(8), params_len(16), return_type_ptr(24),
+#            locals_ptr(32), locals_len(40), blocks_ptr(48), blocks_len(56)
+#   MirBasicBlock: stmts_ptr(0), stmts_len(8), term_ptr(16)
+#   Terminator: kind(0), goto_target(8), switch_disc_ptr(16),
+#               switch_targets_ptr(24), switch_targets_len(32),
+#               switch_otherwise(40), call_func_idx(48),
+#               call_args_ptr(56), call_args_len(64), call_dest_ptr(72)
+
+U mir
+
+# ============================================================================
+# CFG: Successors and Predecessors
+# ============================================================================
+
+# Get number of successors for a terminator
+F cfg_successor_count(term_ptr: i64) -> i64 {
+    I term_ptr == 0 { R 0 }
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_GOTO() { R 1 }
+    E I kind == TERM_CALL() { R 1 }
+    E I kind == TERM_ASSERT() { R 1 }
+    E I kind == TERM_SWITCH_INT() {
+        R load_i64(term_ptr + 32) + 1  # targets + otherwise
+    }
+    E { R 0 }  # RETURN, UNREACHABLE, TAIL_CALL
+}
+
+# Get successor bb index by position (0-based)
+# Returns -1 if out of range
+F cfg_successor_at(term_ptr: i64, idx: i64) -> i64 {
+    I term_ptr == 0 { R 0 - 1 }
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_GOTO() {
+        I idx == 0 { R load_i64(term_ptr + 8) } E { R 0 - 1 }
+    }
+    E I kind == TERM_CALL() {
+        I idx == 0 { R load_i64(term_ptr + 8) } E { R 0 - 1 }
+    }
+    E I kind == TERM_ASSERT() {
+        I idx == 0 { R load_i64(term_ptr + 8) } E { R 0 - 1 }
+    }
+    E I kind == TERM_SWITCH_INT() {
+        targets_ptr := load_i64(term_ptr + 24)
+        targets_len := load_i64(term_ptr + 32)
+        I idx < targets_len {
+            R load_i64(targets_ptr + idx * 16 + 8)
+        }
+        E I idx == targets_len {
+            R load_i64(term_ptr + 40)  # otherwise
+        }
+        E { R 0 - 1 }
+    }
+    E { R 0 - 1 }
+}
+
+# Build predecessor lists for all blocks
+# Returns pred_info_ptr: array of (pred_list_ptr, pred_count) per block
+# Each entry is 16 bytes: [ptr_to_pred_array, pred_count]
+# Caller must free the result and inner arrays
+F cfg_build_predecessors(body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Allocate pred_info: 16 bytes per block (ptr + count)
+    pred_info := malloc(16 * blocks_len)
+    # Allocate temp count array and pred arrays (max preds = blocks_len)
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(pred_info + i * 16, malloc(8 * blocks_len))
+        store_i64(pred_info + i * 16 + 8, 0)
+        i = i + 1
+    }
+
+    # Scan all blocks and record predecessors
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            sc := cfg_successor_count(term_ptr)
+            si := mut 0
+            L {
+                I si >= sc { R 0 }
+                succ := cfg_successor_at(term_ptr, si)
+                I succ >= 0 {
+                    I succ < blocks_len {
+                        # Add bi as predecessor of succ
+                        cnt := load_i64(pred_info + succ * 16 + 8)
+                        pred_list := load_i64(pred_info + succ * 16)
+                        store_i64(pred_list + cnt * 8, bi)
+                        store_i64(pred_info + succ * 16 + 8, cnt + 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+                si = si + 1
+            }
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    R pred_info
+}
+
+# Free predecessor info
+F cfg_free_predecessors(pred_info: i64, blocks_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        free(load_i64(pred_info + i * 16))
+        i = i + 1
+    }
+    free(pred_info)
+    1
+}
+
+# ============================================================================
+# BitSet: compact set for locals (1 bit per local, stored as i64 words)
+# ============================================================================
+
+# Number of i64 words needed for n bits
+F bitset_words(n: i64) -> i64 {
+    R (n + 63) / 64
+}
+
+# Allocate a zeroed bitset for n bits
+F bitset_new(n: i64) -> i64 {
+    words := bitset_words(n)
+    ptr := malloc(8 * words)
+    i := mut 0
+    L {
+        I i >= words { R 0 }
+        store_i64(ptr + i * 8, 0)
+        i = i + 1
+    }
+    R ptr
+}
+
+# Set bit at position idx
+F bitset_set(bs: i64, idx: i64) -> i64 {
+    word := idx / 64
+    bit := idx % 64
+    old := load_i64(bs + word * 8)
+    store_i64(bs + word * 8, old | (1 << bit))
+    1
+}
+
+# Clear bit at position idx
+F bitset_clear(bs: i64, idx: i64) -> i64 {
+    word := idx / 64
+    bit := idx % 64
+    old := load_i64(bs + word * 8)
+    mask := (1 << bit) ^ (0 - 1)  # ~(1 << bit)
+    store_i64(bs + word * 8, old & mask)
+    1
+}
+
+# Test bit at position idx → 1 if set, 0 if not
+F bitset_test(bs: i64, idx: i64) -> i64 {
+    word := idx / 64
+    bit := idx % 64
+    val := load_i64(bs + word * 8)
+    masked := (val >> bit) & 1
+    I masked == 1 { R 1 } E { R 0 }
+}
+
+# Union: dst = dst | src. Returns 1 if dst changed, 0 otherwise
+F bitset_union(dst: i64, src: i64, n: i64) -> i64 {
+    words := bitset_words(n)
+    changed := mut 0
+    i := mut 0
+    L {
+        I i >= words { R changed }
+        old := load_i64(dst + i * 8)
+        new_val := old | load_i64(src + i * 8)
+        I new_val != old {
+            store_i64(dst + i * 8, new_val)
+            changed = 1
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    changed
+}
+
+# Difference: dst = dst & ~src
+F bitset_diff(dst: i64, src: i64, n: i64) -> i64 {
+    words := bitset_words(n)
+    i := mut 0
+    L {
+        I i >= words { R 0 }
+        old := load_i64(dst + i * 8)
+        mask := load_i64(src + i * 8) ^ (0 - 1)
+        store_i64(dst + i * 8, old & mask)
+        i = i + 1
+    }
+    1
+}
+
+# Copy: dst = src
+F bitset_copy(dst: i64, src: i64, n: i64) -> i64 {
+    words := bitset_words(n)
+    i := mut 0
+    L {
+        I i >= words { R 0 }
+        store_i64(dst + i * 8, load_i64(src + i * 8))
+        i = i + 1
+    }
+    1
+}
+
+# Count set bits (popcount)
+F bitset_count(bs: i64, n: i64) -> i64 {
+    words := bitset_words(n)
+    count := mut 0
+    i := mut 0
+    L {
+        I i >= words { R count }
+        val := mut load_i64(bs + i * 8)
+        L {
+            I val == 0 { R 0 }
+            count = count + (val & 1)
+            val = val >> 1
+        }
+        i = i + 1
+    }
+    count
+}
+
+# ============================================================================
+# Liveness Analysis (Backward Dataflow)
+# ============================================================================
+# For each basic block, computes which locals are live-in and live-out.
+# A local is live at a point if its value may be used before being redefined.
+#
+# Returns liveness_result: pointer to struct:
+#   [0]:  live_in_ptr   — array of bitsets, one per block
+#   [8]:  live_out_ptr  — array of bitsets, one per block
+#   [16]: locals_len
+#   [24]: blocks_len
+# Caller must call liveness_free() to release.
+
+F mir_liveness_analysis(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Build predecessors for backward dataflow
+    pred_info := cfg_build_predecessors(body_ptr)
+
+    # Allocate live_in and live_out arrays (one bitset per block)
+    live_in := malloc(8 * blocks_len)
+    live_out := malloc(8 * blocks_len)
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(live_in + i * 8, bitset_new(locals_len))
+        store_i64(live_out + i * 8, bitset_new(locals_len))
+        i = i + 1
+    }
+
+    # Compute gen (uses) and kill (defs) sets for each block
+    gen_sets := malloc(8 * blocks_len)
+    kill_sets := malloc(8 * blocks_len)
+    i = 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(gen_sets + i * 8, bitset_new(locals_len))
+        store_i64(kill_sets + i * 8, bitset_new(locals_len))
+        lv_compute_gen_kill(blocks_ptr, i, load_i64(gen_sets + i * 8), load_i64(kill_sets + i * 8))
+        i = i + 1
+    }
+
+    # Temp bitset for computation
+    temp := bitset_new(locals_len)
+
+    # Fixed-point iteration (backward dataflow)
+    changed := mut 1
+    L {
+        I changed == 0 { R 0 }
+        changed = 0
+
+        # Process blocks in reverse order (backward)
+        bi := mut blocks_len - 1
+        L {
+            I bi < 0 { R 0 }
+
+            # live_out[bb] = union of live_in[succ] for all successors
+            bb_ptr := load_i64(blocks_ptr + bi * 8)
+            term_ptr := load_i64(bb_ptr + 16)
+            out_bs := load_i64(live_out + bi * 8)
+            I term_ptr != 0 {
+                sc := cfg_successor_count(term_ptr)
+                si := mut 0
+                L {
+                    I si >= sc { R 0 }
+                    succ := cfg_successor_at(term_ptr, si)
+                    I succ >= 0 {
+                        I succ < blocks_len {
+                            bitset_union(out_bs, load_i64(live_in + succ * 8), locals_len)
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                    si = si + 1
+                }
+                0
+            } E { 0 }
+
+            # live_in[bb] = gen[bb] ∪ (live_out[bb] - kill[bb])
+            in_bs := load_i64(live_in + bi * 8)
+            bitset_copy(temp, out_bs, locals_len)
+            bitset_diff(temp, load_i64(kill_sets + bi * 8), locals_len)
+            bitset_union(temp, load_i64(gen_sets + bi * 8), locals_len)
+
+            # Check if live_in changed
+            c := bitset_union(in_bs, temp, locals_len)
+            I c != 0 { changed = 1; 0 } E { 0 }
+
+            bi = bi - 1
+        }
+    }
+
+    # Free temporary data
+    free(temp)
+    i = 0
+    L {
+        I i >= blocks_len { R 0 }
+        free(load_i64(gen_sets + i * 8))
+        free(load_i64(kill_sets + i * 8))
+        i = i + 1
+    }
+    free(gen_sets)
+    free(kill_sets)
+    cfg_free_predecessors(pred_info, blocks_len)
+
+    # Pack result
+    result := malloc(32)
+    store_i64(result, live_in)
+    store_i64(result + 8, live_out)
+    store_i64(result + 16, locals_len)
+    store_i64(result + 24, blocks_len)
+    R result
+}
+
+# Compute gen (uses before def) and kill (defs) for a single block
+F lv_compute_gen_kill(blocks_ptr: i64, bi: i64, gen: i64, kill: i64) -> i64 {
+    bb_ptr := load_i64(blocks_ptr + bi * 8)
+    stmts_ptr := load_i64(bb_ptr)
+    stmts_len := load_i64(bb_ptr + 8)
+    term_ptr := load_i64(bb_ptr + 16)
+
+    # Process statements in forward order
+    # gen = uses that are not already killed (first use before def)
+    si := mut 0
+    L {
+        I si >= stmts_len { R 0 }
+        stmt_ptr := load_i64(stmts_ptr + si * 8)
+        kind := load_i64(stmt_ptr)
+
+        I kind == STMT_MIR_ASSIGN() {
+            rvalue_ptr := load_i64(stmt_ptr + 16)
+            place_ptr := load_i64(stmt_ptr + 8)
+
+            # Uses in rvalue (gen if not killed)
+            lv_gen_rvalue(rvalue_ptr, gen, kill)
+
+            # Def in place (kill)
+            local_idx := load_i64(place_ptr)
+            proj_len := load_i64(place_ptr + 16)
+            I proj_len == 0 {
+                bitset_set(kill, local_idx)
+                0
+            } E {
+                # Projected access = use of base
+                I bitset_test(kill, local_idx) == 0 {
+                    bitset_set(gen, local_idx)
+                    0
+                } E { 0 }
+            }
+        }
+        E I kind == STMT_MIR_DROP() {
+            place_ptr := load_i64(stmt_ptr + 8)
+            local_idx := load_i64(place_ptr)
+            I bitset_test(kill, local_idx) == 0 {
+                bitset_set(gen, local_idx)
+                0
+            } E { 0 }
+        }
+        E { 0 }
+
+        si = si + 1
+    }
+
+    # Process terminator uses
+    I term_ptr != 0 {
+        lv_gen_terminator(term_ptr, gen, kill)
+        0
+    } E { 0 }
+
+    1
+}
+
+# Record uses in rvalue to gen set (if not killed)
+F lv_gen_rvalue(rvalue_ptr: i64, gen: i64, kill: i64) -> i64 {
+    kind := load_i64(rvalue_ptr)
+
+    I kind == RVALUE_USE() {
+        lv_gen_operand(load_i64(rvalue_ptr + 8), gen, kill)
+    }
+    E I kind == RVALUE_BINOP() {
+        lv_gen_operand(load_i64(rvalue_ptr + 24), gen, kill)
+        lv_gen_operand(load_i64(rvalue_ptr + 32), gen, kill)
+    }
+    E I kind == RVALUE_UNOP() {
+        lv_gen_operand(load_i64(rvalue_ptr + 8), gen, kill)
+    }
+    E I kind == RVALUE_CAST() {
+        lv_gen_operand(load_i64(rvalue_ptr + 8), gen, kill)
+    }
+    E I kind == RVALUE_REF() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I bitset_test(kill, local_idx) == 0 {
+            bitset_set(gen, local_idx)
+            0
+        } E { 0 }
+    }
+    E I kind == RVALUE_AGGREGATE() {
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        j := mut 0
+        L {
+            I j >= agg_len { R 0 }
+            lv_gen_operand(load_i64(agg_ops + j * 8), gen, kill)
+            j = j + 1
+        }
+        0
+    }
+    E I kind == RVALUE_DISCRIMINANT() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I bitset_test(kill, local_idx) == 0 {
+            bitset_set(gen, local_idx)
+            0
+        } E { 0 }
+    }
+    E I kind == RVALUE_LEN() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I bitset_test(kill, local_idx) == 0 {
+            bitset_set(gen, local_idx)
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Record operand use in gen set if not killed
+F lv_gen_operand(op_ptr: i64, gen: i64, kill: i64) -> i64 {
+    op_kind := load_i64(op_ptr)
+    I op_kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        I bitset_test(kill, local_idx) == 0 {
+            bitset_set(gen, local_idx)
+            0
+        } E { 0 }
+    }
+    E I op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I bitset_test(kill, local_idx) == 0 {
+            bitset_set(gen, local_idx)
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Record terminator uses in gen set
+F lv_gen_terminator(term_ptr: i64, gen: i64, kill: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_SWITCH_INT() {
+        lv_gen_operand(load_i64(term_ptr + 16), gen, kill)
+    }
+    E I kind == TERM_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            lv_gen_operand(load_i64(args_ptr + j * 8), gen, kill)
+            j = j + 1
+        }
+        # Call destination is a def
+        dest_ptr := load_i64(term_ptr + 72)
+        I dest_ptr != 0 {
+            local_idx := load_i64(dest_ptr)
+            bitset_set(kill, local_idx)
+            0
+        } E { 0 }
+    }
+    E I kind == TERM_TAIL_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            lv_gen_operand(load_i64(args_ptr + j * 8), gen, kill)
+            j = j + 1
+        }
+        0
+    }
+    E I kind == TERM_RETURN() {
+        # _0 is implicitly used by return
+        I bitset_test(kill, 0) == 0 {
+            bitset_set(gen, 0)
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Query: is a local live at the exit of a block?
+F liveness_is_live_out(result: i64, bb_idx: i64, local_idx: i64) -> i64 {
+    live_out := load_i64(result + 8)
+    R bitset_test(load_i64(live_out + bb_idx * 8), local_idx)
+}
+
+# Query: is a local live at the entry of a block?
+F liveness_is_live_in(result: i64, bb_idx: i64, local_idx: i64) -> i64 {
+    live_in := load_i64(result)
+    R bitset_test(load_i64(live_in + bb_idx * 8), local_idx)
+}
+
+# Count live locals at exit of a block
+F liveness_live_out_count(result: i64, bb_idx: i64) -> i64 {
+    live_out := load_i64(result + 8)
+    locals_len := load_i64(result + 16)
+    R bitset_count(load_i64(live_out + bb_idx * 8), locals_len)
+}
+
+# Free liveness result
+F liveness_free(result: i64) -> i64 {
+    live_in := load_i64(result)
+    live_out := load_i64(result + 8)
+    blocks_len := load_i64(result + 24)
+
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        free(load_i64(live_in + i * 8))
+        free(load_i64(live_out + i * 8))
+        i = i + 1
+    }
+    free(live_in)
+    free(live_out)
+    free(result)
+    1
+}
+
+# ============================================================================
+# Dominance Analysis (Iterative Algorithm)
+# ============================================================================
+# Computes immediate dominators for all blocks.
+# Returns idom array: idom[i] = immediate dominator of block i (-1 for entry)
+# Caller must free().
+
+F mir_dominance_analysis(body_ptr: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    I blocks_len == 0 { R malloc(8) }
+
+    # Build predecessors
+    pred_info := cfg_build_predecessors(body_ptr)
+
+    # Compute reverse postorder (RPO)
+    rpo := malloc(8 * blocks_len)
+    rpo_order := malloc(8 * blocks_len)  # rpo_order[bb] = position in RPO
+    rpo_len := malloc(8)
+    store_i64(rpo_len, 0)
+    visited := malloc(8 * blocks_len)
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(visited + i * 8, 0)
+        store_i64(rpo_order + i * 8, 0 - 1)
+        i = i + 1
+    }
+
+    # DFS to compute postorder, then reverse
+    dom_dfs(0, blocks_ptr, blocks_len, visited, rpo, rpo_len)
+
+    # Reverse the postorder to get RPO
+    n := load_i64(rpo_len)
+    li := mut 0
+    ri := mut n - 1
+    L {
+        I li >= ri { R 0 }
+        tmp := load_i64(rpo + li * 8)
+        store_i64(rpo + li * 8, load_i64(rpo + ri * 8))
+        store_i64(rpo + ri * 8, tmp)
+        li = li + 1
+        ri = ri - 1
+    }
+
+    # Assign RPO order numbers
+    i = 0
+    L {
+        I i >= n { R 0 }
+        bb := load_i64(rpo + i * 8)
+        store_i64(rpo_order + bb * 8, i)
+        i = i + 1
+    }
+
+    # Initialize idom array
+    idom := malloc(8 * blocks_len)
+    i = 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(idom + i * 8, 0 - 1)
+        i = i + 1
+    }
+    store_i64(idom, 0)  # Entry block dominates itself
+
+    # Cooper-Harvey-Kennedy iterative dominance algorithm
+    changed := mut 1
+    L {
+        I changed == 0 { R 0 }
+        changed = 0
+
+        # Process in RPO (skip entry)
+        ri := mut 1
+        L {
+            I ri >= n { R 0 }
+            bb := load_i64(rpo + ri * 8)
+
+            # Find first predecessor with defined idom
+            pred_list := load_i64(pred_info + bb * 16)
+            pred_cnt := load_i64(pred_info + bb * 16 + 8)
+
+            new_idom := mut 0 - 1
+            pi := mut 0
+            L {
+                I pi >= pred_cnt { R 0 }
+                p := load_i64(pred_list + pi * 8)
+                I load_i64(idom + p * 8) != (0 - 1) {
+                    new_idom = p
+                    R 0  # found first processed pred
+                } E { 0 }
+                pi = pi + 1
+            }
+
+            # Intersect with remaining predecessors
+            pi = 0
+            L {
+                I pi >= pred_cnt { R 0 }
+                p := load_i64(pred_list + pi * 8)
+                I p != new_idom {
+                    I load_i64(idom + p * 8) != (0 - 1) {
+                        new_idom = dom_intersect(p, new_idom, idom, rpo_order)
+                        0
+                    } E { 0 }
+                } E { 0 }
+                pi = pi + 1
+            }
+
+            I load_i64(idom + bb * 8) != new_idom {
+                store_i64(idom + bb * 8, new_idom)
+                changed = 1
+                0
+            } E { 0 }
+
+            ri = ri + 1
+        }
+    }
+
+    # Cleanup
+    free(rpo)
+    free(rpo_order)
+    free(rpo_len)
+    free(visited)
+    cfg_free_predecessors(pred_info, blocks_len)
+
+    R idom
+}
+
+# DFS helper for dominance: compute postorder
+F dom_dfs(bb: i64, blocks_ptr: i64, blocks_len: i64, visited: i64, rpo: i64, rpo_len: i64) -> i64 {
+    I bb >= blocks_len { R 0 }
+    I load_i64(visited + bb * 8) == 1 { R 0 }
+    store_i64(visited + bb * 8, 1)
+
+    bb_ptr := load_i64(blocks_ptr + bb * 8)
+    term_ptr := load_i64(bb_ptr + 16)
+    I term_ptr != 0 {
+        sc := cfg_successor_count(term_ptr)
+        si := mut 0
+        L {
+            I si >= sc { R 0 }
+            succ := cfg_successor_at(term_ptr, si)
+            I succ >= 0 {
+                I succ < blocks_len {
+                    dom_dfs(succ, blocks_ptr, blocks_len, visited, rpo, rpo_len)
+                    0
+                } E { 0 }
+            } E { 0 }
+            si = si + 1
+        }
+        0
+    } E { 0 }
+
+    # Post-visit: add to postorder
+    n := load_i64(rpo_len)
+    store_i64(rpo + n * 8, bb)
+    store_i64(rpo_len, n + 1)
+    1
+}
+
+# Intersect two nodes in the dominator tree (Cooper et al.)
+F dom_intersect(b1: i64, b2: i64, idom: i64, rpo_order: i64) -> i64 {
+    f1 := mut b1
+    f2 := mut b2
+    L {
+        I f1 == f2 { R f1 }
+        L {
+            I load_i64(rpo_order + f1 * 8) <= load_i64(rpo_order + f2 * 8) { R 0 }
+            f1 = load_i64(idom + f1 * 8)
+        }
+        L {
+            I load_i64(rpo_order + f2 * 8) <= load_i64(rpo_order + f1 * 8) { R 0 }
+            f2 = load_i64(idom + f2 * 8)
+        }
+    }
+    f1
+}
+
+# Query: does block a dominate block b?
+F dominates(idom: i64, a: i64, b: i64) -> i64 {
+    runner := mut b
+    L {
+        I runner == a { R 1 }
+        parent := load_i64(idom + runner * 8)
+        I parent == runner { R 0 }  # reached root without finding a
+        I parent == (0 - 1) { R 0 }
+        runner = parent
+    }
+    0
+}
+
+# ============================================================================
+# Loop Analysis (Back-edge detection via dominance)
+# ============================================================================
+# A back-edge is an edge src→dst where dst dominates src.
+# Returns loop_info: array of (is_header, loop_depth) per block (16 bytes each)
+# Caller must free().
+
+F mir_loop_analysis(body_ptr: i64, idom: i64) -> i64 {
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # loop_info: 16 bytes per block (is_header: i64, loop_depth: i64)
+    loop_info := malloc(16 * blocks_len)
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(loop_info + i * 16, 0)      # is_header = 0
+        store_i64(loop_info + i * 16 + 8, 0)  # loop_depth = 0
+        i = i + 1
+    }
+
+    # Find back-edges and mark loop headers
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            sc := cfg_successor_count(term_ptr)
+            si := mut 0
+            L {
+                I si >= sc { R 0 }
+                succ := cfg_successor_at(term_ptr, si)
+                I succ >= 0 {
+                    I succ < blocks_len {
+                        # Check if succ dominates bi → back-edge → succ is loop header
+                        I dominates(idom, succ, bi) == 1 {
+                            store_i64(loop_info + succ * 16, 1)  # mark as header
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+                si = si + 1
+            }
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    # Compute loop depth via BFS from each header
+    # For each header, find all blocks in the natural loop (dominated by header
+    # and can reach header via back-edge), increment their depth
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        I load_i64(loop_info + bi * 16) == 1 {
+            # bi is a loop header — find loop body
+            # A block is in the loop if it is dominated by the header
+            # and there exists a back-edge path to the header
+            loop_mark_depth(bi, blocks_ptr, blocks_len, idom, loop_info)
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    R loop_info
+}
+
+# Mark loop depth for all blocks in a natural loop rooted at header
+F loop_mark_depth(header: i64, blocks_ptr: i64, blocks_len: i64, idom: i64, loop_info: i64) -> i64 {
+    # Find all latches (predecessors of header where header dominates them)
+    # Then backward-walk from latches to find loop body
+    worklist := malloc(8 * blocks_len)
+    in_loop := malloc(8 * blocks_len)
+    wl_len := mut 0
+
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(in_loop + i * 8, 0)
+        i = i + 1
+    }
+
+    # Header is in its own loop
+    store_i64(in_loop + header * 8, 1)
+
+    # Find latches and seed worklist
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            sc := cfg_successor_count(term_ptr)
+            si := mut 0
+            L {
+                I si >= sc { R 0 }
+                succ := cfg_successor_at(term_ptr, si)
+                I succ == header {
+                    I dominates(idom, header, bi) == 1 {
+                        I load_i64(in_loop + bi * 8) == 0 {
+                            store_i64(in_loop + bi * 8, 1)
+                            store_i64(worklist + wl_len * 8, bi)
+                            wl_len = wl_len + 1
+                            0
+                        } E { 0 }
+                    } E { 0 }
+                } E { 0 }
+                si = si + 1
+            }
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    # Backward walk: for each block in worklist, add its predecessors
+    # that are dominated by header
+    pred_info := cfg_build_predecessors_for_body(blocks_ptr, blocks_len)
+    L {
+        I wl_len <= 0 { R 0 }
+        wl_len = wl_len - 1
+        bb := load_i64(worklist + wl_len * 8)
+
+        pred_list := load_i64(pred_info + bb * 16)
+        pred_cnt := load_i64(pred_info + bb * 16 + 8)
+        pi := mut 0
+        L {
+            I pi >= pred_cnt { R 0 }
+            p := load_i64(pred_list + pi * 8)
+            I load_i64(in_loop + p * 8) == 0 {
+                I dominates(idom, header, p) == 1 {
+                    store_i64(in_loop + p * 8, 1)
+                    store_i64(worklist + wl_len * 8, p)
+                    wl_len = wl_len + 1
+                    0
+                } E { 0 }
+            } E { 0 }
+            pi = pi + 1
+        }
+        0
+    }
+
+    # Increment loop depth for all blocks in the loop
+    i = 0
+    L {
+        I i >= blocks_len { R 0 }
+        I load_i64(in_loop + i * 8) == 1 {
+            depth := load_i64(loop_info + i * 16 + 8)
+            store_i64(loop_info + i * 16 + 8, depth + 1)
+            0
+        } E { 0 }
+        i = i + 1
+    }
+
+    # Cleanup
+    free(worklist)
+    free(in_loop)
+    cfg_free_pred_info(pred_info, blocks_len)
+    1
+}
+
+# Build predecessors from raw blocks_ptr/blocks_len (without body_ptr)
+F cfg_build_predecessors_for_body(blocks_ptr: i64, blocks_len: i64) -> i64 {
+    pred_info := malloc(16 * blocks_len)
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(pred_info + i * 16, malloc(8 * blocks_len))
+        store_i64(pred_info + i * 16 + 8, 0)
+        i = i + 1
+    }
+
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        term_ptr := load_i64(bb_ptr + 16)
+        I term_ptr != 0 {
+            sc := cfg_successor_count(term_ptr)
+            si := mut 0
+            L {
+                I si >= sc { R 0 }
+                succ := cfg_successor_at(term_ptr, si)
+                I succ >= 0 {
+                    I succ < blocks_len {
+                        cnt := load_i64(pred_info + succ * 16 + 8)
+                        pred_list := load_i64(pred_info + succ * 16)
+                        store_i64(pred_list + cnt * 8, bi)
+                        store_i64(pred_info + succ * 16 + 8, cnt + 1)
+                        0
+                    } E { 0 }
+                } E { 0 }
+                si = si + 1
+            }
+            0
+        } E { 0 }
+        bi = bi + 1
+    }
+
+    R pred_info
+}
+
+# Free pred info (alias for cfg_free_predecessors without body_ptr)
+F cfg_free_pred_info(pred_info: i64, blocks_len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        free(load_i64(pred_info + i * 16))
+        i = i + 1
+    }
+    free(pred_info)
+    1
+}
+
+# Query: is block a loop header?
+F loop_is_header(loop_info: i64, bb_idx: i64) -> i64 {
+    R load_i64(loop_info + bb_idx * 16)
+}
+
+# Query: loop nesting depth of a block
+F loop_depth(loop_info: i64, bb_idx: i64) -> i64 {
+    R load_i64(loop_info + bb_idx * 16 + 8)
+}
+
+# Free loop info
+F loop_free(loop_info: i64) -> i64 {
+    free(loop_info)
+    1
+}
+
+# ============================================================================
+# Use/Def Counting
+# ============================================================================
+# Returns use_def_info: array of (use_count, def_count) per local (16 bytes each)
+# Caller must free().
+
+F mir_use_def_counts(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # 16 bytes per local: (use_count, def_count)
+    info := malloc(16 * locals_len)
+    i := mut 0
+    L {
+        I i >= locals_len { R 0 }
+        store_i64(info + i * 16, 0)
+        store_i64(info + i * 16 + 8, 0)
+        i = i + 1
+    }
+
+    # Scan all blocks
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+        term_ptr := load_i64(bb_ptr + 16)
+
+        # Scan statements
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            kind := load_i64(stmt_ptr)
+
+            I kind == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                rvalue_ptr := load_i64(stmt_ptr + 16)
+                local_idx := load_i64(place_ptr)
+
+                # Def
+                I local_idx < locals_len {
+                    cnt := load_i64(info + local_idx * 16 + 8)
+                    store_i64(info + local_idx * 16 + 8, cnt + 1)
+                    0
+                } E { 0 }
+
+                # Uses in rvalue
+                ud_count_rvalue(rvalue_ptr, info, locals_len)
+            }
+            E I kind == STMT_MIR_DROP() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                local_idx := load_i64(place_ptr)
+                I local_idx < locals_len {
+                    cnt := load_i64(info + local_idx * 16)
+                    store_i64(info + local_idx * 16, cnt + 1)
+                    0
+                } E { 0 }
+            }
+            E { 0 }
+
+            si = si + 1
+        }
+
+        # Scan terminator
+        I term_ptr != 0 {
+            ud_count_terminator(term_ptr, info, locals_len)
+            0
+        } E { 0 }
+
+        bi = bi + 1
+    }
+
+    R info
+}
+
+# Count uses in an rvalue
+F ud_count_rvalue(rvalue_ptr: i64, info: i64, locals_len: i64) -> i64 {
+    kind := load_i64(rvalue_ptr)
+
+    I kind == RVALUE_USE() {
+        ud_count_operand(load_i64(rvalue_ptr + 8), info, locals_len)
+    }
+    E I kind == RVALUE_BINOP() {
+        ud_count_operand(load_i64(rvalue_ptr + 24), info, locals_len)
+        ud_count_operand(load_i64(rvalue_ptr + 32), info, locals_len)
+    }
+    E I kind == RVALUE_UNOP() {
+        ud_count_operand(load_i64(rvalue_ptr + 8), info, locals_len)
+    }
+    E I kind == RVALUE_CAST() {
+        ud_count_operand(load_i64(rvalue_ptr + 8), info, locals_len)
+    }
+    E I kind == RVALUE_REF() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I local_idx < locals_len {
+            cnt := load_i64(info + local_idx * 16)
+            store_i64(info + local_idx * 16, cnt + 1)
+            0
+        } E { 0 }
+    }
+    E I kind == RVALUE_AGGREGATE() {
+        agg_ops := load_i64(rvalue_ptr + 56)
+        agg_len := load_i64(rvalue_ptr + 64)
+        j := mut 0
+        L {
+            I j >= agg_len { R 0 }
+            ud_count_operand(load_i64(agg_ops + j * 8), info, locals_len)
+            j = j + 1
+        }
+        0
+    }
+    E I kind == RVALUE_DISCRIMINANT() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I local_idx < locals_len {
+            cnt := load_i64(info + local_idx * 16)
+            store_i64(info + local_idx * 16, cnt + 1)
+            0
+        } E { 0 }
+    }
+    E I kind == RVALUE_LEN() {
+        place_ptr := load_i64(rvalue_ptr + 40)
+        local_idx := load_i64(place_ptr)
+        I local_idx < locals_len {
+            cnt := load_i64(info + local_idx * 16)
+            store_i64(info + local_idx * 16, cnt + 1)
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Count use for an operand
+F ud_count_operand(op_ptr: i64, info: i64, locals_len: i64) -> i64 {
+    op_kind := load_i64(op_ptr)
+    I op_kind == OPERAND_COPY() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            cnt := load_i64(info + local_idx * 16)
+            store_i64(info + local_idx * 16, cnt + 1)
+            0
+        } E { 0 }
+    }
+    E I op_kind == OPERAND_MOVE() {
+        local_idx := load_i64(op_ptr + 8)
+        I local_idx < locals_len {
+            cnt := load_i64(info + local_idx * 16)
+            store_i64(info + local_idx * 16, cnt + 1)
+            0
+        } E { 0 }
+    }
+    E { 0 }
+}
+
+# Count uses in a terminator
+F ud_count_terminator(term_ptr: i64, info: i64, locals_len: i64) -> i64 {
+    kind := load_i64(term_ptr)
+
+    I kind == TERM_SWITCH_INT() {
+        ud_count_operand(load_i64(term_ptr + 16), info, locals_len)
+    }
+    E I kind == TERM_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            ud_count_operand(load_i64(args_ptr + j * 8), info, locals_len)
+            j = j + 1
+        }
+        # Call dest is a def
+        dest_ptr := load_i64(term_ptr + 72)
+        I dest_ptr != 0 {
+            local_idx := load_i64(dest_ptr)
+            I local_idx < locals_len {
+                cnt := load_i64(info + local_idx * 16 + 8)
+                store_i64(info + local_idx * 16 + 8, cnt + 1)
+                0
+            } E { 0 }
+        } E { 0 }
+    }
+    E I kind == TERM_TAIL_CALL() {
+        args_ptr := load_i64(term_ptr + 56)
+        args_len := load_i64(term_ptr + 64)
+        j := mut 0
+        L {
+            I j >= args_len { R 0 }
+            ud_count_operand(load_i64(args_ptr + j * 8), info, locals_len)
+            j = j + 1
+        }
+        0
+    }
+    E { 0 }
+}
+
+# Query: get use count for a local
+F use_count(info: i64, local_idx: i64) -> i64 {
+    R load_i64(info + local_idx * 16)
+}
+
+# Query: get def count for a local
+F def_count(info: i64, local_idx: i64) -> i64 {
+    R load_i64(info + local_idx * 16 + 8)
+}
+
+# Free use/def info
+F use_def_free(info: i64) -> i64 {
+    free(info)
+    1
+}
+
+# ============================================================================
+# Reaching Definitions (Forward Dataflow)
+# ============================================================================
+# For each block, computes which definitions (assignment points) reach the
+# entry and exit. A definition is a (block_idx, stmt_idx) pair encoded as
+# a single integer: def_id = block_idx * max_stmts + stmt_idx.
+#
+# Returns reach_result: pointer to struct:
+#   [0]:  reach_in_ptr   — array of bitsets, one per block
+#   [8]:  reach_out_ptr  — array of bitsets, one per block
+#   [16]: total_defs     — total number of definitions
+#   [24]: blocks_len
+#   [32]: def_to_local   — maps def_id → local_idx
+# Caller must call reach_defs_free() to release.
+
+F mir_reaching_defs(body_ptr: i64) -> i64 {
+    locals_len := load_i64(body_ptr + 40)
+    blocks_ptr := load_i64(body_ptr + 48)
+    blocks_len := load_i64(body_ptr + 56)
+
+    # Phase 1: Count total definitions and build def→local map
+    total_defs := mut 0
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_len := load_i64(bb_ptr + 8)
+        stmts_ptr := load_i64(bb_ptr)
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            I load_i64(stmt_ptr) == STMT_MIR_ASSIGN() {
+                total_defs = total_defs + 1
+                0
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+
+    I total_defs == 0 {
+        result := malloc(40)
+        store_i64(result, 0)
+        store_i64(result + 8, 0)
+        store_i64(result + 16, 0)
+        store_i64(result + 24, blocks_len)
+        store_i64(result + 32, 0)
+        R result
+    }
+
+    # Build def→local mapping and gen/kill sets
+    def_to_local := malloc(8 * total_defs)
+    # def_to_block[def_id] for reference (block, stmt)
+    gen_sets := malloc(8 * blocks_len)
+    kill_sets := malloc(8 * blocks_len)
+
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(gen_sets + i * 8, bitset_new(total_defs))
+        store_i64(kill_sets + i * 8, bitset_new(total_defs))
+        i = i + 1
+    }
+
+    # Assign def IDs and build gen/kill
+    def_id := mut 0
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            I load_i64(stmt_ptr) == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                local_idx := load_i64(place_ptr)
+                store_i64(def_to_local + def_id * 8, local_idx)
+
+                # This def is generated in this block
+                bitset_set(load_i64(gen_sets + bi * 8), def_id)
+
+                def_id = def_id + 1
+                0
+            } E { 0 }
+            si = si + 1
+        }
+        bi = bi + 1
+    }
+
+    # Build kill sets: for each def d in block b that defines local x,
+    # kill all other defs of x that are NOT in block b
+    d := mut 0
+    L {
+        I d >= total_defs { R 0 }
+        local_x := load_i64(def_to_local + d * 8)
+        # Find which block contains def d
+        d2 := mut 0
+        L {
+            I d2 >= total_defs { R 0 }
+            I d2 != d {
+                I load_i64(def_to_local + d2 * 8) == local_x {
+                    # d2 defines the same local as d
+                    # All blocks containing d should kill d2
+                    # We need to find which block d is in
+                    # For simplicity, we'll use a different approach below
+                    0
+                } E { 0 }
+            } E { 0 }
+            d2 = d2 + 1
+        }
+        d = d + 1
+    }
+
+    # Simpler kill: for each block, kill all defs of locals that are redefined in this block
+    bi = 0
+    L {
+        I bi >= blocks_len { R 0 }
+        bb_ptr := load_i64(blocks_ptr + bi * 8)
+        stmts_ptr := load_i64(bb_ptr)
+        stmts_len := load_i64(bb_ptr + 8)
+        kill_bs := load_i64(kill_sets + bi * 8)
+
+        si := mut 0
+        L {
+            I si >= stmts_len { R 0 }
+            stmt_ptr := load_i64(stmts_ptr + si * 8)
+            I load_i64(stmt_ptr) == STMT_MIR_ASSIGN() {
+                place_ptr := load_i64(stmt_ptr + 8)
+                local_idx := load_i64(place_ptr)
+
+                # Kill all defs of this local (except ones in this block's gen)
+                d2 := mut 0
+                L {
+                    I d2 >= total_defs { R 0 }
+                    I load_i64(def_to_local + d2 * 8) == local_idx {
+                        bitset_set(kill_bs, d2)
+                        0
+                    } E { 0 }
+                    d2 = d2 + 1
+                }
+                0
+            } E { 0 }
+            si = si + 1
+        }
+
+        # Remove gen from kill (gen overrides kill within same block)
+        gen_bs := load_i64(gen_sets + bi * 8)
+        bitset_diff(kill_bs, gen_bs, total_defs)
+
+        bi = bi + 1
+    }
+
+    # Phase 2: Forward dataflow fixed-point
+    reach_in := malloc(8 * blocks_len)
+    reach_out := malloc(8 * blocks_len)
+    i = 0
+    L {
+        I i >= blocks_len { R 0 }
+        store_i64(reach_in + i * 8, bitset_new(total_defs))
+        store_i64(reach_out + i * 8, bitset_new(total_defs))
+        i = i + 1
+    }
+
+    temp := bitset_new(total_defs)
+    changed := mut 1
+    L {
+        I changed == 0 { R 0 }
+        changed = 0
+
+        bi = 0
+        L {
+            I bi >= blocks_len { R 0 }
+            in_bs := load_i64(reach_in + bi * 8)
+
+            # Build predecessors for this iteration
+            pred_info := cfg_build_predecessors(body_ptr)
+
+            # reach_in[bb] = union of reach_out[pred] for all predecessors
+            pred_list := load_i64(pred_info + bi * 16)
+            pred_cnt := load_i64(pred_info + bi * 16 + 8)
+            pi := mut 0
+            L {
+                I pi >= pred_cnt { R 0 }
+                p := load_i64(pred_list + pi * 8)
+                bitset_union(in_bs, load_i64(reach_out + p * 8), total_defs)
+                pi = pi + 1
+            }
+            cfg_free_predecessors(pred_info, blocks_len)
+
+            # reach_out[bb] = gen[bb] ∪ (reach_in[bb] - kill[bb])
+            out_bs := load_i64(reach_out + bi * 8)
+            bitset_copy(temp, in_bs, total_defs)
+            bitset_diff(temp, load_i64(kill_sets + bi * 8), total_defs)
+            bitset_union(temp, load_i64(gen_sets + bi * 8), total_defs)
+
+            c := bitset_union(out_bs, temp, total_defs)
+            I c != 0 { changed = 1; 0 } E { 0 }
+
+            bi = bi + 1
+        }
+    }
+
+    # Cleanup temp data
+    free(temp)
+    i = 0
+    L {
+        I i >= blocks_len { R 0 }
+        free(load_i64(gen_sets + i * 8))
+        free(load_i64(kill_sets + i * 8))
+        i = i + 1
+    }
+    free(gen_sets)
+    free(kill_sets)
+
+    # Pack result
+    result := malloc(40)
+    store_i64(result, reach_in)
+    store_i64(result + 8, reach_out)
+    store_i64(result + 16, total_defs)
+    store_i64(result + 24, blocks_len)
+    store_i64(result + 32, def_to_local)
+    R result
+}
+
+# Query: does definition def_id reach the entry of block bb_idx?
+F reach_def_at_entry(result: i64, bb_idx: i64, def_id: i64) -> i64 {
+    reach_in := load_i64(result)
+    R bitset_test(load_i64(reach_in + bb_idx * 8), def_id)
+}
+
+# Query: does definition def_id reach the exit of block bb_idx?
+F reach_def_at_exit(result: i64, bb_idx: i64, def_id: i64) -> i64 {
+    reach_out := load_i64(result + 8)
+    R bitset_test(load_i64(reach_out + bb_idx * 8), def_id)
+}
+
+# Query: which local does def_id define?
+F reach_def_local(result: i64, def_id: i64) -> i64 {
+    def_to_local := load_i64(result + 32)
+    R load_i64(def_to_local + def_id * 8)
+}
+
+# Free reaching definitions result
+F reach_defs_free(result: i64) -> i64 {
+    reach_in := load_i64(result)
+    reach_out := load_i64(result + 8)
+    total_defs := load_i64(result + 16)
+    blocks_len := load_i64(result + 24)
+    def_to_local := load_i64(result + 32)
+
+    I reach_in != 0 {
+        i := mut 0
+        L {
+            I i >= blocks_len { R 0 }
+            free(load_i64(reach_in + i * 8))
+            free(load_i64(reach_out + i * 8))
+            i = i + 1
+        }
+        free(reach_in)
+        free(reach_out)
+        0
+    } E { 0 }
+    I def_to_local != 0 { free(def_to_local); 0 } E { 0 }
+    free(result)
+    1
+}
+
+# ============================================================================
+# Summary Statistics
+# ============================================================================
+
+# Print analysis summary for a body
+# Returns total number of live locals across all block exits
+F mir_analysis_live_total(body_ptr: i64) -> i64 {
+    result := mir_liveness_analysis(body_ptr)
+    blocks_len := load_i64(result + 24)
+    total := mut 0
+    bi := mut 0
+    L {
+        I bi >= blocks_len { R 0 }
+        total = total + liveness_live_out_count(result, bi)
+        bi = bi + 1
+    }
+    liveness_free(result)
+    R total
+}
+
+# Count number of loop headers in a body
+F mir_count_loop_headers(body_ptr: i64) -> i64 {
+    idom := mir_dominance_analysis(body_ptr)
+    loop_info := mir_loop_analysis(body_ptr, idom)
+    blocks_len := load_i64(body_ptr + 56)
+    count := mut 0
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        I loop_is_header(loop_info, i) == 1 {
+            count = count + 1
+            0
+        } E { 0 }
+        i = i + 1
+    }
+    free(idom)
+    loop_free(loop_info)
+    R count
+}
+
+# Max loop depth in a body
+F mir_max_loop_depth(body_ptr: i64) -> i64 {
+    idom := mir_dominance_analysis(body_ptr)
+    loop_info := mir_loop_analysis(body_ptr, idom)
+    blocks_len := load_i64(body_ptr + 56)
+    max_d := mut 0
+    i := mut 0
+    L {
+        I i >= blocks_len { R 0 }
+        d := loop_depth(loop_info, i)
+        I d > max_d { max_d = d; 0 } E { 0 }
+        i = i + 1
+    }
+    free(idom)
+    loop_free(loop_info)
+    R max_d
+}
