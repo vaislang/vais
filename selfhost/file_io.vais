@@ -1,0 +1,249 @@
+# ============================================================================
+# File I/O Wrappers for Selfhost
+# ============================================================================
+# Uses Inkwell C builtins: fopen_ptr, fread, fwrite, fclose, fseek, ftell, fflush, feof
+# All pointers represented as i64
+# Read result layout: [data_ptr: i64, len: i64] = 16 bytes
+# ============================================================================
+
+# Open file. path is str, mode is str literal ("r", "w", "rb", "wb", etc.)
+# Returns file pointer as i64, or 0 on failure
+F file_open_r(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fopen_ptr(path_ptr, "r")
+}
+
+F file_open_w(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fopen_ptr(path_ptr, "w")
+}
+
+F file_open_rb(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fopen_ptr(path_ptr, "rb")
+}
+
+F file_open_wb(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fopen_ptr(path_ptr, "wb")
+}
+
+F file_open_a(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fopen_ptr(path_ptr, "a")
+}
+
+F file_open_ab(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fopen_ptr(path_ptr, "ab")
+}
+
+# Close a file pointer
+F file_close(fp: i64) -> i64 {
+    fclose(fp)
+}
+
+# ============================================================================
+# Read Operations
+# ============================================================================
+
+# Read entire file into memory
+# Returns pointer to [data_ptr: i64, len: i64], or 0 on failure
+F file_read_all(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fp := fopen_ptr(path_ptr, "rb")
+    I fp == 0 { R 0 } E { 0 }
+
+    # Get file size via fseek/ftell
+    fseek(fp, 0, 2)    # SEEK_END = 2
+    sz := ftell(fp)
+    fseek(fp, 0, 0)    # SEEK_SET = 0
+
+    # Allocate and read
+    data := malloc(sz + 1)
+    bytes_read := fread(data, 1, sz, fp)
+    fclose(fp)
+
+    store_byte(data + bytes_read, 0)  # null terminate
+
+    # Return result struct
+    result := malloc(16)
+    store_i64(result, data)
+    store_i64(result + 8, bytes_read)
+    result
+}
+
+# Read one line from file (up to newline or EOF)
+# Returns pointer to [data_ptr: i64, len: i64], or 0 on EOF
+F file_read_line(fp: i64) -> i64 {
+    I fp == 0 { R 0 } E { 0 }
+
+    cap := mut 128
+    data := mut malloc(cap)
+    len := mut 0
+
+    byte_buf := malloc(1)
+    done := mut 0
+    L done == 0 {
+        eof := feof(fp)
+        I eof != 0 {
+            done = 1
+        } E {
+            bytes_read := fread(byte_buf, 1, 1, fp)
+            I bytes_read == 0 {
+                done = 1
+            } E {
+                byte := load_byte(byte_buf)
+                I byte == 10 {
+                    done = 1  # newline
+                } E {
+                    # Grow if needed
+                    I len >= cap {
+                        new_cap := cap * 2
+                        new_data := malloc(new_cap)
+                        memcpy(new_data, data, len)
+                        free(data)
+                        data = new_data
+                        cap = new_cap
+                        0
+                    } E { 0 }
+                    store_byte(data + len, byte)
+                    len = len + 1
+                }
+            }
+        }
+    }
+    free(byte_buf)
+
+    # EOF with no data read
+    I len == 0 {
+        eof2 := feof(fp)
+        I eof2 != 0 {
+            free(data)
+            R 0
+        } E { 0 }
+    } E { 0 }
+
+    store_byte(data + len, 0)  # null terminate
+
+    result := malloc(16)
+    store_i64(result, data)
+    store_i64(result + 8, len)
+    result
+}
+
+# Read N bytes from file
+# Returns pointer to [data_ptr: i64, len: i64], or 0 on failure
+F file_read_bytes(fp: i64, count: i64) -> i64 {
+    I fp == 0 { R 0 } E { 0 }
+    I count <= 0 { R 0 } E { 0 }
+
+    data := malloc(count)
+    bytes_read := fread(data, 1, count, fp)
+    I bytes_read <= 0 {
+        free(data)
+        R 0
+    } E { 0 }
+
+    result := malloc(16)
+    store_i64(result, data)
+    store_i64(result + 8, bytes_read)
+    result
+}
+
+# ============================================================================
+# Write Operations
+# ============================================================================
+
+# Write buffer to file (overwrite)
+# Returns 1 on success, 0 on failure
+F file_write_all(path: str, data_ptr: i64, len: i64) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fp := fopen_ptr(path_ptr, "wb")
+    I fp == 0 { R 0 } E { 0 }
+
+    bytes_written := fwrite(data_ptr, 1, len, fp)
+    fflush(fp)
+    fclose(fp)
+    I bytes_written == len { 1 } E { 0 }
+}
+
+# Write N bytes to file pointer
+# Returns number of bytes written
+F file_write_bytes(fp: i64, data_ptr: i64, len: i64) -> i64 {
+    I fp == 0 { R 0 } E { 0 }
+    I len <= 0 { R 0 } E { 0 }
+
+    bytes_written := fwrite(data_ptr, 1, len, fp)
+    fflush(fp)
+    bytes_written
+}
+
+# Append data to file
+# Returns 1 on success, 0 on failure
+F file_append(path: str, data_ptr: i64, len: i64) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fp := fopen_ptr(path_ptr, "ab")
+    I fp == 0 { R 0 } E { 0 }
+
+    bytes_written := fwrite(data_ptr, 1, len, fp)
+    fflush(fp)
+    fclose(fp)
+    I bytes_written == len { 1 } E { 0 }
+}
+
+# ============================================================================
+# Seek/Tell/EOF
+# ============================================================================
+
+F file_seek(fp: i64, offset: i64, whence: i64) -> i64 {
+    I fp == 0 { R 1 } E { 0 }
+    fseek(fp, offset, whence)
+}
+
+F file_tell(fp: i64) -> i64 {
+    I fp == 0 { R 0 } E { 0 }
+    ftell(fp)
+}
+
+F file_is_eof(fp: i64) -> i64 {
+    I fp == 0 { R 0 } E { 0 }
+    eof := feof(fp)
+    I eof == 0 { 0 } E { 1 }
+}
+
+# ============================================================================
+# Utility
+# ============================================================================
+
+# Check if file exists
+F file_exists(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fp := fopen_ptr(path_ptr, "r")
+    I fp == 0 { 0 }
+    E {
+        fclose(fp)
+        1
+    }
+}
+
+# Get file size in bytes
+F file_size(path: str) -> i64 {
+    path_ptr := str_to_ptr(path)
+    fp := fopen_ptr(path_ptr, "rb")
+    I fp == 0 { R 0 } E { 0 }
+    fseek(fp, 0, 2)
+    sz := ftell(fp)
+    fclose(fp)
+    sz
+}
+
+# Free a read result [data_ptr, len]
+F file_result_free(result: i64) -> i64 {
+    I result != 0 {
+        data := load_i64(result)
+        I data != 0 { free(data); 0 } E { 0 }
+        free(result)
+        0
+    } E { 0 }
+}

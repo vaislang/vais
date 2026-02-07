@@ -248,6 +248,18 @@ impl CodeGenerator {
             ResolvedType::I64
         );
 
+        // memcmp: (s1, s2, n) -> i64 (compare memory)
+        register_extern!(
+            self,
+            "memcmp",
+            vec![
+                ("s1".to_string(), ResolvedType::I64),
+                ("s2".to_string(), ResolvedType::I64),
+                ("n".to_string(), ResolvedType::I64),
+            ],
+            ResolvedType::I64
+        );
+
         // load_byte: load single byte from memory (internal helper)
         register_helper!(self, "load_byte" => "__load_byte",
             vec![("ptr".to_string(), ResolvedType::I64)],

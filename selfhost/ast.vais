@@ -74,6 +74,7 @@ F STMT_EXPR() -> i64 = 11
 F STMT_RETURN() -> i64 = 12
 F STMT_BREAK() -> i64 = 13
 F STMT_CONTINUE() -> i64 = 14
+F STMT_DEFER() -> i64 = 15
 
 # Expression types
 F EXPR_INT() -> i64 = 20

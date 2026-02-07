@@ -446,6 +446,28 @@ impl TypeChecker {
             },
         );
 
+        // memcmp: (s1, s2, n) -> i64 (compare memory)
+        self.functions.insert(
+            "memcmp".to_string(),
+            FunctionSig {
+                name: "memcmp".to_string(),
+                generics: vec![],
+                generic_bounds: HashMap::new(),
+                params: vec![
+                    ("s1".to_string(), ResolvedType::I64, false),
+                    ("s2".to_string(), ResolvedType::I64, false),
+                    ("n".to_string(), ResolvedType::I64, false),
+                ],
+                ret: ResolvedType::I64,
+                is_async: false,
+                is_vararg: false,
+                required_params: None,
+                contracts: None,
+                effect_annotation: EffectAnnotation::Infer,
+                inferred_effects: None,
+            },
+        );
+
         // memcpy_str: (dest, src_str, n) -> i64 (accepts str as src)
         self.functions.insert(
             "memcpy_str".to_string(),

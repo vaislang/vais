@@ -348,7 +348,12 @@ S CodeGenerator {
     struct_mono_cap: i64,
 
     # Current impl block context (for method name prefixing)
-    current_impl_type_idx: i64  # -1 when not in impl block
+    current_impl_type_idx: i64,  # -1 when not in impl block
+
+    # Defer stack: expr_ptr values in LIFO order (per function)
+    defer_stack_ptr: i64,
+    defer_stack_len: i64,
+    defer_stack_cap: i64
 }
 
 X CodeGenerator {
@@ -407,7 +412,9 @@ X CodeGenerator {
             generic_structs_len: 0, generic_structs_cap: 32,
             struct_mono_ptr: malloc(32 * 24),
             struct_mono_len: 0, struct_mono_cap: 32,
-            current_impl_type_idx: 0 - 1
+            current_impl_type_idx: 0 - 1,
+            defer_stack_ptr: malloc(32 * 8),
+            defer_stack_len: 0, defer_stack_cap: 32
         }
     }
 
@@ -1485,6 +1492,8 @@ X CodeGenerator {
             }
         } E {
             @.generate_stmts(body_stmts_ptr, body_stmts_len)
+            # Execute deferred expressions at function end
+            @.emit_defer_cleanup()
             I ret_llvm == LLVM_VOID() {
                 @.emit_cstr("  ret void\n")
             } E {
@@ -1495,6 +1504,9 @@ X CodeGenerator {
         }
 
         @.emit_cstr("}\n\n")
+
+        # Clear defer stack for next function
+        self.defer_stack_len = 0
 
         # Clean up bindings
         @.clear_mono_bindings()
@@ -1840,6 +1852,9 @@ X CodeGenerator {
         body_stmts_ptr := load_i64(fn_ptr + 64)
         body_stmts_len := load_i64(fn_ptr + 72)
 
+        # Clear defer stack for this function
+        self.defer_stack_len = 0
+
         # Save generic functions for monomorphization, don't generate them directly
         I generics_len > 0 {
             @.save_generic_fn(fn_ptr)
@@ -2026,7 +2041,46 @@ X CodeGenerator {
         E I kind == 14 {
             @.generate_continue_stmt()
         }
+        # STMT_DEFER = 15
+        E I kind == 15 {
+            @.push_defer(stmt_ptr)
+        }
         E { 1 }
+    }
+
+    # Push a defer statement's expression pointer onto the defer stack
+    F push_defer(&self, stmt_ptr: i64) -> i64 {
+        expr_ptr := load_i64(stmt_ptr + 24)
+        I self.defer_stack_len >= self.defer_stack_cap {
+            new_cap := self.defer_stack_cap * 2
+            new_ptr := malloc(new_cap * 8)
+            memcpy(new_ptr, self.defer_stack_ptr, self.defer_stack_len * 8)
+            free(self.defer_stack_ptr)
+            self.defer_stack_ptr = new_ptr
+            self.defer_stack_cap = new_cap
+            0
+        } E { 0 }
+        store_i64(self.defer_stack_ptr + self.defer_stack_len * 8, expr_ptr)
+        self.defer_stack_len = self.defer_stack_len + 1
+        1
+    }
+
+    # Emit code for all deferred expressions in LIFO order
+    F emit_defer_cleanup(&self) -> i64 {
+        I self.defer_stack_len > 0 {
+            i := mut self.defer_stack_len - 1
+            done := mut 0
+            L done == 0 {
+                expr_ptr := load_i64(self.defer_stack_ptr + i * 8)
+                @.generate_expr(expr_ptr)
+                I i == 0 {
+                    done = 1
+                } E {
+                    i = i - 1
+                }
+            }
+            0
+        } E { 0 }
     }
 
     F generate_let_stmt(&self, stmt_ptr: i64) -> i64 {
@@ -2081,6 +2135,9 @@ X CodeGenerator {
 
     F generate_return_stmt(&self, stmt_ptr: i64) -> i64 {
         expr_ptr := load_i64(stmt_ptr + 24)
+
+        # Execute deferred expressions before returning
+        @.emit_defer_cleanup()
 
         I expr_ptr == 0 || self.current_fn_ret_type == LLVM_VOID() {
             @.emit_cstr("  ret void\n")

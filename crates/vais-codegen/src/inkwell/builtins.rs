@@ -71,6 +71,12 @@ pub fn declare_builtins<'ctx>(context: &'ctx Context, module: &Module<'ctx>) {
         i8_ptr.fn_type(&[i8_ptr.into(), i32_type.into(), i64_type.into()], false),
         None,
     );
+    // memcmp(s1, s2, n) -> i32
+    module.add_function(
+        "memcmp",
+        i32_type.fn_type(&[i8_ptr.into(), i8_ptr.into(), i64_type.into()], false),
+        None,
+    );
 
     // ===== String functions =====
     // strlen(s) -> i64

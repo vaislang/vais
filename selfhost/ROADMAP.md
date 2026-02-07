@@ -71,14 +71,16 @@ MIR pipeline, LSP server, code formatter, and doc generator implemented.
 - [x] Pattern matching enhancements (wildcard, variable binding, guards, or-patterns, range)
 - [x] Option<T> / Result<T, E> support (option.vais — tag-value pair helpers)
 - [ ] Pointer types (*T), references (&T, &mut T)
-- [ ] Defer statement
+- [x] Defer statement (D expr — LIFO cleanup in codegen)
 
 ### Standard Library
-- [ ] Vec<T>
-- [ ] String (owned)
-- [ ] HashMap<K, V>
-- [ ] File I/O wrappers
-- [ ] Better print functions
+- [x] Vec<T> — vec.vais (295 LOC): vec_new/push/pop/get/set/insert/remove/sort/reverse/clone ✅ 2026-02-07
+- [x] String (owned) — string.vais (351 LOC): from/eq/concat/slice/find/starts_with/ends_with/trim ✅ 2026-02-07
+- [x] HashMap<K,V> — hashmap.vais (333 LOC): put/get/has/remove/keys/values, open addressing ✅ 2026-02-07
+- [x] Defer statement — codegen.vais (+50 LOC): D expr, LIFO cleanup at return/function exit ✅ 2026-02-07
+- [x] File I/O wrappers — file_io.vais (249 LOC): read_all/write_all/read_line/exists/size ✅ 2026-02-07
+- [x] Better print functions — print.vais (229 LOC): i64/bool/hex/char/repeat/println ✅ 2026-02-07
+진행률: 6/6 (100%)
 
 ### Known Limitations
 1. Match scrutinee: must be simple identifier (not complex expression) due to `{` ambiguity

@@ -26,7 +26,7 @@ F TOK_KW_TRUE() -> i64 = 16
 F TOK_KW_FALSE() -> i64 = 17
 F TOK_KW_MUT() -> i64 = 18
 F TOK_KW_ELSE() -> i64 = 19
-F TOK_KW_MOVE() -> i64 = 20
+F TOK_KW_D() -> i64 = 20        # defer (same as TOK_KW_MOVE in selfhost context)
 F TOK_KW_AWAIT() -> i64 = 21
 
 # Literal tokens (51-60)
@@ -127,6 +127,7 @@ F STMT_EXPR() -> i64 = 11
 F STMT_RETURN() -> i64 = 12
 F STMT_BREAK() -> i64 = 13
 F STMT_CONTINUE() -> i64 = 14
+F STMT_DEFER() -> i64 = 15
 
 # Expression types
 F EXPR_INT() -> i64 = 20
@@ -2117,6 +2118,21 @@ X Parser {
             store_i64(stmt_ptr + 8, start)
             store_i64(stmt_ptr + 16, @.current_span_start())
             store_i64(stmt_ptr + 24, 0)
+            store_i64(stmt_ptr + 32, 0)
+            store_i64(stmt_ptr + 40, 0)
+            store_i64(stmt_ptr + 48, 0)
+            R stmt_ptr
+        }
+
+        # Defer statement: D expr
+        I @.check(TOK_KW_D()) == 1 {
+            @.advance()
+            expr_ptr := @.parse_expr()
+            stmt_ptr := malloc(StmtNode.size())
+            store_i64(stmt_ptr + 0, STMT_DEFER())
+            store_i64(stmt_ptr + 8, start)
+            store_i64(stmt_ptr + 16, @.current_span_start())
+            store_i64(stmt_ptr + 24, expr_ptr)
             store_i64(stmt_ptr + 32, 0)
             store_i64(stmt_ptr + 40, 0)
             store_i64(stmt_ptr + 48, 0)

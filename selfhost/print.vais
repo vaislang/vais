@@ -1,0 +1,229 @@
+# print.vais - Enhanced output functions for selfhost
+# Provides formatted output utilities for integers, booleans, hex, pointers, and bytes
+
+# Helper: calculate string length from str pointer
+F str_len(ptr: i64) -> i64 {
+    len := mut 0
+    L {
+        ch := load_byte(ptr + len)
+        I ch == 0 { B } E { 0 }
+        len = len + 1
+        0
+    }
+    len
+}
+
+# Helper: print integer digits recursively
+F print_i64_digits(n: i64) -> i64 {
+    I n >= 10 {
+        print_i64_digits(n / 10)
+        0
+    } E { 0 }
+    putchar((n % 10) + 48)
+}
+
+# 1. Print signed integer
+F print_i64(n: i64) -> i64 {
+    I n == 0 {
+        putchar(48)
+    } E I n < 0 {
+        putchar(45)
+        print_i64_digits(0 - n)
+    } E {
+        print_i64_digits(n)
+    }
+}
+
+# 2. Print boolean
+F print_bool(b: i64) -> i64 {
+    I b == 0 {
+        putchar(102)  # f
+        putchar(97)   # a
+        putchar(108)  # l
+        putchar(115)  # s
+        putchar(101)  # e
+        0
+    } E {
+        putchar(116)  # t
+        putchar(114)  # r
+        putchar(117)  # u
+        putchar(101)  # e
+        0
+    }
+}
+
+# Helper: print hex digit (0-15 -> 0-9,a-f)
+F print_hex_digit(digit: i64) -> i64 {
+    I digit < 10 {
+        putchar(digit + 48)
+    } E {
+        putchar(digit - 10 + 97)
+    }
+}
+
+# Helper: print hex digits recursively
+F print_hex_digits(n: i64, pos: i64) -> i64 {
+    I pos < 0 { R 0 } E { 0 }
+
+    shift := pos * 4
+    digit := (n >> shift) & 15
+
+    # Skip leading zeros except last digit
+    I digit == 0 {
+        I pos > 0 {
+            print_hex_digits(n, pos - 1)
+        } E {
+            putchar(48)
+        }
+    } E {
+        print_hex_digit(digit)
+        I pos > 0 {
+            print_hex_digits(n, pos - 1)
+        } E { 0 }
+        0
+    }
+}
+
+# 3. Print hex number (0x prefix)
+F print_hex(n: i64) -> i64 {
+    putchar(48)   # 0
+    putchar(120)  # x
+
+    I n == 0 {
+        putchar(48)
+    } E {
+        # Print up to 16 hex digits (64 bits = 16 nibbles)
+        print_hex_digits(n, 15)
+    }
+}
+
+# 4. Print pointer (0x prefix + hex)
+F print_ptr(p: i64) -> i64 {
+    print_hex(p)
+}
+
+# Helper: print single hex byte (2 digits)
+F print_byte_hex(byte: i64) -> i64 {
+    high := (byte >> 4) & 15
+    low := byte & 15
+    print_hex_digit(high)
+    print_hex_digit(low)
+}
+
+# 5. Print byte array as hex
+F print_bytes(data_ptr: i64, len: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+
+        byte := load_byte(data_ptr + i)
+        print_byte_hex(byte)
+
+        # Add space between bytes
+        I i < len - 1 {
+            putchar(32)
+            0
+        } E { 0 }
+
+        i = i + 1
+        0
+    }
+    0
+}
+
+# 6. Print integer + newline
+F println_i64(n: i64) -> i64 {
+    print_i64(n)
+    putchar(10)
+}
+
+# 7. Print string + newline
+F println_str(s: str) -> i64 {
+    ptr := str_to_ptr(s)
+    len := str_len(ptr)
+
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        ch := load_byte(ptr + i)
+        putchar(ch)
+        i = i + 1
+        0
+    }
+    putchar(10)
+}
+
+# 8. Print single character
+F print_char(ch: i64) -> i64 {
+    putchar(ch)
+}
+
+# 9. Print to stderr
+# Note: stderr not available in current builtins, printing to stdout instead
+F eprint_str(s: str) -> i64 {
+    ptr := str_to_ptr(s)
+    len := str_len(ptr)
+
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        ch := load_byte(ptr + i)
+        putchar(ch)
+        i = i + 1
+        0
+    }
+    0
+}
+
+# 10. Print character repeated count times
+F print_repeat(ch: i64, count: i64) -> i64 {
+    i := mut 0
+    L {
+        I i >= count { B } E { 0 }
+        putchar(ch)
+        i = i + 1
+        0
+    }
+    0
+}
+
+# Bonus: Print newline
+F println() -> i64 {
+    putchar(10)
+}
+
+# Bonus: Print string (no newline)
+F print_str(s: str) -> i64 {
+    ptr := str_to_ptr(s)
+    len := str_len(ptr)
+
+    i := mut 0
+    L {
+        I i >= len { B } E { 0 }
+        ch := load_byte(ptr + i)
+        putchar(ch)
+        i = i + 1
+        0
+    }
+    0
+}
+
+# Bonus: Print to stderr with newline
+# Note: stderr not available, printing to stdout instead
+F eprintln_str(s: str) -> i64 {
+    eprint_str(s)
+    putchar(10)
+}
+
+# Bonus: Print labeled integer (e.g., "count: 42\n")
+F print_label_i64(label: str, value: i64) -> i64 {
+    print_str(label)
+    putchar(58)   # :
+    putchar(32)   # space
+    println_i64(value)
+}
+
+# Bonus: Print indentation (spaces)
+F print_indent(level: i64) -> i64 {
+    print_repeat(32, level * 2)
+}
