@@ -2454,18 +2454,16 @@ fn load_module_with_imports_internal(
                         // Validate remapped indices will be within bounds after extending all_items
                         let future_total_len = offset + filtered_len;
                         for (&original_idx, &remapped_idx) in sub_indices.iter().zip(remapped.iter()) {
-                            if remapped_idx >= future_total_len {
-                                if verbose {
-                                    eprintln!(
-                                        "{}: Remapped index {} (original {} + offset {}) >= total items {} for module '{}'",
-                                        "Warning".yellow(),
-                                        remapped_idx,
-                                        original_idx,
-                                        offset,
-                                        future_total_len,
-                                        sub_path.display()
-                                    );
-                                }
+                            if remapped_idx >= future_total_len && verbose {
+                                eprintln!(
+                                    "{}: Remapped index {} (original {} + offset {}) >= total items {} for module '{}'",
+                                    "Warning".yellow(),
+                                    remapped_idx,
+                                    original_idx,
+                                    offset,
+                                    future_total_len,
+                                    sub_path.display()
+                                );
                             }
                         }
 
@@ -3707,11 +3705,7 @@ fn compile_to_native(
             return Err("clang linking failed".to_string());
         }
 
-        if verbose {
-            println!("{}", bin_path.display());
-        } else {
-            println!("{}", bin_path.display());
-        }
+        println!("{}", bin_path.display());
 
         return Ok(());
     }
