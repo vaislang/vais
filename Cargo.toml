@@ -106,9 +106,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Utils
-ariadne = "0.4"
-codespan-reporting = "0.11"
-colored = "2.1"
+colored = "3"
 
 # Testing
 pretty_assertions = "1.4"

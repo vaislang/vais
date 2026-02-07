@@ -36,7 +36,7 @@ inkwell = { workspace = true, optional = true }
 clap = { version = "4.5", features = ["derive"] }
 miette = { workspace = true }
 thiserror = { workspace = true }
-colored = "3"
+colored = { workspace = true }
 rustyline = "17"
 sha2 = { workspace = true }
 serde = { workspace = true }
