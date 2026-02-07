@@ -336,6 +336,31 @@ enum Commands {
         merge_only: bool,
     },
 
+    /// Create a new Vais project
+    New {
+        /// Project name (creates directory with this name)
+        name: String,
+
+        /// Create a library project instead of a binary
+        #[arg(long)]
+        lib: bool,
+    },
+
+    /// Run tests in the project
+    Test {
+        /// Test file or directory (default: tests/)
+        #[arg(default_value = "tests")]
+        path: PathBuf,
+
+        /// Filter tests by name pattern
+        #[arg(long)]
+        filter: Option<String>,
+
+        /// Show verbose test output
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
     /// Watch source file and recompile on changes
     Watch {
         /// Input source file
@@ -508,6 +533,32 @@ enum PkgCommands {
         /// Registry URL
         #[arg(long)]
         registry: Option<String>,
+    },
+
+    /// Show dependency tree
+    Tree {
+        /// Show all transitive dependencies
+        #[arg(long)]
+        all: bool,
+
+        /// Maximum depth of the tree
+        #[arg(long)]
+        depth: Option<usize>,
+    },
+
+    /// Generate documentation for the package
+    Doc {
+        /// Output directory for documentation
+        #[arg(short, long, default_value = "docs")]
+        output: PathBuf,
+
+        /// Output format (markdown or html)
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+
+        /// Open documentation in browser after generation
+        #[arg(long)]
+        open: bool,
     },
 }
 
@@ -770,6 +821,12 @@ fn main() {
             check,
             indent,
         }) => cmd_fmt(&input, check, indent),
+        Some(Commands::New { name, lib }) => cmd_new(&name, lib),
+        Some(Commands::Test {
+            path,
+            filter,
+            verbose,
+        }) => cmd_test(&path, filter.as_deref(), verbose || cli.verbose),
         Some(Commands::Pkg(pkg_cmd)) => cmd_pkg(pkg_cmd, cli.verbose),
         Some(Commands::Pgo {
             input,
@@ -3455,6 +3512,335 @@ fn cmd_fmt(input: &PathBuf, check: bool, indent: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// Create a new Vais project
+fn cmd_new(name: &str, lib: bool) -> Result<(), String> {
+    use package::init_package;
+
+    let cwd =
+        std::env::current_dir().map_err(|e| format!("failed to get current directory: {}", e))?;
+    let project_dir = cwd.join(name);
+
+    if project_dir.exists() {
+        return Err(format!(
+            "directory '{}' already exists",
+            project_dir.display()
+        ));
+    }
+
+    fs::create_dir_all(&project_dir)
+        .map_err(|e| format!("failed to create directory '{}': {}", name, e))?;
+
+    // Use existing init_package to create vais.toml + src/main.vais
+    init_package(&project_dir, Some(name)).map_err(|e| e.to_string())?;
+
+    // If library project, replace main.vais with lib.vais
+    if lib {
+        let main_path = project_dir.join("src").join("main.vais");
+        let lib_path = project_dir.join("src").join("lib.vais");
+        if main_path.exists() {
+            fs::remove_file(&main_path)
+                .map_err(|e| format!("failed to remove main.vais: {}", e))?;
+        }
+        let lib_content = format!(
+            "# {} library\n\nF add(a: i64, b: i64) -> i64 {{\n    a + b\n}}\n",
+            name
+        );
+        fs::write(&lib_path, lib_content)
+            .map_err(|e| format!("failed to create lib.vais: {}", e))?;
+    }
+
+    // Create tests/ directory with a sample test
+    let tests_dir = project_dir.join("tests");
+    fs::create_dir_all(&tests_dir)
+        .map_err(|e| format!("failed to create tests/ directory: {}", e))?;
+
+    let test_content = if lib {
+        format!(
+            "# Tests for {}\n\nF test_add() -> i64 {{\n    result := add(2, 3)\n    I result == 5 {{\n        0\n    }} E {{\n        1\n    }}\n}}\n",
+            name
+        )
+    } else {
+        format!(
+            "# Tests for {}\n\nF test_basic() -> i64 {{\n    # Basic test - return 0 for pass\n    0\n}}\n",
+            name
+        )
+    };
+    fs::write(tests_dir.join("test_main.vais"), test_content)
+        .map_err(|e| format!("failed to create test file: {}", e))?;
+
+    // Create .gitignore
+    let gitignore_content = "target/\n*.ll\n*.o\n*.out\n.vais-cache/\n";
+    fs::write(project_dir.join(".gitignore"), gitignore_content)
+        .map_err(|e| format!("failed to create .gitignore: {}", e))?;
+
+    println!(
+        "{} Created {} project '{}'",
+        "✓".green(),
+        if lib { "library" } else { "binary" },
+        name
+    );
+    println!("  {}", project_dir.display());
+    println!();
+    println!("  cd {}", name);
+    if lib {
+        println!("  vaisc build src/lib.vais");
+    } else {
+        println!("  vaisc build src/main.vais");
+    }
+    println!("  vaisc test");
+
+    Ok(())
+}
+
+/// Run tests in the project
+fn cmd_test(path: &Path, filter: Option<&str>, verbose: bool) -> Result<(), String> {
+    let test_dir = if path.is_dir() {
+        path.to_path_buf()
+    } else if path.is_file() {
+        // Single test file
+        return run_single_test(path, verbose);
+    } else {
+        // Try relative to current directory
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("failed to get current directory: {}", e))?;
+        let test_path = cwd.join(path);
+        if test_path.is_dir() {
+            test_path
+        } else if test_path.is_file() {
+            return run_single_test(&test_path, verbose);
+        } else {
+            return Err(format!(
+                "test path '{}' not found. Create a tests/ directory with .vais test files.",
+                path.display()
+            ));
+        }
+    };
+
+    // Discover test files
+    let mut test_files: Vec<PathBuf> = Vec::new();
+    discover_test_files(&test_dir, &mut test_files)?;
+
+    if test_files.is_empty() {
+        println!(
+            "{} No test files found in '{}'",
+            "warning:".yellow().bold(),
+            test_dir.display()
+        );
+        return Ok(());
+    }
+
+    // Apply filter
+    let test_files: Vec<PathBuf> = if let Some(pattern) = filter {
+        test_files
+            .into_iter()
+            .filter(|f| {
+                f.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.contains(pattern))
+                    .unwrap_or(false)
+            })
+            .collect()
+    } else {
+        test_files
+    };
+
+    println!(
+        "{} Running {} test file(s)...\n",
+        "Testing".cyan().bold(),
+        test_files.len()
+    );
+
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut errors: Vec<(PathBuf, String)> = Vec::new();
+
+    for test_file in &test_files {
+        let result = run_single_test_inner(test_file, verbose);
+        match result {
+            Ok(true) => {
+                passed += 1;
+                println!(
+                    "  {} {}",
+                    "PASS".green().bold(),
+                    test_file.display()
+                );
+            }
+            Ok(false) => {
+                failed += 1;
+                println!(
+                    "  {} {}",
+                    "FAIL".red().bold(),
+                    test_file.display()
+                );
+            }
+            Err(e) => {
+                failed += 1;
+                let msg = e.clone();
+                errors.push((test_file.clone(), e));
+                println!(
+                    "  {} {} - {}",
+                    "ERROR".red().bold(),
+                    test_file.display(),
+                    msg
+                );
+            }
+        }
+    }
+
+    println!();
+    if failed == 0 {
+        println!(
+            "{} {} test(s) passed",
+            "✓".green().bold(),
+            passed
+        );
+        Ok(())
+    } else {
+        if !errors.is_empty() && verbose {
+            println!("\n{}", "Errors:".red().bold());
+            for (path, err) in &errors {
+                println!("  {}: {}", path.display(), err);
+            }
+        }
+        Err(format!(
+            "{} passed, {} failed",
+            passed, failed
+        ))
+    }
+}
+
+fn discover_test_files(dir: &Path, results: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries =
+        fs::read_dir(dir).map_err(|e| format!("cannot read '{}': {}", dir.display(), e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("failed reading directory entry: {}", e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            discover_test_files(&path, results)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("vais") {
+            results.push(path);
+        }
+    }
+
+    results.sort();
+    Ok(())
+}
+
+fn run_single_test(path: &Path, verbose: bool) -> Result<(), String> {
+    println!(
+        "{} Running test: {}\n",
+        "Testing".cyan().bold(),
+        path.display()
+    );
+    match run_single_test_inner(path, verbose) {
+        Ok(true) => {
+            println!("  {} {}", "PASS".green().bold(), path.display());
+            Ok(())
+        }
+        Ok(false) => {
+            println!("  {} {}", "FAIL".red().bold(), path.display());
+            Err("test failed (non-zero exit code)".to_string())
+        }
+        Err(e) => {
+            println!(
+                "  {} {} - {}",
+                "ERROR".red().bold(),
+                path.display(),
+                e
+            );
+            Err(e)
+        }
+    }
+}
+
+fn run_single_test_inner(path: &Path, verbose: bool) -> Result<bool, String> {
+    use std::process::Command;
+
+    // Step 1: Compile to LLVM IR
+    let ir = compile_to_ir_for_test(path)?;
+
+    // Step 2: Write IR to temp file
+    let tmp_dir = std::env::temp_dir();
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("test");
+    let ir_path = tmp_dir.join(format!("vais_test_{}.ll", stem));
+    let bin_path = tmp_dir.join(format!("vais_test_{}", stem));
+
+    fs::write(&ir_path, &ir).map_err(|e| format!("failed to write IR: {}", e))?;
+
+    // Step 3: Compile IR to binary with clang
+    let clang_output = Command::new("clang")
+        .args([
+            ir_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-lm",
+        ])
+        .output()
+        .map_err(|e| format!("failed to run clang: {}", e))?;
+
+    if !clang_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clang_output.stderr);
+        return Err(format!("clang compilation failed: {}", stderr));
+    }
+
+    // Step 4: Run the binary
+    let run_output = Command::new(&bin_path)
+        .output()
+        .map_err(|e| format!("failed to run test binary: {}", e))?;
+
+    if verbose {
+        let stdout = String::from_utf8_lossy(&run_output.stdout);
+        if !stdout.is_empty() {
+            println!("    stdout: {}", stdout.trim());
+        }
+        let stderr = String::from_utf8_lossy(&run_output.stderr);
+        if !stderr.is_empty() {
+            println!("    stderr: {}", stderr.trim());
+        }
+    }
+
+    // Clean up
+    let _ = fs::remove_file(&ir_path);
+    let _ = fs::remove_file(&bin_path);
+
+    // Exit code 0 = pass
+    Ok(run_output.status.code() == Some(0))
+}
+
+fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
+    let source = fs::read_to_string(path)
+        .map_err(|e| format!("cannot read '{}': {}", path.display(), e))?;
+
+    // Parse
+    let ast = parse(&source).map_err(|e| format!("parse error: {:?}", e))?;
+
+    // Type check
+    let mut checker = TypeChecker::new();
+    configure_type_checker(&mut checker);
+    if let Err(e) = checker.check_module(&ast) {
+        return Err(format!("type error: {:?}", e));
+    }
+
+    // Codegen
+    let module_name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("test");
+    let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
+    codegen.set_resolved_functions(checker.get_all_functions().clone());
+
+    let instantiations = checker.get_generic_instantiations();
+    let ir = if instantiations.is_empty() {
+        codegen.generate_module(&ast)
+    } else {
+        codegen.generate_module_with_instantiations(&ast, instantiations)
+    }
+    .map_err(|e| format!("codegen error: {}", e))?;
+
+    Ok(ir)
+}
+
 /// Package management commands
 fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
     use package::*;
@@ -3727,7 +4113,229 @@ fn cmd_pkg(cmd: PkgCommands, verbose: bool) -> Result<(), String> {
         } => cmd_pkg_yank(&name, &version, token, registry, verbose),
 
         PkgCommands::Login { registry } => cmd_pkg_login(registry, verbose),
+
+        PkgCommands::Tree { all, depth } => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| {
+                "could not find vais.toml in current directory or parents".to_string()
+            })?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+            cmd_pkg_tree(&manifest, &pkg_dir, all, depth, verbose)
+        }
+
+        PkgCommands::Doc {
+            output,
+            format,
+            open,
+        } => {
+            let pkg_dir = find_manifest(&cwd).ok_or_else(|| {
+                "could not find vais.toml in current directory or parents".to_string()
+            })?;
+            let manifest = load_manifest(&pkg_dir).map_err(|e| e.to_string())?;
+            cmd_pkg_doc(&manifest, &pkg_dir, &output, &format, open, verbose)
+        }
     }
+}
+
+/// Show dependency tree
+fn cmd_pkg_tree(
+    manifest: &package::PackageManifest,
+    pkg_dir: &Path,
+    _all: bool,
+    max_depth: Option<usize>,
+    _verbose: bool,
+) -> Result<(), String> {
+    println!(
+        "{} v{}",
+        manifest.package.name.bold(),
+        manifest.package.version
+    );
+
+    let cache_root = package::default_registry_cache_root();
+    let deps =
+        package::resolve_all_dependencies(manifest, pkg_dir, cache_root.as_deref())
+            .map_err(|e| e.to_string())?;
+
+    if deps.is_empty() {
+        println!("  (no dependencies)");
+        return Ok(());
+    }
+
+    let dep_count = deps.len();
+    for (i, dep) in deps.iter().enumerate() {
+        let is_last = i == dep_count - 1;
+        let prefix = if is_last { "└── " } else { "├── " };
+
+        // Try to get version from dependency's manifest
+        let version = dep._manifest.package.version.clone();
+        let path_info = if dep.path.starts_with(pkg_dir) {
+            format!(" ({})", dep.path.strip_prefix(pkg_dir).unwrap_or(&dep.path).display())
+        } else {
+            String::new()
+        };
+
+        println!("{}{} v{}{}", prefix, dep.name.cyan(), version, path_info);
+
+        // Show transitive dependencies (1 level deep unless max_depth allows more)
+        if max_depth.map_or(true, |d| d > 0) {
+            let child_cache = package::default_registry_cache_root();
+            if let Ok(child_deps) = package::resolve_all_dependencies(
+                &dep._manifest,
+                &dep.path,
+                child_cache.as_deref(),
+            ) {
+                let child_prefix = if is_last { "    " } else { "│   " };
+                let child_count = child_deps.len();
+                let child_max = max_depth.map(|d| d.saturating_sub(1));
+                for (j, child) in child_deps.iter().enumerate() {
+                    if child_max == Some(0) {
+                        break;
+                    }
+                    let child_last = j == child_count - 1;
+                    let child_sym = if child_last { "└── " } else { "├── " };
+                    println!(
+                        "{}{}{}  v{}",
+                        child_prefix,
+                        child_sym,
+                        child.name.cyan(),
+                        child._manifest.package.version
+                    );
+                }
+            }
+        }
+    }
+
+    println!(
+        "\n{} {} direct dependencies",
+        "✓".green(),
+        dep_count
+    );
+    Ok(())
+}
+
+/// Generate documentation for a package
+fn cmd_pkg_doc(
+    manifest: &package::PackageManifest,
+    pkg_dir: &Path,
+    output: &Path,
+    format: &str,
+    _open: bool,
+    _verbose: bool,
+) -> Result<(), String> {
+    let src_dir = pkg_dir.join("src");
+    if !src_dir.exists() {
+        return Err("no src/ directory found in package".to_string());
+    }
+
+    // Collect all .vais files in src/
+    let mut vais_files: Vec<PathBuf> = Vec::new();
+    collect_vais_files(&src_dir, &mut vais_files)?;
+
+    if vais_files.is_empty() {
+        return Err("no .vais source files found in src/".to_string());
+    }
+
+    // Use the existing doc_gen module for each source file
+    let output_dir = pkg_dir.join(output);
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| format!("failed to create output directory: {}", e))?;
+
+    println!(
+        "{} Generating docs for {} (v{})",
+        "Documenting".cyan().bold(),
+        manifest.package.name,
+        manifest.package.version
+    );
+
+    // Generate index file
+    let ext = if format == "html" { "html" } else { "md" };
+    let mut index_content = if format == "html" {
+        format!(
+            "<!DOCTYPE html>\n<html><head><title>{} Documentation</title></head>\n<body>\n<h1>{} v{}</h1>\n",
+            manifest.package.name, manifest.package.name, manifest.package.version
+        )
+    } else {
+        format!(
+            "# {} v{}\n\n",
+            manifest.package.name, manifest.package.version
+        )
+    };
+
+    if let Some(desc) = &manifest.package.description {
+        if format == "html" {
+            index_content.push_str(&format!("<p>{}</p>\n", desc));
+        } else {
+            index_content.push_str(&format!("{}\n\n", desc));
+        }
+    }
+
+    if format == "html" {
+        index_content.push_str("<h2>Modules</h2>\n<ul>\n");
+    } else {
+        index_content.push_str("## Modules\n\n");
+    }
+
+    for file in &vais_files {
+        let rel = file.strip_prefix(&src_dir).unwrap_or(file);
+        let module_name = rel
+            .with_extension("")
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "::");
+
+        // Generate doc for this file using doc_gen
+        if let Err(e) = doc_gen::run(file, &output_dir, format) {
+            eprintln!(
+                "  {} failed to generate docs for {}: {}",
+                "warning:".yellow(),
+                rel.display(),
+                e
+            );
+            continue;
+        }
+
+        let doc_file = format!("{}.{}", file.file_stem().unwrap().to_string_lossy(), ext);
+
+        if format == "html" {
+            index_content.push_str(&format!(
+                "  <li><a href=\"{}\">{}</a></li>\n",
+                doc_file, module_name
+            ));
+        } else {
+            index_content.push_str(&format!("- [{}]({})\n", module_name, doc_file));
+        }
+
+        println!("  {} {}", "Generated".green(), rel.display());
+    }
+
+    if format == "html" {
+        index_content.push_str("</ul>\n</body></html>");
+    }
+
+    let index_path = output_dir.join(format!("index.{}", ext));
+    fs::write(&index_path, index_content)
+        .map_err(|e| format!("failed to write index: {}", e))?;
+
+    println!(
+        "\n{} Documentation generated in {}",
+        "✓".green(),
+        output_dir.display()
+    );
+    Ok(())
+}
+
+fn collect_vais_files(dir: &Path, results: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries =
+        fs::read_dir(dir).map_err(|e| format!("cannot read '{}': {}", dir.display(), e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("failed reading directory entry: {}", e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_vais_files(&path, results)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("vais") {
+            results.push(path);
+        }
+    }
+    results.sort();
+    Ok(())
 }
 
 /// Install packages from registry

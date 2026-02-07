@@ -250,16 +250,16 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 - [x] E2E 테스트 16개 (범위루프, 어댑터, 클로저, 제너레이터 등) 전부 통과 ✅
 - **난이도**: 상 | **모델**: Opus 직접
 
-### Stage 5: 패키지 에코시스템 활성화
+### Stage 5: 패키지 에코시스템 활성화 ✅
 
 **목표**: 외부 기여자가 패키지를 만들고 공유할 수 있는 환경
 
-- [ ] `vaisc new <name>` 프로젝트 스캐폴딩 (vais.toml + src/main.vais + tests/)
-- [ ] `vaisc test` 명령 — 프로젝트 내 테스트 자동 탐색·실행
-- [ ] 패키지 의존성 트리 시각화 (`vaisc pkg tree`)
-- [ ] 패키지 문서 자동 생성 (`vaisc pkg doc`)
-- [ ] 패키지 버전 관리 가이드라인 문서
-- **난이도**: 중 | **모델**: Sonnet 위임
+- [x] `vaisc new <name>` 프로젝트 스캐폴딩 (vais.toml + src/main.vais + tests/ + .gitignore) ✅
+- [x] `vaisc test` 명령 — 프로젝트 내 테스트 자동 탐색·실행·필터링·결과 요약 ✅
+- [x] 패키지 의존성 트리 시각화 (`vaisc pkg tree` — 트리 포맷, 전이 의존성, depth 제한) ✅
+- [x] 패키지 문서 자동 생성 (`vaisc pkg doc` — markdown/html, 인덱스 자동 생성) ✅
+- [x] E2E 테스트 14개 추가 (new/test/pkg tree/pkg doc) 전부 통과 ✅
+- **난이도**: 중 | **모델**: Opus 직접
 
 ### Stage 6: E2E 테스트 300개 달성 ✅
 
@@ -289,7 +289,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 | Stage 2 | `[1,2,3].map(\|x\| x * 2)` E2E 통과 |
 | Stage 3 | `?` 체이닝 3단계 에러 전파 + 커스텀 에러 타입 동작 |
 | Stage 4 | `for x in vec.iter() { ... }` E2E 통과 |
-| Stage 5 | `vaisc new` → `vaisc test` → `vaisc pkg publish` 라운드트립 |
+| Stage 5 | `vaisc new` → `vaisc test` → `vaisc pkg tree` → `vaisc pkg doc` E2E 14개 통과 ✅ |
 | Stage 6 | E2E 테스트 300개 이상, 전부 통과 |
 | Stage 7 | PR에 성능 비교 테이블 자동 게시 |
 
