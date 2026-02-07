@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770458817851,
+  "lastUpdate": 1770460959855,
   "repoUrl": "https://github.com/vaislang/vais",
   "entries": {
     "Benchmark": [
@@ -7895,6 +7895,174 @@ window.BENCHMARK_DATA = {
             "name": "lexer_scaling/tokenize/5000_funcs",
             "value": 1823816,
             "range": "± 13775",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "committer": {
+            "email": "sswoowkd@gmail.com",
+            "name": "sswoo",
+            "username": "sswoo88"
+          },
+          "distinct": true,
+          "id": "fc94b9a4963085a2e91a855a4f1640f5c9222a8f",
+          "message": "fix: resolve 5 compiler bugs + update playground examples and docs\n\nParser fixes:\n- Fix tilde-mut (~) prefix not recognized in is_let_stmt()\n- Fix cross-line postfix parsing: prevent `(` on new line from being\n  parsed as function call (fixes consecutive tuple destructuring)\n- Fix cross-line binary ops: prevent `-` on new line from being parsed\n  as subtraction (fixes `-1` after puts() in match arms)\n\nType system fix:\n- Fix E022 false positive on enum match scrutinee — remove duplicate\n  move check that incorrectly flagged single-use enum params\n\nOther:\n- Add Token::Yield to selfhost lexer test mapping\n- Fix clippy: map_or → is_none_or\n- Fix playground examples: type-infer-params uses explicit types\n- Update LANGUAGE_SPEC.md: document yield, iterators, error handling\n  (?/! operators), derive(Error), package ecosystem, enum impl blocks\n\nAll 301 E2E tests pass. 114 selfhost lexer tests pass. 0 clippy warnings.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-02-07T19:35:45+09:00",
+          "tree_id": "b9027b656cdabb20df8e49efdef7baa14a6561e9",
+          "url": "https://github.com/vaislang/vais/commit/fc94b9a4963085a2e91a855a4f1640f5c9222a8f"
+        },
+        "date": 1770460959171,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "lexer/tokenize/fibonacci",
+            "value": 1996,
+            "range": "± 16",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/sort",
+            "value": 4987,
+            "range": "± 222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/struct_heavy",
+            "value": 5870,
+            "range": "± 116",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer/tokenize/complex",
+            "value": 10178,
+            "range": "± 53",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/fibonacci",
+            "value": 16798,
+            "range": "± 56",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/sort",
+            "value": 32585,
+            "range": "± 126",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/struct_heavy",
+            "value": 29237,
+            "range": "± 589",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parser/parse/complex",
+            "value": 63013,
+            "range": "± 427",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/fibonacci",
+            "value": 252980,
+            "range": "± 2125",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/sort",
+            "value": 378560,
+            "range": "± 2416",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/struct_heavy",
+            "value": 107369,
+            "range": "± 578",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "type_checker/check/complex",
+            "value": 644894,
+            "range": "± 3249",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/fibonacci",
+            "value": 155911,
+            "range": "± 594",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/sort",
+            "value": 183880,
+            "range": "± 5589",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/struct_heavy",
+            "value": 193510,
+            "range": "± 588",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "codegen/generate/complex",
+            "value": 234508,
+            "range": "± 1407",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/fibonacci",
+            "value": 470235,
+            "range": "± 2773",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/sort",
+            "value": 654735,
+            "range": "± 3083",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/struct_heavy",
+            "value": 388634,
+            "range": "± 1855",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "full_compile/compile/complex",
+            "value": 1038021,
+            "range": "± 27289",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/100_funcs",
+            "value": 36865,
+            "range": "± 277",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/500_funcs",
+            "value": 181993,
+            "range": "± 1396",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/1000_funcs",
+            "value": 356327,
+            "range": "± 2856",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lexer_scaling/tokenize/5000_funcs",
+            "value": 1750373,
+            "range": "± 17665",
             "unit": "ns/iter"
           }
         ]
