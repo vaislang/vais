@@ -316,6 +316,11 @@ F collect_refs_expr(st: i64, expr: i64) -> i64 {
         # field0=body (block expr)
         collect_refs_expr(st, expr_get_field0(expr))
         0
+    } E I kind == EXPR_WHILE() {
+        # field0=cond, field1=body
+        collect_refs_expr(st, expr_get_field0(expr))
+        collect_refs_expr(st, expr_get_field1(expr))
+        0
     } E I kind == EXPR_BLOCK() {
         # field0=stmts_ptr, field1=stmts_count
         stmts := expr_get_field0(expr)

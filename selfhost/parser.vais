@@ -161,6 +161,7 @@ F EXPR_ASSIGN() -> i64 = 48
 F EXPR_ASSIGN_OP() -> i64 = 49
 F EXPR_LAMBDA() -> i64 = 50
 F EXPR_SPAWN() -> i64 = 51
+F EXPR_WHILE() -> i64 = 52
 
 # Type node types
 F TYPE_NAMED() -> i64 = 60
@@ -2966,23 +2967,129 @@ X Parser {
             R expr_ptr
         }
 
-        # Loop: L { ... }
+        # Loop: L { ... } (infinite) or L cond { ... } (while)
         I @.check(TOK_KW_L()) == 1 {
             @.advance()
 
+            I @.check(TOK_LBRACE()) == 1 {
+                # Infinite loop: L { ... }
+                @.advance()
+                body_stmts := @.parse_block_contents()
+                body_len := load_i64(body_stmts - 8)
+                I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+                expr_ptr := malloc(ExprNode.size())
+                store_i64(expr_ptr + 0, EXPR_LOOP())
+                store_i64(expr_ptr + 8, start)
+                store_i64(expr_ptr + 16, @.current_span_start())
+                store_i64(expr_ptr + 24, 0)  # pattern
+                store_i64(expr_ptr + 32, 0)  # iter
+                store_i64(expr_ptr + 40, body_stmts)
+                store_i64(expr_ptr + 48, body_len)
+                store_i64(expr_ptr + 56, 0)
+                store_i64(expr_ptr + 64, 0)
+                R expr_ptr
+            } E {
+                # While loop: L cond { ... }
+                cond := @.parse_expr()
+                I cond == 0 { R 0 }
+
+                I @.expect(TOK_LBRACE()) == 0 { R 0 }
+                body_stmts := @.parse_block_contents()
+                body_len := load_i64(body_stmts - 8)
+                I @.expect(TOK_RBRACE()) == 0 { R 0 }
+
+                expr_ptr := malloc(ExprNode.size())
+                store_i64(expr_ptr + 0, EXPR_WHILE())
+                store_i64(expr_ptr + 8, start)
+                store_i64(expr_ptr + 16, @.current_span_start())
+                store_i64(expr_ptr + 24, cond)       # field0: condition
+                store_i64(expr_ptr + 32, body_stmts) # field1: body stmts
+                store_i64(expr_ptr + 40, body_len)   # field2: body len
+                store_i64(expr_ptr + 48, 0)
+                store_i64(expr_ptr + 56, 0)
+                store_i64(expr_ptr + 64, 0)
+                R expr_ptr
+            }
+        }
+
+        # Match: M expr { pattern => body, ... }
+        I @.check(TOK_KW_M()) == 1 {
+            @.advance()
+
+            scrutinee := @.parse_expr()
+            I scrutinee == 0 { R 0 }
+
             I @.expect(TOK_LBRACE()) == 0 { R 0 }
-            body_stmts := @.parse_block_contents()
-            body_len := load_i64(body_stmts - 8)
+
+            # Parse match arms
+            arms_cap: mut i64 = 16
+            arms_buf := malloc(arms_cap * 40)  # MatchArm.size() = 40
+            arms_len: mut i64 = 0
+
+            L @.check(TOK_RBRACE()) == 0 && @.check(TOK_EOF()) == 0 {
+                arm_start := @.current_span_start()
+
+                # Parse pattern (with or-pattern support)
+                pat := @.parse_or_pattern()
+                I pat == 0 { R 0 }
+
+                # Check for guard: I condition
+                guard: mut i64 = 0
+                I @.check(TOK_KW_I()) == 1 {
+                    @.advance()
+                    guard = @.parse_expr()
+                    I guard == 0 { R 0 }
+                    0
+                } E { 0 }
+
+                # Expect =>
+                I @.expect(TOK_FAT_ARROW()) == 0 { R 0 }
+
+                # Parse body expression
+                body := @.parse_expr()
+                I body == 0 { R 0 }
+
+                arm_end := @.current_span_start()
+
+                # Store MatchArm (40 bytes)
+                I arms_len >= arms_cap {
+                    arms_cap = arms_cap * 2
+                    new_buf := malloc(arms_cap * 40)
+                    j: mut i64 = 0
+                    L j < arms_len * 40 {
+                        store_i64(new_buf + j, load_i64(arms_buf + j))
+                        j = j + 8
+                    }
+                    arms_buf = new_buf
+                    0
+                } E { 0 }
+
+                arm_offset := arms_len * 40
+                store_i64(arms_buf + arm_offset + 0, pat)       # pattern_ptr
+                store_i64(arms_buf + arm_offset + 8, guard)     # guard_ptr
+                store_i64(arms_buf + arm_offset + 16, body)     # body_ptr
+                store_i64(arms_buf + arm_offset + 24, arm_start) # span_start
+                store_i64(arms_buf + arm_offset + 32, arm_end)   # span_end
+                arms_len = arms_len + 1
+
+                # Optional comma
+                I @.check(TOK_COMMA()) == 1 {
+                    @.advance()
+                    0
+                } E { 0 }
+            }
+
             I @.expect(TOK_RBRACE()) == 0 { R 0 }
 
             expr_ptr := malloc(ExprNode.size())
-            store_i64(expr_ptr + 0, EXPR_LOOP())
+            store_i64(expr_ptr + 0, EXPR_MATCH())
             store_i64(expr_ptr + 8, start)
             store_i64(expr_ptr + 16, @.current_span_start())
-            store_i64(expr_ptr + 24, 0)  # pattern
-            store_i64(expr_ptr + 32, 0)  # iter
-            store_i64(expr_ptr + 40, body_stmts)
-            store_i64(expr_ptr + 48, body_len)
+            store_i64(expr_ptr + 24, scrutinee)   # field0: scrutinee
+            store_i64(expr_ptr + 32, arms_buf)    # field1: arms ptr
+            store_i64(expr_ptr + 40, arms_len)    # field2: arms count
+            store_i64(expr_ptr + 48, 0)
             store_i64(expr_ptr + 56, 0)
             store_i64(expr_ptr + 64, 0)
             R expr_ptr
@@ -3147,6 +3254,282 @@ X Parser {
         }
 
         @.set_error_expected(TOK_INT())
+        0
+    }
+
+    # =========== Pattern Parsing ===========
+
+    F parse_or_pattern(&self) -> i64 {
+        start := @.current_span_start()
+        first := @.parse_pattern()
+        I first == 0 { R 0 }
+
+        # Check for | to form Or pattern
+        I @.check(TOK_PIPE()) == 0 { R first }
+
+        # Collect patterns
+        pats_cap: mut i64 = 8
+        pats_buf := malloc(pats_cap * 8)
+        store_i64(pats_buf, first)
+        pats_len: mut i64 = 1
+
+        L @.check(TOK_PIPE()) == 1 {
+            @.advance()
+            pat := @.parse_pattern()
+            I pat == 0 { R 0 }
+
+            I pats_len >= pats_cap {
+                pats_cap = pats_cap * 2
+                new_buf := malloc(pats_cap * 8)
+                j: mut i64 = 0
+                L j < pats_len {
+                    store_i64(new_buf + j * 8, load_i64(pats_buf + j * 8))
+                    j = j + 1
+                }
+                pats_buf = new_buf
+                0
+            } E { 0 }
+
+            store_i64(pats_buf + pats_len * 8, pat)
+            pats_len = pats_len + 1
+        }
+
+        pat_ptr := malloc(PatternNode.size())
+        store_i64(pat_ptr + 0, PAT_OR())
+        store_i64(pat_ptr + 8, start)
+        store_i64(pat_ptr + 16, @.current_span_start())
+        store_i64(pat_ptr + 24, pats_buf)    # field0: patterns ptr
+        store_i64(pat_ptr + 32, pats_len)    # field1: patterns count
+        store_i64(pat_ptr + 40, 0)
+        store_i64(pat_ptr + 48, 0)
+        pat_ptr
+    }
+
+    F parse_pattern(&self) -> i64 {
+        start := @.current_span_start()
+        tok := @.peek()
+
+        # Wildcard: _
+        I tok.kind == TOK_IDENT() && tok.str_len == 1 && load_byte(tok.str_ptr) == 95 {
+            @.advance()
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_WILDCARD())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, 0)
+            store_i64(pat_ptr + 32, 0)
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        # Bool literals: true/false
+        I tok.kind == TOK_KW_TRUE() {
+            @.advance()
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_LITERAL())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, 1)    # true = 1
+            store_i64(pat_ptr + 32, 0)
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        I tok.kind == TOK_KW_FALSE() {
+            @.advance()
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_LITERAL())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, 0)    # false = 0
+            store_i64(pat_ptr + 32, 0)
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        # Integer literal
+        I tok.kind == TOK_INT() {
+            @.advance()
+            value := tok.value
+
+            # Check for range pattern: N..M or N..=M
+            I @.check(TOK_DOT_DOT()) == 1 || @.check(TOK_DOT_DOT_EQ()) == 1 {
+                inclusive: mut i64 = 0
+                I @.check(TOK_DOT_DOT_EQ()) == 1 { inclusive = 1; 0 } E { 0 }
+                @.advance()
+
+                end_tok := @.advance()
+                end_value := end_tok.value
+
+                # Create start pattern
+                start_pat := malloc(PatternNode.size())
+                store_i64(start_pat + 0, PAT_LITERAL())
+                store_i64(start_pat + 8, start)
+                store_i64(start_pat + 16, @.current_span_start())
+                store_i64(start_pat + 24, value)
+                store_i64(start_pat + 32, 0)
+                store_i64(start_pat + 40, 0)
+                store_i64(start_pat + 48, 0)
+
+                # Create end pattern
+                end_pat := malloc(PatternNode.size())
+                store_i64(end_pat + 0, PAT_LITERAL())
+                store_i64(end_pat + 8, start)
+                store_i64(end_pat + 16, @.current_span_start())
+                store_i64(end_pat + 24, end_value)
+                store_i64(end_pat + 32, 0)
+                store_i64(end_pat + 40, 0)
+                store_i64(end_pat + 48, 0)
+
+                pat_ptr := malloc(PatternNode.size())
+                store_i64(pat_ptr + 0, PAT_RANGE())
+                store_i64(pat_ptr + 8, start)
+                store_i64(pat_ptr + 16, @.current_span_start())
+                store_i64(pat_ptr + 24, start_pat)     # field0: start
+                store_i64(pat_ptr + 32, end_pat)       # field1: end
+                store_i64(pat_ptr + 40, inclusive)      # field2: inclusive
+                store_i64(pat_ptr + 48, 0)
+                R pat_ptr
+            }
+
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_LITERAL())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, value)
+            store_i64(pat_ptr + 32, 0)
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        # String literal
+        I tok.kind == TOK_STRING() {
+            @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_LITERAL())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, name_idx)
+            store_i64(pat_ptr + 32, 1)    # field1: 1 = string literal
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        # Tuple pattern: (a, b, c)
+        I tok.kind == TOK_LPAREN() {
+            @.advance()
+            pats_cap: mut i64 = 8
+            pats_buf := malloc(pats_cap * 8)
+            pats_len: mut i64 = 0
+
+            L @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
+                I pats_len > 0 {
+                    I @.expect(TOK_COMMA()) == 0 { R 0 }
+                    0
+                } E { 0 }
+
+                sub_pat := @.parse_pattern()
+                I sub_pat == 0 { R 0 }
+
+                I pats_len >= pats_cap {
+                    pats_cap = pats_cap * 2
+                    new_buf := malloc(pats_cap * 8)
+                    j: mut i64 = 0
+                    L j < pats_len {
+                        store_i64(new_buf + j * 8, load_i64(pats_buf + j * 8))
+                        j = j + 1
+                    }
+                    pats_buf = new_buf
+                    0
+                } E { 0 }
+
+                store_i64(pats_buf + pats_len * 8, sub_pat)
+                pats_len = pats_len + 1
+            }
+
+            I @.expect(TOK_RPAREN()) == 0 { R 0 }
+
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_TUPLE())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, pats_buf)
+            store_i64(pat_ptr + 32, pats_len)
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        # Identifier or Variant pattern
+        I tok.kind == TOK_IDENT() {
+            @.advance()
+            name_idx := @.intern_string(tok.str_ptr, tok.str_len)
+
+            # Check for variant: Name(fields...)
+            I @.check(TOK_LPAREN()) == 1 {
+                @.advance()
+                pats_cap: mut i64 = 8
+                pats_buf := malloc(pats_cap * 8)
+                pats_len: mut i64 = 0
+
+                L @.check(TOK_RPAREN()) == 0 && @.check(TOK_EOF()) == 0 {
+                    I pats_len > 0 {
+                        I @.expect(TOK_COMMA()) == 0 { R 0 }
+                        0
+                    } E { 0 }
+
+                    sub_pat := @.parse_pattern()
+                    I sub_pat == 0 { R 0 }
+
+                    I pats_len >= pats_cap {
+                        pats_cap = pats_cap * 2
+                        new_buf := malloc(pats_cap * 8)
+                        j: mut i64 = 0
+                        L j < pats_len {
+                            store_i64(new_buf + j * 8, load_i64(pats_buf + j * 8))
+                            j = j + 1
+                        }
+                        pats_buf = new_buf
+                        0
+                    } E { 0 }
+
+                    store_i64(pats_buf + pats_len * 8, sub_pat)
+                    pats_len = pats_len + 1
+                }
+
+                I @.expect(TOK_RPAREN()) == 0 { R 0 }
+
+                pat_ptr := malloc(PatternNode.size())
+                store_i64(pat_ptr + 0, PAT_VARIANT())
+                store_i64(pat_ptr + 8, start)
+                store_i64(pat_ptr + 16, @.current_span_start())
+                store_i64(pat_ptr + 24, name_idx)
+                store_i64(pat_ptr + 32, pats_buf)
+                store_i64(pat_ptr + 40, pats_len)
+                store_i64(pat_ptr + 48, 0)
+                R pat_ptr
+            }
+
+            # Simple identifier binding
+            pat_ptr := malloc(PatternNode.size())
+            store_i64(pat_ptr + 0, PAT_IDENT())
+            store_i64(pat_ptr + 8, start)
+            store_i64(pat_ptr + 16, @.current_span_start())
+            store_i64(pat_ptr + 24, name_idx)
+            store_i64(pat_ptr + 32, 0)
+            store_i64(pat_ptr + 40, 0)
+            store_i64(pat_ptr + 48, 0)
+            R pat_ptr
+        }
+
+        # Fallback: error
+        @.set_error_expected(TOK_IDENT())
         0
     }
 

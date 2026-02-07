@@ -66,10 +66,10 @@ MIR pipeline, LSP server, code formatter, and doc generator implemented.
 ## Future Work
 
 ### Language Extensions
-- [ ] While loop sugar
-- [ ] Negative number literals in lexer
-- [ ] Pattern matching enhancements (wildcard, variable binding, guards)
-- [ ] Option<T> / Result<T, E> support
+- [x] While loop sugar (`L cond { body }` syntax)
+- [x] Negative number literals in lexer (UnaryNeg + IntLiteral — standard approach)
+- [x] Pattern matching enhancements (wildcard, variable binding, guards, or-patterns, range)
+- [x] Option<T> / Result<T, E> support (option.vais — tag-value pair helpers)
 - [ ] Pointer types (*T), references (&T, &mut T)
 - [ ] Defer statement
 

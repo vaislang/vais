@@ -146,6 +146,7 @@ F EXPR_STRUCT_LIT() -> i64 = 40
 F EXPR_BLOCK() -> i64 = 42
 F EXPR_ASSIGN() -> i64 = 48
 F EXPR_MATCH() -> i64 = 49
+F EXPR_WHILE() -> i64 = 52
 
 # Pattern types
 F PAT_WILDCARD() -> i64 = 80

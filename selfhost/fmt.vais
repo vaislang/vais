@@ -39,6 +39,7 @@ F EXPR_DEREF() -> i64 = 47
 F EXPR_ASSIGN_OP() -> i64 = 49
 F EXPR_LAMBDA() -> i64 = 50
 F EXPR_SPAWN() -> i64 = 51
+F EXPR_WHILE() -> i64 = 52
 
 # Type node constants
 F TYPE_NAMED() -> i64 = 60
@@ -406,6 +407,8 @@ F fmt_expr(f: i64, expr_ptr: i64) -> i64 {
         fmt_if_expr(f, expr_ptr)
     } E I kind == EXPR_LOOP() {
         fmt_loop_expr(f, expr_ptr)
+    } E I kind == EXPR_WHILE() {
+        fmt_while_expr(f, expr_ptr)
     } E I kind == EXPR_BLOCK() {
         stmts_ptr := load_i64(expr_ptr + 24)
         stmts_len := load_i64(expr_ptr + 32)
@@ -583,18 +586,25 @@ F fmt_assign_op(f: i64, op: i64) -> i64 {
 # ============================================================================
 
 F fmt_match_arms(f: i64, arms_ptr: i64, arms_len: i64) -> i64 {
-    # Match arm layout: pattern_ptr(8) + body_ptr(8) + guard_ptr(8) + span(16) = 40 bytes
+    # Match arm layout: pattern_ptr(+0) + guard_ptr(+8) + body_ptr(+16) + span(+24,+32) = 40 bytes
     i := mut 0
     L {
         I i >= arms_len { B }
         arm_ptr := arms_ptr + i * 40
         pattern := load_i64(arm_ptr + 0)
-        body := load_i64(arm_ptr + 8)
+        guard := load_i64(arm_ptr + 8)
+        body := load_i64(arm_ptr + 16)
 
         fmt_indent(f)
         fmt_pattern(f, pattern)
+        I guard != 0 {
+            fmt_write(f, " I ")
+            fmt_expr(f, guard)
+            0
+        } E { 0 }
         fmt_write(f, " => ")
         fmt_expr(f, body)
+        I i + 1 < arms_len { fmt_write(f, ",") } E { 0 }
         fmt_newline(f)
         i = i + 1
     }
@@ -741,6 +751,27 @@ F fmt_loop_expr(f: i64, expr_ptr: i64) -> i64 {
         0
     } E { 0 }
 
+    fmt_write(f, " {")
+    fmt_newline(f)
+    fmt_indent_inc(f)
+    fmt_stmts(f, body_stmts, body_len)
+    fmt_indent_dec(f)
+    fmt_indent(f)
+    fmt_write(f, "}")
+    0
+}
+
+# ============================================================================
+# While expression formatting
+# ============================================================================
+
+F fmt_while_expr(f: i64, expr_ptr: i64) -> i64 {
+    cond := load_i64(expr_ptr + 24)
+    body_stmts := load_i64(expr_ptr + 32)
+    body_len := load_i64(expr_ptr + 40)
+
+    fmt_write(f, "L ")
+    fmt_expr(f, cond)
     fmt_write(f, " {")
     fmt_newline(f)
     fmt_indent_inc(f)

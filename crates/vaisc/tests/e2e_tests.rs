@@ -5427,3 +5427,111 @@ F main() -> i64 {
 "#;
     assert_exit_code(source, 0);
 }
+
+#[test]
+fn e2e_while_loop() {
+    let source = r#"
+F main() -> i64 {
+    i := mut 0
+    total := mut 0
+    L i < 5 {
+        total = total + i
+        i = i + 1
+    }
+    total - 10
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_while_loop_nested() {
+    let source = r#"
+F main() -> i64 {
+    i := mut 0
+    total := mut 0
+    L i < 3 {
+        j := mut 0
+        L j < 3 {
+            total = total + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    total - 9
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_while_loop_with_break() {
+    let source = r#"
+F main() -> i64 {
+    i := mut 0
+    L i < 100 {
+        I i == 5 { B }
+        i = i + 1
+    }
+    i - 5
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_match_with_wildcard() {
+    let source = r#"
+F main() -> i64 {
+    x := 42
+    M x {
+        1 => 10,
+        2 => 20,
+        _ => 0,
+    }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_match_with_binding() {
+    let source = r#"
+F main() -> i64 {
+    x := 5
+    M x {
+        0 => 99,
+        n => n - 5,
+    }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_match_with_guard() {
+    let source = r#"
+F main() -> i64 {
+    x := 15
+    M x {
+        n I n > 10 => n - 15,
+        n => n,
+    }
+}
+"#;
+    assert_exit_code(source, 0);
+}
+
+#[test]
+fn e2e_match_or_pattern() {
+    let source = r#"
+F main() -> i64 {
+    x := 2
+    M x {
+        1 | 2 | 3 => 0,
+        _ => 99,
+    }
+}
+"#;
+    assert_exit_code(source, 0);
+}

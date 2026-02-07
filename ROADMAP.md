@@ -305,7 +305,7 @@ community/         # 브랜드/홍보/커뮤니티 자료 ✅
 
 ## 🚀 Phase 30: 성능 최적화 - C/Rust급 실행 속도 달성
 
-> **상태**: 🔄 진행 중 (Stage 1-3 완료 - inkwell 기본 백엔드 + TCO + 인라이닝 & PGO, E2E 210/210 통과)
+> **상태**: ✅ 완료 (Stage 1-3 완료 - inkwell 기본 백엔드 + TCO + 인라이닝 & PGO, E2E 210/210 통과)
 > **목표**: C 대비 실행 속도 갭 10-20% → 5% 이내
 > **핵심 지표**: fibonacci(40), matrix_mul, sort 벤치마크에서 C -O2 대비 비교
 
@@ -1525,7 +1525,7 @@ error: expected i64, found &i64
 
 **목표**: 모든 Vais 구문을 LLVM IR로 변환
 
-- [ ] **Control Flow 완전 구현**
+- [x] **Control Flow 완전 구현**
   - [x] Loop with break/continue labels (LoopContext + push_loop/pop_loop 구현 완료) ✅
   - [x] Match expression codegen (패턴 매칭 IR 생성: wildcard/ident/literal/variant + phi 병합) ✅ 2026-02-06
   - [x] Ternary expression codegen (cond ? then : else → br + phi) ✅ 2026-02-06
@@ -1690,13 +1690,13 @@ error: expected i64, found &i64
   - **JSON 파서**: 완전한 JSON 파서/빌더 (문자열, 숫자, 배열, 오브젝트, null, bool)
   - **심볼 테이블**: AST 재귀 순회, 정의/참조 수집, 위치 변환 (offset↔line:col)
   - **15 빌트인 함수** hover 정보 포함 (puts, malloc, store_i64 등)
-- [ ] **Formatter (Vais 버전)**
-  - [ ] AST 기반 코드 포매팅
-  - [ ] 설정 가능한 스타일
-- [ ] **Doc Generator (Vais 버전)**
-  - [ ] 문서 주석 파싱
-  - [ ] HTML/Markdown 출력
-- **예상 작업량**: 3,000+ LOC (선택 사항)
+- [x] **Formatter (Vais 버전)** ✅ 2026-02-07
+  - [x] AST 기반 코드 포매팅 (fmt.vais, 1,289 LOC)
+  - [x] 설정 가능한 스타일 (--check, --write 모드)
+- [x] **Doc Generator (Vais 버전)** ✅ 2026-02-07
+  - [x] 문서 주석 파싱 (doc_gen.vais, 1,046 LOC)
+  - [x] Markdown 출력 (signatures, field tables, doc comments)
+- **실제 작업량**: 2,711 LOC (fmt: 1,475 + doc_gen: 1,236)
 - **의존성**: Stage 6 완료 후 시작
 - **파일**: `selfhost/lsp/`, `selfhost/fmt/`, `selfhost/doc/` (신규)
 

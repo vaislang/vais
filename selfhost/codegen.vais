@@ -2280,6 +2280,10 @@ X CodeGenerator {
         E I kind == 31 {
             @.generate_loop(expr_ptr)
         }
+        # EXPR_WHILE = 52
+        E I kind == 52 {
+            @.generate_while(expr_ptr)
+        }
         # EXPR_CALL = 33
         E I kind == 33 {
             @.generate_call(expr_ptr)
@@ -2683,6 +2687,65 @@ X CodeGenerator {
         @.emit_cstr("\n")
 
         # End
+        @.emit_cstr("end")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+
+        # Pop loop context
+        @.pop_loop()
+
+        # Return unit
+        result := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(result)
+        @.emit_cstr(" = add i64 0, 0\n")
+        result
+    }
+
+    F generate_while(&self, expr_ptr: i64) -> i64 {
+        cond_ptr := load_i64(expr_ptr + 24)   # field0: condition
+        body_stmts := load_i64(expr_ptr + 32) # field1: body stmts
+        body_len := load_i64(expr_ptr + 40)   # field2: body len
+
+        label_id := @.fresh_label()
+
+        # Push loop context (continue → cond, break → end)
+        @.push_loop(label_id, 0, label_id, 0)
+
+        # Jump to condition check
+        @.emit_cstr("  br label %while_cond")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Condition block
+        @.emit_cstr("while_cond")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        cond_reg := @.generate_expr(cond_ptr)
+        cond_bool := @.fresh_reg()
+        @.emit_cstr("  ")
+        @.emit_reg(cond_bool)
+        @.emit_cstr(" = icmp ne i64 ")
+        @.emit_reg(cond_reg)
+        @.emit_cstr(", 0\n")
+        @.emit_cstr("  br i1 ")
+        @.emit_reg(cond_bool)
+        @.emit_cstr(", label %while_body")
+        @.emit_i64(label_id)
+        @.emit_cstr(", label %end")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # Body block
+        @.emit_cstr("while_body")
+        @.emit_i64(label_id)
+        @.emit_cstr(":\n")
+        @.generate_stmts(body_stmts, body_len)
+        @.emit_cstr("  br label %while_cond")
+        @.emit_i64(label_id)
+        @.emit_cstr("\n")
+
+        # End block
         @.emit_cstr("end")
         @.emit_i64(label_id)
         @.emit_cstr(":\n")
@@ -3781,6 +3844,7 @@ X CodeGenerator {
         L { I i >= arms_len { B }
             arm_ptr := arms_ptr + i * 40  # MatchArm.size() = 40
             pattern_ptr := load_i64(arm_ptr)
+            guard_ptr := load_i64(arm_ptr + 8)
             body_ptr := load_i64(arm_ptr + 16)
 
             arm_label := @.fresh_label()
@@ -3854,6 +3918,102 @@ X CodeGenerator {
                 @.emit_i64(next_label)
                 @.emit_cstr("\n")
             }
+            # PAT_RANGE = 86
+            E I pat_kind == 86 {
+                range_start_pat := load_i64(pattern_ptr + 24)
+                range_end_pat := load_i64(pattern_ptr + 32)
+                range_inclusive := load_i64(pattern_ptr + 40)
+                start_val := load_i64(range_start_pat + 24)
+                end_val := load_i64(range_end_pat + 24)
+
+                # scrutinee >= start
+                ge_reg := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(ge_reg)
+                @.emit_cstr(" = icmp sge i64 ")
+                @.emit_reg(scrutinee_reg)
+                @.emit_cstr(", ")
+                @.emit_i64(start_val)
+                @.emit_cstr("\n")
+
+                # scrutinee <= end (inclusive) or scrutinee < end (exclusive)
+                le_reg := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(le_reg)
+                I range_inclusive == 1 {
+                    @.emit_cstr(" = icmp sle i64 ")
+                } E {
+                    @.emit_cstr(" = icmp slt i64 ")
+                }
+                @.emit_reg(scrutinee_reg)
+                @.emit_cstr(", ")
+                @.emit_i64(end_val)
+                @.emit_cstr("\n")
+
+                # Both conditions must be true
+                and_reg := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(and_reg)
+                @.emit_cstr(" = and i1 ")
+                @.emit_reg(ge_reg)
+                @.emit_cstr(", ")
+                @.emit_reg(le_reg)
+                @.emit_cstr("\n")
+
+                @.emit_cstr("  br i1 ")
+                @.emit_reg(and_reg)
+                @.emit_cstr(", label %arm")
+                @.emit_i64(arm_label)
+                @.emit_cstr(", label %next")
+                @.emit_i64(next_label)
+                @.emit_cstr("\n")
+            }
+            # PAT_OR = 87
+            E I pat_kind == 87 {
+                or_pats_ptr := load_i64(pattern_ptr + 24)
+                or_pats_len := load_i64(pattern_ptr + 32)
+
+                # Try each sub-pattern; if any matches, go to arm
+                k: mut i64 = 0
+                L { I k >= or_pats_len { B }
+                    sub_pat := load_i64(or_pats_ptr + k * 8)
+                    sub_kind := load_i64(sub_pat)
+                    or_next := I k + 1 < or_pats_len { @.fresh_label() } E { next_label }
+
+                    I sub_kind == 82 {
+                        # Literal sub-pattern
+                        sub_val := load_i64(sub_pat + 24)
+                        cmp_or := @.fresh_reg()
+                        @.emit_cstr("  ")
+                        @.emit_reg(cmp_or)
+                        @.emit_cstr(" = icmp eq i64 ")
+                        @.emit_reg(scrutinee_reg)
+                        @.emit_cstr(", ")
+                        @.emit_i64(sub_val)
+                        @.emit_cstr("\n")
+                        @.emit_cstr("  br i1 ")
+                        @.emit_reg(cmp_or)
+                        @.emit_cstr(", label %arm")
+                        @.emit_i64(arm_label)
+                        @.emit_cstr(", label %or_next")
+                        @.emit_i64(or_next)
+                        @.emit_cstr("\n")
+                        I k + 1 < or_pats_len {
+                            @.emit_cstr("or_next")
+                            @.emit_i64(or_next)
+                            @.emit_cstr(":\n")
+                        } E { 0 }
+                    } E {
+                        # Wildcard/ident in or-pattern: always matches
+                        @.emit_cstr("  br label %arm")
+                        @.emit_i64(arm_label)
+                        @.emit_cstr("\n")
+                        0
+                    }
+                    k = k + 1
+                }
+                0
+            }
             E {
                 # Other patterns: default to always-match
                 @.emit_cstr("  br label %arm")
@@ -3865,6 +4025,30 @@ X CodeGenerator {
             @.emit_cstr("arm")
             @.emit_i64(arm_label)
             @.emit_cstr(":\n")
+
+            # Guard check: if guard fails, jump to next arm
+            I guard_ptr != 0 {
+                guard_result := @.generate_expr(guard_ptr)
+                guard_cmp := @.fresh_reg()
+                @.emit_cstr("  ")
+                @.emit_reg(guard_cmp)
+                @.emit_cstr(" = icmp ne i64 ")
+                @.emit_reg(guard_result)
+                @.emit_cstr(", 0\n")
+                guard_pass_label := @.fresh_label()
+                @.emit_cstr("  br i1 ")
+                @.emit_reg(guard_cmp)
+                @.emit_cstr(", label %guard_pass")
+                @.emit_i64(guard_pass_label)
+                @.emit_cstr(", label %next")
+                @.emit_i64(next_label)
+                @.emit_cstr("\n")
+                @.emit_cstr("guard_pass")
+                @.emit_i64(guard_pass_label)
+                @.emit_cstr(":\n")
+                0
+            } E { 0 }
+
             arm_result := @.generate_expr(body_ptr)
 
             # Store result for phi
@@ -3875,8 +4059,8 @@ X CodeGenerator {
             @.emit_i64(merge_label)
             @.emit_cstr("\n")
 
-            # Next label (for non-wildcard patterns)
-            I i + 1 < arms_len && pat_kind != 80 && pat_kind != 81 {
+            # Next label (for non-wildcard patterns, or patterns with guards)
+            I i + 1 < arms_len && (pat_kind != 80 && pat_kind != 81 || guard_ptr != 0) {
                 @.emit_cstr("next")
                 @.emit_i64(next_label)
                 @.emit_cstr(":\n")

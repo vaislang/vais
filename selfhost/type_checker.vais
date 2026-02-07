@@ -3880,6 +3880,26 @@ X TypeChecker {
                 store_i64(type_ptr + 24, ty.field2)
                 type_ptr
             }
+            # EXPR_WHILE = 52
+            E I kind == 52 {
+                cond_ptr := load_i64(expr_ptr + 24)   # field0: condition
+                body_stmts := load_i64(expr_ptr + 32) # field1: body stmts
+                body_len := load_i64(expr_ptr + 40)   # field2: body len
+
+                @.check_expr(cond_ptr)
+
+                @.push_scope()
+                @.check_stmts(body_stmts, body_len)
+                @.pop_scope()
+
+                type_ptr := malloc(ResolvedType.size())
+                ty := ResolvedType.unit_type()
+                store_i64(type_ptr, ty.kind)
+                store_i64(type_ptr + 8, ty.field0)
+                store_i64(type_ptr + 16, ty.field1)
+                store_i64(type_ptr + 24, ty.field2)
+                type_ptr
+            }
             # EXPR_BLOCK = 42
             E I kind == 42 {
                 stmts_ptr := load_i64(expr_ptr + 24)  # field0
@@ -4115,11 +4135,31 @@ X TypeChecker {
                 result_type: mut i64 = 0
                 i: mut i64 = 0
                 L { I i >= arms_len { B }
-                    arm_ptr := arms_ptr + i * 32  # MatchArm size estimate
-                    # arm layout: pattern_ptr, guard_ptr, body_ptr, ...
+                    arm_ptr := arms_ptr + i * 40  # MatchArm.size() = 40
+                    # arm layout: pattern_ptr(+0), guard_ptr(+8), body_ptr(+16)
+                    pattern_ptr := load_i64(arm_ptr)
+                    guard_ptr := load_i64(arm_ptr + 8)
                     body_ptr := load_i64(arm_ptr + 16)
 
                     @.push_scope()
+
+                    # Register pattern bindings (PAT_IDENT)
+                    I pattern_ptr != 0 {
+                        pat_kind := load_i64(pattern_ptr)
+                        I pat_kind == 81 {  # PAT_IDENT
+                            bind_name_idx := load_i64(pattern_ptr + 24)
+                            @.add_var(bind_name_idx, match_ty, 0)
+                            0
+                        } E { 0 }
+                        0
+                    } E { 0 }
+
+                    # Check guard if present
+                    I guard_ptr != 0 {
+                        @.check_expr(guard_ptr)
+                        0
+                    } E { 0 }
+
                     arm_ty := @.check_expr(body_ptr)
                     @.pop_scope()
 

@@ -524,13 +524,29 @@ F parser_parse_primary(p: i64) -> i64 {
     } E I kind == TOK_KW_L() {
         parser_advance(p)  # consume L
 
-        I parser_expect(p, TOK_LBRACE()) == 0 { R 0 }
-        body := parser_parse_block_contents(p)
-        I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
+        I parser_check(p, TOK_LBRACE()) == 1 {
+            # Infinite loop: L { ... }
+            parser_advance(p)  # consume {
+            body := parser_parse_block_contents(p)
+            I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
 
-        e := expr_new(EXPR_LOOP())
-        expr_set_field0(e, body)
-        e
+            e := expr_new(EXPR_LOOP())
+            expr_set_field0(e, body)
+            e
+        } E {
+            # While loop: L cond { ... }
+            cond := parser_parse_expr(p)
+            I cond == 0 { R 0 }
+
+            I parser_expect(p, TOK_LBRACE()) == 0 { R 0 }
+            body := parser_parse_block_contents(p)
+            I parser_expect(p, TOK_RBRACE()) == 0 { R 0 }
+
+            e := expr_new(EXPR_WHILE())
+            expr_set_field0(e, cond)
+            expr_set_field1(e, body)
+            e
+        }
     } E I kind == TOK_LBRACKET() {
         # Array literal: [expr1, expr2, ...]
         parser_advance(p)  # consume [

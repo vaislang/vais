@@ -108,6 +108,7 @@ F EXPR_ASSIGN() -> i64 = 48
 F EXPR_ASSIGN_OP() -> i64 = 49
 F EXPR_LAMBDA() -> i64 = 50
 F EXPR_SPAWN() -> i64 = 51
+F EXPR_WHILE() -> i64 = 52
 
 # Type node types
 F TYPE_NAMED() -> i64 = 60
@@ -358,6 +359,11 @@ X ExprNode {
     F loop_expr(pattern: i64, iter: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
         kind: EXPR_LOOP(), span_start: start, span_end: end,
         field0: pattern, field1: iter, field2: body, field3: body_len, field4: 0, field5: 0
+    }
+
+    F while_expr(cond: i64, body: i64, body_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
+        kind: EXPR_WHILE(), span_start: start, span_end: end,
+        field0: cond, field1: body, field2: body_len, field3: 0, field4: 0, field5: 0
     }
 
     F match_expr(expr: i64, arms: i64, arms_len: i64, start: i64, end: i64) -> ExprNode = ExprNode {
@@ -1212,6 +1218,7 @@ F print_expr_kind(kind: i64) -> i64 {
     E I kind == EXPR_TERNARY() { puts("TERNARY") }
     E I kind == EXPR_IF() { puts("IF") }
     E I kind == EXPR_LOOP() { puts("LOOP") }
+    E I kind == EXPR_WHILE() { puts("WHILE") }
     E I kind == EXPR_MATCH() { puts("MATCH") }
     E I kind == EXPR_CALL() { puts("CALL") }
     E I kind == EXPR_METHOD_CALL() { puts("METHOD_CALL") }

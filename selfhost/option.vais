@@ -1,0 +1,144 @@
+# ============================================================================
+# Option<T> / Result<T, E> Support for Selfhost
+# ============================================================================
+# Representation: malloc'd 2-word pair [tag: i64, value: i64]
+#   Option: tag=0 → Some(value), tag=1 → None
+#   Result: tag=0 → Ok(value),   tag=1 → Err(error)
+# ============================================================================
+
+# ============================================================================
+# Option Constructors
+# ============================================================================
+
+F opt_some(value: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, 0)      # tag = 0 (Some)
+    store_i64(ptr + 8, value)
+    ptr
+}
+
+F opt_none() -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, 1)      # tag = 1 (None)
+    store_i64(ptr + 8, 0)
+    ptr
+}
+
+# ============================================================================
+# Option Queries
+# ============================================================================
+
+F opt_is_some(opt: i64) -> i64 {
+    tag := load_i64(opt)
+    I tag == 0 { 1 } E { 0 }
+}
+
+F opt_is_none(opt: i64) -> i64 {
+    tag := load_i64(opt)
+    I tag == 1 { 1 } E { 0 }
+}
+
+# ============================================================================
+# Option Extractors
+# ============================================================================
+
+# Unwrap: panics if None (returns 0 for now)
+F opt_unwrap(opt: i64) -> i64 {
+    tag := load_i64(opt)
+    I tag == 0 {
+        load_i64(opt + 8)
+    } E {
+        puts("panic: unwrap on None")
+        0
+    }
+}
+
+# Unwrap with default
+F opt_unwrap_or(opt: i64, default: i64) -> i64 {
+    tag := load_i64(opt)
+    I tag == 0 { load_i64(opt + 8) } E { default }
+}
+
+# Map: apply function to inner value (if Some)
+# Returns new Option
+F opt_map(opt: i64, func: i64) -> i64 {
+    tag := load_i64(opt)
+    I tag == 0 {
+        value := load_i64(opt + 8)
+        # Note: func is a function pointer, but selfhost can't call them dynamically
+        # This is a placeholder - use opt_map manually with if-else
+        opt_some(value)
+    } E {
+        opt_none()
+    }
+}
+
+# ============================================================================
+# Result Constructors
+# ============================================================================
+
+F res_ok(value: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, 0)      # tag = 0 (Ok)
+    store_i64(ptr + 8, value)
+    ptr
+}
+
+F res_err(error: i64) -> i64 {
+    ptr := malloc(16)
+    store_i64(ptr, 1)      # tag = 1 (Err)
+    store_i64(ptr + 8, error)
+    ptr
+}
+
+# ============================================================================
+# Result Queries
+# ============================================================================
+
+F res_is_ok(res: i64) -> i64 {
+    tag := load_i64(res)
+    I tag == 0 { 1 } E { 0 }
+}
+
+F res_is_err(res: i64) -> i64 {
+    tag := load_i64(res)
+    I tag == 1 { 1 } E { 0 }
+}
+
+# ============================================================================
+# Result Extractors
+# ============================================================================
+
+# Unwrap Ok value: panics if Err
+F res_unwrap(res: i64) -> i64 {
+    tag := load_i64(res)
+    I tag == 0 {
+        load_i64(res + 8)
+    } E {
+        puts("panic: unwrap on Err")
+        0
+    }
+}
+
+# Unwrap Err value: panics if Ok
+F res_unwrap_err(res: i64) -> i64 {
+    tag := load_i64(res)
+    I tag == 1 {
+        load_i64(res + 8)
+    } E {
+        puts("panic: unwrap_err on Ok")
+        0
+    }
+}
+
+# Unwrap with default
+F res_unwrap_or(res: i64, default: i64) -> i64 {
+    tag := load_i64(res)
+    I tag == 0 { load_i64(res + 8) } E { default }
+}
+
+# Get tag (for match-style usage)
+F opt_tag(opt: i64) -> i64 = load_i64(opt)
+F opt_value(opt: i64) -> i64 = load_i64(opt + 8)
+F res_tag(res: i64) -> i64 = load_i64(res)
+F res_value(res: i64) -> i64 = load_i64(res + 8)

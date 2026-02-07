@@ -756,6 +756,82 @@ F cg_gen_loop_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64)
     result_reg
 }
 
+F cg_gen_while_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
+    cond_expr := expr_get_field0(expr)
+    body := expr_get_field1(expr)
+
+    loop_id := cg_fresh_label(cg)
+
+    prev_header := cg_get_loop_header(cg)
+    prev_end := cg_get_loop_end(cg)
+    prev_terminated := cg_get_terminated(cg)
+
+    cg_set_loop_labels(cg, loop_id, loop_id)
+    cg_clear_terminated(cg)
+
+    # Jump to condition check
+    cg_emit(cg, "  br label %while_cond")
+    cg_emit_i64(cg, loop_id)
+    cg_emit_newline(cg)
+
+    # Condition block
+    cg_emit(cg, "while_cond")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    cond_reg := cg_gen_expr(cg, cond_expr, param_name_ptr, param_name_len)
+
+    cond_bool := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, cond_bool)
+    cg_emit(cg, " = icmp ne i64 ")
+    cg_emit_operand(cg, cond_reg, param_name_ptr, param_name_len)
+    cg_emit(cg, ", 0")
+    cg_emit_newline(cg)
+
+    cg_emit(cg, "  br i1 %")
+    cg_emit_i64(cg, cond_bool)
+    cg_emit(cg, ", label %while_body")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ", label %loop_end")
+    cg_emit_i64(cg, loop_id)
+    cg_emit_newline(cg)
+
+    # Body block
+    cg_emit(cg, "while_body")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+
+    body_reg := cg_gen_expr(cg, body, param_name_ptr, param_name_len)
+
+    body_terminated := cg_get_terminated(cg)
+    I body_terminated == 0 {
+        cg_emit(cg, "  br label %while_cond")
+        cg_emit_i64(cg, loop_id)
+        cg_emit_newline(cg)
+        0
+    } E { 0 }
+
+    # End block
+    cg_emit(cg, "loop_end")
+    cg_emit_i64(cg, loop_id)
+    cg_emit(cg, ":")
+    cg_emit_newline(cg)
+    cg_set_current_block(cg, BLOCK_LOOP_END(), loop_id)
+
+    cg_set_loop_labels(cg, prev_header, prev_end)
+    cg_set_terminated(cg, prev_terminated)
+
+    result_reg := cg_fresh_reg(cg)
+    cg_emit(cg, "  %")
+    cg_emit_i64(cg, result_reg)
+    cg_emit(cg, " = add i64 0, 0")
+    cg_emit_newline(cg)
+    result_reg
+}
+
 F cg_gen_if_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i64 {
     cond := expr_get_field0(expr)
     then_expr := expr_get_field1(expr)
@@ -1117,6 +1193,9 @@ F cg_gen_expr(cg: i64, expr: i64, param_name_ptr: i64, param_name_len: i64) -> i
         0
     } E I kind == EXPR_LOOP() {
         result = cg_gen_loop_expr(cg, expr, param_name_ptr, param_name_len)
+        0
+    } E I kind == EXPR_WHILE() {
+        result = cg_gen_while_expr(cg, expr, param_name_ptr, param_name_len)
         0
     } E I kind == EXPR_ASSIGN() {
         target := expr_get_field0(expr)

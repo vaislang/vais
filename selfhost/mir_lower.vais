@@ -109,6 +109,7 @@ F AST_EXPR_ASSIGN() -> i64 = 48
 F AST_EXPR_ASSIGN_OP() -> i64 = 49
 F AST_EXPR_LAMBDA() -> i64 = 50
 F AST_EXPR_SPAWN() -> i64 = 51
+F AST_EXPR_WHILE() -> i64 = 52
 
 F AST_STMT_LET() -> i64 = 10
 F AST_STMT_EXPR() -> i64 = 11
@@ -354,6 +355,9 @@ F lower_expr(ctx: i64, expr_ptr: i64) -> i64 {
     }
     E I kind == AST_EXPR_LOOP() {
         R lower_expr_loop(ctx, expr_ptr)
+    }
+    E I kind == AST_EXPR_WHILE() {
+        R lower_expr_while(ctx, expr_ptr)
     }
     E I kind == AST_EXPR_MATCH() {
         R lower_expr_match(ctx, expr_ptr)
@@ -710,6 +714,50 @@ F lower_expr_loop(ctx: i64, expr_ptr: i64) -> i64 {
     # Condition block → unconditional jump to body (infinite loop)
     mir_builder_switch_block(b, bb_cond)
     mir_builder_goto(b, bb_body)
+
+    # Body block
+    mir_builder_switch_block(b, bb_body)
+    lower_stmts(ctx, body_stmts_ptr, body_len)
+    mir_builder_goto(b, bb_cond)
+
+    # Pop loop context
+    loop_stack_pop(ctx_loop_stk(ctx))
+
+    # End block
+    mir_builder_switch_block(b, bb_end)
+    R result
+}
+
+# ============================================================================
+# While Expression
+# ============================================================================
+# WHILE: field0=cond, field1=body_stmts, field2=body_len
+
+F lower_expr_while(ctx: i64, expr_ptr: i64) -> i64 {
+    cond_ptr := load_i64(expr_ptr + 24)
+    body_stmts_ptr := load_i64(expr_ptr + 32)
+    body_len := load_i64(expr_ptr + 40)
+
+    b := ctx_builder(ctx)
+
+    # Create blocks
+    bb_cond := mir_builder_new_block(b)
+    bb_body := mir_builder_new_block(b)
+    bb_end := mir_builder_new_block(b)
+
+    result := mir_builder_new_local(b, mir_type_prim(MIR_TY_I64()), 0)
+    mir_builder_assign_const_int(b, result, 0)
+
+    # Push loop context (break→bb_end, continue→bb_cond)
+    loop_stack_push(ctx_loop_stk(ctx), bb_end, bb_cond, result)
+
+    # Jump to condition block
+    mir_builder_goto(b, bb_cond)
+
+    # Condition block → evaluate condition and branch
+    mir_builder_switch_block(b, bb_cond)
+    cond_val := lower_expr(ctx, cond_ptr)
+    mir_builder_cond_br(b, cond_val, bb_body, bb_end)
 
     # Body block
     mir_builder_switch_block(b, bb_body)
