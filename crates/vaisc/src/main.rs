@@ -14,7 +14,7 @@ mod repl;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
@@ -606,10 +606,85 @@ fn main() {
             parallel,
             inkwell: _build_inkwell,
         }) => {
+            // Resolve directory input to entry point file
+            let (resolved_input, dir_dep_paths) = if input.is_dir() {
+                let dir = &input;
+                // Look for entry point
+                let entry = if dir.join("main.vais").exists() {
+                    dir.join("main.vais")
+                } else if dir.join("src").join("main.vais").exists() {
+                    dir.join("src").join("main.vais")
+                } else if dir.join("lib.vais").exists() {
+                    dir.join("lib.vais")
+                } else if dir.join("src").join("lib.vais").exists() {
+                    dir.join("src").join("lib.vais")
+                } else {
+                    let err_msg = format!(
+                        "no entry point found in '{}': expected main.vais or lib.vais in directory or src/ subdirectory",
+                        dir.display()
+                    );
+                    eprintln!("error: {}", err_msg);
+                    exit(1);
+                };
+
+                // Collect search paths: the directory itself + src/ subdirectory
+                let mut dep_paths = Vec::new();
+                if dir.join("src").exists() {
+                    dep_paths.push(dir.join("src"));
+                }
+                dep_paths.push(dir.to_path_buf());
+
+                // If vais.toml exists, resolve package dependencies
+                if let Some(pkg_dir) = package::find_manifest(dir) {
+                    if let Ok(manifest) = package::load_manifest(&pkg_dir) {
+                        let cache_root = package::default_registry_cache_root();
+                        if let Ok(deps) = package::resolve_all_dependencies(
+                            &manifest,
+                            &pkg_dir,
+                            cache_root.as_deref(),
+                        ) {
+                            for dep in &deps {
+                                let src_dir = dep.path.join("src");
+                                if src_dir.exists() {
+                                    dep_paths.push(src_dir);
+                                } else if dep.path.exists() {
+                                    dep_paths.push(dep.path.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if cli.verbose {
+                    println!(
+                        "{} Directory build: entry={}, search_paths=[{}]",
+                        "info:".blue().bold(),
+                        entry.display(),
+                        dep_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+                    );
+                }
+
+                (entry, dep_paths)
+            } else {
+                (input.clone(), Vec::new())
+            };
+
+            // Set up module search paths for directory builds
+            if !dir_dep_paths.is_empty() {
+                let existing = std::env::var("VAIS_DEP_PATHS").unwrap_or_default();
+                let new_paths: Vec<String> = dir_dep_paths.iter().map(|p| p.display().to_string()).collect();
+                let combined = if existing.is_empty() {
+                    new_paths.join(":")
+                } else {
+                    format!("{}:{}", new_paths.join(":"), existing)
+                };
+                std::env::set_var("VAIS_DEP_PATHS", combined);
+            }
+
             // Check if GPU target is specified
             if let Some(gpu_target_str) = &gpu {
                 cmd_build_gpu(
-                    &input,
+                    &resolved_input,
                     output,
                     gpu_target_str,
                     gpu_host,
@@ -656,7 +731,7 @@ fn main() {
                 #[cfg(not(feature = "inkwell"))]
                 let use_inkwell = build_inkwell || cli.inkwell;
                 cmd_build_with_timing(
-                    &input,
+                    &resolved_input,
                     output,
                     emit_ir,
                     opt_level,
@@ -1869,6 +1944,19 @@ fn cmd_build(
 
     // If not emit_ir only, compile to binary
     if !emit_ir {
+        // Load native dependencies from vais.toml if present
+        let native_deps = {
+            let input_dir = input.parent().unwrap_or(Path::new("."));
+            if let Some(pkg_dir) = package::find_manifest(input_dir) {
+                match package::load_manifest(&pkg_dir) {
+                    Ok(m) => m.native_dependencies,
+                    Err(_) => HashMap::new(),
+                }
+            } else {
+                HashMap::new()
+            }
+        };
+
         // Extract used modules from AST for smart C runtime linking
         let used_modules = extract_used_modules(&final_ast);
         if verbose && !used_modules.is_empty() {
@@ -1930,6 +2018,7 @@ fn cmd_build(
             &lto_mode,
             &pgo_mode,
             &used_modules,
+            &native_deps,
         )?;
     }
 
@@ -2816,6 +2905,7 @@ fn compile_ir_to_binary(
     lto_mode: &vais_codegen::optimize::LtoMode,
     pgo_mode: &vais_codegen::optimize::PgoMode,
     used_modules: &HashSet<String>,
+    native_deps: &HashMap<String, package::NativeDependency>,
 ) -> Result<(), String> {
     match target {
         TargetTriple::Wasm32Unknown => compile_to_wasm32(ir_path, bin_path, opt_level, verbose),
@@ -2824,6 +2914,7 @@ fn compile_ir_to_binary(
         }
         _ => compile_to_native(
             ir_path, bin_path, opt_level, debug, verbose, hot, lto_mode, pgo_mode, used_modules,
+            native_deps,
         ),
     }
 }
@@ -2839,6 +2930,7 @@ fn compile_to_native(
     lto_mode: &vais_codegen::optimize::LtoMode,
     pgo_mode: &vais_codegen::optimize::PgoMode,
     used_modules: &HashSet<String>,
+    native_deps: &HashMap<String, package::NativeDependency>,
 ) -> Result<(), String> {
     let opt_flag = format!("-O{}", opt_level.min(3));
 
@@ -3032,6 +3124,45 @@ fn compile_to_native(
     // Add -lpthread once if needed by any runtime
     if needs_pthread {
         args.push("-lpthread".to_string());
+    }
+
+    // Link native dependencies from vais.toml [native-dependencies]
+    if !native_deps.is_empty() {
+        for (name, dep) in native_deps {
+            // Add -L library search path
+            if let Some(lib_path_flag) = dep.lib_path_flag() {
+                args.push(lib_path_flag);
+            }
+            // Add -I include path (for C source compilation)
+            if let Some(include_flag) = dep.include_flag() {
+                args.push(include_flag);
+            }
+            // Add C source files to compile
+            for src in dep.source_files() {
+                // Resolve relative to ir_path's parent directory
+                let src_path = if Path::new(src).is_absolute() {
+                    PathBuf::from(src)
+                } else if let Some(parent) = ir_path.parent() {
+                    parent.join(src)
+                } else {
+                    PathBuf::from(src)
+                };
+                args.push(src_path.to_string_lossy().to_string());
+            }
+            // Add -l library flags
+            for flag in dep.lib_flags() {
+                if !args.contains(&flag) {
+                    args.push(flag);
+                }
+            }
+            if verbose {
+                println!(
+                    "{} Linking native dependency: {}",
+                    "info:".blue().bold(),
+                    name
+                );
+            }
+        }
     }
 
     if verbose && (lto_mode.is_enabled() || pgo_mode.is_enabled()) {

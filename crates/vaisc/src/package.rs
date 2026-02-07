@@ -15,6 +15,8 @@ pub struct PackageManifest {
     pub dependencies: HashMap<String, Dependency>,
     #[serde(default, rename = "dev-dependencies")]
     pub dev_dependencies: HashMap<String, Dependency>,
+    #[serde(default, rename = "native-dependencies")]
+    pub native_dependencies: HashMap<String, NativeDependency>,
     #[serde(default)]
     pub build: BuildConfig,
 }
@@ -54,6 +56,71 @@ pub struct DetailedDependency {
     /// Registry name (None = default registry)
     #[serde(default)]
     pub registry: Option<String>,
+}
+
+/// Native (C/system) dependency specification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum NativeDependency {
+    /// Simple: just a library name to pass as -l flag
+    /// e.g. openssl = "ssl"
+    Simple(String),
+    /// Detailed specification
+    Detailed(NativeDependencyDetail),
+}
+
+/// Detailed native dependency specification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NativeDependencyDetail {
+    /// Library name(s) for -l flags (e.g. ["ssl", "crypto"])
+    #[serde(default)]
+    pub libs: Vec<String>,
+    /// Header search path for -I flag
+    #[serde(default)]
+    pub include: Option<String>,
+    /// Library search path for -L flag
+    #[serde(default)]
+    pub lib_path: Option<String>,
+    /// Whether this is a system library (found via pkg-config)
+    #[serde(default)]
+    pub system: Option<bool>,
+    /// C source files to compile and link
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+impl NativeDependency {
+    /// Get the -l library flags for this native dependency
+    pub fn lib_flags(&self) -> Vec<String> {
+        match self {
+            NativeDependency::Simple(lib) => vec![format!("-l{}", lib)],
+            NativeDependency::Detailed(d) => d.libs.iter().map(|l| format!("-l{}", l)).collect(),
+        }
+    }
+
+    /// Get the -I include path flag, if any
+    pub fn include_flag(&self) -> Option<String> {
+        match self {
+            NativeDependency::Simple(_) => None,
+            NativeDependency::Detailed(d) => d.include.as_ref().map(|p| format!("-I{}", p)),
+        }
+    }
+
+    /// Get the -L library search path flag, if any
+    pub fn lib_path_flag(&self) -> Option<String> {
+        match self {
+            NativeDependency::Simple(_) => None,
+            NativeDependency::Detailed(d) => d.lib_path.as_ref().map(|p| format!("-L{}", p)),
+        }
+    }
+
+    /// Get source files to compile, if any
+    pub fn source_files(&self) -> &[String] {
+        match self {
+            NativeDependency::Simple(_) => &[],
+            NativeDependency::Detailed(d) => &d.sources,
+        }
+    }
 }
 
 /// Build configuration
@@ -172,6 +239,7 @@ pub fn init_package(dir: &Path, name: Option<&str>) -> PackageResult<()> {
         },
         dependencies: HashMap::new(),
         dev_dependencies: HashMap::new(),
+        native_dependencies: HashMap::new(),
         build: BuildConfig::default(),
     };
 
@@ -403,6 +471,7 @@ fn resolve_deps_recursive(
                     },
                     dependencies: HashMap::new(),
                     dev_dependencies: HashMap::new(),
+                    native_dependencies: HashMap::new(),
                     build: BuildConfig::default(),
                 }
             }
@@ -768,6 +837,64 @@ remote-lib = "0.5.0"
 
         // Should not find nonexistent package
         assert!(find_cached_registry_dep(&cache_root, "no-such-pkg", "1.0.0").is_none());
+    }
+
+    #[test]
+    fn test_native_dependencies_simple() {
+        let dir = tempdir().unwrap();
+        let toml_content = r#"
+[package]
+name = "my-pkg"
+version = "1.0.0"
+
+[native-dependencies]
+openssl = "ssl"
+zlib = "z"
+"#;
+        fs::write(dir.path().join("vais.toml"), toml_content).unwrap();
+
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.native_dependencies.len(), 2);
+
+        let ssl = &manifest.native_dependencies["openssl"];
+        assert_eq!(ssl.lib_flags(), vec!["-lssl"]);
+        assert!(ssl.include_flag().is_none());
+
+        let z = &manifest.native_dependencies["zlib"];
+        assert_eq!(z.lib_flags(), vec!["-lz"]);
+    }
+
+    #[test]
+    fn test_native_dependencies_detailed() {
+        let dir = tempdir().unwrap();
+        let toml_content = r#"
+[package]
+name = "my-pkg"
+version = "1.0.0"
+
+[native-dependencies.openssl]
+libs = ["ssl", "crypto"]
+include = "/usr/include/openssl"
+lib_path = "/usr/lib"
+system = true
+
+[native-dependencies.custom]
+libs = ["mylib"]
+sources = ["vendor/mylib.c"]
+"#;
+        fs::write(dir.path().join("vais.toml"), toml_content).unwrap();
+
+        let manifest = load_manifest(dir.path()).unwrap();
+        assert_eq!(manifest.native_dependencies.len(), 2);
+
+        let ssl = &manifest.native_dependencies["openssl"];
+        assert_eq!(ssl.lib_flags(), vec!["-lssl", "-lcrypto"]);
+        assert_eq!(ssl.include_flag(), Some("-I/usr/include/openssl".to_string()));
+        assert_eq!(ssl.lib_path_flag(), Some("-L/usr/lib".to_string()));
+
+        let custom = &manifest.native_dependencies["custom"];
+        assert_eq!(custom.lib_flags(), vec!["-lmylib"]);
+        assert_eq!(custom.source_files(), &["vendor/mylib.c"]);
     }
 
     #[test]

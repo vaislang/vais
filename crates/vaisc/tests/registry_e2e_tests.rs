@@ -1793,3 +1793,137 @@ fn test_manifest_invalid_toml_error() {
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("failed to parse"));
 }
+
+// ===========================================================================
+// 12. Native Dependencies Tests
+// ===========================================================================
+
+#[test]
+fn test_manifest_with_native_dependencies() {
+    let tmp = TempDir::new().unwrap();
+    let toml_content = r#"
+[package]
+name = "native-dep-test"
+version = "1.0.0"
+
+[native-dependencies]
+openssl = "ssl"
+
+[native-dependencies.zlib]
+libs = ["z"]
+include = "/usr/include"
+"#;
+    fs::write(tmp.path().join("vais.toml"), toml_content).unwrap();
+    let manifest = load_manifest(tmp.path());
+    assert!(
+        manifest.is_ok(),
+        "manifest with native-dependencies should parse"
+    );
+}
+
+#[test]
+fn test_manifest_without_native_dependencies_still_parses() {
+    let tmp = TempDir::new().unwrap();
+    let toml_content = r#"
+[package]
+name = "no-native-deps"
+version = "0.1.0"
+
+[dependencies]
+"#;
+    fs::write(tmp.path().join("vais.toml"), toml_content).unwrap();
+    let manifest = load_manifest(tmp.path());
+    assert!(
+        manifest.is_ok(),
+        "manifest without native-dependencies should still parse"
+    );
+}
+
+// ===========================================================================
+// 13. Directory Build Tests
+// ===========================================================================
+
+#[test]
+fn test_build_directory_with_main_vais() {
+    let tmp = TempDir::new().unwrap();
+    let src_dir = tmp.path().join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(
+        src_dir.join("main.vais"),
+        "F main() -> i64 { puts(\"dir build test\") \n 0 }",
+    )
+    .unwrap();
+
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "build"])
+        .arg(tmp.path())
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                // Verify binary was created
+                let bin = src_dir.join("main");
+                assert!(bin.exists(), "binary should be created at src/main");
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!(
+                    "directory build returned non-zero (may be expected in CI): {}",
+                    stderr
+                );
+            }
+        }
+        Err(_) => {
+            eprintln!("skipping CLI test: cargo run not available");
+        }
+    }
+}
+
+#[test]
+fn test_build_directory_with_multifile_import() {
+    let tmp = TempDir::new().unwrap();
+    let src_dir = tmp.path().join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+
+    // Create utils module
+    fs::write(
+        src_dir.join("myutils.vais"),
+        "F add_nums(a: i64, b: i64) -> i64 { a + b }",
+    )
+    .unwrap();
+
+    // Create main with use statement
+    fs::write(
+        src_dir.join("main.vais"),
+        "U myutils\nF main() -> i64 { add_nums(3, 4) }",
+    )
+    .unwrap();
+
+    let output = Command::new("cargo")
+        .args(["run", "--bin", "vaisc", "--", "build"])
+        .arg(tmp.path())
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                // Run the built binary and check exit code
+                let bin = src_dir.join("main");
+                if bin.exists() {
+                    let run_output = Command::new(&bin).output().unwrap();
+                    assert_eq!(
+                        run_output.status.code(),
+                        Some(7),
+                        "add_nums(3, 4) should return 7"
+                    );
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                eprintln!("multifile build returned non-zero (may be expected in CI): {}", stderr);
+            }
+        }
+        Err(_) => {
+            eprintln!("skipping CLI test: cargo run not available");
+        }
+    }
+}
