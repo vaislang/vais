@@ -88,7 +88,7 @@ mod tests {
         assert!(registry.is_empty());
 
         // Run lint on empty module
-        let module = vais_ast::Module { items: vec![] };
+        let module = vais_ast::Module { items: vec![], modules_map: None };
         let diagnostics = registry.run_lint(&module);
         assert!(diagnostics.is_empty());
 

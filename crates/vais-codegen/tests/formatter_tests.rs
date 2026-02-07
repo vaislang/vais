@@ -95,6 +95,7 @@ fn test_format_simple_function() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -118,6 +119,7 @@ fn test_format_function_with_no_params() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -148,6 +150,7 @@ fn test_format_function_with_generics() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -181,6 +184,7 @@ fn test_format_function_with_bounded_generics() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -204,6 +208,7 @@ fn test_format_async_function() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -247,6 +252,7 @@ fn test_format_function_with_block_body() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -284,6 +290,7 @@ fn test_format_function_with_attributes() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -315,6 +322,7 @@ fn test_format_function_with_mut_params() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -351,6 +359,7 @@ fn test_format_simple_struct() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Struct(s))],
     };
 
@@ -379,6 +388,7 @@ fn test_format_generic_struct() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Struct(s))],
     };
 
@@ -436,6 +446,7 @@ fn test_format_struct_with_methods() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Struct(s))],
     };
 
@@ -474,6 +485,7 @@ fn test_format_simple_enum() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Enum(e))],
     };
 
@@ -505,6 +517,7 @@ fn test_format_enum_with_tuple_variants() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Enum(e))],
     };
 
@@ -546,6 +559,7 @@ fn test_format_enum_with_struct_variants() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Enum(e))],
     };
 
@@ -585,6 +599,7 @@ fn test_format_if_else() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -629,6 +644,7 @@ fn test_format_else_if_chain() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -667,6 +683,7 @@ fn test_format_loop() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -713,6 +730,7 @@ fn test_format_match_expression() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -752,6 +770,7 @@ fn test_format_match_with_guard() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -789,6 +808,7 @@ fn test_format_binary_expressions() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -820,6 +840,7 @@ fn test_format_unary_expressions() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -849,6 +870,7 @@ fn test_format_method_call() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -878,6 +900,7 @@ fn test_format_array_literal() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -911,6 +934,7 @@ fn test_format_tuple() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -942,6 +966,7 @@ fn test_format_struct_literal() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -965,6 +990,7 @@ fn test_format_types() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::TypeAlias(type_alias))],
     };
 
@@ -987,6 +1013,7 @@ fn test_format_generic_types() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::TypeAlias(type_alias))],
     };
 
@@ -1006,6 +1033,7 @@ fn test_format_optional_type() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::TypeAlias(type_alias))],
     };
 
@@ -1025,6 +1053,7 @@ fn test_format_result_type() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::TypeAlias(type_alias))],
     };
 
@@ -1058,6 +1087,7 @@ fn test_custom_indent_size() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -1094,6 +1124,7 @@ fn test_use_tabs_indentation() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Function(func))],
     };
 
@@ -1117,6 +1148,7 @@ fn test_use_tabs_indentation() {
 #[test]
 fn test_format_multiple_items() {
     let module = Module {
+        modules_map: None,
         items: vec![
             spanned(Item::TypeAlias(TypeAlias {
                 name: ident("Int"),
@@ -1177,6 +1209,7 @@ fn test_format_use_statement() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Use(use_stmt))],
     };
 
@@ -1194,6 +1227,7 @@ fn test_format_use_with_alias() {
     };
 
     let module = Module {
+        modules_map: None,
         items: vec![spanned(Item::Use(use_stmt))],
     };
 

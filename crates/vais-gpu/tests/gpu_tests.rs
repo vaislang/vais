@@ -148,6 +148,7 @@ mod cuda_codegen_tests {
 
     fn make_kernel(name: &str, params: Vec<Param>, body: Vec<Spanned<Stmt>>) -> Module {
         Module {
+            modules_map: None,
             items: vec![spanned(Item::Function(Function {
                 name: spanned(name.to_string()),
                 generics: vec![],

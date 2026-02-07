@@ -802,6 +802,9 @@ pub struct CodeGenerator {
 
     // Resolved function signatures from type checker (for inferred parameter types)
     resolved_function_sigs: HashMap<String, vais_types::FunctionSig>,
+
+    // Module-specific prefix for string constants (avoids collisions in multi-module builds)
+    string_prefix: Option<String>,
 }
 
 /// Information about a function's decreases clause for termination proof
@@ -885,6 +888,7 @@ impl CodeGenerator {
             generic_fn_instantiations: HashMap::new(),
             generic_function_templates: HashMap::new(),
             resolved_function_sigs: HashMap::new(),
+            string_prefix: None,
         };
 
         // Register built-in extern functions
@@ -946,6 +950,311 @@ impl CodeGenerator {
     /// Used to provide inferred parameter types for functions with Type::Infer parameters.
     pub fn set_resolved_functions(&mut self, resolved: HashMap<String, vais_types::FunctionSig>) {
         self.resolved_function_sigs = resolved;
+    }
+
+    /// Set string prefix for per-module codegen (avoids .str.N collisions across modules)
+    pub fn set_string_prefix(&mut self, prefix: &str) {
+        self.string_prefix = Some(prefix.to_string());
+    }
+
+    /// Generate a unique string constant name, with optional module prefix
+    fn make_string_name(&self) -> String {
+        if let Some(ref prefix) = self.string_prefix {
+            format!("{}.str.{}", prefix, self.string_counter)
+        } else {
+            format!(".str.{}", self.string_counter)
+        }
+    }
+
+    /// Generate LLVM IR for a subset of module items (per-module codegen).
+    ///
+    /// This method generates IR for only the items at the specified indices,
+    /// while declaring cross-module functions as extern. Type definitions
+    /// (structs, enums, unions) are always included since they're needed everywhere.
+    ///
+    /// # Arguments
+    /// * `full_module` - The complete merged AST (all modules)
+    /// * `item_indices` - Indices into `full_module.items` for this module's items
+    /// * `is_main_module` - Whether this module contains main() (emits ABI version, etc.)
+    pub fn generate_module_subset(
+        &mut self,
+        full_module: &Module,
+        item_indices: &[usize],
+        is_main_module: bool,
+    ) -> CodegenResult<String> {
+        let mut ir = String::new();
+        let index_set: std::collections::HashSet<usize> = item_indices.iter().copied().collect();
+
+        // Header
+        ir.push_str(&format!("; ModuleID = '{}'\n", self.module_name));
+        ir.push_str("source_filename = \"<vais>\"\n");
+        if !matches!(self.target, TargetTriple::Native) {
+            ir.push_str(&format!(
+                "target datalayout = \"{}\"\n",
+                self.target.data_layout()
+            ));
+            ir.push_str(&format!(
+                "target triple = \"{}\"\n",
+                self.target.triple_str()
+            ));
+        }
+        ir.push('\n');
+
+        // Initialize debug info if enabled
+        if self.debug_info.is_enabled() {
+            self.debug_info.initialize();
+        }
+
+        // Snapshot builtin function keys (registered in constructor, before AST items)
+        // These should NOT appear as cross-module extern declarations.
+        let builtin_fn_keys: std::collections::HashSet<String> =
+            self.functions.keys().cloned().collect();
+
+        // First pass: register ALL type definitions (structs, enums, unions) from full module
+        // and register functions — tracking which are "ours" vs external
+        let mut module_functions: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for (idx, item) in full_module.items.iter().enumerate() {
+            let is_ours = index_set.contains(&idx);
+            match &item.node {
+                Item::Function(f) => {
+                    self.register_function(f)?;
+                    if is_ours {
+                        module_functions.insert(f.name.node.clone());
+                    }
+                }
+                Item::Struct(s) => {
+                    self.register_struct(s)?;
+                    for method in &s.methods {
+                        self.register_method(&s.name.node, &method.node)?;
+                        if is_ours {
+                            module_functions.insert(format!("{}_{}", s.name.node, method.node.name.node));
+                        }
+                    }
+                }
+                Item::Enum(e) => self.register_enum(e)?,
+                Item::Union(u) => self.register_union(u)?,
+                Item::Impl(impl_block) => {
+                    let type_name = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => name.clone(),
+                        _ => continue,
+                    };
+                    for method in &impl_block.methods {
+                        self.register_method(&type_name, &method.node)?;
+                        if is_ours {
+                            module_functions.insert(format!("{}_{}", type_name, method.node.name.node));
+                        }
+                    }
+                    if let Some(ref trait_name) = impl_block.trait_name {
+                        let mut method_impls = HashMap::new();
+                        for method in &impl_block.methods {
+                            let fn_name = format!("{}_{}", type_name, method.node.name.node);
+                            method_impls.insert(method.node.name.node.clone(), fn_name);
+                        }
+                        self.register_trait_impl(&type_name, &trait_name.node, method_impls);
+                    }
+                }
+                Item::Trait(trait_def) => {
+                    self.register_trait_from_ast(trait_def);
+                }
+                Item::ExternBlock(extern_block) => {
+                    for func in &extern_block.functions {
+                        self.register_extern_function(func, &extern_block.abi)?;
+                    }
+                }
+                Item::Const(const_def) => {
+                    self.register_const(const_def)?;
+                }
+                Item::Global(global_def) => {
+                    self.register_global(global_def)?;
+                }
+                Item::Use(_) | Item::TypeAlias(_) | Item::Macro(_) | Item::Error { .. } => {}
+            }
+        }
+
+        // Generate struct types (all modules need these)
+        for (name, info) in &self.structs {
+            ir.push_str(&self.generate_struct_type(name, info));
+            ir.push('\n');
+        }
+        for (name, info) in &self.enums.clone() {
+            ir.push_str(&self.generate_enum_type(name, info));
+            ir.push('\n');
+        }
+        for (name, info) in &self.unions.clone() {
+            ir.push_str(&self.generate_union_type(name, info));
+            ir.push('\n');
+        }
+
+        // Generate extern declarations for ALL extern functions (is_extern = true)
+        // Builtin helpers (is_extern = false) are handled separately below.
+        let mut declared_fns = std::collections::HashSet::new();
+        let mut sorted_fns: Vec<_> = self
+            .functions
+            .iter()
+            .filter(|(_, info)| info.is_extern)
+            .collect();
+        sorted_fns.sort_by_key(|(key, info)| if **key == info.signature.name { 0 } else { 1 });
+        for (_, info) in &sorted_fns {
+            if !declared_fns.contains(&info.signature.name) {
+                if !is_main_module && info.signature.name == "fopen_ptr" {
+                    // Non-main modules should declare fopen_ptr (not define it).
+                    // The wrapper definition lives in the main module only.
+                    let params: Vec<_> = info.signature.params.iter()
+                        .map(|(_, ty, _)| self.type_to_llvm(ty))
+                        .collect();
+                    let ret = self.type_to_llvm(&info.signature.ret);
+                    ir.push_str(&format!("declare {} @fopen_ptr({})\n", ret, params.join(", ")));
+                } else {
+                    ir.push_str(&self.generate_extern_decl(info));
+                    ir.push('\n');
+                }
+                declared_fns.insert(info.signature.name.clone());
+            }
+        }
+
+        // Generate extern declarations for cross-module Vais functions
+        // (functions registered from AST but not in this module's item set)
+        // Skip builtins — they are handled by generate_helper_functions() or the non-main extern block.
+        for (name, info) in &self.functions {
+            if !info.is_extern
+                && !module_functions.contains(name)
+                && !declared_fns.contains(name)
+                && !builtin_fn_keys.contains(name)
+            {
+                ir.push_str(&self.generate_extern_decl(info));
+                ir.push('\n');
+                declared_fns.insert(name.clone());
+            }
+        }
+
+        // Generate function bodies only for this module's items
+        let mut body_ir = String::new();
+        for &idx in item_indices {
+            if idx >= full_module.items.len() {
+                continue;
+            }
+            let item = &full_module.items[idx];
+            match &item.node {
+                Item::Function(f) => {
+                    body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
+                    body_ir.push('\n');
+                }
+                Item::Struct(s) => {
+                    for method in &s.methods {
+                        body_ir.push_str(&self.generate_method_with_span(
+                            &s.name.node,
+                            &method.node,
+                            method.span,
+                        )?);
+                        body_ir.push('\n');
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    let type_name = match &impl_block.target_type.node {
+                        Type::Named { name, .. } => name.clone(),
+                        _ => continue,
+                    };
+                    for method in &impl_block.methods {
+                        body_ir.push_str(&self.generate_method_with_span(
+                            &type_name,
+                            &method.node,
+                            method.span,
+                        )?);
+                        body_ir.push('\n');
+                    }
+                }
+                _ => {} // Other items handled in registration pass
+            }
+        }
+
+        // ABI version and globals only in main module
+        if is_main_module {
+            let abi_version = crate::abi::ABI_VERSION;
+            let abi_version_len = abi_version.len() + 1;
+            ir.push_str(&format!(
+                "@__vais_abi_version = constant [{} x i8] c\"{}\\00\"\n\n",
+                abi_version_len, abi_version
+            ));
+        }
+
+        // String constants
+        for (name, value) in &self.string_constants {
+            let escaped = escape_llvm_string(value);
+            let len = value.len() + 1;
+            ir.push_str(&format!(
+                "@{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"\n",
+                name, len, escaped
+            ));
+        }
+        if !self.string_constants.is_empty() {
+            ir.push('\n');
+        }
+
+        if self.needs_unwrap_panic {
+            ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
+            ir.push_str("declare void @abort()\n\n");
+        }
+
+        ir.push_str(&body_ir);
+
+        for lambda_ir in &self.lambda_functions {
+            ir.push('\n');
+            ir.push_str(lambda_ir);
+        }
+
+        let vtable_ir = self.generate_vtable_globals();
+        if !vtable_ir.is_empty() {
+            ir.push_str("\n; VTable globals for trait objects\n");
+            ir.push_str(&vtable_ir);
+        }
+        let drop_ir = self.vtable_generator.generate_drop_functions_ir();
+        if !drop_ir.is_empty() {
+            ir.push_str("\n; Drop functions for trait objects\n");
+            ir.push_str(&drop_ir);
+        }
+
+        if is_main_module {
+            // Main module defines all helper functions
+            ir.push_str(&self.generate_helper_functions());
+        } else {
+            // Non-main modules declare builtin helpers as extern
+            // (these are defined by generate_helper_functions() in the main module)
+            ir.push_str("\n; Extern declarations for runtime helpers\n");
+            let mut sorted_helpers: Vec<_> = builtin_fn_keys.iter().collect();
+            sorted_helpers.sort();
+            for key in sorted_helpers {
+                if let Some(info) = self.functions.get(key) {
+                    if !info.is_extern && !declared_fns.contains(&info.signature.name) {
+                        ir.push_str(&self.generate_extern_decl(info));
+                        ir.push('\n');
+                        declared_fns.insert(info.signature.name.clone());
+                    }
+                }
+            }
+        }
+
+        if self.needs_string_helpers {
+            if is_main_module {
+                ir.push_str(&self.generate_string_helper_functions());
+            }
+            ir.push_str(&self.generate_string_extern_declarations());
+        }
+
+        if !self.contract_string_constants.is_empty() {
+            ir.push_str(&self.generate_contract_declarations());
+            ir.push_str(&self.generate_contract_string_constants());
+        }
+
+        if self.debug_info.is_enabled() {
+            ir.push_str("\n; Debug intrinsics\n");
+            ir.push_str("declare void @llvm.dbg.declare(metadata, metadata, metadata)\n");
+            ir.push_str("declare void @llvm.dbg.value(metadata, metadata, metadata)\n");
+        }
+
+        ir.push_str(&self.debug_info.finalize());
+
+        Ok(ir)
     }
 
     /// Set current source file for error messages
@@ -2090,7 +2399,7 @@ impl CodeGenerator {
             Expr::Bool(b) => Ok((if *b { "1" } else { "0" }.to_string(), String::new())),
             Expr::String(s) => {
                 // Create a global string constant
-                let name = format!(".str.{}", self.string_counter);
+                let name = self.make_string_name();
                 self.string_counter += 1;
                 self.string_constants.push((name.clone(), s.clone()));
 
@@ -2567,7 +2876,7 @@ impl CodeGenerator {
                         let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
                         let mut ir = arg_ir;
                         let fmt_str = "%ld";
-                        let fmt_name = format!(".str.{}", self.string_counter);
+                        let fmt_name = self.make_string_name();
                         self.string_counter += 1;
                         self.string_constants
                             .push((fmt_name.clone(), fmt_str.to_string()));
@@ -2589,7 +2898,7 @@ impl CodeGenerator {
                         let (arg_val, arg_ir) = self.generate_expr(&args[0], counter)?;
                         let mut ir = arg_ir;
                         let fmt_str = "%f";
-                        let fmt_name = format!(".str.{}", self.string_counter);
+                        let fmt_name = self.make_string_name();
                         self.string_counter += 1;
                         self.string_constants
                             .push((fmt_name.clone(), fmt_str.to_string()));
@@ -4430,7 +4739,7 @@ impl CodeGenerator {
                     }
                     vais_types::ComptimeValue::String(s) => {
                         // Create a global string constant
-                        let name = format!(".str.{}", self.string_counter);
+                        let name = self.make_string_name();
                         self.string_counter += 1;
                         self.string_constants.push((name.clone(), s.clone()));
                         let len = s.len() + 1;

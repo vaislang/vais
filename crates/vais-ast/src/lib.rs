@@ -78,6 +78,10 @@ pub struct Attribute {
 pub struct Module {
     /// List of top-level items in this module
     pub items: Vec<Spanned<Item>>,
+    /// Per-module item indices (module_path → item indices in `items`)
+    /// Populated during import resolution for per-module codegen.
+    /// None when not using per-module compilation.
+    pub modules_map: Option<std::collections::HashMap<std::path::PathBuf, Vec<usize>>>,
 }
 
 /// Top-level item definitions in a module.

@@ -2547,6 +2547,7 @@ impl TypeChecker {
                 if self.imported_item_count > 0 && self.imported_item_count < module.items.len() {
                     Module {
                         items: module.items[self.imported_item_count..].to_vec(),
+                        modules_map: None,
                     }
                 } else {
                     module.clone()

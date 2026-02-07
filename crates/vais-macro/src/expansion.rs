@@ -120,6 +120,7 @@ impl<'a> AstExpander<'a> {
     }
 
     pub fn expand_module(&mut self, module: Module) -> ExpansionResult<Module> {
+        let modules_map = module.modules_map;
         let mut expanded_items = Vec::new();
         for item in module.items {
             match &item.node {
@@ -134,6 +135,7 @@ impl<'a> AstExpander<'a> {
         }
         Ok(Module {
             items: expanded_items,
+            modules_map,
         })
     }
 

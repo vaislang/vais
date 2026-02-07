@@ -659,6 +659,7 @@ impl TieredJit {
                                 node: vais_ast::Item::Function(func.clone()),
                                 span: Default::default(),
                             }],
+                            modules_map: None,
                         };
                         jit.compile_module(&ast_module)?;
                     }
@@ -674,6 +675,7 @@ impl TieredJit {
                                 node: vais_ast::Item::Function(func.clone()),
                                 span: Default::default(),
                             }],
+                            modules_map: None,
                         };
                         jit.compile_module(&ast_module)?;
                     }
